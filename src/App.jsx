@@ -1550,7 +1550,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
             {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at; return (
               <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||'Cristóbal'); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:editable?'pointer':'default'}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmtCLP(p.amount)}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>editar</span>}</div>
+                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmtCLP(p.amount)}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
                   <div style={{fontSize:10,color:C.done,marginTop:1}}>Entregado por {p.delivered_by||'—'}{p.delivered_at?` · ${fmtD(p.delivered_at)}`:''}</div>
                 </div>
                 <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,flexShrink:0,background:activa?C.greenBg:C.bgSoft,color:activa?C.normal:C.done}}>{activa?'Activa':'Cerrada'}</span>
@@ -1992,7 +1992,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8}}>
               <span style={{fontSize:15,color:C.text}}>Proyección de ingresos{projResp?` · ${projResp}`:''}</span>
               {projResp
-                ? <span onClick={()=>setProjResp(null)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>quitar filtro</span>
+                ? <span onClick={()=>setProjResp(null)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>Quitar filtro</span>
                 : <span onClick={()=>setProjOpen(false)} style={{fontSize:20,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>}
             </div>
             <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmt(projTotalFilt)}</div>
@@ -3706,7 +3706,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             {!repr&&<div style={{background:C.ambarBg,borderLeft:`3px solid ${C.soon}`,borderRadius:'0 9px 9px 0',padding:'8px 11px',marginBottom:10}}><div style={{fontSize:11,color:C.soonText,lineHeight:1.4}}>El margen aún no es representativo: falta cargar el costo de terceros en <b>{serviciosTot.nTotal-serviciosTot.conCosto} ventas</b>. Cárgalo abajo y se enciende con cifras reales.</div></div>}
             {areasCon.map(s=>{ const mp=Math.round(s.margenPct); const cp=Math.max(0,100-mp); return (
               <div key={s.area} style={{marginBottom:9}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.done,fontWeight:500}}>· {s.conCosto}/{s.n} con costo</span></span><span style={{fontWeight:700,color:C.greenText}}>{mp}% <span style={{fontSize:10,color:C.muted,fontWeight:500}}>margen</span></span></div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.done,fontWeight:500}}>· {s.conCosto}/{s.n} con costo</span></span><span style={{fontWeight:700,color:C.greenText}}>{mp}% <span style={{fontSize:10,color:C.muted,fontWeight:500}}>Margen</span></span></div>
                 <div style={{height:9,borderRadius:5,background:'#EEF1F3',display:'flex',overflow:'hidden'}}><div style={{width:`${Math.max(1,mp)}%`,background:C.normal}}/><div style={{width:`${cp}%`,background:C.soon}}/></div>
               </div>
             )})}
@@ -5715,7 +5715,7 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
     <Modal title='Cobertura SII' onClose={onClose}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:11,flexWrap:'wrap'}}>
         <select value={yr} onChange={e=>setYr(e.target.value)} style={{fontSize:13,fontWeight:600,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,color:C.accent}}>{(years.length?years:[yr]).map(y=><option key={y} value={y}>{y}</option>)}</select>
-        <span style={{fontSize:11,color:C.muted}}>facturas emitidas del año que están en el sistema</span>
+        <span style={{fontSize:11,color:C.muted}}>Facturas emitidas del año que están en el sistema</span>
       </div>
       <div style={{border:`1px solid ${sinCliente?'#F0997B':'#BFE3D5'}`,background:sinCliente?C.overdueBg:C.greenBg,borderRadius:12,padding:'12px 14px',marginBottom:9}}>
         {sinCliente>0?<>
@@ -6055,7 +6055,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
-                              {exacto&&<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>monto exacto</div>}
+                              {exacto&&<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>Monto exacto</div>}
                             </div>
                             <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:26,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
                           </div>
@@ -8518,7 +8518,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
           <div style={{fontSize:11,color:C.done,marginBottom:8}}>Este cliente no tiene facturas emitidas abiertas para asignar.</div>
         )}
         <div style={{display:'flex',flexDirection:'column',gap:6}}>
-          {onCubrir&&<div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.azulInfo}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:10.5,color:C.done}}>marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>}
+          {onCubrir&&<div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.azulInfo}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:10.5,color:C.done}}>Marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>}
           {programadasCli.length>0&&onConsolidar&&<div onClick={()=>onConsolidar(a)} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Asignar a 1 factura</div><div style={{fontSize:10.5,color:C.done}}>1 factura por el total · anula las programadas</div></div><span style={{color:C.done}}>→</span></div>}
         </div>
         {facturasAbiertas.length>0&&<button disabled={!selFac||busy} onClick={asignar} style={{width:'100%',height:40,borderRadius:9,border:'none',background:(selFac&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(selFac&&!busy)?'pointer':'default',marginTop:10}}>{busy?'Asignando…':'Guardar asignación'}</button>}
@@ -8595,7 +8595,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
         <div style={{flex:1,padding:'14px 16px',borderLeft:`0.5px solid ${C.border}`}}>
           <div style={flabel}>Consumido</div>
           <div style={{fontSize:22,fontWeight:500,letterSpacing:'-.5px',color:C.muted,marginTop:3}}>{fmtCLP0(totalCons)}</div>
-          <div style={{fontSize:11,color:C.done,marginTop:2}}>histórico total</div>
+          <div style={{fontSize:11,color:C.done,marginTop:2}}>Histórico total</div>
         </div>
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
@@ -10014,7 +10014,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>}
           <div style={{textAlign:'center',fontSize:11,color:C.muted}}>
             <button type='button' onClick={notaria?descargarPlantillaNotaria:descargarPlantilla} disabled={genPlantilla} style={{background:'none',border:'none',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{genPlantilla?'Generando…':(notaria?'Descargar modelo de notaría':'Descargar plantilla')}</button>
-            {!notaria&&<> · <button type='button' onClick={descargarPlantillaNotaria} disabled={genPlantilla} style={{background:'none',border:'none',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>notaría</button></>}
+            {!notaria&&<> · <button type='button' onClick={descargarPlantillaNotaria} disabled={genPlantilla} style={{background:'none',border:'none',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Notaría</button></>}
           </div>
           {bulkImports.length>0&&(
             <div style={{marginTop:18,paddingTop:14,borderTop:`0.5px solid ${C.border}`}}>
@@ -10440,7 +10440,7 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'6px 0'}}>
               <span style={{fontSize:12.5,color:c.cat==='Sin categoría'?C.soonText:C.text,fontWeight:500,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.cat}{c.recupero>0&&<span style={{fontSize:10,color:C.greenText,marginLeft:6}}>−{fmt(c.recupero)} recupero</span>}</span>
               <span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                {(()=>{ const prevN=catsPrevMap[c.cat]; if(prevN==null||prevN===0){ return c.neto!==0?<span style={{fontSize:9,color:C.muted,fontWeight:600}}>nuevo</span>:null } const d=c.neto-prevN; if(Math.abs(d)<1) return <span style={{fontSize:9.5,color:C.done,fontWeight:600}}>=</span>; const up=d>0; return <span title={`Mes anterior: ${fmt(prevN)}`} style={{fontSize:9.5,fontWeight:600,color:up?C.overdueText:C.greenText}}>{up?'▲':'▼'} {fmt(Math.abs(d))}</span> })()}
+                {(()=>{ const prevN=catsPrevMap[c.cat]; if(prevN==null||prevN===0){ return c.neto!==0?<span style={{fontSize:9,color:C.muted,fontWeight:600}}>Nuevo</span>:null } const d=c.neto-prevN; if(Math.abs(d)<1) return <span style={{fontSize:9.5,color:C.done,fontWeight:600}}>=</span>; const up=d>0; return <span title={`Mes anterior: ${fmt(prevN)}`} style={{fontSize:9.5,fontWeight:600,color:up?C.overdueText:C.greenText}}>{up?'▲':'▼'} {fmt(Math.abs(d))}</span> })()}
                 <span style={{fontSize:13,fontWeight:700,color:c.neto<0?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(c.neto)}</span>
               </span>
             </div>
@@ -12160,7 +12160,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
             {esDev&&<div style={{background:C.bgSoft,borderRadius:8,padding:'10px 12px',marginBottom:13}}>
               <label style={flabel}>Rendición N°</label>
               <input value={rendN} onChange={e=>setRendN(e.target.value)} placeholder='1' style={{...inp,maxWidth:120}}/>
-              <div style={{fontSize:11,color:C.muted,marginTop:7,lineHeight:1.45}}>Se registra como <b style={{color:C.text}}>salida de fondo</b> (lleva el saldo a 0). Después de guardar, adjunta el comprobante de transferencia al movimiento.</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:7,lineHeight:1.45}}>Se registra como <b style={{color:C.text}}>Salida de fondo</b> (lleva el saldo a 0). Después de guardar, adjunta el comprobante de transferencia al movimiento.</div>
             </div>}
 
             <div style={{marginBottom:13}}>
@@ -12200,7 +12200,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
           </>
         )}
 
-        {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.45,background:C.greenBg,borderRadius:8,padding:'9px 11px'}}>Al guardar, se abre el <b style={{color:C.accent}}>correo de devolución</b> con el formato de la rendición y los destinatarios — solo adjuntas el comprobante y envías.</div>}
+        {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.45,background:C.greenBg,borderRadius:8,padding:'9px 11px'}}>Al guardar, se abre el <b style={{color:C.accent}}>Correo de devolución</b> con el formato de la rendición y los destinatarios — solo adjuntas el comprobante y envías.</div>}
         <div style={{display:'flex',gap:8}}>
           <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':(esDev?'Guardar devolución':'Guardar fondo')}</button>
@@ -12881,7 +12881,7 @@ function DocumentosDrive({client, onCount, onPick}){
             <span onClick={i<path.length-1?()=>irNivel(i):undefined} style={{color:i<path.length-1?C.azulInfo:C.text,fontWeight:i===path.length-1?700:400,cursor:i<path.length-1?'pointer':'default',maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
           </span>))}
         </div>
-        <button type='button' onClick={()=>{setFolder(null);setItems(null);setPath([]);setCand(null)}} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>cambiar</button>
+        <button type='button' onClick={()=>{setFolder(null);setItems(null);setPath([]);setCand(null)}} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Cambiar</button>
       </div>}
       {busy&&<div style={{fontSize:11,color:C.muted}}>Cargando…</div>}
       {err&&<div style={{fontSize:11,color:C.overdueText,marginBottom:6}}>{err}</div>}
@@ -13075,7 +13075,7 @@ function DestinatarioFacturasCard({client, contacts=[], embedded=false}){
     {!embedded&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
       <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,flex:1}}>Destinatario de facturas</div>
       {saved&&<span style={{fontSize:10,color:C.greenText,fontWeight:600}}>guardado ✓</span>}
-      <span style={{fontSize:9,color:C.muted,background:C.bgWarm,borderRadius:10,padding:'2px 8px'}}>se aprende del envío</span>
+      <span style={{fontSize:9,color:C.muted,background:C.bgWarm,borderRadius:10,padding:'2px 8px'}}>Se aprende del envío</span>
     </div>}
     <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:4}}>Para {embedded&&saved&&<span style={{color:C.greenText}}>· guardado ✓</span>}{embedded&&<span style={{fontWeight:400,color:C.done}}> · se aprende del envío</span>}</div>
     {conEmail.length>0
@@ -13247,7 +13247,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
   return (
     <>
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
-        <span style={{fontSize:15,fontWeight:500,color:C.text}}>Limpiar duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>todos los clientes</span>}</span>
+        <span style={{fontSize:15,fontWeight:500,color:C.text}}>Limpiar duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
         <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
@@ -13712,7 +13712,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   {bigDate(kpiDate(b))}
                   <SIcon n={estadoCobro(b).icon} s={15} c={borde(b)}/>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{b.billing_type==='reembolso'&&<span style={{fontSize:9,color:C.muted,marginLeft:5}}>reembolso</span>}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{b.billing_type==='reembolso'&&<span style={{fontSize:9,color:C.muted,marginLeft:5}}>Reembolso</span>}</div>
                     {b.invoice_no&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>}
                     {(proj||rsNm)&&<div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{proj||''}{proj&&rsNm?' · ':''}{rsNm&&<b style={{fontWeight:600}}>{rsNm}</b>}</div>}
                   </div>
@@ -14318,7 +14318,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       <div><div style={lbl}>{multi?`PDF DE LAS ${listF.length} FACTURAS (DTE con timbre)`:'PDF DE LA FACTURA (DTE con timbre)'}</div>
         {multi
           ? (atts.length?<div style={{display:'flex',flexWrap:'wrap',gap:6}}>{atts.map(a=><button key={a.name} type='button' onClick={()=>verPdf(a.base64,a.name)} title='Ver PDF' style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'5px 9px',cursor:'pointer'}}><span style={{fontWeight:600}}>✓</span> {a.name} <span style={{color:C.accent,fontWeight:600}}>· Ver</span></button>)}</div>:<div style={{fontSize:11,color:C.muted}}>Generando los PDF con timbre…</div>)
-          : (pdf? <div style={{display:'flex',alignItems:'center',gap:10,fontSize:12,flexWrap:'wrap'}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span>{pdf.base64&&<button type='button' onClick={()=>verPdf(pdf.base64,pdf.name)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',cursor:'pointer'}}>Ver PDF</button>}<button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
+          : (pdf? <div style={{display:'flex',alignItems:'center',gap:10,fontSize:12,flexWrap:'wrap'}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span>{pdf.base64&&<button type='button' onClick={()=>verPdf(pdf.base64,pdf.name)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',cursor:'pointer'}}>Ver PDF</button>}<button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button></div>
               : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>)}
         {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente. Toca uno para verlo.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:(!pdf&&pdfErr)?<div style={{fontSize:9,color:C.overdueText,marginTop:3}}>No pude generar el PDF con timbre: {pdfErr} Puedes adjuntarlo a mano.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
       </div>
@@ -17946,7 +17946,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   return (
     <div style={{maxWidth:600}}>
       <div style={{fontSize:11,color:C.muted,lineHeight:1.45,marginBottom:8}}>
-        Cuotas <b style={{color:C.text}}>Pagadas sin folio</b> que pueden <b style={{color:C.text}}>duplicar</b> una factura real. Toca una tarjeta para filtrar.
+        Cuotas <b style={{color:C.text}}>Pagadas sin folio</b> que pueden <b style={{color:C.text}}>Duplicar</b> una factura real. Toca una tarjeta para filtrar.
       </div>
       {(()=>{
         let conMatch=0; sospechosas.forEach(b=>{ if(scoreOf(b)>=0.6) conMatch++ })
@@ -18432,7 +18432,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
         </label>
       )}
       {cliObj&&(cliDocSel&&cliDocTxt
-        ? <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:10.5,color:C.normal,margin:'0 2px 10px'}}><span>Con documento del cliente: <b>{cliDocSel.name}</b></span><button type='button' onClick={()=>{setCliDocSel(null);setCliDocTxt('')}} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>quitar</button></div>
+        ? <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:10.5,color:C.normal,margin:'0 2px 10px'}}><span>Con documento del cliente: <b>{cliDocSel.name}</b></span><button type='button' onClick={()=>{setCliDocSel(null);setCliDocTxt('')}} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Quitar</button></div>
         : <div style={{margin:'0 2px 10px'}}>
             <button type='button' onClick={()=>setMostrarDocCli(v=>!v)} style={{fontSize:11.5,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{mostrarDocCli?'Ocultar documentos':`+ Traer un documento de ${cliObj.name}`}</button>
             {cliDocBusy&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Leyendo el documento…</div>}
@@ -19537,7 +19537,7 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
 
       <div style={{display:'flex',gap:12,flexWrap:'wrap',fontSize:11,color:C.muted,margin:'11px 0 2px'}}>
         {['alto','medio','ligero'].map(k=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:11,height:11,borderRadius:3,background:MC_PESO_CELL[k].bg}}/><b style={{color:C.text,fontWeight:600,textTransform:'capitalize'}}>{k}</b></span>)}
-        <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:11,height:11,borderRadius:3,background:'repeating-linear-gradient(45deg,#E1E6E9,#E1E6E9 3px,#EFF2F4 3px,#EFF2F4 7px)'}}/>vacaciones</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:11,height:11,borderRadius:3,background:'repeating-linear-gradient(45deg,#E1E6E9,#E1E6E9 3px,#EFF2F4 3px,#EFF2F4 7px)'}}/>Vacaciones</span>
       </div>
 
       {selDay && (
@@ -20137,7 +20137,7 @@ function ConciliarLoteModal({ rows=[], cmap={}, clients=[], onClose, onConfirm }
   const total = selRows.reduce((a,x)=>a+(Number(x.m.monto)||0),0)
   const nom = m => cmap[m.cliente_id] || m.nombre_contraparte || (clients.find(c=>String(c.id)===String(m.cliente_id))?.name) || 'Sin cliente'
   return (<>
-    <div style={{padding:'0 2px 10px',fontSize:12.5,color:C.muted,lineHeight:1.5}}>Cada pago calza <b style={{color:C.text}}>exacto en pesos</b> con el saldo de su factura y comparte el <b style={{color:C.text}}>RUT</b>. Destilda el que no quieras conciliar. Es reversible.</div>
+    <div style={{padding:'0 2px 10px',fontSize:12.5,color:C.muted,lineHeight:1.5}}>Cada pago calza <b style={{color:C.text}}>Exacto en pesos</b> con el saldo de su factura y comparte el <b style={{color:C.text}}>RUT</b>. Destilda el que no quieras conciliar. Es reversible.</div>
     <div style={{maxHeight:'52vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:6}}>
       {rows.map(({m,f})=>{ const on=sel.has(String(m.id))
         return <div key={m.id} onClick={()=>toggle(String(m.id))} style={{display:'flex',gap:10,alignItems:'flex-start',padding:'9px 11px',border:`1px solid ${on?C.greenText:C.border}`,borderRadius:10,background:on?C.greenBg:'#fff',cursor:'pointer'}}>
@@ -21879,7 +21879,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               </div>
                             </div>
                             {reembFor===m.id&&<div style={{marginTop:7,background:'#FAECE7',borderRadius:8,padding:'8px 10px'}}>
-                              <div style={{fontSize:10,color:C.coralText,marginBottom:6,lineHeight:1.4}}>Factura de gastos: se marca <b>pagada</b> con respaldo, pero <b>no cuenta como ingreso</b>. Elige:</div>
+                              <div style={{fontSize:10,color:C.coralText,marginBottom:6,lineHeight:1.4}}>Factura de gastos: se marca <b>pagada</b> con respaldo, pero <b>No cuenta como ingreso</b>. Elige:</div>
                               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                                 <button disabled={busy===m.id} onClick={()=>{setReembFor(null);reconciliarReembolso(m,sug,false)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'5px 12px',border:`1px solid ${C.coralText}`,background:'#fff',color:C.coralText,cursor:busy===m.id?'default':'pointer'}}>Solo saldar (no ingreso)</button>
                                 <button disabled={busy===m.id} onClick={()=>{setReembFor(null);reconciliarReembolso(m,sug,true)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'5px 12px',border:'none',background:C.tealText,color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Saldar + fondo por rendir</button>
@@ -21994,7 +21994,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                 <div style={{fontSize:9,fontWeight:700,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>En el SII · {rows.length} que calza{rows.length!==1?'n':''} con este pago</div>
                                 {rows.map(row=>{ const exacto=Math.abs(Number(row.monto)||0)===abs; const ing=siiMovIng===row.folio; return (
                                   <div key={row.folio} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,fontSize:11,padding:'5px 0',borderBottom:`1px solid #F1F1F1`}}>
-                                    <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(row.folio)||row.folio}</b> · {fmtM(row.monto)} <span style={{color:C.done}}>· {fmtFechaDMY(row.fechaEmision)}</span>{exacto&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:6,padding:'1px 6px'}}>monto exacto</span>}<br/><span style={{color:C.muted,fontSize:10}}>{row.receptor||'—'}{row.rut?` · ${row.rut}`:''}</span></span>
+                                    <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(row.folio)||row.folio}</b> · {fmtM(row.monto)} <span style={{color:C.done}}>· {fmtFechaDMY(row.fechaEmision)}</span>{exacto&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:6,padding:'1px 6px'}}>Monto exacto</span>}<br/><span style={{color:C.muted,fontSize:10}}>{row.receptor||'—'}{row.rut?` · ${row.rut}`:''}</span></span>
                                     <button disabled={ing} onClick={e=>{e.stopPropagation();ingresarYConciliar(m,row)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 11px',border:'none',background:exacto?C.accent:C.muted,color:'#fff',cursor:ing?'default':'pointer',flexShrink:0}}>{ing?'Ingresando…':'Ingresar y conciliar'}</button>
                                   </div>) })}
                               </div>
@@ -22104,7 +22104,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 <span style={{fontSize:10,color:C.soonText}}><b>¿Por qué esta?</b> {cli?.name||'El cliente'} también tiene {p.alt.length===1?'otra factura':`${p.alt.length} facturas`} del mismo monto. </span>
                 <span onClick={()=>setPropPick(pp=>({...pp,[m.id]:p.alt[0].id}))} style={{fontSize:10,color:C.accent,fontWeight:600,textDecoration:'underline',cursor:'pointer'}}>Cambiar a Factura N° {folioN(p.alt[0].invoice_no)}</span>
               </div>}
-              {overridden&&<div style={{fontSize:10,color:C.soonText,marginBottom:8}}>Elegida por ti · <span onClick={()=>setPropPick(pp=>{const n={...pp};delete n[m.id];return n})} style={{color:C.accent,fontWeight:600,textDecoration:'underline',cursor:'pointer'}}>volver a la sugerida</span></div>}
+              {overridden&&<div style={{fontSize:10,color:C.soonText,marginBottom:8}}>Elegida por ti · <span onClick={()=>setPropPick(pp=>{const n={...pp};delete n[m.id];return n})} style={{color:C.accent,fontWeight:600,textDecoration:'underline',cursor:'pointer'}}>Volver a la sugerida</span></div>}
               {m.cliente_id&&<div style={{marginBottom:8}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                   <span onClick={()=>{ setPropBuscar(buscando?null:m.id); setPropBuscaQ('') }} style={{fontSize:10,fontWeight:600,color:C.accent,cursor:'pointer'}}>{buscando?'Cerrar búsqueda':(tieneTarget?'Buscar otra factura':'Buscar factura para imputar')}</span>
@@ -22129,7 +22129,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   : m.cliente_id?<div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>
                       <button onClick={async()=>{ if(await appConfirm(`Registrar ${fmtM(m.monto)} como ADELANTO (anticipo) de este cliente?`)) saldoAFavor(m) }} disabled={busy===m.id} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>Adelanto</button>
                       <button onClick={()=>crearFondoProvision(m)} disabled={busy===m.id} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>Fondo por rendir</button>
-                    </div>:<span style={{fontSize:10,color:C.done}}>identifica el cliente primero</span>}
+                    </div>:<span style={{fontSize:10,color:C.done}}>Identifica el cliente primero</span>}
               </div>
             </div>}
           </div>) }
@@ -22162,7 +22162,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               <div style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,marginTop:2}}>{fmtM(total)}</div>
               <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>{conCalce.length>0&&fchip('calce',`${conCalce.length} con calce`,C.greenText,C.greenBg)}{propuesta.revisar.length>0&&fchip('revisar',`${propuesta.revisar.length} a revisar`,C.soonText,C.soonBg)}{propFiltro!=='todos'&&<span onClick={()=>setPropFiltro('todos')} style={{fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer',alignSelf:'center'}}>Ver todos</span>}</div>
             </div>
-            <div style={{fontSize:10,color:C.done,textAlign:'center',marginBottom:11}}>nada se aplica hasta que apruebes</div>
+            <div style={{fontSize:10,color:C.done,textAlign:'center',marginBottom:11}}>Nada se aplica hasta que apruebes</div>
             {recent.map(g=>{ const open=propTime.has(g.k); return (
               <div key={g.k} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
                 <div onClick={()=>setPropTime(s=>{const n=new Set(s);n.has(g.k)?n.delete(g.k):n.add(g.k);return n})} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 14px',cursor:'pointer',background:open?'#F7F9FA':'#fff'}}>
