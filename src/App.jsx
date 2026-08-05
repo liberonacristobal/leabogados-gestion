@@ -6623,6 +6623,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [respaldoFiles,setRespaldoFiles] = useState(null)  // resumen por archivo subido (fase intermedia)
   const [respaldoAt,setRespaldoAt] = useState(null)        // fecha/hora de la carga actual (trazabilidad)
   const [respaldoBatchId,setRespaldoBatchId] = useState(null)  // id del batch de la carga actual (para ligar las facturas registradas)
+  const batchIdRef = useRef(null)              // id del batch de la sesión; se crea al PRIMER registro (no en el preview)
+  const respaldoSummaryRef = useRef(null)      // resumen del preview (period/files/counts) para crear el batch al registrar
   const [cargasHist,setCargasHist] = useState(null)        // historial de cargas del SII (modal); null = cerrado
   const [mesTandaReq,setMesTandaReq] = useState(null)   // {def, resolve} del modal "¿de qué mes es esta tanda?" (promesa)
   // Sube uno o VARIOS "Archivo Respaldo" (SetDTE XML de MIPYME): por cada factura genera el PDF (logo+timbre), lo sube a
@@ -6728,11 +6730,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       const _cat=catImport
       const filesDetail=fileStats.map(f=>{ const its=res.filter(r=>r.archivo===f.name); const c={}; its.forEach(r=>{ const k=_cat(r.estado); c[k]=(c[k]||0)+1 }); return {name:f.name,total:f.total,skipped:f.skipped,counts:c} })
       const totalCounts={}; res.forEach(r=>{ const k=_cat(r.estado); totalCounts[k]=(totalCounts[k]||0)+1 })
-      const batchAt=new Date().toISOString()
-      setRespaldoAt(batchAt)
-      let _batchId=null
-      try{ const {data:_b}=await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period:(periodoISO?String(periodoISO).slice(0,7):null), docs_total:fileStats.reduce((a,f)=>a+(f.total||0),0), skipped:fileStats.reduce((a,f)=>a+(f.skipped||0),0), files:filesDetail, counts:totalCounts }).select('id').single(); _batchId=_b?.id||null }catch(_){}
-      setRespaldoBatchId(_batchId)
+      setRespaldoAt(new Date().toISOString())
+      // El batch (trazabilidad) NO se escribe en el preview: solo al REGISTRAR de verdad (ensureBatch). Previsualizar no deja rastro ni dispara "ya cargaste".
+      batchIdRef.current=null; setRespaldoBatchId(null)
+      respaldoSummaryRef.current={ period:(periodoISO?String(periodoISO).slice(0,7):null), files:filesDetail, counts:totalCounts, docs_total:fileStats.reduce((a,f)=>a+(f.total||0),0), skipped:fileStats.reduce((a,f)=>a+(f.skipped||0),0) }
       setRespaldoFiles(fileStats)
       setRespaldoRes(res)
       onRefresh&&onRefresh()
@@ -6744,6 +6745,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [crearCli,setCrearCli] = useState({})         // folio -> client_id elegido a mano para la huérfana
   // Crea en el sistema una factura que se emitió en el SII pero no estaba en la app (huérfana), desde su DTE del XML:
   // reusa onIngresarSII (fuente única). Cliente: el que elijas a mano (crearCli), o si no, lo resuelve por RUT.
+  // Crea el batch de trazabilidad la PRIMERA vez que registras algo de esta carga (idempotente vía ref). El preview no lo crea.
+  const ensureBatch = async () => {
+    if(batchIdRef.current) return batchIdRef.current
+    const s=respaldoSummaryRef.current||{}
+    try{ const {data}=await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period:s.period||null, docs_total:s.docs_total||0, skipped:s.skipped||0, files:s.files||[], counts:s.counts||{} }).select('id').single(); batchIdRef.current=data?.id||null }catch(_){}
+    setRespaldoBatchId(batchIdRef.current)
+    return batchIdRef.current
+  }
   const crearDesdeXML = async(item, idx)=>{
     if(!onIngresarSII||creandoFac) return
     const clienteId = crearCli[item.row.folio]||item.clienteId||null   // usa el cliente ya resuelto por RUT si no elegiste otro
@@ -6751,7 +6760,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     if(!await appConfirm(`¿Crear la Factura N°${item.row.folio} (${item.row.receptor||'—'} · ${fmt(item.row.monto)})${cliNom?`\nCliente: ${cliNom}`:''} en el sistema?\nSe emitió en el SII pero no estaba acá.`)) return
     setCreandoFac(item.row.folio)
     try{
-      const fac = await onIngresarSII({...item.row, doc:item.doc, import_batch_id:respaldoBatchId}, clienteId)   // pasa el XML + el batch de la carga (trazabilidad)
+      const fac = await onIngresarSII({...item.row, doc:item.doc, import_batch_id:(await ensureBatch())}, clienteId)   // crea el batch al registrar (no en el preview) + liga la factura
       if(fac?.id){ try{ const token=await driveToken(); if(token){ const carpeta=await driveCarpetaFacturacion(token, item.row.fechaEmision||''); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const yaEnDrive=await driveBuscarEnCarpeta(token,carpeta,fname); let fileId,url2; if(yaEnDrive.length){fileId=yaEnDrive[0].id;url2=yaEnDrive[0].webViewLink||null}else{const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,carpeta,new File([u8],fname,{type:'application/pdf'}),fname); fileId=up.id;url2=up.webViewLink||null} await supabase.from('billing_attachments').delete().eq('billing_id',fac.id).eq('uploaded_by','Respaldo SII'); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:fileId,name:fname,url:url2,uploaded_by:'Respaldo SII'}) } }catch(_){} }
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
       setRespaldoRes(p=>(p||[]).map((r,i)=>i===idx?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))
@@ -6765,6 +6774,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const anularPorNC = async(item, idx, vincular)=>{
     setNcBusy(true)
     try{
+      await ensureBatch()   // registrar una NC también cuenta como commit de la carga (trazabilidad)
       const now=new Date().toISOString()
       const facCli=(billing||[]).find(x=>x.id===item.facId)
       if(item.facId){
@@ -6789,10 +6799,11 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   // Registrar una programada como emitida: le pone folio + DTE + estado (Por cobrar) sobre la MISMA fila (no duplica). Monto = MntTotal del DTE (valor real emitido). Conserva su vencimiento planificado.
   const registrarProg = async(item)=>{
     if(!item.progId) throw new Error('sin programada')
+    const bid=await ensureBatch()   // crea el batch al registrar (no en el preview)
     const now=new Date().toISOString()
     const dteTot=item.doc?dteMontoTotal(item.doc):null
     const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(item.row.fechaEmision||item.fecha)
-    const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}), ...(respaldoBatchId?{import_batch_id:respaldoBatchId}:{}) }
+    const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}), ...(bid?{import_batch_id:bid}:{}) }
     const { error } = await supabase.from('billing').update(patch).eq('id',item.progId)
     if(error) throw error
     setBilling&&setBilling(p=>p.map(x=>x.id===item.progId?{...x,...patch}:x))
