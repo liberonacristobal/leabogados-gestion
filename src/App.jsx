@@ -6482,6 +6482,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       const token = await driveToken()
       if(!token){ if(await appConfirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
       const res=[]
+      const progUsadas=new Set()   // programadas ya tomadas por otra factura de este lote (no reusar en el match FIFO)
       for(const file of files){
         let docs=[]; try{ docs=splitSetDTE(await leerXml(file)) }catch(_){ try{ docs=splitSetDTE(await file.text()) }catch(__){} }
         if(!docs.length){ res.push({archivo:file.name, estado:'sin_dte'}); continue }
@@ -6520,9 +6521,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const nmb=(d.match(/<NmbItem>([^<]+)<\/NmbItem>/)||[])[1]||''
             const concepto=nmb||'Honorarios'
             const cli=resolverClienteSII(rut, receptor, clients, clientEntities)   // cliente ya conocido por RUT/RS (no pedir asignar)
-            // ¿Calza con una PROGRAMADA del cliente? (sin folio, mismo cliente, monto ±6%, vencimiento ±45 días) → se REGISTRA sobre ella, no se duplica.
-            const prog = cli && monto>0 ? (billing||[]).find(x=>!x.deleted_at && !x.invoice_no && x.status==='Programada' && x.billing_type!=='reembolso' && String(x.client_id)===String(cli.id) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=45 })()) : null
-            res.push({folio:folioM||'?', estado:prog?'programada':'nueva', cliente:cli?.name||receptor, clienteId:cli?.id||null, progId:prog?.id||null, monto, fecha, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
+            // ¿Calza con una PROGRAMADA del cliente? Candidatas = pendientes (sin folio) del cliente, monto ±6%, vencimiento a ≤120 días de la emisión (cota de seguridad). FIFO: se toma la MÁS ANTIGUA no usada en el lote; si hay varias, se dejan como alternativas para cambiar.
+            const cand = cli && monto>0 ? (billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && x.status==='Programada' && x.billing_type!=='reembolso' && String(x.client_id)===String(cli.id) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=120 })()).sort((a,b)=>String(a.due||a.issued_at||'').localeCompare(String(b.due||b.issued_at||''))) : []
+            const pick = cand.find(c=>!progUsadas.has(c.id)) || null
+            if(pick) progUsadas.add(pick.id)
+            const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0}))
+            res.push({folio:folioM||'?', estado:pick?'programada':'nueva', cliente:cli?.name||receptor, clienteId:cli?.id||null, progId:pick?.id||null, progCand, monto, fecha, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
             continue
           }
           try{
@@ -6602,6 +6606,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   }
   const [regBusy,setRegBusy] = useState(null)       // progId en curso, o 'lote'
   const [regReview,setRegReview] = useState(null)   // items 'programada' en revisión antes de registrar en lote
+  const [progPick,setProgPick] = useState(null)     // item cuya selección de programada (alternativas) está abierta
   // Registrar una programada como emitida: le pone folio + DTE + estado (Por cobrar) sobre la MISMA fila (no duplica). Monto = MntTotal del DTE (valor real emitido). Conserva su vencimiento planificado.
   const registrarProg = async(item)=>{
     if(!item.progId) throw new Error('sin programada')
@@ -7195,18 +7200,28 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
                     </div>
                   </div>) }
-                const progRowR=(r,i)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; return (
-                  <div key={'p'+i} onClick={()=>{ const bb2=r.progId&&(billing||[]).find(x=>x.id===r.progId); if(bb2&&onEdit) onEdit(bb2) }} style={{display:'grid',gridTemplateColumns:'1fr 78px 104px',columnGap:10,alignItems:'center',padding:'10px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:r.progId?'pointer':'default'}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div>
-                      <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Factura N°{r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}<span style={{fontSize:8,fontWeight:600,borderRadius:3,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,background:isProg?C.bgWarm:C.soonBg,color:isProg?C.muted:C.soonText}}>{isProg?'Programada':'Nueva'}</span></div>
+                const progRowR=(r,i)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; const cands=r.progCand||[]; const sel=cands.find(c=>c.id===r.progId); const many=isProg&&cands.length>1; const open=progPick===r; return (
+                  <div key={'p'+i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
+                    <div onClick={()=>{ const bb2=r.progId&&(billing||[]).find(x=>x.id===r.progId); if(bb2&&onEdit) onEdit(bb2) }} style={{display:'grid',gridTemplateColumns:'1fr 78px 104px',columnGap:10,alignItems:'center',cursor:r.progId?'pointer':'default'}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Factura N°{r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}<span style={{fontSize:8,fontWeight:600,borderRadius:3,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,background:isProg?C.bgWarm:C.soonBg,color:isProg?C.muted:C.soonText}}>{isProg?'Programada':'Nueva'}</span></div>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
+                      {done
+                        ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'6px 0',textAlign:'center'}}>Registrada</span>
+                        : isProg
+                          ? <button disabled={!!regBusy} onClick={e=>{e.stopPropagation();doRegistrar(r)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.azulBg,color:C.accent}}>{regBusy===r.progId?'…':'Registrar'}</button>
+                          : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.soonBg,color:C.soonText}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
                     </div>
-                    <span style={{fontSize:12,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
-                    {done
-                      ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'6px 0',textAlign:'center'}}>Registrada</span>
-                      : isProg
-                        ? <button disabled={!!regBusy} onClick={e=>{e.stopPropagation();doRegistrar(r)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.azulBg,color:C.accent}}>{regBusy===r.progId?'…':'Registrar'}</button>
-                        : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.soonBg,color:C.soonText}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
+                    {isProg&&sel&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>→ Vence {sel.due?fmtFechaDMY(sel.due):'—'}{sel.concept?` · ${sel.concept}`:''}{many&&<> · <span onClick={e=>{e.stopPropagation();setProgPick(open?null:r)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Cambiar ({cands.length})</span></>}</div>}
+                    {many&&open&&<div style={{marginTop:6,border:`0.5px solid ${C.border}`,borderRadius:9,overflow:'hidden'}}>
+                      {cands.map((c,ci)=>{ const on2=c.id===r.progId; return <div key={c.id} onClick={()=>{ setRespaldoRes(p=>(p||[]).map(x=>x===r?{...x,progId:c.id}:x)); setProgPick(null) }} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderTop:ci?`0.5px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
+                        <span style={{width:15,height:15,borderRadius:'50%',border:`1.5px solid ${on2?C.accent:'#C7D0D5'}`,flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on2&&<span style={{width:8,height:8,borderRadius:'50%',background:C.accent}}/>}</span>
+                        <span style={{flex:1,fontSize:11.5,color:C.text}}>Vence {c.due?fmtFechaDMY(c.due):'—'}{c.concept?` · ${c.concept}`:''}</span>
+                        <span style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(c.amount)}</span>
+                      </div> })}
+                    </div>}
                   </div>) }
                 const ncRowR=(r,i)=>(
                   <div key={'nc'+i} style={{padding:'10px 0',borderTop:`1px solid ${C.bgSoft}`}}>
