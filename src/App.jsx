@@ -5576,7 +5576,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todo emitido este mes ✓</div>}
         {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const tw=onReplaceProgramada?emitidaTwin(b):null; const exp=emitExp.has(b.id); return (
           <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
-            <div onClick={tw?()=>setEmitExp(s=>{ const n=new Set(s); n.has(b.id)?n.delete(b.id):n.add(b.id); return n }):undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:tw?'pointer':'default'}}>
+            <div onClick={tw?()=>setEmitExp(s=>{ const n=new Set(s); n.has(b.id)?n.delete(b.id):n.add(b.id); return n }):(onEdit?()=>onEdit(b):undefined)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:(tw||onEdit)?'pointer':'default'}}>
               <div style={{flex:1,minWidth:0}}>
                 <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
                 <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'}</div>
@@ -14669,8 +14669,9 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       const adjuntos = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
       const bodyTxt=cuerpoFull()   // ya incluye las cuentas (segmentos), en el orden correcto
       if(pedirFondo){ try{ await supabase.from('learnings').upsert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(ctaGastos)},{onConflict:'kind,key'}) }catch(_){} }   // recuerda la cuenta de gastos ingresada
-      // Envía SIEMPRE desde el correo del usuario; si su Gmail venció, enviarComoUsuario pregunta antes de usar la oficina (o cancela).
-      const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos})
+      // La factura sale SIEMPRE desde el correo del usuario. Si su Gmail venció, NO cae a la oficina: se le pide reentrar y reintentar (control sobre el remitente).
+      const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos, soloUsuario:true})
+      if(via==='reauth'){ appAlert('Tu acceso a Gmail expiró.\nCierra sesión y vuelve a entrar con tu cuenta @leabogados.cl, y reintenta el envío desde tu propio correo.'); setSending(false); return }
       if(via===null){ setSending(false); return }
       const viaServer = via==='oficina'
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
@@ -16244,6 +16245,7 @@ async function enviarComoUsuario(opts, batch){
   if(batch==='oficina'){ await sendMailServer(server); return 'oficina' }
   if(batch==='cancelar'){ return null }
   try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token, gmail); return 'usuario' } }catch(_){}
+  if(opts.soloUsuario) return 'reauth'   // facturas: NO caer a la oficina automáticamente; el llamador pide reentrar y reintentar desde tu correo
   if(batch==='usuario') return null   // en masivo modo-usuario, si falla uno no preguntamos: se omite
   if(!await appConfirm(MAIL_OFICINA_CONFIRM)) return null
   await sendMailServer(server); return 'oficina'
