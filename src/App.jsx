@@ -5872,6 +5872,8 @@ function periodoDeTexto(txt){
   const cM=t.match(/(?:cuota|pago)\s*(\d{1,2})/)||t.match(/\b(\d{1,2})\s*(?:\/|\sde\s)\s*\d{1,2}\b/); const cuota=cM?+cM[1]:null
   return {mes,anio,cuota}
 }
+// UF que menciona la glosa de un DTE ("Equivalente a 37,3 UF", "(30 UF)", "45,83 UF") → número. Sirve para crear la venta EN UF desde la factura.
+const ufDeGlosa = g => { const m=String(g||'').match(/(\d[\d.,]*)\s*UF\b/i); if(!m) return null; let s=m[1]; if(s.includes(',')) s=s.replace(/\./g,'').replace(',','.'); const n=parseFloat(s); return n>0?n:null }
 // Puntúa cuánto calza el MES de servicio de la glosa (gmes) con una candidata. Prioriza la convención "mes vencido" de la firma
 // (servicio = vencimiento − 1), luego el N° de cuota, y deja el mes directo como señal débil. Evita que cuotas de meses contiguos empaten.
 function mesScoreCandidata(concept,due,gmes){
@@ -6596,7 +6598,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   </div>)
 }
 
-function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onIrConciliacion,intent,onIntentDone}) {
+function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onCrearVentaRapida,onIrConciliacion,intent,onIntentDone}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [depurarRows,setDepurarRows] = useState(null)   // facturas saldadas a confirmar (modal detallado)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
@@ -6796,6 +6798,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [regReview,setRegReview] = useState(null)   // items 'programada' en revisión antes de registrar en lote
   const [progPick,setProgPick] = useState(null)     // item cuya selección de programada (alternativas) está abierta
   const [secOpen,setSecOpen] = useState({})         // secciones desplegadas del modal de carga (programadas van replegadas por defecto)
+  const [crearVentaFor,setCrearVentaFor] = useState(null)   // item (nueva) cuyo panel "Crear venta" está abierto
+  const [cvForm,setCvForm] = useState({title:'',ufVal:'',area:'Corporativo',responsible:''})   // form del panel Crear venta
+  const [cvBusy,setCvBusy] = useState(false)
   // Registrar una programada como emitida: le pone folio + DTE + estado (Por cobrar) sobre la MISMA fila (no duplica). Monto = MntTotal del DTE (valor real emitido). Conserva su vencimiento planificado.
   const registrarProg = async(item)=>{
     if(!item.progId) throw new Error('sin programada')
@@ -6810,6 +6815,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   }
   const doRegistrar = async(item)=>{ setRegBusy(item.progId); try{ await registrarProg(item); setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'registrada'}:r)) }catch(e){ appAlert('No se pudo registrar: '+(e.message||e)) } setRegBusy(null); onRefresh&&onRefresh() }
   const doRegistrarLote = async(items)=>{ setRegBusy('lote'); let ok=0; for(const it of items){ try{ await registrarProg(it); ok++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada'}:r)) }catch(_){} } setRegBusy(null); setRegReview(null); onRefresh&&onRefresh(); appAlert(`${ok} de ${items.length} factura${items.length!==1?'s':''} registrada${ok!==1?'s':''}.`) }
+  // Panel "Crear venta" desde una nueva: abre con todo auto-llenado (glosa → título/UF; área+abogado heredados del cliente).
+  const abrirCrearVenta = (item)=>{ const glosa=item.glosa||item.row?.concepto||''; const uf=ufDeGlosa(glosa); const cid=item.clienteId; const lastV=cid?(sales||[]).filter(s=>!s.deleted_at&&String(s.client_id)===String(cid)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0]:null; setCvForm({ title:(glosa.split('—')[0].trim()||glosa||'Servicio'), ufVal:uf?String(uf):'', area:lastV?.area||'Corporativo', responsible:lastV?.responsible||user?.name||'' }); setCrearVentaFor(item) }
+  const doCrearVenta = async(item)=>{ if(!onCrearVentaRapida) return; setCvBusy(true); try{ const res=await onCrearVentaRapida(item,{ title:cvForm.title, ufVal:parseFloat(String(cvForm.ufVal).replace(',','.'))||null, area:cvForm.area, responsible:cvForm.responsible||null }); if(res){ setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'creada',cliente:(clients||[]).find(c=>String(c.id)===String(res.factura?.client_id))?.name||item.cliente}:r)); setCrearVentaFor(null) } }catch(e){ appAlert('No se pudo crear la venta: '+(e.message||e)) } setCvBusy(false); onRefresh&&onRefresh() }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
   const [saludCobranza,setSaludCobranza] = useState(false)   // panel de salud de cobranza (DSO, tasa, morosidad, top deudores)
   const [recOpen,setRecOpen] = useState(()=>new Set())   // "Por recordar": clientes con su grupo expandido (default colapsado)
@@ -7405,15 +7413,44 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                         <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
                         {done
                           ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 12px'}}>Registrada</span>
+                          : r.estado==='creada'
+                            ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 12px'}}>Venta + factura ✓</span>
                           : isProg
                             ? <button disabled={!!regBusy} onClick={e=>{e.stopPropagation();doRegistrar(r)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.azulBg,color:C.accent,whiteSpace:'nowrap'}}>{regBusy===r.progId?'…':'Registrar'}</button>
-                            : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
+                            : r.clienteId
+                              ? <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
+                                  <button disabled={cvBusy||creandoFac===r.row.folio} onClick={e=>{e.stopPropagation();crearVentaFor===r?setCrearVentaFor(null):abrirCrearVenta(r)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.accent,color:'#fff',whiteSpace:'nowrap'}}>{crearVentaFor===r?'Cerrar':'Crear venta'}</button>
+                                  <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:10,fontWeight:600,border:'none',background:'transparent',color:C.muted,cursor:'pointer',padding:'2px 4px'}}>{creandoFac===r.row.folio?'…':'Solo factura'}</button>
+                                </div>
+                              : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
                       </div>
                     </div>
                     {isProg&&sel
                       ? <div style={{fontSize:10,color:C.muted,marginTop:5}}>{r.glosa&&<span style={{fontStyle:'italic'}}>{r.glosa} </span>}→ {sel.concept||(sel.due?`Vence ${fmtFechaDMY(sel.due)}`:'cuota')}{many&&<> · <span onClick={e=>{e.stopPropagation();setProgPick(open?null:r)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Cambiar ({cands.length})</span></>}</div>
                       : r.glosa?<div style={{fontSize:10,color:C.muted,marginTop:5,fontStyle:'italic',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.glosa}</div>:null}
                     {noCli&&<div style={{marginTop:7}}><AsignarClienteInline bill={r} clients={clients} onAssign={asignarClienteImport} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/></div>}
+                    {crearVentaFor===r&&(()=>{ const AREAS=['Corporativo','Tributario','Laboral','Sucesorio','Otro']; const ABOGS=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']; const ufN=parseFloat(String(cvForm.ufVal).replace(',','.'))||0; return (
+                      <div onClick={e=>e.stopPropagation()} style={{marginTop:9,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px'}}>
+                        <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginBottom:8}}>Nueva venta · {cliDisp}</div>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                          <span style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Título</span>
+                          <input value={cvForm.title} onChange={e=>setCvForm(f=>({...f,title:e.target.value}))} style={{flex:1,fontSize:12,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 9px'}}/>
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9}}>
+                          <span style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Monto</span>
+                          <span style={{flex:1,fontSize:12,fontWeight:600,color:C.text}}>{ufN>0?`${ufN.toLocaleString('es-CL',{maximumFractionDigits:2})} UF · ${fmt(r.monto)}`:fmt(r.monto)}</span>
+                          <span style={{fontSize:8.5,color:C.greenText,fontWeight:600}}>de la glosa</span>
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                          <span style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Área</span>
+                          {AREAS.map(a=>{ const on=cvForm.area===a; return <button key={a} onClick={()=>setCvForm(f=>({...f,area:a}))} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.bg,color:on?C.accent:C.muted}}>{a}</button> })}
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:11}}>
+                          <span style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Abogado</span>
+                          {ABOGS.map(a=>{ const on=cvForm.responsible===a; return <button key={a} onClick={()=>setCvForm(f=>({...f,responsible:a}))} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.bg,color:on?C.accent:C.muted}}>{a}</button> })}
+                        </div>
+                        <button disabled={cvBusy||!cvForm.title.trim()} onClick={()=>doCrearVenta(r)} style={{width:'100%',background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'9px 0',fontSize:12,fontWeight:600,cursor:cvBusy?'default':'pointer',opacity:cvBusy?.6:1}}>{cvBusy?'Creando…':'Crear venta y registrar factura'}</button>
+                      </div>) })()}
                     {many&&open&&<div style={{marginTop:6,border:`0.5px solid ${C.border}`,borderRadius:9,overflow:'hidden'}}>
                       {cands.map((c,ci)=>{ const on2=c.id===r.progId; return <div key={c.id} onClick={()=>{ setRespaldoRes(p=>(p||[]).map(x=>x===r?{...x,progId:c.id}:x)); setProgPick(null) }} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderTop:ci?`0.5px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
                         <span style={{width:15,height:15,borderRadius:'50%',border:`1.5px solid ${on2?C.accent:'#C7D0D5'}`,flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on2&&<span style={{width:8,height:8,borderRadius:'50%',background:C.accent}}/>}</span>
@@ -20183,7 +20220,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
         <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
         <span style={{ fontSize:17, fontWeight:600, color:C.accent, flex:1 }}>Proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</span>
         {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
-        <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.azul3||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
+        <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
       </div>
 
       {esAdmin&&activasSinProyecto.length>0&&(
@@ -20440,7 +20477,7 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
               <div style={{ marginBottom:14 }}>
                 {servicios.map((s,i)=>(
                   <div key={i} onClick={()=>setServicios(a=>a.map((x,j)=>j===i?{...x,on:!x.on}:x))} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', cursor:'pointer' }}>
-                    <span style={{ width:16, height:16, borderRadius:4, flexShrink:0, background:s.on?C.done:'transparent', border:s.on?'none':`1.5px solid ${C.azul3||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{s.on?'✓':''}</span>
+                    <span style={{ width:16, height:16, borderRadius:4, flexShrink:0, background:s.on?C.done:'transparent', border:s.on?'none':`1.5px solid ${C.done||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{s.on?'✓':''}</span>
                     <span style={{ fontSize:13, color:s.on?C.text:C.muted }}>{s.t}</span>
                   </div>
                 ))}
@@ -20453,7 +20490,7 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
                   <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none' }}>
                     <span style={{ fontSize:13, color:C.text, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h.titulo}</span>
                     <input type='date' value={h.fecha} onChange={e=>setHitos(a=>a.map((x,j)=>j===i?{...x,fecha:e.target.value}:x))} style={{ fontSize:11, padding:'2px 5px', borderRadius:6, border:`1px solid ${C.border}`, color:C.text }}/>
-                    <span onClick={()=>setHitos(a=>a.map((x,j)=>j===i?{...x,on:!x.on}:x))} style={{ width:16, height:16, borderRadius:4, flexShrink:0, cursor:'pointer', background:h.on?C.done:'transparent', border:h.on?'none':`1.5px solid ${C.azul3||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{h.on?'✓':''}</span>
+                    <span onClick={()=>setHitos(a=>a.map((x,j)=>j===i?{...x,on:!x.on}:x))} style={{ width:16, height:16, borderRadius:4, flexShrink:0, cursor:'pointer', background:h.on?C.done:'transparent', border:h.on?'none':`1.5px solid ${C.done||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{h.on?'✓':''}</span>
                   </div>
                 ))}
               </div>
@@ -24023,13 +24060,29 @@ export default function App() {
     try{
       const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(row.fechaEmision)   // DD/MM/YYYY→ISO
       const montoReal = (row.doc?dteMontoTotal(row.doc):null) ?? row.monto   // el monto REAL es el del DTE emitido; row.monto es respaldo
-      created=await upsertBilling({ client_id:cli?.id||null, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:montoReal, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, dte_xml:row.doc||null, sii_synced_at:new Date().toISOString(), notes:null, ...(row.import_batch_id?{import_batch_id:row.import_batch_id}:{}) })
+      created=await upsertBilling({ client_id:cli?.id||null, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:montoReal, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, dte_xml:row.doc||null, sii_synced_at:new Date().toISOString(), notes:null, ...(row.import_batch_id?{import_batch_id:row.import_batch_id}:{}), ...(row.sale_id?{sale_id:row.sale_id}:{}) })
       if(cli && row.rut){ try{ await supabase.from('client_entities').upsert({client_id:cli.id,rut:row.rut,name:row.receptor||null},{onConflict:'rut',ignoreDuplicates:true}) }catch(_){}}   // M5: no pisar el nombre bueno de la RS
     }catch(e){ if(!/duplicate/i.test(e.message||'')) throw e }   // ya estaba: la buscamos abajo para conciliar con ella
     let nb=null; try{ nb=await getBilling(); if(nb)setBilling(nb) }catch(_){}
     const pool=nb||billing||[]
     return pool.find(b=>String(b.invoice_no)===String(row.folio)&&(!row.rut||nr(b.receptor_rut)===nr(row.rut)))||created
   },[clients,clientEntities,billing])
+  // Crea una VENTA (servicio único, Terminado) desde una factura "nueva" y registra la factura ligada a ella. Auto-llenado de la glosa; solo área+responsable extra.
+  const handleCrearVentaRapida=useCallback(async(item, opts={})=>{
+    const row=item.row||item; const clienteId=item.clienteId||opts.clienteId
+    const cli = clienteId ? String(clienteId) : (resolverClienteSII(row.rut,row.receptor,clients,clientEntities)?.id||null)
+    if(!cli){ appAlert('Falta el cliente para crear la venta. Asígnalo primero.'); return null }
+    const fecha=String(row.fechaEmision||'').slice(0,10)
+    const y = /^\d{4}/.test(fecha)? +fecha.slice(0,4) : new Date().getFullYear()
+    const mo = /^\d{4}-\d{2}/.test(fecha)? +fecha.slice(5,7) : null
+    const monto = item.doc? (dteMontoTotal(item.doc)??row.monto) : row.monto
+    const uf = (opts.ufVal>0)? opts.ufVal : null; const esUF = uf!=null
+    const venta = { client_id:cli, title:(opts.title||row.concepto||'Servicio').trim(), area:opts.area||'Corporativo', responsible:opts.responsible||null, status:'Terminado', cobro_type:'personalizada', moneda:esUF?'UF':'CLP', amount_uf:esUF?uf:null, amount_clp:esUF?null:monto, uf_value:esUF?null:(readUFCache()?.value||null), year:y, month:mo }
+    let saved=null
+    try{ const {data,error}=await supabase.from('sales').insert(venta).select().single(); if(error)throw error; saved=data; setSales(p=>[data,...p]) }catch(e){ appAlert('No se pudo crear la venta: '+(e.message||e)); return null }
+    const fac = await handleIngresarSII({...row, doc:item.doc, sale_id:saved.id, import_batch_id:item.import_batch_id||null}, cli)
+    return {venta:saved, factura:fac}
+  },[clients,clientEntities,handleIngresarSII])
   // Paso 1: arma la vista previa (dryRun, no envía) y abre el modal con folio/receptor/total + Ver PDF.
   const handleEmitirDTE=useCallback(async(bill, entity)=>{
     try{
@@ -24295,7 +24348,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
