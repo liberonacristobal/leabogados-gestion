@@ -5755,8 +5755,11 @@ function MesTandaModal({def,onPick}){
 // Devuelve la fila creada, o null si ya existía esa RS / no había cliente / falló. Úsalo en todo "asignar/aprende" (no repetir el insert).
 async function aprenderRS(clientId, rut, name, clientEntities=[]){
   if(!clientId) return null
-  const norm=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const nr=norm(rut)
-  if(nr && (clientEntities||[]).some(e=>norm(e.rut)===nr)) return null
+  const norm=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const nr=norm(rut); const nm=(name||'').trim().toLowerCase()
+  // Con RUT: dedup por RUT (global — un RUT pertenece a UN cliente, evita el RUT en dos fichas). Sin RUT: dedup por nombre dentro del mismo cliente.
+  const dup = nr ? (clientEntities||[]).some(e=>norm(e.rut)===nr)
+                 : (nm && (clientEntities||[]).some(e=>String(e.client_id)===String(clientId)&&(e.name||'').trim().toLowerCase()===nm))
+  if(dup) return null
   try{ const {data}=await supabase.from('client_entities').insert({client_id:clientId, name:name||null, rut:rut||null}).select().single(); return data||null }catch(_){ return null }
 }
 // Parser único de un DTE del import (Documento XML) → todos los campos que usa la carga, extraídos en UN solo lugar (misma regex de siempre).
@@ -5788,6 +5791,7 @@ function CargaHistRow({b}){
   const mi=b.period&&/^\d{4}-\d{2}$/.test(b.period)?+b.period.slice(5,7)-1:null
   const per=mi!=null?`${M[mi].charAt(0).toUpperCase()+M[mi].slice(1)} ${b.period.slice(0,4)}`:null
   const nf=(b.files?.length)||0
+  const regTarget=(c.prog||0)+(c.new||0)   // facturas que se podían registrar (programadas + nuevas)
   return <div style={{padding:'12px 2px',borderTop:`1px solid ${C.bgSoft}`}}>
     <div onClick={()=>nf&&setOpen(o=>!o)} style={{cursor:nf?'pointer':'default'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
@@ -5796,6 +5800,7 @@ function CargaHistRow({b}){
       </div>
       <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{b.created_by||'—'}</div>
       <div style={{fontSize:11,color:C.muted,marginTop:5}}><b style={{color:C.text}}>{nf} archivo{nf!==1?'s':''} · {b.docs_total} doc</b>{parts.length?` — ${parts.join(' · ')}`:''}{b.skipped>0?` · ${b.skipped} omitida${b.skipped!==1?'s':''}`:''}{nf?<span style={{color:C.azulInfo,fontWeight:600}}> · {open?'ocultar':'ver'}</span>:null}</div>
+      {regTarget>0&&<div style={{fontSize:10.5,fontWeight:600,marginTop:3,color:(b.registered||0)>=regTarget?C.greenText:C.muted}}>Registró {b.registered||0} de {regTarget}{(b.registered||0)>=regTarget?' ✓':''}</div>}
     </div>
     {open&&(b.files||[]).map((f,i)=><div key={i} style={{fontSize:10.5,color:C.muted,marginTop:6,paddingLeft:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.name} · {f.total} doc{f.skipped>0?` · ${f.skipped} omitida${f.skipped!==1?'s':''}`:''}</div>)}
   </div>
@@ -6691,7 +6696,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
     setProcResp(false)
   }
-  const abrirHistCargas = async () => { setCargasHist('loading'); try{ const {data}=await supabase.from('sii_import_batches').select('*').order('created_at',{ascending:false}).limit(60); setCargasHist(data||[]) }catch(_){ setCargasHist([]) } }
+  const abrirHistCargas = async () => { setCargasHist('loading'); try{ const {data}=await supabase.from('sii_import_batches').select('*').order('created_at',{ascending:false}).limit(60); const batches=data||[]; const ids=batches.map(b=>b.id).filter(Boolean); const reg={}; if(ids.length){ try{ const {data:bl}=await supabase.from('billing').select('import_batch_id').is('deleted_at',null).in('import_batch_id',ids); (bl||[]).forEach(r=>{ if(r.import_batch_id) reg[r.import_batch_id]=(reg[r.import_batch_id]||0)+1 }) }catch(_){} } setCargasHist(batches.map(b=>({...b, registered:reg[b.id]||0}))) }catch(_){ setCargasHist([]) } }
   const [creandoFac,setCreandoFac] = useState(null)   // folio en curso al crear una factura huérfana desde el XML
   const [crearCli,setCrearCli] = useState({})         // folio -> client_id elegido a mano para la huérfana
   // Crea en el sistema una factura que se emitió en el SII pero no estaba en la app (huérfana), desde su DTE del XML:
@@ -23447,14 +23452,10 @@ export default function App() {
           if(nt) setTerceros(nt)
         }catch(te){ appAlert('El cobro se guardó, pero hubo un problema con la cuenta por pagar al proveedor: '+te.message) }
       }
-      // Aprendizaje universal: si la factura trae razón social, la guarda en el catálogo
+      // Aprendizaje universal: si la factura trae razón social, la guarda en el catálogo (fuente única aprenderRS)
       if(saved.client_id && (saved.receptor_name||saved.receptor_rut)){
-        const yaExiste=(clientEntities||[]).some(e=>e.client_id===saved.client_id&&((e.rut&&e.rut===saved.receptor_rut)||(e.name?.toLowerCase()===saved.receptor_name?.toLowerCase())))
-        if(!yaExiste){
-          await supabase.from('client_entities').insert({client_id:saved.client_id,name:saved.receptor_name||null,rut:saved.receptor_rut||null})
-          const {data:ce}=await supabase.from('client_entities').select('*')
-          if(ce) setClientEntities(ce)   // no vaciar el catálogo si el refetch falla
-        }
+        const ne=await aprenderRS(saved.client_id, saved.receptor_rut, saved.receptor_name, clientEntities)
+        if(ne){ const {data:ce}=await supabase.from('client_entities').select('*'); if(ce) setClientEntities(ce) }   // no vaciar el catálogo si el refetch falla
       }
       setModal(null)
     }catch(e){appAlert('Error: '+e.message)}
@@ -23819,14 +23820,10 @@ export default function App() {
       const {error}=await supabase.from('billing').update({client_id:clientId,updated_at:new Date().toISOString()}).eq('id',bill.id)
       if(error)throw error
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,client_id:clientId}:x))
-      // 2. Aprender el RUT/razón social ↔ cliente (para que próximas facturas se asocien solas)
+      // 2. Aprender el RUT/razón social ↔ cliente (fuente única aprenderRS) para que próximas facturas se asocien solas
       if(bill.receptor_rut||bill.receptor_name){
-        const yaExiste=(clientEntities||[]).some(e=>e.client_id===clientId&&((e.rut&&e.rut===bill.receptor_rut)||(e.name?.toLowerCase()===bill.receptor_name?.toLowerCase())))
-        if(!yaExiste){
-          await supabase.from('client_entities').insert({client_id:clientId,name:bill.receptor_name||null,rut:bill.receptor_rut||null})
-          const {data:ce}=await supabase.from('client_entities').select('*')
-          if(ce) setClientEntities(ce)   // no vaciar el catálogo si el refetch falla
-        }
+        const ne=await aprenderRS(clientId, bill.receptor_rut, bill.receptor_name, clientEntities)
+        if(ne){ const {data:ce}=await supabase.from('client_entities').select('*'); if(ce) setClientEntities(ce) }
       }
     }catch(e){appAlert('Error: '+e.message)}
   },[clientEntities])
