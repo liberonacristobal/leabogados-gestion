@@ -14671,7 +14671,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       if(pedirFondo){ try{ await supabase.from('learnings').upsert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(ctaGastos)},{onConflict:'kind,key'}) }catch(_){} }   // recuerda la cuenta de gastos ingresada
       // La factura sale SIEMPRE desde el correo del usuario. Si su Gmail venció, NO cae a la oficina: se le pide reentrar y reintentar (control sobre el remitente).
       const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos, soloUsuario:true})
-      if(via==='reauth'){ appAlert('Tu acceso a Gmail expiró.\nCierra sesión y vuelve a entrar con tu cuenta @leabogados.cl, y reintenta el envío desde tu propio correo.'); setSending(false); return }
+      if(via==='reauth'){ appAlert('La factura NO se envió.\nTu acceso a Gmail expiró: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl para poder enviarla desde tu correo.'); setSending(false); return }
       if(via===null){ setSending(false); return }
       const viaServer = via==='oficina'
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
