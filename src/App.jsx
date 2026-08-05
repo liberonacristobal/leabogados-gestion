@@ -96,7 +96,7 @@ const saldoBill = b => { if(!b || ['Pagado','Anulada'].includes(b.status)) retur
 // Pagada = monto completo (DTE); parcial (Pendiente/Vencido con abono) = lo abonado, tope el monto; Anulada = 0. Mismo abonado que saldoBill (banco o paid_amount) → cobrado + saldo = monto.
 const cobradoBill = b => { if(!b || b.status==='Anulada') return 0; if(b.status==='Pagado') return montoFactura(b); const abonado = Math.max(b.paid_amount||0, _respaldoCache[b.id]||0); return Math.min(montoFactura(b), abonado) }
 // Por cobrar de un conjunto de facturas — FUENTE ÚNICA del "por cobrar" del cliente (lista, ficha Resumen y Financiero deben coincidir). Solo cuentas por cobrar REALES: emitidas con folio, Pendiente/Vencido, saldo pendiente (saldoBill). Excluye sin-folio (eso es "por facturar"), anticipadas, anuladas y reembolsos.
-const porCobrarBills = bills => (bills||[]).filter(b=>b && !b.deleted_at && b.billing_type!=='reembolso' && b.invoice_no && ['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
+const porCobrarBills = bills => (bills||[]).filter(b=>b && !b.deleted_at && !['reembolso','nota_credito'].includes(b.billing_type) && b.invoice_no && ['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
 // CANON DE COLOR POR ESTADO DE COBRO — fuente única (un color por estado, sin duplicados ni hex sueltos). Cada estado: {label, color (línea/borde/cifra), bg (fondo de badge), text (texto sobre bg)}.
 const ESTADO_COBRO = {
   vencido:     {label:'Vencido',      color:C.overdue,  bg:C.overdueBg, text:C.overdueText, icon:'alert'},
@@ -6487,6 +6487,28 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         if(!docs.length){ res.push({archivo:file.name, estado:'sin_dte'}); continue }
         for(const d of docs){
           const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
+          // NOTA DE CRÉDITO (TipoDTE 61): no es factura. Lee la <Referencia> (a qué factura aplica y si la anula), busca esa factura y un reemplazo probable, y va a su propia sección — se resuelve con compuerta (anular + vincular).
+          const _tipoNC=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
+          if(_tipoNC===61){
+            const refB=(d.match(/<Referencia>[\s\S]*?<\/Referencia>/)||[''])[0]
+            const folioRef=((refB.match(/<FolioRef>([^<]+)<\/FolioRef>/)||[])[1]||'').trim()
+            const codRef=+((refB.match(/<CodRef>(\d+)<\/CodRef>/)||[])[1]||0)||null
+            const razonRef=(refB.match(/<RazonRef>([^<]+)<\/RazonRef>/)||[])[1]||''
+            const ncMonto=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
+            const ncFecha=(d.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||null
+            const ncRut=(d.match(/<RUTRecep>([^<]+)<\/RUTRecep>/)||[])[1]||null
+            const ncRecep=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||null
+            const ncConcepto=(d.match(/<NmbItem>([^<]+)<\/NmbItem>/)||[])[1]||''
+            const fac=(billing||[]).find(x=>!x.deleted_at&&x.invoice_no&&folioN(x.invoice_no)===folioN(folioRef))
+            const repl=fac?(billing||[]).find(x=>!x.deleted_at&&x.invoice_no&&folioN(x.invoice_no)!==folioN(folioRef)&&x.status!=='Anulada'&&x.billing_type!=='nota_credito'&&Math.round(x.amount||0)===ncMonto&&_normTxt(x.concept||'')===_normTxt(ncConcepto)):null
+            const yaReg=(billing||[]).some(x=>!x.deleted_at&&x.billing_type==='nota_credito'&&folioN(x.invoice_no)===folioN(folioM))
+            res.push({estado:yaReg?'nc_hecha':'nota_credito', ncFolio:folioM, ncFecha, monto:ncMonto, receptor:ncRecep, rut:ncRut, codRef, razonRef,
+              facId:fac?.id||null, facFolio:folioRef, facStatus:fac?.status||null,
+              facCliente:fac?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||fac.receptor_name||''):null,
+              replId:repl?.id||null, replFolio:repl?folioN(repl.invoice_no):null, replCliente:repl?((clients||[]).find(c=>String(c.id)===String(repl.client_id))?.name||repl.receptor_name||''):null,
+              doc:d})
+            continue
+          }
           const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioM)
           const cli = b ? ((clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||'—') : null
           if(!b){
@@ -6550,6 +6572,30 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       setRespaldoRes(p=>(p||[]).map((r,i)=>i===idx?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))
     }catch(e){ appAlert('No se pudo crear la factura: '+(e.message||e)) }
     setCreandoFac(null)
+  }
+  const [ncConfirm,setNcConfirm] = useState(null)   // {item,idx} de la nota de crédito en confirmación de anulación
+  const [ncVincular,setNcVincular] = useState(true) // check "vincular la factura que la reemplaza"
+  const [ncBusy,setNcBusy] = useState(false)
+  // Compuerta de nota de crédito: anula la factura referenciada (si existe) + registra la NC como documento (billing_type='nota_credito', status Anulada = excluida de toda cifra; queda para el libro por sii_tipo_dte=61) + vincula el reemplazo si lo confirmas.
+  const anularPorNC = async(item, idx, vincular)=>{
+    setNcBusy(true)
+    try{
+      const now=new Date().toISOString()
+      const facCli=(billing||[]).find(x=>x.id===item.facId)
+      if(item.facId){
+        const patch={ status:'Anulada', anulada_at:now, anulada_por:`Nota de crédito N°${item.ncFolio}`, updated_at:now, ...(vincular&&item.replId?{reemplazada_por_billing_id:item.replId}:{}) }
+        const { error:e1 } = await supabase.from('billing').update(patch).eq('id',item.facId)
+        if(e1) throw e1
+        setBilling&&setBilling(p=>p.map(x=>x.id===item.facId?{...x,...patch}:x))
+      }
+      const ncRow={ client_id:facCli?.client_id||null, concept:`Nota de crédito — anula Factura N°${item.facFolio}`, receptor_name:item.receptor||null, receptor_rut:item.rut||null, amount:Math.round(item.monto||0), status:'Anulada', invoice_no:String(item.ncFolio), issued_at:item.ncFecha||null, billing_type:'nota_credito', sii_tipo_dte:61, dte_xml:item.doc||null, nc_ref_billing_id:item.facId||null, sii_synced_at:now }
+      const { data:ins, error:e2 } = await supabase.from('billing').insert(ncRow).select().single()
+      if(e2) throw e2
+      if(setBilling&&ins) setBilling(p=>[...p, ins])
+      setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'nc_hecha'}:r))
+      setNcConfirm(null); onRefresh&&onRefresh()
+    }catch(e){ appAlert('No se pudo anular / registrar la nota de crédito: '+(e.message||e)) }
+    setNcBusy(false)
   }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
   const [saludCobranza,setSaludCobranza] = useState(false)   // panel de salud de cobranza (DSO, tasa, morosidad, top deudores)
@@ -7114,7 +7160,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
               <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
-              {respaldoRes&&(()=>{ const g=k=>respaldoRes.filter(r=>r.estado===k); const adj=g('adjuntada'),dup=g('duplicada'),sinf=g('sin_factura'),cre=g('creada'),err=[...g('error'),...g('sin_dte')]
+              {respaldoRes&&(()=>{ const g=k=>respaldoRes.filter(r=>r.estado===k); const adj=g('adjuntada'),dup=g('duplicada'),sinf=g('sin_factura'),cre=g('creada'),nc=[...g('nota_credito'),...g('nc_hecha')],err=[...g('error'),...g('sin_dte')]
                 const STY={adjuntada:{t:'Adjuntada al Drive',c:C.greenText,bg:C.greenBg},creada:{t:'Creada ✓',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},sin_factura:{t:'Sin factura en el sistema',c:C.soonText,bg:C.soonBg},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg}}
                 const row=(r,i)=>{ const s=STY[r.estado]||STY.error; const esSin=r.estado==='sin_factura'&&r.row&&onIngresarSII; const pick=esSin&&crearCli[r.row.folio]; return (
                   <div key={i} style={{padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
@@ -7133,6 +7179,24 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       <button disabled={creandoFac===r.row.folio} onClick={()=>crearDesdeXML(r,i)} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:creandoFac?'default':'pointer',flexShrink:0}}>{creandoFac===r.row.folio?'Creando…':'Crear factura'}</button>
                     </div>}
                   </div>) }
+                const ncRowR=(r,i)=>(
+                  <div key={'nc'+i} style={{padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+                    <div style={{display:'flex',alignItems:'baseline',gap:6}}>
+                      <span style={{fontSize:8.5,fontWeight:600,color:C.coralText,background:'#FAECE7',borderRadius:3,padding:'2px 7px',textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</span>
+                      <span style={{fontSize:12,fontWeight:600,color:C.text}}>N°{r.ncFolio}</span>
+                      <span style={{fontSize:10,color:C.done,marginLeft:'auto'}}>{r.ncFecha?fmtFechaDMY(r.ncFecha):''}</span>
+                    </div>
+                    <div style={{fontSize:12.5,color:C.text,marginTop:4}}>Anula <span style={{color:C.done}}>→</span> <b style={{color:C.accent}}>Factura N°{r.facFolio}</b></div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:1}}>{r.facCliente||r.receptor||'—'}{r.facStatus?` · ${r.facStatus}`:' · no está en el sistema'} · {fmt(r.monto)}</div>
+                    {r.replFolio&&<div style={{fontSize:10,color:C.muted,marginTop:5,paddingTop:5,borderTop:`0.5px solid ${C.bgSoft}`}}>Reemplazo probable: <b style={{color:C.accent}}>Factura N°{r.replFolio}{r.replCliente?` · ${r.replCliente}`:''}</b></div>}
+                    <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>
+                      {r.estado==='nc_hecha'
+                        ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>Anulada · registrada</span>
+                        : r.facId
+                          ? <button onClick={()=>{setNcVincular(!!r.replId);setNcConfirm({item:r})}} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'7px 13px',cursor:'pointer'}}>Anular Factura N°{r.facFolio}</button>
+                          : <button disabled={ncBusy} onClick={()=>anularPorNC(r,i,false)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:C.soonBg,border:'none',borderRadius:7,padding:'7px 13px',cursor:'pointer'}}>Solo registrar la NC</button>}
+                    </div>
+                  </div>)
                 return <Modal title='Respaldo XML · resultados' onClose={()=>setRespaldoRes(null)}>
                   <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
                     <div style={{flex:'1 1 90px',background:C.greenBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.greenText}}>Adjuntadas</div><div style={{fontSize:18,fontWeight:700,color:C.greenText}}>{adj.length}</div></div>
@@ -7143,8 +7207,22 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   {adj.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Adjuntadas al Drive · {adj.length}</div>{adj.map(row)}</>}
                   {dup.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Ya tenían respaldo · {dup.length}</div>{dup.map(row)}</>}
                   {sinf.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Sin factura en el sistema · {sinf.length}</div><div style={{fontSize:10,color:C.muted,margin:'2px 0 2px'}}>El folio del XML se emitió en el SII pero no está acá. Toca <b>"Crear factura"</b> para ingresarla desde el XML.</div>{sinf.map(row)}</>}
+                  {nc.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.coralText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Notas de crédito · {nc.length}</div><div style={{fontSize:10,color:C.muted,margin:'2px 0 2px'}}>Anulan una factura. Revisa a cuál y confirma la anulación (con su reemplazo si corresponde).</div>{nc.map(ncRowR)}</>}
                   {err.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Con problema · {err.length}</div>{err.map(row)}</>}
                 </Modal> })()}
+              {ncConfirm&&(()=>{ const it=ncConfirm.item; return (
+                <Modal title={`¿Anular la Factura N°${it.facFolio}?`} onClose={()=>!ncBusy&&setNcConfirm(null)}>
+                  <div style={{fontSize:12.5,color:C.text,lineHeight:1.5}}>{it.facCliente||it.receptor||'—'} · <b style={{fontVariantNumeric:'tabular-nums'}}>{fmt(it.monto)}</b>. Queda <b>Anulada</b> y sale del por cobrar. Reversible.</div>
+                  {it.replId&&<div onClick={()=>setNcVincular(v=>!v)} style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:12,background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:9,padding:'9px 10px',cursor:'pointer'}}>
+                    <span style={{width:17,height:17,borderRadius:5,flexShrink:0,marginTop:1,background:ncVincular?C.accent:'#fff',border:`1px solid ${ncVincular?C.accent:C.border}`,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{ncVincular&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>}</span>
+                    <div><div style={{fontSize:11.5,fontWeight:600,color:C.text}}>Vincular la Factura N°{it.replFolio} como su reemplazo</div><div style={{fontSize:10,color:C.muted,marginTop:1,lineHeight:1.4}}>{it.replCliente||''} · solo deja la trazabilidad, no mueve dinero.</div></div>
+                  </div>}
+                  <div style={{display:'flex',gap:8,marginTop:14}}>
+                    <button disabled={ncBusy} onClick={()=>setNcConfirm(null)} style={{flex:1,fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'9px 0',cursor:'pointer'}}>Cancelar</button>
+                    <button disabled={ncBusy} onClick={()=>anularPorNC(it,0,it.replId?ncVincular:false)} style={{flex:1,fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'9px 0',cursor:'pointer',opacity:ncBusy?.6:1}}>{ncBusy?'Anulando…':'Anular'}</button>
+                  </div>
+                </Modal>
+              )})()}
               {impOpen&&<>
                 <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
                 <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
