@@ -6644,7 +6644,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       periodoISO = /^\d{4}-\d{2}$/.test(String(p||'').trim()) ? String(p).trim()+'-01' : (def?def+'-01':null)
     }catch(_){}
     // La app anticipa: si ya cargaste esa tanda (mismo período en sii_import_batches), avisa antes de reprocesar (evita recargas ciegas).
-    if(periodoISO){ try{ const per=String(periodoISO).slice(0,7); const {data}=await supabase.from('sii_import_batches').select('created_at,docs_total').eq('period',per).order('created_at',{ascending:false}).limit(1); if(data&&data[0]){ const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const ml=`${M[+per.slice(5,7)-1]} ${per.slice(0,4)}`; if(!(await appConfirm(`Ya cargaste ${ml} el ${fmtFechaDMY(data[0].created_at)} (${data[0].docs_total} docs). ¿Cargar de nuevo?`))) return } }catch(_){} }
+    if(periodoISO){ try{ const per=String(periodoISO).slice(0,7); const {data}=await supabase.from('sii_import_batches').select('id,created_at').eq('period',per).order('created_at',{ascending:false}).limit(1); if(data&&data[0]){ let n=0; try{ const {count}=await supabase.from('billing').select('id',{count:'exact',head:true}).eq('import_batch_id',data[0].id).is('deleted_at',null); n=count||0 }catch(_){} const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const ml=`${M[+per.slice(5,7)-1]} ${per.slice(0,4)}`; if(!(await appConfirm(`Ya registraste ${ml}${n?`: ${n} factura${n!==1?'s':''}`:''} el ${fmtFechaDMY(data[0].created_at)}. Si subes de nuevo, las ya registradas se saltan solas y solo verás lo que falte — no se duplican. ¿Subir igual?`))) return } }catch(_){} }
     setProcResp(true); setRespaldoRes(null)
     try{
       const token = await driveToken()
@@ -7443,11 +7443,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 return createPortal(
                   <div style={{position:'fixed',left:0,right:0,top:0,bottom:'calc(56px + env(safe-area-inset-bottom,0px))',background:C.bg,zIndex:100,display:'flex',flexDirection:'column'}}>
                   <div style={{display:'flex',alignItems:'center',gap:12,padding:'calc(env(safe-area-inset-top,0px) + 14px) 16px 12px',borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
-                    <button onClick={()=>setRespaldoRes(null)} style={chipBtn('primary')}>← Volver</button>
+                    <button onClick={async()=>{ const pend=(prog||[]).length+(nuevas||[]).length; if(pend>0 && !(await appConfirm(`Tienes ${pend} factura${pend!==1?'s':''} revisada${pend!==1?'s':''} que no registraste. Cerrar no guarda nada; cuando quieras vuelve a subir el XML y regístralas — no se duplican. ¿Cerrar igual?`))) return; setRespaldoRes(null) }} style={chipBtn('primary')}>← Volver</button>
                     <span style={{fontSize:15,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.3}}>Cargar XML del SII · {respaldoRes.length}</span>
                   </div>
                   <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
                   <div style={{maxWidth:600,margin:'0 auto',padding:'14px 16px 34px'}}>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10,background:C.bgSoft,borderRadius:8,padding:'7px 10px'}}>Revisa acá; <b style={{color:C.text}}>nada se guarda hasta que registras</b>.</div>
                   <div style={{display:'flex',gap:8,marginBottom:10}}>
                     <div onClick={()=>goSec('prog')} style={{flex:1,background:C.bgWarm,borderRadius:9,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Programadas</div></div>
                     <div onClick={()=>goSec('nc')} style={{flex:1,background:'#FAECE7',borderRadius:9,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.coralText,fontVariantNumeric:'tabular-nums'}}>{nc.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.coralText,textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</div></div>
@@ -7486,7 +7487,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   </div>, document.body) })()}
               {regReview&&(()=>{ const items=regReview; const total=items.reduce((a,r)=>a+(r.monto||0),0); return (
                 <Modal title={`Registrar ${items.length} factura${items.length!==1?'s':''}`} onClose={()=>!regBusy&&setRegReview(null)}>
-                  <div style={{fontSize:11.5,color:C.muted,marginBottom:8}}>Total <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(total)}</b> · pasan de programadas a por cobrar.</div>
+                  <div style={{fontSize:11.5,color:C.muted,marginBottom:8}}>El SII ya las emitió. Esto las <b style={{color:C.text}}>registra en tu sistema</b> (pasan de programadas a por cobrar) — no las vuelve a emitir. Total <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(total)}</b>.</div>
                   <div style={{maxHeight:'46vh',overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10}}>
                     {items.map((r,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'1fr 84px',columnGap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
                       <div style={{minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div><div style={{fontSize:9,color:C.done}}>Factura N°{r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}</div></div>
