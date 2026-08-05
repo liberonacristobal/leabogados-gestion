@@ -13827,7 +13827,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         {(()=>{
           if(!aniosList.length) return <div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Este cliente no tiene facturas todavía.</div>
           const matchQ = b => { if(!q.trim()) return true; const s=q.toLowerCase().trim(); return `${b.concept||''} ${folioN(b.invoice_no)} ${b.amount||''} ${fmtFechaDMY(kpiDate(b))} ${saleTitle(b.sale_id)||''}`.toLowerCase().includes(s) }
-          const yf = all.filter(b=>anioDe(b)===selYear && matchQ(b))
+          const yf = all.filter(b=>anioDe(b)===selYear && matchQ(b) && b.billing_type!=='nota_credito')   // las notas de crédito no van sueltas: se muestran anidadas bajo la factura que anulan
           // histYear: las emitidas históricas (≤2025) no exigen proyecto asignado (lo usa needsProj más abajo).
           const histYear = (parseInt(selYear)||9999) <= 2025
           const lblFolio = b => b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:(b.concept||'—')
@@ -13861,6 +13861,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     {pend&&<ActBtn variant='softNavy' onClick={(ev)=>{ev.stopPropagation();recordarCobro(b)}} style={{marginTop:5}}>Recordar</ActBtn>}
                   </div>
                 </div>
+                {(b.anulada_por||'').startsWith('Nota de crédito')&&<div style={{marginTop:6,marginLeft:49,fontSize:9.5,color:C.muted,lineHeight:1.4}}>{b.anulada_por}{b.reemplazada_por_billing_id&&(()=>{ const rp=(billing||[]).find(x=>x.id===b.reemplazada_por_billing_id); return rp?<> · reemplazada por <b style={{color:C.accent,fontWeight:600}}>Factura N°{folioN(rp.invoice_no)}</b>{String(rp.client_id)!==String(client.id)&&(rsShort(rp)||rp.receptor_name)?` · ${rsShort(rp)||rp.receptor_name}`:''}</>:null })()}</div>}
+                {(()=>{ const orig=(billing||[]).find(x=>x.reemplazada_por_billing_id===b.id); return orig?<div style={{marginTop:6,marginLeft:49,fontSize:9.5,color:C.muted,lineHeight:1.4}}>Reemplaza a <b style={{color:C.accent,fontWeight:600}}>Factura N°{folioN(orig.invoice_no)}</b>{String(orig.client_id)!==String(client.id)&&(rsShort(orig)||orig.receptor_name)?` · ${rsShort(orig)||orig.receptor_name}`:''}</div>:null })()}
                 {e&&<div style={{marginTop:6,marginLeft:49}}><EstadoFacturaChip b={b} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} chevron={conciliada}/></div>}
                 {conciliada&&detOpen&&(()=>{ const cs=fConcByFac[b.id]||[]; const mv=fMovById[cs[0]?.movimiento_id]; return (
                   <div style={{marginTop:8,marginLeft:49,background:'#F0F7F4',border:`1px solid #CFE9DD`,borderRadius:8,padding:'8px 10px'}}>
