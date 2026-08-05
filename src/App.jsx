@@ -4376,6 +4376,9 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     try {
       let client = propClientMatch
       if(!client || propClientMode==='crear') {
+        // Previene el duplicado de ficha en el origen (lo de Eugenia/Saavedra): si el RUT ya está en otra ficha, avisa.
+        const _rut=propNewClient.rut.trim()
+        if(_rut){ const _n=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const ya=(clients||[]).find(c=>c.rut&&_n(c.rut)===_n(_rut))||(clientEntities||[]).find(e=>e.rut&&_n(e.rut)===_n(_rut)); if(ya && !await appConfirm(`Ya existe una ficha con el RUT ${_rut}${ya.name?` · ${ya.name}`:''}. Un RUT debería estar en una sola ficha. ¿Crear otra de todas formas?`)){ setPropCreating(false); return } }
         // clients NO tiene columna razon_social: el cliente se crea con nombre/RUT y la razón social va a client_entities.
         const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null}).select().single()
         if(error) throw error
@@ -4420,9 +4423,13 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   // Agregar una razón social nueva al cliente desde el form de venta (se persiste y queda seleccionada).
   const agregarRS = async() => {
     const name=newRS.name.trim(); if(!name||!f.client_id) return
+    const rut=newRS.rut.trim()
+    const _n=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase()
+    const dup=(clientEntitiesList||[]).find(e=> (rut&&e.rut&&_n(e.rut)===_n(rut)) || _n(e.name)===_n(name) )
+    if(dup && !await appConfirm(`Ya existe la razón social "${dup.name}"${dup.rut?` · ${dup.rut}`:''} en este cliente. ¿Agregarla de todas formas?`)) return
     setSavingRS(true)
     try{
-      const {data,error}=await supabase.from('client_entities').insert({client_id:f.client_id,name,rut:newRS.rut.trim()||null}).select().single()
+      const {data,error}=await supabase.from('client_entities').insert({client_id:f.client_id,name,rut:rut||null}).select().single()
       if(error)throw error
       setExtraEntities(p=>[...p,data]); up('entity_id',data.id); setNewRS({name:'',rut:''}); setRsMode(null)
     }catch(e){ appAlert('No se pudo agregar la razón social: '+e.message) }
