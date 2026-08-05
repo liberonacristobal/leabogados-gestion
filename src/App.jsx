@@ -637,7 +637,7 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
     </div>
   </div>
   )
-  return fullscreen ? createPortal(node, document.body) : node
+  return createPortal(node, document.body)   // SIEMPRE al body: evita que un modal abierto desde una vista portada (Cargar XML) quede detrás
 }
 
 // ── Diálogos propios (reemplazan alert/confirm/prompt nativos, que muestran el dominio en el navegador) ──
