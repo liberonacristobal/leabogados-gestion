@@ -77,6 +77,7 @@ const UF_FALLBACK = 40000
 const RENDCAT = c => c==='CBR'?'Conservador de Bienes Raíces':(c==='Notaria'||c==='Notaría')?'Notaría Lascar':(c||'Otro')
 // Fecha DD-MM-AAAA a partir de un ISO 'AAAA-MM-DD'
 const fmtFechaDMY = d => { if(!d) return '—'; const p=String(d).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(d) }
+const fmtFechaHora = d => d ? `${fmtFechaDMY(d)} · ${new Date(d).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',hour12:false})}` : '—'
 // Fecha breve '15 jun' (omite el año si es el actual; muestra '15 jun 24' si es otro año). Para botones-calendario compactos.
 const fechaBreve = d => { if(!d) return ''; const p=String(d).slice(0,10).split('-'); if(p.length!==3) return String(d); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const cur=new Date().getFullYear(); return `${+p[2]} ${M[+p[1]-1]||p[1]}${+p[0]!==cur?` ${p[0].slice(2)}`:''}` }
 // Fecha breve SIEMPRE con año ('19 jun 26'). Para campos donde el año importa.
@@ -5747,6 +5748,29 @@ function MesTandaModal({def,onPick}){
     </div>
   </Modal>
 }
+// Fila del historial de cargas del SII: fecha, quién, mes de la tanda, totales, y despliegue por archivo.
+function CargaHistRow({b}){
+  const [open,setOpen]=useState(false)
+  const c=b.counts||{}
+  const LAB={prog:'programadas',new:'nuevas',dup:'ya cargadas',reg:'registradas',nc:'NC',cre:'agregadas',err:'con problema'}
+  const parts=['prog','new','dup','reg','nc','cre','err'].filter(k=>c[k]).map(k=>`${c[k]} ${LAB[k]}`)
+  const fecha=fmtFechaHora(b.created_at)
+  const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const mi=b.period&&/^\d{4}-\d{2}$/.test(b.period)?+b.period.slice(5,7)-1:null
+  const per=mi!=null?`${M[mi].charAt(0).toUpperCase()+M[mi].slice(1)} ${b.period.slice(0,4)}`:null
+  const nf=(b.files?.length)||0
+  return <div style={{padding:'12px 2px',borderTop:`1px solid ${C.bgSoft}`}}>
+    <div onClick={()=>nf&&setOpen(o=>!o)} style={{cursor:nf?'pointer':'default'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+        <span style={{fontSize:13,fontWeight:600,color:C.accent}}>{fecha}</span>
+        {per&&<span style={{fontSize:9,fontWeight:700,color:C.azulInfo,background:C.azulBg,borderRadius:20,padding:'2px 9px',flexShrink:0}}>{per}</span>}
+      </div>
+      <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{b.created_by||'—'}</div>
+      <div style={{fontSize:11,color:C.muted,marginTop:5}}><b style={{color:C.text}}>{nf} archivo{nf!==1?'s':''} · {b.docs_total} doc</b>{parts.length?` — ${parts.join(' · ')}`:''}{b.skipped>0?` · ${b.skipped} omitida${b.skipped!==1?'s':''}`:''}{nf?<span style={{color:C.azulInfo,fontWeight:600}}> · {open?'ocultar':'ver'}</span>:null}</div>
+    </div>
+    {open&&(b.files||[]).map((f,i)=><div key={i} style={{fontSize:10.5,color:C.muted,marginTop:6,paddingLeft:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.name} · {f.total} doc{f.skipped>0?` · ${f.skipped} omitida${f.skipped!==1?'s':''}`:''}</div>)}
+  </div>
+}
 function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
   const nr = r => (r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
   const k = nr(rut)
@@ -6520,6 +6544,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [procResp,setProcResp] = useState(false)
   const [respaldoRes,setRespaldoRes] = useState(null)   // listado de resultados del último cargue de XML (por factura)
   const [respaldoFiles,setRespaldoFiles] = useState(null)  // resumen por archivo subido (fase intermedia)
+  const [respaldoAt,setRespaldoAt] = useState(null)        // fecha/hora de la carga actual (trazabilidad)
+  const [cargasHist,setCargasHist] = useState(null)        // historial de cargas del SII (modal); null = cerrado
   const [mesTandaReq,setMesTandaReq] = useState(null)   // {def, resolve} del modal "¿de qué mes es esta tanda?" (promesa)
   // Sube uno o VARIOS "Archivo Respaldo" (SetDTE XML de MIPYME): por cada factura genera el PDF (logo+timbre), lo sube a
   // la carpeta de facturación en Drive y lo adjunta a la ficha. Devuelve un LISTADO de resultados factura por factura.
@@ -6630,12 +6656,20 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         for(let k=_start;k<res.length;k++){ if(!res[k].archivo) res[k].archivo=file.name }
         fileStats.push({name:file.name, total:docs.length, skipped:_skip})
       }
+      // Trazabilidad: guarda la carga como evento (fecha, quién, mes de la tanda, archivos + conteos) para el historial.
+      const _cat=e=>({programada:'prog',nueva:'new',nota_credito:'nc',nc_hecha:'nc',adjuntada:'dup',duplicada:'dup',creada:'cre',registrada:'reg',error:'err',sin_dte:'err',sin_factura:'err'}[e]||'otro')
+      const filesDetail=fileStats.map(f=>{ const its=res.filter(r=>r.archivo===f.name); const c={}; its.forEach(r=>{ const k=_cat(r.estado); c[k]=(c[k]||0)+1 }); return {name:f.name,total:f.total,skipped:f.skipped,counts:c} })
+      const totalCounts={}; res.forEach(r=>{ const k=_cat(r.estado); totalCounts[k]=(totalCounts[k]||0)+1 })
+      const batchAt=new Date().toISOString()
+      setRespaldoAt(batchAt)
+      try{ await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period:(periodoISO?String(periodoISO).slice(0,7):null), docs_total:fileStats.reduce((a,f)=>a+(f.total||0),0), skipped:fileStats.reduce((a,f)=>a+(f.skipped||0),0), files:filesDetail, counts:totalCounts }) }catch(_){}
       setRespaldoFiles(fileStats)
       setRespaldoRes(res)
       onRefresh&&onRefresh()
     }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
     setProcResp(false)
   }
+  const abrirHistCargas = async () => { setCargasHist('loading'); try{ const {data}=await supabase.from('sii_import_batches').select('*').order('created_at',{ascending:false}).limit(60); setCargasHist(data||[]) }catch(_){ setCargasHist([]) } }
   const [creandoFac,setCreandoFac] = useState(null)   // folio en curso al crear una factura huérfana desde el XML
   const [crearCli,setCrearCli] = useState({})         // folio -> client_id elegido a mano para la huérfana
   // Crea en el sistema una factura que se emitió en el SII pero no estaba en la app (huérfana), desde su DTE del XML:
@@ -7342,9 +7376,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     const order=['prog','new','dup','reg','nc','cre','err']
                     const totDocs=respaldoFiles.reduce((a,f)=>a+(f.total||0),0), totSkip=respaldoFiles.reduce((a,f)=>a+(f.skipped||0),0)
                     return <div style={{border:`1px solid ${C.border}`,borderRadius:11,overflow:'hidden',marginBottom:12}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'10px 13px 8px',borderBottom:`1px solid ${C.bgSoft}`}}>
-                        <span style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>{respaldoFiles.length} archivos · {totDocs} documentos</span>
-                        {totSkip>0&&<span style={{fontSize:10,color:C.muted,flexShrink:0}}>{totSkip} repetido{totSkip!==1?'s':''} omitido{totSkip!==1?'s':''}</span>}
+                      <div style={{padding:'10px 13px 8px',borderBottom:`1px solid ${C.bgSoft}`}}>
+                        {respaldoAt&&<div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5}}>Cargado {fmtFechaHora(respaldoAt)}</div>}
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:respaldoAt?3:0}}>
+                          <span style={{fontSize:10.5,color:C.muted}}>{respaldoFiles.length} archivos · {totDocs} documentos</span>
+                          {totSkip>0&&<span style={{fontSize:10,color:C.muted,flexShrink:0}}>{totSkip} repetido{totSkip!==1?'s':''} omitido{totSkip!==1?'s':''}</span>}
+                        </div>
                       </div>
                       {respaldoFiles.map((f,fi)=>{ const items=(respaldoRes||[]).filter(r=>r.archivo===f.name); const counts={}; items.forEach(r=>{ const k=catOf(r.estado); counts[k]=(counts[k]||0)+1 }); return (
                         <div key={f.name} style={{padding:'10px 13px',borderTop:fi?`1px solid ${C.bgSoft}`:'none'}}>
@@ -7395,7 +7432,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {impOpen&&<>
                 <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
                 <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
-                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['Cotejar SII',()=>setSiiOpen(true)],[procResp?'Generando…':'Respaldo PDF',()=>respaldoRef.current&&respaldoRef.current.click()]].map(([l,fn])=>(
+                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['Cotejar SII',()=>setSiiOpen(true)],[procResp?'Generando…':'Respaldo PDF',()=>respaldoRef.current&&respaldoRef.current.click()],['Cargas anteriores',abrirHistCargas]].map(([l,fn])=>(
                     <div key={l} onClick={()=>{setImpOpen(false);fn()}} style={{padding:'10px 14px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{l}</div>
                   ))}
                 </div>
@@ -7404,6 +7441,13 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
+        {cargasHist!==null&&<Modal title='Cargas del SII' maxWidth={520} onClose={()=>setCargasHist(null)}>
+          {cargasHist==='loading'
+            ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Cargando…</div>
+            : cargasHist.length===0
+              ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Aún no hay cargas registradas.</div>
+              : cargasHist.map(b=><CargaHistRow key={b.id} b={b}/>)}
+        </Modal>}
         {depurarRows&&<Modal title='Marcar como pagadas' onClose={()=>setDepurarRows(null)} closeOnBackdrop={false}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></Modal>}
         {cierreOpen&&<Modal title='Cierre de mes' fullscreen onClose={()=>setCierreOpen(false)}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>{setCierreOpen(false);onEdit&&onEdit(b)}} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></Modal>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
