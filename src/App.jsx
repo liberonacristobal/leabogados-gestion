@@ -78,6 +78,9 @@ const RENDCAT = c => c==='CBR'?'Conservador de Bienes Raíces':(c==='Notaria'||c
 // Fecha DD-MM-AAAA a partir de un ISO 'AAAA-MM-DD'
 const fmtFechaDMY = d => { if(!d) return '—'; const p=String(d).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(d) }
 const fmtFechaHora = d => d ? `${fmtFechaDMY(d)} · ${new Date(d).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',hour12:false})}` : '—'
+// Fuente única: estado de una fila del import → categoría corta (para conteos por archivo y batch). No duplicar este mapa.
+const CAT_IMPORT = {programada:'prog',nueva:'new',nota_credito:'nc',nc_hecha:'nc',adjuntada:'dup',duplicada:'dup',creada:'cre',registrada:'reg',error:'err',sin_dte:'err',sin_factura:'err'}
+const catImport = e => CAT_IMPORT[e]||'otro'
 // Fecha breve '15 jun' (omite el año si es el actual; muestra '15 jun 24' si es otro año). Para botones-calendario compactos.
 const fechaBreve = d => { if(!d) return ''; const p=String(d).slice(0,10).split('-'); if(p.length!==3) return String(d); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const cur=new Date().getFullYear(); return `${+p[2]} ${M[+p[1]-1]||p[1]}${+p[0]!==cur?` ${p[0].slice(2)}`:''}` }
 // Fecha breve SIEMPRE con año ('19 jun 26'). Para campos donde el año importa.
@@ -5748,6 +5751,32 @@ function MesTandaModal({def,onPick}){
     </div>
   </Modal>
 }
+// Fuente única para APRENDER una RS: vincula el RUT del receptor a un cliente (client_entities) con dedup consistente.
+// Devuelve la fila creada, o null si ya existía esa RS / no había cliente / falló. Úsalo en todo "asignar/aprende" (no repetir el insert).
+async function aprenderRS(clientId, rut, name, clientEntities=[]){
+  if(!clientId) return null
+  const norm=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const nr=norm(rut)
+  if(nr && (clientEntities||[]).some(e=>norm(e.rut)===nr)) return null
+  try{ const {data}=await supabase.from('client_entities').insert({client_id:clientId, name:name||null, rut:rut||null}).select().single(); return data||null }catch(_){ return null }
+}
+// Parser único de un DTE del import (Documento XML) → todos los campos que usa la carga, extraídos en UN solo lugar (misma regex de siempre).
+// No repetir estas extracciones inline en procesarRespaldoSII. total = MntTotal, cae a MntExe (exenta).
+function parseDTE(d){
+  const s=String(d||'')
+  const one=re=>((s.match(re)||[])[1]||'')
+  const nmb=one(/<NmbItem>([^<]+)<\/NmbItem>/), dsc=one(/<DscItem>([^<]+)<\/DscItem>/)
+  const refB=(s.match(/<Referencia>[\s\S]*?<\/Referencia>/)||[''])[0]
+  return {
+    tipo:+one(/<TipoDTE>(\d+)<\/TipoDTE>/)||null,
+    folio:one(/<Folio>([^<]+)<\/Folio>/).trim(),
+    fecha:one(/<FchEmis>([^<]+)<\/FchEmis>/)||null,
+    rut:one(/<RUTRecep>([^<]+)<\/RUTRecep>/)||null,
+    receptor:one(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||null,
+    total:+(one(/<MntTotal>(\d+)<\/MntTotal>/)||one(/<MntExe>(\d+)<\/MntExe>/)||0),
+    nmb, dsc, glosa:[nmb,dsc].filter(Boolean).join(' — ').trim(),
+    ref:{ folio:((refB.match(/<FolioRef>([^<]+)<\/FolioRef>/)||[])[1]||'').trim(), cod:+((refB.match(/<CodRef>(\d+)<\/CodRef>/)||[])[1]||0)||null, razon:(refB.match(/<RazonRef>([^<]+)<\/RazonRef>/)||[])[1]||'' }
+  }
+}
 // Fila del historial de cargas del SII: fecha, quién, mes de la tanda, totales, y despliegue por archivo.
 function CargaHistRow({b}){
   const [open,setOpen]=useState(false)
@@ -6545,6 +6574,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [respaldoRes,setRespaldoRes] = useState(null)   // listado de resultados del último cargue de XML (por factura)
   const [respaldoFiles,setRespaldoFiles] = useState(null)  // resumen por archivo subido (fase intermedia)
   const [respaldoAt,setRespaldoAt] = useState(null)        // fecha/hora de la carga actual (trazabilidad)
+  const [respaldoBatchId,setRespaldoBatchId] = useState(null)  // id del batch de la carga actual (para ligar las facturas registradas)
   const [cargasHist,setCargasHist] = useState(null)        // historial de cargas del SII (modal); null = cerrado
   const [mesTandaReq,setMesTandaReq] = useState(null)   // {def, resolve} del modal "¿de qué mes es esta tanda?" (promesa)
   // Sube uno o VARIOS "Archivo Respaldo" (SetDTE XML de MIPYME): por cada factura genera el PDF (logo+timbre), lo sube a
@@ -6563,6 +6593,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       if(p===null) return
       periodoISO = /^\d{4}-\d{2}$/.test(String(p||'').trim()) ? String(p).trim()+'-01' : (def?def+'-01':null)
     }catch(_){}
+    // La app anticipa: si ya cargaste esa tanda (mismo período en sii_import_batches), avisa antes de reprocesar (evita recargas ciegas).
+    if(periodoISO){ try{ const per=String(periodoISO).slice(0,7); const {data}=await supabase.from('sii_import_batches').select('created_at,docs_total').eq('period',per).order('created_at',{ascending:false}).limit(1); if(data&&data[0]){ const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const ml=`${M[+per.slice(5,7)-1]} ${per.slice(0,4)}`; if(!(await appConfirm(`Ya cargaste ${ml} el ${fmtFechaDMY(data[0].created_at)} (${data[0].docs_total} docs). ¿Cargar de nuevo?`))) return } }catch(_){} }
     setProcResp(true); setRespaldoRes(null)
     try{
       const token = await driveToken()
@@ -6576,22 +6608,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         if(!docs.length){ res.push({archivo:file.name, estado:'sin_dte'}); fileStats.push({name:file.name,total:0,skipped:0}); continue }
         const _start=res.length; let _skip=0
         for(const d of docs){
-          const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
+          const P = parseDTE(d)   // fuente única de los campos del DTE
+          const folioM = P.folio
           // NOTA DE CRÉDITO (TipoDTE 61): no es factura. Lee la <Referencia> (a qué factura aplica y si la anula), busca esa factura y un reemplazo probable, y va a su propia sección — se resuelve con compuerta (anular + vincular).
-          const _tipoNC=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
+          const _tipoNC = P.tipo
           const _dk=(_tipoNC||'?')+':'+folioM
           if(folioM && seenDoc.has(_dk)){ _skip++; continue }   // dedup: no listar dos veces el mismo folio+tipo
           if(folioM) seenDoc.add(_dk)
           if(_tipoNC===61){
-            const refB=(d.match(/<Referencia>[\s\S]*?<\/Referencia>/)||[''])[0]
-            const folioRef=((refB.match(/<FolioRef>([^<]+)<\/FolioRef>/)||[])[1]||'').trim()
-            const codRef=+((refB.match(/<CodRef>(\d+)<\/CodRef>/)||[])[1]||0)||null
-            const razonRef=(refB.match(/<RazonRef>([^<]+)<\/RazonRef>/)||[])[1]||''
-            const ncMonto=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
-            const ncFecha=(d.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||null
-            const ncRut=(d.match(/<RUTRecep>([^<]+)<\/RUTRecep>/)||[])[1]||null
-            const ncRecep=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||null
-            const ncConcepto=(d.match(/<NmbItem>([^<]+)<\/NmbItem>/)||[])[1]||''
+            const folioRef=P.ref.folio, codRef=P.ref.cod, razonRef=P.ref.razon
+            const ncMonto=P.total, ncFecha=P.fecha, ncRut=P.rut, ncRecep=P.receptor, ncConcepto=P.nmb
             const fac=(billing||[]).find(x=>!x.deleted_at&&x.invoice_no&&folioN(x.invoice_no)===folioN(folioRef))
             const repl=fac?(billing||[]).find(x=>!x.deleted_at&&x.invoice_no&&folioN(x.invoice_no)!==folioN(folioRef)&&x.status!=='Anulada'&&x.billing_type!=='nota_credito'&&Math.round(x.amount||0)===ncMonto&&_normTxt(x.concept||'')===_normTxt(ncConcepto)):null
             const yaReg=(billing||[]).some(x=>!x.deleted_at&&x.billing_type==='nota_credito'&&folioN(x.invoice_no)===folioN(folioM))
@@ -6605,14 +6631,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioM)
           const cli = b ? ((clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||'—') : null
           if(!b){
-            const tipoDte=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
-            const fecha=(d.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||null
-            const rut=(d.match(/<RUTRecep>([^<]+)<\/RUTRecep>/)||[])[1]||null
-            const receptor=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||null
-            const monto=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
-            const nmb=(d.match(/<NmbItem>([^<]+)<\/NmbItem>/)||[])[1]||''
-            const dsc=(d.match(/<DscItem>([^<]+)<\/DscItem>/)||[])[1]||''
-            const glosa=[nmb,dsc].filter(Boolean).join(' — ').trim()   // lo que DICE la factura del SII (descripción del servicio)
+            const tipoDte=P.tipo, fecha=P.fecha, rut=P.rut, receptor=P.receptor, monto=P.total, nmb=P.nmb, dsc=P.dsc
+            const glosa=P.glosa   // lo que DICE la factura del SII (descripción del servicio)
             const concepto=nmb||'Honorarios'
             const cli=resolverClienteSII(rut, receptor, clients, clientEntities)   // cliente ya conocido por RUT/RS (no pedir asignar)
             // ¿Calza con una PROGRAMADA del cliente? Candidatas = pendientes (sin folio) del cliente, monto ±6%, vencimiento a ≤120 días de la emisión (cota).
@@ -6627,16 +6647,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             continue
           }
           try{
-            const td=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
+            const td=P.tipo
             // Guarda/REFRESCA el DTE en la factura: así el PDF con timbre se auto-adjunta al enviar y aparece el botón "PDF";
             // refrescarlo corrige el dte_xml de cargas viejas que quedó con acentos mal (�).
             // Además corrige el MONTO al del SII (MntTotal del DTE = valor real), no el programado de la venta.
-            const dteTot=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
+            const dteTot=P.total
             const fixAmt = dteTot&&Math.round(dteTot)!==Math.round(b.amount||0) ? {amount:dteTot} : {}
             // Sincroniza al estado local TODO lo que se escribió (dte_xml + monto + tipo), no solo el monto:
             // así el modal "Enviar factura" ve el XML y auto-adjunta el PDF con timbre SIN necesidad de recargar.
             try{ await supabase.from('billing').update({dte_xml:d,...fixAmt,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id); if(setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,dte_xml:d,...(fixAmt.amount!=null?{amount:dteTot}:{}),...(td?{sii_tipo_dte:td}:{})}:x)) }catch(_){}
-            const rzn=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||''
+            const rzn=P.receptor||''
             const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
             // Carpeta real por año/mes de la emisión (Facturación → 2026 → Mes), ya no la BETA.
             const fEmis=(d.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||b.issued_at||''
@@ -6657,12 +6677,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         fileStats.push({name:file.name, total:docs.length, skipped:_skip})
       }
       // Trazabilidad: guarda la carga como evento (fecha, quién, mes de la tanda, archivos + conteos) para el historial.
-      const _cat=e=>({programada:'prog',nueva:'new',nota_credito:'nc',nc_hecha:'nc',adjuntada:'dup',duplicada:'dup',creada:'cre',registrada:'reg',error:'err',sin_dte:'err',sin_factura:'err'}[e]||'otro')
+      const _cat=catImport
       const filesDetail=fileStats.map(f=>{ const its=res.filter(r=>r.archivo===f.name); const c={}; its.forEach(r=>{ const k=_cat(r.estado); c[k]=(c[k]||0)+1 }); return {name:f.name,total:f.total,skipped:f.skipped,counts:c} })
       const totalCounts={}; res.forEach(r=>{ const k=_cat(r.estado); totalCounts[k]=(totalCounts[k]||0)+1 })
       const batchAt=new Date().toISOString()
       setRespaldoAt(batchAt)
-      try{ await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period:(periodoISO?String(periodoISO).slice(0,7):null), docs_total:fileStats.reduce((a,f)=>a+(f.total||0),0), skipped:fileStats.reduce((a,f)=>a+(f.skipped||0),0), files:filesDetail, counts:totalCounts }) }catch(_){}
+      let _batchId=null
+      try{ const {data:_b}=await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period:(periodoISO?String(periodoISO).slice(0,7):null), docs_total:fileStats.reduce((a,f)=>a+(f.total||0),0), skipped:fileStats.reduce((a,f)=>a+(f.skipped||0),0), files:filesDetail, counts:totalCounts }).select('id').single(); _batchId=_b?.id||null }catch(_){}
+      setRespaldoBatchId(_batchId)
       setRespaldoFiles(fileStats)
       setRespaldoRes(res)
       onRefresh&&onRefresh()
@@ -6681,7 +6703,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     if(!await appConfirm(`¿Crear la Factura N°${item.row.folio} (${item.row.receptor||'—'} · ${fmt(item.row.monto)})${cliNom?`\nCliente: ${cliNom}`:''} en el sistema?\nSe emitió en el SII pero no estaba acá.`)) return
     setCreandoFac(item.row.folio)
     try{
-      const fac = await onIngresarSII({...item.row, doc:item.doc}, clienteId)   // pasa el XML para que la factura creada guarde dte_xml (PDF con timbre al enviar)
+      const fac = await onIngresarSII({...item.row, doc:item.doc, import_batch_id:respaldoBatchId}, clienteId)   // pasa el XML + el batch de la carga (trazabilidad)
       if(fac?.id){ try{ const token=await driveToken(); if(token){ const carpeta=await driveCarpetaFacturacion(token, item.row.fechaEmision||''); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const yaEnDrive=await driveBuscarEnCarpeta(token,carpeta,fname); let fileId,url2; if(yaEnDrive.length){fileId=yaEnDrive[0].id;url2=yaEnDrive[0].webViewLink||null}else{const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,carpeta,new File([u8],fname,{type:'application/pdf'}),fname); fileId=up.id;url2=up.webViewLink||null} await supabase.from('billing_attachments').delete().eq('billing_id',fac.id).eq('uploaded_by','Respaldo SII'); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:fileId,name:fname,url:url2,uploaded_by:'Respaldo SII'}) } }catch(_){} }
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
       setRespaldoRes(p=>(p||[]).map((r,i)=>i===idx?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))
@@ -6722,7 +6744,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const now=new Date().toISOString()
     const dteTot=item.doc?dteMontoTotal(item.doc):null
     const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(item.row.fechaEmision||item.fecha)
-    const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}) }
+    const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}), ...(respaldoBatchId?{import_batch_id:respaldoBatchId}:{}) }
     const { error } = await supabase.from('billing').update(patch).eq('id',item.progId)
     if(error) throw error
     setBilling&&setBilling(p=>p.map(x=>x.id===item.progId?{...x,...patch}:x))
@@ -7311,7 +7333,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     </div>
                   </div>) }
                 // Asigna un cliente a una fila 'nueva' sin resolver Y APRENDE: crea la RS (RUT del receptor) bajo ese cliente para que la próxima carga se resuelva sola.
-                const asignarClienteImport=async(row,cid)=>{ const cli=(clients||[]).find(c=>String(c.id)===String(cid)); setRespaldoRes(p=>(p||[]).map(x=>x===row?{...x,clienteId:cid,cliente:cli?.name||x.cliente}:x)); const rut=row?.row?.rut; if(rut&&cid){ const norm=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const ya=(clientEntities||[]).some(e=>norm(e.rut)===norm(rut)); if(!ya){ try{ await supabase.from('client_entities').insert({client_id:cid,name:row.row.receptor||null,rut}) }catch(_){} } } }
+                const asignarClienteImport=async(row,cid)=>{ const cli=(clients||[]).find(c=>String(c.id)===String(cid)); setRespaldoRes(p=>(p||[]).map(x=>x===row?{...x,clienteId:cid,cliente:cli?.name||x.cliente}:x)); await aprenderRS(cid, row?.row?.rut, row?.row?.receptor, clientEntities) }
                 const progRowR=(r,i)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; const cands=r.progCand||[]; const sel=cands.find(c=>c.id===r.progId); const many=isProg&&cands.length>1; const open=progPick===r; const noCli=!r.clienteId&&r.estado==='nueva'; const cliDisp=r.clienteId?(r.cliente||'—'):titleCase(r.cliente||r.row?.receptor||'—'); const rsDisp=r.row?.receptor?titleCase(r.row.receptor):''; const showRS=rsDisp&&_normTxt(rsDisp)!==_normTxt(cliDisp); return (
                   <div key={'p'+i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
                     <div onClick={()=>{ const bb2=r.progId&&(billing||[]).find(x=>x.id===r.progId); if(bb2&&onEdit) onEdit(bb2) }} style={{display:'grid',gridTemplateColumns:'1fr auto',columnGap:12,alignItems:'start',cursor:r.progId?'pointer':'default'}}>
@@ -7371,7 +7393,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <div style={{flex:1,background:C.soonBg,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nuevas.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.soonText,textTransform:'uppercase',letterSpacing:.3}}>Nuevas</div></div>
                   </div>
                   {respaldoFiles&&respaldoFiles.length>1&&(()=>{
-                    const catOf=e=>({programada:'prog',nueva:'new',nota_credito:'nc',nc_hecha:'nc',adjuntada:'dup',duplicada:'dup',creada:'cre',registrada:'reg',error:'err',sin_dte:'err',sin_factura:'err'}[e]||'otro')
+                    const catOf=catImport
                     const PILL={prog:['programadas',C.bgWarm,C.muted],new:['nuevas',C.soonBg,C.soonText],dup:['ya cargadas',C.greenBg,C.greenText],reg:['registradas',C.greenBg,C.greenText],nc:['nota de crédito','#FAECE7',C.coralText],cre:['agregadas',C.greenBg,C.greenText],err:['con problema',C.overdueBg,C.overdueText]}
                     const order=['prog','new','dup','reg','nc','cre','err']
                     const totDocs=respaldoFiles.reduce((a,f)=>a+(f.total||0),0), totSkip=respaldoFiles.reduce((a,f)=>a+(f.skipped||0),0)
@@ -18045,8 +18067,7 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
     const rut=row?.rut?String(row.rut).trim():''
     // Aprende: guarda el RUT como razón social del cliente para que próximas importaciones lo reconozcan solas (no repetir el trabajo).
     if(rut){
-      const ya=(clientEntities||[]).some(e=>String(e.client_id)===String(clientId)&&e.rut&&normRut(e.rut)===normRut(rut))
-      if(!ya){ try{ await supabase.from('client_entities').insert({client_id:clientId,name:row?.nombre||c?.name||null,rut}) }catch(_){} }
+      await aprenderRS(clientId, rut, row?.nombre||c?.name, clientEntities)   // fuente única (dedup por RUT)
     }
     // Aplica el cliente a TODAS las filas con el mismo RUT que aún no lo tienen (no asignar a mano una por una).
     setRows(p=>p.map(r=>(r.id===rowId || (rut && String(r.rut).trim()===rut && !r.client_id))
@@ -23934,7 +23955,7 @@ export default function App() {
     try{
       const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(row.fechaEmision)   // DD/MM/YYYY→ISO
       const montoReal = (row.doc?dteMontoTotal(row.doc):null) ?? row.monto   // el monto REAL es el del DTE emitido; row.monto es respaldo
-      created=await upsertBilling({ client_id:cli?.id||null, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:montoReal, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, dte_xml:row.doc||null, sii_synced_at:new Date().toISOString(), notes:null })
+      created=await upsertBilling({ client_id:cli?.id||null, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:montoReal, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, dte_xml:row.doc||null, sii_synced_at:new Date().toISOString(), notes:null, ...(row.import_batch_id?{import_batch_id:row.import_batch_id}:{}) })
       if(cli && row.rut){ try{ await supabase.from('client_entities').upsert({client_id:cli.id,rut:row.rut,name:row.receptor||null},{onConflict:'rut',ignoreDuplicates:true}) }catch(_){}}   // M5: no pisar el nombre bueno de la RS
     }catch(e){ if(!/duplicate/i.test(e.message||'')) throw e }   // ya estaba: la buscamos abajo para conciliar con ella
     let nb=null; try{ nb=await getBilling(); if(nb)setBilling(nb) }catch(_){}
