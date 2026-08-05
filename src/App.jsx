@@ -5718,6 +5718,30 @@ const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','
 const MESES_LG = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 // FUENTE ÚNICA: resuelve el cliente de una factura del SII por RUT→nombre (vínculos aprendidos primero, luego clientes).
 // La usan tanto SiiSyncModal como handleIngresarSII (antes divergían en normalización y prioridad → podían asignar clientes distintos).
+// Modal "¿de qué mes es esta tanda?" (carga de XML): mes + año. def = 'AAAA-MM' preseleccionado (mes del servicio = vencido). onPick(valor|null).
+function MesTandaModal({def,onPick}){
+  const MES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const ok=def&&/^\d{4}-\d{2}$/.test(def)
+  const dy=ok?+def.slice(0,4):new Date().getFullYear(), dm=ok?+def.slice(5,7)-1:0
+  const [y,setY]=useState(dy); const [m,setM]=useState(dm)
+  const years=[dy+1,dy,dy-1,dy-2]
+  const cap=s=>s.charAt(0).toUpperCase()+s.slice(1)
+  const selSty={fontSize:13,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',background:C.surface,appearance:'none',WebkitAppearance:'none'}
+  return <Modal hideHeader onClose={()=>onPick(null)}>
+    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+      <span style={{width:34,height:34,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg viewBox='0 0 24 24' width='18' height='18' style={{fill:'none',stroke:C.accent,strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'}}><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg></span>
+      <div><div style={{fontSize:15,fontWeight:600,color:C.accent}}>¿De qué mes es esta tanda?</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>El mes del servicio.</div></div>
+    </div>
+    <div style={{display:'flex',gap:8}}>
+      <select value={m} onChange={e=>setM(+e.target.value)} style={{...selSty,flex:1}}>{MES.map((mm,i)=><option key={i} value={i}>{cap(mm)}</option>)}</select>
+      <select value={y} onChange={e=>setY(+e.target.value)} style={{...selSty,width:100}}>{years.map(yy=><option key={yy} value={yy}>{yy}</option>)}</select>
+    </div>
+    <div style={{display:'flex',gap:8,marginTop:14}}>
+      <button onClick={()=>onPick(null)} style={{flex:1,fontSize:12.5,fontWeight:600,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'9px 0',color:C.muted,cursor:'pointer'}}>Cancelar</button>
+      <button onClick={()=>onPick(`${y}-${String(m+1).padStart(2,'0')}`)} style={{flex:1,fontSize:12.5,fontWeight:600,background:C.accent,border:'none',borderRadius:7,padding:'9px 0',color:'#fff',cursor:'pointer'}}>Guardar</button>
+    </div>
+  </Modal>
+}
 function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
   const nr = r => (r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
   const k = nr(rut)
@@ -5726,6 +5750,35 @@ function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
   if(k){ const c=clients.find(c=>nr(c.rut)===k); if(c) return c }
   if(nombre){ const c=clients.find(c=>c.name&&c.name.toLowerCase()===String(nombre).toLowerCase()); if(c) return c }
   return null
+}
+
+// Señales de período en una glosa/concepto: mes (0-11), año y N° de cuota. Sirve para calzar la factura del SII con SU cuota
+// programada por lo que DICE ("Asesoría permanente julio 2026", "Cuota 7/12"), no solo por monto/fecha (que fallan con cuotas viejas sin registrar).
+const _MESES_FULL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+const _MESES_ABR=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+function periodoDeTexto(txt){
+  const t=(txt||'').toLowerCase()
+  let mes=null
+  for(let i=0;i<12;i++){ if(t.includes(_MESES_FULL[i])){ mes=i; break } }
+  if(mes==null){ for(let i=0;i<12;i++){ if(new RegExp('\\b'+_MESES_ABR[i]+'\\.?').test(t)){ mes=i; break } } }
+  const yM=t.match(/\b20(\d{2})\b/); const anio=yM?2000+ +yM[1]:null
+  // Cuota/pago: "cuota 2", "pago 1", "2/5", "3 de 24" (evita el dash para no confundir años tipo 2026-07). 1-2 dígitos.
+  const cM=t.match(/(?:cuota|pago)\s*(\d{1,2})/)||t.match(/\b(\d{1,2})\s*(?:\/|\sde\s)\s*\d{1,2}\b/); const cuota=cM?+cM[1]:null
+  return {mes,anio,cuota}
+}
+// Puntúa cuánto calza el MES de servicio de la glosa (gmes) con una candidata. Prioriza la convención "mes vencido" de la firma
+// (servicio = vencimiento − 1), luego el N° de cuota, y deja el mes directo como señal débil. Evita que cuotas de meses contiguos empaten.
+function mesScoreCandidata(concept,due,gmes){
+  if(gmes==null) return 0
+  const cp=periodoDeTexto(concept||'')
+  if(cp.mes===gmes) return 3                                   // el concepto nombra el mes
+  const dm = due? new Date(due).getUTCMonth() : null
+  const dmOk = dm!=null && !isNaN(dm)
+  if(dmOk && ((dm-1+12)%12)===gmes) return 3                   // vencimiento − 1 (mes vencido)
+  if(cp.cuota!=null && ((cp.cuota-2+12)%12)===gmes) return 2   // cuota N ≈ servicio del mes N−1 (0-idx N−2)
+  if(dmOk && dm===gmes) return 1                               // vencimiento mismo mes (etiquetado directo)
+  if(cp.cuota!=null && ((cp.cuota-1+12)%12)===gmes) return 1
+  return 0
 }
 
 // Chequeo de cobertura del año: facturas EMITIDAS (con folio real) que quedaron SIN CLIENTE = fantasmas por asignar.
@@ -6461,6 +6514,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const respaldoRef = useRef(null)
   const [procResp,setProcResp] = useState(false)
   const [respaldoRes,setRespaldoRes] = useState(null)   // listado de resultados del último cargue de XML (por factura)
+  const [mesTandaReq,setMesTandaReq] = useState(null)   // {def, resolve} del modal "¿de qué mes es esta tanda?" (promesa)
   // Sube uno o VARIOS "Archivo Respaldo" (SetDTE XML de MIPYME): por cada factura genera el PDF (logo+timbre), lo sube a
   // la carpeta de facturación en Drive y lo adjunta a la ficha. Devuelve un LISTADO de resultados factura por factura.
   const procesarRespaldoSII = async(fileList)=>{
@@ -6473,9 +6527,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     try{
       const d0=splitSetDTE(await leerXml(files[0]))[0]||''; const f0=(d0.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||''
       const def=(()=>{ const s=String(f0||''); if(!/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,7); let [y,m,dd]=s.slice(0,10).split('-').map(Number); if(dd<=5){ m--; if(m<1){m=12;y--} } return `${y}-${String(m).padStart(2,'0')}` })()
-      const p=await appPrompt('¿A qué mes corresponde esta tanda? (AAAA-MM)\nLa tanda de un mes que terminas de emitir a inicio del siguiente va en el mes del servicio (ej. junio = 2026-06).', def)
+      const p=await new Promise(resolve=>setMesTandaReq({def,resolve}))
       if(p===null) return
-      periodoISO = /^\d{4}-\d{2}$/.test(String(p).trim()) ? String(p).trim()+'-01' : (def?def+'-01':null)
+      periodoISO = /^\d{4}-\d{2}$/.test(String(p||'').trim()) ? String(p).trim()+'-01' : (def?def+'-01':null)
     }catch(_){}
     setProcResp(true); setRespaldoRes(null)
     try{
@@ -6519,14 +6573,19 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const receptor=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||null
             const monto=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
             const nmb=(d.match(/<NmbItem>([^<]+)<\/NmbItem>/)||[])[1]||''
+            const dsc=(d.match(/<DscItem>([^<]+)<\/DscItem>/)||[])[1]||''
+            const glosa=[nmb,dsc].filter(Boolean).join(' — ').trim()   // lo que DICE la factura del SII (descripción del servicio)
             const concepto=nmb||'Honorarios'
             const cli=resolverClienteSII(rut, receptor, clients, clientEntities)   // cliente ya conocido por RUT/RS (no pedir asignar)
-            // ¿Calza con una PROGRAMADA del cliente? Candidatas = pendientes (sin folio) del cliente, monto ±6%, vencimiento a ≤120 días de la emisión (cota de seguridad). FIFO: se toma la MÁS ANTIGUA no usada en el lote; si hay varias, se dejan como alternativas para cambiar.
-            const cand = cli && monto>0 ? (billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && x.status==='Programada' && x.billing_type!=='reembolso' && String(x.client_id)===String(cli.id) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=120 })()).sort((a,b)=>String(a.due||a.issued_at||'').localeCompare(String(b.due||b.issued_at||''))) : []
+            // ¿Calza con una PROGRAMADA del cliente? Candidatas = pendientes (sin folio) del cliente, monto ±6%, vencimiento a ≤120 días de la emisión (cota).
+            // Se ordenan por cuánto CALZA LA GLOSA del DTE con el período de cada cuota (mes/cuota); a igualdad, FIFO (más antigua). Así una cuota vieja sin registrar no roba el match de un mes reciente.
+            const gp=periodoDeTexto(glosa)
+            const scoreCand=(x)=>{ const cp=periodoDeTexto(x.concept||''); let s=0; if(gp.cuota!=null&&cp.cuota!=null&&gp.cuota===cp.cuota) s+=4; s+=mesScoreCandidata(x.concept,x.due||x.issued_at,gp.mes); if(gp.anio!=null&&cp.anio!=null&&gp.anio===cp.anio) s+=1; return s }
+            const cand = cli && monto>0 ? (billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && x.status==='Programada' && x.billing_type!=='reembolso' && String(x.client_id)===String(cli.id) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=120 })()).map(x=>({x,s:scoreCand(x)})).sort((a,b)=> b.s-a.s || String(a.x.due||a.x.issued_at||'').localeCompare(String(b.x.due||b.x.issued_at||''))).map(o=>o.x) : []
             const pick = cand.find(c=>!progUsadas.has(c.id)) || null
             if(pick) progUsadas.add(pick.id)
-            const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0}))
-            res.push({folio:folioM||'?', estado:pick?'programada':'nueva', cliente:cli?.name||receptor, clienteId:cli?.id||null, progId:pick?.id||null, progCand, monto, fecha, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
+            const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0, s:scoreCand(c)}))
+            res.push({folio:folioM||'?', estado:pick?'programada':'nueva', cliente:cli?.name||receptor, clienteId:cli?.id||null, progId:pick?.id||null, progCand, glosa, monto, fecha, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
             continue
           }
           try{
@@ -6607,6 +6666,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [regBusy,setRegBusy] = useState(null)       // progId en curso, o 'lote'
   const [regReview,setRegReview] = useState(null)   // items 'programada' en revisión antes de registrar en lote
   const [progPick,setProgPick] = useState(null)     // item cuya selección de programada (alternativas) está abierta
+  const [secOpen,setSecOpen] = useState({})         // secciones desplegadas del modal de carga (programadas van replegadas por defecto)
   // Registrar una programada como emitida: le pone folio + DTE + estado (Por cobrar) sobre la MISMA fila (no duplica). Monto = MntTotal del DTE (valor real emitido). Conserva su vencimiento planificado.
   const registrarProg = async(item)=>{
     if(!item.progId) throw new Error('sin programada')
@@ -7183,6 +7243,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
               <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
+              {mesTandaReq&&<MesTandaModal def={mesTandaReq.def} onPick={v=>{ mesTandaReq.resolve(v); setMesTandaReq(null) }}/>}
               {respaldoRes&&(()=>{
                 const g=k=>respaldoRes.filter(r=>r.estado===k)
                 const prog=g('programada'), nuevas=g('nueva'), reg=g('registrada'), nc=[...g('nota_credito'),...g('nc_hecha')]
@@ -7214,7 +7275,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                           ? <button disabled={!!regBusy} onClick={e=>{e.stopPropagation();doRegistrar(r)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.azulBg,color:C.accent}}>{regBusy===r.progId?'…':'Registrar'}</button>
                           : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.soonBg,color:C.soonText}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
                     </div>
-                    {isProg&&sel&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>→ Vence {sel.due?fmtFechaDMY(sel.due):'—'}{sel.concept?` · ${sel.concept}`:''}{many&&<> · <span onClick={e=>{e.stopPropagation();setProgPick(open?null:r)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Cambiar ({cands.length})</span></>}</div>}
+                    {isProg&&sel
+                      ? <div style={{fontSize:10,color:C.muted,marginTop:5}}>{r.glosa&&<span style={{fontStyle:'italic'}}>{r.glosa} </span>}→ {sel.concept||(sel.due?`Vence ${fmtFechaDMY(sel.due)}`:'cuota')}{many&&<> · <span onClick={e=>{e.stopPropagation();setProgPick(open?null:r)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Cambiar ({cands.length})</span></>}</div>
+                      : r.glosa?<div style={{fontSize:10,color:C.muted,marginTop:5,fontStyle:'italic',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.glosa}</div>:null}
                     {many&&open&&<div style={{marginTop:6,border:`0.5px solid ${C.border}`,borderRadius:9,overflow:'hidden'}}>
                       {cands.map((c,ci)=>{ const on2=c.id===r.progId; return <div key={c.id} onClick={()=>{ setRespaldoRes(p=>(p||[]).map(x=>x===r?{...x,progId:c.id}:x)); setProgPick(null) }} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderTop:ci?`0.5px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
                         <span style={{width:15,height:15,borderRadius:'50%',border:`1.5px solid ${on2?C.accent:'#C7D0D5'}`,flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on2&&<span style={{width:8,height:8,borderRadius:'50%',background:C.accent}}/>}</span>
@@ -7237,6 +7300,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     </div>
                   </div>)
                 const hdr=(t,c)=><div style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3,margin:'12px 2px 2px'}}>{t}</div>
+                // Sección colapsable: encabezado tocable + cuerpo replegado por defecto (las listas largas no abruman al abrir).
+                const sec=(key,t,c,items,rowFn,def=false)=>{ if(!items.length) return null; const open=secOpen[key]??def; return <div key={key}><div onClick={()=>setSecOpen(p=>({...p,[key]:!open}))} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',margin:'12px 2px 2px'}}><span style={{fontSize:9,color:c,transform:open?'rotate(90deg)':'none',transition:'transform .12s'}}>▸</span><span style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3}}>{t}</span></div>{open&&items.map(rowFn)}</div> }
                 return <Modal title={`Cargar XML del SII · ${respaldoRes.length}`} fullscreen onClose={()=>setRespaldoRes(null)}>
                   <div style={{display:'flex',gap:8,marginBottom:10}}>
                     <div style={{flex:1,background:C.bgWarm,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Programadas</div></div>
@@ -7244,13 +7309,13 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <div style={{flex:1,background:C.soonBg,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nuevas.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.soonText,textTransform:'uppercase',letterSpacing:.3}}>Nuevas</div></div>
                   </div>
                   {prog.length>0&&<button onClick={()=>setRegReview(prog)} style={{width:'100%',fontSize:12.5,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid #B5D4F4`,borderRadius:7,padding:'9px 0',cursor:'pointer'}}>Registrar las {prog.length} emitidas</button>}
-                  {prog.length>0&&<>{hdr(`Programadas · ${prog.length}`,C.muted)}{prog.map(progRowR)}</>}
-                  {nuevas.length>0&&<>{hdr(`Nuevas · ${nuevas.length}`,C.soonText)}{nuevas.map(progRowR)}</>}
+                  {sec('prog',`Programadas · ${prog.length}`,C.muted,prog,progRowR,false)}
+                  {sec('nuevas',`Nuevas · ${nuevas.length}`,C.soonText,nuevas,progRowR,true)}
                   {nc.length>0&&<>{hdr(`Notas de crédito · ${nc.length}`,C.coralText)}{nc.map(ncRowR)}</>}
-                  {reg.length>0&&<>{hdr(`Registradas · ${reg.length}`,C.greenText)}{reg.map(progRowR)}</>}
-                  {adj.length>0&&<>{hdr(`Adjuntadas al Drive · ${adj.length}`,C.greenText)}{adj.map(row)}</>}
-                  {dup.length>0&&<>{hdr(`Ya tenían respaldo · ${dup.length}`,C.muted)}{dup.map(row)}</>}
-                  {cre.length>0&&<>{hdr(`Agregadas · ${cre.length}`,C.greenText)}{cre.map(row)}</>}
+                  {sec('reg',`Registradas · ${reg.length}`,C.greenText,reg,progRowR,false)}
+                  {sec('adj',`Adjuntadas al Drive · ${adj.length}`,C.greenText,adj,row,false)}
+                  {sec('dup',`Ya tenían respaldo · ${dup.length}`,C.muted,dup,row,false)}
+                  {sec('cre',`Agregadas · ${cre.length}`,C.greenText,cre,row,false)}
                   {err.length>0&&<>{hdr(`Con problema · ${err.length}`,C.overdueText)}{err.map(row)}</>}
                 </Modal> })()}
               {regReview&&(()=>{ const items=regReview; const total=items.reduce((a,r)=>a+(r.monto||0),0); return (
