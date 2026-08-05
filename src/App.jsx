@@ -2830,7 +2830,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
       {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). Antes eran 2 secciones que repetían "Por cobrar". */}
-      {kMini('cobranza','Cobranza · por cobrar',fmtShort(totalPorCobrar),null,'receipt',{fg:C.tealText,bg:C.tealBg})}
+      {kMini('cobranza','Cobranza · por cobrar',fmtShort(totalPorCobrar),null,'receipt',{fg:C.accent,bg:C.azulBg})}
       {kOpen('cobranza')&&(
       <div style={{padding:'16px 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
