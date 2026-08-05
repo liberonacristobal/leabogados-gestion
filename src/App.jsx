@@ -6519,6 +6519,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const respaldoRef = useRef(null)
   const [procResp,setProcResp] = useState(false)
   const [respaldoRes,setRespaldoRes] = useState(null)   // listado de resultados del último cargue de XML (por factura)
+  const [respaldoFiles,setRespaldoFiles] = useState(null)  // resumen por archivo subido (fase intermedia)
   const [mesTandaReq,setMesTandaReq] = useState(null)   // {def, resolve} del modal "¿de qué mes es esta tanda?" (promesa)
   // Sube uno o VARIOS "Archivo Respaldo" (SetDTE XML de MIPYME): por cada factura genera el PDF (logo+timbre), lo sube a
   // la carpeta de facturación en Drive y lo adjunta a la ficha. Devuelve un LISTADO de resultados factura por factura.
@@ -6543,15 +6544,17 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       const res=[]
       const progUsadas=new Set()   // programadas ya tomadas por otra factura de este lote (no reusar en el match FIFO)
       const seenDoc=new Set()      // folio+tipo ya vistos en el lote (dedup: mismo DTE repetido en 2 archivos o archivo cargado 2 veces)
+      const fileStats=[]           // resumen por archivo (fase intermedia): nombre, total de DTE, repetidos omitidos
       for(const file of files){
         let docs=[]; try{ docs=splitSetDTE(await leerXml(file)) }catch(_){ try{ docs=splitSetDTE(await file.text()) }catch(__){} }
-        if(!docs.length){ res.push({archivo:file.name, estado:'sin_dte'}); continue }
+        if(!docs.length){ res.push({archivo:file.name, estado:'sin_dte'}); fileStats.push({name:file.name,total:0,skipped:0}); continue }
+        const _start=res.length; let _skip=0
         for(const d of docs){
           const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
           // NOTA DE CRÉDITO (TipoDTE 61): no es factura. Lee la <Referencia> (a qué factura aplica y si la anula), busca esa factura y un reemplazo probable, y va a su propia sección — se resuelve con compuerta (anular + vincular).
           const _tipoNC=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
           const _dk=(_tipoNC||'?')+':'+folioM
-          if(folioM && seenDoc.has(_dk)) continue   // dedup: no listar dos veces el mismo folio+tipo
+          if(folioM && seenDoc.has(_dk)){ _skip++; continue }   // dedup: no listar dos veces el mismo folio+tipo
           if(folioM) seenDoc.add(_dk)
           if(_tipoNC===61){
             const refB=(d.match(/<Referencia>[\s\S]*?<\/Referencia>/)||[''])[0]
@@ -6624,7 +6627,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             res.push({folio:folioM, cliente:cli, monto:b.amount, estado:subido?'adjuntada':'duplicada', url})
           }catch(e){ res.push({folio:folioM, cliente:cli, estado:'error', msg:e.message||String(e)}) }
         }
+        for(let k=_start;k<res.length;k++){ if(!res[k].archivo) res[k].archivo=file.name }
+        fileStats.push({name:file.name, total:docs.length, skipped:_skip})
       }
+      setRespaldoFiles(fileStats)
       setRespaldoRes(res)
       onRefresh&&onRefresh()
     }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
@@ -7270,11 +7276,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
                     </div>
                   </div>) }
-                const progRowR=(r,i)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; const cands=r.progCand||[]; const sel=cands.find(c=>c.id===r.progId); const many=isProg&&cands.length>1; const open=progPick===r; return (
+                // Asigna un cliente a una fila 'nueva' sin resolver Y APRENDE: crea la RS (RUT del receptor) bajo ese cliente para que la próxima carga se resuelva sola.
+                const asignarClienteImport=async(row,cid)=>{ const cli=(clients||[]).find(c=>String(c.id)===String(cid)); setRespaldoRes(p=>(p||[]).map(x=>x===row?{...x,clienteId:cid,cliente:cli?.name||x.cliente}:x)); const rut=row?.row?.rut; if(rut&&cid){ const norm=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const ya=(clientEntities||[]).some(e=>norm(e.rut)===norm(rut)); if(!ya){ try{ await supabase.from('client_entities').insert({client_id:cid,name:row.row.receptor||null,rut}) }catch(_){} } } }
+                const progRowR=(r,i)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; const cands=r.progCand||[]; const sel=cands.find(c=>c.id===r.progId); const many=isProg&&cands.length>1; const open=progPick===r; const noCli=!r.clienteId&&r.estado==='nueva'; const cliDisp=r.clienteId?(r.cliente||'—'):titleCase(r.cliente||r.row?.receptor||'—'); const rsDisp=r.row?.receptor?titleCase(r.row.receptor):''; const showRS=rsDisp&&_normTxt(rsDisp)!==_normTxt(cliDisp); return (
                   <div key={'p'+i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
                     <div onClick={()=>{ const bb2=r.progId&&(billing||[]).find(x=>x.id===r.progId); if(bb2&&onEdit) onEdit(bb2) }} style={{display:'grid',gridTemplateColumns:'1fr auto',columnGap:12,alignItems:'start',cursor:r.progId?'pointer':'default'}}>
                       <div style={{minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cliDisp}</div>
+                        {showRS&&<div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{rsDisp}</div>}
                         <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Factura N°{r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}<span style={{fontSize:8,fontWeight:600,borderRadius:3,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,background:isProg?C.bgWarm:C.soonBg,color:isProg?C.muted:C.soonText}}>{isProg?'Programada':'Nueva'}</span></div>
                       </div>
                       <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
@@ -7289,6 +7298,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     {isProg&&sel
                       ? <div style={{fontSize:10,color:C.muted,marginTop:5}}>{r.glosa&&<span style={{fontStyle:'italic'}}>{r.glosa} </span>}→ {sel.concept||(sel.due?`Vence ${fmtFechaDMY(sel.due)}`:'cuota')}{many&&<> · <span onClick={e=>{e.stopPropagation();setProgPick(open?null:r)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Cambiar ({cands.length})</span></>}</div>
                       : r.glosa?<div style={{fontSize:10,color:C.muted,marginTop:5,fontStyle:'italic',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.glosa}</div>:null}
+                    {noCli&&<div style={{marginTop:7}}><AsignarClienteInline bill={r} clients={clients} onAssign={asignarClienteImport} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/></div>}
                     {many&&open&&<div style={{marginTop:6,border:`0.5px solid ${C.border}`,borderRadius:9,overflow:'hidden'}}>
                       {cands.map((c,ci)=>{ const on2=c.id===r.progId; return <div key={c.id} onClick={()=>{ setRespaldoRes(p=>(p||[]).map(x=>x===r?{...x,progId:c.id}:x)); setProgPick(null) }} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderTop:ci?`0.5px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
                         <span style={{width:15,height:15,borderRadius:'50%',border:`1.5px solid ${on2?C.accent:'#C7D0D5'}`,flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on2&&<span style={{width:8,height:8,borderRadius:'50%',background:C.accent}}/>}</span>
@@ -7326,6 +7336,22 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <div style={{flex:1,background:'#FAECE7',borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.coralText,fontVariantNumeric:'tabular-nums'}}>{nc.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.coralText,textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</div></div>
                     <div style={{flex:1,background:C.soonBg,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nuevas.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.soonText,textTransform:'uppercase',letterSpacing:.3}}>Nuevas</div></div>
                   </div>
+                  {respaldoFiles&&respaldoFiles.length>1&&(()=>{
+                    const catOf=e=>({programada:'prog',nueva:'new',nota_credito:'nc',nc_hecha:'nc',adjuntada:'dup',duplicada:'dup',creada:'cre',registrada:'reg',error:'err',sin_dte:'err',sin_factura:'err'}[e]||'otro')
+                    const PILL={prog:['programadas',C.bgWarm,C.muted],new:['nuevas',C.soonBg,C.soonText],dup:['ya cargadas',C.greenBg,C.greenText],reg:['registradas',C.greenBg,C.greenText],nc:['nota de crédito','#FAECE7',C.coralText],cre:['agregadas',C.greenBg,C.greenText],err:['con problema',C.overdueBg,C.overdueText]}
+                    const order=['prog','new','dup','reg','nc','cre','err']
+                    const totDocs=respaldoFiles.reduce((a,f)=>a+(f.total||0),0), totSkip=respaldoFiles.reduce((a,f)=>a+(f.skipped||0),0)
+                    return <div style={{border:`1px solid ${C.border}`,borderRadius:11,overflow:'hidden',marginBottom:12}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'10px 13px 8px',borderBottom:`1px solid ${C.bgSoft}`}}>
+                        <span style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>{respaldoFiles.length} archivos · {totDocs} documentos</span>
+                        {totSkip>0&&<span style={{fontSize:10,color:C.muted,flexShrink:0}}>{totSkip} repetido{totSkip!==1?'s':''} omitido{totSkip!==1?'s':''}</span>}
+                      </div>
+                      {respaldoFiles.map((f,fi)=>{ const items=(respaldoRes||[]).filter(r=>r.archivo===f.name); const counts={}; items.forEach(r=>{ const k=catOf(r.estado); counts[k]=(counts[k]||0)+1 }); return (
+                        <div key={f.name} style={{padding:'10px 13px',borderTop:fi?`1px solid ${C.bgSoft}`:'none'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.name}</span><span style={{marginLeft:'auto',fontSize:9.5,color:C.muted,fontWeight:600,flexShrink:0}}>{f.total} doc</span></div>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:6}}>{order.filter(k=>counts[k]).map(k=>{ const p=PILL[k]; return <span key={k} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',background:p[1],color:p[2]}}>{counts[k]} {p[0]}</span> })}{f.skipped>0&&<span style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',background:C.bgSoft,color:C.muted}}>{f.skipped} repetida{f.skipped!==1?'s':''}</span>}</div>
+                        </div>) })}
+                    </div> })()}
                   {prog.length>0&&<button onClick={()=>setRegReview(prog)} style={{width:'100%',fontSize:12.5,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid #B5D4F4`,borderRadius:7,padding:'9px 0',cursor:'pointer'}}>Registrar las {prog.length} emitidas</button>}
                   {sec('prog',`Programadas · ${prog.length}`,C.muted,prog,progRowR,false)}
                   {sec('nuevas',`Nuevas · ${nuevas.length}`,C.soonText,nuevas,progRowR,true)}
