@@ -7426,7 +7426,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   </div>)
                 const hdr=(t,c)=><div style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3,margin:'12px 2px 2px'}}>{t}</div>
                 // Sección colapsable: encabezado tocable + cuerpo replegado por defecto (las listas largas no abruman al abrir).
-                const sec=(key,t,c,items,rowFn,def=false)=>{ if(!items.length) return null; const open=secOpen[key]??def; return <div key={key}><div onClick={()=>setSecOpen(p=>({...p,[key]:!open}))} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',margin:'12px 2px 2px'}}><span style={{fontSize:9,color:c,transform:open?'rotate(90deg)':'none',transition:'transform .12s'}}>▸</span><span style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3}}>{t}</span></div>{open&&items.map(rowFn)}</div> }
+                const CATKEYS={prog:['prog'],new:['nuevas'],dup:['adj','dup'],reg:['reg'],nc:['nc'],cre:['cre'],err:['err']}
+                const goSec=(cat)=>{ const ks=CATKEYS[cat]||[cat]; ks.forEach(k=>setSecOpen(p=>({...p,[k]:true}))); setTimeout(()=>{ for(const k of ks){ const el=document.getElementById('imp-sec-'+k); if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); break } } },70) }
+                const sec=(key,t,c,items,rowFn,def=false)=>{ if(!items.length) return null; const open=secOpen[key]??def; return <div key={key} id={'imp-sec-'+key}><div onClick={()=>setSecOpen(p=>({...p,[key]:!open}))} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',margin:'12px 2px 2px'}}><span style={{fontSize:9,color:c,transform:open?'rotate(90deg)':'none',transition:'transform .12s'}}>▸</span><span style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3}}>{t}</span></div>{open&&items.map(rowFn)}</div> }
                 return createPortal(
                   <div style={{position:'fixed',left:0,right:0,top:0,bottom:'calc(56px + env(safe-area-inset-bottom,0px))',background:C.bg,zIndex:100,display:'flex',flexDirection:'column'}}>
                   <div style={{display:'flex',alignItems:'center',gap:12,padding:'calc(env(safe-area-inset-top,0px) + 14px) 16px 12px',borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
@@ -7436,9 +7438,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
                   <div style={{maxWidth:600,margin:'0 auto',padding:'14px 16px 34px'}}>
                   <div style={{display:'flex',gap:8,marginBottom:10}}>
-                    <div style={{flex:1,background:C.bgWarm,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Programadas</div></div>
-                    <div style={{flex:1,background:'#FAECE7',borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.coralText,fontVariantNumeric:'tabular-nums'}}>{nc.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.coralText,textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</div></div>
-                    <div style={{flex:1,background:C.soonBg,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nuevas.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.soonText,textTransform:'uppercase',letterSpacing:.3}}>Nuevas</div></div>
+                    <div onClick={()=>goSec('prog')} style={{flex:1,background:C.bgWarm,borderRadius:9,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Programadas</div></div>
+                    <div onClick={()=>goSec('nc')} style={{flex:1,background:'#FAECE7',borderRadius:9,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.coralText,fontVariantNumeric:'tabular-nums'}}>{nc.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.coralText,textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</div></div>
+                    <div onClick={()=>goSec('new')} style={{flex:1,background:C.soonBg,borderRadius:9,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nuevas.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.soonText,textTransform:'uppercase',letterSpacing:.3}}>Nuevas</div></div>
                   </div>
                   {respaldoFiles&&respaldoFiles.length>1&&(()=>{
                     const catOf=catImport
@@ -7456,18 +7458,18 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       {respaldoFiles.map((f,fi)=>{ const items=(respaldoRes||[]).filter(r=>r.archivo===f.name); const counts={}; items.forEach(r=>{ const k=catOf(r.estado); counts[k]=(counts[k]||0)+1 }); return (
                         <div key={f.name} style={{padding:'10px 13px',borderTop:fi?`1px solid ${C.bgSoft}`:'none'}}>
                           <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.name}</span><span style={{marginLeft:'auto',fontSize:9.5,color:C.muted,fontWeight:600,flexShrink:0}}>{f.total} doc</span></div>
-                          <div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:6}}>{order.filter(k=>counts[k]).map(k=>{ const p=PILL[k]; return <span key={k} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',background:p[1],color:p[2]}}>{counts[k]} {p[0]}</span> })}{f.skipped>0&&<span style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',background:C.bgSoft,color:C.muted}}>{f.skipped} repetida{f.skipped!==1?'s':''}</span>}</div>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:6}}>{order.filter(k=>counts[k]).map(k=>{ const p=PILL[k]; return <span key={k} onClick={()=>goSec(k)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',background:p[1],color:p[2],cursor:'pointer'}}>{counts[k]} {p[0]}</span> })}{f.skipped>0&&<span style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',background:C.bgSoft,color:C.muted}}>{f.skipped} repetida{f.skipped!==1?'s':''}</span>}</div>
                         </div>) })}
                     </div> })()}
                   {prog.length>0&&<button onClick={()=>setRegReview(prog)} style={{width:'100%',fontSize:12.5,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid #B5D4F4`,borderRadius:7,padding:'9px 0',cursor:'pointer'}}>Registrar las {prog.length} emitidas</button>}
                   {sec('prog',`Programadas · ${prog.length}`,C.muted,prog,progRowR,false)}
                   {sec('nuevas',`Nuevas · ${nuevas.length}`,C.soonText,nuevas,progRowR,true)}
-                  {nc.length>0&&<>{hdr(`Notas de crédito · ${nc.length}`,C.coralText)}{nc.map(ncRowR)}</>}
+                  {nc.length>0&&<div id='imp-sec-nc'>{hdr(`Notas de crédito · ${nc.length}`,C.coralText)}{nc.map(ncRowR)}</div>}
                   {sec('reg',`Registradas · ${reg.length}`,C.greenText,reg,progRowR,false)}
                   {sec('adj',`Adjuntadas al Drive · ${adj.length}`,C.greenText,adj,row,false)}
                   {sec('dup',`Ya tenían respaldo · ${dup.length}`,C.muted,dup,row,false)}
                   {sec('cre',`Agregadas · ${cre.length}`,C.greenText,cre,row,false)}
-                  {err.length>0&&<>{hdr(`Con problema · ${err.length}`,C.overdueText)}{err.map(row)}</>}
+                  {err.length>0&&<div id='imp-sec-err'>{hdr(`Con problema · ${err.length}`,C.overdueText)}{err.map(row)}</div>}
                   </div>
                   </div>
                   </div>, document.body) })()}
