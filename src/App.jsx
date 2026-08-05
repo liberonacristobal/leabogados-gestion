@@ -6608,6 +6608,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [cotejoMes,setCotejoMes] = useState(null)   // mes con el que abrir el cotejo (para buscar facturas antiguas del mes de un pago)
   const [cierreOpen,setCierreOpen] = useState(false)
   useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='cierre') setCierreOpen(true); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
+  useEffect(()=>{ contarSinRegistrar() },[])   // badge del hub: cargas sin registrar // eslint-disable-line
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
   const [agingF,setAgingF] = useState('')   // filtro por tramo de antigüedad de vencimiento ('1-30'|'31-60'|'61-90'|'90'); '' = todos. Lo setean los chips de "Vencido por antigüedad" de la foto.
@@ -6629,6 +6630,24 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const respaldoSummaryRef = useRef(null)      // resumen del preview (period/files/counts) para crear el batch al registrar
   const [cargasHist,setCargasHist] = useState(null)        // historial de cargas del SII (modal); null = cerrado
   const [mesTandaReq,setMesTandaReq] = useState(null)   // {def, resolve} del modal "¿de qué mes es esta tanda?" (promesa)
+  const [xmlHub,setXmlHub] = useState(false)            // hub "Cargar XML": Cargar archivo · Cargadas sin registrar · Historial
+  const [sinRegN,setSinRegN] = useState(0)              // cuántas cargas quedaron sin registrar (badge del hub)
+  const [cargandoStage,setCargandoStage] = useState(false)
+  // Fuente ÚNICA del match doc→programada (la usan la carga y la lista persistente). Devuelve la mejor candidata y todas.
+  const matchProgramada = (cliId, monto, fecha, glosa, progUsadas)=>{
+    if(!cliId || !(monto>0)) return {progId:null, progCand:[]}
+    const gp=periodoDeTexto(glosa)
+    const scoreCand=(x)=>{ const cp=periodoDeTexto(x.concept||''); let s=0; if(gp.cuota!=null&&cp.cuota!=null&&gp.cuota===cp.cuota) s+=4; s+=mesScoreCandidata(x.concept,x.due||x.issued_at,gp.mes); if(gp.anio!=null&&cp.anio!=null&&gp.anio===cp.anio) s+=1; return s }
+    const cand=(billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && x.status==='Programada' && x.billing_type!=='reembolso' && String(x.client_id)===String(cliId) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=120 })()).map(x=>({x,s:scoreCand(x)})).sort((a,b)=> b.s-a.s || String(a.x.due||a.x.issued_at||'').localeCompare(String(b.x.due||b.x.issued_at||''))).map(o=>o.x)
+    const pick = cand.find(c=>!(progUsadas&&progUsadas.has(c.id))) || null
+    if(pick&&progUsadas) progUsadas.add(pick.id)
+    const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0, s:scoreCand(c)}))
+    return {progId:pick?.id||null, progCand}
+  }
+  // Marca una carga (staging) como registrada/descartada por folio — al pasar de "sin registrar" a factura real. Silencioso.
+  const marcarStaged = async(folio, estado='registrada', billingId=null)=>{ if(!folio) return; try{ await supabase.from('sii_cargas_docs').update({estado, billing_id:billingId||null, updated_at:new Date().toISOString()}).eq('folio',String(folio)).eq('estado','sin_registrar') }catch(_){} }
+  // Cuántas cargas quedaron sin registrar (badge del hub). Tolera que la tabla aún no exista.
+  const contarSinRegistrar = async()=>{ try{ const {count}=await supabase.from('sii_cargas_docs').select('id',{count:'exact',head:true}).eq('estado','sin_registrar'); setSinRegN(count||0) }catch(_){ setSinRegN(0) } }
   // Sube uno o VARIOS "Archivo Respaldo" (SetDTE XML de MIPYME): por cada factura genera el PDF (logo+timbre), lo sube a
   // la carpeta de facturación en Drive y lo adjunta a la ficha. Devuelve un LISTADO de resultados factura por factura.
   const procesarRespaldoSII = async(fileList)=>{
@@ -6689,13 +6708,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const cli=resolverClienteSII(rut, receptor, clients, clientEntities)   // cliente ya conocido por RUT/RS (no pedir asignar)
             // ¿Calza con una PROGRAMADA del cliente? Candidatas = pendientes (sin folio) del cliente, monto ±6%, vencimiento a ≤120 días de la emisión (cota).
             // Se ordenan por cuánto CALZA LA GLOSA del DTE con el período de cada cuota (mes/cuota); a igualdad, FIFO (más antigua). Así una cuota vieja sin registrar no roba el match de un mes reciente.
-            const gp=periodoDeTexto(glosa)
-            const scoreCand=(x)=>{ const cp=periodoDeTexto(x.concept||''); let s=0; if(gp.cuota!=null&&cp.cuota!=null&&gp.cuota===cp.cuota) s+=4; s+=mesScoreCandidata(x.concept,x.due||x.issued_at,gp.mes); if(gp.anio!=null&&cp.anio!=null&&gp.anio===cp.anio) s+=1; return s }
-            const cand = cli && monto>0 ? (billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && x.status==='Programada' && x.billing_type!=='reembolso' && String(x.client_id)===String(cli.id) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=120 })()).map(x=>({x,s:scoreCand(x)})).sort((a,b)=> b.s-a.s || String(a.x.due||a.x.issued_at||'').localeCompare(String(b.x.due||b.x.issued_at||''))).map(o=>o.x) : []
-            const pick = cand.find(c=>!progUsadas.has(c.id)) || null
-            if(pick) progUsadas.add(pick.id)
-            const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0, s:scoreCand(c)}))
-            res.push({folio:folioM||'?', estado:pick?'programada':'nueva', cliente:cli?.name||receptor, clienteId:cli?.id||null, progId:pick?.id||null, progCand, glosa, monto, fecha, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
+            const {progId:pickId, progCand} = matchProgramada(cli?.id, monto, fecha, glosa, progUsadas)
+            res.push({folio:folioM||'?', estado:pickId?'programada':'nueva', cliente:cli?.name||receptor, clienteId:cli?.id||null, progId:pickId, progCand, glosa, monto, fecha, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
             continue
           }
           try{
@@ -6738,9 +6752,41 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       respaldoSummaryRef.current={ period:(periodoISO?String(periodoISO).slice(0,7):null), files:filesDetail, counts:totalCounts, docs_total:fileStats.reduce((a,f)=>a+(f.total||0),0), skipped:fileStats.reduce((a,f)=>a+(f.skipped||0),0) }
       setRespaldoFiles(fileStats)
       setRespaldoRes(res)
+      // PERSISTIR lo cargado sin registrar (programada/nueva) → puedes salir y retomar. Llave folio+tipo (no duplica).
+      // Solo entran las que NO están aún en billing; las ya registradas van por la rama de arriba (adjuntada).
+      try{
+        const stage=res.filter(r=>(r.estado==='programada'||r.estado==='nueva')&&r.row&&r.row.folio).map(r=>({
+          folio:String(r.row.folio), tipo_dte:r.row.tipoDte||33, fecha_emision:r.fecha||null,
+          receptor_rut:r.row.rut||null, receptor_name:r.row.receptor||null, monto:Math.round(r.monto||0),
+          glosa:r.glosa||null, doc_json:{doc:r.doc, row:r.row}, client_id:r.clienteId||null,
+          estado:'sin_registrar', created_by:user?.name||null, updated_at:new Date().toISOString() }))
+        if(stage.length){ await supabase.from('sii_cargas_docs').upsert(stage,{onConflict:'folio,tipo_dte'}); contarSinRegistrar() }
+      }catch(_){}
       onRefresh&&onRefresh()
     }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
     setProcResp(false)
+  }
+  // Reabre lo cargado sin registrar (persistente): reconstruye las filas y REFRESCA el match contra las programadas de hoy.
+  const cargarSinRegistrar = async()=>{
+    setCargandoStage(true)
+    try{
+      const {data,error}=await supabase.from('sii_cargas_docs').select('*').eq('estado','sin_registrar').order('created_at',{ascending:false})
+      if(error) throw error
+      const usadas=new Set(); const rows=[]
+      for(const s of (data||[])){
+        const ya=(billing||[]).find(x=>!x.deleted_at&&x.invoice_no&&folioN(x.invoice_no)===folioN(s.folio))
+        if(ya){ marcarStaged(s.folio,'registrada',ya.id); continue }   // se registró desde entonces → limpia y salta
+        const row=s.doc_json?.row || {folio:s.folio, rut:s.receptor_rut, receptor:s.receptor_name, monto:s.monto, fechaEmision:s.fecha_emision, tipoDte:s.tipo_dte, concepto:s.glosa}
+        const cliId=s.client_id || resolverClienteSII(row.rut,row.receptor,clients,clientEntities)?.id || null
+        const {progId,progCand}=matchProgramada(cliId, s.monto, s.fecha_emision, s.glosa, usadas)
+        const cliName=(clients||[]).find(c=>String(c.id)===String(cliId))?.name || row.receptor
+        rows.push({folio:s.folio, estado:progId?'programada':'nueva', cliente:cliName, clienteId:cliId, progId, progCand, glosa:s.glosa, monto:s.monto, fecha:s.fecha_emision, row, doc:s.doc_json?.doc||null, _stageId:s.id})
+      }
+      setRespaldoFiles(null); respaldoSummaryRef.current=null; batchIdRef.current=null; setRespaldoBatchId(null)
+      setRespaldoRes(rows); setXmlHub(false); contarSinRegistrar()
+      if(!rows.length) appAlert('No hay cargas sin registrar. Todo lo cargado ya está registrado.')
+    }catch(e){ appAlert('No se pudo abrir lo cargado sin registrar. ¿Corriste el SQL de sii_cargas_docs? '+(e.message||'')) }
+    setCargandoStage(false)
   }
   const abrirHistCargas = async () => { setCargasHist('loading'); try{ const {data}=await supabase.from('sii_import_batches').select('*').order('created_at',{ascending:false}).limit(60); const batches=data||[]; const ids=batches.map(b=>b.id).filter(Boolean); const reg={}; if(ids.length){ try{ const {data:bl}=await supabase.from('billing').select('import_batch_id').is('deleted_at',null).in('import_batch_id',ids); (bl||[]).forEach(r=>{ if(r.import_batch_id) reg[r.import_batch_id]=(reg[r.import_batch_id]||0)+1 }) }catch(_){} } setCargasHist(batches.map(b=>({...b, registered:reg[b.id]||0}))) }catch(_){ setCargasHist([]) } }
   const [creandoFac,setCreandoFac] = useState(null)   // folio en curso al crear una factura huérfana desde el XML
@@ -6766,6 +6812,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       if(fac?.id){ try{ const token=await driveToken(); if(token){ const carpeta=await driveCarpetaFacturacion(token, item.row.fechaEmision||''); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const yaEnDrive=await driveBuscarEnCarpeta(token,carpeta,fname); let fileId,url2; if(yaEnDrive.length){fileId=yaEnDrive[0].id;url2=yaEnDrive[0].webViewLink||null}else{const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,carpeta,new File([u8],fname,{type:'application/pdf'}),fname); fileId=up.id;url2=up.webViewLink||null} await supabase.from('billing_attachments').delete().eq('billing_id',fac.id).eq('uploaded_by','Respaldo SII'); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:fileId,name:fname,url:url2,uploaded_by:'Respaldo SII'}) } }catch(_){} }
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
       setRespaldoRes(p=>(p||[]).map((r,i)=>i===idx?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))
+      if(fac?.id) marcarStaged(item.row.folio,'registrada',fac.id)
     }catch(e){ appAlert('No se pudo crear la factura: '+(e.message||e)) }
     setCreandoFac(null)
   }
@@ -6816,14 +6863,15 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const { error } = await supabase.from('billing').update(patch).eq('id',item.progId)
     if(error) throw error
     setBilling&&setBilling(p=>p.map(x=>x.id===item.progId?{...x,...patch}:x))
+    marcarStaged(item.row.folio,'registrada',item.progId)   // sale de "Cargadas sin registrar"
   }
   const doRegistrar = async(item)=>{ setRegBusy(item.progId); try{ await registrarProg(item); setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'registrada'}:r)) }catch(e){ appAlert('No se pudo registrar: '+(e.message||e)) } setRegBusy(null); onRefresh&&onRefresh() }
   const doRegistrarLote = async(items)=>{ setRegBusy('lote'); let ok=0; for(const it of items){ try{ await registrarProg(it); ok++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada'}:r)) }catch(_){} } setRegBusy(null); setRegReview(null); onRefresh&&onRefresh(); appAlert(`${ok} de ${items.length} factura${items.length!==1?'s':''} registrada${ok!==1?'s':''}.`) }
   // Panel "Crear venta" desde una nueva: abre con todo auto-llenado (glosa → título/UF; área+abogado heredados del cliente).
   const abrirCrearVenta = (item)=>{ const glosa=item.glosa||item.row?.concepto||''; const uf=ufDeGlosa(glosa); const cid=item.clienteId; const lastV=cid?(sales||[]).filter(s=>!s.deleted_at&&String(s.client_id)===String(cid)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0]:null; setCvForm({ title:(glosa.split('—')[0].trim()||glosa||'Servicio'), ufVal:uf?String(uf):'', area:lastV?.area||'Corporativo', responsible:lastV?.responsible||user?.name||'' }); setCrearVentaFor(item) }
-  const doCrearVenta = async(item)=>{ if(!onCrearVentaRapida) return; setCvBusy(true); try{ const res=await onCrearVentaRapida(item,{ title:cvForm.title, ufVal:parseFloat(String(cvForm.ufVal).replace(',','.'))||null, area:cvForm.area, responsible:cvForm.responsible||null }); if(res){ setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'creada',cliente:(clients||[]).find(c=>String(c.id)===String(res.factura?.client_id))?.name||item.cliente}:r)); setCrearVentaFor(null) } }catch(e){ appAlert('No se pudo crear la venta: '+(e.message||e)) } setCvBusy(false); onRefresh&&onRefresh() }
+  const doCrearVenta = async(item)=>{ if(!onCrearVentaRapida) return; setCvBusy(true); try{ const res=await onCrearVentaRapida(item,{ title:cvForm.title, ufVal:parseFloat(String(cvForm.ufVal).replace(',','.'))||null, area:cvForm.area, responsible:cvForm.responsible||null }); if(res){ setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'creada',cliente:(clients||[]).find(c=>String(c.id)===String(res.factura?.client_id))?.name||item.cliente}:r)); if(res.factura?.id) marcarStaged(item.row?.folio,'registrada',res.factura.id); setCrearVentaFor(null) } }catch(e){ appAlert('No se pudo crear la venta: '+(e.message||e)) } setCvBusy(false); onRefresh&&onRefresh() }
   const abrirTercero = (item)=>{ setTvProv(''); setTvNuevo(''); setCrearVentaFor(null); setTerceroFor(item) }
-  const doTercero = async(item)=>{ if(!onFacturaTercero) return; setTvBusy(true); try{ let pid=tvProv; if(!pid&&tvNuevo.trim()&&onSaveProveedor){ const np=await onSaveProveedor({nombre:tvNuevo.trim()}); if(np) pid=np.id } if(!pid){ appAlert('Elige el externo o escribe su nombre.'); setTvBusy(false); return } const res=await onFacturaTercero(item,{proveedorId:pid}); if(res){ setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'tercero',proveedorNombre:res.proveedor?.razon_social||res.proveedor?.nombre||''}:r)); setTerceroFor(null) } }catch(e){ appAlert('No se pudo registrar la factura del externo: '+(e.message||e)) } setTvBusy(false); onRefresh&&onRefresh() }
+  const doTercero = async(item)=>{ if(!onFacturaTercero) return; setTvBusy(true); try{ let pid=tvProv; if(!pid&&tvNuevo.trim()&&onSaveProveedor){ const np=await onSaveProveedor({nombre:tvNuevo.trim()}); if(np) pid=np.id } if(!pid){ appAlert('Elige el externo o escribe su nombre.'); setTvBusy(false); return } const res=await onFacturaTercero(item,{proveedorId:pid}); if(res){ setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'tercero',proveedorNombre:res.proveedor?.razon_social||res.proveedor?.nombre||''}:r)); if(res.factura?.id) marcarStaged(item.row?.folio,'registrada',res.factura.id); setTerceroFor(null) } }catch(e){ appAlert('No se pudo registrar la factura del externo: '+(e.message||e)) } setTvBusy(false); onRefresh&&onRefresh() }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
   const [saludCobranza,setSaludCobranza] = useState(false)   // panel de salud de cobranza (DSO, tasa, morosidad, top deudores)
   const [recOpen,setRecOpen] = useState(()=>new Set())   // "Por recordar": clientes con su grupo expandido (default colapsado)
@@ -7506,12 +7554,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 return createPortal(
                   <div style={{position:'fixed',left:0,right:0,top:0,bottom:'calc(56px + env(safe-area-inset-bottom,0px))',background:C.bg,zIndex:100,display:'flex',flexDirection:'column'}}>
                   <div style={{display:'flex',alignItems:'center',gap:12,padding:'calc(env(safe-area-inset-top,0px) + 14px) 16px 12px',borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
-                    <button onClick={async()=>{ const pend=(prog||[]).length+(nuevas||[]).length; if(pend>0 && !(await appConfirm(`Tienes ${pend} factura${pend!==1?'s':''} revisada${pend!==1?'s':''} que no registraste. Cerrar no guarda nada; cuando quieras vuelve a subir el XML y regístralas — no se duplican. ¿Cerrar igual?`))) return; setRespaldoRes(null) }} style={chipBtn('primary')}>← Volver</button>
+                    <button onClick={async()=>{ const pend=(prog||[]).length+(nuevas||[]).length; if(pend>0 && !(await appConfirm({title:`Quedan ${pend} carga${pend!==1?'s':''} sin registrar`, message:'Se guardan en “Cargar XML › Cargadas sin registrar”. No se registran ni entran en tus cifras hasta completarlas, y no se duplican.', confirmText:'Guardar y salir', cancelText:'Volver a la carga'}))) return; setRespaldoRes(null); contarSinRegistrar() }} style={chipBtn('primary')}>← Volver</button>
                     <span style={{fontSize:15,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.3}}>Cargar XML del SII · {respaldoRes.length}</span>
                   </div>
                   <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
                   <div style={{maxWidth:600,margin:'0 auto',padding:'14px 16px 34px'}}>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:10,background:C.bgSoft,borderRadius:8,padding:'7px 10px'}}>Revisa acá; <b style={{color:C.text}}>nada se guarda hasta que registras</b>.</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10,background:C.bgSoft,borderRadius:8,padding:'7px 10px'}}><b style={{color:C.text}}>Lo cargado queda guardado aunque salgas.</b> Se registra en las fichas cuando tú quieras.</div>
                   <div style={{display:'flex',gap:8,marginBottom:10}}>
                     <div onClick={()=>goSec('prog')} style={{flex:1,background:C.bgWarm,borderRadius:9,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Programadas</div></div>
                     <div onClick={()=>goSec('nc')} style={{flex:1,background:'#FAECE7',borderRadius:9,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.coralText,fontVariantNumeric:'tabular-nums'}}>{nc.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.coralText,textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</div></div>
@@ -7588,6 +7636,22 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
+        {xmlHub&&<Modal title='Cargar XML del SII' maxWidth={400} onClose={()=>setXmlHub(false)}>
+          {(()=>{ const opt=(icon,ic,titulo,sub,onClick,badge)=>(
+            <button onClick={onClick} style={{display:'flex',alignItems:'center',gap:13,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderRadius:13,padding:14,cursor:'pointer',textAlign:'left',marginBottom:10}}>
+              <span style={{width:42,height:42,borderRadius:11,background:ic.bg,color:ic.fg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icon}</span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.accent}}>{titulo}</div><div style={{fontSize:11,color:C.muted}}>{sub}</div></div>
+              {badge>0&&<span style={{fontSize:13,fontWeight:800,color:C.soonText,background:C.soonBg,borderRadius:20,minWidth:26,textAlign:'center',padding:'3px 9px',flexShrink:0}}>{badge}</span>}
+              <span style={{color:C.done,fontSize:18,flexShrink:0,marginLeft:6}}>›</span>
+            </button>)
+            const svg=d=><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
+            return <div>
+              {opt(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar archivo','Carga el XML del SII desde tus Descargas',()=>{setXmlHub(false);respaldoRef.current&&respaldoRef.current.click()})}
+              {opt(svg(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>),{bg:C.soonBg,fg:C.soonText},'Cargadas sin registrar','Cargas pendientes de registrar — retómalas cuando quieras',()=>{ if(cargandoStage) return; cargarSinRegistrar() },sinRegN)}
+              {opt(svg(<><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></>),{bg:C.azulBg,fg:C.accent},'Historial de cargas','Tus cargas anteriores',()=>{setXmlHub(false);abrirHistCargas()})}
+              <div style={{fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:9,padding:'10px 12px',textAlign:'center',lineHeight:1.4}}><b style={{color:'#0B5A46'}}>Lo cargado queda guardado aunque salgas.</b> Lo registras cuando quieras.</div>
+            </div> })()}
+        </Modal>}
         {cargasHist!==null&&<Modal title='Cargas del SII' maxWidth={520} onClose={()=>setCargasHist(null)}>
           {cargasHist==='loading'
             ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Cargando…</div>
@@ -8129,7 +8193,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onEnviarVarias={arr=>setFacturasEmail(arr)} onUnsend={onUnsendFactura} onAssignSeries={onAssignSeries} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()} onReplaceProgramada={onReplaceProgramada}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onEnviarVarias={arr=>setFacturasEmail(arr)} onUnsend={onUnsendFactura} onAssignSeries={onAssignSeries} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>{contarSinRegistrar();setXmlHub(true)}} onReplaceProgramada={onReplaceProgramada}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
