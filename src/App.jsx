@@ -5780,6 +5780,42 @@ function parseDTE(d){
     ref:{ folio:((refB.match(/<FolioRef>([^<]+)<\/FolioRef>/)||[])[1]||'').trim(), cod:+((refB.match(/<CodRef>(\d+)<\/CodRef>/)||[])[1]||0)||null, razon:(refB.match(/<RazonRef>([^<]+)<\/RazonRef>/)||[])[1]||'' }
   }
 }
+// Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], onOpenClientFicha, onOpenFactura}){
+  const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
+  const rutMulti=useMemo(()=>{ const m={}; (clientEntities||[]).forEach(e=>{ const r=crNormRut(e.rut); if(!r) return; if(!m[r]) m[r]={ids:new Set(),rs:e.name}; m[r].ids.add(String(e.client_id)) }); return Object.entries(m).filter(([r,v])=>v.ids.size>1).map(([r,v])=>({rut:r, rs:v.rs, clientIds:[...v.ids]})) },[clientEntities])
+  const folioDup=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||!b.invoice_no) return; const f=folioN(b.invoice_no); if(!/^\d+$/.test(f)) return; (m[f]=m[f]||[]).push(b) }); return Object.entries(m).filter(([f,a])=>a.length>1).map(([f,a])=>({folio:f, rows:a})) },[billing])
+  const montoNeDte=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.dte_xml&&b.amount!=null).map(b=>({b, dte:dteMontoTotal(b.dte_xml)})).filter(x=>x.dte!=null&&Math.round(x.dte)!==Math.round(x.b.amount)),[billing])
+  const ventasDup=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s.deleted_at||!['Activo','Terminado'].includes(s.status)) return; const k=`${s.client_id}|${s.amount_uf||s.amount_clp||0}|${s.year}|${s.month}`; (m[k]=m[k]||[]).push(s) }); return Object.values(m).filter(a=>a.length>1) },[sales])
+  const total=rutMulti.length+folioDup.length+montoNeDte.length+ventasDup.length
+  if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{fontSize:26,color:C.greenText}}>✓</div><div style={{fontSize:13,fontWeight:600,color:C.greenText,marginTop:6}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
+  const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
+  const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
+  return <div>
+    <div style={{fontSize:11.5,color:C.muted,marginBottom:2}}>{total} cosa{total!==1?'s':''} por revisar. Toca cada una para abrir su ficha o factura.</div>
+    {folioDup.length>0&&<div style={{marginTop:14}}>{sh('Folio duplicado','#C0392B',folioDup.length)}
+      {folioDup.map(({folio,rows})=><div key={folio} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N°{folio} · {rows.length} filas</div>
+        {rows.map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:10.5,color:C.muted,marginTop:3,paddingLeft:10,cursor:'pointer'}}>{cName(b.client_id)} · {b.concept||'—'} · {fmt(b.amount||0)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
+      </div>)}
+    </div>}
+    {rutMulti.length>0&&<div style={{marginTop:14}}>{sh('RUT repetido en fichas',C.coralText,rutMulti.length)}
+      {rutMulti.map(({rut,rs,clientIds})=><div key={rut} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.text}}>RUT {rut}{rs?` · ${rs}`:''}</div>
+        <div style={{fontSize:10.5,color:C.muted,marginTop:2}}>En {clientIds.length} fichas: {clientIds.map((id,i)=><span key={id}>{i>0?' · ':''}<span onClick={()=>onOpenClientFicha&&onOpenClientFicha(id)} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>{cName(id)}</span></span>)}</div>
+      </div>)}
+    </div>}
+    {montoNeDte.length>0&&<div style={{marginTop:14}}>{sh('Monto distinto al DTE',C.soonText,montoNeDte.length)}
+      {montoNeDte.map(({b,dte})=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:10.5,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}>{cName(b.client_id)} · Factura N°{folioN(b.invoice_no)} — en el sistema {fmt(b.amount)} · en el DTE {fmt(dte)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
+    </div>}
+    {ventasDup.length>0&&<div style={{marginTop:14}}>{sh('Ventas que podrían estar duplicadas',C.muted,ventasDup.length)}
+      {ventasDup.map((arr,i)=><div key={i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(arr[0].client_id)} style={{fontSize:12.5,fontWeight:600,color:C.accent,cursor:'pointer'}}>{cName(arr[0].client_id)}</div>
+        {arr.map(s=><div key={s.id} style={{fontSize:10.5,color:C.muted,marginTop:2,paddingLeft:10}}>{s.title||'—'} · {s.amount_uf?`${s.amount_uf} UF`:fmt(s.amount_clp||0)} · {s.year}</div>)}
+      </div>)}
+    </div>}
+  </div>
+}
 // Fila del historial de cargas del SII: fecha, quién, mes de la tanda, totales, y despliegue por archivo.
 function CargaHistRow({b}){
   const [open,setOpen]=useState(false)
@@ -24180,6 +24216,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>
                   Papelera
                 </div>
+                {actualRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'revisionDatos'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12h-4l-3 9L9 3l-3 9H2'/></svg>
+                  Revisión de datos
+                </div>}
                 {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para autorizar el acceso permanente a Drive (con tu cuenta, que ve las carpetas de clientes). Al volver queda conectado para siempre. ¿Continuar?')) connectDrivePermanente()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2v8'/><path d='m8 6 4-4 4 4'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7'/></svg>
                   Conectar Drive
@@ -24323,6 +24363,7 @@ export default function App() {
             supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
+        {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
