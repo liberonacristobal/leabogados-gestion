@@ -2420,7 +2420,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const _sySel = String(selYear)
   // "Por cobrar" = saldo vivo real (fuente única porCobrarBills: folio, Pendiente/Vencido, saldoBill sobre el DTE, descuenta abonos).
   // NO facturado−cobrado con amount programado: eso ignoraba abonos parciales e inflaba la cifra (era un 3er número distinto al de Cobranza).
-  const porCobrarSel = porCobrarBills(bb)
   const fmtMon = v => dashMoneda==='UF' ? (ufRef>0?fmtUFk(Math.round(v/ufRef)):'—') : fmtShort(v)
   // Para cifras de VENTAS (tienen UF nominal): en modo UF usa el UF nominal directo (cuadra con la pestaña Ventas); en CLP usa el monto en pesos. NO reconvertir CLP↔UF con la UF de hoy.
   const vMon = (uf,clp) => dashMoneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
@@ -2645,7 +2644,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <div style={{display:'flex',justifyContent:'space-between',gap:6,borderTop:`0.5px solid ${C.border}`,marginTop:11,paddingTop:10}}>
                   <div onClick={()=>setGaugeMode(neto?'venta':'neto')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:neto?C.accent:C.greenText}}>{vMon(otherUF,otherVal)}</div><div style={lblSm}>{neto?'Vendido':'Neto'}</div></div>
                   <div style={{minWidth:0}}><div style={{...lblBig,color:C.muted}}>{vMon(m.costoUF,m.costo)}</div><div style={lblSm}>Terceros</div></div>
-                  <div onClick={()=>setTab('billing')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.tealText}}>{fmtMon(porCobrarSel)}</div><div style={lblSm}>Por cobrar ›</div></div>
                   <div onClick={()=>setRevOpen(o=>!o)} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.azulInfo}}>{ventasDelAnio.length}</div><div style={lblSm}>Ventas ›</div></div>
                 </div>
               </>)
@@ -2832,7 +2830,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
       {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). Antes eran 2 secciones que repetían "Por cobrar". */}
-      {kMini('cobranza','Cobranza',fmtShort(totalPorCobrar),null,'receipt',{fg:C.tealText,bg:C.tealBg})}
+      {kMini('cobranza','Cobranza · por cobrar',fmtShort(totalPorCobrar),null,'receipt',{fg:C.tealText,bg:C.tealBg})}
       {kOpen('cobranza')&&(
       <div style={{padding:'16px 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
