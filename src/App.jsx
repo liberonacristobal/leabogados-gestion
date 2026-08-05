@@ -5538,7 +5538,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           {onCotejar&&(
             <button onClick={onCotejar} title='Trae lo emitido del SII y lo calza con las programadas' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
               <span style={{width:36,height:36,borderRadius:10,background:C.ambarBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></svg></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cotejar SII</div><div style={{fontSize:10,color:C.muted}}>Por cotejar</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cuadrar con SII</div><div style={{fontSize:10,color:C.muted}}>Emitido vs cargado</div></div>
               <span style={{fontSize:19,fontWeight:600,color:C.soonText,flexShrink:0}}>{porEmitir.length}</span>
             </button>
           )}
@@ -5946,8 +5946,8 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
       ))}
       {orphansAll.length>0&&!orphans.length&&<div style={{fontSize:11,color:C.muted,padding:'6px 0'}}>Nada calza con "{q}".</div>}
       <div style={{marginTop:6,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-        <div style={{flex:1,minWidth:0,fontSize:11,color:C.muted,lineHeight:1.4}}>¿Faltan facturas del SII que no están acá? El cotejo mes a mes trae del portal las que no están en el sistema.</div>
-        <button onClick={onCotejar} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',flexShrink:0}}>Cotejar con el SII</button>
+        <div style={{flex:1,minWidth:0,fontSize:11,color:C.muted,lineHeight:1.4}}>¿Faltan facturas del SII que no están acá? Cuadrar con el SII, mes a mes, trae del portal las que no están en el sistema.</div>
+        <button onClick={onCotejar} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',flexShrink:0}}>Cuadrar con SII</button>
       </div>
     </Modal>
   )
@@ -6111,7 +6111,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
     <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
       <div style={{background:'#fff',borderRadius:14,maxWidth:480,width:'100%',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'16px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:1}}>
-          <span style={{fontSize:15,fontWeight:500,color:C.text}}>Cotejar con el SII</span>
+          <span style={{fontSize:15,fontWeight:500,color:C.text}}>Cuadrar con SII</span>
           <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:'0.5px solid #E4E8EB',background:'none',color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round'><line x1='6' y1='6' x2='18' y2='18'/><line x1='18' y1='6' x2='6' y2='18'/></svg>
           </button>
@@ -6128,22 +6128,37 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
         {(()=>{ const porEmitir=(billing||[]).filter(b=>b.status==='Programada'&&!b.deleted_at&&String(b.due||'').startsWith(mes)); const ds=desdeTxt(lastSync); return (
           <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 20px',borderBottom:'0.5px solid #E4E8EB',background:C.bgSoft}}>
             <span style={{width:7,height:7,borderRadius:'50%',background:ds?C.normal:C.done,flexShrink:0}}/>
-            <span style={{fontSize:11,color:C.muted}}>{ds?`Cotejado con el SII · ${ds}`:'Sin cotejar aún'}</span>
+            <span style={{fontSize:11,color:C.muted}}>{ds?`Cuadrado con el SII · ${ds}`:'Sin cuadrar aún'}</span>
             {porEmitir.length>0&&<span style={{fontSize:11,color:C.soonText,marginLeft:'auto',whiteSpace:'nowrap'}}>{porEmitir.length} por emitir este mes</span>}
           </div>
         )})()}
         {error&&<div style={{padding:'10px 20px',fontSize:12,color:C.overdue,background:C.overdueBg}}>{error}</div>}
         {result&&!loading&&(()=>{ const auto=(result.actualizadas?.length||0); const porResolver=(result.corregirFolio||[]).filter(it=>!corregidas[it.billingId]).length+(result.ambiguas||[]).filter(it=>!ambDone[it.folio]).length+(result.sinMatch||[]).filter(it=>!ingresadas[it.folio]).length; return (   /* baja a medida que resuelves en la sesión (M2) */
           <div style={{padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB'}}>
-            <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-              <span style={{fontSize:28,fontWeight:700,color:porResolver>0?'#C77F18':C.normal,lineHeight:1}}>{porResolver}</span>
-              <span style={{fontSize:13,color:C.muted}}>{porResolver===1?'factura por resolver':'facturas por resolver'}</span>
-            </div>
-            <div style={{display:'flex',alignItems:'center',gap:7,marginTop:9,paddingTop:9,borderTop:'0.5px solid #E4E8EB'}}>
-              {auto>0&&<><CheckVerde/><span style={{fontSize:12,color:C.muted}}>{auto} se cargaron solas</span></>}
-              {auto===0&&<span style={{fontSize:12,color:C.done}}>Nada se cargó solo este mes</span>}
-              <span style={{fontSize:11,color:C.done,marginLeft:'auto',whiteSpace:'nowrap'}}>{result.totalSII||0} en el SII</span>
-            </div>
+            {(()=>{ const emit=result.totalSII||0; const cuad=Math.max(0,emit-porResolver); return <>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                <div style={{border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 12px',textAlign:'center',background:'#F3F0F8'}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>Emitido en SII</div>
+                  <div style={{fontSize:22,fontWeight:700,color:C.accent,marginTop:3,lineHeight:1}}>{emit}</div>
+                </div>
+                <div style={{border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 12px',textAlign:'center'}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>Cargado</div>
+                  <div style={{fontSize:22,fontWeight:700,color:C.accent,marginTop:3,lineHeight:1}}>{cuad}</div>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <div style={{borderRadius:11,padding:'9px 12px',background:porResolver>0?C.soonBg:C.bgSoft,border:`1px solid ${porResolver>0?'#F0E4B8':C.border}`}}>
+                  <div style={{fontSize:9,fontWeight:700,color:porResolver>0?C.soonText:C.done,textTransform:'uppercase',letterSpacing:.3}}>Por cargar</div>
+                  <div style={{fontSize:18,fontWeight:700,color:porResolver>0?C.soonText:C.done,marginTop:2,lineHeight:1}}>{porResolver}</div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:1}}>emitidas, sin cargar</div>
+                </div>
+                <div style={{borderRadius:11,padding:'9px 12px',background:C.greenBg,border:'1px solid #CFE9DD'}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Cuadradas</div>
+                  <div style={{fontSize:18,fontWeight:700,color:C.greenText,marginTop:2,lineHeight:1}}>{cuad}</div>
+                  <div style={{fontSize:9,color:C.greenText,marginTop:1}}>{auto>0?`${auto} se cargaron solas`:'emitido = cargado'}</div>
+                </div>
+              </div>
+            </> })()}
           </div>
         )})()}
         {loading&&<SiiDots/>}
@@ -7627,7 +7642,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {impOpen&&<>
                 <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
                 <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
-                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['Cotejar SII',()=>setSiiOpen(true)],[procResp?'Generando…':'Respaldo PDF',()=>respaldoRef.current&&respaldoRef.current.click()],['Cargas anteriores',abrirHistCargas]].map(([l,fn])=>(
+                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['Cuadrar con SII',()=>setSiiOpen(true)],['Cargar XML',()=>{contarSinRegistrar();setXmlHub(true)}],['Cargas anteriores',abrirHistCargas]].map(([l,fn])=>(
                     <div key={l} onClick={()=>{setImpOpen(false);fn()}} style={{padding:'10px 14px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{l}</div>
                   ))}
                 </div>
@@ -22176,7 +22191,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   </div>
                   <div style={{fontSize:9.5,color:C.muted,marginBottom:4}}>no están en la app — <b>"Buscar todo en el SII"</b> revisa el RCV de los <b>{sinFac.length}</b> pagos y hasta <b>36 meses atrás</b>, y sugiere el calce (incluye antiguas). O busca uno por su mes.</div>
                   {siiBuscando&&<div style={{margin:'2px 0 6px'}}><div style={{height:5,background:C.border,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${Math.round(siiBuscando.hechos/Math.max(1,siiBuscando.total)*100)}%`,background:C.azulInfo,transition:'width .3s'}}/></div><div style={{fontSize:9,color:C.muted,marginTop:3}}>Sincronizando {siiBuscando.mes}… ({siiBuscando.hechos}/{siiBuscando.total} meses)</div></div>}
-                  {siiResumen&&!siiBuscando&&<div style={{fontSize:9.5,color:siiResumen.err?C.overdue:C.greenText,background:siiResumen.err?C.overdueBg:C.greenBg,borderRadius:7,padding:'5px 9px',marginBottom:6}}>{siiResumen.err?`No se pudo: ${siiResumen.err}`:`Listo · ${siiResumen.meses} mes(es) revisados · ${siiResumen.aplicadas} calzada(s)${siiResumen.huerfanas?` · ${siiResumen.huerfanas} sin cargar (revisar en Cotejar SII)`:''}. Las que calzan ya aparecen como sugerencia abajo.`}</div>}
+                  {siiResumen&&!siiBuscando&&<div style={{fontSize:9.5,color:siiResumen.err?C.overdue:C.greenText,background:siiResumen.err?C.overdueBg:C.greenBg,borderRadius:7,padding:'5px 9px',marginBottom:6}}>{siiResumen.err?`No se pudo: ${siiResumen.err}`:`Listo · ${siiResumen.meses} mes(es) revisados · ${siiResumen.aplicadas} calzada(s)${siiResumen.huerfanas?` · ${siiResumen.huerfanas} sin cargar (revisar en Cuadrar con SII)`:''}. Las que calzan ya aparecen como sugerencia abajo.`}</div>}
                   <div style={{maxHeight:300,overflowY:'auto',margin:'0 -2px'}}>
                   {sinFac.map(m=>{ const mesPago=String(m.fecha||'').slice(0,7); return (
                     <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderTop:`1px solid ${C.border}`,fontSize:11}}>
