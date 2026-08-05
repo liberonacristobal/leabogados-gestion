@@ -2332,6 +2332,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   ) }
   const [plazos,setPlazos] = useState([])   // plazos vencidos/próximos para "qué atender hoy"
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
+  // Accesos que aprenden: se ordenan por frecuencia de uso de ESTE usuario (cache instantáneo en localStorage) + registro durable en usage_events. Un punto verde marca el último abierto.
+  const accUsoKey = `accesoUso_${user?.name||user?.email||'x'}`
+  const [accUso,setAccUso] = useState(()=>{ try{ return JSON.parse(localStorage.getItem(accUsoKey))||{c:{},last:''} }catch(_){ return {c:{},last:''} } })
+  const bumpAcceso = id => { setAccUso(p=>{ const n={c:{...p.c,[id]:(p.c[id]||0)+1},last:id}; try{ localStorage.setItem(accUsoKey,JSON.stringify(n)) }catch(_){}; return n }); try{ logEvent('acceso',id,{},user?.name) }catch(_){} }
   const yr = currentYear
   const bb = billing
   // "Vendido del año" = Activo + Terminado (MISMA definición que kpis.vendidoYTD y SalesView.vendUF — fuente única; antes usaba "no Borrador/Propuesta/Rechazada", que divergía si aparecía otro estado como Pausado).
@@ -2555,8 +2559,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{padding:'0 20px 0'}}>
             <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Accesos directos</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:14}}>
-              {accesos.map(([id,label,icon,bg])=>(
-                <button key={id} onClick={()=>onAcceso(id)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
+              {[...accesos].sort((a,b)=>((accUso.c[b[0]]||0)-(accUso.c[a[0]]||0))).map(([id,label,icon,bg])=>(
+                <button key={id} onClick={()=>{bumpAcceso(id);onAcceso(id)}} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
+                  {accUso.last===id&&<span title='Lo último que abriste' style={{position:'absolute',top:7,right:9,width:7,height:7,borderRadius:'50%',background:C.normal}}/>}
                   <span style={{width:34,height:34,borderRadius:'50%',background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{icon}</span>
                   <span style={{fontSize:9.5,color:C.text}}>{label}</span>
                 </button>
