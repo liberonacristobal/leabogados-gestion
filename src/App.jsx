@@ -2440,18 +2440,23 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const ingresosPorAnioVenta = useMemo(()=>{
     const saleYrById={}; sales.forEach(s=>{ if(s.year!=null) saleYrById[String(s.id)]=s.year })
     const pagadas = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.paid_at?.startsWith(_sySel))
-    let total=0, sinMonto=0, sinN=0; const byYear={}
+    let total=0, sinMonto=0, sinN=0; const byYear={}; const listByYear={}; const sinList=[]
     pagadas.forEach(b=>{
       const ay = (b.sale_id&&saleYrById[String(b.sale_id)]!=null) ? saleYrById[String(b.sale_id)] : (b.sale_year!=null?b.sale_year:null)
       total+=(b.amount||0)
-      if(ay==null){ sinMonto+=(b.amount||0); sinN++; return }
-      byYear[ay]=(byYear[ay]||0)+(b.amount||0)
+      if(ay==null){ sinMonto+=(b.amount||0); sinN++; sinList.push(b); return }
+      byYear[ay]=(byYear[ay]||0)+(b.amount||0); (listByYear[ay]=listByYear[ay]||[]).push(b)
     })
     const delAnio = byYear[selYear]||0
     const anteriores = Math.max(0, total - delAnio - sinMonto)
     const prioYears = Object.keys(byYear).map(Number).filter(y=>y<selYear).sort((a,b)=>b-a)
-    return {total,byYear,delAnio,anteriores,sinMonto,sinN,prioYears}
+    const allYears = Object.keys(byYear).map(Number).sort((a,b)=>b-a)
+    return {total,byYear,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList}
   },[bb,sales,selYear])
+  // Meta de cobranza del año (annual_targets.collection_target). % y faltante para la foto de ingresos.
+  const metaCobranza = Number(targets.find(t=>t.year===selYear)?.collection_target) || 0
+  const [ingDrill,setIngDrill] = usePersistedState('d_ingdrill',null)   // año de venta cuyo detalle (facturas) está abierto ('sin' = sin año)
+  const [convOpen,setConvOpen] = usePersistedState('d_conv',false)      // explicación de la conversión desplegada
   // Años con meta cargada O con ventas registradas (así 2025/2024 aparecen al ingresar sus ventas, sin necesidad de meta)
   const aniosDisponibles = [...new Set([currentYear, ...targets.map(t=>t.year), ...sales.filter(s=>!['Borrador','Propuesta','Rechazada'].includes(s.status)).map(s=>s.year).filter(Boolean)])].sort((a,b)=>b-a)
   const prevM = metricasAnio(selYear-1)
@@ -2811,31 +2816,81 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {kMini('ventas','Ventas por mes',null,null,'chart',{fg:C.azulInfo,bg:C.azulBg})}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
 
-      {/* Cobrado del año por AÑO DE VENTA — controla ingresos de este año que vienen de ventas anteriores */}
-      {ingresosPorAnioVenta.total>0&&kMini('cobrado','Cobrado del año',fmtShort(ingresosPorAnioVenta.total),null,'check',{fg:C.greenText,bg:C.greenBg})}
-      {ingresosPorAnioVenta.total>0&&kOpen('cobrado')&&(()=>{
+      {/* INGRESOS DEL AÑO — plata que entró a caja, por año de la venta (fuente única ingresosPorAnioVenta) + meta de cobranza + conversión */}
+      {(ingresosPorAnioVenta.total>0||metaCobranza>0)&&kMini('cobrado','Ingresos del año',fmtShort(ingresosPorAnioVenta.total),null,'check',{fg:C.greenText,bg:C.greenBg})}
+      {(ingresosPorAnioVenta.total>0||metaCobranza>0)&&kOpen('cobrado')&&(()=>{
         const iv=ingresosPorAnioVenta
-        const prioColors=['#537281','#99ABB4','#537281','#99ABB4']
-        const segs=[{lbl:`Ventas ${selYear}`,val:iv.delAnio,col:C.accent},
-          ...iv.prioYears.map((y,i)=>({lbl:`Ventas ${y}`,val:iv.byYear[y],col:prioColors[i%prioColors.length]})),
-          ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:C.soon,sin:true}]:[])]
+        const vendidoCLP=m.bruto
+        const metaPct=metaCobranza>0?Math.round(iv.total/metaCobranza*100):0
+        const falta=Math.max(0,metaCobranza-iv.total)
+        const convPura=vendidoCLP>0?Math.round(iv.delAnio/vendidoCLP*100):0
+        const convGlob=vendidoCLP>0?Math.round(iv.total/vendidoCLP*100):0
+        const yc=(y,i)=> y===selYear?C.accent:([C.muted,C.done][i%2])
+        const nombreCli=b=>(clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'Sin cliente'
+        const abreFac=b=>{ if(b.client_id&&onOpenClientFicha) onOpenClientFicha(b.client_id); else setTab('billing') }
+        const drillList = ingDrill==null?null : (ingDrill==='sin'?iv.sinList:(iv.listByYear[ingDrill]||[])).slice().sort((a,b)=>String(b.paid_at||'').localeCompare(String(a.paid_at||'')))
+        const st={border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',position:'relative',background:C.bgPanel}
+        const arrow=<span style={{position:'absolute',right:9,top:9,color:C.done,fontSize:12}}>›</span>
         return (
         <div style={{padding:'16px 20px 0'}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cobrado {selYear} · por año de venta</div>
-          <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
-            <div style={{fontSize:22,fontWeight:600,color:C.accent,lineHeight:1.05}}>{fmtMon(iv.total)}</div>
-            <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3,marginBottom:11}}>Cobrado este año</div>
-            <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',marginBottom:12,background:C.bgSoft}}>
-              {segs.filter(s=>s.val>0).map((s,i)=>(<div key={i} style={{width:`${(s.val/iv.total)*100}%`,background:s.col}}/>))}
+          {/* twin pesos: ingresado a caja + meta de cobranza */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            <div style={{borderRadius:13,padding:'12px 13px',background:C.greenText,color:'#fff'}}>
+              <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',opacity:.85}}>Ingresado a caja</div>
+              <div style={{fontSize:23,fontWeight:700,lineHeight:1,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.total)}</div>
+              <div style={{fontSize:9.5,opacity:.9,marginTop:4}}>en {selYear}</div>
             </div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:'5px 16px',fontSize:12.5}}>
-              {segs.map((s,i)=>(
-                <span key={i} onClick={s.sin?()=>setTab('billing'):undefined} style={{display:'inline-flex',alignItems:'center',gap:5,cursor:s.sin?'pointer':'default',color:s.sin?C.soon:C.muted}}>
-                  <span style={{width:8,height:8,borderRadius:2,background:s.col,flexShrink:0}}/>{s.lbl} <b style={{color:s.sin?C.soon:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtMon(s.val)}</b>{s.sin?` · ${iv.sinN} ›`:''}
-                </span>
-              ))}
+            <div style={{borderRadius:13,padding:'12px 13px',background:C.greenBg,border:'1px solid #CFE9DD'}}>
+              <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',color:C.greenText}}>Meta de cobranza</div>
+              <div style={{fontSize:23,fontWeight:700,lineHeight:1,marginTop:3,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{metaCobranza>0?fmtMon(metaCobranza):'—'}</div>
+              <div style={{fontSize:9.5,color:'#2E7D5B',marginTop:4}}>{metaCobranza>0?`${metaPct}% · faltan ${fmtMon(falta)}`:'sin meta'}</div>
             </div>
           </div>
+          {/* vendido + conversión (T3) */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div onClick={()=>setRevOpen(o=>!o)} style={st}>{arrow}
+              <div style={{fontSize:8.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',color:C.done}}>Vendido {selYear}</div>
+              <div style={{fontSize:17,fontWeight:700,color:C.accent,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</div>
+              <div style={{fontSize:9,color:C.muted,marginTop:1}}>meta de venta</div>
+            </div>
+            <div onClick={()=>setConvOpen(o=>!o)} style={{...st,borderColor:convOpen?C.greenText:C.border}}><span style={{position:'absolute',right:9,top:9,color:C.greenText,fontSize:12,transform:convOpen?'rotate(180deg)':'none',transition:'transform .15s'}}>▾</span>
+              <div style={{fontSize:8.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',color:C.done}}>Conversión ventas {selYear}</div>
+              <div style={{fontSize:20,fontWeight:700,color:C.greenText,marginTop:3,lineHeight:1}}>{convPura}%</div>
+              <div style={{fontSize:9,color:C.muted,marginTop:2}}>toca para el cálculo</div>
+            </div>
+          </div>
+          {convOpen&&<div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'baseline',gap:11,padding:'11px 14px'}}><span style={{fontSize:19,fontWeight:700,color:C.greenText,minWidth:46}}>{convPura}%</span><span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent}}>De ventas {selYear}</span><span style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.delAnio)} / {vMon(m.brutoUF,m.bruto)}</span></div>
+            <div style={{display:'flex',alignItems:'baseline',gap:11,padding:'11px 14px',borderTop:`1px solid ${C.bgSoft}`}}><span style={{fontSize:15,fontWeight:700,color:C.done,minWidth:46}}>{convGlob}%</span><span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent}}>Con años previos</span><span style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.total)} / {vMon(m.brutoUF,m.bruto)}</span></div>
+          </div>}
+          {/* por año de la venta */}
+          <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',margin:'14px 2px 8px'}}>Cuánto viene de cada año de venta · suma {fmtMon(iv.total)}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {iv.allYears.map((y,i)=>{ const on=ingDrill===y; return (
+              <div key={y} onClick={()=>setIngDrill(on?null:y)} style={{...st,borderColor:on?yc(y,i):C.border}}>{arrow}
+                <div style={{fontSize:12.5,fontWeight:600,color:C.accent,display:'flex',alignItems:'center',gap:7}}><span style={{width:9,height:9,borderRadius:'50%',background:yc(y,i),flexShrink:0}}/>{y}</div>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,marginTop:4,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.byYear[y])}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>{(iv.listByYear[y]||[]).length} factura{(iv.listByYear[y]||[]).length!==1?'s':''} ›</div>
+              </div> )})}
+            {iv.sinMonto>0&&(()=>{ const on=ingDrill==='sin'; return (
+              <div onClick={()=>setIngDrill(on?null:'sin')} style={{...st,borderColor:on?C.soonText:C.border}}>{arrow}
+                <div style={{fontSize:12.5,fontWeight:600,color:C.soonText,display:'flex',alignItems:'center',gap:7}}><span style={{width:9,height:9,borderRadius:'50%',background:C.soon,flexShrink:0}}/>Sin año</div>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,marginTop:4,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.sinMonto)}</div>
+                <div style={{fontSize:10,color:C.soonText,marginTop:2}}>{iv.sinN} · asignar venta ›</div>
+              </div> )})()}
+          </div>
+          {/* drill: facturas cobradas del año elegido → ficha */}
+          {drillList&&<div style={{marginTop:11,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.3px',padding:'9px 13px 3px',background:C.bgPanel}}>{ingDrill==='sin'?'Sin año asignado':`De ventas ${ingDrill}`} · {drillList.length} cobrada{drillList.length!==1?'s':''} · toca para ir al cliente</div>
+            {drillList.map(b=>{ const vt=sales.find(s=>String(s.id)===String(b.sale_id))?.title; return (
+              <div key={b.id} onClick={()=>abreFac(b)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(b)}</div>
+                  <div style={{fontSize:9.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N°{folioN(b.invoice_no)||b.folio||'—'}{vt?` · ${vt}`:''}{b.paid_at?` · pagada ${fmtFechaDMY(b.paid_at)}`:''}</div>
+                </div>
+                <span style={{fontSize:12,fontWeight:700,color:C.greenText,whiteSpace:'nowrap'}}>{fmtMon(b.amount)}</span>
+              </div> )})}
+          </div>}
         </div>
         )
       })()}
