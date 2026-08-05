@@ -6864,6 +6864,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [cvForm,setCvForm] = useState({title:'',ufVal:'',area:'Corporativo',responsible:''})   // form del panel Crear venta
   const [cvBusy,setCvBusy] = useState(false)
   const [terceroFor,setTerceroFor] = useState(null)   // item (nueva) cuyo panel "De un externo" está abierto
+  const [queCorr,setQueCorr] = useState(null)          // item (nueva) cuyo chooser "¿A qué corresponde?" está abierto
   const [tvProv,setTvProv] = useState('')             // proveedor externo elegido en el panel
   const [tvNuevo,setTvNuevo] = useState('')           // nombre para crear un externo al vuelo
   const [tvBusy,setTvBusy] = useState(false)
@@ -7489,11 +7490,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                           : isProg
                             ? <button disabled={!!regBusy} onClick={e=>{e.stopPropagation();doRegistrar(r)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.azulBg,color:C.accent,whiteSpace:'nowrap'}}>{regBusy===r.progId?'…':'Registrar'}</button>
                             : r.clienteId
-                              ? <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
-                                  <button disabled={cvBusy||creandoFac===r.row.folio} onClick={e=>{e.stopPropagation();crearVentaFor===r?setCrearVentaFor(null):abrirCrearVenta(r)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.accent,color:'#fff',whiteSpace:'nowrap'}}>{crearVentaFor===r?'Cerrar':'Crear venta'}</button>
-                                  <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:10,fontWeight:600,border:'none',background:'transparent',color:C.muted,cursor:'pointer',padding:'2px 4px'}}>{creandoFac===r.row.folio?'…':'Solo factura'}</button>
-                                  <button disabled={tvBusy||creandoFac===r.row.folio} onClick={e=>{e.stopPropagation();terceroFor===r?setTerceroFor(null):abrirTercero(r)}} style={{fontSize:10,fontWeight:600,border:'none',background:'transparent',color:C.tealText,cursor:'pointer',padding:'2px 4px'}}>{terceroFor===r?'Cerrar':'De un externo'}</button>
-                                </div>
+                              ? <button disabled={cvBusy||tvBusy||creandoFac===r.row.folio} onClick={e=>{e.stopPropagation(); const abierto=(queCorr===r||crearVentaFor===r||terceroFor===r); setQueCorr(abierto?null:r); setCrearVentaFor(null); setTerceroFor(null)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.accent,color:'#fff',whiteSpace:'nowrap'}}>{(queCorr===r||crearVentaFor===r||terceroFor===r)?'Cerrar':'Registrar ▾'}</button>
                               : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
                       </div>
                     </div>
@@ -7501,6 +7498,18 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       ? <div style={{fontSize:10,color:C.muted,marginTop:5}}>{r.glosa&&<span style={{fontStyle:'italic'}}>{r.glosa} </span>}→ {sel.concept||(sel.due?`Vence ${fmtFechaDMY(sel.due)}`:'cuota')}{many&&<> · <span onClick={e=>{e.stopPropagation();setProgPick(open?null:r)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Cambiar ({cands.length})</span></>}</div>
                       : r.glosa?<div style={{fontSize:10,color:C.muted,marginTop:5,fontStyle:'italic',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.glosa}</div>:null}
                     {noCli&&<div style={{marginTop:7}}><AsignarClienteInline bill={r} clients={clients} onAssign={asignarClienteImport} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/></div>}
+                    {queCorr===r&&(()=>{ const opt=(icon,titulo,sub,onClick,tint)=>(
+                      <div onClick={e=>{e.stopPropagation();onClick()}} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+                        <span style={{width:30,height:30,borderRadius:8,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,background:tint.bg,color:tint.fg}}>{icon}</span>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>{titulo}</div><div style={{fontSize:10,color:C.muted}}>{sub}</div></div>
+                        <span style={{color:C.done,fontSize:15,flexShrink:0}}>›</span>
+                      </div>)
+                      return <div onClick={e=>e.stopPropagation()} style={{marginTop:9,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+                        <div style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,padding:'9px 12px 3px'}}>¿A qué corresponde esta factura?</div>
+                        {opt('◆','Una venta nuestra','Crea la venta · suma a las metas',()=>{setQueCorr(null);abrirCrearVenta(r)},{bg:C.azulBg,fg:C.accent})}
+                        {opt('▤','Solo la factura','Sin venta asociada',()=>{setQueCorr(null);crearDesdeXML(r,i)},{bg:C.bgSoft,fg:C.muted})}
+                        {opt('⇆','El ingreso es de un externo','La cobramos nosotros, pero la plata es de otro',()=>{setQueCorr(null);abrirTercero(r)},{bg:C.tealBg,fg:C.tealText})}
+                      </div> })()}
                     {crearVentaFor===r&&(()=>{ const AREAS=['Corporativo','Tributario','Laboral','Sucesorio','Otro']; const ABOGS=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']; const ufN=parseFloat(String(cvForm.ufVal).replace(',','.'))||0; return (
                       <div onClick={e=>e.stopPropagation()} style={{marginTop:9,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px'}}>
                         <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginBottom:8}}>Nueva venta · {cliDisp}</div>
