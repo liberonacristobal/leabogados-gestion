@@ -6519,7 +6519,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const monto=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
             const nmb=(d.match(/<NmbItem>([^<]+)<\/NmbItem>/)||[])[1]||''
             const concepto=nmb||'Honorarios'
-            res.push({folio:folioM||'?', estado:'sin_factura', cliente:receptor, monto, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
+            const cli=resolverClienteSII(rut, receptor, clients, clientEntities)   // cliente ya conocido por RUT/RS (no pedir asignar)
+            // ¿Calza con una PROGRAMADA del cliente? (sin folio, mismo cliente, monto ±6%, vencimiento ±45 días) → se REGISTRA sobre ella, no se duplica.
+            const prog = cli && monto>0 ? (billing||[]).find(x=>!x.deleted_at && !x.invoice_no && x.status==='Programada' && x.billing_type!=='reembolso' && String(x.client_id)===String(cli.id) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=45 })()) : null
+            res.push({folio:folioM||'?', estado:prog?'programada':'nueva', cliente:cli?.name||receptor, clienteId:cli?.id||null, progId:prog?.id||null, monto, fecha, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
             continue
           }
           try{
@@ -6561,7 +6564,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   // reusa onIngresarSII (fuente única). Cliente: el que elijas a mano (crearCli), o si no, lo resuelve por RUT.
   const crearDesdeXML = async(item, idx)=>{
     if(!onIngresarSII||creandoFac) return
-    const clienteId = crearCli[item.row.folio]||null
+    const clienteId = crearCli[item.row.folio]||item.clienteId||null   // usa el cliente ya resuelto por RUT si no elegiste otro
     const cliNom = clienteId ? ((clients||[]).find(c=>String(c.id)===String(clienteId))?.name||'') : ''
     if(!await appConfirm(`¿Crear la Factura N°${item.row.folio} (${item.row.receptor||'—'} · ${fmt(item.row.monto)})${cliNom?`\nCliente: ${cliNom}`:''} en el sistema?\nSe emitió en el SII pero no estaba acá.`)) return
     setCreandoFac(item.row.folio)
@@ -6597,6 +6600,21 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     }catch(e){ appAlert('No se pudo anular / registrar la nota de crédito: '+(e.message||e)) }
     setNcBusy(false)
   }
+  const [regBusy,setRegBusy] = useState(null)       // progId en curso, o 'lote'
+  const [regReview,setRegReview] = useState(null)   // items 'programada' en revisión antes de registrar en lote
+  // Registrar una programada como emitida: le pone folio + DTE + estado (Por cobrar) sobre la MISMA fila (no duplica). Monto = MntTotal del DTE (valor real emitido). Conserva su vencimiento planificado.
+  const registrarProg = async(item)=>{
+    if(!item.progId) throw new Error('sin programada')
+    const now=new Date().toISOString()
+    const dteTot=item.doc?dteMontoTotal(item.doc):null
+    const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(item.row.fechaEmision||item.fecha)
+    const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}) }
+    const { error } = await supabase.from('billing').update(patch).eq('id',item.progId)
+    if(error) throw error
+    setBilling&&setBilling(p=>p.map(x=>x.id===item.progId?{...x,...patch}:x))
+  }
+  const doRegistrar = async(item)=>{ setRegBusy(item.progId); try{ await registrarProg(item); setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'registrada'}:r)) }catch(e){ appAlert('No se pudo registrar: '+(e.message||e)) } setRegBusy(null); onRefresh&&onRefresh() }
+  const doRegistrarLote = async(items)=>{ setRegBusy('lote'); let ok=0; for(const it of items){ try{ await registrarProg(it); ok++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada'}:r)) }catch(_){} } setRegBusy(null); setRegReview(null); onRefresh&&onRefresh(); appAlert(`${ok} de ${items.length} factura${items.length!==1?'s':''} registrada${ok!==1?'s':''}.`) }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
   const [saludCobranza,setSaludCobranza] = useState(false)   // panel de salud de cobranza (DSO, tasa, morosidad, top deudores)
   const [recOpen,setRecOpen] = useState(()=>new Set())   // "Por recordar": clientes con su grupo expandido (default colapsado)
@@ -7160,56 +7178,81 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
               <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
-              {respaldoRes&&(()=>{ const g=k=>respaldoRes.filter(r=>r.estado===k); const adj=g('adjuntada'),dup=g('duplicada'),sinf=g('sin_factura'),cre=g('creada'),nc=[...g('nota_credito'),...g('nc_hecha')],err=[...g('error'),...g('sin_dte')]
-                const STY={adjuntada:{t:'Adjuntada al Drive',c:C.greenText,bg:C.greenBg},creada:{t:'Creada ✓',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},sin_factura:{t:'Sin factura en el sistema',c:C.soonText,bg:C.soonBg},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg}}
-                const row=(r,i)=>{ const s=STY[r.estado]||STY.error; const esSin=r.estado==='sin_factura'&&r.row&&onIngresarSII; const pick=esSin&&crearCli[r.row.folio]; return (
+              {respaldoRes&&(()=>{
+                const g=k=>respaldoRes.filter(r=>r.estado===k)
+                const prog=g('programada'), nuevas=g('nueva'), reg=g('registrada'), nc=[...g('nota_credito'),...g('nc_hecha')]
+                const adj=g('adjuntada'),dup=g('duplicada'),cre=g('creada'),err=[...g('error'),...g('sin_dte'),...g('sin_factura')]
+                const STY={adjuntada:{t:'Adjuntada',c:C.greenText,bg:C.greenBg},creada:{t:'Agregada',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg},sin_factura:{t:'Sin factura',c:C.soonText,bg:C.soonBg}}
+                const row=(r,i)=>{ const s=STY[r.estado]||STY.error; return (
                   <div key={i} style={{padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.folio?`N°${r.folio}`:r.archivo||'—'}{r.cliente?<span style={{fontWeight:400,color:C.muted}}> · {r.cliente}</span>:''}{r.monto?<span style={{fontWeight:400,color:C.muted}}> · {fmt(r.monto)}</span>:''}</div>
                         {r.msg&&<div style={{fontSize:10,color:C.overdueText}}>{r.msg}</div>}
-                        {r.estado==='creada'&&r.sinCliente&&<div style={{fontSize:10,color:C.soonText}}>Sin cliente — asígnalo en Cobertura SII o en la factura.</div>}
+                        {r.estado==='creada'&&r.sinCliente&&<div style={{fontSize:10,color:C.soonText}}>Sin cliente — asígnalo en la factura.</div>}
                       </div>
                       {r.url&&<a href={r.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.accent,textDecoration:'none',flexShrink:0}}>Ver PDF ↗</a>}
                       <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
                     </div>
-                    {esSin&&<div style={{display:'flex',gap:8,alignItems:'center',marginTop:6,flexWrap:'wrap'}}>
-                      <div style={{flex:'1 1 150px',minWidth:0}}><AsignarClienteInline bill={{id:r.row.folio}} clients={clients} onAssign={(_,cid)=>setCrearCli(p=>({...p,[r.row.folio]:cid}))} label='Asignar a un cliente (opcional)' placeholder='Buscar cliente…'/></div>
-                      {pick&&<span style={{fontSize:10,color:C.greenText,fontWeight:600,flexShrink:0}}>✓ {(clients||[]).find(c=>String(c.id)===String(pick))?.name||''}</span>}
-                      <button disabled={creandoFac===r.row.folio} onClick={()=>crearDesdeXML(r,i)} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:creandoFac?'default':'pointer',flexShrink:0}}>{creandoFac===r.row.folio?'Creando…':'Crear factura'}</button>
-                    </div>}
+                  </div>) }
+                const progRowR=(r,i)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; return (
+                  <div key={'p'+i} onClick={()=>{ const bb2=r.progId&&(billing||[]).find(x=>x.id===r.progId); if(bb2&&onEdit) onEdit(bb2) }} style={{display:'grid',gridTemplateColumns:'1fr 78px 104px',columnGap:10,alignItems:'center',padding:'10px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:r.progId?'pointer':'default'}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Factura N°{r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}<span style={{fontSize:8,fontWeight:600,borderRadius:3,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,background:isProg?C.bgWarm:C.soonBg,color:isProg?C.muted:C.soonText}}>{isProg?'Programada':'Nueva'}</span></div>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
+                    {done
+                      ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'6px 0',textAlign:'center'}}>Registrada</span>
+                      : isProg
+                        ? <button disabled={!!regBusy} onClick={e=>{e.stopPropagation();doRegistrar(r)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.azulBg,color:C.accent}}>{regBusy===r.progId?'…':'Registrar'}</button>
+                        : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.soonBg,color:C.soonText}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
                   </div>) }
                 const ncRowR=(r,i)=>(
-                  <div key={'nc'+i} style={{padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`}}>
-                    <div style={{display:'flex',alignItems:'baseline',gap:6}}>
-                      <span style={{fontSize:8.5,fontWeight:600,color:C.coralText,background:'#FAECE7',borderRadius:3,padding:'2px 7px',textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</span>
-                      <span style={{fontSize:12,fontWeight:600,color:C.text}}>N°{r.ncFolio}</span>
-                      <span style={{fontSize:10,color:C.done,marginLeft:'auto'}}>{r.ncFecha?fmtFechaDMY(r.ncFecha):''}</span>
-                    </div>
-                    <div style={{fontSize:12.5,color:C.text,marginTop:4}}>Anula <span style={{color:C.done}}>→</span> <b style={{color:C.accent}}>Factura N°{r.facFolio}</b></div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:1}}>{r.facCliente||r.receptor||'—'}{r.facStatus?` · ${r.facStatus}`:' · no está en el sistema'} · {fmt(r.monto)}</div>
-                    {r.replFolio&&<div style={{fontSize:10,color:C.muted,marginTop:5,paddingTop:5,borderTop:`0.5px solid ${C.bgSoft}`}}>Reemplazo probable: <b style={{color:C.accent}}>Factura N°{r.replFolio}{r.replCliente?` · ${r.replCliente}`:''}</b></div>}
+                  <div key={'nc'+i} style={{padding:'10px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>{r.facCliente||r.receptor||'—'}</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>N°{r.ncFolio}{r.ncFecha?` · ${fmtFechaDMY(r.ncFecha)}`:''} · anula Factura N°{r.facFolio}{r.facStatus?` · ${r.facStatus}`:' · no está en el sistema'} · {fmt(r.monto)}<span style={{fontSize:8,fontWeight:600,color:C.coralText,background:'#FAECE7',borderRadius:3,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</span></div>
+                    {r.replFolio&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>Reemplazo probable: <b style={{color:C.accent}}>Factura N°{r.replFolio}{r.replCliente?` · ${r.replCliente}`:''}</b></div>}
                     <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>
                       {r.estado==='nc_hecha'
                         ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>Anulada · registrada</span>
                         : r.facId
-                          ? <button onClick={()=>{setNcVincular(!!r.replId);setNcConfirm({item:r})}} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'7px 13px',cursor:'pointer'}}>Anular Factura N°{r.facFolio}</button>
-                          : <button disabled={ncBusy} onClick={()=>anularPorNC(r,i,false)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:C.soonBg,border:'none',borderRadius:7,padding:'7px 13px',cursor:'pointer'}}>Solo registrar la NC</button>}
+                          ? <button onClick={()=>{setNcVincular(!!r.replId);setNcConfirm({item:r})}} style={{fontSize:10.5,fontWeight:600,color:C.overdueText,background:C.overdueBg,border:'none',borderRadius:7,padding:'7px 13px',cursor:'pointer'}}>Anular N°{r.facFolio}</button>
+                          : <button disabled={ncBusy} onClick={()=>anularPorNC(r,i,false)} style={{fontSize:10.5,fontWeight:600,color:C.soonText,background:C.soonBg,border:'none',borderRadius:7,padding:'7px 13px',cursor:'pointer'}}>Solo registrar</button>}
                     </div>
                   </div>)
-                return <Modal title='Respaldo XML · resultados' onClose={()=>setRespaldoRes(null)}>
-                  <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-                    <div style={{flex:'1 1 90px',background:C.greenBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.greenText}}>Adjuntadas</div><div style={{fontSize:18,fontWeight:700,color:C.greenText}}>{adj.length}</div></div>
-                    <div style={{flex:'1 1 90px',background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.muted}}>Ya tenían</div><div style={{fontSize:18,fontWeight:700,color:C.muted}}>{dup.length}</div></div>
-                    <div style={{flex:'1 1 90px',background:C.soonBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.soonText}}>Sin factura</div><div style={{fontSize:18,fontWeight:700,color:C.soonText}}>{sinf.length}</div></div>
+                const hdr=(t,c)=><div style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3,margin:'12px 2px 2px'}}>{t}</div>
+                return <Modal title={`Cargar XML del SII · ${respaldoRes.length}`} fullscreen onClose={()=>setRespaldoRes(null)}>
+                  <div style={{display:'flex',gap:8,marginBottom:10}}>
+                    <div style={{flex:1,background:C.bgWarm,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Programadas</div></div>
+                    <div style={{flex:1,background:'#FAECE7',borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.coralText,fontVariantNumeric:'tabular-nums'}}>{nc.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.coralText,textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</div></div>
+                    <div style={{flex:1,background:C.soonBg,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nuevas.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.soonText,textTransform:'uppercase',letterSpacing:.3}}>Nuevas</div></div>
                   </div>
-                  {cre.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:4}}>Creadas ahora · {cre.length}</div>{cre.map(row)}</>}
-                  {adj.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Adjuntadas al Drive · {adj.length}</div>{adj.map(row)}</>}
-                  {dup.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Ya tenían respaldo · {dup.length}</div>{dup.map(row)}</>}
-                  {sinf.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Sin factura en el sistema · {sinf.length}</div><div style={{fontSize:10,color:C.muted,margin:'2px 0 2px'}}>El folio del XML se emitió en el SII pero no está acá. Toca <b>"Crear factura"</b> para ingresarla desde el XML.</div>{sinf.map(row)}</>}
-                  {nc.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.coralText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Notas de crédito · {nc.length}</div><div style={{fontSize:10,color:C.muted,margin:'2px 0 2px'}}>Anulan una factura. Revisa a cuál y confirma la anulación (con su reemplazo si corresponde).</div>{nc.map(ncRowR)}</>}
-                  {err.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Con problema · {err.length}</div>{err.map(row)}</>}
+                  {prog.length>0&&<button onClick={()=>setRegReview(prog)} style={{width:'100%',fontSize:12.5,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid #B5D4F4`,borderRadius:7,padding:'9px 0',cursor:'pointer'}}>Registrar las {prog.length} emitidas</button>}
+                  {prog.length>0&&<>{hdr(`Programadas · ${prog.length}`,C.muted)}{prog.map(progRowR)}</>}
+                  {nuevas.length>0&&<>{hdr(`Nuevas · ${nuevas.length}`,C.soonText)}{nuevas.map(progRowR)}</>}
+                  {nc.length>0&&<>{hdr(`Notas de crédito · ${nc.length}`,C.coralText)}{nc.map(ncRowR)}</>}
+                  {reg.length>0&&<>{hdr(`Registradas · ${reg.length}`,C.greenText)}{reg.map(progRowR)}</>}
+                  {adj.length>0&&<>{hdr(`Adjuntadas al Drive · ${adj.length}`,C.greenText)}{adj.map(row)}</>}
+                  {dup.length>0&&<>{hdr(`Ya tenían respaldo · ${dup.length}`,C.muted)}{dup.map(row)}</>}
+                  {cre.length>0&&<>{hdr(`Agregadas · ${cre.length}`,C.greenText)}{cre.map(row)}</>}
+                  {err.length>0&&<>{hdr(`Con problema · ${err.length}`,C.overdueText)}{err.map(row)}</>}
                 </Modal> })()}
+              {regReview&&(()=>{ const items=regReview; const total=items.reduce((a,r)=>a+(r.monto||0),0); return (
+                <Modal title={`Registrar ${items.length} factura${items.length!==1?'s':''}`} onClose={()=>!regBusy&&setRegReview(null)}>
+                  <div style={{fontSize:11.5,color:C.muted,marginBottom:8}}>Total <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(total)}</b> · pasan de programadas a por cobrar.</div>
+                  <div style={{maxHeight:'46vh',overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10}}>
+                    {items.map((r,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'1fr 84px',columnGap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+                      <div style={{minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div><div style={{fontSize:9,color:C.done}}>Factura N°{r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}</div></div>
+                      <span style={{fontSize:11,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
+                    </div>)}
+                  </div>
+                  <div style={{display:'flex',gap:8,marginTop:12}}>
+                    <button disabled={!!regBusy} onClick={()=>setRegReview(null)} style={{flex:1,fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'9px 0',cursor:'pointer'}}>Cancelar</button>
+                    <button disabled={!!regBusy} onClick={()=>doRegistrarLote(items)} style={{flex:1,fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'9px 0',cursor:'pointer',opacity:regBusy?.6:1}}>{regBusy==='lote'?'Registrando…':`Confirmar · ${items.length}`}</button>
+                  </div>
+                </Modal>
+              )})()}
               {ncConfirm&&(()=>{ const it=ncConfirm.item; return (
                 <Modal title={`¿Anular la Factura N°${it.facFolio}?`} onClose={()=>!ncBusy&&setNcConfirm(null)}>
                   <div style={{fontSize:12.5,color:C.text,lineHeight:1.5}}>{it.facCliente||it.receptor||'—'} · <b style={{fontVariantNumeric:'tabular-nums'}}>{fmt(it.monto)}</b>. Queda <b>Anulada</b> y sale del por cobrar. Reversible.</div>
