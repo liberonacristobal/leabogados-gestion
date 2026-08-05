@@ -618,20 +618,23 @@ const TrashIcon = ({color}) => (
 const BanIcon = ({size=15,color}) => (
   <svg width={size} height={size} viewBox='0 0 24 24' fill='none' stroke={color||C.overdue} strokeWidth='2' strokeLinecap='round'><circle cx='12' cy='12' r='9'/><line x1='5.6' y1='5.6' x2='18.4' y2='18.4'/></svg>
 )
-const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeader=false,fullscreen=false}) => (
-  <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:fullscreen?'stretch':'center',justifyContent:'center',padding:fullscreen?0:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
-    <div style={{background:C.surface,borderRadius:fullscreen?0:16,width:'100%',maxWidth:fullscreen?'none':520,maxHeight:fullscreen?'100%':'90vh',height:fullscreen?'100%':'auto',overflowY:'auto',boxShadow:fullscreen?'none':'0 20px 60px rgba(0,0,0,.18)',border:fullscreen?'none':`1px solid ${C.border}`,paddingBottom:fullscreen?0:24}}>
-      {!hideHeader&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:1}}>
+const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeader=false,fullscreen=false,maxWidth=520}) => {
+  const node = (
+  <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:fullscreen?600:200,display:'flex',alignItems:fullscreen?'stretch':'center',justifyContent:'center',padding:fullscreen?0:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
+    <div style={{background:C.surface,borderRadius:fullscreen?0:16,width:'100%',maxWidth:fullscreen?'none':maxWidth,maxHeight:fullscreen?'100%':'90vh',height:fullscreen?'100%':'auto',overflowY:'auto',boxShadow:fullscreen?'none':'0 20px 60px rgba(0,0,0,.18)',border:fullscreen?'none':`1px solid ${C.border}`,paddingBottom:fullscreen?0:(hideHeader?0:24)}}>
+      {!hideHeader&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:fullscreen?'calc(env(safe-area-inset-top,0px) + 16px) 18px 14px':'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:1}}>
         <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>{title}</span>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           {titleRight}
           <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:22,cursor:'pointer',lineHeight:1,width:44,height:44,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-10}}>×</button>
         </div>
       </div>}
-      <div style={{padding:hideHeader?'0':(fullscreen?'14px 16px 40px':'18px 20px')}}>{children}</div>
+      <div style={{padding:hideHeader?'0':(fullscreen?'14px 16px calc(env(safe-area-inset-bottom,0px) + 32px)':'18px 20px'),maxWidth:fullscreen?720:'none',margin:fullscreen?'0 auto':'0',width:fullscreen?'auto':undefined}}>{children}</div>
     </div>
   </div>
-)
+  )
+  return fullscreen ? createPortal(node, document.body) : node
+}
 
 // ── Diálogos propios (reemplazan alert/confirm/prompt nativos, que muestran el dominio en el navegador) ──
 let _dialogHost = null
@@ -5726,19 +5729,21 @@ function MesTandaModal({def,onPick}){
   const [y,setY]=useState(dy); const [m,setM]=useState(dm)
   const years=[dy+1,dy,dy-1,dy-2]
   const cap=s=>s.charAt(0).toUpperCase()+s.slice(1)
-  const selSty={fontSize:13,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',background:C.surface,appearance:'none',WebkitAppearance:'none'}
-  return <Modal hideHeader onClose={()=>onPick(null)}>
-    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
-      <span style={{width:34,height:34,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg viewBox='0 0 24 24' width='18' height='18' style={{fill:'none',stroke:C.accent,strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'}}><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg></span>
-      <div><div style={{fontSize:15,fontWeight:600,color:C.accent}}>¿De qué mes es esta tanda?</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>El mes del servicio.</div></div>
-    </div>
-    <div style={{display:'flex',gap:8}}>
-      <select value={m} onChange={e=>setM(+e.target.value)} style={{...selSty,flex:1}}>{MES.map((mm,i)=><option key={i} value={i}>{cap(mm)}</option>)}</select>
-      <select value={y} onChange={e=>setY(+e.target.value)} style={{...selSty,width:100}}>{years.map(yy=><option key={yy} value={yy}>{yy}</option>)}</select>
-    </div>
-    <div style={{display:'flex',gap:8,marginTop:14}}>
-      <button onClick={()=>onPick(null)} style={{flex:1,fontSize:12.5,fontWeight:600,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'9px 0',color:C.muted,cursor:'pointer'}}>Cancelar</button>
-      <button onClick={()=>onPick(`${y}-${String(m+1).padStart(2,'0')}`)} style={{flex:1,fontSize:12.5,fontWeight:600,background:C.accent,border:'none',borderRadius:7,padding:'9px 0',color:'#fff',cursor:'pointer'}}>Guardar</button>
+  const selSty={fontSize:13.5,color:C.text,border:`1px solid ${C.border}`,borderRadius:9,padding:'10px 11px',background:C.surface,cursor:'pointer'}
+  return <Modal hideHeader maxWidth={360} onClose={()=>onPick(null)}>
+    <div style={{padding:'18px 18px 18px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:15}}>
+        <span style={{width:34,height:34,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg viewBox='0 0 24 24' width='18' height='18' style={{fill:'none',stroke:C.accent,strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'}}><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg></span>
+        <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent,lineHeight:1.2}}>¿De qué mes es esta tanda?</div><div style={{fontSize:11,color:C.muted,marginTop:2}}>El mes del servicio.</div></div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <select value={m} onChange={e=>setM(+e.target.value)} style={{...selSty,flex:1}}>{MES.map((mm,i)=><option key={i} value={i}>{cap(mm)}</option>)}</select>
+        <select value={y} onChange={e=>setY(+e.target.value)} style={{...selSty,width:92}}>{years.map(yy=><option key={yy} value={yy}>{yy}</option>)}</select>
+      </div>
+      <div style={{display:'flex',gap:8,marginTop:16}}>
+        <button onClick={()=>onPick(null)} style={{flex:1,fontSize:13,fontWeight:600,background:C.surface,border:`1px solid ${C.border}`,borderRadius:9,padding:'10px 0',color:C.muted,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={()=>onPick(`${y}-${String(m+1).padStart(2,'0')}`)} style={{flex:1.3,fontSize:13,fontWeight:600,background:C.accent,border:'none',borderRadius:9,padding:'10px 0',color:'#fff',cursor:'pointer'}}>Guardar</button>
+      </div>
     </div>
   </Modal>
 }
@@ -6537,6 +6542,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       if(!token){ if(await appConfirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
       const res=[]
       const progUsadas=new Set()   // programadas ya tomadas por otra factura de este lote (no reusar en el match FIFO)
+      const seenDoc=new Set()      // folio+tipo ya vistos en el lote (dedup: mismo DTE repetido en 2 archivos o archivo cargado 2 veces)
       for(const file of files){
         let docs=[]; try{ docs=splitSetDTE(await leerXml(file)) }catch(_){ try{ docs=splitSetDTE(await file.text()) }catch(__){} }
         if(!docs.length){ res.push({archivo:file.name, estado:'sin_dte'}); continue }
@@ -6544,6 +6550,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
           // NOTA DE CRÉDITO (TipoDTE 61): no es factura. Lee la <Referencia> (a qué factura aplica y si la anula), busca esa factura y un reemplazo probable, y va a su propia sección — se resuelve con compuerta (anular + vincular).
           const _tipoNC=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
+          const _dk=(_tipoNC||'?')+':'+folioM
+          if(folioM && seenDoc.has(_dk)) continue   // dedup: no listar dos veces el mismo folio+tipo
+          if(folioM) seenDoc.add(_dk)
           if(_tipoNC===61){
             const refB=(d.match(/<Referencia>[\s\S]*?<\/Referencia>/)||[''])[0]
             const folioRef=((refB.match(/<FolioRef>([^<]+)<\/FolioRef>/)||[])[1]||'').trim()
@@ -7263,17 +7272,19 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   </div>) }
                 const progRowR=(r,i)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; const cands=r.progCand||[]; const sel=cands.find(c=>c.id===r.progId); const many=isProg&&cands.length>1; const open=progPick===r; return (
                   <div key={'p'+i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
-                    <div onClick={()=>{ const bb2=r.progId&&(billing||[]).find(x=>x.id===r.progId); if(bb2&&onEdit) onEdit(bb2) }} style={{display:'grid',gridTemplateColumns:'1fr 78px 104px',columnGap:10,alignItems:'center',cursor:r.progId?'pointer':'default'}}>
+                    <div onClick={()=>{ const bb2=r.progId&&(billing||[]).find(x=>x.id===r.progId); if(bb2&&onEdit) onEdit(bb2) }} style={{display:'grid',gridTemplateColumns:'1fr auto',columnGap:12,alignItems:'start',cursor:r.progId?'pointer':'default'}}>
                       <div style={{minWidth:0}}>
-                        <div style={{fontSize:12.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div>
                         <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Factura N°{r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}<span style={{fontSize:8,fontWeight:600,borderRadius:3,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,background:isProg?C.bgWarm:C.soonBg,color:isProg?C.muted:C.soonText}}>{isProg?'Programada':'Nueva'}</span></div>
                       </div>
-                      <span style={{fontSize:12,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
-                      {done
-                        ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'6px 0',textAlign:'center'}}>Registrada</span>
-                        : isProg
-                          ? <button disabled={!!regBusy} onClick={e=>{e.stopPropagation();doRegistrar(r)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.azulBg,color:C.accent}}>{regBusy===r.progId?'…':'Registrar'}</button>
-                          : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:10.5,fontWeight:600,border:'none',borderRadius:7,padding:'7px 0',cursor:'pointer',background:C.soonBg,color:C.soonText}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
+                        <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
+                        {done
+                          ? <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 12px'}}>Registrada</span>
+                          : isProg
+                            ? <button disabled={!!regBusy} onClick={e=>{e.stopPropagation();doRegistrar(r)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.azulBg,color:C.accent,whiteSpace:'nowrap'}}>{regBusy===r.progId?'…':'Registrar'}</button>
+                            : <button disabled={creandoFac===r.row.folio||!onIngresarSII} onClick={e=>{e.stopPropagation();crearDesdeXML(r,i)}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>{creandoFac===r.row.folio?'…':'Agregar factura'}</button>}
+                      </div>
                     </div>
                     {isProg&&sel
                       ? <div style={{fontSize:10,color:C.muted,marginTop:5}}>{r.glosa&&<span style={{fontStyle:'italic'}}>{r.glosa} </span>}→ {sel.concept||(sel.due?`Vence ${fmtFechaDMY(sel.due)}`:'cuota')}{many&&<> · <span onClick={e=>{e.stopPropagation();setProgPick(open?null:r)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Cambiar ({cands.length})</span></>}</div>
@@ -7302,7 +7313,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 const hdr=(t,c)=><div style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3,margin:'12px 2px 2px'}}>{t}</div>
                 // Sección colapsable: encabezado tocable + cuerpo replegado por defecto (las listas largas no abruman al abrir).
                 const sec=(key,t,c,items,rowFn,def=false)=>{ if(!items.length) return null; const open=secOpen[key]??def; return <div key={key}><div onClick={()=>setSecOpen(p=>({...p,[key]:!open}))} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',margin:'12px 2px 2px'}}><span style={{fontSize:9,color:c,transform:open?'rotate(90deg)':'none',transition:'transform .12s'}}>▸</span><span style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3}}>{t}</span></div>{open&&items.map(rowFn)}</div> }
-                return <Modal title={`Cargar XML del SII · ${respaldoRes.length}`} fullscreen onClose={()=>setRespaldoRes(null)}>
+                return createPortal(
+                  <div style={{position:'fixed',left:0,right:0,top:0,bottom:'calc(56px + env(safe-area-inset-bottom,0px))',background:C.bg,zIndex:100,display:'flex',flexDirection:'column'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12,padding:'calc(env(safe-area-inset-top,0px) + 14px) 16px 12px',borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
+                    <button onClick={()=>setRespaldoRes(null)} style={chipBtn('primary')}>← Volver</button>
+                    <span style={{fontSize:15,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.3}}>Cargar XML del SII · {respaldoRes.length}</span>
+                  </div>
+                  <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+                  <div style={{maxWidth:600,margin:'0 auto',padding:'14px 16px 34px'}}>
                   <div style={{display:'flex',gap:8,marginBottom:10}}>
                     <div style={{flex:1,background:C.bgWarm,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Programadas</div></div>
                     <div style={{flex:1,background:'#FAECE7',borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:18,fontWeight:800,color:C.coralText,fontVariantNumeric:'tabular-nums'}}>{nc.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.coralText,textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</div></div>
@@ -7317,7 +7335,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   {sec('dup',`Ya tenían respaldo · ${dup.length}`,C.muted,dup,row,false)}
                   {sec('cre',`Agregadas · ${cre.length}`,C.greenText,cre,row,false)}
                   {err.length>0&&<>{hdr(`Con problema · ${err.length}`,C.overdueText)}{err.map(row)}</>}
-                </Modal> })()}
+                  </div>
+                  </div>
+                  </div>, document.body) })()}
               {regReview&&(()=>{ const items=regReview; const total=items.reduce((a,r)=>a+(r.monto||0),0); return (
                 <Modal title={`Registrar ${items.length} factura${items.length!==1?'s':''}`} onClose={()=>!regBusy&&setRegReview(null)}>
                   <div style={{fontSize:11.5,color:C.muted,marginBottom:8}}>Total <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(total)}</b> · pasan de programadas a por cobrar.</div>
