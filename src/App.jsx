@@ -2486,7 +2486,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       const S=2, W=440, PAD=20, IW=W-PAD*2
       const iv=ingresosPorAnioVenta
       const anios=[...iv.allYears.slice(0,4).map(yr=>({lbl:'De ventas '+yr,val:iv.byYear[yr],col:yr===selYear?'#003E52':'#537281'})), ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:'#C77F18'}]:[])]
-      const H = 580 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer). Base subió al agregar Cobranza antigüedad + Proyección de ingresos
+      const H = 588 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer). Base subió al agregar Cobranza antigüedad + Proyección de ingresos, y al agrandar el header (76)
       const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
       const g=cv.getContext('2d'); g.scale(S,S)
       const F=(w,s)=>`${w} ${s}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
@@ -2508,10 +2508,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       // fondo
       g.fillStyle='#fff'; g.fillRect(0,0,W,H)
       // header navy (diseño 4: logo izq · Metas del año / 2026 der)
-      const HH=68; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH)
-      if(logo.naturalWidth){ const lgH=48, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,(HH-lgH)/2+5,lgW,lgH) }   // logo +40% (34→48); +5px para bajarlo y centrarlo mejor al alto del recuadro
-      g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,30)
-      g.fillStyle='#fff'; g.font=F(700,23); g.fillText(String(selYear),W-PAD,54); g.textAlign='left'
+      const HH=76; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH)
+      if(logo.naturalWidth){ const lgH=48, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,(HH-lgH)/2+8,lgW,lgH) }   // logo +40% (34→48); header más alto (76) y logo bajado (~12%) para centrarlo al alto del recuadro
+      g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,38)
+      g.fillStyle='#fff'; g.font=F(700,23); g.fillText(String(selYear),W-PAD,62); g.textAlign='left'
       let y=HH+26
       // VENTAS
       g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText(`VENTAS · ${selYear}`,PAD,y)
