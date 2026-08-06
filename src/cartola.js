@@ -63,6 +63,13 @@ function anioDesdeGlosa(desc){
   const m = String(desc||'').match(/\b\d{1,2}[-/]\d{1,2}[-/](\d{4})\b/)
   return m ? m[1] : null
 }
+// Fecha COMPLETA dentro de la glosa (dd/mm/yyyy o dd-mm-yyyy), ej. "... desde Itau el 08/07/2026 a las 16:47".
+// Cuando la fila NO trae fecha en su columna, esta es la fecha REAL del movimiento (evita que caiga al 1-ene por defecto).
+function fechaDesdeGlosa(desc){
+  const m = String(desc||'').match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/)
+  if(!m) return null
+  return { d: m[1].padStart(2,'0'), mm: m[2].padStart(2,'0'), y: m[3] }
+}
 
 // Hash estable (cyrb53) para dedup idempotente.
 function cyrb53(str){
@@ -172,9 +179,12 @@ export function parseCartola(aoa, { filename='' } = {}){
     if(cargo===0 && abono===0) continue
     const tipo = abono>0 ? 'abono' : 'cargo'
     const monto = abono>0 ? abono : cargo
-    // Año: glosa > fecha de fila > período
-    const anio = anioDesdeGlosa(desc) || (fp&&fp.y) || anioFallback
-    const fecha = fp ? `${anio}-${fp.mm}-${fp.d}` : `${anio}-01-01`
+    // Fecha del movimiento: columna (forward-fill) > fecha COMPLETA en la glosa ("el 08/07/2026") > 1-ene como último recurso.
+    // Antes, sin fecha de columna caía al 1-ene aunque la glosa trajera la fecha real (rompía la conciliación por fecha).
+    const fg = fechaDesdeGlosa(desc)
+    const dm = fp || fg
+    const anio = anioDesdeGlosa(desc) || (dm&&dm.y) || anioFallback
+    const fecha = dm ? `${anio}-${dm.mm}-${dm.d}` : `${anio}-01-01`
     // RUT / nombre (mismos formatos para abono y cargo) + detección de interno (incluye auto-transferencia con RUT propio)
     const cp = extraerContraparte(desc)
     let rut = cp.rut ? formatRut(cp.rut) : null, nombre = cp.nombre
