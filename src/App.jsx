@@ -21330,7 +21330,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const sm=pool.filter(f=>(f.issued_at||'').slice(0,7)===pm); if(sm.length===1) return sm[0]
     // Desempate saldo-safe: entre facturas del MISMO cliente y MISMO monto exacto, el saldo del cliente baja igual sea cual sea → elegimos la más cercana al pago (cs ya viene ordenado por cercanía emisión→pago). No afecta ninguna cifra de saldo/total.
     return (sm.length?sm:pool)[0] }
-  const tieneCand = m => esConciliable(m) && candidatos(m).length>0
+  // Candidatas para MOSTRAR/CONFIRMAR (no auto): facturas del cliente/RUT cuyo saldo calza EXACTO con el pago, SIN la ventana
+  // de fecha del auto. Motivo: la firma a veces emite la factura DESPUÉS de recibir el pago (emisión tardía) o el pago llega
+  // meses antes/después; si el monto calza exacto y es del cliente, se OFRECE sí o sí (el usuario confirma). El auto
+  // (mejorCandidato) sigue con la ventana estricta para no marcar pagos solo. Excluye ya pagadas/conciliadas (facturasParaMov→facturasConSaldo).
+  const candidatosMostrar = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
+    if(!esConciliable(mov) || amt<=0) return []
+    const pr=crNormRut(mov.rut_contraparte)
+    const payT = mov.fecha ? new Date(mov.fecha+'T12:00').getTime() : null
+    const deltaAbs = iso => (payT&&iso) ? Math.abs(payT-new Date(iso.slice(0,10)+'T12:00').getTime())/86400000 : 9e9
+    return facturasParaMov(mov).filter(b=> !(exclude&&exclude.has(b.id)))
+      .map(b=>({b,saldo:saldoFactura(b)}))
+      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL)   // monto EXACTO (TOL=0) + cliente/RUT; sin filtro de fecha
+      .sort((a,b)=> ((pr&&crNormRut(b.b.receptor_rut)===pr?1:0)-(pr&&crNormRut(a.b.receptor_rut)===pr?1:0)) || (deltaAbs(a.b.issued_at)-deltaAbs(b.b.issued_at)))
+      .map(x=>x.b) }
+  const tieneCand = m => esConciliable(m) && candidatosMostrar(m).length>0
   // Sugerencia de cliente por MONTO: para abonos sin identificar (depósitos sin RUT), busca una factura de algún
   // cliente cuyo saldo calce EXACTO con el abono y caiga en la ventana de fecha. Solo sugiere si el cliente es ÚNICO.
   const clientePorMonto = (mov) => {
@@ -22581,7 +22595,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
                 {sub==='abonos'&&esConciliable(m)&&(()=>{
                   const myConc=concByMov[m.id]||[]; const resto=(m.monto||0)-(m.monto_conciliado||0)
-                  const cands=resto>TOL?candidatos(m,null,resto):[]
+                  const cands=resto>TOL?candidatosMostrar(m,null,resto):[]
                   // Facturas candidatas: del mismo cliente O del mismo RUT (aunque estén bajo otro cliente/RS) — así aparecen las
                   // emitidas a la empresa aunque el abono quede pegado al cliente-persona. Cruce por RUT (receptor/entidad/cliente).
                   // RUT a cruzar: el del pagador (m.rut_contraparte, a veces el personal de la glosa) MÁS los del cliente
@@ -22595,7 +22609,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   // Un pago suele pagar 1 factura + dejar un saldo para gastos/anticipo (o pagar 2 facturas). Cuando NADA calza
                   // solo, ofrecemos las facturas con saldo MENOR al pago: conciliar esa factura deja el resto para colocarlo abajo
                   // (Fondo/Saldo a favor/Devolución). Ordenadas por resto más chico = la que más explica el pago. Reversible.
-                  const factResto=(myConc.length===0&&cands.length===0&&!combo&&!fmg)?(()=>{ const t=Math.abs(m.monto||0); return facsAll.map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0&&x.saldo<t).map(x=>({...x,resto:t-x.saldo})).sort((a,b)=>a.resto-b.resto).slice(0,4) })():[]
+                  // Solo facturas NO pagadas / no conciliadas (facturasParaMov = pool con saldo real; excluye Pagadas y saldo 0). Antes usaba facsAll (todas, incl. pagadas) y colaba facturas ya saldadas.
+                  const factResto=(myConc.length===0&&cands.length===0&&!combo&&!fmg)?(()=>{ const t=Math.abs(m.monto||0); return facturasParaMov(m).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0&&x.saldo<t).map(x=>({...x,resto:t-x.saldo})).sort((a,b)=>a.resto-b.resto).slice(0,4) })():[]
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
                   // candidato ordenado (RS·mes·cercanía) aunque no sea único → surfacea recurrentes que antes no se sugerían.
                   const showPick=myConc.length===0||resto>TOL; const sug=showPick?(mejorCandidato(m)||cands[0]||null):null
