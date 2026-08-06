@@ -22486,18 +22486,30 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           <button onClick={()=>{setEditMov(null);setEditForm({rut:'',nombre:''})}} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                         </div>
                       </div>
-                    : (!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]])
-                    ? <div onClick={e=>e.stopPropagation()} style={{marginTop:5}}>
-                        {/* Sugerencia de cliente como TARJETA clara (protagonista + motivo), no una pill apretada. Las otras vías quedan en "¿A qué corresponde?". */}
+                    : (!cliName&&(sugerencias[m.id]&&cmap[sugerencias[m.id]]||clientePorMonto(m)||facturaPorMontoManual(m).length===1))
+                    ? (()=>{
+                        // Sugerencia de cliente como TARJETA clara (protagonista + motivo), NUNCA un chip que asigna a ciegas. Cubre las dos vías:
+                        // por NOMBRE de la transferencia, o por MONTO (una factura emitida sin pago que calza exacto). Al confirmar se asigna el
+                        // cliente y aparece el card de conciliación "El depósito | La factura · Conciliar ahora" (la fila queda abierta).
+                        const nomDe=cid=>cmap[cid]||clients.find(c=>String(c.id)===String(cid))?.name||'cliente'
+                        let sc=null
+                        if(sugerencias[m.id]&&cmap[sugerencias[m.id]]) sc={cid:sugerencias[m.id], nombre:cmap[sugerencias[m.id]], motivo:'Coincide por el nombre de la transferencia'}
+                        else { const cm=clientePorMonto(m); if(cm) sc={cid:cm.cid, nombre:nomDe(cm.cid), motivo:`Tiene la Factura N°${folioN(cm.factura.invoice_no)||'—'} que calza exacto en monto`}
+                          else { const fm=facturaPorMontoManual(m); if(fm.length===1){ const f=fm[0]; sc={cid:f.client_id, nombre:nomDe(f.client_id), motivo:`Factura N°${folioN(f.invoice_no)||'—'} del mismo monto exacto, emitida sin pago`} } } }
+                        if(!sc) return null
+                        return (
+                        <div onClick={e=>e.stopPropagation()} style={{marginTop:5}}>
                         <div style={{border:'1px solid #CFE9DD',background:'#F1FAF6',borderRadius:10,padding:'10px 12px'}}>
-                          <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{cmap[sugerencias[m.id]]}</div>
-                          <div style={{fontSize:10.5,color:C.greenText,marginTop:1}}>Coincide por el nombre de la transferencia</div>
+                          <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{sc.nombre}</div>
+                          <div style={{fontSize:10.5,color:C.greenText,marginTop:1}}>{sc.motivo}</div>
                           <div style={{display:'flex',gap:8,alignItems:'center',marginTop:9}}>
                             <AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>identificar(m,cid)} label='Buscar otro' placeholder='Buscar cliente…'/>
-                            <button onClick={()=>identificar(m,sugerencias[m.id],true)} style={{marginLeft:'auto',fontSize:11.5,fontWeight:600,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',whiteSpace:'nowrap'}}>Es {cmap[sugerencias[m.id]]} ✓</button>
+                            <button onClick={()=>identificar(m,sc.cid,true)} style={{marginLeft:'auto',fontSize:11.5,fontWeight:600,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',whiteSpace:'nowrap'}}>Es {sc.nombre} ✓</button>
                           </div>
                         </div>
-                      </div>
+                        </div>
+                        )
+                      })()
                     : <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,flexWrap:'wrap',fontSize:10}} onClick={e=>e.stopPropagation()}>
                         {/* Cliente como chip gris-borde (igual al header): tocar = editar/cambiar cliente */}
                         {cliName
