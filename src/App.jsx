@@ -2486,7 +2486,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       const S=2, W=440, PAD=20, IW=W-PAD*2
       const iv=ingresosPorAnioVenta
       const anios=[...iv.allYears.slice(0,4).map(yr=>({lbl:'De ventas '+yr,val:iv.byYear[yr],col:yr===selYear?'#003E52':'#537281'})), ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:'#C77F18'}]:[])]
-      const H = 526 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer)
+      const H = 580 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer). Base subió al agregar Cobranza antigüedad + Proyección de ingresos
       const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
       const g=cv.getContext('2d'); g.scale(S,S)
       const F=(w,s)=>`${w} ${s}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
@@ -2509,7 +2509,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       g.fillStyle='#fff'; g.fillRect(0,0,W,H)
       // header navy (diseño 4: logo izq · Metas del año / 2026 der)
       const HH=68; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH)
-      if(logo.naturalWidth){ const lgH=34, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,(HH-lgH)/2,lgW,lgH) }
+      if(logo.naturalWidth){ const lgH=48, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,(HH-lgH)/2,lgW,lgH) }   // logo +40% (34→48), centrado vertical en el header
       g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,30)
       g.fillStyle='#fff'; g.font=F(700,23); g.fillText(String(selYear),W-PAD,54); g.textAlign='left'
       let y=HH+26
@@ -2544,15 +2544,23 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         g.textAlign='right'; g.fillStyle='#003E52'; g.font=F(700,12.5); g.fillText(clpS(a.val),W-PAD,y); g.fillStyle='#A2ADAA'; g.font=F(500,9.5); g.fillText(ufS(a.val/ufRef),W-PAD-72,y); g.textAlign='left'
         y+=22 })
       y+=2; hr(y); y+=20
-      // COBROS Y PAGOS
-      g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('COBROS Y PAGOS',PAD,y)
-      y+=8; const bh=52
-      g.strokeStyle='#E4E8EB'; g.lineWidth=1; rr(PAD,y,tw,bh,10); g.stroke()
-      g.fillStyle='#99ABB4'; g.font=F(700,8); g.fillText('POR COBRAR',PAD+12,y+18); g.fillStyle='#003E52'; g.font=F(700,16); g.fillText(clpS(totalPorCobrar),PAD+12,y+38)
-      g.fillStyle='#C0392B'; g.font=F(500,9.5); g.textAlign='right'; g.fillText('Vencido '+clpS(vencido),PAD+tw-12,y+38); g.textAlign='left'
-      rr(PAD+tw+10,y,tw,bh,10); g.stroke()
-      g.fillStyle='#99ABB4'; g.font=F(700,8); g.fillText('POR PAGAR',PAD+tw+22,y+18); g.fillStyle='#854F0B'; g.font=F(700,16); g.fillText(clpS(cxpT),PAD+tw+22,y+38)
-      g.fillStyle='#537281'; g.font=F(500,9.5); g.textAlign='right'; g.fillText(cxpN+(cxpN===1?' proveedor':' proveedores'),PAD+IW-12,y+38); g.textAlign='left'
+      // COBRANZA — Por cobrar + Proyección de ingresos lado a lado, y antigüedad en 3 tramos debajo. (Sin "Por pagar".)
+      const finAnoP=`${new Date().getFullYear()}-12-31`
+      const proyIngresos=(billing||[]).filter(b=> b && !b.deleted_at && b.billing_type!=='reembolso' && b.due && b.due<=finAnoP && (['Pendiente','Vencido'].includes(b.status)||b.status==='Programada')).reduce((a,b)=>a+saldoBill(b),0)   // mirror de CashflowProjection.baseProj/projTotalAll
+      const _bk=(agingData&&agingData.buckets)?agingData.buckets:{current:{monto:0,pct:0},warning:{monto:0,pct:0},overdue:{monto:0,pct:0}}
+      g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('COBRANZA',PAD,y)
+      y+=8; const cbh=50
+      g.strokeStyle='#E4E8EB'; g.lineWidth=1; rr(PAD,y,tw,cbh,10); g.stroke()
+      g.fillStyle='#99ABB4'; g.font=F(700,8); g.fillText('POR COBRAR',PAD+12,y+18); g.fillStyle='#003E52'; g.font=F(700,17); g.fillText(clpS(totalPorCobrar),PAD+12,y+38)
+      g.fillStyle='#E2F1F2'; rr(PAD+tw+10,y,tw,cbh,10); g.fill()
+      g.fillStyle='#0E7C86'; g.font=F(700,8); g.fillText('PROYECCIÓN DE INGRESOS',PAD+tw+22,y+18); g.font=F(700,17); g.fillText(clpS(proyIngresos),PAD+tw+22,y+38)
+      g.fillStyle='#5B9AA0'; g.font=F(500,8); g.textAlign='right'; g.fillText('al 31 dic',PAD+IW-12,y+18); g.textAlign='left'
+      y+=cbh+9
+      ;[['Al día',_bk.current,'#E6F4EE','#0F6E56','#2E7D5B'],['31-60 días',_bk.warning,'#FBF0DC','#B4772A','#946017'],['+60 días',_bk.overdue,'#FBE6E4','#C0392B','#A6362B']].forEach((t,i)=>{ const atw=(IW-16)/3, tx=PAD+i*(atw+8)
+        g.fillStyle=t[2]; rr(tx,y,atw,44,9); g.fill()
+        g.fillStyle=t[3]; g.font=F(700,14); g.fillText(clpS((t[1]&&t[1].monto)||0),tx+11,y+21)
+        g.fillStyle=t[4]; g.font=F(700,7.5); g.fillText(`${t[0]} · ${(t[1]&&t[1].pct)||0}%`,tx+11,y+34) })
+      y+=44
       // footer
       g.fillStyle='#99ABB4'; g.font=F(600,9.5); g.fillText('gestion.leabogados.cl',PAD,H-12)
       g.textAlign='right'; g.fillText(`${dd}·${mo}·${yyN} · ${hh}:${mi} hrs`,W-PAD,H-12); g.textAlign='left'
