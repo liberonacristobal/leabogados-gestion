@@ -7811,14 +7811,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <span style={{fontSize:8.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>1:1{rut?' · RUT ✓':''}</span>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                    <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px'}}>
+                    <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px',minWidth:0,overflow:'hidden'}}>
                       <div style={{fontSize:9,fontWeight:700,color:C.azulInfo,marginBottom:4,letterSpacing:'.2px'}}>ABONO · {rol}</div>
                       <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(m.monto)}</div>
                       <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(m.fecha)}</div>
                       <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}</div>
                       <div style={{fontSize:10,color:C.muted}}>{m.rut_contraparte||''}</div>
                     </div>
-                    <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px'}}>
+                    <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px',minWidth:0,overflow:'hidden'}}>
                       <div style={{fontSize:9,fontWeight:700,color:C.muted,marginBottom:4,letterSpacing:'.2px'}}>FACTURA N° {folioN(f.invoice_no)}</div>
                       <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(saldoBill(f))}</div>
                       <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(f.issued_at)}</div>
@@ -7847,14 +7847,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       const contested=calcesSugeridos.contested.has(String(f.id))
                       return (<div key={f.id} style={{marginBottom:9}}>
                         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                          <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px'}}>
+                          <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px',minWidth:0,overflow:'hidden'}}>
                             <div style={{fontSize:9,fontWeight:700,color:C.azulInfo,marginBottom:4,letterSpacing:'.2px'}}>ABONO · {rol}</div>
                             <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(m.monto)}</div>
                             <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(m.fecha)}</div>
                             <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}</div>
                             <div style={{fontSize:10,color:C.muted}}>{m.rut_contraparte||''}</div>
                           </div>
-                          <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px',border:(rRut&&!sameRut)?`1px solid ${C.soon}`:'1px solid transparent'}}>
+                          <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px',minWidth:0,overflow:'hidden',border:(rRut&&!sameRut)?`1px solid ${C.soon}`:'1px solid transparent'}}>
                             <div style={{fontSize:9,fontWeight:700,color:C.muted,marginBottom:4,letterSpacing:'.2px'}}>FACTURA N° {folioN(f.invoice_no)}</div>
                             <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(saldoBill(f))}</div>
                             <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(f.issued_at)}</div>
