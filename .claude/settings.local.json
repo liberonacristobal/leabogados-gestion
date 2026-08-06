@@ -348,7 +348,8 @@
       "Bash(perl -0pi -e 's/flex:1,height:40,borderRadius:8/flex:1,height:38,borderRadius:8/g; s/flex:1,height:40,borderRadius:10/flex:1,height:38,borderRadius:10/g' src/App.jsx)",
       "Bash(perl -0pi -e \"s/\\(flex:[0-9.]+,\\)padding:11,borderRadius:10/\\\\${1}padding:'9px 14px',borderRadius:10/g\" src/App.jsx)",
       "Bash(perl -0pi -e \"s/flex:'1 1 160px',minWidth:150/flex:'1 1 150px',minWidth:130/g\" src/App.jsx)",
-      "Bash(perl -i -pe \"s/const t=\\\\\\(txt\\\\|\\\\|''\\\\\\)\\\\.toLowerCase\\\\\\(\\\\\\)\\\\.normalize\\\\\\('NFD'\\\\\\)\\\\.replace\\\\\\(.*?,''\\\\\\)/const t=\\(txt||''\\).toLowerCase\\(\\)/ if /const t=\\\\\\(txt/\" src/App.jsx)"
+      "Bash(perl -i -pe \"s/const t=\\\\\\(txt\\\\|\\\\|''\\\\\\)\\\\.toLowerCase\\\\\\(\\\\\\)\\\\.normalize\\\\\\('NFD'\\\\\\)\\\\.replace\\\\\\(.*?,''\\\\\\)/const t=\\(txt||''\\).toLowerCase\\(\\)/ if /const t=\\\\\\(txt/\" src/App.jsx)",
+      "Bash(sips -g pixelWidth -g pixelHeight public/le-logo-blanco.png public/le-logo-color.png)"
     ]
   }
 }

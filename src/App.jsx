@@ -2479,38 +2479,78 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   // Descargar la foto de "Metas del año" como PNG (imagen para compartir/guardar). Dibuja un canvas propio (no screenshot del DOM) → salida limpia y branded. En iPhone usa la hoja de compartir.
   const descargarMetas = async () => {
     try{
-      const S=2, W=440, H=328
+      const S=2, W=440, H=548, PAD=20, IW=W-PAD*2
       const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
       const g=cv.getContext('2d'); g.scale(S,S)
       const F=(w,s)=>`${w} ${s}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
       const rr=(x,y,w,h,r)=>{ g.beginPath(); if(g.roundRect) g.roundRect(x,y,w,h,r); else { g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.arcTo(x+w,y,x+w,y+r,r); g.lineTo(x+w,y+h-r); g.arcTo(x+w,y+h,x+w-r,y+h,r); g.lineTo(x+r,y+h); g.arcTo(x,y+h,x,y+h-r,r); g.lineTo(x,y+r); g.arcTo(x,y,x+r,y,r); } g.closePath() }
-      const ventas=vMon(m.brutoUF,m.bruto), neto=vMon(m.netoUF,m.neto), terceros=vMon(m.costoUF,m.costo), meta=vMon(metaUF,m.meta)
-      const denomM=dashMoneda==='UF'?metaUF:m.meta, heroM=dashMoneda==='UF'?m.brutoUF:m.bruto
-      const pct=denomM>0?Math.min(100,Math.round(heroM/denomM*100)):0
+      const hr=y=>{ g.strokeStyle='#EDEFF1'; g.lineWidth=1; g.beginPath(); g.moveTo(PAD,y); g.lineTo(W-PAD,y); g.stroke() }
+      const ufS=v=>'UF '+Math.round(v||0).toLocaleString('es-CL')
+      const clpS=v=>fmtShort(v||0)
       const iv=ingresosPorAnioVenta
-      const ingresado=fmtMon(iv.total), metaCob=metaCobranza>0?fmtMon(metaCobranza):'—'
+      const pct=metaUF>0?Math.min(100,Math.round(m.brutoUF/metaUF*100)):0
+      const faltanUF=Math.max(0,metaUF-m.brutoUF), faltanCLP=Math.max(0,m.meta-m.bruto)
+      const convPura=m.bruto>0?Math.round(iv.delAnio/m.bruto*100):0, convGlob=m.bruto>0?Math.round(iv.total/m.bruto*100):0
       const metaPct=metaCobranza>0?Math.round(iv.total/metaCobranza*100):0
-      const hoy=new Date(), dd=String(hoy.getDate()).padStart(2,'0'), mo=String(hoy.getMonth()+1).padStart(2,'0'), yy=hoy.getFullYear(), hh=String(hoy.getHours()).padStart(2,'0'), mi=String(hoy.getMinutes()).padStart(2,'0')
+      const vencido=(agingData&&agingData.buckets&&agingData.buckets.overdue)?agingData.buckets.overdue.monto:0
+      const cxpAbi=(terceros||[]).filter(t=>t&&t.estado!=='pagado')
+      const cxpT=cxpAbi.reduce((a,t)=>a+(t.monto||0),0), cxpN=new Set(cxpAbi.map(t=>t.proveedor_id||t.proveedor)).size
+      const hoy=new Date(), dd=String(hoy.getDate()).padStart(2,'0'), mo=String(hoy.getMonth()+1).padStart(2,'0'), yyN=hoy.getFullYear(), hh=String(hoy.getHours()).padStart(2,'0'), mi=String(hoy.getMinutes()).padStart(2,'0')
+      // cargar logo (blanco, letras)
+      const logo=new Image(); logo.src='/le-logo-full-blanco.png'
+      await new Promise(res=>{ if(logo.complete&&logo.naturalWidth) return res(); logo.onload=res; logo.onerror=res })
+      // fondo
       g.fillStyle='#fff'; g.fillRect(0,0,W,H)
-      g.fillStyle='#003C50'; g.fillRect(0,0,W,56)
-      g.fillStyle='#fff'; g.font=F(700,17); g.fillText(`METAS DEL AÑO · ${selYear}`,18,28)
-      g.fillStyle='#85B7EB'; g.font=F(500,11.5); g.fillText('Liberona Escala Abogados',18,46)
-      g.fillStyle='#99ABB4'; g.font=F(700,10); g.fillText(`VENTAS · ${selYear}`,18,84)
-      g.fillStyle='#003C50'; g.font=F(700,30); g.fillText(ventas,18,116)
-      g.fillStyle='#537281'; g.font=F(600,12); g.fillText(`${pct}% de la meta · Meta ${meta}`,18,134)
-      g.fillStyle='#EDEFF1'; rr(18,146,W-36,9,4.5); g.fill()
-      g.fillStyle='#003C50'; rr(18,146,(W-36)*pct/100,9,4.5); g.fill()
-      ;[[neto,'NETO','#0F6E56'],[terceros,'TERCEROS','#537281'],[String(ventasDelAnio.length),'VENTAS','#185FA5']].forEach((c,i)=>{ const cx=18+i*((W-36)/3); g.fillStyle=c[2]; g.font=F(700,15); g.fillText(c[0],cx,188); g.fillStyle='#A8B2B8'; g.font=F(700,9); g.fillText(c[1],cx,202) })
-      g.strokeStyle='#EDEFF1'; g.lineWidth=1; g.beginPath(); g.moveTo(18,218); g.lineTo(W-18,218); g.stroke()
-      const tw=(W-36-10)/2
-      g.fillStyle='#0F6E56'; rr(18,230,tw,72,12); g.fill()
-      g.fillStyle='rgba(255,255,255,.85)'; g.font=F(700,9); g.fillText('INGRESADO A CAJA',32,254)
-      g.fillStyle='#fff'; g.font=F(700,22); g.fillText(ingresado,32,282)
-      g.fillStyle='#E1F5EE'; rr(28+tw,230,tw,72,12); g.fill()
-      g.fillStyle='#0F6E56'; g.font=F(700,9); g.fillText('META COBRANZA',42+tw,254)
-      g.fillStyle='#0F6E56'; g.font=F(700,22); g.fillText(metaCob,42+tw,282)
-      g.fillStyle='#2E7D5B'; g.font=F(600,10); g.fillText(metaCobranza>0?`${metaPct}% de la meta`:'sin meta',42+tw,297)
-      g.fillStyle='#99ABB4'; g.font=F(700,10); g.fillText(`CORTE AL ${dd}-${mo}-${yy} · ${hh}:${mi} HRS`,18,H-10)
+      // header navy (diseño 4: logo izq · Metas del año / 2026 der)
+      const HH=68; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH)
+      if(logo.naturalWidth){ const lgH=34, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,(HH-lgH)/2,lgW,lgH) }
+      g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,30)
+      g.fillStyle='#fff'; g.font=F(700,23); g.fillText(String(selYear),W-PAD,54); g.textAlign='left'
+      let y=HH+26
+      // VENTAS
+      g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText(`VENTAS · ${selYear}`,PAD,y)
+      y+=25; g.fillStyle='#003E52'; g.font=F(700,26); g.fillText(ufS(m.brutoUF),PAD,y)
+      y+=18; g.fillStyle='#537281'; g.font=F(600,12); g.fillText(clpS(m.bruto),PAD,y); g.textAlign='right'; g.fillStyle='#003E52'; g.font=F(700,12); g.fillText(`${pct}% de la meta`,W-PAD,y); g.textAlign='left'
+      y+=12; g.fillStyle='#EDEFF1'; rr(PAD,y,IW,9,4.5); g.fill(); g.fillStyle='#003E52'; rr(PAD,y,IW*pct/100,9,4.5); g.fill()
+      y+=22; g.fillStyle='#C0392B'; g.font=F(400,10); g.fillText(`Faltan ${ufS(faltanUF)} · ${clpS(faltanCLP)}`,PAD,y)
+      g.textAlign='right'; g.fillStyle='#537281'; g.font=F(600,10); g.fillText(`Meta ${ufS(metaUF)} · ${clpS(m.meta)}`,W-PAD,y); g.textAlign='left'
+      y+=28; ;[[ufS(m.netoUF),clpS(m.neto),'NETO','#0F6E56'],[ufS(m.costoUF),clpS(m.costo),'TERCEROS','#003E52'],[String(ventasDelAnio.length),'','VENTAS','#003E52']].forEach((c,i)=>{ const cx=PAD+i*(IW/3); g.fillStyle=c[3]; g.font=F(700,15); g.fillText(c[0],cx,y); if(c[1]){ g.fillStyle='#7C8A92'; g.font=F(500,9.5); g.fillText(c[1],cx,y+13) } g.fillStyle='#A2ADAA'; g.font=F(700,8); g.fillText(c[2],cx,y+(c[1]?26:14)) })
+      y+=44; hr(y); y+=20
+      // CONVERSIÓN
+      g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('CONVERSIÓN VENTAS → PAGOS',PAD,y)
+      y+=24; g.fillStyle='#0F6E56'; g.font=F(700,22); g.fillText(`${convPura}%`,PAD,y)
+      g.fillStyle='#537281'; g.font=F(500,11); g.fillText(`de lo vendido este año ya se pagó · global ${convGlob}%`,PAD+56,y-2)
+      y+=18; hr(y); y+=20
+      // INGRESADO A LA CAJA (dos tiles)
+      g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('INGRESADO A LA CAJA',PAD,y)
+      y+=8; const tw=(IW-10)/2, th=64
+      g.fillStyle='#0F6E56'; rr(PAD,y,tw,th,11); g.fill()
+      g.fillStyle='rgba(255,255,255,.85)'; g.font=F(700,8); g.fillText('INGRESADO '+selYear,PAD+12,y+20)
+      g.fillStyle='#fff'; g.font=F(700,19); g.fillText(ufS(iv.total/ufRef),PAD+12,y+42); g.font=F(600,10); g.fillStyle='rgba(255,255,255,.9)'; g.fillText(clpS(iv.total),PAD+12,y+56)
+      g.fillStyle='#E1F5EE'; rr(PAD+tw+10,y,tw,th,11); g.fill()
+      g.fillStyle='#0F6E56'; g.font=F(700,8); g.fillText('META COBRANZA',PAD+tw+22,y+20); g.font=F(700,19); g.fillText(metaCobranza>0?ufS(metaCobranza/ufRef):'—',PAD+tw+22,y+42)
+      g.fillStyle='#2E7D5B'; g.font=F(600,10); g.fillText(metaCobranza>0?`${clpS(metaCobranza)} · ${metaPct}%`:'sin meta',PAD+tw+22,y+56)
+      y+=th+16
+      // por año de venta
+      const anios=[...iv.allYears.slice(0,3).map(yr=>({lbl:'De ventas '+yr,val:iv.byYear[yr],col:yr===selYear?'#003E52':'#537281'})), ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:'#C77F18'}]:[])]
+      anios.forEach((a,i)=>{ if(i>0){ g.strokeStyle='#F4F6F7'; g.lineWidth=1; g.beginPath(); g.moveTo(PAD,y-11); g.lineTo(W-PAD,y-11); g.stroke() }
+        g.fillStyle=a.col; g.beginPath(); g.arc(PAD+4,y-4,4,0,7); g.fill()
+        g.fillStyle='#3D3D3D'; g.font=F(500,12); g.fillText(a.lbl,PAD+16,y)
+        g.textAlign='right'; g.fillStyle='#003E52'; g.font=F(700,12.5); g.fillText(clpS(a.val),W-PAD,y); g.fillStyle='#A2ADAA'; g.font=F(500,9.5); g.fillText(ufS(a.val/ufRef),W-PAD-72,y); g.textAlign='left'
+        y+=22 })
+      y+=2; hr(y); y+=20
+      // COBROS Y PAGOS
+      g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('COBROS Y PAGOS',PAD,y)
+      y+=8; const bh=52
+      g.strokeStyle='#E4E8EB'; g.lineWidth=1; rr(PAD,y,tw,bh,10); g.stroke()
+      g.fillStyle='#99ABB4'; g.font=F(700,8); g.fillText('POR COBRAR',PAD+12,y+18); g.fillStyle='#003E52'; g.font=F(700,16); g.fillText(clpS(totalPorCobrar),PAD+12,y+38)
+      g.fillStyle='#C0392B'; g.font=F(500,9.5); g.textAlign='right'; g.fillText('Vencido '+clpS(vencido),PAD+tw-12,y+38); g.textAlign='left'
+      rr(PAD+tw+10,y,tw,bh,10); g.stroke()
+      g.fillStyle='#99ABB4'; g.font=F(700,8); g.fillText('POR PAGAR',PAD+tw+22,y+18); g.fillStyle='#854F0B'; g.font=F(700,16); g.fillText(clpS(cxpT),PAD+tw+22,y+38)
+      g.fillStyle='#537281'; g.font=F(500,9.5); g.textAlign='right'; g.fillText(cxpN+(cxpN===1?' proveedor':' proveedores'),PAD+IW-12,y+38); g.textAlign='left'
+      // footer
+      g.fillStyle='#99ABB4'; g.font=F(600,9.5); g.fillText('gestion.leabogados.cl',PAD,H-12)
+      g.textAlign='right'; g.fillText(`${dd}·${mo}·${yyN} · ${hh}:${mi} hrs`,W-PAD,H-12); g.textAlign='left'
       const blob=await new Promise(res=>cv.toBlob(res,'image/png'))
       if(!blob) throw new Error('canvas vacío')
       const file=new File([blob],`METAS-DEL-ANO-${selYear}.png`,{type:'image/png'})
