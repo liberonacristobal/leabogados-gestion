@@ -22220,54 +22220,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </div>
         )}
 
-        {/* Filtros — toggle + Cuenta (fuera) + Filtros colapsable (Mes/Año/Resp) + Fecha */}
-        {(()=>{ const CHV = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2399ABB4' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`; const selSty={fontSize:10.5,fontWeight:600,height:26,boxSizing:'border-box',padding:'0 22px 0 10px',borderRadius:7,border:'none',backgroundColor:'#F2F5F7',color:C.accent,cursor:'pointer',outline:'none',WebkitAppearance:'none',MozAppearance:'none',appearance:'none',backgroundImage:CHV,backgroundRepeat:'no-repeat',backgroundPosition:'right 7px center'}; const btnSty={fontSize:10.5,fontWeight:600,height:26,boxSizing:'border-box',padding:'0 10px',borderRadius:7,border:'none',backgroundColor:'#F2F5F7',color:C.accent,cursor:'pointer',outline:'none',display:'inline-flex',alignItems:'center',gap:5}; const nF=(mesF!=='todos'?1:0)+(anioF!=='todos'?1:0)+(respF!=='todos'?1:0); return (
-        <div style={{marginBottom:8}}>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-            <span style={{display:'inline-flex',height:26,borderRadius:7,overflow:'hidden',background:'#EEF1F3'}}>
-              {[['abonos','Abonos'],['cargos','Cargos']].map(([v,l])=>(
-                <button key={v} onClick={()=>setSub(v)} style={{fontSize:10.5,fontWeight:600,padding:'0 11px',border:'none',borderRadius:7,background:sub===v?C.accent:'transparent',color:sub===v?'#fff':C.muted,cursor:'pointer'}}>{l}</button>
-              ))}
-            </span>
-            {(()=>{ const n=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Pagado'&&(b.billing_type||'')!=='reembolso'&&(aplicadoByFactura[b.id]||0)<(b.amount||0)).length; return n>0 ? <button onClick={()=>setCobradasOpen(true)} title='Limpieza del histórico: cobradas sin respaldo bancario ↔ cartola (desaparece al terminar)' style={{fontSize:10.5,fontWeight:600,height:26,boxSizing:'border-box',padding:'0 10px',borderRadius:7,border:'none',background:C.ambarBg,color:C.soonText,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}>Cobradas s/ respaldo · {n}</button> : null })()}
-            {cobradasOpen&&<CobradasSinRespaldoModal billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onClose={()=>setCobradasOpen(false)}/>}
-            <select value={cuentaF} onChange={e=>setCuentaF(e.target.value)} style={selSty}>
-              <option value='ambas'>Cuenta</option>
-              <option value='honorarios'>Honorarios</option>
-              <option value='gastos'>Gastos</option>
-            </select>
-            <button onClick={()=>setVerFiltros(v=>!v)} style={{...btnSty,backgroundColor:nF>0?C.azulBg:'#F2F5F7',color:nF>0?C.accent:C.muted}}>
-              <svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke={nF>0?C.accent:C.muted} strokeWidth='2' strokeLinecap='round'><path d='M3 5h18M6 12h12M10 19h4'/></svg>Filtros{nF>0?` · ${nF}`:''}
-              <svg width='9' height='9' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round' style={{transform:verFiltros?'rotate(180deg)':'none'}}><polyline points='6 9 12 15 18 9'/></svg>
-            </button>
-            <button onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{...btnSty,marginLeft:'auto',gap:4}}>Fecha
-              <svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:orden==='asc'?'rotate(180deg)':'none'}}><line x1='12' y1='5' x2='12' y2='19'/><polyline points='6 13 12 19 18 13'/></svg>
-            </button>
-          </div>
-          {verFiltros&&(
-            <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',background:C.bgSoft,borderRadius:8,padding:8,marginTop:6}}>
-              <select value={mesF} onChange={e=>setMesF(e.target.value)} style={{...selSty,backgroundColor:'#fff'}}>
-                <option value='todos'>Mes</option>
-                {MESES_ABR.map((nm,i)=>{const mm=String(i+1).padStart(2,'0');return <option key={mm} value={mm}>{nm}</option>})}
-              </select>
-              <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={{...selSty,backgroundColor:'#fff'}}>
-                <option value='todos'>Año</option>
-                {aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}
-              </select>
-              <select value={respF} onChange={e=>setRespF(e.target.value)} style={{...selSty,backgroundColor:'#fff'}} title='Filtrar por abogado responsable del cliente'>
-                <option value='todos'>Responsable</option>
-                {respDisp.map(r=><option key={r} value={r}>{r}</option>)}
-                <option value='__sin__'>Sin responsable</option>
-              </select>
-              {nF>0&&<span onClick={()=>{setMesF('todos');setAnioF('todos');setRespF('todos')}} style={{marginLeft:'auto',fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer'}}>Limpiar</span>}
-            </div>
-          )}
-        </div>
-        )})()}
-
-        {/* Buscar + Mis clientes (estrella) + conteo */}
-        <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
-          <div style={{flex:1,display:'flex',alignItems:'center',gap:6,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 9px'}}>
+        {/* Buscar primero (lo que más se usa para encontrar un pago) + Mis clientes (estrella) + conteo */}
+        <div style={{display:'flex',gap:8,marginBottom:9,alignItems:'center'}}>
+          <div style={{flex:1,display:'flex',alignItems:'center',gap:6,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px'}}>
             <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.2' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>
             <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar RUT, nombre o cliente…' style={{flex:1,minWidth:0,border:'none',outline:'none',fontSize:12,color:C.text,background:'transparent'}}/>
             {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>✕</button>}
@@ -22280,46 +22235,94 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',flexShrink:0}}>{lista.length}{(()=>{const tot=movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length;return tot>lista.length?` / ${tot}`:''})()}</span>
         </div>
 
-        {/* Conciliación — bandeja de pendientes: solo lo accionable. Un protagonista ("te faltan N"), cada estado una fila tappable que filtra la lista; el archivo (conciliados) y las provisiones bajan a un susurro al pie. Sin % ni barra: la confianza va por diseño y así ambas cifras (filas + conciliados) salen de la MISMA base (chipCounts). */}
+        {/* Controles: tipo (segmentado) · Filtros (Cuenta + Mes/Año/Resp adentro) · orden por Fecha. Cada cosa en su grupo → cabe sin scroll horizontal. */}
+        {(()=>{ const CHV = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2399ABB4' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`; const selSty={fontSize:10.5,fontWeight:600,height:28,boxSizing:'border-box',padding:'0 22px 0 10px',borderRadius:8,border:'none',backgroundColor:'#fff',color:C.accent,cursor:'pointer',outline:'none',WebkitAppearance:'none',MozAppearance:'none',appearance:'none',backgroundImage:CHV,backgroundRepeat:'no-repeat',backgroundPosition:'right 7px center'}; const btnSty={fontSize:11.5,fontWeight:600,height:28,boxSizing:'border-box',padding:'0 11px',borderRadius:8,border:'none',backgroundColor:'#F2F5F7',color:C.muted,cursor:'pointer',outline:'none',display:'inline-flex',alignItems:'center',gap:5}; const nF=(cuentaF!=='ambas'?1:0)+(mesF!=='todos'?1:0)+(anioF!=='todos'?1:0)+(respF!=='todos'?1:0); return (
+        <div style={{marginBottom:11}}>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <span style={{display:'inline-flex',height:28,borderRadius:8,overflow:'hidden',background:'#EEF1F3',padding:2,gap:2}}>
+              {[['abonos','Abonos'],['cargos','Cargos']].map(([v,l])=>(
+                <button key={v} onClick={()=>setSub(v)} style={{fontSize:11.5,fontWeight:600,padding:'0 14px',border:'none',borderRadius:6,background:sub===v?C.accent:'transparent',color:sub===v?'#fff':C.muted,cursor:'pointer'}}>{l}</button>
+              ))}
+            </span>
+            <button onClick={()=>setVerFiltros(v=>!v)} style={{...btnSty,marginLeft:'auto',backgroundColor:nF>0?C.azulBg:'#F2F5F7',color:nF>0?C.accent:C.muted}}>
+              <svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke={nF>0?C.accent:C.muted} strokeWidth='2' strokeLinecap='round'><path d='M3 5h18M6 12h12M10 19h4'/></svg>Filtros{nF>0?` · ${nF}`:''}
+              <svg width='9' height='9' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round' style={{transform:verFiltros?'rotate(180deg)':'none'}}><polyline points='6 9 12 15 18 9'/></svg>
+            </button>
+            <button onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{...btnSty,gap:4}}>Fecha
+              <svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:orden==='asc'?'rotate(180deg)':'none'}}><line x1='12' y1='5' x2='12' y2='19'/><polyline points='6 13 12 19 18 13'/></svg>
+            </button>
+          </div>
+          {verFiltros&&(
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',background:C.bgSoft,borderRadius:8,padding:8,marginTop:6}}>
+              <select value={cuentaF} onChange={e=>setCuentaF(e.target.value)} style={selSty}>
+                <option value='ambas'>Cuenta</option>
+                <option value='honorarios'>Honorarios</option>
+                <option value='gastos'>Gastos</option>
+              </select>
+              <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selSty}>
+                <option value='todos'>Mes</option>
+                {MESES_ABR.map((nm,i)=>{const mm=String(i+1).padStart(2,'0');return <option key={mm} value={mm}>{nm}</option>})}
+              </select>
+              <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={selSty}>
+                <option value='todos'>Año</option>
+                {aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}
+              </select>
+              <select value={respF} onChange={e=>setRespF(e.target.value)} style={selSty} title='Filtrar por abogado responsable del cliente'>
+                <option value='todos'>Responsable</option>
+                {respDisp.map(r=><option key={r} value={r}>{r}</option>)}
+                <option value='__sin__'>Sin responsable</option>
+              </select>
+              {nF>0&&<span onClick={()=>{setCuentaF('ambas');setMesF('todos');setAnioF('todos');setRespF('todos')}} style={{marginLeft:'auto',fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer'}}>Limpiar</span>}
+            </div>
+          )}
+        </div>
+        )})()}
+        {cobradasOpen&&<CobradasSinRespaldoModal billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onClose={()=>setCobradasOpen(false)}/>}
+
+        {/* Por resolver — estados como TILES de color (canon aging), cada uno filtra la lista a su fuente. Conciliados y "pagadas sin respaldo" (facturas, tema aparte) van debajo. */}
         {sub==='abonos'&&(()=>{
           const porc=chipCounts.porconciliar, desc=chipCounts.descalces, sinid=chipCounts.sinid, conc=chipCounts.conciliados
           const pend=porc+desc+sinid, nSug=sugeridosId.length
-          const rows=[
-            {v:'porconciliar', n:porc, bg:C.soonBg,    col:C.soonText,    l:'Por conciliar',          sub:'Calzan con una factura — un toque'},
-            {v:'descalces',    n:desc, bg:C.overdueBg, col:C.overdueText, l:'Sin factura que calce',  sub:'Piden tu criterio'},
-            {v:'sinid',        n:sinid,bg:C.bgWarm,    col:C.grisText,    l:'Sin identificar',        sub:'Falta asignar cliente', act:nSug>0?`Identificar ${nSug} por su nombre →`:null},
+          const nCobradas=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Pagado'&&(b.billing_type||'')!=='reembolso'&&(aplicadoByFactura[b.id]||0)<(b.amount||0)).length
+          const tiles=[
+            {v:'porconciliar', n:porc, bg:C.soonBg,    col:C.soonText,    l:'Por conciliar',   sub:'Calzan con factura'},
+            {v:'descalces',    n:desc, bg:C.overdueBg, col:C.overdueText, l:'Sin factura',     sub:'Piden tu criterio'},
+            {v:'sinid',        n:sinid,bg:C.bgWarm,    col:C.grisText,    l:'Sin identificar', sub:'Falta el cliente'},
           ].filter(r=>r.n>0)
           return (
-            <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10,background:'#fff'}}>
+            <div style={{marginBottom:11}}>
               {pend>0?<>
-                <div style={{display:'flex',alignItems:'center',padding:'10px 13px 5px'}}>
-                  <span style={{fontSize:11.5,fontWeight:600,color:C.text,flex:1}}>Te faltan por resolver · {pend}</span>
-                  {concView!=='todos'&&<span onClick={()=>setConcView('todos')} style={{fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer'}}>Ver todos</span>}
+                <div style={{display:'flex',alignItems:'center',marginBottom:7,padding:'0 2px'}}>
+                  <span style={{fontSize:11,fontWeight:700,color:C.text}}>Por resolver</span>
+                  <span style={{marginLeft:7,fontSize:10.5,color:C.muted}}>{pend} movimiento{pend!==1?'s':''}</span>
+                  {concView!=='todos'&&<span onClick={()=>setConcView('todos')} style={{marginLeft:'auto',fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer'}}>Ver todos</span>}
                 </div>
-                {rows.map(r=>{ const on=concView===r.v; return (
-                  <div key={r.v} onClick={()=>setConcView(on?'todos':r.v)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 13px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.bgSoft:'#fff'}}>
-                    <span style={{width:34,height:34,borderRadius:10,flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,fontVariantNumeric:'tabular-nums',background:r.bg,color:r.col}}>{r.n}</span>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13.5,color:C.text}}>{r.l}</div>
-                      {r.act
-                        ? <div onClick={e=>{e.stopPropagation();setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,marginTop:2,cursor:'pointer'}}>{r.act}</div>
-                        : <div style={{fontSize:11,color:C.muted,marginTop:2}}>{r.sub}</div>}
+                <div style={{display:'grid',gridTemplateColumns:tiles.length>=3?'1fr 1fr 1fr':(tiles.length===2?'1fr 1fr':'1fr'),gap:8}}>
+                  {tiles.map(r=>{ const on=concView===r.v; return (
+                    <div key={r.v} onClick={()=>setConcView(on?'todos':r.v)} style={{background:r.bg,borderRadius:11,padding:'10px 11px',cursor:'pointer',border:`1px solid ${on?r.col:'transparent'}`}}>
+                      <div style={{fontSize:20,fontWeight:800,color:r.col,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{r.n}</div>
+                      <div style={{fontSize:11.5,fontWeight:600,color:r.col,marginTop:3}}>{r.l}</div>
+                      <div style={{fontSize:9,color:r.col,opacity:.85,marginTop:1}}>{r.sub}</div>
                     </div>
-                    <span style={{color:C.done,fontSize:15,flexShrink:0}}>›</span>
-                  </div>
-                )})}
+                  )})}
+                </div>
+                {nSug>0&&<div onClick={()=>{setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,marginTop:8,cursor:'pointer',padding:'0 2px'}}>Identificar {nSug} por su nombre →</div>}
+                {conc>0&&<div style={{display:'flex',gap:12,alignItems:'center',marginTop:8}}>
+                  <span onClick={()=>setConcView(concView==='conciliados'?'todos':'conciliados')} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,color:C.greenText,background:C.greenBg,borderRadius:9,padding:'7px 11px',cursor:'pointer'}}><SIcon n='check' s={13} c={C.greenText}/><b>{conc}</b> conciliados</span>
+                  {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones / fondos por rendir)' style={{fontSize:11,color:C.done,cursor:'pointer',marginLeft:'auto'}}>{resumenConc.fondos} en Cta. Gastos →</span>}
+                </div>}
               </>:(
-                <div style={{display:'flex',alignItems:'center',gap:11,padding:'13px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:11,padding:'12px 13px',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>
                   <span style={{width:28,height:28,borderRadius:'50%',background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={15} c={C.greenText}/></span>
                   <span style={{fontSize:14,fontWeight:600,color:C.greenText}}>Todo conciliado · {conc}</span>
                 </div>
               )}
-              {(( pend>0&&conc>0 )||resumenConc.fondos>0)&&(
-                <div style={{display:'flex',gap:14,alignItems:'center',padding:'9px 13px',borderTop:`0.5px solid ${C.border}`,background:C.bgSoft}}>
-                  {pend>0&&conc>0&&<span onClick={()=>setConcView(concView==='conciliados'?'todos':'conciliados')} style={{fontSize:11,color:C.done,cursor:'pointer'}}>{conc} conciliados</span>}
-                  {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones / fondos por rendir)' style={{fontSize:11,color:C.done,cursor:'pointer',marginLeft:'auto'}}>{resumenConc.fondos} en Cta. Gastos →</span>}
-                </div>
-              )}
+              {nCobradas>0&&<div onClick={()=>setCobradasOpen(true)} title='Facturas marcadas pagadas que aún no calzan con un movimiento del banco' style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,borderRadius:10,padding:'9px 11px',marginTop:10,cursor:'pointer'}}>
+                <SIcon n='alert' s={16} c={C.soonText}/>
+                <span style={{fontSize:13,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nCobradas}</span>
+                <span style={{fontSize:11,color:C.soonText,flex:1,minWidth:0}}>Facturas pagadas sin respaldo en banco</span>
+                <span style={{color:C.soonText,flexShrink:0}}>›</span>
+              </div>}
             </div>
           )
         })()}
@@ -22332,12 +22335,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           pend.forEach(m=>{ const mej=mejorCandidato(m); if(mej){ cand.push({m,f:mej}) } else { const cs=candidatos(m); if(cs.length>1) revisar.push(m); else sinFac.push(m) } })
           const byFac={}; cand.forEach(x=>{ (byFac[String(x.f.id)]=byFac[String(x.f.id)]||[]).push(x) })
           const exactos=[]; cand.forEach(x=>{ if(byFac[String(x.f.id)].length===1) exactos.push(x); else revisar.push(x.m) })
-          if(!exactos.length&&!revisar.length&&!sinFac.length) return null
+          if(!exactos.length) return null   // solo se muestra cuando hay calces exactos para conciliar de una; el resto (por revisar / sin factura) ya vive en los tiles "Por resolver"
           return (
-            <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
+            <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:11}}>
               <div onClick={()=>setLoteOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',background:C.bgSoft,cursor:'pointer'}}>
                 <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={15} c={C.accent}/></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Conciliar varias</div><div style={{fontSize:10,color:C.muted}}>{exactos.length} calzan exacto · {revisar.length} por revisar{sinFac.length?` · ${sinFac.length} sin factura`:''}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Conciliar de una vez</div><div style={{fontSize:10,color:C.muted}}>{exactos.length} {exactos.length===1?'calza':'calzan'} exacto con su factura{revisar.length?` · ${revisar.length} por revisar`:''}</div></div>
                 {exactos.length>0&&!loteOpen&&<button onClick={e=>{e.stopPropagation();setLoteConfirm(exactos)}} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0,opacity:loteBusy?.6:1}}>{loteBusy?`${loteProg}/${exactos.length}…`:`Conciliar ${exactos.length}`}</button>}
                 <span style={{fontSize:12,color:C.muted,marginLeft:4}}>{loteOpen?'▾':'▸'}</span>
               </div>
@@ -22391,6 +22394,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           )
         })()}
         {/* El "pago en grupo" ya NO se sugiere en la vista principal: vive dentro del detalle de cada transferencia, y solo cuando es un grupo real (no descomponible en 1:1). */}
+        {/* Título de la lista: separa el resumen (arriba) de los movimientos (abajo). */}
+        <div style={{display:'flex',alignItems:'center',gap:8,margin:'2px 3px 6px'}}>
+          <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Movimientos</span>
+          <span style={{fontSize:10,color:C.muted,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{lista.length}</span>
+          <span onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{marginLeft:'auto',fontSize:10.5,fontWeight:600,color:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:3}}>Fecha
+            <svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:orden==='asc'?'rotate(180deg)':'none'}}><line x1='12' y1='5' x2='12' y2='19'/><polyline points='6 13 12 19 18 13'/></svg>
+          </span>
+        </div>
         {/* Lista */}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
           {lista.length===0&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:12}}>{movs.length>0?<>No hay movimientos con estos filtros. <span onClick={()=>{setCuentaF('ambas');setMesF('todos');setAnioF('todos');setRespF('todos');setConcView('todos');setQ('')}} style={{color:C.accent,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>Ver todos</span></>:'Sin movimientos. Sube una cartola para empezar.'}</div>}
