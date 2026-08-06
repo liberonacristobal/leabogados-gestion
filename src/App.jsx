@@ -2476,6 +2476,49 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     .sort((a,b)=>b.bruto-a.bruto)
   ,[sales,selYear,ufRef])
 
+  // Descargar la foto de "Metas del año" como PNG (imagen para compartir/guardar). Dibuja un canvas propio (no screenshot del DOM) → salida limpia y branded. En iPhone usa la hoja de compartir.
+  const descargarMetas = async () => {
+    try{
+      const S=2, W=440, H=328
+      const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
+      const g=cv.getContext('2d'); g.scale(S,S)
+      const F=(w,s)=>`${w} ${s}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
+      const rr=(x,y,w,h,r)=>{ g.beginPath(); if(g.roundRect) g.roundRect(x,y,w,h,r); else { g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.arcTo(x+w,y,x+w,y+r,r); g.lineTo(x+w,y+h-r); g.arcTo(x+w,y+h,x+w-r,y+h,r); g.lineTo(x+r,y+h); g.arcTo(x,y+h,x,y+h-r,r); g.lineTo(x,y+r); g.arcTo(x,y,x+r,y,r); } g.closePath() }
+      const ventas=vMon(m.brutoUF,m.bruto), neto=vMon(m.netoUF,m.neto), terceros=vMon(m.costoUF,m.costo), meta=vMon(metaUF,m.meta)
+      const denomM=dashMoneda==='UF'?metaUF:m.meta, heroM=dashMoneda==='UF'?m.brutoUF:m.bruto
+      const pct=denomM>0?Math.min(100,Math.round(heroM/denomM*100)):0
+      const iv=ingresosPorAnioVenta
+      const ingresado=fmtMon(iv.total), metaCob=metaCobranza>0?fmtMon(metaCobranza):'—'
+      const metaPct=metaCobranza>0?Math.round(iv.total/metaCobranza*100):0
+      const hoy=new Date(), dd=String(hoy.getDate()).padStart(2,'0'), mo=String(hoy.getMonth()+1).padStart(2,'0'), yy=hoy.getFullYear(), hh=String(hoy.getHours()).padStart(2,'0'), mi=String(hoy.getMinutes()).padStart(2,'0')
+      g.fillStyle='#fff'; g.fillRect(0,0,W,H)
+      g.fillStyle='#003C50'; g.fillRect(0,0,W,56)
+      g.fillStyle='#fff'; g.font=F(700,17); g.fillText(`METAS DEL AÑO · ${selYear}`,18,28)
+      g.fillStyle='#85B7EB'; g.font=F(500,11.5); g.fillText('Liberona Escala Abogados',18,46)
+      g.fillStyle='#99ABB4'; g.font=F(700,10); g.fillText(`VENTAS · ${selYear}`,18,84)
+      g.fillStyle='#003C50'; g.font=F(700,30); g.fillText(ventas,18,116)
+      g.fillStyle='#537281'; g.font=F(600,12); g.fillText(`${pct}% de la meta · Meta ${meta}`,18,134)
+      g.fillStyle='#EDEFF1'; rr(18,146,W-36,9,4.5); g.fill()
+      g.fillStyle='#003C50'; rr(18,146,(W-36)*pct/100,9,4.5); g.fill()
+      ;[[neto,'NETO','#0F6E56'],[terceros,'TERCEROS','#537281'],[String(ventasDelAnio.length),'VENTAS','#185FA5']].forEach((c,i)=>{ const cx=18+i*((W-36)/3); g.fillStyle=c[2]; g.font=F(700,15); g.fillText(c[0],cx,188); g.fillStyle='#A8B2B8'; g.font=F(700,9); g.fillText(c[1],cx,202) })
+      g.strokeStyle='#EDEFF1'; g.lineWidth=1; g.beginPath(); g.moveTo(18,218); g.lineTo(W-18,218); g.stroke()
+      const tw=(W-36-10)/2
+      g.fillStyle='#0F6E56'; rr(18,230,tw,72,12); g.fill()
+      g.fillStyle='rgba(255,255,255,.85)'; g.font=F(700,9); g.fillText('INGRESADO A CAJA',32,254)
+      g.fillStyle='#fff'; g.font=F(700,22); g.fillText(ingresado,32,282)
+      g.fillStyle='#E1F5EE'; rr(28+tw,230,tw,72,12); g.fill()
+      g.fillStyle='#0F6E56'; g.font=F(700,9); g.fillText('META COBRANZA',42+tw,254)
+      g.fillStyle='#0F6E56'; g.font=F(700,22); g.fillText(metaCob,42+tw,282)
+      g.fillStyle='#2E7D5B'; g.font=F(600,10); g.fillText(metaCobranza>0?`${metaPct}% de la meta`:'sin meta',42+tw,297)
+      g.fillStyle='#99ABB4'; g.font=F(700,10); g.fillText(`CORTE AL ${dd}-${mo}-${yy} · ${hh}:${mi} HRS`,18,H-10)
+      const blob=await new Promise(res=>cv.toBlob(res,'image/png'))
+      if(!blob) throw new Error('canvas vacío')
+      const file=new File([blob],`METAS-DEL-ANO-${selYear}.png`,{type:'image/png'})
+      if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:`Metas del año ${selYear}`}); return }catch(_){ } }
+      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000)
+    }catch(e){ appAlert('No se pudo generar la imagen: '+(e.message||e)) }
+  }
+
   // --- Aging de cartera ---
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
   const [top5Open,setTop5Open] = usePersistedState('d_top5',false)
@@ -2599,14 +2642,20 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               </div>
             )}
           </div>
-          <div style={{display:'flex',gap:4}}>
-            {['UF','CLP'].map(v=>{ const on=dashMoneda===v; return (
-              <button key={v} onClick={()=>setDashMoneda(v)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1}}>{v}</button>
-            )})}
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <button onClick={descargarMetas} title='Descargar imagen de Metas del año' style={{display:'inline-flex',alignItems:'center',gap:4,background:'none',border:'none',padding:0,cursor:'pointer',color:C.accent,fontSize:10.5,fontWeight:600}}>
+              <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>Descargar
+            </button>
+            <span style={{width:1,height:12,background:C.border}}/>
+            <div style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11.5,fontWeight:700}}>
+              <span onClick={()=>setDashMoneda('UF')} style={{cursor:'pointer',color:dashMoneda==='UF'?C.accent:C.done}}>UF</span>
+              <span style={{color:C.border,fontWeight:400}}>·</span>
+              <span onClick={()=>setDashMoneda('CLP')} style={{cursor:'pointer',color:dashMoneda==='CLP'?C.accent:C.done}}>$</span>
+            </div>
           </div>
         </div>
-        <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-          {/* Bloque único: izquierda velocímetro de meta · derecha desglose financiero */}
+        <div style={{background:C.accent,borderRadius:12,border:`1px solid ${C.accent}`,overflow:'hidden'}}>
+          {/* Velocímetro de meta (navy) + desglose. Paneles de detalle (revOpen/histOpen) van en blanco. */}
           <div style={{padding:'14px 15px'}}>
             {(()=>{
               const denom = dashMoneda==='UF' ? metaUF : m.meta
@@ -2616,41 +2665,43 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               const pctMeta = denom>0?Math.round(heroMon/denom*100):0
               const faltanUF = Math.max(0,metaUF-heroUF), faltanVal = Math.max(0,m.meta-heroVal)
               const otherUF = neto?m.brutoUF:m.netoUF, otherVal = neto?m.bruto:m.neto
-              const heroCol = neto?C.greenText:C.accent
+              const heroCol = neto?C.onNavyGreen:'#fff'
               const lblBig = {fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}
-              const lblSm = {fontSize:9,color:'#A8B2B8',textTransform:'uppercase',letterSpacing:.3}
+              const lblSm = {fontSize:9,color:'#7C9AA8',textTransform:'uppercase',letterSpacing:.3}
+              const segBtn = on => ({padding:'3px 9px',borderRadius:6,border:`1px solid ${on?'transparent':C.onNavyLine}`,background:on?C.onNavyBtn:'transparent',color:on?'#fff':C.onNavyLabel,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:.3,cursor:'pointer',lineHeight:1})
               return (<>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-                  <div>
-                    <div style={{fontSize:23,fontWeight:700,color:heroCol,fontVariantNumeric:'tabular-nums',lineHeight:1.1}}>{vMon(heroUF,heroVal)}</div>
-                    <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>{neto?'Neto':'Vendido'} · {pctMeta}% de la meta</div>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.onNavyLabel,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>{neto?'Neto':'Ventas'} · {selYear}</div>
+                    <div style={{fontSize:25,fontWeight:700,color:heroCol,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{vMon(heroUF,heroVal)}</div>
+                    <div style={{fontSize:9.5,fontWeight:600,color:'#B7CCD6',marginTop:3}}>{pctMeta}% de la meta</div>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     <div style={{display:'flex',gap:4}}>
                       {[['venta','Bruto'],['neto','Neto']].map(([k,l])=>{ const on=gaugeMode===k; return (
-                        <button key={k} onClick={()=>setGaugeMode(k)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:.3,cursor:'pointer',lineHeight:1}}>{l}</button>
+                        <button key={k} onClick={()=>setGaugeMode(k)} style={segBtn(on)}>{l}</button>
                       )})}
                     </div>
-                    <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?C.accent:C.muted,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
+                    <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?'#fff':C.onNavyLabel,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
                   </div>
                 </div>
-                {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:1}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
-                <div style={{height:8.5,borderRadius:5,background:C.bgWarm,overflow:'hidden',margin:'9px 0 4px'}}><div style={{height:'100%',width:`${Math.min(100,pctMeta)}%`,background:heroCol,borderRadius:5,transition:'width .3s'}}/></div>
+                {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.onNavyGreen:C.onNavyRed,marginTop:4}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
+                <div style={{height:8.5,borderRadius:5,background:'rgba(255,255,255,.16)',overflow:'hidden',margin:'10px 0 4px'}}><div style={{height:'100%',width:`${Math.min(100,pctMeta)}%`,background:heroCol,borderRadius:5,transition:'width .3s'}}/></div>
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:10}}>
-                  <span style={{color:C.overdueText}}>Faltan {vMon(faltanUF,faltanVal)}</span>
-                  <span style={{color:C.muted,fontWeight:600}}>Meta {vMon(metaUF,m.meta)}</span>
+                  <span style={{color:C.onNavyRed}}>Faltan {vMon(faltanUF,faltanVal)}</span>
+                  <span style={{color:'#B7CCD6',fontWeight:600}}>Meta {vMon(metaUF,m.meta)}</span>
                 </div>
-                <div style={{display:'flex',justifyContent:'space-between',gap:6,borderTop:`0.5px solid ${C.border}`,marginTop:11,paddingTop:10}}>
-                  <div onClick={()=>setGaugeMode(neto?'venta':'neto')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:neto?C.accent:C.greenText}}>{vMon(otherUF,otherVal)}</div><div style={lblSm}>{neto?'Vendido':'Neto'}</div></div>
-                  <div style={{minWidth:0}}><div style={{...lblBig,color:C.muted}}>{vMon(m.costoUF,m.costo)}</div><div style={lblSm}>Terceros</div></div>
-                  <div onClick={()=>setRevOpen(o=>!o)} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.azulInfo}}>{ventasDelAnio.length}</div><div style={lblSm}>Ventas ›</div></div>
+                <div style={{display:'flex',justifyContent:'space-between',gap:6,borderTop:`0.5px solid ${C.onNavyLine}`,marginTop:11,paddingTop:10}}>
+                  <div onClick={()=>setGaugeMode(neto?'venta':'neto')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:neto?'#fff':C.onNavyGreen}}>{vMon(otherUF,otherVal)}</div><div style={lblSm}>{neto?'Ventas':'Neto'}</div></div>
+                  <div style={{minWidth:0}}><div style={{...lblBig,color:'#B7CCD6'}}>{vMon(m.costoUF,m.costo)}</div><div style={lblSm}>Terceros</div></div>
+                  <div onClick={()=>setRevOpen(o=>!o)} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.onNavyLabel}}>{ventasDelAnio.length}</div><div style={lblSm}>Ventas ›</div></div>
                 </div>
               </>)
             })()}
           </div>
           {/* Trigger detalle de ventas del año (componen el Vendido) */}
           {revOpen&&(
-              <div style={{borderTop:`1px solid ${C.border}`,padding:'10px 16px 12px'}}>
+              <div style={{background:'#fff',borderTop:`1px solid ${C.onNavyLine}`,padding:'10px 16px 12px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
                   <span style={{color:C.done,fontSize:10,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ventas {selYear} · {ventasDelAnio.length}</span>
                   <button onClick={()=>setRevOpen(false)} style={{background:'none',border:'none',color:C.done,fontSize:10,cursor:'pointer',textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ocultar</button>
@@ -2670,7 +2721,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 })}
                 {ventasDelAnio.length>0&&(
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,paddingTop:8,fontWeight:700}}>
-                    <span style={{fontSize:11,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Vendido {selYear}</span>
+                    <span style={{fontSize:11,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Ventas {selYear}</span>
                     <span style={{fontSize:13,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</span>
                   </div>
                 )}
@@ -2678,7 +2729,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             )}
           {/* Años anteriores: se abre con el icono junto a "Desglose financiero" */}
           {histOpen&&(
-            <div style={{borderTop:`1px solid ${C.border}`,padding:'10px 16px 14px'}}>
+            <div style={{background:'#fff',borderTop:`1px solid ${C.onNavyLine}`,padding:'10px 16px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,paddingBottom:4}}>
                 <span>Año</span><span>Avance</span><span style={{textAlign:'right'}}>Neto · % meta</span>
               </div>
@@ -2879,7 +2930,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {lvlLabel('Dinero por resolver')}
+      {lvlLabel('Cobros y pagos')}
       {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). */}
       {kMini('cobranza','Cobranza',fmtShort(totalPorCobrar),null,'receipt',{fg:C.accent,bg:C.azulBg})}
       {kOpen('cobranza')&&(
@@ -3192,7 +3243,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {lvlLabel('Referencia')}
+      {lvlLabel('Otros indicadores')}
       {kMini('ventas','Ventas por mes',null,null,'chart',{fg:C.azulInfo,bg:C.azulBg},true)}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
 
       {/* Acceso directo a Costos de oficina (admin) — nivel referencia (compact) */}
