@@ -2212,6 +2212,35 @@ const ventaCLP = (s, ufRef) => {
   const clp = s.amount_clp || (s.amount_uf&&s.uf_value>0?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef))
   return (clp||0)*factor
 }
+// Match factura → venta (reproceso de "sin año de venta"). Cruza con las VENTAS del cliente y elige un ganador CLARO;
+// si empata o no hay señal fuerte, devuelve {ok:false} → queda para asignación manual (cero adivinanzas, cero errores de cifra).
+// Señales, de más fuerte a más débil: año de emisión == venta.year (+4) · monto ≈ total/mensual/cuota de la venta (+3) ·
+// glosa: tokens significativos del concepto ∩ título de la venta, filtrando genéricas (honorarios/asesoría/legal…) (+ hasta 2).
+const _GLOSA_GENERICAS = new Set(['honorarios','honorario','asesoria','asesorias','legal','legales','laboral','servicio','servicios','tributario','tributaria','abogado','abogados','cliente','pago','factura','mensual','permanente','anual','general'])
+const _tokVenta = s => _normTxt(s||'').split(' ').filter(w=>w.length>=4 && !_GLOSA_GENERICAS.has(w))
+function matchVentaFactura(fac, ventasCliente, ufRef){
+  const ventas=(ventasCliente||[]).filter(v=>v && !v.deleted_at && !['Borrador','Propuesta','Rechazada'].includes(v.status))
+  if(!ventas.length) return {ok:false, reason:'sin ventas del cliente'}
+  const issueY = fac.issued_at ? +String(fac.issued_at).slice(0,4) : null
+  const amt = Math.abs(fac.amount||0)
+  const facTok = new Set(_tokVenta(fac.concept))
+  const near = (a,b)=> b>0 && Math.abs(a-b)/b <= 0.02
+  const scored = ventas.map(v=>{
+    let sc=0; const why=[]
+    if(issueY && Number(v.year)===issueY){ sc+=4; why.push('año') }
+    const vt = ventaCLP(v, ufRef)                                  // total (recurrente anualizado x12)
+    const mensual = esRecurrente(v) ? Math.round(vt/12) : null
+    const cuota = Math.round(vt/Math.max(1, parseInt(v.cuotas)||1))
+    if(near(amt,vt) || (mensual&&near(amt,mensual)) || near(amt,cuota)){ sc+=3; why.push('monto') }
+    const inter = _tokVenta(v.title).filter(t=>facTok.has(t)).length
+    if(inter>0){ sc+=Math.min(2,inter); why.push('glosa') }
+    return {v, sc, why}
+  }).sort((a,b)=>b.sc-a.sc)
+  const best=scored[0], second=scored[1]
+  if(!best || best.sc<4) return {ok:false, reason:'sin señal fuerte'}
+  if(scored.length>1 && (best.sc-(second.sc||0))<2) return {ok:false, reason:'empate entre ventas'}
+  return {ok:true, sale_id:best.v.id, year:best.v.year, score:best.sc, why:best.why.join('+'), title:best.v.title||'Venta'}
+}
 // Costo de terceros (reparto) de una venta en UF, anualizado si es recurrente. Fuente única del costo → margen de contribución = ventaUF − costoVentaUF.
 const costoVentaUF = (s, ufRef) => ((parseFloat(s?.cost_uf)||0)*(esRecurrente(s)?12:1)) + (s?.moneda==='CLP'&&s?.cost_clp&&ufRef>0 ? (parseFloat(s.cost_clp)||0)/ufRef*(esRecurrente(s)?12:1) : 0)
 // Venta histórica del cliente (Activo+Terminado) en UF — fuente única ventaUF (UF congelada).
@@ -6788,7 +6817,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   </div>)
 }
 
-function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onCrearVentaRapida,onFacturaTercero,proveedores=[],onSaveProveedor,onIrConciliacion,intent,onIntentDone}) {
+function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onReprocesarSinAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onCrearVentaRapida,onFacturaTercero,proveedores=[],onSaveProveedor,onIrConciliacion,intent,onIntentDone}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [depurarRows,setDepurarRows] = useState(null)   // facturas saldadas a confirmar (modal detallado)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
@@ -7172,10 +7201,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const bb = billing.filter(b=>b.billing_type!=='reembolso')   // Facturación excluye reembolsos de gastos
   // Año de venta de una factura: de la venta asociada (sale_id → sales.year) o el año asignado a mano (sale_year).
   const [anioPickFor,setAnioPickFor] = useState(null)
+  const [ventaBusca,setVentaBusca] = useState('')          // buscador del selector de venta (cola "Sin año")
+  const [verCerradas,setVerCerradas] = useState(false)     // mostrar también ventas cerradas en el selector
+  const [reprocBusy,setReprocBusy] = useState(false)
   const [anioLearned,setAnioLearned] = useState({})   // client_id → año aprendido (sugerencia)
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','venta_anio_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=Number(r.value) }); setAnioLearned(m) },()=>{}) },[])
   const saleYrById = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(s.year!=null) m[String(s.id)]=s.year }); return m },[sales])
-  const anioVentaDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:(b.issued_at?+String(b.issued_at).slice(0,4):null))
+  // Año de venta ESTRICTO (single source, igual que Inicio/CashflowProjection): venta enlazada (sale_id→sales.year) o año a mano (sale_year); NADA de respaldo por issued_at (eso enmascaraba facturas sin enlazar y desalineaba Inicio vs Facturación).
+  const anioVentaDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:null)
   const sinAnio = useMemo(()=> bb.filter(b=>b.status==='Pagado'&&anioVentaDe(b)==null).sort((a,b)=>new Date(b.paid_at||0)-new Date(a.paid_at||0)),[bb,saleYrById])
   const yearBtns = useMemo(()=>{ const ys=sales.map(s=>s.year).filter(Boolean); return [...new Set([currentYear,currentYear-1,currentYear-2,currentYear-3,...ys])].sort((a,b)=>b-a).slice(0,6) },[sales])
   // Cuentas por pagar a proveedores ancladas a cada factura (terceros_pagos.billing_id)
@@ -8403,7 +8436,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
-            <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.5}}>Facturas pagadas sin año de venta. Asocia la venta o elige el año; se aprende por cliente y no se vuelve a preguntar.</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.5}}>Facturas pagadas que quedaron sin enlazar a su venta. La app ya asoció sola las que tenían un calce claro; acá quedan las que necesitan tu criterio (asigna la venta o el año). Se aprende por cliente.</div>
             {sinAnio.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Todas las facturas pagadas tienen su año de venta.</div>}
             {sinAnio.map(b=>{
               const c=clients.find(x=>x.id===b.client_id)
@@ -8420,13 +8453,22 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     {yearBtns.map(y=><button key={y} onClick={()=>onSetVentaAnio&&onSetVentaAnio(b,{sale_year:y})} style={cs()}>{y}</button>)}
                     <button onClick={async()=>{const v=await appPrompt('Año de venta:'); const n=parseInt(v); if(n>1990&&n<2100) onSetVentaAnio&&onSetVentaAnio(b,{sale_year:n})}} style={cs()}>…</button>
                   </div>
-                  {anioPickFor===b.id&&clientSales.length>0&&(
+                  {anioPickFor===b.id&&clientSales.length>0&&(()=>{
+                    const abiertas=clientSales.filter(s=>s.status==='Activo')
+                    const base=(verCerradas||!abiertas.length)?clientSales:abiertas   // por defecto solo abiertas (Activo); si no hay, todas
+                    const q=ventaBusca.trim().toLowerCase()
+                    const list=[...base].filter(s=>!q||`${s.title||''} ${s.year||''}`.toLowerCase().includes(q)).sort((a,b)=>(b.year||0)-(a.year||0))
+                    const nCerr=clientSales.filter(s=>s.status!=='Activo').length
+                    return (
                     <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
-                      {[...clientSales].sort((a,b)=>(b.year||0)-(a.year||0)).map(s=>(
-                        <button key={s.id} onClick={()=>{onSetVentaAnio&&onSetVentaAnio(b,{sale_id:s.id});setAnioPickFor(null)}} style={{textAlign:'left',padding:'7px 10px',borderRadius:8,border:`0.5px solid ${C.border}`,background:C.bgSoft,fontSize:12,color:C.text,cursor:'pointer'}}>{s.year} · {s.title||'Venta'}</button>
+                      {clientSales.length>4&&<input value={ventaBusca} onChange={e=>setVentaBusca(e.target.value)} placeholder='Buscar proyecto…' style={{padding:'6px 9px',borderRadius:7,border:`0.5px solid ${C.border}`,fontSize:12,outline:'none'}}/>}
+                      {list.map(s=>(
+                        <button key={s.id} onClick={()=>{onSetVentaAnio&&onSetVentaAnio(b,{sale_id:s.id});setAnioPickFor(null);setVentaBusca('');setVerCerradas(false)}} style={{textAlign:'left',padding:'7px 10px',borderRadius:8,border:`0.5px solid ${C.border}`,background:C.bgSoft,fontSize:12,color:C.text,cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'Venta'}</span><span style={{color:C.done,flexShrink:0}}>{s.year}{s.status!=='Activo'?' · cerrada':''}</span></button>
                       ))}
+                      {!verCerradas&&abiertas.length>0&&nCerr>0&&<button onClick={()=>setVerCerradas(true)} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 0'}}>Ver también cerradas ({nCerr}) →</button>}
                     </div>
-                  )}
+                    )
+                  })()}
                 </div>
               )
             })}
@@ -24297,7 +24339,7 @@ export default function App() {
   // o año manual (sale_year) cuando la venta no está cargada. Aprende cliente→año para sugerir después.
   const handleSetVentaAnio=useCallback(async(bill,{sale_id,sale_year})=>{
     try{
-      const patch={}
+      const patch={anio_manual:true}   // asignación a mano → protegida del reproceso
       if(sale_id!==undefined){ patch.sale_id=sale_id; patch.sale_year=null }
       else if(sale_year!==undefined){ patch.sale_year=sale_year }
       const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
@@ -24307,6 +24349,43 @@ export default function App() {
       if(bill.client_id && anio!=null) learnPut('venta_anio_cliente', String(bill.client_id), anio)
     }catch(e){appAlert('Error: '+e.message)}
   },[sales])
+  // Reproceso "sin año de venta": recorre las facturas pagadas NO enlazadas (sale_id/sale_year null, no manual) e intenta asociarlas
+  // a su venta con matchVentaFactura (año>monto>glosa). Idempotente (solo toca las no asignadas, con guarda .is(null)), no pisa las
+  // manuales (anio_manual), deja log en consola y devuelve resumen {asociadas, pendientes}.
+  const handleReprocesarSinAnio=useCallback(async(opts={})=>{
+    const ufR = (readUFCache()?.value) || (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK   // ufRef no vive en App; se calcula igual que en 3545
+    const saleYrById={}; sales.forEach(s=>{ if(s.year!=null) saleYrById[String(s.id)]=s.year })
+    const anioDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:null)
+    const pend=(billing||[]).filter(b=>b.status==='Pagado'&&(b.billing_type||'')!=='reembolso'&&!b.deleted_at&&!b.anio_manual&&b.sale_id==null&&b.sale_year==null&&anioDe(b)==null)
+    if(!pend.length){ if(!opts.silent) appAlert('No hay facturas pagadas sin año por reprocesar.'); return {asociadas:0,pendientes:0} }
+    const cn = id => clients.find(c=>String(c.id)===String(id))?.name || null
+    const ventasPorCliente={}; sales.forEach(s=>{ (ventasPorCliente[String(s.client_id)]=ventasPorCliente[String(s.client_id)]||[]).push(s) })
+    const log=[]; let asociadas=0, pendientes=0
+    for(const b of pend){
+      const m=matchVentaFactura(b, ventasPorCliente[String(b.client_id)]||[], ufR)
+      if(m.ok){
+        const {error}=await supabase.from('billing').update({sale_id:m.sale_id,sale_year:null}).eq('id',b.id).is('sale_id',null).is('sale_year',null)
+        if(error){ pendientes++; log.push({factura:folioN(b.invoice_no)||b.id,estado:'ERROR',msg:error.message}); continue }
+        asociadas++; setBilling(p=>p.map(x=>x.id===b.id?{...x,sale_id:m.sale_id,sale_year:null}:x))
+        if(b.client_id&&m.year!=null) learnPut('venta_anio_cliente',String(b.client_id),m.year)
+        log.push({factura:folioN(b.invoice_no)||b.id, cliente:cn(b.client_id), venta:m.title, año:m.year, por:m.why})
+      } else { pendientes++; log.push({factura:folioN(b.invoice_no)||b.id, cliente:cn(b.client_id), estado:'PENDIENTE', motivo:m.reason}) }
+    }
+    try{ if(asociadas||pendientes) console.info(`[reproceso sin año] ${asociadas} asociadas · ${pendientes} pendientes`, log) }catch(_){}
+    if(!opts.silent) appAlert(`Reproceso listo · ${pend.length} revisadas.\n✓ ${asociadas} asociada${asociadas!==1?'s':''} a su venta.\n${pendientes} pendiente${pendientes!==1?'s':''} — asígnalas a mano en "Sin año".`)
+    return {asociadas,pendientes,log}
+  },[sales,billing,clients])
+  // Cruce AUTÓNOMO (sin botón): al cargar, la app intenta asociar sola las facturas pagadas sin año a su venta (matchVentaFactura),
+  // en silencio; solo las ambiguas quedan en la cola "Sin año" para tu criterio. Corre una vez por sesión, es idempotente y no pisa lo manual.
+  const _reprocRan = useRef(false)
+  useEffect(()=>{
+    if(_reprocRan.current || userRole!=='admin') return
+    if(!(billing||[]).length || !(sales||[]).length) return
+    const hay=(billing||[]).some(b=>b.status==='Pagado'&&(b.billing_type||'')!=='reembolso'&&!b.deleted_at&&!b.anio_manual&&b.sale_id==null&&b.sale_year==null)
+    if(!hay) return
+    _reprocRan.current=true
+    handleReprocesarSinAnio({silent:true})
+  },[billing,sales,userRole,handleReprocesarSinAnio])
 
   // Eliminar una o varias cuotas (usado por "Ya emitida"); el confirm lo hace el componente
   const handleDeleteBillingBulk=useCallback(async(ids)=>{
@@ -24723,7 +24802,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
