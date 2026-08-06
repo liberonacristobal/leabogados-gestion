@@ -2509,7 +2509,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       g.fillStyle='#fff'; g.fillRect(0,0,W,H)
       // header navy (diseño 4: logo izq · Metas del año / 2026 der)
       const HH=68; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH)
-      if(logo.naturalWidth){ const lgH=48, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,(HH-lgH)/2,lgW,lgH) }   // logo +40% (34→48), centrado vertical en el header
+      if(logo.naturalWidth){ const lgH=48, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,(HH-lgH)/2+5,lgW,lgH) }   // logo +40% (34→48); +5px para bajarlo y centrarlo mejor al alto del recuadro
       g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,30)
       g.fillStyle='#fff'; g.font=F(700,23); g.fillText(String(selYear),W-PAD,54); g.textAlign='left'
       let y=HH+26
@@ -2525,7 +2525,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       // CONVERSIÓN
       g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('CONVERSIÓN VENTAS → PAGOS',PAD,y)
       y+=24; g.fillStyle='#0F6E56'; g.font=F(700,22); g.fillText(`${convPura}%`,PAD,y)
-      g.fillStyle='#537281'; g.font=F(500,11); g.fillText(`de lo vendido este año ya se pagó · global ${convGlob}%`,PAD+56,y-2)
+      g.fillStyle='#537281'; g.font=F(500,9.5); g.fillText(`de lo vendido este año ya se pagó · global ${convGlob}%`,PAD+52,y-3)
       y+=18; hr(y); y+=20
       // INGRESADO A LA CAJA (dos tiles)
       g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('INGRESADO A LA CAJA',PAD,y)
