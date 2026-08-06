@@ -2327,16 +2327,18 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
   const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
   const kToggle = id => setKpiOpen(p=>{ const a=Array.isArray(p)?p:[]; return a.includes(id)?a.filter(x=>x!==id):[...a,id] })
-  const kMini = (id,title,value,valCol,icon,tint) => { const fg=tint?.fg||C.accent, bg=tint?.bg||C.azulBg; return (
-    <div style={{padding:'14px 20px 0'}}>
-      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${fg}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
-        {icon&&<span style={{width:30,height:30,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={17} c={fg}/></span>}
-        <span style={{flex:1,fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{title}</span>
-        {value&&!kOpen(id)&&<b style={{fontSize:14,fontWeight:700,color:valCol||fg,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{value}</b>}
-        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
+  const kMini = (id,title,value,valCol,icon,tint,compact) => { const fg=tint?.fg||C.accent, bg=tint?.bg||C.azulBg; return (
+    <div style={{padding:compact?'6px 20px 0':'14px 20px 0'}}>
+      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',gap:compact?9:11,background:compact?'#EDF0F2':'#fff',border:`1px solid ${compact?'#DDE2E6':C.border}`,...(compact?{}:{borderLeft:`3px solid ${fg}`}),borderRadius:compact?10:12,padding:compact?'9px 12px':'12px 14px',cursor:'pointer'}}>
+        {icon&&<span style={{width:compact?24:30,height:compact?24:30,borderRadius:compact?7:8,background:compact?'#D3DAE0':bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={compact?14:17} c={compact?C.text:fg}/></span>}
+        <span style={{flex:1,fontSize:compact?11:11,fontWeight:600,color:compact?C.text:C.muted,textTransform:compact?'none':'uppercase',letterSpacing:compact?0:'.04em'}}>{title}</span>
+        {value&&!kOpen(id)&&<b style={{fontSize:compact?12:14,fontWeight:700,color:compact?C.text:(valCol||fg),fontVariantNumeric:'tabular-nums',flexShrink:0}}>{value}</b>}
+        <svg width={compact?13:14} height={compact?13:14} viewBox='0 0 24 24' fill='none' stroke={compact?'#8FA0AA':'#99ABB4'} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
       </div>
     </div>
   ) }
+  // Rótulo de nivel de la pirámide del Inicio (Dinero por resolver / Referencia)
+  const lvlLabel = t => <div style={{padding:'14px 22px 0',fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.5px'}}>{t}</div>
   const [plazos,setPlazos] = useState([])   // plazos vencidos/próximos para "qué atender hoy"
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
   // Accesos que aprenden: se ordenan por frecuencia de uso de ESTE usuario (cache instantáneo en localStorage) + registro durable en usage_events. Un punto verde marca el último abierto.
@@ -2579,26 +2581,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 </button>
               ))}
             </div>
-            {mine.length>0&&(
-              <div style={{marginBottom:14}}>
-                <div onClick={()=>setMisProyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,border:'0.5px solid #9FE1CB',borderLeft:`3px solid ${C.normal}`,borderRadius:misProyOpen?'10px 10px 0 0':10,padding:'12px 14px',cursor:'pointer'}}>
-                  <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z'/></svg>
-                  <span style={{flex:1,fontSize:14,fontWeight:600,color:C.accent}}>Mis proyectos</span>
-                  <span style={{fontSize:11,fontWeight:600,color:C.greenText,background:'#fff',border:'0.5px solid #9FE1CB',borderRadius:20,padding:'2px 10px'}}>{mine.length} activos</span>
-                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:misProyOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
-                </div>
-                {misProyOpen&&<div style={{border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 10px 10px',overflow:'hidden'}}>
-                  {sorted.slice(0,6).map(p=>(
-                    <div key={p.id} onClick={()=>setTab('cartera')} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:'#fff',cursor:'pointer'}}>
-                      <span style={{width:8,height:8,borderRadius:'50%',background:CART_DOT[p.estado||'verde'],flexShrink:0}}/>
-                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.nota||p.nombre_proyecto||''}</div></div>
-                      <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{hace(p.ultima_actividad)}</span>
-                    </div>
-                  ))}
-                  <div onClick={()=>setTab('cartera')} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`,textAlign:'center',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',background:'#fff'}}>Ver todos →</div>
-                </div>}
-              </div>
-            )}
           </div>
         )
       })()}
@@ -2897,12 +2879,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {kMini('ventas','Ventas por mes',null,null,'chart',{fg:C.azulInfo,bg:C.azulBg})}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
-
-
-
-      {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). Antes eran 2 secciones que repetían "Por cobrar". */}
-      {kMini('cobranza','Cobranza · por cobrar',fmtShort(totalPorCobrar),null,'receipt',{fg:C.accent,bg:C.azulBg})}
+      {lvlLabel('Dinero por resolver')}
+      {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). */}
+      {kMini('cobranza','Cobranza',fmtShort(totalPorCobrar),null,'receipt',{fg:C.accent,bg:C.azulBg})}
       {kOpen('cobranza')&&(
       <div style={{padding:'16px 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -3213,23 +3192,53 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {/* Acceso directo a Costos de oficina (admin) desde el Dashboard — menos clics a la vista de la firma */}
+      {lvlLabel('Referencia')}
+      {kMini('ventas','Ventas por mes',null,null,'chart',{fg:C.azulInfo,bg:C.azulBg},true)}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
+
+      {/* Acceso directo a Costos de oficina (admin) — nivel referencia (compact) */}
       {onOpenOficina&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
         const ym=new Date().toISOString().slice(0,7); const mesOfi=expenses.filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
         return (
-        <div style={{padding:'16px 20px 0'}}>
-          <div onClick={onOpenOficina} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
-            <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div></div>
-            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesOfi)}</div><div style={{fontSize:9,color:C.done}}>Este mes</div></div>
-            <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
+        <div style={{padding:'6px 20px 0'}}>
+          <div onClick={onOpenOficina} style={{display:'flex',alignItems:'center',gap:9,background:'#EDF0F2',border:'1px solid #DDE2E6',borderRadius:10,padding:'9px 12px',cursor:'pointer'}}>
+            <span style={{width:24,height:24,borderRadius:7,background:'#D3DAE0',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={14} c={C.text}/></span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Costos de oficina</div></div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmtShort(mesOfi)}</div><div style={{fontSize:8.5,color:C.muted}}>Este mes</div></div>
+            <span style={{fontSize:13,color:'#8FA0AA',flexShrink:0}}>›</span>
           </div>
         </div>
         )
       })()}
 
+      {/* Mis proyectos — nivel referencia (compact), movido desde arriba */}
+      {(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
+        const hace=iso=>{ if(!iso) return 'sin mover'; const d=Math.round((Date.now()-new Date(iso+'T00:00').getTime())/86400000); return d<=0?'hoy':d===1?'ayer':`hace ${d} d` }
+        const sorted=[...mine].sort((a,b)=>{ const ka=a.ultima_actividad?new Date(a.ultima_actividad).getTime():0, kb=b.ultima_actividad?new Date(b.ultima_actividad).getTime():0; return ka-kb })
+        const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
+        return (
+        <div style={{padding:'6px 20px 0'}}>
+          <div onClick={()=>setMisProyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,background:'#EDF0F2',border:'1px solid #DDE2E6',borderRadius:misProyOpen?'10px 10px 0 0':10,padding:'9px 12px',cursor:'pointer'}}>
+            <span style={{width:24,height:24,borderRadius:7,background:'#D3DAE0',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.text} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z'/></svg></span>
+            <span style={{flex:1,fontSize:12,fontWeight:600,color:C.text}}>Mis proyectos</span>
+            <span style={{fontSize:11,fontWeight:700,color:C.text}}>{mine.length}</span>
+            <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#8FA0AA' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:misProyOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
+          </div>
+          {misProyOpen&&<div style={{border:'1px solid #DDE2E6',borderTop:'none',borderRadius:'0 0 10px 10px',overflow:'hidden'}}>
+            {sorted.slice(0,6).map(p=>(
+              <div key={p.id} onClick={()=>setTab('cartera')} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
+                <span style={{width:8,height:8,borderRadius:'50%',background:CART_DOT[p.estado||'verde'],flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.nota||p.nombre_proyecto||''}</div></div>
+                <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{hace(p.ultima_actividad)}</span>
+              </div>
+            ))}
+            <div onClick={()=>setTab('cartera')} style={{padding:'9px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',background:'#fff'}}>Ver todos →</div>
+          </div>}
+        </div>
+        )
+      })()}
+
       {/* Equipo (admin) — trazabilidad del equipo limited: caja chica + actividad reciente (Eje 4, 2026-06-28) */}
-      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kMini('equipo','Equipo · trazabilidad',null,null,'users',{fg:C.accent,bg:C.azulBg})}
+      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kMini('equipo','Equipo · trazabilidad',null,null,'users',{fg:C.accent,bg:C.azulBg},true)}
       {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kOpen('equipo')&&(()=>{
         const ADMIN_NAMES=['Cristóbal','Erasmo']
         const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!ADMIN_NAMES.includes(u)).sort((a,b)=>a.localeCompare(b,'es'))
