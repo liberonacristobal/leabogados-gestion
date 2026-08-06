@@ -2109,7 +2109,11 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[],onOpenClientFicha}) {
     return arr
   },[sales,ufHoy])
   const val = m => moneda==='UF'? m.uf : m.clp
-  const maxVal = Math.max(...data.map(val),1)
+  // Solo meses ya transcurridos (no mostrar meses que aún no están abiertos). Si es un año pasado, se ven los 12.
+  const hoyMes = new Date().getMonth()
+  const visMeses = yr===currentYear ? Math.min(11,hoyMes) : 11
+  const visible = data.slice(0,visMeses+1)
+  const maxVal = Math.max(...visible.map(val),1)
   const totalUF = data.reduce((a,m)=>a+m.uf,0)
   const totalCLP = data.reduce((a,m)=>a+m.clp,0)
   // Ingreso recurrente: ventas mensuales recurrentes activas
@@ -2138,9 +2142,9 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[],onOpenClientFicha}) {
           </div>
         )}
         <div style={{display:'flex',gap:3,alignItems:'flex-end',height:84}}>
-          {data.map((m,i)=>{
+          {visible.map((m,i)=>{
             const v = val(m)
-            const hoy = new Date().getMonth()
+            const hoy = hoyMes
             const activo = sel===i
             return (
               <div key={i} onClick={()=>setSel(s=>s===i?null:i)} onMouseEnter={()=>setSel(i)} onMouseLeave={()=>setSel(null)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,cursor:v>0?'pointer':'default'}}>
@@ -2986,19 +2990,18 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:11}}>
             <div>
-              <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtMon(agingData.total)}</div>
-              <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>Por cobrar</div>
+              <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(agingData.total)}</div>
+              <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>a hoy</div>
             </div>
             <button onClick={()=>setTop5Open(o=>!o)} style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:C.muted,padding:0,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em',flexShrink:0}}>Detalle <span style={{fontSize:12,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span></button>
           </div>
-          <div style={{height:8.5,borderRadius:5,display:'flex',overflow:'hidden',background:C.border,marginBottom:12}}>
-            <div style={{width:`${agingData.buckets.current.pct}%`,background:C.normal}}/>
-            <div style={{width:`${agingData.buckets.warning.pct}%`,background:C.soon}}/>
-            <div style={{width:`${agingData.buckets.overdue.pct}%`,background:C.overdue}}/>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12.5}}>
-            {[['Al día','current',C.greenText],['31-60','warning',C.soon],['+60 días','overdue',C.overdueText]].map(([l,k,col])=>{ const bk=agingData.buckets[k], abierto=agingBucket===k, vacio=bk.monto===0; return (
-              <span key={k} onClick={()=>!vacio&&setAgingBucket(abierto?null:k)} style={{cursor:vacio?'default':'pointer',color:abierto?col:C.muted,fontWeight:abierto?700:400}}><b style={{color:col}}>{bk.pct}%</b> {l}</span>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginTop:12}}>
+            {[['Al día','current',C.greenText,C.greenBg],['31-60 días','warning',C.soonText,C.ambarBg],['+60 días','overdue',C.overdueText,C.overdueBg]].map(([l,k,col,bg])=>{ const bk=agingData.buckets[k], abierto=agingBucket===k, vacio=bk.monto===0; return (
+              <div key={k} onClick={()=>!vacio&&setAgingBucket(abierto?null:k)} style={{background:bg,borderRadius:10,padding:'9px 10px',cursor:vacio?'default':'pointer',border:`1px solid ${abierto?col:'transparent'}`,opacity:vacio?.55:1}}>
+                <div style={{fontSize:15.5,fontWeight:700,color:col,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmtShort(bk.monto)}</div>
+                <div style={{fontSize:9,fontWeight:600,color:col,opacity:.8,marginTop:1}}>{bk.pct}%</div>
+                <div style={{fontSize:8.5,fontWeight:600,color:col,textTransform:'uppercase',letterSpacing:'.3px',marginTop:2}}>{l}</div>
+              </div>
             )})}
           </div>
           {agingBucket&&agingData.buckets[agingBucket]?.items?.length>0&&(()=>{
@@ -3042,109 +3045,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
         )}
       </div>)}
-
-      {/* Cuentas por pagar a proveedores (costos de terceros) */}
-      {(terceros||[]).length>0&&kMini('cxp','Cuentas por pagar',null,null,'wallet',{fg:C.soonText,bg:C.ambarBg})}
-      {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
-        if((terceros||[]).length===0) return null
-        const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
-        const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
-        const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-        const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
-        // Una cuenta por pagar solo es deuda real si su factura existe (no borrada) y no está anulada. Las pagadas se conservan en el histórico.
-        const billOk = bid => { if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }
-        const porPagarTot = (terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
-        const pendienteTot = (terceros||[]).filter(t=>t.estado==='pendiente'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
-        const pagadoYr = (terceros||[]).filter(t=>t.estado==='pagado'&&String(t.pagado_at||'').startsWith(String(yr))).reduce((a,t)=>a+(t.monto||0),0)
-        const nProvPorPagar = new Set((terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id)).map(t=>t.proveedor_id)).size
-        // Agrupar lo NO pagado por proveedor; por_pagar primero (excluye facturas borradas/anuladas)
-        const activos = (terceros||[]).filter(t=>t.estado!=='pagado'&&billOk(t.billing_id))
-        const byProv = {}
-        activos.forEach(t=>{ const k=t.proveedor_id||'__'; if(!byProv[k]) byProv[k]={prov:provById(t.proveedor_id),cuentas:[]}; byProv[k].cuentas.push(t) })
-        const grupos = Object.values(byProv).map(g=>({...g, total:g.cuentas.reduce((a,t)=>a+(t.monto||0),0), urgente:g.cuentas.some(t=>t.estado==='por_pagar')}))
-          .sort((a,b)=> (b.urgente-a.urgente) || (b.total-a.total))
-        const ordCuentas = cs => [...cs].sort((a,b)=> (a.estado==='por_pagar'?0:1)-(b.estado==='por_pagar'?0:1))
-        const estPill = est => est==='por_pagar'?{l:'Por pagar',c:C.normal,bg:C.greenBg}:{l:'Pendiente',c:C.soon,bg:'#FFF8E1'}
-        return (
-          <div style={{padding:'16px 20px 0'}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cuentas por pagar · proveedores</div>
-            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
-              <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(porPagarTot+pendienteTot)}</div>
-              <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3,marginBottom:11}}>Le debes a proveedores</div>
-                {(()=>{ const debe=(porPagarTot+pendienteTot)||1; return (<>
-                  <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',background:C.bgWarm,marginBottom:9}}>
-                    {porPagarTot>0&&<div style={{width:`${Math.round(porPagarTot/debe*100)}%`,background:C.normal}}/>}
-                    {pendienteTot>0&&<div style={{width:`${Math.round(pendienteTot/debe*100)}%`,background:C.soon}}/>}
-                  </div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:'5px 16px',fontSize:12,marginBottom:13}}>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.normal}}>●</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(porPagarTot)}</b> <span style={{color:C.greenText}}>Listo para pagar</span></span>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.soon}}>●</span><b style={{color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(pendienteTot)}</b> <span style={{color:C.soonText}}>En espera del cobro</span></span>
-                  </div>
-                </>)})()}
-                {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún proveedor.</div>}
-                {grupos.map((g,gi)=>{
-                  const ppCuentas=g.cuentas.filter(t=>t.estado==='por_pagar')
-                  const ppTot=ppCuentas.reduce((a,t)=>a+(t.monto||0),0)
-                  const pkey=g.prov?.id||('g'+gi); const provOpen=!!cpProvOpen[pkey]
-                  const provNom=titleCase(tituloProv(g.prov)); const provRS=g.prov?.razon_social?.trim()
-                  return (
-                  <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                    <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} title={provRS&&titleCase(provRS)!==provNom?titleCase(provRS):undefined} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.neutro||C.bgSoft,cursor:'pointer'}}>
-                      <span style={{width:24,height:24,borderRadius:6,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
-                      <span style={{flex:1,fontSize:13,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}</span>
-                      <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtShort(g.total)}</span>
-                      <span style={{fontSize:11,color:C.done,flexShrink:0}}>{provOpen?'▴':'▾'}</span>
-                    </div>
-                    {provOpen&&ppCuentas.length>=2&&(
-                      <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{margin:'8px 12px 0',height:30,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
-                    )}
-                    {provOpen&&ordCuentas(g.cuentas).map(t=>{
-                      const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
-                      const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
-                      const venta=(sales||[]).find(s=>String(s.id)===String(t.sale_id))
-                      const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}`
-                      const pp=t.estado==='por_pagar', pi=estPill(t.estado)
-                      const metaFac = fac ? (pp? `Factura N°${folioN(fac.invoice_no)||'—'} · cobrada ${fmtDMY(fac.paid_at)}` : `Factura N°${folioN(fac.invoice_no)||'—'}${fac.due?` · vence ${fmtDMY(fac.due)}`:''}`) : '—'
-                      const on = cpExp===t.id
-                      const explica = pp
-                        ? `La factura al cliente ${fac?.invoice_no?`Factura N°${folioN(fac.invoice_no)}`:'asociada'} ya fue cobrada${fac?.paid_at?` el ${fmtDMY(fac.paid_at)}`:''}, así que ya puedes pagarle al proveedor.`
-                        : `Aún no se cobra la factura al cliente${fac?.invoice_no?` (Factura N°${folioN(fac.invoice_no)})`:''}${fac?.due?`, que vence el ${fmtDMY(fac.due)}`:''}. Esta cuenta se paga recién cuando ese cobro entre.`
-                      return (
-                        <div key={t.id} style={{borderTop:`1px solid ${C.border}`}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px'}}>
-                            <div onClick={()=>setCpExp(on?null:t.id)} style={{minWidth:0,flex:1,cursor:'pointer'}}>
-                              <div style={{display:'flex',alignItems:'center',gap:5}}>
-                                <span style={{fontSize:10,color:C.done,transform:on?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>▸</span>
-                                <span style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ori}</span>
-                              </div>
-                              <div style={{fontSize:11,color:C.done,marginTop:1,paddingLeft:15}}>{metaFac}</div>
-                            </div>
-                            <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(t.monto)}</span>
-                            <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:pi.bg,color:pi.c,flexShrink:0,whiteSpace:'nowrap'}}>{pi.l}</span>
-                            {pp
-                              ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc(t.factura_numero||'');setPayDocF(t.factura_fecha||'')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
-                              : <span title='Esperando que el cliente pague su factura' style={{fontSize:11,color:C.done,flexShrink:0,whiteSpace:'nowrap'}}>Espera cobro</span>}
-                          </div>
-                          {on&&(
-                            <div style={{padding:'0 12px 12px 27px',display:'flex',flexDirection:'column',gap:7}}>
-                              <div style={{fontSize:12,color:C.text,lineHeight:1.4}}>{explica}</div>
-                              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                                {venta&&<span style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px'}}>Venta: {venta.title||'—'}</span>}
-                                {cli&&<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(cli.id)}} style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px',cursor:'pointer'}}>Cliente: {cli.name}</span>}
-                                {t.tipo_costo&&<span style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px'}}>{t.tipo_costo}</span>}
-                                <span style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px'}}>Monto a pagar: {fmt(t.monto)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )})}
-              </div>
-          </div>
-        )
-      })()}
 
       {payTercero&&(()=>{
         const prov=(proveedores||[]).find(p=>String(p.id)===String(payTercero.proveedor_id))
@@ -3443,6 +3343,110 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <button onClick={()=>setTab('expenses')} style={{width:'100%',padding:'10px',border:'none',borderTop:`1px solid ${C.border}`,background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Ir a liquidar</button>
               </div>
             )}
+          </div>
+        )
+      })()}
+
+      {/* Cuentas por pagar a proveedores (costos de terceros) */}
+      {(terceros||[]).length>0&&kMini('cxp','Cuentas por pagar',null,null,'wallet',{fg:C.soonText,bg:C.ambarBg})}
+      {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
+        if((terceros||[]).length===0) return null
+        const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
+        const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
+        const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+        const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
+        // Una cuenta por pagar solo es deuda real si su factura existe (no borrada) y no está anulada. Las pagadas se conservan en el histórico.
+        const billOk = bid => { if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }
+        const porPagarTot = (terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
+        const pendienteTot = (terceros||[]).filter(t=>t.estado==='pendiente'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
+        const pagadoYr = (terceros||[]).filter(t=>t.estado==='pagado'&&String(t.pagado_at||'').startsWith(String(yr))).reduce((a,t)=>a+(t.monto||0),0)
+        const nProvPorPagar = new Set((terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id)).map(t=>t.proveedor_id)).size
+        // Agrupar lo NO pagado por proveedor; por_pagar primero (excluye facturas borradas/anuladas)
+        const activos = (terceros||[]).filter(t=>t.estado!=='pagado'&&billOk(t.billing_id))
+        const byProv = {}
+        activos.forEach(t=>{ const k=t.proveedor_id||'__'; if(!byProv[k]) byProv[k]={prov:provById(t.proveedor_id),cuentas:[]}; byProv[k].cuentas.push(t) })
+        const grupos = Object.values(byProv).map(g=>({...g, total:g.cuentas.reduce((a,t)=>a+(t.monto||0),0), urgente:g.cuentas.some(t=>t.estado==='por_pagar')}))
+          .sort((a,b)=> (b.urgente-a.urgente) || (b.total-a.total))
+        const ordCuentas = cs => [...cs].sort((a,b)=> (a.estado==='por_pagar'?0:1)-(b.estado==='por_pagar'?0:1))
+        const estPill = est => est==='por_pagar'?{l:'Por pagar',c:C.normal,bg:C.greenBg}:{l:'Pendiente',c:C.soon,bg:'#FFF8E1'}
+        return (
+          <div style={{padding:'16px 20px 0'}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cuentas por pagar · proveedores</div>
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
+              {(porPagarTot+pendienteTot)===0 ? (
+                <div style={{display:'flex',alignItems:'center',gap:11}}>
+                  <span style={{width:34,height:34,borderRadius:'50%',background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg></span>
+                  <div><div style={{fontSize:15,fontWeight:600,color:C.greenText}}>Al día con proveedores</div><div style={{fontSize:11,color:C.done,marginTop:1}}>Sin deudas pendientes</div></div>
+                </div>
+              ) : (
+                <div style={{display:'flex',alignItems:'center',gap:11,marginBottom:13}}>
+                  <span style={{width:34,height:34,borderRadius:'50%',background:C.ambarBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2 2 22h20L12 2z'/><line x1='12' y1='9' x2='12' y2='14'/><line x1='12' y1='18' x2='12' y2='18'/></svg></span>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:19,fontWeight:700,color:C.soonText,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(porPagarTot+pendienteTot)} <span style={{fontSize:12,fontWeight:600}}>por pagar</span></div>
+                    <div style={{fontSize:11,color:C.done,marginTop:2}}>{porPagarTot>0&&<><b style={{color:C.greenText}}>{fmtShort(porPagarTot)}</b> listo para pagar</>}{porPagarTot>0&&pendienteTot>0&&' · '}{pendienteTot>0&&<><b style={{color:C.soonText}}>{fmtShort(pendienteTot)}</b> en espera del cobro</>}</div>
+                  </div>
+                </div>
+              )}
+                {grupos.map((g,gi)=>{
+                  const ppCuentas=g.cuentas.filter(t=>t.estado==='por_pagar')
+                  const ppTot=ppCuentas.reduce((a,t)=>a+(t.monto||0),0)
+                  const pkey=g.prov?.id||('g'+gi); const provOpen=!!cpProvOpen[pkey]
+                  const provNom=titleCase(tituloProv(g.prov)); const provRS=g.prov?.razon_social?.trim()
+                  return (
+                  <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+                    <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} title={provRS&&titleCase(provRS)!==provNom?titleCase(provRS):undefined} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.neutro||C.bgSoft,cursor:'pointer'}}>
+                      <span style={{width:24,height:24,borderRadius:6,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
+                      <span style={{flex:1,fontSize:13,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}</span>
+                      <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtShort(g.total)}</span>
+                      <span style={{fontSize:11,color:C.done,flexShrink:0}}>{provOpen?'▴':'▾'}</span>
+                    </div>
+                    {provOpen&&ppCuentas.length>=2&&(
+                      <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{margin:'8px 12px 0',height:30,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
+                    )}
+                    {provOpen&&ordCuentas(g.cuentas).map(t=>{
+                      const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
+                      const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
+                      const venta=(sales||[]).find(s=>String(s.id)===String(t.sale_id))
+                      const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}`
+                      const pp=t.estado==='por_pagar', pi=estPill(t.estado)
+                      const metaFac = fac ? (pp? `Factura N°${folioN(fac.invoice_no)||'—'} · cobrada ${fmtDMY(fac.paid_at)}` : `Factura N°${folioN(fac.invoice_no)||'—'}${fac.due?` · vence ${fmtDMY(fac.due)}`:''}`) : '—'
+                      const on = cpExp===t.id
+                      const explica = pp
+                        ? `La factura al cliente ${fac?.invoice_no?`Factura N°${folioN(fac.invoice_no)}`:'asociada'} ya fue cobrada${fac?.paid_at?` el ${fmtDMY(fac.paid_at)}`:''}, así que ya puedes pagarle al proveedor.`
+                        : `Aún no se cobra la factura al cliente${fac?.invoice_no?` (Factura N°${folioN(fac.invoice_no)})`:''}${fac?.due?`, que vence el ${fmtDMY(fac.due)}`:''}. Esta cuenta se paga recién cuando ese cobro entre.`
+                      return (
+                        <div key={t.id} style={{borderTop:`1px solid ${C.border}`}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px'}}>
+                            <div onClick={()=>setCpExp(on?null:t.id)} style={{minWidth:0,flex:1,cursor:'pointer'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                <span style={{fontSize:10,color:C.done,transform:on?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>▸</span>
+                                <span style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ori}</span>
+                              </div>
+                              <div style={{fontSize:11,color:C.done,marginTop:1,paddingLeft:15}}>{metaFac}</div>
+                            </div>
+                            <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(t.monto)}</span>
+                            <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:pi.bg,color:pi.c,flexShrink:0,whiteSpace:'nowrap'}}>{pi.l}</span>
+                            {pp
+                              ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc(t.factura_numero||'');setPayDocF(t.factura_fecha||'')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
+                              : <span title='Esperando que el cliente pague su factura' style={{fontSize:11,color:C.done,flexShrink:0,whiteSpace:'nowrap'}}>Espera cobro</span>}
+                          </div>
+                          {on&&(
+                            <div style={{padding:'0 12px 12px 27px',display:'flex',flexDirection:'column',gap:7}}>
+                              <div style={{fontSize:12,color:C.text,lineHeight:1.4}}>{explica}</div>
+                              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                                {venta&&<span style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px'}}>Venta: {venta.title||'—'}</span>}
+                                {cli&&<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(cli.id)}} style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px',cursor:'pointer'}}>Cliente: {cli.name}</span>}
+                                {t.tipo_costo&&<span style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px'}}>{t.tipo_costo}</span>}
+                                <span style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px'}}>Monto a pagar: {fmt(t.monto)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )})}
+              </div>
           </div>
         )
       })()}
