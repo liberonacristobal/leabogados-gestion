@@ -22493,15 +22493,27 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         // cliente y aparece el card de conciliación "El depósito | La factura · Conciliar ahora" (la fila queda abierta).
                         const nomDe=cid=>cmap[cid]||clients.find(c=>String(c.id)===String(cid))?.name||'cliente'
                         let sc=null
-                        if(sugerencias[m.id]&&cmap[sugerencias[m.id]]) sc={cid:sugerencias[m.id], nombre:cmap[sugerencias[m.id]], motivo:'Coincide por el nombre de la transferencia'}
-                        else { const cm=clientePorMonto(m); if(cm) sc={cid:cm.cid, nombre:nomDe(cm.cid), motivo:`Tiene la Factura N°${folioN(cm.factura.invoice_no)||'—'} que calza exacto en monto`}
-                          else { const fm=facturaPorMontoManual(m); if(fm.length===1){ const f=fm[0]; sc={cid:f.client_id, nombre:nomDe(f.client_id), motivo:`Factura N°${folioN(f.invoice_no)||'—'} del mismo monto exacto, emitida sin pago`} } } }
+                        if(sugerencias[m.id]&&cmap[sugerencias[m.id]]) sc={cid:sugerencias[m.id], nombre:cmap[sugerencias[m.id]], via:'nombre', f:null}
+                        else { const cm=clientePorMonto(m); if(cm) sc={cid:cm.cid, nombre:nomDe(cm.cid), via:'monto', f:cm.factura}
+                          else { const fm=facturaPorMontoManual(m); if(fm.length===1){ const f=fm[0]; sc={cid:f.client_id, nombre:nomDe(f.client_id), via:'monto', f} } } }
                         if(!sc) return null
+                        const fMon = sc.f ? montoFactura(sc.f) : 0
                         return (
                         <div onClick={e=>e.stopPropagation()} style={{marginTop:5}}>
-                        <div style={{border:'1px solid #CFE9DD',background:'#F1FAF6',borderRadius:10,padding:'10px 12px'}}>
-                          <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{sc.nombre}</div>
-                          <div style={{fontSize:10.5,color:C.greenText,marginTop:1}}>{sc.motivo}</div>
+                        <div style={{border:'1px solid #CFE9DD',background:'#F1FAF6',borderRadius:11,padding:'11px 12px'}}>
+                          <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}>
+                            <span style={{fontSize:13.5,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span>
+                            <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{sc.via==='nombre'?'Por el nombre':'Monto exacto'}</span>
+                          </div>
+                          {sc.via==='nombre'
+                            ? <div style={{fontSize:10.5,color:C.greenText,marginTop:2}}>Coincide por el nombre de la transferencia</div>
+                            : sc.f ? <div style={{marginTop:8,borderTop:'1px solid #DCEEE5',paddingTop:8}}>
+                                <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5}}><span style={{color:C.done}}>Este depósito</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtM(m.monto)}</b></div>
+                                <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,marginTop:3}}><span style={{color:C.done}}>Factura N°{folioN(sc.f.invoice_no)||'—'}{sc.f.issued_at?` · emitida ${fmtFechaDMY(sc.f.issued_at)}`:''}</span><b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtM(fMon)}</b></div>
+                                {sc.f.concept&&<div style={{fontSize:10,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.f.concept}</div>}
+                                {(sc.f.receptor_name||sc.f.receptor_rut)&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Emitida a {sc.f.receptor_name||'—'}{sc.f.receptor_rut?` · ${sc.f.receptor_rut}`:''}</div>}
+                                <div style={{fontSize:9.5,color:C.done,marginTop:5,lineHeight:1.4}}>La glosa no trae RUT — el calce es por <b>monto exacto</b>. Revisa que sea de este cliente antes de confirmar.</div>
+                              </div> : null}
                           <div style={{display:'flex',gap:8,alignItems:'center',marginTop:9}}>
                             <AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>identificar(m,cid)} label='Buscar otro' placeholder='Buscar cliente…'/>
                             <button onClick={()=>identificar(m,sc.cid,true)} style={{marginLeft:'auto',fontSize:11.5,fontWeight:600,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',whiteSpace:'nowrap'}}>Es {sc.nombre} ✓</button>
@@ -22514,7 +22526,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         {/* Cliente como chip gris-borde (igual al header): tocar = editar/cambiar cliente */}
                         {cliName
                           ? <span onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} title='Tocar para editar / cambiar cliente' style={{fontWeight:500,color:C.muted,border:`1px solid ${C.border}`,borderRadius:3,padding:'1px 8px',background:'#fff',cursor:'pointer'}}>{cliName}</span>
-                          : <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:10,color:C.soon,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Asignar cliente</button>}
+                          : <AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>identificar(m,cid)} label='Asignar cliente' placeholder='Buscar cliente o RUT…'/>}
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Asignar este cliente (aprende el RUT)' style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:20,background:C.greenBg,color:C.greenText,border:'none',cursor:'pointer'}}>{cmap[sugerencias[m.id]]} <span style={{fontWeight:600,opacity:.85}}>· por el nombre</span></button>}
                         {!cliName&&!sugerencias[m.id]&&(()=>{
                           const cm=clientePorMonto(m)
