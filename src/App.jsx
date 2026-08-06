@@ -2343,14 +2343,15 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   ) }
   // Tile compacto de KPI para el grid de 2 columnas del Inicio (icono + etiqueta + cifra + sub). Al tocar abre su detalle (kToggle) o navega (onClick). Reusa kOpen/kToggle.
   const kTile = (id,title,value,valCol,icon,tint,sub,onClick) => { const fg=tint?.fg||C.accent, bg=tint?.bg||C.azulBg, op=!onClick&&kOpen(id); return (
-    <div key={id} onClick={onClick||(()=>kToggle(id))} style={{background:'#F7F9FA',border:`1px solid ${op?'#CFE0E6':'#EAEEF0'}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',position:'relative',minWidth:0}}>
-      <span style={{position:'absolute',top:11,right:11,color:'#B9C6CD',fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>{onClick?'›':'▾'}</span>
-      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:7,paddingRight:12}}>
-        {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={14} c={fg}/></span>}
-        <span style={{fontSize:10,fontWeight:600,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</span>
+    <div key={id} onClick={onClick||(()=>kToggle(id))} style={{background:'#F7F9FA',border:`1px solid ${op?'#CFE0E6':'#EAEEF0'}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',position:'relative',minWidth:0,display:'flex',gap:9,alignItems:'flex-start'}}>
+      {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n={icon} s={14} c={fg}/></span>}
+      <div style={{minWidth:0,flex:1}}>
+        {/* Label, cifra y sub en una columna → todos alineados al mismo margen (a la derecha del icono), no bajo el icono. */}
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
+        <div style={{fontSize:(value&&String(value).length>6)?15:19,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
+        {sub&&<div style={{fontSize:9,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
       </div>
-      <div style={{fontSize:(value&&String(value).length>6)?15:19,fontWeight:800,color:valCol||fg,lineHeight:1,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums'}}>{value||'—'}</div>
-      {sub&&<div style={{fontSize:9,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
+      <span style={{position:'absolute',top:11,right:11,color:'#B9C6CD',fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>{onClick?'›':'▾'}</span>
     </div>
   ) }
   // Rótulo de nivel de la pirámide del Inicio (Dinero por resolver / Referencia)
@@ -3003,7 +3004,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       <div style={{padding:'6px 20px 0'}}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
           {kTile('cobranza','Cobranza',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'por cobrar')}
-          {kTile('proyeccion','Proyección de ingresos',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'al 31 dic')}
+          {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'ingresos · al 31 dic')}
         </div>
       </div>
       {kOpen('cobranza')&&(
@@ -3316,50 +3317,38 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {lvlLabel('Otros indicadores')}
 
-      {/* Acceso directo a Costos de oficina (admin) — nivel referencia (compact) */}
-      {onOpenOficina&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
-        const ym=new Date().toISOString().slice(0,7); const mesOfi=expenses.filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
-        return (
-        <div style={{padding:'6px 20px 0'}}>
-          <div onClick={onOpenOficina} style={{display:'flex',alignItems:'center',gap:9,background:'#EDF0F2',border:'1px solid #DDE2E6',borderRadius:10,padding:'9px 12px',cursor:'pointer'}}>
-            <span style={{width:24,height:24,borderRadius:7,background:'#D3DAE0',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={14} c={C.text}/></span>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Costos de oficina</div></div>
-            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmtShort(mesOfi)}</div><div style={{fontSize:8.5,color:C.muted}}>Este mes</div></div>
-            <span style={{fontSize:13,color:'#8FA0AA',flexShrink:0}}>›</span>
-          </div>
+      {/* Costos de oficina + Mis proyectos — tiles de media columna; Mis proyectos abre su lista debajo. */}
+      <div style={{padding:'6px 20px 0'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {onOpenOficina&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
+            const ym=new Date().toISOString().slice(0,7); const mesOfi=expenses.filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
+            return kTile('costos','Costos de oficina',fmtShort(mesOfi),C.text,'building',{fg:C.text,bg:'#E4E8EB'},'este mes',onOpenOficina) })()}
+          {(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
+            return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:'#E4E8EB'},'activos',()=>setMisProyOpen(o=>!o)) })()}
         </div>
-        )
-      })()}
-
-      {/* Mis proyectos — nivel referencia (compact), movido desde arriba */}
-      {(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
+      </div>
+      {misProyOpen&&(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
         const hace=iso=>{ if(!iso) return 'sin mover'; const d=Math.round((Date.now()-new Date(iso+'T00:00').getTime())/86400000); return d<=0?'hoy':d===1?'ayer':`hace ${d} d` }
         const sorted=[...mine].sort((a,b)=>{ const ka=a.ultima_actividad?new Date(a.ultima_actividad).getTime():0, kb=b.ultima_actividad?new Date(b.ultima_actividad).getTime():0; return ka-kb })
         const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
         return (
-        <div style={{padding:'6px 20px 0'}}>
-          <div onClick={()=>setMisProyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,background:'#EDF0F2',border:'1px solid #DDE2E6',borderRadius:misProyOpen?'10px 10px 0 0':10,padding:'9px 12px',cursor:'pointer'}}>
-            <span style={{width:24,height:24,borderRadius:7,background:'#D3DAE0',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.text} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z'/></svg></span>
-            <span style={{flex:1,fontSize:12,fontWeight:600,color:C.text}}>Mis proyectos</span>
-            <span style={{fontSize:11,fontWeight:700,color:C.text}}>{mine.length}</span>
-            <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#8FA0AA' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:misProyOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
-          </div>
-          {misProyOpen&&<div style={{border:'1px solid #DDE2E6',borderTop:'none',borderRadius:'0 0 10px 10px',overflow:'hidden'}}>
-            {sorted.slice(0,6).map(p=>(
-              <div key={p.id} onClick={()=>setTab('cartera')} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
+        <div style={{padding:'8px 20px 0'}}>
+          <div style={{border:'1px solid #DDE2E6',borderRadius:10,overflow:'hidden'}}>
+            {sorted.slice(0,6).map((p,i)=>(
+              <div key={p.id} onClick={()=>setTab('cartera')} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:i>0?'1px solid #DDE2E6':'none',background:'#fff',cursor:'pointer'}}>
                 <span style={{width:8,height:8,borderRadius:'50%',background:CART_DOT[p.estado||'verde'],flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.nota||p.nombre_proyecto||''}</div></div>
                 <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{hace(p.ultima_actividad)}</span>
               </div>
             ))}
             <div onClick={()=>setTab('cartera')} style={{padding:'9px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',background:'#fff'}}>Ver todos →</div>
-          </div>}
+          </div>
         </div>
         )
       })()}
 
       {/* Equipo (admin) — trazabilidad del equipo limited: caja chica + actividad reciente (Eje 4, 2026-06-28) */}
-      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kMini('equipo','Equipo · trazabilidad',null,null,'users',{fg:C.accent,bg:C.azulBg},true)}
+      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&<div style={{padding:'8px 20px 0'}}>{kTile('equipo','Equipo · trazabilidad',String([...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!['Cristóbal','Erasmo'].includes(u)).length),C.accent,'users',{fg:C.accent,bg:C.azulBg},'caja chica del equipo')}</div>}
       {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kOpen('equipo')&&(()=>{
         const ADMIN_NAMES=['Cristóbal','Erasmo']
         const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!ADMIN_NAMES.includes(u)).sort((a,b)=>a.localeCompare(b,'es'))
