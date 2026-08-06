@@ -33,6 +33,8 @@ const C = {
   azulInfo:'#185FA5', azulBg:'#E6F1FB', tealBg:'#DFF1F2', tealText:'#155E6B', ambarBg:'#FAEEDA', coralText:'#993C1D', grisText:'#5F5E5A',
   // grises de fondo (antes hex sueltos repetidos): bgSoft = filas/hover/chips suaves; bgPanel = paneles internos; bgWarm = chips neutros cálidos. Migrar los literales a estos al tocar cada vista.
   bgSoft:'#F5F7F9', bgPanel:'#FAFBFC', bgWarm:'#F1EFE8',
+  // tiles del grid del Inicio (kTile): fondo, borde y borde-abierto
+  tileBg:'#F7F9FA', tileLine:'#EAEEF0', tileLineOn:'#CFE0E6',
   // sub-paleta SOBRE NAVY (heroes con fondo accent #003C50, p.ej. Saldo del cliente / Vendido): label azul claro, botón navy profundo, divisor, verde/rojo claros legibles sobre navy
   onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
 }
@@ -2331,19 +2333,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
   const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
   const kToggle = id => setKpiOpen(p=>{ const a=Array.isArray(p)?p:[]; return a.includes(id)?a.filter(x=>x!==id):[...a,id] })
-  const kMini = (id,title,value,valCol,icon,tint,compact) => { const fg=tint?.fg||C.accent, bg=tint?.bg||C.azulBg; return (
-    <div style={{padding:compact?'6px 20px 0':'14px 20px 0'}}>
-      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',gap:compact?9:11,background:compact?'#EDF0F2':'#fff',border:`1px solid ${compact?'#DDE2E6':C.border}`,...(compact?{}:{borderLeft:`3px solid ${fg}`}),borderRadius:compact?10:12,padding:compact?'9px 12px':'12px 14px',cursor:'pointer'}}>
-        {icon&&<span style={{width:compact?24:30,height:compact?24:30,borderRadius:compact?7:8,background:compact?'#D3DAE0':bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={compact?14:17} c={compact?C.text:fg}/></span>}
-        <span style={{flex:1,fontSize:compact?11:11,fontWeight:600,color:compact?C.text:C.muted,textTransform:compact?'none':'uppercase',letterSpacing:compact?0:'.04em'}}>{title}</span>
-        {value&&!kOpen(id)&&<b style={{fontSize:compact?12:14,fontWeight:700,color:compact?C.text:(valCol||fg),fontVariantNumeric:'tabular-nums',flexShrink:0}}>{value}</b>}
-        <svg width={compact?13:14} height={compact?13:14} viewBox='0 0 24 24' fill='none' stroke={compact?'#8FA0AA':'#99ABB4'} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
-      </div>
-    </div>
-  ) }
   // Tile compacto de KPI para el grid de 2 columnas del Inicio (icono + etiqueta + cifra + sub). Al tocar abre su detalle (kToggle) o navega (onClick). Reusa kOpen/kToggle.
   const kTile = (id,title,value,valCol,icon,tint,sub,onClick) => { const fg=tint?.fg||C.accent, bg=tint?.bg||C.azulBg, op=!onClick&&kOpen(id); return (
-    <div key={id} onClick={onClick||(()=>kToggle(id))} style={{background:'#F7F9FA',border:`1px solid ${op?'#CFE0E6':'#EAEEF0'}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',position:'relative',minWidth:0,display:'flex',gap:9,alignItems:'flex-start'}}>
+    <div key={id} onClick={onClick||(()=>kToggle(id))} style={{background:C.tileBg,border:`1px solid ${op?C.tileLineOn:C.tileLine}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',position:'relative',minWidth:0,display:'flex',gap:9,alignItems:'flex-start'}}>
       {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n={icon} s={14} c={fg}/></span>}
       <div style={{minWidth:0,flex:1}}>
         {/* Label, cifra y sub en una columna → todos alineados al mismo margen (a la derecha del icono), no bajo el icono. */}
@@ -2351,7 +2343,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{fontSize:(value&&String(value).length>6)?15:19,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
         {sub&&<div style={{fontSize:9,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
       </div>
-      <span style={{position:'absolute',top:11,right:11,color:'#B9C6CD',fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>{onClick?'›':'▾'}</span>
+      <span style={{position:'absolute',top:11,right:11,color:C.done,fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>{onClick?'›':'▾'}</span>
     </div>
   ) }
   // Rótulo de nivel de la pirámide del Inicio (Dinero por resolver / Referencia)
@@ -3322,9 +3314,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
           {onOpenOficina&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
             const ym=new Date().toISOString().slice(0,7); const mesOfi=expenses.filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
-            return kTile('costos','Costos de oficina',fmtShort(mesOfi),C.text,'building',{fg:C.text,bg:'#E4E8EB'},'este mes',onOpenOficina) })()}
+            return kTile('costos','Costos de oficina',fmtShort(mesOfi),C.text,'building',{fg:C.text,bg:C.border},'este mes',onOpenOficina) })()}
           {(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
-            return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:'#E4E8EB'},'activos',()=>setMisProyOpen(o=>!o)) })()}
+            return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>setMisProyOpen(o=>!o)) })()}
         </div>
       </div>
       {misProyOpen&&(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
