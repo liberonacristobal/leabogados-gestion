@@ -2486,7 +2486,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       const S=2, W=440, PAD=20, IW=W-PAD*2
       const iv=ingresosPorAnioVenta
       const anios=[...iv.allYears.slice(0,4).map(yr=>({lbl:'De ventas '+yr,val:iv.byYear[yr],col:yr===selYear?'#003E52':'#537281'})), ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:'#C77F18'}]:[])]
-      const H = 588 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer). Base subió al agregar Cobranza antigüedad + Proyección de ingresos, y al agrandar el header (76)
+      const H = 594 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer). Base subió al agregar Cobranza antigüedad + Proyección de ingresos, y al agrandar el header (82)
       const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
       const g=cv.getContext('2d'); g.scale(S,S)
       const F=(w,s)=>`${w} ${s}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
@@ -2508,10 +2508,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       // fondo
       g.fillStyle='#fff'; g.fillRect(0,0,W,H)
       // header navy (diseño 4: logo izq · Metas del año / 2026 der)
-      const HH=76; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH)
-      if(logo.naturalWidth){ const lgH=48, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,(HH-lgH)/2+8,lgW,lgH) }   // logo +40% (34→48); header más alto (76) y logo bajado (~12%) para centrarlo al alto del recuadro
-      g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,38)
-      g.fillStyle='#fff'; g.font=F(700,23); g.fillText(String(selYear),W-PAD,62); g.textAlign='left'
+      const HH=82; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH); const lgY=(HH-48)/2+11   // logo bajado (~10% más); header 82
+      if(logo.naturalWidth){ const lgH=48, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,lgY,lgW,lgH) }
+      // "METAS DEL AÑO / 2026" arranca a la MISMA altura que el tope del logo (lgY)
+      g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,lgY+9)
+      g.fillStyle='#fff'; g.font=F(700,23); g.fillText(String(selYear),W-PAD,lgY+34); g.textAlign='left'
       let y=HH+26
       // VENTAS
       g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText(`VENTAS · ${selYear}`,PAD,y)
@@ -2525,7 +2526,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       // CONVERSIÓN
       g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('CONVERSIÓN VENTAS → PAGOS',PAD,y)
       y+=24; g.fillStyle='#0F6E56'; g.font=F(700,22); g.fillText(`${convPura}%`,PAD,y)
-      g.fillStyle='#537281'; g.font=F(500,9.5); g.fillText(`de lo vendido este año ya se pagó · global ${convGlob}%`,PAD+52,y-3)
+      g.fillStyle='#537281'; g.font=F(500,10); g.fillText(`de lo vendido este año · global ${convGlob}%`,PAD+52,y-3)
       y+=18; hr(y); y+=20
       // INGRESADO A LA CAJA (dos tiles)
       g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText('INGRESADO A LA CAJA',PAD,y)
@@ -22359,12 +22360,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     <button onClick={()=>setLoteConfirm(exactos)} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',opacity:loteBusy?.6:1}}>{loteBusy?`Conciliando ${loteProg}/${exactos.length}…`:`Conciliar los ${exactos.length}`}</button>
                   </div>
                   {exactos.slice(0,25).map(({m,f})=>(
-                    <div key={m.id} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b><span style={{color:C.done}}> · {fmtFechaDMY(m.fecha)}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</span></div>
-                        <div style={{color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:10,marginTop:1}}>→ Factura N°{folioN(f.invoice_no)||'—'}{f.issued_at?` · emitida ${fmtFechaDMY(f.issued_at)}`:''}{f.concept?` · ${f.concept}`:''}</div>
+                    <div key={m.id} style={{border:`0.5px solid ${C.border}`,borderRadius:9,overflow:'hidden',marginTop:8}}>
+                      <div style={{display:'flex'}}>
+                        <div style={{flex:1,padding:'8px 10px',minWidth:0}}><div style={{fontSize:8.5,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>El depósito</div><div style={{fontSize:13,fontWeight:700,color:C.greenText,marginTop:1,fontVariantNumeric:'tabular-nums'}}>+{fmtM(m.monto)}</div><div style={{fontSize:9.5,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtFechaDMY(m.fecha)} · {cmap[m.cliente_id]||m.nombre_contraparte||'—'}</div></div>
+                        <div style={{flex:1,padding:'8px 10px',borderLeft:`1px solid ${C.bgSoft}`,minWidth:0}}><div style={{fontSize:8.5,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>La factura</div><div style={{fontSize:13,fontWeight:700,color:C.accent,marginTop:1}}>N° {folioN(f.invoice_no)||'—'}</div><div style={{fontSize:9.5,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtM(saldoFactura(f))}{f.concept?` · ${f.concept}`:''}</div></div>
                       </div>
-                      <span style={{color:C.greenText,fontWeight:600,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(m.monto)}</span>
+                      <div style={{display:'flex',gap:12,padding:'5px 10px',background:C.bgSoft}}><span style={{fontSize:10,color:C.greenText,fontWeight:600}}>✓ Monto exacto</span>{f.issued_at&&<span style={{fontSize:9.5,color:C.done}}>Emitida {fmtFechaDMY(f.issued_at)}</span>}</div>
                     </div>
                   ))}
                   {exactos.length>25&&<div style={{fontSize:10,color:C.muted,marginTop:4}}>y {exactos.length-25} más…</div>}
