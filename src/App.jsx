@@ -8188,17 +8188,24 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               return (
               <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:8}}>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  <div onClick={()=>setCierreOpen(true)} style={{background:C.azulBg,border:'0.5px solid #D3E3F3',borderRadius:11,padding:'11px 12px',cursor:'pointer',position:'relative',display:'flex',flexDirection:'column'}}>
-                    <div style={kick}>{cap(MN[_pm.getMonth()])}</div>
-                    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span style={{width:24,height:24,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span><span style={{fontSize:10.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Cierre de mes</span></div>
-                    {emi.length>0?<><div style={{fontSize:20,fontWeight:800,color:C.accent,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(tCob)}</div><div style={{fontSize:9.5,color:'#3E6472',marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>de {fmtShort(tEmi)} cobrado · {tasa}%</div></>:<div style={{fontSize:11,color:'#3E6472',marginTop:2}}>Quién pagó y quién no</div>}
+                  {/* kTile del Inicio: icono a la izq (bajado a la 2ª línea = label) + columna mes·label·cifra·sub alineada. */}
+                  <div onClick={()=>setCierreOpen(true)} style={{background:C.azulBg,border:'0.5px solid #D3E3F3',borderRadius:11,padding:'11px 12px',cursor:'pointer',position:'relative',display:'flex',gap:9,alignItems:'flex-start'}}>
+                    <span style={{width:26,height:26,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:14}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={kick}>{cap(MN[_pm.getMonth()])}</div>
+                      <div style={{fontSize:10.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:14}}>Cierre de mes</div>
+                      {emi.length>0?<><div style={{fontSize:20,fontWeight:800,color:C.accent,lineHeight:1,fontVariantNumeric:'tabular-nums',marginTop:5}}>{fmtShort(tCob)}</div><div style={{fontSize:9.5,color:'#3E6472',marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>de {fmtShort(tEmi)} cobrado · {tasa}%</div></>:<div style={{fontSize:11,color:'#3E6472',marginTop:5}}>Quién pagó y quién no</div>}
+                    </div>
                     <span style={{position:'absolute',top:10,right:11,color:'#7FA6BE',fontSize:13}}>›</span>
                   </div>
-                  <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:C.greenBg,border:'0.5px solid #C4E7D9',borderRadius:11,padding:'11px 12px',cursor:'pointer',position:'relative',display:'flex',flexDirection:'column'}}>
-                    <div style={kick}>{cap(MN[_now.getMonth()])}</div>
-                    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span style={{width:24,height:24,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg></span><span style={{fontSize:10.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Facturas por emitir</span></div>
-                    <div style={{fontSize:20,fontWeight:800,color:C.greenText,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(pemTot)}</div>
-                    <div style={{fontSize:9.5,color:'#3E7360',marginTop:4}}>{pemN} factura{pemN!==1?'s':''}</div>
+                  <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:C.greenBg,border:'0.5px solid #C4E7D9',borderRadius:11,padding:'11px 12px',cursor:'pointer',position:'relative',display:'flex',gap:9,alignItems:'flex-start'}}>
+                    <span style={{width:26,height:26,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:14}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg></span>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={kick}>{cap(MN[_now.getMonth()])}</div>
+                      <div style={{fontSize:10.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:14}}>Facturas por emitir</div>
+                      <div style={{fontSize:20,fontWeight:800,color:C.greenText,lineHeight:1,fontVariantNumeric:'tabular-nums',marginTop:5}}>{fmtShort(pemTot)}</div>
+                      <div style={{fontSize:9.5,color:'#3E7360',marginTop:4}}>{pemN} factura{pemN!==1?'s':''}</div>
+                    </div>
                     <span style={{position:'absolute',top:10,right:11,color:'#7FC4A9',fontSize:13}}>›</span>
                   </div>
                 </div>
