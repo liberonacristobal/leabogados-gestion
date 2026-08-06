@@ -5965,7 +5965,9 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const folioDup=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||!b.invoice_no) return; const f=folioN(b.invoice_no); if(!/^\d+$/.test(f)) return; (m[f]=m[f]||[]).push(b) }); return Object.entries(m).filter(([f,a])=>a.length>1).map(([f,a])=>({folio:f, rows:a})) },[billing])
   const montoNeDte=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.dte_xml&&b.amount!=null).map(b=>({b, dte:dteMontoTotal(b.dte_xml)})).filter(x=>x.dte!=null&&Math.round(x.dte)!==Math.round(x.b.amount)),[billing])
   const ventasDup=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s.deleted_at||!['Activo','Terminado'].includes(s.status)) return; const k=`${s.client_id}|${s.amount_uf||s.amount_clp||0}|${s.year}|${s.month}`; (m[k]=m[k]||[]).push(s) }); return Object.values(m).filter(a=>a.length>1) },[sales])
-  const total=rutMulti.length+folioDup.length+montoNeDte.length+ventasDup.length
+  // Facturas huérfanas: emitidas (con folio, no anuladas/borradas, no reembolso/NC) SIN cliente asignado → hay que vincularlas para que cuenten en el por-cobrar del cliente.
+  const huerfanas=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&String(b.invoice_no||'').trim()&&!b.client_id&&!['reembolso','nota_credito'].includes(b.billing_type||'')),[billing])
+  const total=rutMulti.length+folioDup.length+montoNeDte.length+ventasDup.length+huerfanas.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{fontSize:26,color:C.greenText}}>✓</div><div style={{fontSize:13,fontWeight:600,color:C.greenText,marginTop:6}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -5991,6 +5993,10 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(arr[0].client_id)} style={{fontSize:12.5,fontWeight:600,color:C.accent,cursor:'pointer'}}>{cName(arr[0].client_id)}</div>
         {arr.map(s=><div key={s.id} style={{fontSize:10.5,color:C.muted,marginTop:2,paddingLeft:10}}>{s.title||'—'} · {s.amount_uf?`${s.amount_uf} UF`:fmt(s.amount_clp||0)} · {s.year}</div>)}
       </div>)}
+    </div>}
+    {huerfanas.length>0&&<div style={{marginTop:14}}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
+      {huerfanas.slice(0,30).map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:10.5,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(b.invoice_no)} · {b.receptor_name||b.concept||'—'} · {fmt(b.amount||0)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
+      {huerfanas.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {huerfanas.length-30} más…</div>}
     </div>}
   </div>
 }
@@ -21136,10 +21142,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
           const sinId=abo.filter(r=>!r.es_interno && !r.cliente_id).length
           const fechas=rows.map(r=>r.fecha).filter(Boolean).sort(); const minF=fechas[0]||null, maxF=fechas[fechas.length-1]||null
+          // Cruce fecha↔glosa (tu regla: al cargar, siempre cruzar). La glosa suele traer la fecha real ("...el DD/MM/YYYY"); si la fecha del
+          // movimiento quedó MUY lejos (≥30 días) de esa, es data sospechosa (bug de parseo / columna mal leída) → se avisa ANTES de confirmar.
+          const _fechaGlosa = desc => { const m=String(desc||'').match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/); return m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:null }
+          const sospechosos = nuevosRows.map(r=>{ const fg=_fechaGlosa(r.descripcion); if(!fg||!r.fecha) return null; const d=Math.abs((new Date(r.fecha+'T12:00')-new Date(fg+'T12:00'))/86400000); return d>=30?{fecha:r.fecha,fechaGlosa:fg,dias:Math.round(d),monto:r.monto,desc:(r.descripcion||'').slice(0,64)}:null }).filter(Boolean)
           reps.push({ file:file.name, cuenta:res.cuenta, rol:res.rol_cuenta, ok:!res.error, error:res.error||null,
             nAbonos:abo.length, sumAbonos:sumA, nCargos:car.length, sumCargos:sumC,
             internos:rows.filter(r=>r.es_interno).length, sinId, total:rows.length, nuevos:nuevosRows.length, dup:rows.length-nuevosRows.length,
-            minF, maxF, nuevosRows,
+            minF, maxF, nuevosRows, sospechosos,
             verA: res.totalAbonos!=null?{banco:res.totalAbonos,parsed:sumA,diff:sumA-res.totalAbonos}:null,
             verC: res.totalCargos!=null?{banco:res.totalCargos,parsed:sumC,diff:sumC-res.totalCargos}:null })
         }catch(e){ reps.push({ file:file.name, ok:false, error:e.message, nuevosRows:[] }) }
@@ -22160,6 +22170,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           <span style={{whiteSpace:'nowrap',fontWeight:600,color:r.tipo==='abono'?C.greenText:C.overdue}}>{r.tipo==='abono'?'+':'−'}{fmtM(r.monto)}</span>
                         </div>
                       ))}
+                    </div>}
+                    {(e.sospechosos||[]).length>0&&<div style={{marginTop:8,background:C.ambarBg,borderRadius:9,padding:'8px 10px'}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:C.soonText,marginBottom:3,display:'flex',alignItems:'center',gap:5}}><SIcon n='alert' s={13} c={C.soonText}/>{e.sospechosos.length} con fecha distinta a su glosa — revisa antes de cargar</div>
+                      {e.sospechosos.slice(0,3).map((sp,si)=>(
+                        <div key={si} style={{fontSize:10,color:C.soonText,padding:'2px 0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dmy(sp.fecha)} <span style={{opacity:.7}}>vs glosa</span> {dmy(sp.fechaGlosa)} <b>({sp.dias} días)</b> · {fmtM(sp.monto)}</div>
+                      ))}
+                      {e.sospechosos.length>3&&<div style={{fontSize:9.5,color:C.soonText,opacity:.85,marginTop:2}}>y {e.sospechosos.length-3} más…</div>}
                     </div>}
                     {e.error&&<div style={{fontSize:10,color:C.overdueText,marginTop:5}}>{e.error}</div>}
                   </>}
