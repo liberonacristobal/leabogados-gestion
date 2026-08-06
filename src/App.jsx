@@ -2486,7 +2486,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       const S=2, W=440, PAD=20, IW=W-PAD*2
       const iv=ingresosPorAnioVenta
       const anios=[...iv.allYears.slice(0,4).map(yr=>({lbl:'De ventas '+yr,val:iv.byYear[yr],col:yr===selYear?'#003E52':'#537281'})), ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:'#C77F18'}]:[])]
-      const H = 594 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer). Base subió al agregar Cobranza antigüedad + Proyección de ingresos, y al agrandar el header (82)
+      const H = 584 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer). Base = header(72) + secciones (Ventas·Conversión·Ingresado·por año·Cobranza+Proyección+aging) + footer
       const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
       const g=cv.getContext('2d'); g.scale(S,S)
       const F=(w,s)=>`${w} ${s}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
@@ -2508,11 +2508,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       // fondo
       g.fillStyle='#fff'; g.fillRect(0,0,W,H)
       // header navy (diseño 4: logo izq · Metas del año / 2026 der)
-      const HH=82; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH); const lgY=(HH-48)/2+11   // logo bajado (~10% más); header 82
-      if(logo.naturalWidth){ const lgH=48, lgW=lgH*(logo.naturalWidth/logo.naturalHeight); g.drawImage(logo,PAD,lgY,lgW,lgH) }
+      const HH=72; g.fillStyle='#003E52'; g.fillRect(0,0,W,HH)
+      // El asset del logo trae margen transparente (10.4% izq/der, 49.6% abajo → el contenido vive en la mitad superior). Recortamos SOLO las letras (bbox 104,0,792,119) con drawImage de 9 args → alinea a PAD (como los textos de abajo) y se centra DE VERDAD al alto.
+      const LGC={sx:104,sy:0,sw:792,sh:119}, lgH=28, lgY=(HH-lgH)/2
+      if(logo.naturalWidth){ const lgW=lgH*(LGC.sw/LGC.sh); g.drawImage(logo, LGC.sx,LGC.sy,LGC.sw,LGC.sh, PAD, lgY, lgW, lgH) }
       // "METAS DEL AÑO / 2026" arranca a la MISMA altura que el tope del logo (lgY)
-      g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,lgY+9)
-      g.fillStyle='#fff'; g.font=F(700,23); g.fillText(String(selYear),W-PAD,lgY+34); g.textAlign='left'
+      g.textAlign='right'; g.fillStyle='#8FCEE0'; g.font=F(700,8.5); g.fillText('METAS DEL AÑO',W-PAD,lgY+8)
+      g.fillStyle='#fff'; g.font=F(700,22); g.fillText(String(selYear),W-PAD,lgY+30); g.textAlign='left'
       let y=HH+26
       // VENTAS
       g.fillStyle='#99ABB4'; g.font=F(700,9); g.fillText(`VENTAS · ${selYear}`,PAD,y)
