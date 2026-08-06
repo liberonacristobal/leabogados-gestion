@@ -2479,7 +2479,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   // Descargar la foto de "Metas del año" como PNG (imagen para compartir/guardar). Dibuja un canvas propio (no screenshot del DOM) → salida limpia y branded. En iPhone usa la hoja de compartir.
   const descargarMetas = async () => {
     try{
-      const S=2, W=440, H=548, PAD=20, IW=W-PAD*2
+      const S=2, W=440, PAD=20, IW=W-PAD*2
+      const iv=ingresosPorAnioVenta
+      const anios=[...iv.allYears.slice(0,4).map(yr=>({lbl:'De ventas '+yr,val:iv.byYear[yr],col:yr===selYear?'#003E52':'#537281'})), ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:'#C77F18'}]:[])]
+      const H = 526 + anios.length*22   // altura dinámica: crece con las filas por año (evita que se corte/pise el footer)
       const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
       const g=cv.getContext('2d'); g.scale(S,S)
       const F=(w,s)=>`${w} ${s}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
@@ -2487,7 +2490,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       const hr=y=>{ g.strokeStyle='#EDEFF1'; g.lineWidth=1; g.beginPath(); g.moveTo(PAD,y); g.lineTo(W-PAD,y); g.stroke() }
       const ufS=v=>'UF '+Math.round(v||0).toLocaleString('es-CL')
       const clpS=v=>fmtShort(v||0)
-      const iv=ingresosPorAnioVenta
       const pct=metaUF>0?Math.min(100,Math.round(m.brutoUF/metaUF*100)):0
       const faltanUF=Math.max(0,metaUF-m.brutoUF), faltanCLP=Math.max(0,m.meta-m.bruto)
       const convPura=m.bruto>0?Math.round(iv.delAnio/m.bruto*100):0, convGlob=m.bruto>0?Math.round(iv.total/m.bruto*100):0
@@ -2531,8 +2533,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       g.fillStyle='#0F6E56'; g.font=F(700,8); g.fillText('META COBRANZA',PAD+tw+22,y+20); g.font=F(700,19); g.fillText(metaCobranza>0?ufS(metaCobranza/ufRef):'—',PAD+tw+22,y+42)
       g.fillStyle='#2E7D5B'; g.font=F(600,10); g.fillText(metaCobranza>0?`${clpS(metaCobranza)} · ${metaPct}%`:'sin meta',PAD+tw+22,y+56)
       y+=th+16
-      // por año de venta
-      const anios=[...iv.allYears.slice(0,3).map(yr=>({lbl:'De ventas '+yr,val:iv.byYear[yr],col:yr===selYear?'#003E52':'#537281'})), ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:'#C77F18'}]:[])]
+      // por año de venta (anios hoisted arriba para la altura dinámica)
       anios.forEach((a,i)=>{ if(i>0){ g.strokeStyle='#F4F6F7'; g.lineWidth=1; g.beginPath(); g.moveTo(PAD,y-11); g.lineTo(W-PAD,y-11); g.stroke() }
         g.fillStyle=a.col; g.beginPath(); g.arc(PAD+4,y-4,4,0,7); g.fill()
         g.fillStyle='#3D3D3D'; g.font=F(500,12); g.fillText(a.lbl,PAD+16,y)
