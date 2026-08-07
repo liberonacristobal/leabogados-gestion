@@ -4108,7 +4108,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const flatView = buscando || !(fStatus===''||fStatus==='Activo')
   const saleRow = s => {
     const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), rec=esRecurrente(s)
-    const client=clients.find(c=>c.id===s.client_id)
+    const client=clients.find(c=>String(c.id)===String(s.client_id))
     const isPropuesta = s.status==='Propuesta'
     const diasPendiente = s.created_at ? Math.floor((Date.now()-new Date(s.created_at))/86400000) : 0
     const tardio = isPropuesta && diasPendiente>14
@@ -4123,7 +4123,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
           <div style={{minWidth:0,flex:1}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
             <div onClick={client&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} title={client&&onOpenClientFicha?'Ver ficha del cliente':undefined} style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:client&&onOpenClientFicha?'pointer':'inherit'}}>{client?.name||'—'}</div>
-            {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return (rs.name!==client?.name||rs.rut)?<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</div>:null })()}
+            {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return (rs.name!==client?.name||rs.rut)?<div onClick={client&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:client&&onOpenClientFicha?'pointer':'inherit'}}>{rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</div>:null })()}
           </div>
           <div style={{textAlign:'right',flexShrink:0}}>
             {ufA>0&&<div style={{fontSize:13,fontWeight:600,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /año</span>:null}</div>}
@@ -4183,7 +4183,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
               </span>
             </div>
             <div style={{fontSize:23,fontWeight:800,color:C.accent,lineHeight:1.05,fontVariantNumeric:'tabular-nums',marginTop:2}}>{fmtMonto(vendUF,vendCLP)}</div>
-            <div style={{fontSize:9.5,color:C.muted,marginTop:3}}>{actYr.length} activas · {termYr.length} terminadas</div>
+            <div style={{fontSize:9.5,color:C.muted,marginTop:3}}><span onClick={e=>{e.stopPropagation();setFStatus(fStatus==='Activo'?'':'Activo')}} style={{cursor:'pointer',fontWeight:fStatus==='Activo'?700:400,color:fStatus==='Activo'?C.accent:C.muted}}>{actYr.length} activas</span> · <span onClick={e=>{e.stopPropagation();setFStatus(fStatus==='Terminado'?'':'Terminado')}} style={{cursor:'pointer',fontWeight:fStatus==='Terminado'?700:400,color:fStatus==='Terminado'?C.accent:C.muted}}>{termYr.length} terminadas</span></div>
           </div>
           {(()=>{ const vacio=propuestasFiltradas.length===0; return (
           <div onClick={vacio?onAddPropuesta:()=>setFStatus(fStatus==='Propuesta'?'':'Propuesta')} title={vacio?'Crear la primera propuesta':'Ver propuestas'} style={{flex:1,minWidth:0,background:fStatus==='Propuesta'?C.azulBg:'#fff',border:`1px solid ${fStatus==='Propuesta'?C.accent:C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
@@ -14324,7 +14324,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     {Hdr({icon:'clock',title:'Anticipos',k:'adelantos',summary:anticipos.length?`${anticipos.length}`:'sin anticipos'})}
     {sec.adelantos&&<div style={{padding:'2px 13px 12px'}}>
       {(anticipos||[]).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin adelantos.</div>}
-      {(anticipos||[]).slice().sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(a=>(<div key={a.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1'}}><span>{(a.nota||'Anticipo').slice(0,30)} <span style={{color:C.done}}>· {fmtFechaDMY(a.fecha)}</span></span><span style={{textAlign:'right'}}><b style={{color:C.greenText}}>{fmt(a.monto)}</b> <span style={{fontSize:9,color:a.estado==='disponible'?C.greenText:C.done}}>{a.estado}</span></span></div>))}
+      {(anticipos||[]).slice().sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(a=>{ const bill=(clientBilling||[]).find(b=>String(b.id)===String(a.billing_id)); const clickable=a.estado!=='disponible'&&bill&&onEditBilling; return (<div key={a.id} onClick={clickable?()=>onEditBilling(bill):undefined} title={clickable?`Ver factura N°${folioN(bill.invoice_no)||'—'}`:undefined} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1',cursor:clickable?'pointer':'default'}}><span>{(a.nota||'Anticipo').slice(0,30)} <span style={{color:C.done}}>· {fmtFechaDMY(a.fecha)}</span></span><span style={{textAlign:'right'}}><b style={{color:C.greenText}}>{fmt(a.monto)}</b> <span style={{fontSize:9,color:a.estado==='disponible'?C.greenText:C.done}}>{a.estado}</span>{clickable?<span style={{color:C.done,marginLeft:4}}>›</span>:''}</span></div>) })}
     </div>}
     </div>
   </div>)
@@ -15455,7 +15455,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               <div onClick={()=>onEdit(client)} title='Tocar para editar' style={{fontSize:18,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>{client.name}</div>
               {(()=>{ const pc=responsable?personChip(responsable):null; return <><span style={{color:C.done,fontWeight:400,fontSize:16,flexShrink:0}}>|</span><button onClick={()=>setRespPick(v=>!v)} style={{flexShrink:0,fontSize:10,background:pc?pc.bg:C.bgWarm,color:pc?pc.color:C.grisText,borderRadius:10,padding:'1px 8px',fontWeight:600,border:'none',cursor:'pointer'}}>{responsable?`${responsable} ▾`:'Asignar ▾'}</button></> })()}
             </div>
-            {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name||rs.multi)?<div style={{fontSize:11,color:C.muted,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
+            {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name||rs.multi)?<div onClick={()=>setFtab('contacto')} title='Ver razones sociales' style={{fontSize:11,color:C.muted,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
             <div style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:6}}>
               {client.type}
               {client.is_occasional&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:C.bgWarm,color:C.grisText,fontWeight:600}}>Ocasional</span>}
@@ -15482,7 +15482,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E6EEF1',C.accent,'financiero'],
             ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?C.azulBg:C.bgSoft,totalPorCobrar>0?C.accent:C.muted,'financiero'],   // canon: por cobrar = navy (rojo es solo para vencido)
             ['Cobrado',fmt(cobrado),'#E1F5EE',C.normal,'financiero'],
-            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?C.overdueBg:C.greenBg,saldoFondos<0?C.overdue:C.normal,null],
+            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?C.overdueBg:C.greenBg,saldoFondos<0?C.overdue:C.normal,'documentos'],
           ].map(([l,v,bg,col,go])=>(
             <div key={l} onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`,position:'relative',cursor:go?'pointer':'default'}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
