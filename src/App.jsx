@@ -20974,7 +20974,7 @@ function ConciliarLoteModal({ rows=[], cmap={}, clients=[], onClose, onConfirm }
 }
 
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
-function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],user,focusMovId,onFocusConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII}){
+function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],pettyCash=[],setPettyCash,user,focusMovId,onFocusConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII}){
   // Capa 2 — RUT conocidos para el tag "quién es"
   const EQUIPO_RUT = { '198897337':'Martín', '211389281':'Martina' }   // Rodrigo (rd@): falta su RUT real; 9.619.443-9 era del CLIENTE Rodrigo Macho
   const SOCIO_RUT  = { '156213209':'Cristóbal', '153717338':'Erasmo' }
@@ -21984,12 +21984,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   }
   // ===== Clasificador de CARGOS (combo 2 familias → categoría → subcategoría, con aprendizaje) =====
   const CARGO_OFI_GRUPOS = [
-    ['Personas',['Sueldos','Retiros']],
+    ['Personas',['Sueldos','Retiros','Caja chica']],
     ['Servicios externos',['Proveedores','Comisiones']],
     ['Local',['Arriendo','Gastos comunes','Servicios']],
-    ['Administración',['Contadora','Software','Tarjeta de crédito']],
+    ['Administración',['Contadora','Software','Tarjeta de crédito','Reembolso oficina']],
   ]
-  const CARGO_SUB_LABEL = { Sueldos:'persona', Retiros:'socio', Proveedores:'colaborador', Contadora:'tipo', Servicios:'tipo', Software:'tipo' }  // categorías con 3er nivel
+  const CARGO_SUB_LABEL = { Sueldos:'persona', Retiros:'socio', 'Caja chica':'persona', Proveedores:'colaborador', Contadora:'tipo', Servicios:'tipo', Software:'tipo' }  // categorías con 3er nivel
   const cargoPersonas = cat => {
     const fromExp=[...new Set((expenses||[]).filter(e=>ofiCli&&String(e.client_id)===String(ofiCli.id)&&e.category===cat&&e.subcategory).map(e=>String(e.subcategory)))]
     let seed=[]
@@ -21997,6 +21997,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     else if(cat==='Retiros') seed=Object.values(SOCIO_RUT)
     else if(cat==='Proveedores') seed=(proveedores||[]).map(p=>p.nombre||p.name).filter(Boolean)
     else if(cat==='Contadora') seed=['Remuneración','PPM','Cotizaciones']
+    else if(cat==='Caja chica') seed=[...(pettyCash||[]).map(p=>p.user_name).filter(Boolean),...Object.values(EQUIPO_RUT)]
     return [...new Set([...seed,...fromExp])].filter(Boolean).sort((a,b)=>a.localeCompare(b,'es'))
   }
   // Sugerencia aprendida para un cargo: RUT (persona/socio/contadora) > glosa (costo oficina) > glosa (cliente).
@@ -22044,6 +22045,55 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ appAlert('Error: '+e.message) }
     setBusy(null)
   }
+  // Abono a la caja chica de una persona (Martín/Martina): crea el abono en petty_cash (money in), NO un gasto → no duplica.
+  const abonoCajaChica = async(m, persona) => {
+    if(busy) return
+    if(!persona){ appAlert('Elige a quién le pasaste la caja chica.'); return }
+    setBusy(m.id)
+    let pc=null
+    try{
+      const monto=(m.monto||0)-(m.monto_conciliado||0)
+      const ins = await supabase.from('petty_cash').insert({ user_name:persona, amount:monto, nota:`Abono caja chica (banco) · mov:${m.id}` }).select().single()
+      if(ins.error) throw ins.error; pc=ins.data
+      const movAplic=(m.monto_conciliado||0)+monto
+      const estado=((m.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id)
+      if(me) throw me
+      setPettyCash&&setPettyCash(p=>[pc,...p]); setMovs(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplic,categoria:'Caja chica'}:x))
+      setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''}))
+    }catch(e){ if(pc) await supabase.from('petty_cash').delete().eq('id',pc.id); appAlert('Error al abonar caja chica: '+e.message) }
+    setBusy(null)
+  }
+  const deshacerCajaChica = async(m) => {
+    if(busy) return
+    setBusy(m.id)
+    try{
+      const pc=(pettyCash||[]).find(p=>String(p.nota||'').includes(`mov:${m.id}`))
+      if(pc){ const {error:pe}=await supabase.from('petty_cash').delete().eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.filter(x=>x.id!==pc.id)) }
+      const { error } = await supabase.from('cartola_movimientos').update({ estado:'pendiente', monto_conciliado:0, categoria:null }).eq('id',m.id)
+      if(error) throw error
+      setMovs(p=>p.map(x=>x.id===m.id?{...x,estado:'pendiente',monto_conciliado:0,categoria:null}:x))
+    }catch(e){ appAlert('Error al deshacer: '+e.message) }
+    setBusy(null)
+  }
+  // Marca de control (no crea gasto ni toca saldos): p.ej. "Reembolso oficina" de gastos ya registrados.
+  const marcarControlCargo = async(m, cat) => {
+    if(busy) return
+    setBusy(m.id)
+    try{
+      const { error } = await supabase.from('cartola_movimientos').update({ categoria:cat }).eq('id',m.id)
+      if(error) throw error
+      setMovs(p=>p.map(x=>x.id===m.id?{...x,categoria:cat}:x))
+      setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''}))
+    }catch(e){ appAlert('Error: '+e.message) }
+    setBusy(null)
+  }
+  // Router del leaf de Gasto Oficina: Caja chica→petty_cash; Reembolso oficina→control; resto→costo de oficina.
+  const registrarCargoOficina = (m, cat, sub) => {
+    if(cat==='Caja chica') return abonoCajaChica(m, sub)
+    if(cat==='Reembolso oficina') return marcarControlCargo(m, 'Reembolso oficina')
+    return costoOficina(m, cat, sub||null)
+  }
   // Render del clasificador de un cargo: estados resueltos (con Deshacer) o el combo de 3 niveles.
   const renderCargoClasificar = (m) => {
     if(m.tipo!=='cargo'||m.es_interno) return null
@@ -22064,6 +22114,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }
     if(conc.length) return null   // conciliado contra otra cosa → lo maneja otro bloque
     if(m.categoria==='Cliente'&&m.cliente_id) return done({color:C.coralText,bg:'#FAECE7'}, `Gasto de ${cmap[m.cliente_id]||'cliente'} · control`, ()=>quitarCargoCliente(m), 'Quitar')
+    if(m.categoria==='Caja chica'){ const pc=(pettyCash||[]).find(p=>String(p.nota||'').includes(`mov:${m.id}`)); return done({color:C.tealText,bg:C.tealBg}, `Abono caja chica${pc?.user_name?` · ${pc.user_name}`:''} · ${fmtM(m.monto)}`, ()=>deshacerCajaChica(m), 'Deshacer') }
+    if(m.categoria==='Reembolso oficina') return done({color:C.azulInfo,bg:C.azulBg}, 'Reembolso oficina · control', ()=>marcarControlCargo(m,null), 'Quitar')
     if(m.categoria&&m.categoria!=='Cliente'){ const t=TAG_STY[m.categoria]||{bg:C.bgWarm,color:C.grisText}; return done({color:t.color,bg:t.bg}, m.categoria, ()=>setCategoria(m,null), 'Quitar') }
     // ---- SIN clasificar → combo ----
     const fam=ccFam[m.id]; const cat=ccCat[m.id]; const q=(ccQ[m.id]||'')
@@ -22078,7 +22130,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(sug.fam==='oficina'){ const hint=cargoRachaHint(sug.category,sug.sub); const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`; const canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
         return <div style={{display:'flex',alignItems:'center',gap:9,background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{path}</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
-          <button disabled={busy===m.id} onClick={canConfirm?()=>costoOficina(m,sug.category,sug.sub||null):()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:sug.category}));setCcQ(p=>({...p,[m.id]:''}))}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>{canConfirm?'Confirmar':'Elegir'}</button>
+          <button disabled={busy===m.id} onClick={canConfirm?()=>registrarCargoOficina(m,sug.category,sug.sub||null):()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:sug.category}));setCcQ(p=>({...p,[m.id]:''}))}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>{canConfirm?'Confirmar':'Elegir'}</button>
         </div> }
       const cnm=cmap[sug.clientId]||'cliente'
       return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
@@ -22114,11 +22166,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {backHd(`Gasto Oficina › ${cat}`,()=>{setCcCat(p=>({...p,[m.id]:undefined}));setCcQ(p=>({...p,[m.id]:''}))})}
         {inp(`busca o agrega ${subLabel}…`)}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:7}}>
-          {shown.map((s,i)=><div key={s} onClick={()=>costoOficina(m,cat,s)} style={rowSty(i)}><span style={{fontSize:12.5,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s}</span><span style={{color:C.done,fontSize:14}}>›</span></div>)}
-          {ql&&!exact&&<div onClick={()=>costoOficina(m,cat,q.trim())} style={{...rowSty(shown.length),background:'#FBFCFD'}}><span style={{fontSize:12.5,fontWeight:600,color:C.accent}}>+ Crear "{q.trim()}" en {cat}</span></div>}
+          {shown.map((s,i)=><div key={s} onClick={()=>registrarCargoOficina(m,cat,s)} style={rowSty(i)}><span style={{fontSize:12.5,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s}</span><span style={{color:C.done,fontSize:14}}>›</span></div>)}
+          {ql&&!exact&&<div onClick={()=>registrarCargoOficina(m,cat,q.trim())} style={{...rowSty(shown.length),background:'#FBFCFD'}}><span style={{fontSize:12.5,fontWeight:600,color:C.accent}}>+ Crear "{q.trim()}" en {cat}</span></div>}
           {!shown.length&&!ql&&<div style={{padding:'9px 11px',fontSize:11,color:C.muted}}>Escribe para agregar {subLabel}…</div>}
         </div>
-        <button disabled={busy===m.id} onClick={()=>costoOficina(m,cat,null)} style={{marginTop:7,fontSize:10.5,fontWeight:600,color:C.azulInfo,background:C.azulBg,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Sin {subLabel} · registrar {cat}</button>
+        <button disabled={busy===m.id} onClick={()=>registrarCargoOficina(m,cat,null)} style={{marginTop:7,fontSize:10.5,fontWeight:600,color:C.azulInfo,background:C.azulBg,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Sin {subLabel} · registrar {cat}</button>
       </div>
     }
     // FAMILIA OFICINA · nivel 2 (categorías agrupadas) + Otro
@@ -22130,12 +22182,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:7}}>
         {CARGO_OFI_GRUPOS.map(([gname,cats])=>{ const vis=cats.filter(matchCat); if(!vis.length) return null; return <div key={gname}>
           <div style={{fontSize:8.5,fontWeight:700,color:C.grisText,textTransform:'uppercase',letterSpacing:.4,padding:'7px 11px 2px',background:C.bgSoft}}>{gname}</div>
-          {vis.map((c,i)=>{ const sub=CARGO_SUB_LABEL[c]; const hint=cargoRachaHint(c,null); return <div key={c} onClick={()=> sub ? (setCcCat(p=>({...p,[m.id]:c})),setCcQ(p=>({...p,[m.id]:''}))) : costoOficina(m,c,null)} style={rowSty(i)}>
+          {vis.map((c,i)=>{ const sub=CARGO_SUB_LABEL[c]; const hint=cargoRachaHint(c,null); return <div key={c} onClick={()=> sub ? (setCcCat(p=>({...p,[m.id]:c})),setCcQ(p=>({...p,[m.id]:''}))) : registrarCargoOficina(m,c,null)} style={rowSty(i)}>
             <span style={{fontSize:12.5,fontWeight:600,color:C.text,flex:1,minWidth:0}}>{c}{sub&&<span style={{color:C.done,fontWeight:400}}> › {sub}</span>}</span>
             {hint?<span style={{fontSize:8.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 7px'}}>{hint.mes} {fmtM(hint.monto)}</span>:<span style={{color:C.done,fontSize:14}}>{sub?'›':''}</span>}
           </div> })}
         </div> })}
-        <div onClick={()=>{ const t=q.trim(); if(t) costoOficina(m,'Otros',t); else setCcCat(p=>({...p,[m.id]:'Otros'})) }} style={{...rowSty(1),background:'#FBFCFD'}}>
+        <div onClick={()=>{ const t=q.trim(); if(t) registrarCargoOficina(m,'Otros',t); else setCcCat(p=>({...p,[m.id]:'Otros'})) }} style={{...rowSty(1),background:'#FBFCFD'}}>
           <span style={{fontSize:12.5,fontWeight:600,color:C.accent,flex:1}}>{q.trim()?`+ Usar "${q.trim()}" como concepto`:'Otro… escribir un concepto'}</span>
         </div>
       </div>
@@ -24903,7 +24955,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
-            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
+            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
