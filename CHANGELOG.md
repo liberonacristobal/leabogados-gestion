@@ -1872,3 +1872,4 @@
 2026-08-07 Pulido nav: menú 'Conciliación' abre el hub (unificado con acceso directo); quitado 'Buscar acciones…' del menú (redundante con 🔍 del header)
 2026-08-07 Pulido nav: filas de 'Mis proyectos' abren la ficha del cliente específico (antes iban al listado genérico de Cartera)
 2026-08-07 Pulido clickeable-a-la-fuente: nombre de cliente abre su ficha en cabecera de grupo Facturación (Por cobrar/emitidas), filas de rendición, cabecera grupo Notaría y detalle de liquidación (Gastos)
+2026-08-07 Pulido Facturacion: banner 'DTE rechazadas' abre deep-link a SOLO esas facturas (filtro interno rechazadas + pill), ya no el listado general. Gastos: eliminado icono de Historial redundante (3ra entrada al mismo panel; las 2 KPI cards ya lo abren)
