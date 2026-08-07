@@ -21048,6 +21048,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
   const [costoOfiLearn,setCostoOfiLearn] = useState({})  // glosaKey → {category, subcategory} aprendido (costo de oficina recurrente: arriendo/sueldos/servicios vienen del banco cada mes)
   useEffect(()=>{ supabase.from('learnings').select('key,value,meta').eq('kind','costo_oficina').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]={category:r.value,subcategory:(r.meta&&r.meta.subcategory)||null} }); setCostoOfiLearn(m) },()=>{}) },[])
+  // Cargo v2 — clasificador combo (Gasto Oficina / Gasto Cliente → categoría → subcategoría). Estado por movimiento.
+  const [ccFam,setCcFam] = useState({})   // movId → 'oficina' | 'cliente' (familia elegida)
+  const [ccCat,setCcCat] = useState({})   // movId → categoría de oficina en drill de subcategoría
+  const [ccQ,setCcQ]     = useState({})   // movId → texto de búsqueda del combo
   const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
   const fmtM = fmt
   const mesAbbr = iso => { if(!iso) return ''; const [y,mo]=String(iso).slice(0,7).split('-'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${M[+mo-1]||mo} ${(y||'').slice(2)}` }
@@ -21978,6 +21982,162 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ appAlert('Error al deshacer: '+e.message) }
     setBusy(null)
   }
+  // ===== Clasificador de CARGOS (combo 2 familias → categoría → subcategoría, con aprendizaje) =====
+  const CARGO_OFI_GRUPOS = [
+    ['Personas',['Sueldos','Retiros']],
+    ['Local',['Arriendo','Gastos comunes','Servicios']],
+    ['Administración',['Contadora','Software','Tarjeta de crédito']],
+    ['Tributario',['Impuestos']],
+  ]
+  const CARGO_SUB_LABEL = { Sueldos:'persona', Retiros:'socio', Servicios:'tipo', Software:'tipo', Impuestos:'tipo' }  // categorías con 3er nivel
+  const cargoPersonas = cat => {
+    const fromExp=[...new Set((expenses||[]).filter(e=>ofiCli&&String(e.client_id)===String(ofiCli.id)&&e.category===cat&&e.subcategory).map(e=>String(e.subcategory)))]
+    let seed=[]
+    if(cat==='Sueldos') seed=[...Object.values(EQUIPO_RUT),...Object.values(SOCIO_RUT)]
+    else if(cat==='Retiros') seed=Object.values(SOCIO_RUT)
+    return [...new Set([...seed,...fromExp])].filter(Boolean).sort((a,b)=>a.localeCompare(b,'es'))
+  }
+  // Sugerencia aprendida para un cargo: RUT (persona/socio/contadora) > glosa (costo oficina) > glosa (cliente).
+  const cargoSugerencia = m => {
+    if(m.tipo!=='cargo'||m.es_interno) return null
+    const k=crNormRut(m.rut_contraparte)
+    if(k){
+      if(EQUIPO_RUT[k]) return {fam:'oficina',category:'Sueldos',sub:EQUIPO_RUT[k],via:'RUT'}
+      if(SOCIO_RUT[k])  return {fam:'oficina',category:'Retiros',sub:SOCIO_RUT[k],via:'RUT'}
+      if(CONTADORA_RUT[k]) return {fam:'oficina',category:'Contadora',sub:null,via:'RUT'}
+    }
+    const gk=glosaKey(m.descripcion)
+    if(gk&&costoOfiLearn[gk]) return {fam:'oficina',category:costoOfiLearn[gk].category,sub:costoOfiLearn[gk].subcategory||null,via:'glosa'}
+    if(gk&&cargoCliLearn[gk]) return {fam:'cliente',clientId:cargoCliLearn[gk],via:'glosa'}
+    return null
+  }
+  // Mes anterior con el mismo costo de oficina (categoría[+sub]) → hint "jul $X" para dar confianza.
+  const cargoRachaHint = (cat,sub) => {
+    const rows=(expenses||[]).filter(e=>ofiCli&&String(e.client_id)===String(ofiCli.id)&&e.category===cat&&(!sub||String(e.subcategory||'')===String(sub))&&e.date).sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+    if(!rows.length) return null
+    return { mes:mesAbbr(rows[0].date), monto:rows[0].amount||0 }
+  }
+  // Gasto Cliente = SOLO CONTROL: marca cliente_id + categoría 'Cliente' en el movimiento, sin crear gasto ni tocar fondos.
+  const marcarCargoCliente = async(m, clientId) => {
+    if(busy) return
+    if(!clientId){ appAlert('Elige el cliente.'); return }
+    setBusy(m.id)
+    try{
+      const { error } = await supabase.from('cartola_movimientos').update({ cliente_id:clientId, categoria:'Cliente' }).eq('id',m.id)
+      if(error) throw error
+      setMovs(p=>p.map(x=>x.id===m.id?{...x,cliente_id:clientId,categoria:'Cliente'}:x))
+      const gk=glosaKey(m.descripcion); if(gk){ learnPut('cargo_cliente',gk,clientId,{control:true}); setCargoCliLearn(p=>({...p,[gk]:String(clientId)})) }
+      setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''}))
+    }catch(e){ appAlert('Error: '+e.message) }
+    setBusy(null)
+  }
+  const quitarCargoCliente = async(m) => {
+    if(busy) return
+    setBusy(m.id)
+    try{
+      const { error } = await supabase.from('cartola_movimientos').update({ cliente_id:null, categoria:null }).eq('id',m.id)
+      if(error) throw error
+      setMovs(p=>p.map(x=>x.id===m.id?{...x,cliente_id:null,categoria:null}:x))
+    }catch(e){ appAlert('Error: '+e.message) }
+    setBusy(null)
+  }
+  // Render del clasificador de un cargo: estados resueltos (con Deshacer) o el combo de 3 niveles.
+  const renderCargoClasificar = (m) => {
+    if(m.tipo!=='cargo'||m.es_interno) return null
+    const conc=concByMov[m.id]||[]
+    const monto=(m.monto||0)-(m.monto_conciliado||0)
+    const stop=e=>e.stopPropagation()
+    const done=(sty,txt,onUndo,undoLabel)=><div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={stop}>
+      <span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',background:sty.bg,color:sty.color}}>→ {txt}</span>
+      <button disabled={busy===m.id} onClick={()=>onUndo()} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>{undoLabel||'Deshacer'}</button>
+    </div>
+    // ---- YA resuelto ----
+    const gcRow=conc.find(c=>(c.tipo_destino==='gasto'||c.tipo_destino==='fondo')&&c.gasto_id)
+    const gExp=gcRow&&(expenses||[]).find(e=>String(e.id)===String(gcRow.gasto_id))
+    if(gExp){
+      const esOfi=ofiCli&&String(gExp.client_id)===String(ofiCli.id)
+      const txt=esOfi ? `Gasto Oficina · ${gExp.category||'—'}${gExp.subcategory?` › ${gExp.subcategory}`:''} · ${fmtM(gcRow.monto_aplicado)}` : `Gasto de ${cmap[gExp.client_id]||'cliente'} · ${fmtM(gcRow.monto_aplicado)}`
+      return done(esOfi?{color:C.azulInfo,bg:C.azulBg}:{color:C.coralText,bg:'#FAECE7'}, txt, ()=>deshacer(m))
+    }
+    if(conc.length) return null   // conciliado contra otra cosa → lo maneja otro bloque
+    if(m.categoria==='Cliente'&&m.cliente_id) return done({color:C.coralText,bg:'#FAECE7'}, `Gasto de ${cmap[m.cliente_id]||'cliente'} · control`, ()=>quitarCargoCliente(m), 'Quitar')
+    if(m.categoria&&m.categoria!=='Cliente'){ const t=TAG_STY[m.categoria]||{bg:C.bgWarm,color:C.grisText}; return done({color:t.color,bg:t.bg}, m.categoria, ()=>setCategoria(m,null), 'Quitar') }
+    // ---- SIN clasificar → combo ----
+    const fam=ccFam[m.id]; const cat=ccCat[m.id]; const q=(ccQ[m.id]||'')
+    const sug=cargoSugerencia(m)
+    const inp=(ph,onBg)=><div style={{display:'flex',alignItems:'center',gap:8,border:`1.5px solid ${C.accent}`,background:'#fff',borderRadius:10,padding:'8px 10px'}}>
+      <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.2' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
+      <input value={q} onChange={e=>setCcQ(p=>({...p,[m.id]:e.target.value}))} placeholder={ph} style={{border:'none',outline:'none',fontSize:12.5,color:C.text,flex:1,minWidth:0,background:'none'}}/>
+    </div>
+    const rowSty=(i)=>({display:'flex',alignItems:'center',gap:10,padding:'9px 11px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'})
+    const backHd=(label,onBack)=><div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span onClick={onBack} style={{color:C.accent,fontSize:15,cursor:'pointer'}}>←</span><span style={{fontSize:11.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span><span style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmtM(monto)}</span></div>
+    const sugBar=()=>{ if(!sug) return null
+      if(sug.fam==='oficina'){ const hint=cargoRachaHint(sug.category,sug.sub); const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`
+        return <div style={{display:'flex',alignItems:'center',gap:9,background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{path}</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':'de la glosa'}{hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''}</div></div>
+          <button disabled={busy===m.id} onClick={()=>costoOficina(m,sug.category,sug.sub||null)} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>Confirmar</button>
+        </div> }
+      const cnm=cmap[sug.clientId]||'cliente'
+      return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cnm}</div><div style={{fontSize:9.5,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
+        <button disabled={busy===m.id} onClick={()=>marcarCargoCliente(m,sug.clientId)} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.coralText,color:'#fff'}}>Confirmar</button>
+      </div>
+    }
+    // NIVEL 0 — dos tiles
+    if(!fam) return <div style={{marginTop:6}} onClick={stop}>
+      {sugBar()}
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={()=>{setCcCat(p=>({...p,[m.id]:undefined}));setCcQ(p=>({...p,[m.id]:''}));setCcFam(p=>({...p,[m.id]:'oficina'}))}} style={{flex:1,background:'#F2F7FB',border:'1px solid #CFE0EC',borderRadius:11,padding:'11px',cursor:'pointer',textAlign:'center'}}>
+          <div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Gasto Oficina</div><div style={{fontSize:9,color:C.muted,marginTop:2}}>sueldos, arriendo, retiros…</div>
+        </button>
+        <button onClick={()=>{setCcQ(p=>({...p,[m.id]:''}));setCcFam(p=>({...p,[m.id]:'cliente'}))}} style={{flex:1,background:'#FBF3EF',border:'1px solid #EFD8CC',borderRadius:11,padding:'11px',cursor:'pointer',textAlign:'center'}}>
+          <div style={{fontSize:12.5,fontWeight:700,color:C.coralText}}>Gasto Cliente</div><div style={{fontSize:9,color:C.muted,marginTop:2}}>marca de qué cliente fue</div>
+        </button>
+      </div>
+    </div>
+    // FAMILIA CLIENTE — buscador (solo control)
+    if(fam==='cliente') return <div style={{marginTop:6}} onClick={stop}>
+      {backHd('Gasto Cliente',()=>setCcFam(p=>({...p,[m.id]:undefined})))}
+      <div style={{fontSize:9.5,color:C.muted,marginBottom:6}}>Marca de qué cliente fue — queda registrado, sin descuento de fondo.</div>
+      <AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>marcarCargoCliente(m,cid)} label='Buscar cliente' placeholder='Buscar cliente o RUT…'/>
+    </div>
+    // FAMILIA OFICINA · 3er nivel (subcategoría de la categoría en drill)
+    if(cat){
+      const subLabel=CARGO_SUB_LABEL[cat]||'detalle'
+      const subs=cargoPersonas(cat); const ql=q.trim().toLowerCase()
+      const shown=ql?subs.filter(s=>s.toLowerCase().includes(ql)):subs
+      const exact=subs.some(s=>s.toLowerCase()===ql)
+      return <div style={{marginTop:6}} onClick={stop}>
+        {backHd(`Gasto Oficina › ${cat}`,()=>{setCcCat(p=>({...p,[m.id]:undefined}));setCcQ(p=>({...p,[m.id]:''}))})}
+        {inp(`busca o agrega ${subLabel}…`)}
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:7}}>
+          {shown.map((s,i)=><div key={s} onClick={()=>costoOficina(m,cat,s)} style={rowSty(i)}><span style={{fontSize:12.5,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s}</span><span style={{color:C.done,fontSize:14}}>›</span></div>)}
+          {ql&&!exact&&<div onClick={()=>costoOficina(m,cat,q.trim())} style={{...rowSty(shown.length),background:'#FBFCFD'}}><span style={{fontSize:12.5,fontWeight:600,color:C.accent}}>+ Crear "{q.trim()}" en {cat}</span></div>}
+          {!shown.length&&!ql&&<div style={{padding:'9px 11px',fontSize:11,color:C.muted}}>Escribe para agregar {subLabel}…</div>}
+        </div>
+        <button disabled={busy===m.id} onClick={()=>costoOficina(m,cat,null)} style={{marginTop:7,fontSize:10.5,fontWeight:600,color:C.azulInfo,background:C.azulBg,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Sin {subLabel} · registrar {cat}</button>
+      </div>
+    }
+    // FAMILIA OFICINA · nivel 2 (categorías agrupadas) + Otro
+    const ql=q.trim().toLowerCase(); const matchCat=c=>!ql||c.toLowerCase().includes(ql)
+    return <div style={{marginTop:6}} onClick={stop}>
+      {backHd('Gasto Oficina',()=>setCcFam(p=>({...p,[m.id]:undefined})))}
+      {sugBar()}
+      {inp('busca o elige categoría…')}
+      <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:7}}>
+        {CARGO_OFI_GRUPOS.map(([gname,cats])=>{ const vis=cats.filter(matchCat); if(!vis.length) return null; return <div key={gname}>
+          <div style={{fontSize:8.5,fontWeight:700,color:C.grisText,textTransform:'uppercase',letterSpacing:.4,padding:'7px 11px 2px',background:C.bgSoft}}>{gname}</div>
+          {vis.map((c,i)=>{ const sub=CARGO_SUB_LABEL[c]; const hint=cargoRachaHint(c,null); return <div key={c} onClick={()=> sub ? (setCcCat(p=>({...p,[m.id]:c})),setCcQ(p=>({...p,[m.id]:''}))) : costoOficina(m,c,null)} style={rowSty(i)}>
+            <span style={{fontSize:12.5,fontWeight:600,color:C.text,flex:1,minWidth:0}}>{c}{sub&&<span style={{color:C.done,fontWeight:400}}> › {sub}</span>}</span>
+            {hint?<span style={{fontSize:8.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 7px'}}>{hint.mes} {fmtM(hint.monto)}</span>:<span style={{color:C.done,fontSize:14}}>{sub?'›':''}</span>}
+          </div> })}
+        </div> })}
+        <div onClick={()=>{ const t=q.trim(); if(t) costoOficina(m,'Otros',t); else setCcCat(p=>({...p,[m.id]:'Otros'})) }} style={{...rowSty(1),background:'#FBFCFD'}}>
+          <span style={{fontSize:12.5,fontWeight:600,color:C.accent,flex:1}}>{q.trim()?`+ Usar "${q.trim()}" como concepto`:'Otro… escribir un concepto'}</span>
+        </div>
+      </div>
+    </div>
+  }
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
   const conciliarAuto = async()=>{
     if(autoRun||busy) return
@@ -22548,8 +22708,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     ? <div style={{fontSize:11,color:C.accent,marginBottom:4}}>↔ origen: <b>{nom}</b> · abono en {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
                     : <div style={{fontSize:11,color:C.overdue,marginBottom:4}}>↔ posible origen: <b>{nom}</b> · abono en {cta} — <b>Diferencia {fmtM(Math.abs(o.diff))}</b>, revisar</div>
                 })()}
-                {!m.es_interno&&<div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Cliente</div>}
-                {!m.es_interno&&(
+                {!m.es_interno&&m.tipo==='abono'&&<div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Cliente</div>}
+                {!m.es_interno&&m.tipo==='cargo'&&renderCargoClasificar(m)}
+                {!m.es_interno&&m.tipo==='abono'&&(
                   editMov===m.id
                     ? <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
@@ -22628,8 +22789,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         )})()}
                       </div>
                 )}
-                {/* Fase 3.D — Cargo por cuenta de un cliente: registra un gasto que descuenta su fondo (reversible, aprende glosa→cliente) */}
-                {m.tipo==='cargo'&&!m.es_interno&&(()=>{
+                {/* Fase 3.D (legacy, desactivado; reemplazado por renderCargoClasificar / marcarCargoCliente) */}
+                {false&&m.tipo==='cargo'&&!m.es_interno&&(()=>{
                   const gc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='gasto'&&c.gasto_id)
                   const gcGe=gc&&(expenses||[]).find(e=>String(e.id)===String(gc.gasto_id)); const gcEsOfi=gcGe&&ofiCli&&String(gcGe.client_id)===String(ofiCli.id)
                   if(gc&&!gcEsOfi) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
@@ -22654,8 +22815,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     </div>
                   </div>)
                 })()}
-                {/* Pieza 3 — Costo de OFICINA: cargo que es gasto operativo de la firma (arriendo, contadora, servicios…) → gasto en el cliente interno con categoría */}
-                {m.tipo==='cargo'&&!m.es_interno&&(()=>{
+                {/* Pieza 3 — Costo de OFICINA (legacy, desactivado; reemplazado por renderCargoClasificar) */}
+                {false&&m.tipo==='cargo'&&!m.es_interno&&(()=>{
                   const gc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='gasto'&&c.gasto_id)
                   const ge=gc&&(expenses||[]).find(e=>String(e.id)===String(gc.gasto_id))
                   const esOfi=ge&&ofiCli&&String(ge.client_id)===String(ofiCli.id)
