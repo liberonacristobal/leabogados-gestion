@@ -3354,7 +3354,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{padding:'8px 20px 0'}}>
           <div style={{border:'1px solid #DDE2E6',borderRadius:10,overflow:'hidden'}}>
             {sorted.slice(0,6).map((p,i)=>(
-              <div key={p.id} onClick={()=>setTab('cartera')} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:i>0?'1px solid #DDE2E6':'none',background:'#fff',cursor:'pointer'}}>
+              <div key={p.id} onClick={()=>{ const cid=p.cliente_id; if(cid&&onOpenClientFicha) onOpenClientFicha(cid); else setTab('cartera') }} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:i>0?'1px solid #DDE2E6':'none',background:'#fff',cursor:'pointer'}}>
                 <span style={{width:8,height:8,borderRadius:'50%',background:CART_DOT[p.estado||'verde'],flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.nota||p.nombre_proyecto||''}</div></div>
                 <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{hace(p.ultima_actividad)}</span>
