@@ -14431,12 +14431,12 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         const progYear=real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&String(b.due||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
         return <div style={{display:'flex',gap:7,overflowX:'auto',marginBottom:12,paddingBottom:2,scrollbarWidth:'none',alignItems:'stretch'}}>
           {/* Por cobrar con Vencido ANIDADO (jerarquía: el vencido es parte del por cobrar, no una tarjeta paralela) */}
-          <div style={{flex:'0 0 auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 11px'}}>
+          <div onClick={()=>{setVSec(p=>({...p,facturas:true}));setFicEst({'Por cobrar':true,'Por facturar':false,'Pagadas':false,'Anuladas':false})}} title='Ver facturas por cobrar' style={{flex:'0 0 auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 11px',cursor:'pointer'}}>
             <div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div>
             <div style={{fontSize:14,fontWeight:700,color:porCobrar>0?C.accent:C.text,whiteSpace:'nowrap'}}>{fmt(porCobrar)}</div>
             {overdueTot>0&&<div style={{fontSize:10,fontWeight:600,color:C.overdue,whiteSpace:'nowrap',marginTop:2}}>Vencido {fmt(overdueTot)}</div>}
           </div>
-          {[['Por facturar '+(selYear||''),progYear,C.muted],['Cobrado '+(selYear||''),cobYear,C.normal]].map(([l,v,col])=>(<div key={l} style={{flex:'0 0 auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 11px'}}><div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:col,whiteSpace:'nowrap'}}>{fmt(v)}</div></div>))}
+          {[['Por facturar '+(selYear||''),progYear,C.muted,'Por facturar'],['Cobrado '+(selYear||''),cobYear,C.normal,'Pagadas']].map(([l,v,col,est])=>(<div key={l} onClick={()=>{setVSec(p=>({...p,facturas:true}));setFicEst({'Por cobrar':false,'Por facturar':false,'Pagadas':false,'Anuladas':false,[est]:true})}} title={`Ver ${est.toLowerCase()}`} style={{flex:'0 0 auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 11px',cursor:'pointer'}}><div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:col,whiteSpace:'nowrap'}}>{fmt(v)}</div></div>))}
         </div>
       })()}
 
