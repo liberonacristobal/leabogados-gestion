@@ -22789,70 +22789,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         )})()}
                       </div>
                 )}
-                {/* Fase 3.D (legacy, desactivado; reemplazado por renderCargoClasificar / marcarCargoCliente) */}
-                {false&&m.tipo==='cargo'&&!m.es_interno&&(()=>{
-                  const gc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='gasto'&&c.gasto_id)
-                  const gcGe=gc&&(expenses||[]).find(e=>String(e.id)===String(gc.gasto_id)); const gcEsOfi=gcGe&&ofiCli&&String(gcGe.client_id)===String(ofiCli.id)
-                  if(gc&&!gcEsOfi) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                    <span style={{fontSize:10,fontWeight:700,color:C.coralText,background:'#FAECE7',borderRadius:20,padding:'2px 9px'}}>→ Gasto por cuenta de {cmap[m.cliente_id]||'cliente'} · {fmtM(gc.monto_aplicado)} · descuenta fondo</span>
-                    <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button></div>)
-                  if((concByMov[m.id]||[]).length) return null
-                  const gk=glosaKey(m.descripcion); const sugCid=gk&&cargoCliLearn[gk]?cargoCliLearn[gk]:null
-                  if(gcFor!==m.id) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                    <button onClick={()=>{setOfiFor(null);setGcFor(m.id);setGcCli(sugCid||m.cliente_id||null);setGcEnt(null)}} title='La oficina pagó a un tercero por cuenta de un cliente; descuenta su fondo' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:'#FAECE7',color:C.coralText,border:'none'}}>Por cuenta de un cliente…</button>
-                    {sugCid&&cmap[sugCid]&&<span style={{fontSize:10,color:C.muted}}>sugerido: {cmap[sugCid]}</span>}</div>)
-                  const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(gcCli))
-                  const monto=(m.monto||0)-(m.monto_conciliado||0)
-                  return (<div style={{marginTop:6,padding:'8px 9px',background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:8}} onClick={e=>e.stopPropagation()}>
-                    <div style={{fontSize:10,color:C.coralText,fontWeight:700,marginBottom:6}}>Gasto por cuenta de un cliente · {fmtM(monto)} · {m.categoria||'Notaría'}</div>
-                    <div style={{marginBottom:6}}><AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>{setGcCli(cid);setGcEnt(null)}} label='Cliente' placeholder='Buscar cliente…'/></div>
-                    {gcCli&&<div style={{fontSize:11,color:C.text,marginBottom:6}}>Cliente: <b>{cmap[gcCli]||'—'}</b>
-                      {ents.length>1&&<select value={gcEnt||''} onChange={e=>setGcEnt(e.target.value||null)} style={{marginLeft:8,fontSize:11,padding:'3px 6px',borderRadius:6,border:`1px solid ${C.border}`}}><option value=''>— Razón social —</option>{ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}</select>}
-                      {ents.length===1&&<span style={{color:C.muted}}> · {ents[0].name}</span>}</div>}
-                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <button disabled={busy===m.id||!gcCli} onClick={()=>gastoPorCuentaCliente(m,gcCli,gcEnt||(ents.length===1?ents[0].id:null),m.descripcion,m.categoria||'Notaría')} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:gcCli?C.coralText:C.done,color:'#fff',cursor:gcCli&&busy!==m.id?'pointer':'default'}}>Registrar gasto {fmtM(monto)}</button>
-                      <button onClick={()=>{setGcFor(null);setGcCli(null);setGcEnt(null)}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
-                    </div>
-                  </div>)
-                })()}
-                {/* Pieza 3 — Costo de OFICINA (legacy, desactivado; reemplazado por renderCargoClasificar) */}
-                {false&&m.tipo==='cargo'&&!m.es_interno&&(()=>{
-                  const gc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='gasto'&&c.gasto_id)
-                  const ge=gc&&(expenses||[]).find(e=>String(e.id)===String(gc.gasto_id))
-                  const esOfi=ge&&ofiCli&&String(ge.client_id)===String(ofiCli.id)
-                  if(gc&&esOfi) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                    <span style={{fontSize:10,fontWeight:700,color:C.azulInfo,background:C.azulBg,borderRadius:20,padding:'2px 9px'}}>→ Costo de oficina · {ge.category||'—'} · {fmtM(gc.monto_aplicado)}</span>
-                    <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button></div>)
-                  if((concByMov[m.id]||[]).length) return null
-                  if(ofiFor!==m.id){
-                    const NO_OFI=['Socio','Proveedor','Notaría','Devolución','Cliente','Gastos Oficina']   // etiquetas que NO son costo de oficina (o son genéricas → piden categoría específica)
-                    const catYa = m.categoria && !NO_OFI.includes(m.categoria) && !CATS_LEGALES.includes(String(m.categoria).trim().toLowerCase())   // ya marcado con una categoría de oficina (Contadora, Impuestos, Equipo…) → un toque la registra, sin volver a preguntar
-                    const sugOfi = !catYa && costoOfiSugerido(m)   // glosa aprendida (mismo arriendo/sueldo del mes pasado) → un toque
-                    return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                      {sugOfi&&<button disabled={busy===m.id} onClick={()=>costoOficina(m,sugOfi.category,sugOfi.subcategory)} title='Aprendido de la glosa — confirma para registrar el costo de oficina' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.greenBg,color:C.greenText,border:'none'}}>✦ ¿{sugOfi.category}{sugOfi.subcategory?` · ${sugOfi.subcategory}`:''}?</button>}
-                      <button disabled={busy===m.id} onClick={()=> catYa ? costoOficina(m,m.categoria) : (setGcFor(null),setOfiFor(m.id),setOfiCat(null),setOfiSub(''))} title={catYa?`Registrar como costo de oficina · ${m.categoria}`:'Costo operativo de la firma (arriendo, contadora, servicios…); no es de un cliente'} style={{fontSize:10,fontWeight:catYa?700:600,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{catYa?`→ Costo de oficina · ${m.categoria}`:(sugOfi?'Otra…':'Costo de oficina…')}</button></div>)
-                  }
-                  const monto=(m.monto||0)-(m.monto_conciliado||0)
-                  return (<div style={{marginTop:6,padding:'8px 9px',background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:8}} onClick={e=>e.stopPropagation()}>
-                    {!ofiCat ? (<>
-                    <div style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginBottom:6}}>Costo de oficina · {fmtM(monto)} — elige categoría:</div>
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                      {catsOficinaConc.map(c=><button key={c} onClick={()=>{setOfiCat(c);setOfiSub('')}} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'3px 10px',cursor:'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{c}</button>)}
-                      <button onClick={async()=>{const nv=await appPrompt('Nueva categoría de oficina:'); if(nv&&nv.trim()){setOfiCat(nv.trim());setOfiSub('')}}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>+ Nueva…</button>
-                      <button onClick={()=>setOfiFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
-                    </div>
-                    </>) : (<>
-                    <div style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginBottom:6}}>Costo de oficina · {fmtM(monto)} · <b>{ofiCat}</b></div>
-                    {(()=>{ const used=[...new Set((expenses||[]).filter(e=>ofiCli&&String(e.client_id)===String(ofiCli.id)&&e.category===ofiCat&&e.subcategory).map(e=>e.subcategory))].sort(); return used.length>0?<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:6}}>{used.map(s=>{const on=ofiSub.trim()===s; return <button key={s} onClick={()=>setOfiSub(on?'':s)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:on?C.accent:C.azulBg,color:on?'#fff':C.azulInfo,border:'none'}}>{s}</button>})}</div>:null })()}
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                      <input list='ofi-subcats' value={ofiSub} onChange={e=>setOfiSub(e.target.value)} placeholder='Subcategoría (opcional)…' style={{flex:'1 1 150px',minWidth:0,fontSize:11,padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,outline:'none'}}/>
-                      <datalist id='ofi-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
-                      <button disabled={busy===m.id} onClick={()=>{costoOficina(m,ofiCat,ofiSub.trim()||null);setOfiCat(null);setOfiSub('')}} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'4px 13px',cursor:busy===m.id?'default':'pointer',background:C.accent,color:'#fff',border:'none'}}>Crear</button>
-                      <button onClick={()=>{setOfiCat(null);setOfiSub('')}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>← Cambiar</button>
-                    </div>
-                    </>)}
-                  </div>)
-                })()}
+                {/* Cargos: clasificación (Gasto Oficina / Gasto Cliente) → renderCargoClasificar(m), arriba. */}
                 {/* Fase 3.A — Provisión de gastos → acreditar al fondo del cliente (proponer + confirmar) */}
                 {m.tipo==='abono'&&!m.es_interno&&m.categoria==='Provisión de gastos'&&(()=>{
                   const fc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='fondo')
