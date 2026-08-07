@@ -417,7 +417,7 @@ const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
 const enMiLista = (t,name) => isAssignee(t,name) || (!!name && ((t&&t.delegated_to)||[]).includes(name))
 const ADMIN_NAMES = ['Cristóbal','Erasmo']
 // Costos ESTRUCTURALES de la oficina (fijos: sueldos/arriendo/servicios/compras — normalmente vienen de la conciliación bancaria). El resto de categorías = GESTIÓN (operativo: notaría/CBR/movilización/archivo judicial/otros, gralmente de clientes; movilización siempre nuestra).
-const CATS_OFICINA_ESTRUCTURAL = ['Sueldos','Retiros','Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Compras']
+const CATS_OFICINA_ESTRUCTURAL = ['Sueldos','Retiros','Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Proveedores','Comisiones','Compras']
 // Un gasto de oficina es de GESTIÓN si su categoría NO es estructural (criterio por CATEGORÍA, determinista — no por quién lo cargó).
 const esGestionGasto = g => !CATS_OFICINA_ESTRUCTURAL.includes(String(g?.category||'').trim())
 
@@ -21985,16 +21985,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // ===== Clasificador de CARGOS (combo 2 familias → categoría → subcategoría, con aprendizaje) =====
   const CARGO_OFI_GRUPOS = [
     ['Personas',['Sueldos','Retiros']],
+    ['Servicios externos',['Proveedores','Comisiones']],
     ['Local',['Arriendo','Gastos comunes','Servicios']],
     ['Administración',['Contadora','Software','Tarjeta de crédito']],
-    ['Tributario',['Impuestos']],
   ]
-  const CARGO_SUB_LABEL = { Sueldos:'persona', Retiros:'socio', Servicios:'tipo', Software:'tipo', Impuestos:'tipo' }  // categorías con 3er nivel
+  const CARGO_SUB_LABEL = { Sueldos:'persona', Retiros:'socio', Proveedores:'colaborador', Contadora:'tipo', Servicios:'tipo', Software:'tipo' }  // categorías con 3er nivel
   const cargoPersonas = cat => {
     const fromExp=[...new Set((expenses||[]).filter(e=>ofiCli&&String(e.client_id)===String(ofiCli.id)&&e.category===cat&&e.subcategory).map(e=>String(e.subcategory)))]
     let seed=[]
     if(cat==='Sueldos') seed=[...Object.values(EQUIPO_RUT),...Object.values(SOCIO_RUT)]
     else if(cat==='Retiros') seed=Object.values(SOCIO_RUT)
+    else if(cat==='Proveedores') seed=(proveedores||[]).map(p=>p.nombre||p.name).filter(Boolean)
+    else if(cat==='Contadora') seed=['Remuneración','PPM','Cotizaciones']
     return [...new Set([...seed,...fromExp])].filter(Boolean).sort((a,b)=>a.localeCompare(b,'es'))
   }
   // Sugerencia aprendida para un cargo: RUT (persona/socio/contadora) > glosa (costo oficina) > glosa (cliente).
@@ -22005,6 +22007,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(EQUIPO_RUT[k]) return {fam:'oficina',category:'Sueldos',sub:EQUIPO_RUT[k],via:'RUT'}
       if(SOCIO_RUT[k])  return {fam:'oficina',category:'Retiros',sub:SOCIO_RUT[k],via:'RUT'}
       if(CONTADORA_RUT[k]) return {fam:'oficina',category:'Contadora',sub:null,via:'RUT'}
+      if(provByRut[k]) return {fam:'oficina',category:'Proveedores',sub:provByRut[k],via:'RUT'}
     }
     const gk=glosaKey(m.descripcion)
     if(gk&&costoOfiLearn[gk]) return {fam:'oficina',category:costoOfiLearn[gk].category,sub:costoOfiLearn[gk].subcategory||null,via:'glosa'}
@@ -22072,10 +22075,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const rowSty=(i)=>({display:'flex',alignItems:'center',gap:10,padding:'9px 11px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'})
     const backHd=(label,onBack)=><div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span onClick={onBack} style={{color:C.accent,fontSize:15,cursor:'pointer'}}>←</span><span style={{fontSize:11.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span><span style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmtM(monto)}</span></div>
     const sugBar=()=>{ if(!sug) return null
-      if(sug.fam==='oficina'){ const hint=cargoRachaHint(sug.category,sug.sub); const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`
+      if(sug.fam==='oficina'){ const hint=cargoRachaHint(sug.category,sug.sub); const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`; const canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
         return <div style={{display:'flex',alignItems:'center',gap:9,background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{path}</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':'de la glosa'}{hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''}</div></div>
-          <button disabled={busy===m.id} onClick={()=>costoOficina(m,sug.category,sug.sub||null)} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>Confirmar</button>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{path}</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
+          <button disabled={busy===m.id} onClick={canConfirm?()=>costoOficina(m,sug.category,sug.sub||null):()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:sug.category}));setCcQ(p=>({...p,[m.id]:''}))}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>{canConfirm?'Confirmar':'Elegir'}</button>
         </div> }
       const cnm=cmap[sug.clientId]||'cliente'
       return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
