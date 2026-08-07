@@ -13721,7 +13721,7 @@ function DocumentosDrive({client, onCount, onPick}){
     </div>
   )
 }
-function ContactoTab({client, entities, onSaveFields}) {
+function ContactoTab({client, entities, onSaveFields, clientBilling=[], onOpenFinanciero}) {
   const fields = ['rut']
   const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
   const [form,setForm] = useState(fromClient())
@@ -13809,12 +13809,17 @@ function ContactoTab({client, entities, onSaveFields}) {
         {entities&&entities.length>0&&(
           <IconSection icon='building' title='Razones sociales facturadas' summary={entities.length} open={sec.rs} onToggle={()=>tog('rs')}>
             <div style={{paddingTop:4}}>
-              {entities.map(e=>(
-                <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:`0.5px solid ${C.bgWarm}`}}>
-                  <span style={{fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(e.name)||'—'}</span>
-                  <Copyable text={e.rut} title='Copiar RUT'><span style={{fontSize:11,color:C.muted,fontFamily:'monospace',whiteSpace:'nowrap',flexShrink:0,marginLeft:8}}>{e.rut}</span></Copyable>
+              {entities.map(e=>{
+                const nFac=(clientBilling||[]).filter(b=>!b.deleted_at&&b.invoice_no&&(String(b.entity_id)===String(e.id)||(e.rut&&crNormRut(b.receptor_rut||'')===crNormRut(e.rut)))).length
+                return (
+                <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`0.5px solid ${C.bgWarm}`}}>
+                  <span onClick={onOpenFinanciero?()=>onOpenFinanciero():undefined} title={onOpenFinanciero?'Ver sus facturas en Financiero':undefined} style={{fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenFinanciero?'pointer':'inherit'}}>{rsDisplay(e.name)||'—'}</span>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    {nFac>0&&onOpenFinanciero&&<span onClick={()=>onOpenFinanciero()} style={{fontSize:9.5,fontWeight:700,color:C.accent,background:C.azulBg,borderRadius:20,padding:'2px 8px',cursor:'pointer',whiteSpace:'nowrap'}}>{nFac} factura{nFac!==1?'s':''} →</span>}
+                    <Copyable text={e.rut} title='Copiar RUT'><span style={{fontSize:11,color:C.muted,fontFamily:'monospace',whiteSpace:'nowrap'}}>{e.rut}</span></Copyable>
+                  </div>
                 </div>
-              ))}
+              )})}
             </div>
           </IconSection>
         )}
@@ -14330,7 +14335,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   </div>)
 }
 
-function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onConciliar, onAssignSeries, onStatusChange, onOpenSale}) {
+function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onConciliar, onOpenConciliacion, onAssignSeries, onStatusChange, onOpenSale}) {
   // Cockpit de facturas: TODAS las del cliente — buscador + tabs por año + agrupación Proyecto → Razón social → Factura con orden por fecha.
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
@@ -14549,7 +14554,9 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     </> : <div style={{fontSize:11,color:C.muted}}>Conciliada (movimiento en otra cuenta o sin detalle local).</div>}
                     <div style={{display:'flex',justifyContent:'flex-end',gap:12,marginTop:6}}>
                       {onEditBilling&&<span onClick={()=>onEditBilling(b)} style={{fontSize:10,fontWeight:600,color:C.muted,cursor:'pointer'}}>Editar</span>}
-                      {onConciliar&&<span onClick={()=>onConciliar()} style={{fontSize:10,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver en conciliación →</span>}
+                      {(onOpenConciliacion&&cs[0]?.movimiento_id)
+                        ? <span onClick={()=>onOpenConciliacion(cs[0].movimiento_id)} style={{fontSize:10,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver este movimiento →</span>
+                        : (onConciliar&&<span onClick={()=>onConciliar()} style={{fontSize:10,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver en conciliación →</span>)}
                     </div>
                   </div>
                 )})()}
@@ -15595,7 +15602,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                     <div style={{fontSize:11,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:.3,display:'flex',alignItems:'center',gap:6,minWidth:0}}>
                       <span aria-hidden="true" style={{display:'inline-block',transform:open?'rotate(90deg)':'none',transition:'transform .12s',fontSize:15,lineHeight:1}}>›</span>
                       <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}{g.rut?` · ${g.rut}`:''}</span>
-                      {sinRS&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:'#FEF6EE',color:C.soon,letterSpacing:0,flexShrink:0}}>Asignar</span>}
+                      {sinRS&&<span style={{fontSize:9,fontWeight:600,padding:'1px 6px',borderRadius:8,background:C.bgSoft,color:C.muted,letterSpacing:0,flexShrink:0}}>sin RS</span>}
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
                       <span style={{fontSize:9,color:C.muted,fontWeight:600}}>{g.items.length}</span>
@@ -15793,8 +15800,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         })()}
 
       </div>
-      {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
-      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onOpenSale={onOpenSale}/>}
+      {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields} clientBilling={clientBilling} onOpenFinanciero={()=>setFtab('financiero')}/>}
+      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)} onOpenConciliacion={onOpenConciliacion} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onOpenSale={onOpenSale}/>}
       {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onAjuste={onAjuste}/>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
