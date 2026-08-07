@@ -7227,6 +7227,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     else if(filter==='vencido') r = r.filter(b=>b.status==='Vencido')
     else if(filter==='pagado') r = r.filter(b=>b.status==='Pagado')
     else if(filter==='terceros') r = r.filter(b=>tercerosByBilling.has(b.id))
+    else if(filter==='rechazadas') r = r.filter(b=>/rech/i.test(b.dte_estado||''))   // deep-link del banner "DTE rechazadas por el SII"
     if(fYear) r = r.filter(b=>dateField(b)?.startsWith(fYear))
     if(fMonth) r = r.filter(b=>dateField(b)?.slice(5,7)===fMonth)
     if(q.trim()) r = r.filter(b=>{
@@ -7893,7 +7894,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         </Modal>}
         {depurarRows&&<Modal title='Marcar como pagadas' onClose={()=>setDepurarRows(null)} closeOnBackdrop={false}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></Modal>}
         {cierreOpen&&<Modal title='Cierre de mes' fullscreen onClose={()=>setCierreOpen(false)}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>{setCierreOpen(false);onEdit&&onEdit(b)}} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></Modal>}
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='rechazadas'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n='file' s={12} c={C.accent}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap'}}>Por cobrar</span></div>
@@ -7908,7 +7909,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </button>
           )})}
         </div>}
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&(()=>{
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&filter!=='rechazadas'&&(()=>{
           const lista=bb.filter(b=>!b.deleted_at&&esEmitida(b)&&b.email_sent_at&&saldoBill(b)>0&&!['Pagado','Anulada','Anticipada'].includes(b.status))
             .map(b=>({b,dias:Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000),venc:esVencidaG(b)}))
             .sort((a,z)=>((z.venc?1:0)-(a.venc?1:0))||(z.dias-a.dias))   // vencidas primero (lo urgente), luego por días desde el envío
@@ -7930,7 +7931,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </div>}
           </div>)
         })()}
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&(calcesSugeridos.clean.length>0||calcesSugeridos.revisar.length>0)&&(
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&filter!=='rechazadas'&&(calcesSugeridos.clean.length>0||calcesSugeridos.revisar.length>0)&&(
           <div style={{background:C.greenBg,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`,borderRadius:'0 10px 10px 0',padding:'9px 12px',marginBottom:9}}>
             <div onClick={()=>setCalcesOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
               <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.normal} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>
@@ -8031,9 +8032,11 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         )}
         {filter!=='resumen'&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9,flexWrap:'wrap'}}>
           <span onClick={()=>{setFilter('resumen');clearSel()}} title='Volver al resumen' style={{fontSize:16,color:C.accent,cursor:'pointer',flexShrink:0,lineHeight:1}}>←</span>
-          <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
+          {filter==='rechazadas'
+            ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.overdueBg,color:C.overdueText,flexShrink:0}}>DTE rechazadas</span>
+            : <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
             {[['clientes','Por cliente'],['all','Todas']].map(([v,l])=><span key={v} onClick={()=>{setFilter(v);clearSel();setSoloSinEnviar(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 13px',cursor:'pointer',background:filter===v?C.accent:'transparent',color:filter===v?'#fff':C.muted}}>{l}</span>)}
-          </div>
+          </div>}
           <select value={fYear} onChange={e=>{setFYear(e.target.value); if(!e.target.value)setFMonth('')}} style={{fontSize:11,fontWeight:600,border:`1px solid ${fYear?C.accent:C.border}`,borderRadius:20,padding:'5px 9px',background:fYear?C.azulBg:'#fff',color:fYear?C.accent:C.muted,cursor:'pointer',flexShrink:0,appearance:'none'}}>
             <option value=''>Todos los años</option>
             {years.map(y=><option key={y} value={y}>{y}</option>)}
@@ -8249,7 +8252,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </div>
             )})()}
             {(()=>{ const rech=(billing||[]).filter(b=>!b.deleted_at&&/rech/i.test(b.dte_estado||'')); if(!rech.length) return null; return (
-              <div onClick={()=>go('clientes')} title='El SII rechazó estas facturas electrónicas — revísalas y vuelve a emitir' style={{display:'flex',alignItems:'center',gap:11,background:C.overdueBg,borderLeft:`3px solid ${C.overdue}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
+              <div onClick={()=>go('rechazadas')} title='El SII rechazó estas facturas electrónicas — revísalas y vuelve a emitir' style={{display:'flex',alignItems:'center',gap:11,background:C.overdueBg,borderLeft:`3px solid ${C.overdue}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdue} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.overdueText}}>DTE rechazadas por el SII</div><div style={{fontSize:9,color:C.overdueText}}>{rech.length} factura{rech.length!==1?'s':''} — revisar y volver a emitir</div></div>
                 <span style={{color:C.overdue,fontSize:18,fontWeight:700}}>›</span>
@@ -12147,7 +12150,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>
           </div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial' aria-label='Historial' style={{background:'none',border:'none',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:4}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaBtnOpen(o=>!o);setNotaMenuOpen(false)}} style={{...chipBtn('soft'),fontWeight:500,background:notaBtnOpen?C.tealText:C.tealBg,color:notaBtnOpen?'#fff':C.tealText,border:`1px solid ${C.tealText}`}}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''} {notaBtnOpen?'▴':'▾'}</button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaMenuOpen(o=>!o);setNotaBtnOpen(false)}} style={chipBtn('primary')}>Cargar {notaMenuOpen?'▴':'▾'}</button>}
             {selectedClient&&!esOficina(selectedClient.id)&&(()=>{ const por=gastosPorRendir(selectedClient.id); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
