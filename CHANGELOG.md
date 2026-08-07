@@ -1871,3 +1871,4 @@
 - KPIs de caja chica en la pestaÃ±a Tareas (vista limited): tarjetas "Mi caja chica" (saldo real = entregado â gastos del usuario) y "Gastos por liquidar" (monto + cantidad), mÃ¡s lista "Ãltimos gastos ingresados" (3 Ãºltimos del usuario). Nueva columna `expenses.created_by` con atribuciÃ³n automÃ¡tica del usuario que ingresa el gasto. Saldo de caja chica unificado en un helper Ãºnico (`saldoCajaChica`) usado por Tareas y por la pestaÃ±a Caja Chica.
 2026-08-07 Pulido nav: menú 'Conciliación' abre el hub (unificado con acceso directo); quitado 'Buscar acciones…' del menú (redundante con 🔍 del header)
 2026-08-07 Pulido nav: filas de 'Mis proyectos' abren la ficha del cliente específico (antes iban al listado genérico de Cartera)
+2026-08-07 Pulido clickeable-a-la-fuente: nombre de cliente abre su ficha en cabecera de grupo Facturación (Por cobrar/emitidas), filas de rendición, cabecera grupo Notaría y detalle de liquidación (Gastos)

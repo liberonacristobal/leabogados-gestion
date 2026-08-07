@@ -7580,7 +7580,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
             <span style={{fontSize:12,color:C.accent,transform:isOpen?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(client.id)}} style={{cursor:'pointer'}}>{client.name}</span>:client.name}</div>
               {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name&&!rs.multi)?<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</div>:null })()}
               {!isOpen&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{nDocs} doc{nDocs!==1?'s':''}{vencidoMonto>0&&<span style={{color:C.overdue,fontWeight:700}}> · {fmt(vencidoMonto)} vencido</span>}</div>}
             </div>
@@ -11996,7 +11996,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'flex',gap:13,alignItems:'center',cursor:'pointer'}}>
             <div style={{textAlign:'center',width:40,flexShrink:0}}><div style={{fontSize:17,fontWeight:600,color:C.accent,lineHeight:1}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.done,marginTop:2}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div>
             <div style={{flex:1,minWidth:0}}>
-              {showClient&&<div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Cliente'}</div>}
+              {showClient&&<div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl&&onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(cl.id)}} style={{cursor:'pointer'}}>{cl.name}</span>:(cl?.name||'Cliente')}</div>}
               {proj
                 ? <span style={{display:'inline-block',fontSize:9.5,fontWeight:600,color:C.accent,background:C.azulBg,borderRadius:12,padding:'1px 7px',maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',verticalAlign:'middle'}}>{proj}</span>
                 : (!showClient&&<span style={{fontSize:13,fontWeight:600,color:C.text}}>Rendición</span>)}
@@ -12563,7 +12563,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             return (
             <div key={cid} style={{border:`1px solid ${rojo?'#F0997B':C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,padding:'8px 13px',background:rojo?C.overdueBg:C.bgSoft,borderBottom:`1px solid ${rojo?'#F0997B':C.border}`}}>
-                <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:rojo?C.overdueText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>{esOf?<>Oficina · <b>Se cubre sola</b></>:<>Disponible <b>{fmt(disp)}</b> de {fmt(fondosC)}</>}</div></div>
+                <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:rojo?C.overdueText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha?<span onClick={()=>onOpenClientFicha(cid)} style={{cursor:'pointer'}}>{cn}</span>:cn}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>{esOf?<>Oficina · <b>Se cubre sola</b></>:<>Disponible <b>{fmt(disp)}</b> de {fmt(fondosC)}</>}</div></div>
                 <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
               </div>
               {reservadoC>0&&<div style={{fontSize:10,color:C.azulInfo,background:C.azulBg,padding:'4px 13px',borderBottom:`1px solid ${C.border}`}}>Otros gastos por pagar: {fmt(reservadoC)}</div>}
@@ -12628,7 +12628,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   {gs.map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
                     <div key={e.id} style={{display:'flex',alignItems:'baseline',gap:8,padding:'4px 0',fontSize:11}}>
                       <span style={{fontSize:9,color:C.azulInfo,fontWeight:700,width:62,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
-                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'} <span style={{color:C.done}}>· {cn}</span></span>
+                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'} <span style={{color:C.done}}>· {e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}} style={{cursor:'pointer'}}>{cn}</span>:cn}</span></span>
                       <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
                     </div>) })}
                   <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
