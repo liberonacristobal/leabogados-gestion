@@ -22045,22 +22045,38 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ appAlert('Error: '+e.message) }
     setBusy(null)
   }
-  // Abono a la caja chica de una persona (Martín/Martina): crea el abono en petty_cash (money in), NO un gasto → no duplica.
+  // Abono a caja chica ya ingresado a mano (mismo nombre, monto exacto, aún sin vincular a un movimiento).
+  const cajaChicaMatch = (persona, monto) => (pettyCash||[]).find(p => p.user_name===persona && (p.amount||0)>0 && Math.abs((p.amount||0)-monto)<=TOL && !String(p.nota||'').includes('mov:'))
+  const _cierraCaja = (m,movAplic,estado)=>{ setMovs(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplic,categoria:'Caja chica'}:x)); setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''})) }
+  // Caso común: la caja chica ya se ingresó a mano → VINCULAR (pide confirmar, no duplica). Solo crea si no hay match.
   const abonoCajaChica = async(m, persona) => {
     if(busy) return
     if(!persona){ appAlert('Elige a quién le pasaste la caja chica.'); return }
+    const monto=(m.monto||0)-(m.monto_conciliado||0)
+    const movAplic=(m.monto_conciliado||0)+monto
+    const estado=((m.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+    const match=cajaChicaMatch(persona, monto)
+    if(match){
+      const vincular = await appConfirm(`Ya ingresaste ${fmtM(match.amount)} a la caja chica de ${persona}${match.nota?` (${match.nota})`:''}. ¿Es este mismo movimiento? Se vincula para NO duplicar.`)
+      if(vincular){
+        setBusy(m.id)
+        try{
+          const nota=`${match.nota||''} · mov:${m.id}`.trim()
+          const { error:pe } = await supabase.from('petty_cash').update({ nota }).eq('id',match.id); if(pe) throw pe
+          const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id); if(me) throw me
+          setPettyCash&&setPettyCash(p=>p.map(x=>x.id===match.id?{...x,nota}:x)); _cierraCaja(m,movAplic,estado)
+        }catch(e){ appAlert('Error al vincular caja chica: '+e.message) }
+        setBusy(null); return
+      }
+      // dijo que NO es ese abono → cae al alta de uno nuevo
+    }
     setBusy(m.id)
     let pc=null
     try{
-      const monto=(m.monto||0)-(m.monto_conciliado||0)
       const ins = await supabase.from('petty_cash').insert({ user_name:persona, amount:monto, nota:`Abono caja chica (banco) · mov:${m.id}` }).select().single()
       if(ins.error) throw ins.error; pc=ins.data
-      const movAplic=(m.monto_conciliado||0)+monto
-      const estado=((m.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id)
-      if(me) throw me
-      setPettyCash&&setPettyCash(p=>[pc,...p]); setMovs(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplic,categoria:'Caja chica'}:x))
-      setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''}))
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id); if(me) throw me
+      setPettyCash&&setPettyCash(p=>[pc,...p]); _cierraCaja(m,movAplic,estado)
     }catch(e){ if(pc) await supabase.from('petty_cash').delete().eq('id',pc.id); appAlert('Error al abonar caja chica: '+e.message) }
     setBusy(null)
   }
@@ -22069,7 +22085,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     setBusy(m.id)
     try{
       const pc=(pettyCash||[]).find(p=>String(p.nota||'').includes(`mov:${m.id}`))
-      if(pc){ const {error:pe}=await supabase.from('petty_cash').delete().eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.filter(x=>x.id!==pc.id)) }
+      if(pc){
+        if(/\(banco\)/.test(pc.nota||'')){ const {error:pe}=await supabase.from('petty_cash').delete().eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.filter(x=>x.id!==pc.id)) }   // lo creó la conciliación → borrar
+        else { const nota=String(pc.nota||'').replace(new RegExp(`\\s*·\\s*mov:${m.id}`),'').trim(); const {error:pe}=await supabase.from('petty_cash').update({nota}).eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.map(x=>x.id===pc.id?{...x,nota}:x)) }   // era manual → solo desvincular
+      }
       const { error } = await supabase.from('cartola_movimientos').update({ estado:'pendiente', monto_conciliado:0, categoria:null }).eq('id',m.id)
       if(error) throw error
       setMovs(p=>p.map(x=>x.id===m.id?{...x,estado:'pendiente',monto_conciliado:0,categoria:null}:x))
@@ -22114,7 +22133,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }
     if(conc.length) return null   // conciliado contra otra cosa → lo maneja otro bloque
     if(m.categoria==='Cliente'&&m.cliente_id) return done({color:C.coralText,bg:'#FAECE7'}, `Gasto de ${cmap[m.cliente_id]||'cliente'} · control`, ()=>quitarCargoCliente(m), 'Quitar')
-    if(m.categoria==='Caja chica'){ const pc=(pettyCash||[]).find(p=>String(p.nota||'').includes(`mov:${m.id}`)); return done({color:C.tealText,bg:C.tealBg}, `Abono caja chica${pc?.user_name?` · ${pc.user_name}`:''} · ${fmtM(m.monto)}`, ()=>deshacerCajaChica(m), 'Deshacer') }
+    if(m.categoria==='Caja chica'){ const pc=(pettyCash||[]).find(p=>String(p.nota||'').includes(`mov:${m.id}`)); const vinc=pc&&!/\(banco\)/.test(pc.nota||''); return done({color:C.tealText,bg:C.tealBg}, `Caja chica${pc?.user_name?` · ${pc.user_name}`:''}${vinc?' · vinculado':''} · ${fmtM(m.monto)}`, ()=>deshacerCajaChica(m), 'Deshacer') }
     if(m.categoria==='Reembolso oficina') return done({color:C.azulInfo,bg:C.azulBg}, 'Reembolso oficina · control', ()=>marcarControlCargo(m,null), 'Quitar')
     if(m.categoria&&m.categoria!=='Cliente'){ const t=TAG_STY[m.categoria]||{bg:C.bgWarm,color:C.grisText}; return done({color:t.color,bg:t.bg}, m.categoria, ()=>setCategoria(m,null), 'Quitar') }
     // ---- SIN clasificar → combo ----
