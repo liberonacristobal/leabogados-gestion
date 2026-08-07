@@ -22616,23 +22616,27 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     </div>
                   )})}
                 </div>
-                {nSug>0&&<div onClick={()=>{setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,marginTop:8,cursor:'pointer',padding:'0 2px'}}>Identificar {nSug} por su nombre →</div>}
-                {conc>0&&<div style={{display:'flex',gap:12,alignItems:'center',marginTop:8}}>
-                  <span onClick={()=>setConcView(concView==='conciliados'?'todos':'conciliados')} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,color:C.greenText,background:C.greenBg,borderRadius:9,padding:'7px 11px',cursor:'pointer'}}><SIcon n='check' s={13} c={C.greenText}/><b>{conc}</b> conciliados</span>
-                  {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones / fondos por rendir)' style={{fontSize:11,color:C.done,cursor:'pointer',marginLeft:'auto'}}>{resumenConc.fondos} en Cta. Gastos →</span>}
-                </div>}
               </>:(
                 <div style={{display:'flex',alignItems:'center',gap:11,padding:'12px 13px',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>
                   <span style={{width:28,height:28,borderRadius:'50%',background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={15} c={C.greenText}/></span>
                   <span style={{fontSize:14,fontWeight:600,color:C.greenText}}>Todo conciliado · {conc}</span>
                 </div>
               )}
-              {nCobradas>0&&<div onClick={()=>setCobradasOpen(true)} title='Facturas marcadas pagadas que aún no calzan con un movimiento del banco' style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,borderRadius:10,padding:'9px 11px',marginTop:10,cursor:'pointer'}}>
-                <SIcon n='alert' s={16} c={C.soonText}/>
-                <span style={{fontSize:13,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nCobradas}</span>
-                <span style={{fontSize:11,color:C.soonText,flex:1,minWidth:0}}>Facturas pagadas sin respaldo en banco</span>
-                <span style={{color:C.soonText,flexShrink:0}}>›</span>
-              </div>}
+              {/* Resumen en 3 tiles (opción C): Conciliados · Identificar · Sin respaldo — cada uno abre su lista */}
+              {(()=>{ const cards=[
+                  (pend>0&&conc>0)&&{k:'conc',bg:C.greenBg,col:C.greenText,n:conc,l:'Conciliados',sub:resumenConc.fondos>0?`${resumenConc.fondos} en Cta. Gastos`:'movimientos',on:()=>setConcView(concView==='conciliados'?'todos':'conciliados')},
+                  nSug>0&&{k:'ident',bg:C.azulBg,col:C.accent,n:nSug,l:'Identificar',sub:'por su nombre',on:()=>{setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}},
+                  nCobradas>0&&{k:'resp',bg:C.ambarBg,col:C.soonText,n:nCobradas,l:'Sin respaldo',sub:'facturas pagadas',on:()=>setCobradasOpen(true)},
+                ].filter(Boolean)
+                if(!cards.length) return null
+                return <div style={{display:'grid',gridTemplateColumns:cards.length>=3?'1fr 1fr 1fr':(cards.length===2?'1fr 1fr':'1fr'),gap:8,marginTop:10}}>
+                  {cards.map(c=><div key={c.k} onClick={c.on} style={{background:c.bg,borderRadius:11,padding:'10px 11px',cursor:'pointer'}}>
+                    <div style={{fontSize:19,fontWeight:800,color:c.col,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{c.n}</div>
+                    <div style={{fontSize:11,fontWeight:600,color:c.col,marginTop:3}}>{c.l}</div>
+                    <div style={{fontSize:9,color:c.col,opacity:.85,marginTop:1}}>{c.sub}</div>
+                  </div>)}
+                </div>
+              })()}
             </div>
           )
         })()}
@@ -22648,11 +22652,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           if(!exactos.length) return null   // solo se muestra cuando hay calces exactos para conciliar de una; el resto (por revisar / sin factura) ya vive en los tiles "Por resolver"
           return (
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:11}}>
-              <div onClick={()=>setLoteOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',background:C.bgSoft,cursor:'pointer'}}>
-                <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={15} c={C.accent}/></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Conciliar de una vez</div><div style={{fontSize:10,color:C.muted}}>{exactos.length} {exactos.length===1?'calza':'calzan'} exacto con su factura{revisar.length?` · ${revisar.length} por revisar`:''}</div></div>
-                {exactos.length>0&&!loteOpen&&<button onClick={e=>{e.stopPropagation();setLoteConfirm(exactos)}} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0,opacity:loteBusy?.6:1}}>{loteBusy?`${loteProg}/${exactos.length}…`:`Conciliar ${exactos.length}`}</button>}
-                <span style={{fontSize:12,color:C.muted,marginLeft:4}}>{loteOpen?'▾':'▸'}</span>
+              <div onClick={()=>setLoteOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:C.greenText,cursor:'pointer'}}>
+                <span style={{width:30,height:30,borderRadius:8,background:'rgba(255,255,255,.18)',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={15} c='#fff'/></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:'#fff'}}>Conciliar de una vez</div><div style={{fontSize:10,color:'rgba(255,255,255,.85)'}}>{exactos.length} {exactos.length===1?'calza':'calzan'} exacto con su factura{revisar.length?` · ${revisar.length} por revisar`:''}</div></div>
+                {exactos.length>0&&!loteOpen&&<button onClick={e=>{e.stopPropagation();setLoteConfirm(exactos)}} disabled={loteBusy} style={{fontSize:11.5,fontWeight:700,color:C.greenText,background:'#fff',border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',flexShrink:0,opacity:loteBusy?.6:1}}>{loteBusy?`${loteProg}/${exactos.length}…`:`Conciliar ${exactos.length}`}</button>}
+                <span style={{fontSize:12,color:'rgba(255,255,255,.8)',marginLeft:4}}>{loteOpen?'▾':'▸'}</span>
               </div>
               {loteOpen&&<div style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
                 {exactos.length>0?<>
