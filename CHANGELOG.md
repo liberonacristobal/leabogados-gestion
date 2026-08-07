@@ -1881,3 +1881,4 @@
 2026-08-07 Conciliación bancaria (abonos): resumen reordenado (opción C) — Conciliados/Identificar/Sin respaldo como tiles de color que abren su lista, y 'Conciliar de una vez' como barra verde destacada
 2026-08-07 Pulido Ventas+Ficha: Ventas — match de cliente normalizado (String), razón social/RUT clickeable a ficha, contadores 'activas/terminadas' filtran su estado. Ficha — KPI 'Saldo fondos' abre Estado de cuenta, encabezado RS/RUT abre Contacto, anticipos consumidos en Estado de cuenta abren su factura
 2026-08-07 Pulido Ficha #2: los KPIs de Financiero (Por cobrar/Por facturar/Cobrado) abren la sección Facturas y expanden el acordeón de ese estado (antes eran solo display)
+2026-08-07 Ficha coherente: subtítulo de propósito en encabezados (Ventas='qué le vendiste', Proyectos='cuánto falta cobrar'); 'Por cobrar $X' destacado por proyecto en Financiero (antes 'pend.' chico)
