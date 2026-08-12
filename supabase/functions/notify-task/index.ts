@@ -3,6 +3,74 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
+const SB_URL = Deno.env.get("SUPABASE_URL") || "";
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUIÉN PUEDE USAR ESTA FUNCIÓN.
+//
+// ESTABA ABIERTA A INTERNET. Sin `verify_jwt`, sin secreto y con CORS a `*`:
+// un POST con {mail:{to,subject,html,attachments}} enviaba correo arbitrario,
+// con adjuntos, DESDE LA CUENTA DEL ESTUDIO. La base no la protegía porque la
+// función usa sus propias credenciales de Gmail.
+//
+// PONER verify_jwt = true NO LA CIERRA. La clave anónima del proyecto es un JWT
+// válido firmado por el proyecto y viaja en el paquete que descarga el
+// navegador: cualquiera que la lea sigue pasando. Por eso la comprobación va
+// acá adentro y la clave anónima se rechaza explícitamente.
+//
+// Dos llamadores legítimos, y ninguno más:
+//   · una persona del estudio, con su sesión iniciada;
+//   · el servidor, con la clave de servicio, que nunca sale del servidor.
+// ─────────────────────────────────────────────────────────────────────────────
+const DOMINIO = "@leabogados.cl";
+
+async function autorizar(req: Request): Promise<{ ok: true; quien: string } | { ok: false; motivo: string }> {
+  const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  if (!bearer) return { ok: false, motivo: "Falta el encabezado Authorization" };
+
+  // Llamada de servidor a servidor.
+  if (SERVICE_KEY && bearer === SERVICE_KEY) return { ok: true, quien: "servidor" };
+
+  // La clave anónima está en el paquete del navegador: no identifica a nadie.
+  if (ANON_KEY && bearer === ANON_KEY) {
+    return { ok: false, motivo: "La clave anónima no autoriza: hace falta la sesión de una persona del estudio" };
+  }
+
+  // Sesión de una persona: se resuelve contra Auth y se exige el dominio.
+  if (!SB_URL || !ANON_KEY) return { ok: false, motivo: "La función no está configurada para verificar sesiones" };
+  let correo = "";
+  try {
+    const r = await fetch(`${SB_URL}/auth/v1/user`, {
+      headers: { apikey: ANON_KEY, Authorization: `Bearer ${bearer}` },
+    });
+    if (!r.ok) return { ok: false, motivo: "Sesión inválida o expirada" };
+    correo = String((await r.json())?.email || "").toLowerCase();
+  } catch {
+    return { ok: false, motivo: "No se pudo verificar la sesión" };
+  }
+  if (!correo.endsWith(DOMINIO)) return { ok: false, motivo: "La cuenta no es del estudio" };
+  return { ok: true, quien: correo };
+}
+
+// El origen tampoco es cualquiera. No protege contra un llamador que no sea un
+// navegador —para eso está `autorizar`— pero evita que una página cualquiera
+// use esta función desde el navegador de alguien del estudio.
+const ORIGENES = [
+  "https://gestion.leabogados.cl",
+  "https://taxiq.leabogados.cl",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+const cors = (req: Request) => {
+  const o = req.headers.get("Origin") || "";
+  return {
+    "Access-Control-Allow-Origin": ORIGENES.includes(o) ? o : ORIGENES[0],
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+};
 
 const EMAILS: Record<string, string> = {
   "Martín": "mc@leabogados.cl",
@@ -79,12 +147,13 @@ async function sendMail(
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors(req) });
+
+  const permiso = await autorizar(req);
+  if (!permiso.ok) {
+    return new Response(JSON.stringify({ error: permiso.motivo }), {
+      status: 403,
+      headers: { "Content-Type": "application/json", ...cors(req) },
     });
   }
 
@@ -96,12 +165,12 @@ serve(async (req) => {
       const { to, cc, subject, html, text, pdfBase64, pdfName, attachments } = payload.mail;
       if (!to || !subject) {
         return new Response(JSON.stringify({ error: "Falta to o subject" }), {
-          status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          status: 400, headers: { "Content-Type": "application/json", ...cors(req) },
         });
       }
       await sendMail({ to, cc, subject, html, text, pdfBase64, pdfName, attachments });
       return new Response(JSON.stringify({ ok: true, sent_to: to, via: "servidor" }), {
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: { "Content-Type": "application/json", ...cors(req) },
       });
     }
 
@@ -239,13 +308,13 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ ok: true, sent_to: toEmail }), {
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      headers: { "Content-Type": "application/json", ...cors(req) },
     });
 
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      headers: { "Content-Type": "application/json", ...cors(req) },
     });
   }
 });

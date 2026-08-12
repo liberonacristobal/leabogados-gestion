@@ -245,7 +245,9 @@ serve(async (req) => {
         const html = `<div style="font-family:Arial,sans-serif;color:#1a1a1a"><h3 style="color:#A32D2D;margin:0 0 8px">DTE rechazadas por el SII</h3><p>El SII rechazó ${rechazadas.length} factura(s) electrónica(s). Revísalas en Facturación y vuelve a emitir:</p><ul>${filas}</ul></div>`
         try {
           await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-task`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Deno.env.get('SUPABASE_ANON_KEY') },
+            // La clave de servicio, no la anónima: notify-task exige la sesión de una
+            // persona del estudio o esta clave, que nunca sale del servidor.
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') },
             body: JSON.stringify({ mail: { to: ['cl@leabogados.cl', 'ee@leabogados.cl'], subject: `${rechazadas.length} DTE rechazada(s) por el SII`, html } }),
           })
         } catch (_) { /* el aviso no debe romper el job */ }
@@ -277,7 +279,9 @@ serve(async (req) => {
       const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:16px 22px;color:#fff"><b>Resumen semanal de facturación</b></div><div style="padding:18px 22px;color:#1a1a1a;font-size:14px"><table style="width:100%;border-collapse:collapse">${fila('Emitidas esta semana', String(emitidasSemana))}${fila('Por cobrar', fm(porCobrar))}${fila('De eso, vencido', fm(vencido), vencido > 0 ? '#A32D2D' : '#003C50')}${fila('Facturas por enviar', String(porEnviar), porEnviar > 0 ? '#854F0B' : '#003C50')}${fila('DTE rechazadas por el SII', String(rechazadas), rechazadas > 0 ? '#A32D2D' : '#0F6E56')}</table></div></div>`
       try {
         await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-task`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Deno.env.get('SUPABASE_ANON_KEY') },
+          // La clave de servicio, no la anónima: notify-task exige la sesión de una
+            // persona del estudio o esta clave, que nunca sale del servidor.
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') },
           body: JSON.stringify({ mail: { to: ['cl@leabogados.cl', 'ee@leabogados.cl'], subject: 'Resumen semanal de facturación', html } }),
         })
       } catch (_) { /* no romper el job */ }
