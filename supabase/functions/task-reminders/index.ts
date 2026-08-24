@@ -21,11 +21,13 @@ const toAscii = (s: string) =>
   String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[–—]/g, "-").replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/[^\x20-\x7E]/g, "");
+// Quoted-printable deja los espacios de fin de línea como "=20" si el cliente no los decodifica → se ven crudos. Los quitamos del HTML.
+const qpSafe = (h: string) => String(h || "").replace(/[ \t]+$/gm, "");
 
 async function sendMail(to: string, subject: string, html: string) {
   const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
   try {
-    await client.send({ from: `Liberona Escala Abogados - Recordatorios <${GMAIL_USER}>`, to, subject: toAscii(subject), content: "Ver el contenido en formato HTML.", html });
+    await client.send({ from: `Liberona Escala Abogados - Recordatorios <${GMAIL_USER}>`, to, subject: toAscii(subject), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
   } finally { await client.close(); }
 }
 

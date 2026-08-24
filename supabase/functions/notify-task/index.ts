@@ -94,7 +94,7 @@ async function sendViaSMTP(to: string, subject: string, html: string, fromName =
   });
   try {
     // From y Asunto SOLO ASCII (denomailer rompe el encoded-word RFC 2047 con tildes → correo crudo "con crush"). El cuerpo HTML conserva las tildes.
-    const msg: Record<string, unknown> = { from: `${toAscii(fromName)} <${GMAIL_USER}>`, to, subject: toAscii(subject), html };
+    const msg: Record<string, unknown> = { from: `${toAscii(fromName)} <${GMAIL_USER}>`, to, subject: toAscii(subject), html: qpSafe(html) };
     if (replyTo) msg.replyTo = replyTo;
     await client.send(msg);
   } finally {
@@ -114,6 +114,9 @@ const toAscii = (s: string) =>
     .replace(/[–—]/g, "-")
     .replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/[^\x20-\x7E]/g, "");
+// Quoted-printable codifica los espacios al final de línea como "=20"; si el cliente no los decodifica, se ven crudos en el correo.
+// Los quitamos del HTML (por línea) antes de enviar. Cierra el bug de los "=20" sueltos en el cuerpo.
+const qpSafe = (h: string) => String(h || "").replace(/[ \t]+$/gm, "");
 async function sendMail(
   { to, cc, subject, html, text, pdfBase64, pdfName, attachments, fromName, replyTo }:
   { to: string; cc?: string; subject: string; html?: string; text?: string; pdfBase64?: string; pdfName?: string; attachments?: MailAttachment[]; fromName?: string; replyTo?: string },
@@ -125,7 +128,7 @@ async function sendMail(
     const msg: Record<string, unknown> = { from: `${toAscii(fromName || "Liberona Escala Abogados")} <${GMAIL_USER}>`, to, subject: toAscii(subject) };
     if (cc) msg.cc = cc;
     if (replyTo) msg.replyTo = replyTo;
-    if (html) msg.html = html;
+    if (html) msg.html = qpSafe(html);
     msg.content = text || (html ? "Ver el contenido en formato HTML." : subject);
     // Lista unificada de adjuntos. Compat: pdfBase64/pdfName = un adjunto PDF.
     const atts: MailAttachment[] = (attachments && attachments.length)
@@ -217,14 +220,14 @@ serve(async (req) => {
     const clienteName = task.client_name || "";
     const project = task.project || "";
     const titulo = task.title || "";
-    const nota = task.note || task.descripcion || task.comentario || "";
+    const nota = String(task.note || task.descripcion || task.comentario || "").trim();
     // Reporte de cierre (solo tareas terminadas): detalle de la gestión + estado + adjuntos.
-    const gestion = tipo === "terminada" ? String(task.completion_note || "") : "";
+    const gestion = tipo === "terminada" ? String(task.completion_note || "").trim() : "";
     const estadoCierre = tipo === "terminada" ? String(task.completion_status || "") : "";
     const attachments: MailAttachment[] = Array.isArray(payload.attachments) ? payload.attachments : [];
     const attCount = attachments.length;
     // Motivo de la delegación (obligatorio): viaja al delegado y a quien asignó.
-    const motivoDeleg = String(task.delegated_note || "");
+    const motivoDeleg = String(task.delegated_note || "").trim();
     const due = task.due ? new Date(task.due + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "";
     // Urgencia del vencimiento: ≤ 2 días desde hoy → pill roja; si no, pill neutra.
     let dueUrgent = false;
@@ -271,11 +274,11 @@ serve(async (req) => {
         </table>
       </div>
       ${motivoDeleg ? `<div style="background:#FDF6E7; border-left:3px solid #E0A93B; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
-        <div style="font-size:11px; font-weight:bold; color:#854F0B; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Motivo de la delegacion</div>
+        <div style="font-size:11px; font-weight:bold; color:#854F0B; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Motivo de la delegación</div>
         <div style="font-size:13px; color:#1a1a1a; line-height:1.55; white-space:pre-wrap;">${esc(motivoDeleg)}</div>
       </div>` : ""}
       ${gestion ? `<div style="background:#E1F5EE; border-left:3px solid #1D9E75; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
-        <div style="font-size:11px; font-weight:bold; color:#0F6E56; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Gestion realizada${estadoCierre ? ` &middot; ${esc(estadoCierre)}` : ""}</div>
+        <div style="font-size:11px; font-weight:bold; color:#0F6E56; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Gestión realizada${estadoCierre ? ` <span style="display:inline-block; background:${/complet/i.test(estadoCierre) ? "#1D9E75" : "#E0A93B"}; color:#ffffff; border-radius:20px; padding:1px 8px; font-size:9px; letter-spacing:0.3px; vertical-align:1px;">${esc(estadoCierre)}</span>` : ""}</div>
         <div style="font-size:13px; color:#1a1a1a; line-height:1.55; white-space:pre-wrap;">${esc(gestion)}</div>
         ${attCount ? `<div style="font-size:12px; color:#0F6E56; margin-top:8px;">${attCount} documento${attCount > 1 ? "s" : ""} adjunto${attCount > 1 ? "s" : ""}</div>` : ""}
       </div>` : ""}
