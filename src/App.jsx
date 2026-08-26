@@ -4654,7 +4654,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     if(ups.length){ await onUpdateCuotas(ups); setCuotaEdits({}) }
   }
 
-  const handleSave = async () => {
+  const handleSave = async (extra={}) => {
     // Reparto: solo filas con proveedor elegido y monto. Si hay filas con monto pero SIN proveedor y ninguna completa, avisar.
     const repartoLimpio = (reparto||[]).filter(r=>r.proveedor_id && (parseFloat(r.valor)||0)>0)
     const hayIncompleto = (reparto||[]).some(r=>(parseFloat(r.valor)||0)>0 && !r.proveedor_id)
@@ -4674,7 +4674,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     }
     clearDraft()
     // En propuesta/borrador editada se regeneran las cuotas programadas (todas sin emitir) según la forma de cobro actual.
-    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false, _regenProg:propBorr, repartoTerceros:repartoLimpio})
+    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false, _regenProg:propBorr, repartoTerceros:repartoLimpio, ...extra})
   }
 
   const handleSaveDraft = () => {
@@ -5431,7 +5431,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {/* 11. Botones — CTA principal full-width abajo, acciones secundarias arriba (responsive móvil) */}
       <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:6}}>
         {sale?.id&&sale?.status==='Activo'&&!_activandoPropuesta&&!modCobro&&onPrimerasTareas&&
-          <button type='button' onClick={()=>onPrimerasTareas(sale)} style={{width:'100%',padding:'9px 14px',borderRadius:10,border:`1px solid ${C.azulInfo}`,background:C.azulBg,color:C.azulInfo,fontSize:12.5,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>
+          <button type='button' disabled={saving} onClick={()=>handleSave({_thenPrimerasTareas:true})} title='Guarda la venta y abre la generación de tareas con IA' style={{width:'100%',padding:'9px 14px',borderRadius:10,border:`1px solid ${C.azulInfo}`,background:C.azulBg,color:C.azulInfo,fontSize:12.5,fontWeight:600,cursor:saving?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Primeras tareas con IA
           </button>}
         <div style={{display:'flex',gap:8}}>
@@ -5439,7 +5439,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           {!sale?.id&&!modCobro&&<button disabled={saving} onClick={handleSaveDraft} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Borrador</button>}
           {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{flex:1,padding:'11px 0',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         </div>
-        <button disabled={saving||savingTariff||!f.client_id||!f.title} onClick={modCobro?confirmAndSave:handleSave}
+        <button disabled={saving||savingTariff||!f.client_id||!f.title} onClick={modCobro?confirmAndSave:()=>handleSave()}
           style={{width:'100%',padding:13,borderRadius:10,border:'none',background:_activandoPropuesta?C.normal:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
           {(saving||savingTariff)?<Spin/>:null}{(saving||savingTariff)?'Guardando...':modCobro?'Confirmar y guardar':_activandoPropuesta?'Activar propuesta':'Guardar'}
         </button>
@@ -23545,7 +23545,7 @@ export default function App() {
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const {cobros, cobroType, _actualizarPago, _regenProg, _activandoPropuesta, _propAmountUF, _propAmountCLP, repartoTerceros, ...saleData} = f
+      const {cobros, cobroType, _actualizarPago, _regenProg, _activandoPropuesta, _propAmountUF, _propAmountCLP, _thenPrimerasTareas, repartoTerceros, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
       const esCLP = (f.moneda||'UF')==='CLP'
       // Ventas en CLP: congelar la UF del día (la histórica de la fecha de venta) para que su equivalente en UF NO fluctúe. Al editar, se preserva la ya guardada.
@@ -23660,7 +23660,7 @@ export default function App() {
               if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
               const m = montoCuota(row,cuota); if(m<=0) continue
               nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
-                proveedor: prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null,
+                proveedor: prov?(prov.nombre||prov.razon_social):null, rut:prov?.rut||null,
                 tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, monto:m,
                 estado: cuota.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null})
             }
@@ -23678,8 +23678,8 @@ export default function App() {
           setClients(p=>p.map(c=>c.id===cliente.id?{...c,status:'Activo'}:c))
         }
       }
-      // Recién activada: la IA propone las primeras tareas (compuerta) y avisa al abogado. Cerramos el form y abrimos la compuerta.
-      if(_activandoPropuesta) setModal({type:'primerasTareas',data})
+      // Recién activada (o botón "Primeras tareas con IA" en venta activa): guardamos y abrimos la compuerta de tareas.
+      if(_activandoPropuesta||_thenPrimerasTareas) setModal({type:'primerasTareas',data})
       else setModal(null)
     }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
