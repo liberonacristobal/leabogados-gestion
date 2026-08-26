@@ -2366,7 +2366,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,onOpenClientFicha,onOpenPlazos,onAcceso}) {
+function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   // KPIs colapsables: "Cómo va el año" queda fijo (hero); el resto arranca en mini y se abre al tocar (recuerda por usuario).
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
@@ -3367,20 +3367,21 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
             return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>setMisProyOpen(o=>!o)) })()}
         </div>
       </div>
-      {misProyOpen&&(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
-        const hace=iso=>{ if(!iso) return 'sin mover'; const d=Math.round((Date.now()-new Date(iso+'T00:00').getTime())/86400000); return d<=0?'hoy':d===1?'ayer':`hace ${d} d` }
-        const sorted=[...mine].sort((a,b)=>{ const ka=a.ultima_actividad?new Date(a.ultima_actividad).getTime():0, kb=b.ultima_actividad?new Date(b.ultima_actividad).getTime():0; return ka-kb })
+      {misProyOpen&&(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
+        // Misma fuente que el panel: movimiento real → última señal + orden (lo que se mueve, arriba).
+        const movByP={}; mine.forEach(p=>{ movByP[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) })
+        const sorted=[...mine].sort((a,b)=>(movByP[b.id].score)-(movByP[a.id].score))
         const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
         return (
         <div style={{padding:'8px 20px 0'}}>
           <div style={{border:'1px solid #DDE2E6',borderRadius:10,overflow:'hidden'}}>
-            {sorted.slice(0,6).map((p,i)=>(
-              <div key={p.id} onClick={()=>{ const cid=p.cliente_id; if(cid&&onOpenClientFicha) onOpenClientFicha(cid); else setTab('cartera') }} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:i>0?'1px solid #DDE2E6':'none',background:'#fff',cursor:'pointer'}}>
+            {sorted.slice(0,6).map((p,i)=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} d`; return (
+              <div key={p.id} onClick={()=>{ onOpenProyecto?onOpenProyecto(p.id):setTab('cartera') }} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:i>0?'1px solid #DDE2E6':'none',background:'#fff',cursor:'pointer'}}>
                 <span style={{width:8,height:8,borderRadius:'50%',background:CART_DOT[p.estado||'verde'],flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.nota||p.nombre_proyecto||''}</div></div>
-                <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{hace(p.ultima_actividad)}</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>{s&&<span style={{width:5,height:5,borderRadius:'50%',background:SEÑAL_COL[s.tipo]||C.muted,flexShrink:0}}/>}{s?s.texto:(p.nota||p.nombre_proyecto||'sin señales')}</div></div>
+                <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{s?cu:''}</span>
               </div>
-            ))}
+            )})}
             <div onClick={()=>setTab('cartera')} style={{padding:'9px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',background:'#fff'}}>Ver todos →</div>
           </div>
         </div>
@@ -20301,6 +20302,29 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
 const ETAPAS_CARTERA = ['Diagnóstico','Análisis','Borrador','Revisión cliente','Ejecución','Cierre']
 const CART_DOT = { rojo:'#E24B4A', ambar:'#EF9F27', verde:'#1D9E75' }   // semáforo (eje nuevo: salud del proyecto)
 const CART_AV  = { CL:'#003C50', EE:'#185FA5', MC:'#3B6D11', MP:'#993556', RD:'#854F0B' }  // color por persona (canon)
+const SEÑAL_COL = { pago:'#0F6E56', factura:'#185FA5', anticipo:'#185FA5', tarea:'#854F0B', gasto:'#537281', nota:'#99ABB4' }
+// FUENTE ÚNICA del movimiento de un proyecto (la usan Cartera y el strip "Mis proyectos" del Inicio).
+// Barre los eventos REALES del cliente/proyecto (pagos, facturas, tareas, anticipos, gastos) → última señal + score 30d + eventos (con ref clickeable).
+const carteraMovimiento = (p, { billing=[], tasks=[], anticipos=[], expenses=[] }={}) => {
+  const _d = iso => iso==null?null:Math.round((Date.now()-new Date(String(iso).slice(0,10)+'T12:00').getTime())/86400000)
+  const cid = String(p.cliente_id||''); const sid = p.sale_id?String(p.sale_id):null
+  const evs = []; const linkCli = x => cid && String(x)===cid
+  const push=(fecha,tipo,texto,peso,ref)=>{ if(!fecha) return; const iso=String(fecha).slice(0,10); if(iso.length<10) return; evs.push({iso,tipo,texto,peso,ref:ref||null}) }
+  const fichaRef = { kind:'ficha', id:p.cliente_id }
+  billing.forEach(b=>{ if(b.deleted_at) return; if(!(linkCli(b.client_id) || (sid&&String(b.sale_id)===sid))) return
+    if(b.paid_at) push(b.paid_at,'pago','Pago recibido',5,fichaRef)
+    else if(b.issued_at) push(b.issued_at,'factura','Factura emitida',3,fichaRef) })
+  tasks.forEach(t=>{ const linked=(String(t.project_id||'')===String(p.id)) || (!t.project_id && linkCli(t.client_id)); if(!linked) return
+    if(t.completed_at) push(t.completed_at,'tarea','Tarea terminada',2,{kind:'task',id:t.id})
+    else push(t.created_at,'tarea','Tarea nueva',2,{kind:'task',id:t.id}) })
+  anticipos.forEach(a=>{ if(!linkCli(a.client_id)) return; push(a.fecha,'anticipo','Anticipo',3,fichaRef) })
+  expenses.forEach(e=>{ if(!linkCli(e.client_id)) return; push(e.rendered_at||e.date||e.created_at,'gasto','Movimiento de gastos',1,fichaRef) })
+  if(!evs.length && p.ultima_actividad) push(p.ultima_actividad,'nota','Actualización manual',1)
+  if(!evs.length) return { ultima:null, dias:null, score:0, eventos:[] }
+  evs.sort((a,b)=>b.iso.localeCompare(a.iso))
+  const score = evs.reduce((s,e)=>{ const d=_d(e.iso); if(d==null||d<0||d>30) return s; const rec=d<=3?1:d<=7?.7:d<=14?.4:.2; return s+e.peso*rec },0)
+  return { ultima:evs[0], dias:_d(evs[0].iso), score, eventos:evs.slice(0,40) }
+}
 const cartDias = iso => iso ? Math.floor((Date.now()-new Date(iso+'T00:00').getTime())/86400000) : null
 const cartDiasPlazo = iso => iso ? Math.ceil((new Date(iso+'T00:00').getTime()-Date.now())/86400000) : null
 // Prioridad viva (NO se guarda): estado*3 + plazo*2 + inactividad. Casos borde → 0, nunca NaN.
@@ -20488,34 +20512,11 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
   )
 }
 
-function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
-  // ── Motor de movimiento: reúne los eventos REALES del cliente/proyecto (pagos, facturas, tareas, anticipos, gastos)
-  // y devuelve la ÚLTIMA SEÑAL (la más reciente) + un score de actividad de 30 días. Esto reemplaza el ultima_actividad
-  // estático (que solo cambiaba a mano → todo decía "hace 56 días"). Fuente única para ordenar y para la línea de señal.
+  // Motor de movimiento = FUENTE ÚNICA global carteraMovimiento (definida a nivel módulo; la comparte el Inicio).
   const _dias = iso => iso==null?null:Math.round((Date.now()-new Date(String(iso).slice(0,10)+'T12:00').getTime())/86400000)
-  const SEÑAL_COL = { pago:'#0F6E56', factura:'#185FA5', anticipo:'#185FA5', tarea:'#854F0B', gasto:'#537281', nota:'#99ABB4' }
-  const movimientoDe = p => {
-    const cid = String(p.cliente_id||''); const sid = p.sale_id?String(p.sale_id):null
-    const evs = []
-    const linkCli = x => cid && String(x)===cid
-    const push=(fecha,tipo,texto,peso)=>{ if(!fecha) return; const iso=String(fecha).slice(0,10); if(iso.length<10) return; evs.push({iso,tipo,texto,peso}) }
-    ;(billing||[]).forEach(b=>{ if(b.deleted_at) return; if(!(linkCli(b.client_id) || (sid&&String(b.sale_id)===sid))) return
-      if(b.paid_at) push(b.paid_at,'pago','Pago recibido',5)
-      else if(b.issued_at) push(b.issued_at,'factura','Factura emitida',3) })
-    ;(tasks||[]).forEach(t=>{ const linked=(String(t.project_id||'')===String(p.id)) || (!t.project_id && linkCli(t.client_id)); if(!linked) return
-      if(t.completed_at) push(t.completed_at,'tarea','Tarea terminada',2)
-      else push(t.created_at,'tarea','Tarea nueva',2) })
-    ;(anticipos||[]).forEach(a=>{ if(!linkCli(a.client_id)) return; push(a.fecha,'anticipo','Anticipo',3) })
-    ;(expenses||[]).forEach(e=>{ if(!linkCli(e.client_id)) return; push(e.rendered_at||e.date||e.created_at,'gasto','Movimiento de gastos',1) })
-    if(!evs.length && p.ultima_actividad) push(p.ultima_actividad,'nota','Actualización manual',1)
-    if(!evs.length) return { ultima:null, dias:null, score:0, eventos:[] }
-    evs.sort((a,b)=>b.iso.localeCompare(a.iso))
-    const ultima = evs[0]
-    const score = evs.reduce((s,e)=>{ const d=_dias(e.iso); if(d==null||d<0||d>30) return s; const rec=d<=3?1:d<=7?.7:d<=14?.4:.2; return s+e.peso*rec },0)
-    return { ultima, dias:_dias(ultima.iso), score, eventos:evs.slice(0,24) }
-  }
   const HOY = new Date().toISOString().slice(0,10)
   const esAdmin = userRole==='admin'
   const miInicial = INICIALES_RESP[currentUserName] || null
@@ -20551,12 +20552,13 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const [alcanceFor,setAlcanceFor] = useState(null)   // Fase 2A: proyecto sobre el que leer la propuesta
   const [novedades,setNovedades] = useState([])       // Fase 2B: sugerencias del correo pendientes de revisar
   const [escaneando,setEscaneando] = useState(false)
-  const [novOpen,setNovOpen] = useState(true)
+  const [novOpen,setNovOpen] = useState(false)   // novedades correo/agenda: COLAPSADO por defecto (era ruido al entrar)
   const [archivados,setArchivados] = useState([])     // proyectos archivados (activo=false), para ver/reponer
   const [archOpen,setArchOpen] = useState(false)
   const [notas,setNotas] = useState({})               // bitácora manual: { proyecto_id: [{id,texto,autor,created_at}] }
   const [grpOpen,setGrpOpen] = useState({})           // clientes con varios proyectos: abiertos/cerrados
   const [notaDraft,setNotaDraft] = useState('')       // borrador de nota nueva en la bitácora abierta
+  const [bitFull,setBitFull] = useState({})           // { proyecto_id: true } → bitácora completa (por defecto colapsada a los últimos)
   useEffect(()=>{
     if(DEMO){ setNotas({}); return }
     supabase.from('cartera_notas').select('*').order('created_at',{ascending:false}).then(({data})=>{ if(!data) return; const m={}; data.forEach(n=>{ (m[n.proyecto_id]=m[n.proyecto_id]||[]).push(n) }); setNotas(m) },()=>{})
@@ -20569,15 +20571,20 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
     if(error||!data){ appAlert('No se pudo guardar la nota'+(error?': '+error.message:'')); return }
     setNotas(prev=>({ ...prev, [p.id]:[data,...(prev[p.id]||[])] }))
   }
-  // Bitácora = eventos automáticos (movimientoDe) + notas manuales, en una sola cronología.
+  // Bitácora = eventos automáticos + notas manuales, cronología única. AGRUPA los iguales del mismo día
+  // (evita "Factura emitida" ×10) y conserva el ref del primero para el salto clickeable.
   const bitacoraDe = p => {
-    const auto = (mov(p).eventos||[]).map(e=>({ iso:e.iso, tipo:e.tipo, texto:e.texto, autor:null }))
-    const man = (notas[p.id]||[]).filter(Boolean).map(n=>({ iso:String(n.created_at||'').slice(0,10), tipo:'nota', texto:n.texto, autor:n.autor }))
-    return [...auto,...man].filter(e=>e.iso&&e.iso.length>=10).sort((a,b)=>b.iso.localeCompare(a.iso)).slice(0,30)
+    const auto = (mov(p).eventos||[]).map(e=>({ iso:e.iso, tipo:e.tipo, texto:e.texto, autor:null, ref:e.ref }))
+    const man = (notas[p.id]||[]).filter(Boolean).map(n=>({ iso:String(n.created_at||'').slice(0,10), tipo:'nota', texto:n.texto, autor:n.autor, ref:null }))
+    const all = [...auto,...man].filter(e=>e.iso&&e.iso.length>=10).sort((a,b)=>b.iso.localeCompare(a.iso))
+    const out=[], seen=new Map()
+    all.forEach(e=>{ if(e.tipo==='nota'){ out.push({...e,count:1}); return } const k=e.tipo+'|'+e.texto+'|'+e.iso; if(seen.has(k)){ seen.get(k).count++ } else { const o={...e,count:1}; seen.set(k,o); out.push(o) } })
+    return out.slice(0,40)
   }
+  const clickEvento = e => { if(!e.ref) return; if(e.ref.kind==='task'){ const t=(tasks||[]).find(x=>String(x.id)===String(e.ref.id)); if(t&&onPreviewTask) onPreviewTask(t) } else if(e.ref.kind==='ficha'&&onOpenClientFicha){ onOpenClientFicha(e.ref.id) } }
 
   // Movimiento por proyecto (fuente única). Se recomputa cuando cambian los datos reales.
-  const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=movimientoDe(p) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
+  const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
   const mov = p => movMap[p.id] || { ultima:null, dias:null, score:0 }
   const rows = useMemo(()=>{
     // Pestaña: En curso (activa, no pausada) · En pausa (activa, pausada) · Terminados (archivados = activo:false)
@@ -20600,6 +20607,8 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   },[proyectos,archivados,fase,esAdmin,miInicial,soloMios,estadoF,q,sortBy,clients,sales,movMap])
 
   const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||'') } }
+  // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
+  useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||'') } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
   const patch = async (p,campos) => {
     const upd = { ...campos, ultima_actividad:HOY, updated_at:new Date().toISOString() }
@@ -20782,25 +20791,28 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
               {/* QUÉ PASÓ — bitácora */}
               <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:7 }}>Qué pasó</div>
               <input value={openId===p.id?notaDraft:''} onChange={e=>setNotaDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') agregarNota(p) }} placeholder='Agregar una nota a la bitácora…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:10 }}/>
-              {(()=>{ const bit=bitacoraDe(p); if(!bit.length) return <div style={{ fontSize:11, color:C.grisText, paddingLeft:2, marginBottom:10 }}>Sin movimientos aún.</div>
-                return <div style={{ position:'relative', paddingLeft:18, marginBottom:6 }}>
+              {(()=>{ const bit=bitacoraDe(p); if(!bit.length) return <div style={{ fontSize:11, color:C.grisText, paddingLeft:2, marginBottom:12 }}>Sin movimientos aún.</div>
+                const full=!!bitFull[p.id]; const vis=full?bit:bit.slice(0,5)
+                return <div style={{ marginBottom:6 }}><div style={{ position:'relative', paddingLeft:18 }}>
                   <div style={{ position:'absolute', left:5, top:4, bottom:6, width:2, background:C.border }}/>
-                  {bit.map((e,ei)=>{ const dd=_dias(e.iso); const cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`; return (
-                    <div key={ei} style={{ position:'relative', paddingBottom:11 }}>
+                  {vis.map((e,ei)=>{ const dd=_dias(e.iso); const cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`; const clickable=!!e.ref; const titulo=e.tipo==='nota'?'Nota':(e.count>1?`${e.texto} · ${e.count}`:e.texto); return (
+                    <div key={ei} onClick={clickable?()=>clickEvento(e):undefined} style={{ position:'relative', paddingBottom:10, cursor:clickable?'pointer':'default' }}>
                       <span style={{ position:'absolute', left:-17, top:2, width:11, height:11, borderRadius:'50%', border:'2px solid #fff', background:SEÑAL_COL[e.tipo]||C.muted }}/>
-                      <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{e.tipo==='nota'?'Nota':e.texto}</div>
-                      {e.tipo==='nota'&&<div style={{ fontSize:11, color:C.mut||C.muted, marginTop:1 }}>{e.texto}</div>}
+                      <div style={{ fontSize:12.5, color:clickable?C.accent:C.text, fontWeight:600 }}>{titulo}</div>
+                      {e.tipo==='nota'&&<div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{e.texto}</div>}
                       <div style={{ fontSize:9.5, color:C.done, marginTop:1 }}>{fmtDia(e.iso)} · {cu}{e.autor?` · ${e.autor}`:''}</div>
                     </div>
                   )})}
                 </div>
+                {bit.length>5&&<div onClick={()=>setBitFull(o=>({...o,[p.id]:!full}))} style={{ fontSize:10.5, fontWeight:600, color:C.azulInfo, cursor:'pointer', paddingLeft:18, marginTop:2 }}>{full?'Ver menos':`Ver toda la bitácora (${bit.length}) →`}</div>}
+                </div>
               })()}
 
               {/* ACCIONES */}
-              <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'center', borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
+              <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'center', borderTop:`1px solid ${C.border}`, paddingTop:10, marginTop:8 }}>
                 <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
                 {p.sale_id&&onOpenSale&&(()=>{ const v=sales.find(s=>String(s.id)===String(p.sale_id)); return v?<button onClick={()=>onOpenSale(v)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver venta</button>:null })()}
-                <button onClick={()=>setAlcanceFor(p)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>{p.alcance?'Actualizar alcance':'Leer alcance (IA)'}</button>
+                {!p.alcance&&<button onClick={()=>setAlcanceFor(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0 }}>Leer alcance (IA)</button>}
                 {!terminado&&<button onClick={()=>togglePausa(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>{p.pausado?'Reanudar':'Pausar'}</button>}
                 <button onClick={()=>terminado?reponer(p):archivar(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:terminado?'auto':0 }}>{terminado?'Reponer':'Terminar'}</button>
               </div>
@@ -20830,14 +20842,15 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
       {esAdmin&&novedades.length>0&&(
         <div style={{ marginBottom:12, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', background:'#fff' }}>
           <div onClick={()=>setNovOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', cursor:'pointer', background:C.azulBg||'#E6F1FB' }}>
-            <span style={{ fontSize:12, fontWeight:600, color:C.azulInfo||'#185FA5', flex:1 }}>Novedades · correo y agenda · {novedades.length}</span>
+            <span style={{ fontSize:12, fontWeight:600, color:C.azulInfo||'#185FA5', flex:1 }}>Sugerencias del correo y la agenda · {novedades.length}</span>
             <span style={{ fontSize:12, color:C.azulInfo||'#185FA5' }}>{novOpen?'▾':'▸'}</span>
           </div>
+          {novOpen&&<div style={{ padding:'8px 12px', fontSize:10.5, color:C.muted, borderTop:`1px solid ${C.border}`, lineHeight:1.5 }}>Leídas de tu Gmail y Calendar. <b style={{color:C.text}}>Aceptar</b> la guarda en el proyecto (o crea uno / fija el plazo); <b style={{color:C.text}}>Descartar</b> la quita. No cambia nada hasta que tú elijas.</div>}
           {novOpen&&novedades.map((n,idx)=>{
             const cli = (n.tipo==='update'||n.tipo==='hito') ? (()=>{ const p=proyectos.find(x=>String(x.id)===String(n.proyecto_id)); return p?cnm(p.cliente_id):'' })() : cnm(n.cliente_id)
             const texto = n.tipo==='hito' ? n.titulo : n.sugerencia
             const tag = n.tipo==='nuevo'?'NUEVO':n.tipo==='hito'?'AGENDA':null
-            const btn = n.tipo==='nuevo'?'Crear proyecto':n.tipo==='hito'?'Fijar como hito':'Aceptar'
+            const btn = n.tipo==='nuevo'?'Crear proyecto':n.tipo==='hito'?'Fijar como hito':'Guardar en el proyecto'
             return (
               <div key={idx} style={{ padding:'10px 12px', borderTop:`1px solid ${C.border}` }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
@@ -23494,6 +23507,7 @@ export default function App() {
   const [modal,setModal]=useState(null)
   const [devEmail,setDevEmail]=useState(null)   // {client,amount,fecha,rend,rendN} → abre DevolucionEmailModal tras guardar una devolución
   const [openFichaId,setOpenFichaId]=useState(null)   // abrir la Ficha→Financiero de un cliente desde otra vista (ej. Facturación)
+  const [carteraFocus,setCarteraFocus]=useState(null)   // abrir un proyecto puntual en Cartera desde el Inicio ("Mis proyectos")
   // Pila de navegación cross-link: cada salto apila {tab,fichaId,scroll}; el ← desapila y restaura la posición exacta.
   // DEBE ir antes de handleBackOrigin (su dep array se evalúa en render → TDZ/pantalla negra si va después).
   const [navStack,setNavStack]=useState([])
@@ -25205,13 +25219,13 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>{ setCarteraFocus(pid); setTab('cartera') }} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
-            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
