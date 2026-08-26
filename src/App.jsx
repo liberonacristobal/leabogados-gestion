@@ -5443,6 +5443,138 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     </>
   )
 }
+// Al activar una propuesta: la IA propone las primeras tareas (compuerta editable), se crean asignadas al abogado
+// y se manda UN correo consolidado. Aprende del set confirmado por área (learnings kind='propuesta_tareas').
+function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfirm, onClose, saving}){
+  const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const WHO=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const cli = clients.find(c=>String(c.id)===String(sale?.client_id))
+  const ent = sale?.entity_id ? clientEntities.find(e=>String(e.id)===String(sale.entity_id)) : null
+  const cliName = ent?.name || cli?.name || 'el cliente'
+  const area = sale?.area || 'General'
+  const montoTxt = (sale?.moneda==='CLP'||!sale?.amount_uf) ? (sale?.amount_clp?fmt(sale.amount_clp):'') : `UF ${sale.amount_uf}`
+  const addDays = n => { const d=new Date(); d.setDate(d.getDate()+(parseInt(n)||0)); return d.toISOString().slice(0,10) }
+  const fmtDue = due => { try{ return new Date(String(due)+'T00:00:00').toLocaleDateString('es-CL',{day:'numeric',month:'long'}) }catch(e){ return String(due||'') } }
+  const miEmail = EMAIL_BY_NAME[user?.name] || user?.email || null
+  const [loading,setLoading]=useState(true)
+  const [items,setItems]=useState([])   // {titulo, due, nota, incluir}
+  const [responsable,setResponsable]=useState(sale?.responsible||user?.name||'')
+  const [copiarme,setCopiarme]=useState(false)
+  const [intro,setIntro]=useState('Se activó una propuesta que tienes a cargo. Estas son las primeras tareas para arrancar.')
+  const [sending,setSending]=useState(false)
+
+  const proponer = async()=>{
+    setLoading(true)
+    let previos=null
+    try{ const {data}=await supabase.from('learnings').select('value').eq('kind','propuesta_tareas').eq('key',String(area)).maybeSingle(); if(data?.value) previos=JSON.parse(data.value) }catch(_){}
+    const ref = (previos&&previos.length) ? `\n\nEn casos ANTERIORES de esta área usaste estas tareas (respétalas como base y ajústalas si corresponde):\n${previos.map(p=>`- ${p.titulo} (${p.dias!=null?p.dias+' días':'sin plazo'})`).join('\n')}` : ''
+    const prompt = `Eres abogado senior en un estudio chileno. Se activó una propuesta y hay que arrancar el trabajo. Devuelve SOLO un JSON (sin markdown) con la forma {"tareas":[{"titulo":"...","dias":N,"nota":"..."}]}: entre 3 y 5 primeras tareas concretas para comenzar este encargo, en orden lógico. "dias" = plazo sugerido en días corridos desde hoy (entero). "nota" = una línea breve de contexto (máx ~12 palabras). Español de Chile, forma "tú", sin emojis, sin voseo.\n\nEncargo: "${sale?.title||''}"\nÁrea: ${area}\nCliente: ${cliName}\n${sale?.notes?`Notas: ${String(sale.notes).slice(0,600)}`:''}${ref}`
+    try{
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:900,messages:[{role:'user',content:prompt}]})
+      const txt = data?.content?.[0]?.text || ''
+      const j = JSON.parse((txt.match(/\{[\s\S]*\}/)||[txt])[0])
+      const arr = Array.isArray(j?.tareas)?j.tareas:[]
+      const mapped = arr.slice(0,5).map(t=>({titulo:String(t.titulo||'').trim(), due:addDays(t.dias), nota:String(t.nota||'').trim(), incluir:true})).filter(t=>t.titulo)
+      setItems(mapped.length?mapped:[{titulo:'',due:addDays(3),nota:'',incluir:true}])
+    }catch(e){
+      setItems([{titulo:'',due:addDays(3),nota:'',incluir:true}])
+    }
+    setLoading(false)
+  }
+  useEffect(()=>{ proponer() },[])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const upItem=(i,k,v)=>setItems(p=>p.map((it,j)=>j===i?{...it,[k]:v}:it))
+  const addItem=()=>setItems(p=>[...p,{titulo:'',due:addDays(7),nota:'',incluir:true}])
+  const delItem=i=>setItems(p=>p.filter((_,j)=>j!==i))
+
+  const buildEmail = (incl)=>{
+    const nombre = responsable || 'equipo'
+    const introTxt = (intro||'').trim() || 'Estas son las primeras tareas para arrancar.'
+    const subject = `Primeras tareas · ${sale?.title||'Nuevo encargo'} — ${cliName}`
+    const rowsHtml = incl.map((it,i)=>`<tr><td style="padding:9px 0;border-top:1px solid #eee;vertical-align:top;"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="width:24px;vertical-align:top;"><span style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;background:#0F6E56;color:#fff;font-size:10px;font-weight:bold;">${i+1}</span></td><td style="font-size:13px;color:#1a1a1a;"><b>${esc(it.titulo)}</b>${it.nota?`<div style="font-size:11px;color:#888;margin-top:2px;">${esc(it.nota)}</div>`:''}<div style="font-size:11px;color:#854F0B;margin-top:2px;">Vence ${esc(fmtDue(it.due))}</div></td></tr></table></td></tr>`).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px;"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb;"><div style="background:#003C50;padding:20px 28px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div><div style="padding:28px;"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px;">Hola ${esc(nombre)},</div><div style="font-size:14px;color:#666;margin:0 0 18px;">${esc(introTxt)}</div><div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:6px;"><div style="font-size:14px;font-weight:bold;color:#1a1a1a;">${esc(sale?.title||'Nuevo encargo')}</div><div style="font-size:12px;color:#777;margin-top:3px;">Cliente: ${esc(cliName)}${area?` · ${esc(area)}`:''}${montoTxt?` · ${esc(montoTxt)}`:''}</div></div><table style="width:100%;border-collapse:collapse;margin-top:6px;">${rowsHtml}</table><div style="margin-top:22px;"><a href="https://gestion.leabogados.cl" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:9px 18px;border-radius:18px;font-size:12px;font-weight:bold;">Ver las tareas en la app &rarr;</a></div></div><div style="padding:16px 28px;border-top:1px solid #eee;"><div style="font-size:11px;color:#999;">gestion.leabogados.cl &middot; Liberona Escala Abogados</div></div></div></body></html>`
+    const text = `Hola ${nombre},\n\n${introTxt}\n\n${sale?.title||'Nuevo encargo'} — ${cliName}\n\n`+incl.map((it,i)=>`${i+1}. ${it.titulo} (vence ${fmtDue(it.due)})${it.nota?` — ${it.nota}`:''}`).join('\n')+`\n\ngestion.leabogados.cl`
+    return {subject, html, text}
+  }
+
+  const confirmar = async()=>{
+    const incl = items.filter(it=>it.incluir && it.titulo.trim())
+    if(!incl.length){ appAlert('Deja al menos una tarea con título.'); return }
+    if(!responsable){ appAlert('Elige a quién se le asignan las tareas.'); return }
+    const to = EMAIL_BY_NAME[responsable] || null
+    const cc = (copiarme && miEmail && miEmail.toLowerCase()!==(to||'').toLowerCase()) ? [miEmail] : []
+    const {subject,html,text}=buildEmail(incl)
+    setSending(true)
+    await onConfirm({sale, items:incl, responsable, to, cc, subject, html, text, area})
+    setSending(false)
+  }
+
+  const busy = saving||sending
+  const nIncl = items.filter(it=>it.incluir && it.titulo.trim()).length
+  const inp = {width:'100%',padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,color:C.text,boxSizing:'border-box',background:'#fff'}
+
+  if(loading) return (
+    <div style={{padding:'34px 12px',textAlign:'center'}}>
+      <div style={{display:'inline-flex'}}><Spin/></div>
+      <div style={{fontSize:13,color:C.muted,marginTop:12}}>La IA está preparando las primeras tareas de <b style={{color:C.accent}}>{esc(sale?.title||'este encargo')}</b>…</div>
+    </div>
+  )
+  return (
+    <div>
+      <div style={{fontSize:11.5,color:C.muted,margin:'0 0 12px',lineHeight:1.5}}>Propuesta de la IA según el área y la descripción. Edita, desmarca o agrega antes de confirmar. Nada se crea ni se envía hasta que confirmes.</div>
+
+      {/* Responsable + copia */}
+      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:12}}>
+        <span style={{fontSize:12,color:C.muted,fontWeight:600}}>Para</span>
+        <select value={responsable} onChange={e=>setResponsable(e.target.value)} style={{padding:'6px 9px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontWeight:600,color:C.accent,background:'#fff',cursor:'pointer'}}>
+          <option value=''>Elige…</option>
+          {WHO.map(w=><option key={w} value={w}>{w}</option>)}
+        </select>
+        <span style={{fontSize:11,color:C.done}}>· se le asignan las tareas y recibe el correo</span>
+        {miEmail && (EMAIL_BY_NAME[responsable]||'').toLowerCase()!==miEmail.toLowerCase() &&
+          <label style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.muted,cursor:'pointer',fontWeight:600}}>
+            <input type='checkbox' checked={copiarme} onChange={e=>setCopiarme(e.target.checked)} style={{width:15,height:15,accentColor:C.accent}}/>Copiarme
+          </label>}
+      </div>
+
+      {/* Tareas */}
+      <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+        {items.map((it,i)=>(
+          <div key={i} style={{display:'flex',gap:9,padding:'11px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',background:it.incluir?'#fff':C.bgSoft,alignItems:'flex-start'}}>
+            <button type='button' onClick={()=>upItem(i,'incluir',!it.incluir)} title={it.incluir?'Quitar':'Incluir'} style={{flexShrink:0,marginTop:2,width:19,height:19,borderRadius:5,border:it.incluir?'none':`1.5px solid ${C.done}`,background:it.incluir?C.accent:'#fff',color:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,padding:0}}>{it.incluir?'✓':''}</button>
+            <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:6,opacity:it.incluir?1:.55}}>
+              <input value={it.titulo} onChange={e=>upItem(i,'titulo',e.target.value)} placeholder='Título de la tarea' style={{...inp,fontWeight:600}}/>
+              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                <input type='date' value={it.due||''} onChange={e=>upItem(i,'due',e.target.value)} style={{...inp,width:'auto',padding:'5px 8px',fontSize:12}}/>
+                <input value={it.nota} onChange={e=>upItem(i,'nota',e.target.value)} placeholder='Nota breve (opcional)' style={{...inp,flex:1,minWidth:120,padding:'5px 8px',fontSize:12,color:C.muted}}/>
+                <button type='button' onClick={()=>delItem(i)} title='Eliminar' style={{flexShrink:0,background:'none',border:'none',color:C.done,fontSize:17,cursor:'pointer',lineHeight:1,padding:'0 4px'}}>×</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}>
+        <button type='button' onClick={addItem} style={{fontSize:12,color:C.azulInfo,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Agregar tarea</button>
+        <button type='button' onClick={proponer} style={{fontSize:11.5,color:C.muted,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>↻ Proponer de nuevo</button>
+      </div>
+
+      {/* Texto del correo (editable) */}
+      <div style={{marginTop:14}}>
+        <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:4}}>Texto del correo</div>
+        <textarea value={intro} onChange={e=>setIntro(e.target.value)} rows={2} style={{...inp,resize:'vertical',fontSize:12.5,lineHeight:1.45}}/>
+      </div>
+
+      {/* Acciones */}
+      <div style={{display:'flex',gap:9,marginTop:16,alignItems:'center'}}>
+        <button type='button' onClick={onClose} disabled={busy} style={{fontSize:13,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 15px',cursor:busy?'default':'pointer'}}>Cancelar</button>
+        <button type='button' onClick={confirmar} disabled={busy||!nIncl||!responsable} style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:9,padding:'9px 17px',cursor:(busy||!nIncl||!responsable)?'default':'pointer',opacity:(busy||!nIncl||!responsable)?.6:1,display:'inline-flex',alignItems:'center',gap:8}}>
+          {busy&&<Spin/>}{busy?'Creando…':`Crear ${nIncl} y avisar${responsable?` a ${responsable}`:''}`}
+        </button>
+      </div>
+    </div>
+  )
+}
 function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',placeholder='Buscar cliente...'}) {
   const [open,setOpen] = useState(false)
   const [q,setQ] = useState('')
@@ -23542,10 +23674,39 @@ export default function App() {
           setClients(p=>p.map(c=>c.id===cliente.id?{...c,status:'Activo'}:c))
         }
       }
-      setModal(null)
+      // Recién activada: la IA propone las primeras tareas (compuerta) y avisa al abogado. Cerramos el form y abrimos la compuerta.
+      if(_activandoPropuesta) setModal({type:'primerasTareas',data})
+      else setModal(null)
     }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[clients,clientEntities,terceros,proveedores,user])
+
+  // Crea las primeras tareas confirmadas (asignadas al abogado) + UN correo consolidado + aprende el set por área.
+  const handleCrearPrimerasTareas=useCallback(async({sale, items, responsable, to, cc, subject, html, text, area})=>{
+    setSaving(true)
+    try{
+      const rows = items.map(it=>({
+        title: it.titulo, who: responsable, assignees:[responsable],
+        client_id: sale.client_id||null, sale_id: sale.id||null, entity_id: sale.entity_id||null,
+        due: it.due||null, status:'Activo', note: it.nota||null, project: sale.title||null,
+        assigned_by: user?.name||null
+      }))
+      const {data:ins,error} = await supabase.from('tasks').insert(rows).select()
+      if(error) throw error
+      if(ins&&ins.length) setTasks(p=>[...ins,...p])
+      let via=null
+      if(to){ try{ via = await enviarComoUsuario({to, cc:(cc&&cc.length)?cc:null, subject, html, text}) }catch(e){ appAlert('Las tareas se crearon, pero el correo no se pudo enviar: '+(e?.message||'reintenta desde la tarea')) } }
+      // Aprende: guarda el set confirmado por área (días desde hoy) para mejorar la próxima propuesta.
+      try{
+        const hoy = Date.parse(new Date().toISOString().slice(0,10))
+        const learn = items.map(it=>({ titulo:it.titulo, dias: it.due?Math.round((Date.parse(it.due)-hoy)/86400000):null, nota:it.nota||'' }))
+        await supabase.from('learnings').upsert({kind:'propuesta_tareas', key:String(area||'General'), value:JSON.stringify(learn), meta:{}},{onConflict:'kind,key'})
+      }catch(_){}
+      setModal(null)
+      appAlert(`Listo: ${rows.length} tarea${rows.length!==1?'s':''} creada${rows.length!==1?'s':''} para ${responsable}${via?(via==='usuario'?' y correo enviado.':' y correo enviado desde la oficina.'):' (sin correo).'}`)
+    }catch(e){ appAlert('Error: '+(e?.message||e)) }
+    setSaving(false)
+  },[user])
 
   const handleRechazarPropuesta=useCallback(async(s)=>{
     if(!await appConfirm(`¿Marcar como rechazada la propuesta "${s.title}"?`)) return
@@ -24949,6 +25110,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
+        {modal?.type==='primerasTareas'&&<Modal title={<><span style={{color:C.accent}}>Primeras tareas</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:400}}>{modal.data?.title||'Encargo'}</span></>} onClose={()=>setModal(null)} closeOnBackdrop={false} maxWidth={560}><PrimerasTareasModal sale={modal.data} clients={clients} clientEntities={clientEntities} user={user} onConfirm={handleCrearPrimerasTareas} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='conciliaHub'&&(()=>{ const mesA=new Date().toISOString().slice(0,7)
           const dupN=matchProgEmitidas(billing,clients,clientEntities).length
           const siiN=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&(b.billing_type||'')!=='reembolso'&&String(b.due||'').startsWith(mesA)).length
