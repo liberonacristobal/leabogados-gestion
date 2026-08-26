@@ -23656,11 +23656,21 @@ export default function App() {
           for(const row of f.repartoTerceros){
             if(!row.proveedor_id || !((parseFloat(row.valor)||0)>0)) continue
             const prov = proveedores.find(p=>String(p.id)===String(row.proveedor_id))
+            const provNom = prov?(prov.nombre||prov.razon_social):null
+            // Sin cuotas generadas: se registra igual la cuenta por pagar (billing_id null) para no perder el costo en silencio.
+            if(cuotasVenta.length===0){
+              const v = parseFloat(row.valor)||0
+              const mSin = row.tipo==='uf' ? Math.round(v*(sUfVal||0)) : row.tipo==='pct' ? 0 : Math.round(v)
+              if(mSin>0) nuevos.push({sale_id:data.id, billing_id:null, proveedor_id:row.proveedor_id,
+                proveedor:provNom, rut:prov?.rut||null, tipo_costo:row.tipo||null, valor:v||null, monto:mSin,
+                estado:'pendiente', created_by:user?.name||null})
+              continue
+            }
             for(const cuota of cuotasVenta){
               if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
               const m = montoCuota(row,cuota); if(m<=0) continue
               nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
-                proveedor: prov?(prov.nombre||prov.razon_social):null, rut:prov?.rut||null,
+                proveedor: provNom, rut:prov?.rut||null,
                 tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, monto:m,
                 estado: cuota.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null})
             }
