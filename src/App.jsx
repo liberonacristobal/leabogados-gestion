@@ -20510,11 +20510,11 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
     ;(anticipos||[]).forEach(a=>{ if(!linkCli(a.client_id)) return; push(a.fecha,'anticipo','Anticipo',3) })
     ;(expenses||[]).forEach(e=>{ if(!linkCli(e.client_id)) return; push(e.rendered_at||e.date||e.created_at,'gasto','Movimiento de gastos',1) })
     if(!evs.length && p.ultima_actividad) push(p.ultima_actividad,'nota','Actualización manual',1)
-    if(!evs.length) return { ultima:null, dias:null, score:0 }
+    if(!evs.length) return { ultima:null, dias:null, score:0, eventos:[] }
     evs.sort((a,b)=>b.iso.localeCompare(a.iso))
     const ultima = evs[0]
     const score = evs.reduce((s,e)=>{ const d=_dias(e.iso); if(d==null||d<0||d>30) return s; const rec=d<=3?1:d<=7?.7:d<=14?.4:.2; return s+e.peso*rec },0)
-    return { ultima, dias:_dias(ultima.iso), score }
+    return { ultima, dias:_dias(ultima.iso), score, eventos:evs.slice(0,24) }
   }
   const HOY = new Date().toISOString().slice(0,10)
   const esAdmin = userRole==='admin'
@@ -20554,6 +20554,27 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const [novOpen,setNovOpen] = useState(true)
   const [archivados,setArchivados] = useState([])     // proyectos archivados (activo=false), para ver/reponer
   const [archOpen,setArchOpen] = useState(false)
+  const [notas,setNotas] = useState({})               // bitácora manual: { proyecto_id: [{id,texto,autor,created_at}] }
+  const [grpOpen,setGrpOpen] = useState({})           // clientes con varios proyectos: abiertos/cerrados
+  const [notaDraft,setNotaDraft] = useState('')       // borrador de nota nueva en la bitácora abierta
+  useEffect(()=>{
+    if(DEMO){ setNotas({}); return }
+    supabase.from('cartera_notas').select('*').order('created_at',{ascending:false}).then(({data})=>{ if(!data) return; const m={}; data.forEach(n=>{ (m[n.proyecto_id]=m[n.proyecto_id]||[]).push(n) }); setNotas(m) },()=>{})
+  },[])   // eslint-disable-line
+  const agregarNota = async (p) => {
+    const t=(notaDraft||'').trim(); if(!t) return
+    setNotaDraft('')
+    if(DEMO){ setNotas(prev=>({ ...prev, [p.id]:[{ id:'n'+Date.now(), texto:t, autor:currentUserName||null, created_at:new Date().toISOString() },...(prev[p.id]||[])] })); return }
+    const { data,error } = await supabase.from('cartera_notas').insert({ proyecto_id:p.id, texto:t, autor:currentUserName||null }).select().single()
+    if(error||!data){ appAlert('No se pudo guardar la nota'+(error?': '+error.message:'')); return }
+    setNotas(prev=>({ ...prev, [p.id]:[data,...(prev[p.id]||[])] }))
+  }
+  // Bitácora = eventos automáticos (movimientoDe) + notas manuales, en una sola cronología.
+  const bitacoraDe = p => {
+    const auto = (mov(p).eventos||[]).map(e=>({ iso:e.iso, tipo:e.tipo, texto:e.texto, autor:null }))
+    const man = (notas[p.id]||[]).filter(Boolean).map(n=>({ iso:String(n.created_at||'').slice(0,10), tipo:'nota', texto:n.texto, autor:n.autor }))
+    return [...auto,...man].filter(e=>e.iso&&e.iso.length>=10).sort((a,b)=>b.iso.localeCompare(a.iso)).slice(0,30)
+  }
 
   // Movimiento por proyecto (fuente única). Se recomputa cuando cambian los datos reales.
   const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=movimientoDe(p) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
@@ -20679,6 +20700,117 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const nCrit = rows.filter(p=>(p.estado||'verde')==='rojo').length
   const chipSty = (on,col,bg) => ({ fontSize:12, fontWeight:500, color:on?'#fff':col, background:on?C.accent:bg, borderRadius:20, padding:'4px 12px', border:'none', cursor:'pointer' })
 
+  // Fijar a nivel CLIENTE (toca todos sus proyectos activos a la vez).
+  const fijarCliente = g => g.proyectos.forEach(p=>{ if(!p.fijado) fijar(p) })
+  const quitarFijarCliente = g => g.proyectos.forEach(p=>{ if(p.fijado) quitarFijar(p) })
+  // Grupos por cliente (protagonista). rows ya viene filtrado + ordenado (fijados y movimiento); agrupar preserva ese orden.
+  const grupos = (()=>{ const seen=new Map(); rows.forEach(p=>{ const cid=String(p.cliente_id||'—'); if(!seen.has(cid)) seen.set(cid,{cliente_id:p.cliente_id,cliente:cnm(p.cliente_id)||'—',proyectos:[]}); seen.get(cid).proyectos.push(p) })
+    return [...seen.values()].map(g=>{ let best=null,fij=false; g.proyectos.forEach(p=>{ const mm=mov(p); if(!best||mm.score>best.score) best=mm; if(p.fijado) fij=true }); return {...g, mov:best||{ultima:null,dias:null,score:0}, fijado:fij} }) })()
+  const CHINCHETA = <svg width="12" height="12" viewBox="0 0 24 24" fill={C.accent} style={{flexShrink:0}}><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg>
+  const señalLine = (m, style={}) => { const s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`
+    if(!s) return <div style={{ fontSize:11, color:C.grisText, display:'flex', alignItems:'center', gap:6, ...style }}><span style={{ width:6, height:6, borderRadius:'50%', background:C.done }}/>Sin señales{dd!=null?` · ${cu}`:''}</div>
+    return <div style={{ fontSize:11.5, display:'flex', alignItems:'center', gap:6, ...style }}><span style={{ width:6, height:6, borderRadius:'50%', background:SEÑAL_COL[s.tipo]||C.muted, flexShrink:0 }}/><span style={{ color:C.text, fontWeight:600 }}>{s.texto}</span><span style={{ color:C.muted }}>· {cu}</span></div>
+  }
+
+  // Un proyecto (tarjeta colapsada + detalle B3). nested=true cuando va bajo un grupo de cliente.
+  const renderProyecto = (p, nested) => {
+    const abierto = openId===p.id
+    const dP = cartDiasPlazo(p.plazo)
+    const etapa = ETAPAS_CARTERA[p.etapa_idx||0]
+    const m = mov(p)
+    const terminado = fase==='terminados'
+    const avancePct = Math.round(((p.etapa_idx||0)/5)*100)
+    const tks = tareasDe(p)
+    const venceTk = tks.map(t=>daysLeft(t.due)).filter(d=>d!=null).sort((a,b)=>a-b)[0]
+    const inp = { fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', color:C.text }
+    return (
+      <div key={p.id} style={{ opacity:terminado?.7:1 }}>
+        <div onClick={()=>abrir(p)} style={{ padding:nested?'10px 13px':'12px 13px', cursor:'pointer' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
+                <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
+                {!nested&&p.fijado&&!terminado&&CHINCHETA}
+                {nested
+                  ? <span style={{ fontSize:13.5, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:220 }}>{p.nombre_proyecto||etapa}</span>
+                  : <><span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:14, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:170 }}>{cnm(p.cliente_id)||'—'}</span><span style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>· {p.nombre_proyecto||etapa}</span></>}
+                {esPropAbierta(p)&&<span style={{ fontSize:9.5, fontWeight:700, color:C.accent, background:C.azulBg, borderRadius:20, padding:'1px 7px', flexShrink:0, textTransform:'uppercase', letterSpacing:.3 }}>Propuesta</span>}
+                {p.pausado&&fase!=='pausa'&&!terminado&&<span style={{ fontSize:9.5, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'1px 7px', flexShrink:0 }}>En pausa</span>}
+                {p.plazo&&dP!=null&&(dP<0||dP<=7)&&!terminado&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
+              </div>
+              {!terminado&&señalLine(m,{ marginTop:4, paddingLeft:15 })}
+              {p.nota&&<div style={{ fontSize:12, color:C.muted, marginTop:3, paddingLeft:15, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nota}</div>}
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5, flexShrink:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                {terminado
+                  ? <button onClick={e=>{ e.stopPropagation(); reponer(p) }} style={{ fontSize:10.5, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'3px 10px', cursor:'pointer' }}>Reponer</button>
+                  : !nested&&<button onClick={e=>{ e.stopPropagation(); p.fijado?quitarFijar(p):fijar(p) }} title={p.fijado?'Quitar de arriba':'Fijar arriba'} style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:0 }}><svg width="15" height="15" viewBox="0 0 24 24" fill={p.fijado?C.accent:'none'} stroke={p.fijado?C.accent:C.done} strokeWidth="2"><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg></button>}
+                <span style={{ width:24, height:24, borderRadius:'50%', background:CART_AV[p.responsable]||C.muted, color:'#fff', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' }}>{p.responsable||'—'}</span>
+              </div>
+              {!terminado&&tks.length>0&&(()=>{ const vh=tks.filter(t=>{ const d=daysLeft(t.due); return d!=null&&d<=0 }).length; return <span style={{ fontSize:9.5, fontWeight:600, color:vh>0?'#A32D2D':C.muted, whiteSpace:'nowrap' }}>{tks.length} tarea{tks.length!==1?'s':''}{vh>0?` · ${vh} vence`:''}</span> })()}
+            </div>
+          </div>
+        </div>
+        {abierto&&(
+          <div style={{ padding:'0 13px 13px', background:C.bgSoft||'#FAFBFC' }}>
+            <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:11 }}>
+              {/* EN QUÉ ESTÁ */}
+              <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:7 }}>En qué está</div>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:5 }}><span style={{ fontSize:11, fontWeight:600, color:C.accent }}>Etapa {(p.etapa_idx||0)+1} de 6 · {etapa}</span><span style={{ fontSize:11, fontWeight:700, color:C.accent }}>{avancePct}%</span></div>
+              <div style={{ height:6, borderRadius:4, background:'#EAEEF1', overflow:'hidden', marginBottom:10 }}><div style={{ height:'100%', width:avancePct+'%', background:C.accent, borderRadius:4 }}/></div>
+              <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+                <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Próximo plazo</div><div style={{ fontSize:12.5, fontWeight:700, color:dP!=null&&dP<0?'#A32D2D':dP!=null&&dP<=7?'#854F0B':C.text, marginTop:2 }}>{p.plazo?(dP<0?`vencido ${-dP}d`:dP===0?'hoy':`en ${dP} días`):'sin plazo'}</div>{p.plazo_label&&<div style={{ fontSize:10, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.plazo_label}</div>}</div>
+                <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Tareas abiertas</div><div style={{ fontSize:12.5, fontWeight:700, color:C.text, marginTop:2 }}>{tks.length}</div>{venceTk!=null&&<div style={{ fontSize:10, color:venceTk<0?'#A32D2D':venceTk<=7?'#854F0B':C.muted }}>{venceTk<0?`1 vencida`:venceTk<=7?`próxima en ${venceTk}d`:`próxima en ${venceTk}d`}</div>}</div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, flexWrap:'wrap' }}>
+                <span style={{ fontSize:11, color:C.muted }}>Resp.</span>
+                <select value={p.responsable||''} onChange={e=>patch(p,{responsable:e.target.value})} disabled={!esAdmin} style={inp}>{['CL','EE','MC','MP','RD'].map(i=><option key={i} value={i}>{i}</option>)}</select>
+                <span style={{ fontSize:11, color:C.muted, marginLeft:4 }}>Plazo</span>
+                <input type='date' value={p.plazo||''} onChange={e=>patch(p,{plazo:e.target.value||null})} style={inp}/>
+                <button onClick={()=>avanzar(p)} disabled={(p.etapa_idx||0)>=5} style={{ fontSize:11, fontWeight:600, color:(p.etapa_idx||0)>=5?C.grisText:C.accent, background:'none', border:'none', cursor:(p.etapa_idx||0)>=5?'default':'pointer', padding:0, marginLeft:'auto' }}>→ Avanzar etapa</button>
+              </div>
+              {p.alcance&&<div style={{ fontSize:12, color:C.text, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{p.alcance}</div>}
+              {tks.length>0&&<div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 10px', marginBottom:12 }}>{tks.slice(0,6).map((t,ti)=>{ const d=daysLeft(t.due); const col=d==null?C.muted:d<0?'#A32D2D':d<=2?'#854F0B':C.muted; return (
+                <div key={t.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'6px 0', borderTop:ti?`1px solid ${C.border}`:'none' }}>
+                  <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar terminada' style={{ width:17, height:17, borderRadius:5, border:`1.5px solid ${C.done}`, flexShrink:0, cursor:'pointer' }}/>
+                  <div onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, cursor:'pointer' }}><div style={{ fontSize:12, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div><div style={{ fontSize:9.5, color:col }}>{t.due?(d<0?`vencida ${-d}d`:d===0?'vence hoy':`en ${d}d`):'sin plazo'}{t.who?` · ${INICIALES_RESP[t.who]||t.who}`:''}</div></div>
+                </div>
+              )})}{onAddTaskForProject&&<div style={{ textAlign:'right', paddingTop:4 }}><span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span></div>}</div>}
+              {tks.length===0&&onAddTaskForProject&&<div style={{ marginBottom:12 }}><span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span></div>}
+
+              {/* QUÉ PASÓ — bitácora */}
+              <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:7 }}>Qué pasó</div>
+              <input value={openId===p.id?notaDraft:''} onChange={e=>setNotaDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') agregarNota(p) }} placeholder='Agregar una nota a la bitácora…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:10 }}/>
+              {(()=>{ const bit=bitacoraDe(p); if(!bit.length) return <div style={{ fontSize:11, color:C.grisText, paddingLeft:2, marginBottom:10 }}>Sin movimientos aún.</div>
+                return <div style={{ position:'relative', paddingLeft:18, marginBottom:6 }}>
+                  <div style={{ position:'absolute', left:5, top:4, bottom:6, width:2, background:C.border }}/>
+                  {bit.map((e,ei)=>{ const dd=_dias(e.iso); const cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`; return (
+                    <div key={ei} style={{ position:'relative', paddingBottom:11 }}>
+                      <span style={{ position:'absolute', left:-17, top:2, width:11, height:11, borderRadius:'50%', border:'2px solid #fff', background:SEÑAL_COL[e.tipo]||C.muted }}/>
+                      <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{e.tipo==='nota'?'Nota':e.texto}</div>
+                      {e.tipo==='nota'&&<div style={{ fontSize:11, color:C.mut||C.muted, marginTop:1 }}>{e.texto}</div>}
+                      <div style={{ fontSize:9.5, color:C.done, marginTop:1 }}>{fmtDia(e.iso)} · {cu}{e.autor?` · ${e.autor}`:''}</div>
+                    </div>
+                  )})}
+                </div>
+              })()}
+
+              {/* ACCIONES */}
+              <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'center', borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
+                <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
+                {p.sale_id&&onOpenSale&&(()=>{ const v=sales.find(s=>String(s.id)===String(p.sale_id)); return v?<button onClick={()=>onOpenSale(v)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver venta</button>:null })()}
+                <button onClick={()=>setAlcanceFor(p)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>{p.alcance?'Actualizar alcance':'Leer alcance (IA)'}</button>
+                {!terminado&&<button onClick={()=>togglePausa(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>{p.pausado?'Reanudar':'Pausar'}</button>}
+                <button onClick={()=>terminado?reponer(p):archivar(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:terminado?'auto':0 }}>{terminado?'Reponer':'Terminar'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ maxWidth:720, margin:'0 auto', padding:'0 14px 40px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
@@ -20774,99 +20906,24 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{ marginLeft:'auto', fontSize:12, padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', width:110 }}/>
       </div>
 
-      {rows.length===0
+      {grupos.length===0
         ? <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>{proyectos.length?'Nada con este filtro.':'Aún no hay proyectos. Toca “+ Nuevo” o se irán creando desde tus ventas activas.'}</div>
-        : <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
-            {rows.map((p,i)=>{
-              const abierto = openId===p.id
-              const dP = cartDiasPlazo(p.plazo)
-              const etapa = ETAPAS_CARTERA[p.etapa_idx||0]
-              const m = mov(p)
-              const terminado = fase==='terminados'
+        : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {grupos.map(g=>{
+              const terminadoG = fase==='terminados'
+              if(g.proyectos.length===1) return <div key={g.cliente_id} style={{ background:'#fff', border:`1px solid ${g.fijado&&!terminadoG?C.accent:C.border}`, borderRadius:12, overflow:'hidden' }}>{renderProyecto(g.proyectos[0],false)}</div>
+              const abiertoG = grpOpen[g.cliente_id]!==false
               return (
-                <div key={p.id} style={{ borderTop:i?`1px solid ${C.border}`:'none', opacity:terminado?.7:1 }}>
-                  <div onClick={()=>abrir(p)} style={{ padding:'12px 13px', cursor:'pointer' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
-                          <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
-                          {p.fijado&&!terminado&&<svg width="12" height="12" viewBox="0 0 24 24" fill={C.accent} style={{flexShrink:0}}><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg>}
-                          <span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:14, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:170 }}>{cnm(p.cliente_id)||'—'}</span>
-                          <span style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>· {p.nombre_proyecto||etapa}</span>
-                          {esPropAbierta(p)&&<span style={{ fontSize:9.5, fontWeight:700, color:C.accent, background:C.azulBg, borderRadius:20, padding:'1px 7px', flexShrink:0, textTransform:'uppercase', letterSpacing:.3 }}>Propuesta</span>}
-                          {p.pausado&&fase!=='pausa'&&!terminado&&<span style={{ fontSize:9.5, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'1px 7px', flexShrink:0 }}>En pausa</span>}
-                          {p.plazo&&dP!=null&&(dP<0||dP<=7)&&!terminado&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
-                        </div>
-                        {/* última señal real (reemplaza el "hace X días" estático) */}
-                        {!terminado&&(()=>{ const s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`
-                          if(!s) return <div style={{ fontSize:11, color:C.grisText, marginTop:4, paddingLeft:15, display:'flex', alignItems:'center', gap:6 }}><span style={{ width:6, height:6, borderRadius:'50%', background:C.done }}/>Sin señales{dd!=null?` · ${cu}`:''}</div>
-                          return <div style={{ fontSize:11.5, marginTop:4, paddingLeft:15, display:'flex', alignItems:'center', gap:6 }}><span style={{ width:6, height:6, borderRadius:'50%', background:SEÑAL_COL[s.tipo]||C.muted, flexShrink:0 }}/><span style={{ color:C.text, fontWeight:600 }}>{s.texto}</span><span style={{ color:C.muted }}>· {cu}</span></div>
-                        })()}
-                        {p.nota&&<div style={{ fontSize:12, color:C.muted, marginTop:3, paddingLeft:15 }}>{p.nota}</div>}
-                      </div>
-                      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5, flexShrink:0 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                          {!terminado
-                            ? <button onClick={e=>{ e.stopPropagation(); p.fijado?quitarFijar(p):fijar(p) }} title={p.fijado?'Quitar de arriba':'Fijar arriba'} style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:0 }}><svg width="15" height="15" viewBox="0 0 24 24" fill={p.fijado?C.accent:'none'} stroke={p.fijado?C.accent:C.done} strokeWidth="2"><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg></button>
-                            : <button onClick={e=>{ e.stopPropagation(); reponer(p) }} style={{ fontSize:10.5, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'3px 10px', cursor:'pointer' }}>Reponer</button>}
-                          <span style={{ width:24, height:24, borderRadius:'50%', background:CART_AV[p.responsable]||C.muted, color:'#fff', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' }}>{p.responsable||'—'}</span>
-                        </div>
-                        {!terminado&&(()=>{ const tks=tareasDe(p); if(!tks.length) return null; const vh=tks.filter(t=>{ const d=daysLeft(t.due); return d!=null&&d<=0 }).length; return <span style={{ fontSize:9.5, fontWeight:600, color:vh>0?'#A32D2D':C.muted, whiteSpace:'nowrap' }}>{tks.length} tarea{tks.length!==1?'s':''}{vh>0?` · ${vh} vence`:''}</span> })()}
-                      </div>
-                    </div>
+                <div key={g.cliente_id} style={{ background:'#fff', border:`1px solid ${g.fijado&&!terminadoG?C.accent:C.border}`, borderRadius:12, overflow:'hidden' }}>
+                  <div onClick={()=>setGrpOpen(o=>({...o,[g.cliente_id]:!abiertoG}))} style={{ display:'flex', alignItems:'center', gap:8, padding:'11px 13px', cursor:'pointer' }}>
+                    {g.fijado&&!terminadoG&&CHINCHETA}
+                    <span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(g.cliente_id) }} style={{ fontSize:14.5, fontWeight:700, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:190 }}>{g.cliente}</span>
+                    <span style={{ fontSize:11, color:C.done, fontWeight:600, flexShrink:0 }}>{g.proyectos.length} proyectos</span>
+                    <div style={{ flex:1, minWidth:0, display:'flex', justifyContent:'flex-end' }}>{!terminadoG&&señalLine(g.mov)}</div>
+                    {!terminadoG&&<button onClick={e=>{ e.stopPropagation(); g.fijado?quitarFijarCliente(g):fijarCliente(g) }} title={g.fijado?'Quitar de arriba':'Fijar arriba'} style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:0, flexShrink:0 }}><svg width="15" height="15" viewBox="0 0 24 24" fill={g.fijado?C.accent:'none'} stroke={g.fijado?C.accent:C.done} strokeWidth="2"><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg></button>}
+                    <span style={{ fontSize:13, color:C.muted, flexShrink:0, transform:abiertoG?'rotate(90deg)':'none', transition:'transform .15s' }}>›</span>
                   </div>
-                  {abierto&&(
-                    <div style={{ padding:'0 13px 13px 28px', background:C.bgSoft||'#FAFBFC' }}>
-                      <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
-                        <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-                          <span style={{ fontSize:11, color:C.muted, width:88, flexShrink:0 }}>Próximo hito</span>
-                          <span style={{ fontSize:12, color:C.text }}>{p.plazo_label||etapa}{p.plazo?` · ${dP<0?`vencido hace ${-dP}d`:dP===0?'vence hoy':`vence ${fmtDia(p.plazo)}`}`:''}</span>
-                        </div>
-                        {p.alcance&&<div style={{ fontSize:12, color:C.text, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{p.alcance}</div>}
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:10 }}>
-                          {ETAPAS_CARTERA.map((et,idx)=>{ const done=idx<(p.etapa_idx||0), cur=idx===(p.etapa_idx||0); return (
-                            <span key={et} style={{ fontSize:10.5, color:cur?'#fff':done?'#0F6E56':C.muted, background:cur?C.accent:done?'#E1F5EE':'#EEF1F3', borderRadius:20, padding:'3px 9px', fontWeight:cur?600:400 }}>{done&&<span>✓ </span>}{et}</span>
-                          )})}
-                        </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8, flexWrap:'wrap' }}>
-                          <span style={{ fontSize:11, color:C.muted }}>Responsable</span>
-                          <select value={p.responsable||''} onChange={e=>patch(p,{responsable:e.target.value})} disabled={!esAdmin} style={{ fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}>
-                            {['CL','EE','MC','MP','RD'].map(i=><option key={i} value={i}>{i}</option>)}
-                          </select>
-                          <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>Plazo</span>
-                          <input type='date' value={p.plazo||''} onChange={e=>patch(p,{plazo:e.target.value||null})} style={{ fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}/>
-                        </div>
-                        <textarea value={draft} onChange={e=>setDraft(e.target.value)} onBlur={()=>guardarNota(p)} placeholder='¿En qué está? / última acción' rows={2} style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'7px 9px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', resize:'vertical', marginBottom:8 }}/>
-                        {(()=>{ const tks=tareasDe(p); return (
-                          <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10 }}>
-                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:tks.length?4:0 }}>
-                              <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Tareas del proyecto{tks.length?` · ${tks.length}`:''}</span>
-                              {onAddTaskForProject&&<span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span>}
-                            </div>
-                            {tks.length===0
-                              ? <div style={{ fontSize:11, color:C.grisText }}>Sin tareas activas.</div>
-                              : tks.slice(0,6).map(t=>{ const d=daysLeft(t.due); const col=d==null?C.muted:d<0?'#A32D2D':d<=2?'#854F0B':C.muted; return (
-                                <div key={t.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'6px 0', borderTop:`1px solid ${C.border}` }}>
-                                  <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar terminada' style={{ width:17, height:17, borderRadius:5, border:`1.5px solid ${C.done}`, flexShrink:0, cursor:'pointer' }}/>
-                                  <div onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, cursor:'pointer' }}>
-                                    <div style={{ fontSize:12, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
-                                    <div style={{ fontSize:9.5, color:col }}>{t.due?(d<0?`vencida ${-d}d`:d===0?'vence hoy':`en ${d}d`):'sin plazo'}{t.who?` · ${INICIALES_RESP[t.who]||t.who}`:''}</div>
-                                  </div>
-                                </div>
-                              )})}
-                          </div>
-                        )})()}
-                        <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'center' }}>
-                          <button onClick={()=>avanzar(p)} disabled={(p.etapa_idx||0)>=5} style={{ fontSize:11.5, fontWeight:600, color:(p.etapa_idx||0)>=5?C.grisText:C.accent, background:'none', border:'none', cursor:(p.etapa_idx||0)>=5?'default':'pointer', padding:0 }}>→ Avanzar etapa</button>
-                          <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
-                          {p.sale_id&&onOpenSale&&(()=>{ const v=sales.find(s=>String(s.id)===String(p.sale_id)); return v?<button onClick={()=>onOpenSale(v)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver venta</button>:null })()}
-                          <button onClick={()=>setAlcanceFor(p)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>{p.alcance?'Actualizar alcance':'Leer alcance (IA)'}</button>
-                          {fase!=='terminados'&&<button onClick={()=>togglePausa(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>{p.pausado?'Reanudar':'Pausar'}</button>}
-                          <button onClick={()=>archivar(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:fase!=='terminados'?0:'auto' }}>Terminar</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {abiertoG&&<div>{g.proyectos.map((p)=><div key={p.id} style={{ borderTop:`1px solid ${C.border}` }}>{renderProyecto(p,true)}</div>)}</div>}
                 </div>
               )
             })}
