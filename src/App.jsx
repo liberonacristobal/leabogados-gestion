@@ -3375,7 +3375,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         return (
         <div style={{padding:'8px 20px 0'}}>
           <div style={{border:'1px solid #DDE2E6',borderRadius:10,overflow:'hidden'}}>
-            {sorted.slice(0,6).map((p,i)=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} d`; return (
+            {sorted.slice(0,6).map((p,i)=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?new Date(s.iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):`hace ${dd} d`); return (
               <div key={p.id} onClick={()=>{ onOpenProyecto?onOpenProyecto(p.id):setTab('cartera') }} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:i>0?'1px solid #DDE2E6':'none',background:'#fff',cursor:'pointer'}}>
                 <span style={{width:8,height:8,borderRadius:'50%',background:CART_DOT[p.estado||'verde'],flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>{s&&<span style={{width:5,height:5,borderRadius:'50%',background:SEÑAL_COL[s.tipo]||C.muted,flexShrink:0}}/>}{s?s.texto:(p.nota||p.nombre_proyecto||'sin señales')}</div></div>
@@ -20742,9 +20742,10 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const grupos = (()=>{ const seen=new Map(); rows.forEach(p=>{ const cid=String(p.cliente_id||'—'); if(!seen.has(cid)) seen.set(cid,{cliente_id:p.cliente_id,cliente:cnm(p.cliente_id)||'—',proyectos:[]}); seen.get(cid).proyectos.push(p) })
     return [...seen.values()].map(g=>{ let best=null,fij=false; g.proyectos.forEach(p=>{ const mm=mov(p); if(!best||mm.score>best.score) best=mm; if(p.fijado) fij=true }); return {...g, mov:best||{ultima:null,dias:null,score:0}, fijado:fij} }) })()
   const CHINCHETA = <svg width="12" height="12" viewBox="0 0 24 24" fill={C.accent} style={{flexShrink:0}}><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg>
-  const señalLine = (m, style={}) => { const s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`
-    if(!s) return <div style={{ fontSize:11, color:C.grisText, display:'flex', alignItems:'center', gap:6, ...style }}><span style={{ width:6, height:6, borderRadius:'50%', background:C.done }}/>Sin señales{dd!=null?` · ${cu}`:''}</div>
-    return <div style={{ fontSize:11.5, display:'flex', alignItems:'center', gap:6, ...style }}><span style={{ width:6, height:6, borderRadius:'50%', background:SEÑAL_COL[s.tipo]||C.muted, flexShrink:0 }}/><span style={{ color:C.text, fontWeight:600 }}>{s.texto}</span><span style={{ color:C.muted }}>· {cu}</span></div>
+  const señalLine = (m, style={}) => { const s=m.ultima, dd=m.dias
+    const fecha = dd==null?'':dd<=0?'hoy':dd===1?'ayer':fmtDia(s&&s.iso)
+    if(!s) return <div style={{ fontSize:11, color:C.grisText, display:'flex', alignItems:'center', gap:6, ...style }}><span style={{ width:6, height:6, borderRadius:'50%', background:C.done }}/>Sin señales{dd!=null?` · ${dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`}`:''}</div>
+    return <div style={{ fontSize:11.5, display:'flex', alignItems:'center', gap:5, flexWrap:'wrap', ...style }}><span style={{ width:6, height:6, borderRadius:'50%', background:SEÑAL_COL[s.tipo]||C.muted, flexShrink:0 }}/><span style={{ color:C.text, fontWeight:600 }}>{s.texto}</span><span style={{ color:C.muted, fontWeight:600 }}>· {fecha}</span>{dd>1&&<span style={{ color:C.done, fontSize:10 }}>· hace {dd} d</span>}</div>
   }
 
   // Un proyecto (tarjeta colapsada + detalle B3). nested=true cuando va bajo un grupo de cliente.
@@ -20796,7 +20797,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:5 }}><span style={{ fontSize:11, fontWeight:600, color:C.accent }}>Etapa {(p.etapa_idx||0)+1} de 6 · {etapa}</span><span style={{ fontSize:11, fontWeight:700, color:C.accent }}>{avancePct}%</span></div>
               <div style={{ height:6, borderRadius:4, background:'#EAEEF1', overflow:'hidden', marginBottom:10 }}><div style={{ height:'100%', width:avancePct+'%', background:C.accent, borderRadius:4 }}/></div>
               <div style={{ display:'flex', gap:8, marginBottom:10 }}>
-                <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Próximo plazo</div><div style={{ fontSize:12.5, fontWeight:700, color:dP!=null&&dP<0?'#A32D2D':dP!=null&&dP<=7?'#854F0B':C.text, marginTop:2 }}>{p.plazo?(dP<0?`vencido ${-dP}d`:dP===0?'hoy':`en ${dP} días`):'sin plazo'}</div>{p.plazo_label&&<div style={{ fontSize:10, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.plazo_label}</div>}</div>
+                <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Próximo plazo</div><div style={{ fontSize:13, fontWeight:700, color:C.text, marginTop:2 }}>{p.plazo?fmtDia(p.plazo):'sin plazo'}</div>{p.plazo&&<div style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':dP<=7?'#854F0B':C.muted }}>{dP<0?`vencido ${-dP}d`:dP===0?'hoy':`en ${dP} días`}</div>}{p.plazo_label&&<div style={{ fontSize:10, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.plazo_label}</div>}</div>
                 <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Tareas abiertas</div><div style={{ fontSize:12.5, fontWeight:700, color:C.text, marginTop:2 }}>{tks.length}</div>{venceTk!=null&&<div style={{ fontSize:10, color:venceTk<0?'#A32D2D':venceTk<=7?'#854F0B':C.muted }}>{venceTk<0?`1 vencida`:venceTk<=7?`próxima en ${venceTk}d`:`próxima en ${venceTk}d`}</div>}</div>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, flexWrap:'wrap' }}>
@@ -20822,12 +20823,18 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
                 const full=!!bitFull[p.id]; const vis=full?bit:bit.slice(0,5)
                 return <div style={{ marginBottom:6 }}><div style={{ position:'relative', paddingLeft:18 }}>
                   <div style={{ position:'absolute', left:5, top:4, bottom:6, width:2, background:C.border }}/>
-                  {vis.map((e,ei)=>{ const dd=_dias(e.iso); const cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`; const clickable=!!e.ref; const titulo=e.tipo==='nota'?'Nota':(e.count>1?`${e.texto} · ${e.count}`:e.texto); return (
-                    <div key={ei} onClick={clickable?()=>clickEvento(e):undefined} style={{ position:'relative', paddingBottom:10, cursor:clickable?'pointer':'default' }}>
-                      <span style={{ position:'absolute', left:-17, top:2, width:11, height:11, borderRadius:'50%', border:'2px solid #fff', background:SEÑAL_COL[e.tipo]||C.muted }}/>
-                      <div style={{ fontSize:12.5, color:clickable?C.accent:C.text, fontWeight:600 }}>{titulo}</div>
-                      {e.tipo==='nota'&&<div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{e.texto}</div>}
-                      <div style={{ fontSize:9.5, color:C.done, marginTop:1 }}>{fmtDia(e.iso)} · {cu}{e.autor?` · ${e.autor}`:''}</div>
+                  {vis.map((e,ei)=>{ const dd=_dias(e.iso); const cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} d`; const clickable=!!e.ref; const titulo=e.tipo==='nota'?'Nota':(e.count>1?`${e.texto} · ${e.count}`:e.texto); return (
+                    <div key={ei} onClick={clickable?()=>clickEvento(e):undefined} style={{ position:'relative', paddingBottom:10, cursor:clickable?'pointer':'default', display:'flex', gap:8, alignItems:'flex-start' }}>
+                      <span style={{ position:'absolute', left:-17, top:3, width:11, height:11, borderRadius:'50%', border:'2px solid #fff', background:SEÑAL_COL[e.tipo]||C.muted }}/>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12.5, color:clickable?C.accent:C.text, fontWeight:600 }}>{titulo}</div>
+                        {e.tipo==='nota'&&<div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{e.texto}</div>}
+                        {e.autor&&<div style={{ fontSize:9.5, color:C.done, marginTop:1 }}>{e.autor}</div>}
+                      </div>
+                      <div style={{ textAlign:'right', flexShrink:0 }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:C.muted, whiteSpace:'nowrap' }}>{fmtDia(e.iso)}</div>
+                        <div style={{ fontSize:9, color:C.done, whiteSpace:'nowrap' }}>{cu}</div>
+                      </div>
                     </div>
                   )})}
                 </div>
