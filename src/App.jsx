@@ -20488,9 +20488,34 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
   )
 }
 
-function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
+  // ── Motor de movimiento: reúne los eventos REALES del cliente/proyecto (pagos, facturas, tareas, anticipos, gastos)
+  // y devuelve la ÚLTIMA SEÑAL (la más reciente) + un score de actividad de 30 días. Esto reemplaza el ultima_actividad
+  // estático (que solo cambiaba a mano → todo decía "hace 56 días"). Fuente única para ordenar y para la línea de señal.
+  const _dias = iso => iso==null?null:Math.round((Date.now()-new Date(String(iso).slice(0,10)+'T12:00').getTime())/86400000)
+  const SEÑAL_COL = { pago:'#0F6E56', factura:'#185FA5', anticipo:'#185FA5', tarea:'#854F0B', gasto:'#537281', nota:'#99ABB4' }
+  const movimientoDe = p => {
+    const cid = String(p.cliente_id||''); const sid = p.sale_id?String(p.sale_id):null
+    const evs = []
+    const linkCli = x => cid && String(x)===cid
+    const push=(fecha,tipo,texto,peso)=>{ if(!fecha) return; const iso=String(fecha).slice(0,10); if(iso.length<10) return; evs.push({iso,tipo,texto,peso}) }
+    ;(billing||[]).forEach(b=>{ if(b.deleted_at) return; if(!(linkCli(b.client_id) || (sid&&String(b.sale_id)===sid))) return
+      if(b.paid_at) push(b.paid_at,'pago','Pago recibido',5)
+      else if(b.issued_at) push(b.issued_at,'factura','Factura emitida',3) })
+    ;(tasks||[]).forEach(t=>{ const linked=(String(t.project_id||'')===String(p.id)) || (!t.project_id && linkCli(t.client_id)); if(!linked) return
+      if(t.completed_at) push(t.completed_at,'tarea','Tarea terminada',2)
+      else push(t.created_at,'tarea','Tarea nueva',2) })
+    ;(anticipos||[]).forEach(a=>{ if(!linkCli(a.client_id)) return; push(a.fecha,'anticipo','Anticipo',3) })
+    ;(expenses||[]).forEach(e=>{ if(!linkCli(e.client_id)) return; push(e.rendered_at||e.date||e.created_at,'gasto','Movimiento de gastos',1) })
+    if(!evs.length && p.ultima_actividad) push(p.ultima_actividad,'nota','Actualización manual',1)
+    if(!evs.length) return { ultima:null, dias:null, score:0 }
+    evs.sort((a,b)=>b.iso.localeCompare(a.iso))
+    const ultima = evs[0]
+    const score = evs.reduce((s,e)=>{ const d=_dias(e.iso); if(d==null||d<0||d>30) return s; const rec=d<=3?1:d<=7?.7:d<=14?.4:.2; return s+e.peso*rec },0)
+    return { ultima, dias:_dias(ultima.iso), score }
+  }
   const HOY = new Date().toISOString().slice(0,10)
   const esAdmin = userRole==='admin'
   const miInicial = INICIALES_RESP[currentUserName] || null
@@ -20513,6 +20538,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   }
 
   const [q,setQ] = useState('')
+  const [fase,setFase] = usePersistedState('cartera_fase','curso')   // curso | pausa | terminados
   const [sortBy,setSortBy] = usePersistedState('cartera_sort2','movimiento')   // movimiento | sinmover | plazo | prioridad | cliente (recuerda al volver)
   const [estadoF,setEstadoF] = usePersistedState('cartera_estadoF','todos') // todos | rojo | ambar | verde
   const [soloMios,setSoloMios] = usePersistedState('cartera_solomios2',true) // admin: por defecto ver solo donde soy responsable
@@ -20529,26 +20555,28 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const [archivados,setArchivados] = useState([])     // proyectos archivados (activo=false), para ver/reponer
   const [archOpen,setArchOpen] = useState(false)
 
+  // Movimiento por proyecto (fuente única). Se recomputa cuando cambian los datos reales.
+  const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=movimientoDe(p) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
+  const mov = p => movMap[p.id] || { ultima:null, dias:null, score:0 }
   const rows = useMemo(()=>{
-    let arr = (proyectos||[]).filter(p=>p.activo!==false)
+    // Pestaña: En curso (activa, no pausada) · En pausa (activa, pausada) · Terminados (archivados = activo:false)
+    let arr = fase==='terminados' ? (archivados||[]) : (proyectos||[]).filter(p=> p.activo!==false && (fase==='pausa' ? !!p.pausado : !p.pausado))
     if(!esAdmin) arr = arr.filter(p=>(p.responsable||'')===miInicial)
     else if(soloMios && miInicial) arr = arr.filter(p=>(p.responsable||'')===miInicial)
     if(estadoF!=='todos') arr = arr.filter(p=>(p.estado||'verde')===estadoF)
     if(q){ const s=q.toLowerCase(); arr = arr.filter(p=>(cnm(p.cliente_id)+' '+(p.nombre_proyecto||'')+' '+(p.nota||'')).toLowerCase().includes(s)) }
-    const key = p => { const d=cartDias(p.ultima_actividad); return d==null?Infinity:d }
+    const key = p => { const d=mov(p).dias; return d==null?Infinity:d }
+    const pin = (a,b) => { const fa=!!a.fijado, fb=!!b.fijado; if(fa!==fb) return fa?-1:1; if(fa&&fb) return String(a.fijado_at||'').localeCompare(String(b.fijado_at||'')); return 0 }   // fijados arriba, en el orden en que se fijaron
     return [...arr].sort((a,b)=>{
-      if(sortBy==='movimiento'){   // propuestas abiertas fijadas arriba; el resto por momentum (lo que se mueve arriba, lo parado al fondo)
-        const pa=esPropAbierta(a), pb=esPropAbierta(b)
-        if(pa!==pb) return pa?-1:1
-        return carteraMomentum(b)-carteraMomentum(a)
-      }
-      if(sortBy==='sinmover') return key(b)-key(a)   // más olvidado (más días sin mover, o nunca) primero
+      const pn = pin(a,b); if(pn!==0) return pn
+      if(sortBy==='movimiento'){ const pa=esPropAbierta(a), pb=esPropAbierta(b); if(pa!==pb) return pa?-1:1; return mov(b).score-mov(a).score }
+      if(sortBy==='sinmover') return key(b)-key(a)
       if(sortBy==='plazo'){ const pa=a.plazo?new Date(a.plazo).getTime():Infinity, pb=b.plazo?new Date(b.plazo).getTime():Infinity; return pa-pb }
       if(sortBy==='prioridad') return carteraScore(b)-carteraScore(a)
       if(sortBy==='cliente') return cnm(a.cliente_id).localeCompare(cnm(b.cliente_id),'es')
       return 0
     })
-  },[proyectos,esAdmin,miInicial,soloMios,estadoF,q,sortBy,clients,sales,tasks])
+  },[proyectos,archivados,fase,esAdmin,miInicial,soloMios,estadoF,q,sortBy,clients,sales,movMap])
 
   const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||'') } }
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
@@ -20561,11 +20589,20 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const avanzar = p => patch(p,{ etapa_idx:Math.min(5,(p.etapa_idx||0)+1) })
   const setEstado = (p,e) => patch(p,{ estado:e })
   const guardarNota = p => { if((draft||'')!==(p.nota||'')) patch(p,{ nota:draft||null }) }
+  // Cambios de gestión (pausar/fijar) que NO son "movimiento real": no tocan ultima_actividad.
+  const updP = async (p,campos) => {
+    setProyectos(prev=>prev.map(x=>x.id===p.id?{...x,...campos}:x))
+    const { error } = await supabase.from('proyectos_cartera').update({...campos,updated_at:new Date().toISOString()}).eq('id',p.id)
+    if(error) appAlert('No se pudo guardar: '+error.message)
+  }
+  const togglePausa = p => updP(p,{ pausado: !p.pausado })
+  const fijar = p => updP(p,{ fijado:true, fijado_at:new Date().toISOString() })
+  const quitarFijar = p => updP(p,{ fijado:false, fijado_at:null })
   const archivar = async p => {
-    if(!(await appConfirm(`¿Archivar "${p.nombre_proyecto||cnm(p.cliente_id)}"? Sale del panel; queda en Archivados, no se borra.`))) return
+    if(!(await appConfirm(`¿Terminar "${p.nombre_proyecto||cnm(p.cliente_id)}"? Sale del panel; queda en Terminados, no se borra.`))) return
     setProyectos(prev=>prev.filter(x=>x.id!==p.id)); setArchivados(prev=>[{...p,activo:false},...prev]); setOpenId(null)
     const { error } = await supabase.from('proyectos_cartera').update({activo:false,updated_at:new Date().toISOString()}).eq('id',p.id)
-    if(error) appAlert('No se pudo archivar: '+error.message)
+    if(error) appAlert('No se pudo terminar: '+error.message)
   }
   const reponer = async p => {
     setArchivados(prev=>prev.filter(x=>x.id!==p.id)); setProyectos(prev=>[{...p,activo:true,ultima_actividad:HOY},...prev])
@@ -20714,14 +20751,22 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
         </div>
       )}
 
+      {(()=>{ const scope=arr=>{ let a=arr; if(!esAdmin) a=a.filter(p=>(p.responsable||'')===miInicial); else if(soloMios&&miInicial) a=a.filter(p=>(p.responsable||'')===miInicial); return a }
+        const nCurso=scope((proyectos||[]).filter(p=>p.activo!==false&&!p.pausado)).length
+        const nPausa=scope((proyectos||[]).filter(p=>p.activo!==false&&!!p.pausado)).length
+        const nTerm=scope(archivados||[]).length
+        const tab=(k,l,n)=>(<button key={k} onClick={()=>{setFase(k);setOpenId(null)}} style={{ fontSize:12, fontWeight:600, borderRadius:20, padding:'5px 13px', border:`1px solid ${fase===k?C.accent:C.border}`, background:fase===k?C.accent:'#fff', color:fase===k?'#fff':C.muted, cursor:'pointer', whiteSpace:'nowrap' }}>{l}<span style={{opacity:.65,marginLeft:5}}>{n}</span></button>)
+        return <div style={{ display:'flex', gap:6, marginBottom:10, flexWrap:'wrap' }}>{tab('curso','En curso',nCurso)}{tab('pausa','En pausa',nPausa)}{tab('terminados','Terminados',nTerm)}</div>
+      })()}
+
       <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
-        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ fontSize:12, color:C.muted, background:'#EEF1F3', border:'none', borderRadius:8, padding:'6px 10px', cursor:'pointer' }}>
+        {fase!=='terminados'&&<select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ fontSize:12, color:C.muted, background:'#EEF1F3', border:'none', borderRadius:8, padding:'6px 10px', cursor:'pointer' }}>
           <option value='movimiento'>En movimiento</option>
           <option value='sinmover'>Sin mover</option>
           <option value='plazo'>Plazo</option>
           <option value='prioridad'>Prioridad</option>
           <option value='cliente'>Cliente</option>
-        </select>
+        </select>}
         {esAdmin && miInicial && (<>
           <button onClick={()=>setSoloMios(true)} style={chipSty(soloMios,C.accent,C.azulBg)}>Míos</button>
           <button onClick={()=>setSoloMios(false)} style={chipSty(!soloMios,C.muted,'#EEF1F3')}>Todos</button>
@@ -20736,24 +20781,37 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
               const abierto = openId===p.id
               const dP = cartDiasPlazo(p.plazo)
               const etapa = ETAPAS_CARTERA[p.etapa_idx||0]
+              const m = mov(p)
+              const terminado = fase==='terminados'
               return (
-                <div key={p.id} style={{ borderTop:i?`1px solid ${C.border}`:'none' }}>
+                <div key={p.id} style={{ borderTop:i?`1px solid ${C.border}`:'none', opacity:terminado?.7:1 }}>
                   <div onClick={()=>abrir(p)} style={{ padding:'12px 13px', cursor:'pointer' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
                           <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
+                          {p.fijado&&!terminado&&<svg width="12" height="12" viewBox="0 0 24 24" fill={C.accent} style={{flexShrink:0}}><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg>}
                           <span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:14, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:170 }}>{cnm(p.cliente_id)||'—'}</span>
                           <span style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>· {p.nombre_proyecto||etapa}</span>
                           {esPropAbierta(p)&&<span style={{ fontSize:9.5, fontWeight:700, color:C.accent, background:C.azulBg, borderRadius:20, padding:'1px 7px', flexShrink:0, textTransform:'uppercase', letterSpacing:.3 }}>Propuesta</span>}
-                          {p.plazo&&dP!=null&&(dP<0||dP<=7)&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
+                          {p.pausado&&fase!=='pausa'&&!terminado&&<span style={{ fontSize:9.5, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'1px 7px', flexShrink:0 }}>En pausa</span>}
+                          {p.plazo&&dP!=null&&(dP<0||dP<=7)&&!terminado&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
                         </div>
-                        {p.nota&&<div style={{ fontSize:13, color:C.text, marginTop:5, paddingLeft:15 }}>{p.nota}</div>}
+                        {/* última señal real (reemplaza el "hace X días" estático) */}
+                        {!terminado&&(()=>{ const s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} días`
+                          if(!s) return <div style={{ fontSize:11, color:C.grisText, marginTop:4, paddingLeft:15, display:'flex', alignItems:'center', gap:6 }}><span style={{ width:6, height:6, borderRadius:'50%', background:C.done }}/>Sin señales{dd!=null?` · ${cu}`:''}</div>
+                          return <div style={{ fontSize:11.5, marginTop:4, paddingLeft:15, display:'flex', alignItems:'center', gap:6 }}><span style={{ width:6, height:6, borderRadius:'50%', background:SEÑAL_COL[s.tipo]||C.muted, flexShrink:0 }}/><span style={{ color:C.text, fontWeight:600 }}>{s.texto}</span><span style={{ color:C.muted }}>· {cu}</span></div>
+                        })()}
+                        {p.nota&&<div style={{ fontSize:12, color:C.muted, marginTop:3, paddingLeft:15 }}>{p.nota}</div>}
                       </div>
-                      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4, flexShrink:0 }}>
-                        <span style={{ width:24, height:24, borderRadius:'50%', background:CART_AV[p.responsable]||C.muted, color:'#fff', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' }}>{p.responsable||'—'}</span>
-                        <span style={{ fontSize:11, fontWeight:600, color:haceCol(p.ultima_actividad) }}>{haceTxt(p.ultima_actividad)}</span>
-                        {(()=>{ const tks=tareasDe(p); if(!tks.length) return null; const vh=tks.filter(t=>{ const d=daysLeft(t.due); return d!=null&&d<=0 }).length; return <span style={{ fontSize:9.5, fontWeight:600, color:vh>0?'#A32D2D':C.muted, whiteSpace:'nowrap' }}>{tks.length} tarea{tks.length!==1?'s':''}{vh>0?` · ${vh} vence`:''}</span> })()}
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5, flexShrink:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                          {!terminado
+                            ? <button onClick={e=>{ e.stopPropagation(); p.fijado?quitarFijar(p):fijar(p) }} title={p.fijado?'Quitar de arriba':'Fijar arriba'} style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:0 }}><svg width="15" height="15" viewBox="0 0 24 24" fill={p.fijado?C.accent:'none'} stroke={p.fijado?C.accent:C.done} strokeWidth="2"><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg></button>
+                            : <button onClick={e=>{ e.stopPropagation(); reponer(p) }} style={{ fontSize:10.5, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'3px 10px', cursor:'pointer' }}>Reponer</button>}
+                          <span style={{ width:24, height:24, borderRadius:'50%', background:CART_AV[p.responsable]||C.muted, color:'#fff', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' }}>{p.responsable||'—'}</span>
+                        </div>
+                        {!terminado&&(()=>{ const tks=tareasDe(p); if(!tks.length) return null; const vh=tks.filter(t=>{ const d=daysLeft(t.due); return d!=null&&d<=0 }).length; return <span style={{ fontSize:9.5, fontWeight:600, color:vh>0?'#A32D2D':C.muted, whiteSpace:'nowrap' }}>{tks.length} tarea{tks.length!==1?'s':''}{vh>0?` · ${vh} vence`:''}</span> })()}
                       </div>
                     </div>
                   </div>
@@ -20803,7 +20861,8 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
                           <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
                           {p.sale_id&&onOpenSale&&(()=>{ const v=sales.find(s=>String(s.id)===String(p.sale_id)); return v?<button onClick={()=>onOpenSale(v)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver venta</button>:null })()}
                           <button onClick={()=>setAlcanceFor(p)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>{p.alcance?'Actualizar alcance':'Leer alcance (IA)'}</button>
-                          <button onClick={()=>archivar(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>Archivar</button>
+                          {fase!=='terminados'&&<button onClick={()=>togglePausa(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>{p.pausado?'Reanudar':'Pausar'}</button>}
+                          <button onClick={()=>archivar(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:fase!=='terminados'?0:'auto' }}>Terminar</button>
                         </div>
                       </div>
                     </div>
@@ -20813,20 +20872,6 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
             })}
           </div>}
 
-      {archivados.length>0&&(
-        <div style={{ marginTop:10, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', background:'#fff' }}>
-          <div onClick={()=>setArchOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', cursor:'pointer' }}>
-            <span style={{ fontSize:12, fontWeight:600, color:C.muted, flex:1 }}>Archivados · {archivados.length}</span>
-            <span style={{ fontSize:12, color:C.muted }}>{archOpen?'▾':'▸'}</span>
-          </div>
-          {archOpen&&archivados.map(p=>(
-            <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}` }}>
-              <span style={{ fontSize:13, color:C.muted, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||'—'}{p.nombre_proyecto?` · ${p.nombre_proyecto}`:''}</span>
-              <button onClick={()=>reponer(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'3px 10px', cursor:'pointer', flexShrink:0 }}>Reponer</button>
-            </div>
-          ))}
-        </div>
-      )}
       {alcanceFor&&<CarteraAlcanceModal proyecto={alcanceFor} client={clients.find(c=>String(c.id)===String(alcanceFor.cliente_id))||null} onClose={()=>setAlcanceFor(null)} onApplied={(id,campos)=>{ setProyectos(prev=>prev.map(x=>x.id===id?{...x,...campos}:x)); if(openId===id) setDraft(d=>d) }}/>}
     </div>
   )
@@ -25109,7 +25154,7 @@ export default function App() {
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
-            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
