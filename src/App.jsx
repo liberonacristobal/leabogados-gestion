@@ -20570,6 +20570,26 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const [grpOpen,setGrpOpen] = useState({})           // clientes con varios proyectos: abiertos/cerrados
   const [notaDraft,setNotaDraft] = useState('')       // borrador de nota nueva en la bitácora abierta
   const [bitFull,setBitFull] = useState({})           // { proyecto_id: true } → bitácora completa (por defecto colapsada a los últimos)
+  const [semanalOn,setSemanalOn] = useState(false)    // interruptor del correo semanal de cartera
+  const [pruebaMsg,setPruebaMsg] = useState('')       // feedback del botón "Enviarme una prueba"
+  useEffect(()=>{ if(DEMO){ return } supabase.from('learnings').select('value').eq('kind','config').eq('key','cartera_semanal').maybeSingle().then(({data})=>{ setSemanalOn((data?.value||'off')==='on') },()=>{}) },[])
+  const toggleSemanal = async () => {
+    const next = !semanalOn; setSemanalOn(next)
+    if(DEMO) return
+    try{ await supabase.from('learnings').delete().eq('kind','config').eq('key','cartera_semanal'); await supabase.from('learnings').insert({kind:'config',key:'cartera_semanal',value:next?'on':'off'}) }catch(e){ setSemanalOn(!next); appAlert('No se pudo guardar: '+e.message) }
+  }
+  const enviarPrueba = async () => {
+    setPruebaMsg('Enviando…')
+    if(DEMO){ setPruebaMsg('En demo no se envía.'); return }
+    try{
+      const {data:{session}} = await supabase.auth.getSession()
+      const res = await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/cartera-semanal',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+(session?.access_token||''),'apikey':supabase.supabaseKey}, body:JSON.stringify({}) })
+      const j = await res.json().catch(()=>({}))
+      if(!res.ok) throw new Error(j.error||('Error '+res.status))
+      setPruebaMsg('Listo — revisa tu correo.')
+    }catch(e){ setPruebaMsg('No se pudo: '+(e?.message||'reintenta')) }
+    setTimeout(()=>setPruebaMsg(''),6000)
+  }
   useEffect(()=>{
     if(DEMO){ setNotas({}); return }
     supabase.from('cartera_notas').select('*').order('created_at',{ascending:false}).then(({data})=>{ if(!data) return; const m={}; data.forEach(n=>{ (m[n.proyecto_id]=m[n.proyecto_id]||[]).push(n) }); setNotas(m) },()=>{})
@@ -20870,6 +20890,20 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
         <div onClick={backfill} style={{ display:'flex', alignItems:'center', gap:8, background:C.azulBg||'#E6F1FB', border:`1px solid ${C.border}`, borderRadius:10, padding:'9px 12px', marginBottom:10, cursor:'pointer' }}>
           <span style={{ fontSize:12, color:C.accent, flex:1 }}>{activasSinProyecto.length} venta{activasSinProyecto.length!==1?'s':''} activa{activasSinProyecto.length!==1?'s':''} sin proyecto en el panel</span>
           <span style={{ fontSize:12, fontWeight:600, color:C.accent, whiteSpace:'nowrap' }}>Generar →</span>
+        </div>
+      )}
+
+      {esAdmin&&(
+        <div style={{ display:'flex', alignItems:'center', gap:10, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:'9px 12px', marginBottom:10, flexWrap:'wrap' }}>
+          <div style={{ flex:1, minWidth:150 }}>
+            <div style={{ fontSize:12, fontWeight:600, color:C.accent }}>Correo semanal de cartera</div>
+            <div style={{ fontSize:10.5, color:C.muted, marginTop:1 }}>Lunes AM a cada abogado con su cartera. {semanalOn?'Activo.':'Apagado.'}</div>
+          </div>
+          {pruebaMsg&&<span style={{ fontSize:11, color:C.muted }}>{pruebaMsg}</span>}
+          <button onClick={enviarPrueba} style={{ fontSize:11, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'4px 12px', cursor:'pointer', whiteSpace:'nowrap' }}>Enviarme una prueba</button>
+          <button onClick={toggleSemanal} title={semanalOn?'Apagar':'Encender'} style={{ width:38, height:22, borderRadius:12, border:'none', background:semanalOn?C.normal:C.done, position:'relative', cursor:'pointer', flexShrink:0, padding:0 }}>
+            <span style={{ position:'absolute', top:2, left:semanalOn?18:2, width:18, height:18, borderRadius:'50%', background:'#fff', transition:'left .15s' }}/>
+          </button>
         </div>
       )}
 
