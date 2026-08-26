@@ -20302,28 +20302,39 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
 const ETAPAS_CARTERA = ['Diagnóstico','Análisis','Borrador','Revisión cliente','Ejecución','Cierre']
 const CART_DOT = { rojo:'#E24B4A', ambar:'#EF9F27', verde:'#1D9E75' }   // semáforo (eje nuevo: salud del proyecto)
 const CART_AV  = { CL:'#003C50', EE:'#185FA5', MC:'#3B6D11', MP:'#993556', RD:'#854F0B' }  // color por persona (canon)
-const SEÑAL_COL = { pago:'#0F6E56', factura:'#185FA5', anticipo:'#185FA5', tarea:'#854F0B', gasto:'#537281', nota:'#99ABB4' }
+const SEÑAL_COL = { pago:'#0F6E56', factura:'#185FA5', anticipo:'#185FA5', tarea:'#854F0B', gasto:'#537281', plan:'#537281', genesis:'#003C50', nota:'#99ABB4' }
+// Una factura está EMITIDA solo si tiene folio y no es Programada/Anulada. Una cuota Programada NO es "emitida"
+// (bug real: se marcaba issued_at de programadas como "Factura emitida" a clientes sin facturar).
+const facturaEmitida = b => !!b && !!b.invoice_no && b.status!=='Programada' && b.status!=='Anulada' && b.billing_type!=='reembolso'
 // FUENTE ÚNICA del movimiento de un proyecto (la usan Cartera y el strip "Mis proyectos" del Inicio).
-// Barre los eventos REALES del cliente/proyecto (pagos, facturas, tareas, anticipos, gastos) → última señal + score 30d + eventos (con ref clickeable).
+// Barre eventos REALES (pagos, facturas EMITIDAS, tareas, anticipos, gastos) + un resumen del plan de cobro → última señal + score 30d + eventos (ref clickeable).
 const carteraMovimiento = (p, { billing=[], tasks=[], anticipos=[], expenses=[] }={}) => {
   const _d = iso => iso==null?null:Math.round((Date.now()-new Date(String(iso).slice(0,10)+'T12:00').getTime())/86400000)
   const cid = String(p.cliente_id||''); const sid = p.sale_id?String(p.sale_id):null
   const evs = []; const linkCli = x => cid && String(x)===cid
+  const mine = x => linkCli(x.client_id) || (sid&&String(x.sale_id)===sid)
   const push=(fecha,tipo,texto,peso,ref)=>{ if(!fecha) return; const iso=String(fecha).slice(0,10); if(iso.length<10) return; evs.push({iso,tipo,texto,peso,ref:ref||null}) }
   const fichaRef = { kind:'ficha', id:p.cliente_id }
-  billing.forEach(b=>{ if(b.deleted_at) return; if(!(linkCli(b.client_id) || (sid&&String(b.sale_id)===sid))) return
-    if(b.paid_at) push(b.paid_at,'pago','Pago recibido',5,fichaRef)
-    else if(b.issued_at) push(b.issued_at,'factura','Factura emitida',3,fichaRef) })
+  const bMine = billing.filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && mine(b))
+  bMine.forEach(b=>{
+    if(b.paid_at && b.status==='Pagado'){ push(b.paid_at,'pago',`Pago recibido${b.amount?` · ${fmt(b.amount)}`:''}`,5,fichaRef); return }   // un pago cuenta aunque no tenga folio
+    if(facturaEmitida(b)) push(b.issued_at||b.due,'factura',`Factura emitida${b.invoice_no?` N° ${b.invoice_no}`:''}`,3,fichaRef)   // "emitida" exige folio (una Programada NO lo es)
+  })
+  // Resumen del plan de cobro: UN evento por las cuotas Programadas (no 8 "facturas" falsas).
+  const prog = bMine.filter(b=>b.status==='Programada')
+  if(prog.length){ const fecha=prog.map(b=>b.issued_at||b.due).filter(Boolean).sort()[0]; push(fecha,'plan',`Plan de cobro · ${prog.length} cuota${prog.length!==1?'s':''} por facturar`,1,null) }
   tasks.forEach(t=>{ const linked=(String(t.project_id||'')===String(p.id)) || (!t.project_id && linkCli(t.client_id)); if(!linked) return
     if(t.completed_at) push(t.completed_at,'tarea','Tarea terminada',2,{kind:'task',id:t.id})
     else push(t.created_at,'tarea','Tarea nueva',2,{kind:'task',id:t.id}) })
-  anticipos.forEach(a=>{ if(!linkCli(a.client_id)) return; push(a.fecha,'anticipo','Anticipo',3,fichaRef) })
+  anticipos.forEach(a=>{ if(!linkCli(a.client_id)) return; push(a.fecha,'anticipo',`Anticipo recibido${a.monto?` · ${fmt(a.monto)}`:''}`,3,fichaRef) })
   expenses.forEach(e=>{ if(!linkCli(e.client_id)) return; push(e.rendered_at||e.date||e.created_at,'gasto','Movimiento de gastos',1,fichaRef) })
+  if(p.created_at) push(p.created_at,'genesis','Proyecto iniciado',0,null)   // ancla del inicio de la línea de tiempo
   if(!evs.length && p.ultima_actividad) push(p.ultima_actividad,'nota','Actualización manual',1)
   if(!evs.length) return { ultima:null, dias:null, score:0, eventos:[] }
   evs.sort((a,b)=>b.iso.localeCompare(a.iso))
   const score = evs.reduce((s,e)=>{ const d=_d(e.iso); if(d==null||d<0||d>30) return s; const rec=d<=3?1:d<=7?.7:d<=14?.4:.2; return s+e.peso*rec },0)
-  return { ultima:evs[0], dias:_d(evs[0].iso), score, eventos:evs.slice(0,40) }
+  const ultReal = evs.find(e=>e.tipo!=='genesis') || evs[0]   // la última "señal" no debería ser el génesis
+  return { ultima:ultReal, dias:_d(ultReal.iso), score, eventos:evs.slice(0,40) }
 }
 const cartDias = iso => iso ? Math.floor((Date.now()-new Date(iso+'T00:00').getTime())/86400000) : null
 const cartDiasPlazo = iso => iso ? Math.ceil((new Date(iso+'T00:00').getTime()-Date.now())/86400000) : null
@@ -20582,6 +20593,21 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
     return out.slice(0,40)
   }
   const clickEvento = e => { if(!e.ref) return; if(e.ref.kind==='task'){ const t=(tasks||[]).find(x=>String(x.id)===String(e.ref.id)); if(t&&onPreviewTask) onPreviewTask(t) } else if(e.ref.kind==='ficha'&&onOpenClientFicha){ onOpenClientFicha(e.ref.id) } }
+  // Resumen del proyecto de un vistazo (rule-based, datos reales): etapa · tareas abiertas · estado de facturación.
+  const resumenDe = p => {
+    const bMine = (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && (String(b.client_id)===String(p.cliente_id) || (p.sale_id&&String(b.sale_id)===String(p.sale_id))))
+    const emit = bMine.filter(facturaEmitida)
+    const cobrado = bMine.filter(b=>b.paid_at && b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+    const prog = bMine.filter(b=>b.status==='Programada')
+    const tks = tareasDe(p)
+    const parts = [ETAPAS_CARTERA[p.etapa_idx||0]]
+    if(tks.length) parts.push(`${tks.length} tarea${tks.length!==1?'s':''} abierta${tks.length!==1?'s':''}`)
+    if(cobrado>0) parts.push(`${fmt(cobrado)} cobrado`)
+    else if(emit.length) parts.push(`${emit.length} factura${emit.length!==1?'s':''} emitida${emit.length!==1?'s':''}`)
+    else if(prog.length) parts.push(`${prog.length} cuota${prog.length!==1?'s':''} por facturar`)
+    else parts.push('sin facturación aún')
+    return parts.join(' · ')
+  }
 
   // Movimiento por proyecto (fuente única). Se recomputa cuando cambian los datos reales.
   const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
@@ -20764,6 +20790,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
         {abierto&&(
           <div style={{ padding:'0 13px 13px', background:C.bgSoft||'#FAFBFC' }}>
             <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:11 }}>
+              <div style={{ fontSize:11.5, color:C.muted, marginBottom:10, lineHeight:1.4 }}>{resumenDe(p)}</div>
               {/* EN QUÉ ESTÁ */}
               <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:7 }}>En qué está</div>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:5 }}><span style={{ fontSize:11, fontWeight:600, color:C.accent }}>Etapa {(p.etapa_idx||0)+1} de 6 · {etapa}</span><span style={{ fontSize:11, fontWeight:700, color:C.accent }}>{avancePct}%</span></div>
