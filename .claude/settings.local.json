@@ -353,7 +353,8 @@
       "Bash(perl -0pi -e \"s/\\\\Q<span style={{position:'absolute',top:11,right:11,color:'#B9C6CD'\\\\E/<span style={{position:'absolute',top:11,right:11,color:C.done/g\" src/App.jsx)",
       "Bash(perl -0pi -e \"s/\\\\Q'building',{fg:C.text,bg:'#E4E8EB'}\\\\E/'building',{fg:C.text,bg:C.border}/g; s/\\\\Q'briefcase',{fg:C.text,bg:'#E4E8EB'}\\\\E/'briefcase',{fg:C.text,bg:C.border}/g\" src/App.jsx)",
       "Bash(perl -0pi -e 's/onSetVentaAnio,onAssignSeries/onSetVentaAnio,onReprocesarSinAnio,onAssignSeries/' src/App.jsx)",
-      "Bash(perl -0pi -e 's/onSetVentaAnio=\\\\{handleSetVentaAnio\\\\} onAssignSeries=/onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries=/' src/App.jsx)"
+      "Bash(perl -0pi -e 's/onSetVentaAnio=\\\\{handleSetVentaAnio\\\\} onAssignSeries=/onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries=/' src/App.jsx)",
+      "Bash(printf '2026-08-26: Diagnóstico reparto \\(reproducido con instrumentación en demo\\). El reparto SÍ llega al guardado \\(repartoLimpio correcto y no-vacío en handleSave\\); la base acepta el insert. La pérdida del proveedor era el botón \"Primeras tareas con IA\" descartando la edición sin guardar \\(ya corregido en ce7ab39: ahora guarda antes de abrir\\). Robustez extra: si una venta no tiene cuotas generadas, la cuenta por pagar del proveedor se registra igual \\(billing_id null\\) en vez de perderse en silencio. Se dejó la cuenta de Álvaro Awad en Survías \\(2×$531.245=26 UF\\) por inserción directa. Build verde.\\\\n\\\\n')"
     ]
   }
 }
