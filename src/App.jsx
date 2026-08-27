@@ -20657,7 +20657,6 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const [dur,setDur] = useState({})
   const [cfgOpen,setCfgOpen] = useState(null)
   const [cfgF,setCfgF] = useState({horas_estimadas:'',tarifa_mensual:'',valor_hora_excedente_uf:''})
-  const [excCobros,setExcCobros] = useState([])   // puente excedente→facturar (horas_excedente_cobros)
   const ufHoy = useUF().uf || UF_FALLBACK
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const mesActual = hoy.slice(0,7)
@@ -20667,11 +20666,10 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const retDe = cid => retainers.find(r=>String(r.client_id)===String(cid))
 
   useEffect(()=>{
-    if(DEMO){ setHoras(demoData.horas||[]); setRetainers(demoData.retainers||[]); setExcCobros(demoData.excedente_cobros||[]); return }
+    if(DEMO){ setHoras(demoData.horas||[]); setRetainers(demoData.retainers||[]); return }
     let ok=true
     supabase.from('horas').select('*').order('fecha',{ascending:false}).then(({data})=>{ if(ok&&data) setHoras(data) },()=>{})
     supabase.from('retainers').select('*').then(({data})=>{ if(ok&&data) setRetainers(data) },()=>{})
-    supabase.from('horas_excedente_cobros').select('*').then(({data})=>{ if(ok&&data) setExcCobros(data) },()=>{})
     return ()=>{ ok=false }
   },[])
 
@@ -20751,10 +20749,16 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const tareasDiaDe = (name,iso) => (tasks||[]).filter(t=>t.due===iso && t.status!=='Terminado' && (isAssignee(t,name)||t.who===name))
   const anioAct = mesActual.slice(0,4)
   const mesesYTD = (new Date().getMonth()+1)
-  const ytdData = permanentes.map(({cid})=>{ const r=retDe(cid); const est=(Number(r?.horas_estimadas)||0)*mesesYTD; const cons=horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct).reduce((a,h)=>a+(Number(h.horas)||0),0); return { cid, est, cons, over:cons>est, sinCfg:!r } })
+  const ytdData = permanentes.map(({cid})=>{ const r=retDe(cid); const estMes=Number(r?.horas_estimadas)||0; const est=estMes*mesesYTD; const valorUF=Number(r?.valor_hora_excedente_uf)||0
+    const hCli=horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct); const cons=hCli.reduce((a,h)=>a+(Number(h.horas)||0),0)
+    // Excedente = suma de sobre-cupos MENSUALES (el balde se llena cada mes; no netear meses bajos con altos).
+    let excesoMeses=0; for(let m=1;m<=mesesYTD;m++){ const mm=anioAct+'-'+String(m).padStart(2,'0'); const cm=hCli.filter(h=>String(h.fecha||'').slice(0,7)===mm).reduce((a,h)=>a+(Number(h.horas)||0),0); excesoMeses+=Math.max(0,cm-estMes) }
+    const exCLP=Math.round(excesoMeses*valorUF*ufHoy); return { cid, est, cons, over:cons>est, exceso:excesoMeses, valorUF, exCLP, sinCfg:!r } })
+  const excedenteYTD = ytdData.reduce((a,d)=>a+(d.exCLP||0),0)
   const exportYTD = () => {
-    const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.over?'#A32D2D':'#0F6E56'}'>${d.over?'Reajustar':'OK'}</td></tr>`).join('')
-    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'><table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Estimadas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Reales YTD</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno del estudio — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#537281'}'>${d.exCLP>0?f0(d.exCLP):'—'}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#0F6E56'}'>${d.exCLP>0?'Reajustar':'OK'}</td></tr>`).join('')
+    const heroExc = excedenteYTD>0?`<div style='background:#F5F7F9;border-radius:8px;padding:12px 14px;margin-bottom:16px'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#537281;font-weight:700'>Dinero dejado sobre la mesa · ${anioAct}</div><div style='font-size:22px;font-weight:800;color:#003C50;margin-top:2px'>${f0(excedenteYTD)}</div><div style='font-size:10px;color:#537281;margin-top:2px'>Suma de las horas excedidas cada mes, a tu valor hora excedente. Base para el reajuste ${Number(anioAct)+1}.</div></div>`:''
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'>${heroExc}<table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Estimadas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Reales YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Sin cobrar</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno del estudio — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
   const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
@@ -20778,16 +20782,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     else await supabase.from('retainers').insert({client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar,valor_hora_excedente_uf:vex})
     const {data}=await supabase.from('retainers').select('*'); if(data) setRetainers(data); setCfgOpen(null)
   }
-  // Puente excedente→facturar: registra el exceso del mes como cobro por facturar (según la propuesta = valor hora excedente).
-  const excDeMes = (cid,mes) => excCobros.find(e=>String(e.client_id)===String(cid)&&e.periodo===mes)
-  async function marcarExcedente(cid,sale_id,exceso,valorUF){
-    const mes=mesActual, monto=Math.round(exceso*valorUF*ufHoy)
-    const row={ client_id:cid, sale_id:sale_id||null, periodo:mes, horas_exceso:exceso, valor_hora_uf:valorUF, uf_valor:ufHoy, monto, estado:'por_facturar', created_by:me }
-    if(DEMO){ setExcCobros(p=>[...p.filter(e=>!(String(e.client_id)===String(cid)&&e.periodo===mes)),{id:'ex'+Date.now(),created_at:new Date().toISOString(),...row}]); return }
-    const {data,error}=await supabase.from('horas_excedente_cobros').insert(row).select().single()
-    if(error||!data){ appAlert('No se pudo marcar: '+(error?.message||'')); return }
-    setExcCobros(p=>[...p.filter(e=>!(String(e.client_id)===String(cid)&&e.periodo===mes)),data])
-  }
+  // Excedente = inteligencia de repricing (no cobro): $ que no estamos cobrando según la propuesta (valor hora excedente).
+  const excedenteCLP = (excesoH,valorUF) => Math.round((Number(excesoH)||0)*(Number(valorUF)||0)*ufHoy)
   const cliOpen = cid => onOpenClientFicha&&onOpenClientFicha(cid)
   // Reporte de horas al cliente (Fase 2). Solo el socio (admin) reporta = visado.
   const [rep,setRep] = useState(null)   // {cid,mes,para,lang,sending}
@@ -20896,6 +20892,11 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
 
       {isAdmin && vista==='ytd' && <>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontSize:11,color:C.muted}}>Acumulado {anioAct} · para reajustar tarifas</span><button onClick={exportYTD} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:'pointer'}}>Exportar · uso interno</button></div>
+        {excedenteYTD>0 && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:10,color:'#fff'}}>
+          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Dinero dejado sobre la mesa · {anioAct}</div>
+          <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(excedenteYTD)}</div>
+          <div style={{fontSize:10.5,opacity:.85,lineHeight:1.4}}>Lo que habrías facturado si cobraras las horas excedidas a tu valor hora. La base para reajustar tarifas el próximo año.</div>
+        </div>}
         {ytdData.length===0 && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:14}}>Sin asesorías permanentes configuradas.</div>}
         {ytdData.map(d=>(
           <div key={d.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginBottom:8}}>
@@ -20906,7 +20907,11 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
                 <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.cons)}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Reales</div></div>
                 <div style={{flex:1,textAlign:'center',background:d.over?C.overdueBg:C.greenBg,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:d.over?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{d.est>0?Math.round((d.est-d.cons)/d.est*100)+'%':'—'}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Holgura</div></div>
               </div>
-              <div style={{fontSize:10.5,fontWeight:600,marginTop:7,color:d.over?C.overdueText:C.greenText}}>{d.over?'Tomó más horas de lo estimado → reajustar tarifa el próximo año.':'Dentro del estimado — con espacio para ofrecer más.'}</div>
+              <div style={{fontSize:10.5,fontWeight:600,marginTop:7,color:d.exCLP>0?C.overdueText:d.over?C.soonText:C.greenText}}>{d.exCLP>0
+                ? <>Excediste {fh(d.exceso)} en el año → <b>{f0(d.exCLP)}</b> sin cobrar. Base para reajustar la tarifa.</>
+                : d.exceso>0
+                  ? <>Excediste {fh(d.exceso)} en algún mes. <span onClick={()=>setVista('mias')} style={{color:C.azulInfo,cursor:'pointer'}}>Define el valor hora excedente</span> para cuantificarlo.</>
+                  : 'Dentro del estimado — con espacio para ofrecer más.'}</div>
             </>}
           </div>
         ))}
@@ -20998,18 +21003,11 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               <div style={{display:'flex',justifyContent:'space-between',marginTop:7,fontSize:10.5,color:C.muted}}><span>Estimadas {fh(est)}</span><span>Consumidas {fh(cons)}</span><span style={{color:over?C.overdueText:C.greenText,fontWeight:600}}>{over?'Excedido '+fh(cons-est):'Saldo '+fh(est-cons)}</span></div>
               {r.tarifa_mensual>0 && <div style={{fontSize:10,color:C.done,marginTop:4}}>{f0(r.tarifa_mensual)}/mes · implícita {est>0?f0(r.tarifa_mensual/est)+'/h':'—'}{over?' · conviene reajustar':''}</div>}
               {(()=>{ const diaMes=new Date().getDate(); const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate(); const rate=diaMes>0?cons/diaMes:0; if(est>0&&rate>0&&!over&&rate*diasMes>est){ const dia=Math.min(diasMes,Math.ceil(est/rate)); return <div style={{fontSize:10,color:C.soonText,marginTop:3}}>A este ritmo, agotas las {fh(est)} cerca del día {dia}.</div> } return null })()}
-              {/* Puente excedente→acción: informar (reporte), registrado (horas), facturar (según propuesta = valor hora excedente) */}
-              {over && (()=>{ const exceso=cons-est; const valorUF=Number(r.valor_hora_excedente_uf)||0; const monto=Math.round(exceso*valorUF*ufHoy); const marc=excDeMes(cid,mesActual); return (
-                <div style={{marginTop:10,background:C.overdueBg,border:`1px solid ${C.overdue}22`,borderRadius:9,padding:'9px 10px'}}>
-                  <div style={{fontSize:11.5,fontWeight:700,color:C.overdueText}}>Excedente del mes · {fh(exceso)}</div>
-                  <div style={{fontSize:10.5,color:C.overdueText,opacity:.9,marginTop:2}}>{valorUF>0?<>Según tu propuesta: {fh(exceso)} × {valorUF.toLocaleString('es-CL')} UF = <b>{f0(monto)}</b> facturable.</>:'Registrado en tus horas. Define el valor hora excedente para poder facturarlo.'}</div>
-                  {isAdmin && <div style={{display:'flex',gap:7,marginTop:9,alignItems:'center',flexWrap:'wrap'}}>
-                    <button onClick={()=>abrirReporte(cid)} style={{background:'#fff',border:`1px solid ${C.overdue}55`,color:C.overdueText,borderRadius:8,padding:'6px 11px',fontSize:11,fontWeight:600,cursor:'pointer'}}>Informar al cliente</button>
-                    {valorUF>0 ? (marc ? <span style={{fontSize:10.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 10px'}}>✓ Marcado para facturar · {f0(marc.monto)}</span>
-                      : <button onClick={()=>appConfirm(`¿Marcar ${fh(exceso)} de excedente (${f0(monto)}) para facturar a ${cn(cid)}?`).then(ok=>ok&&marcarExcedente(cid,sale?.id,exceso,valorUF))} style={{background:C.overdue,color:'#fff',border:'none',borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:600,cursor:'pointer'}}>Facturar excedente</button>)
-                      : <span onClick={()=>{ setCfgF({horas_estimadas:r?.horas_estimadas||'',tarifa_mensual:r?.tarifa_mensual||'',valor_hora_excedente_uf:''}); setCfgOpen(cid) }} style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Definir valor hora →</span>}
-                  </div>}
-                </div>
+              {/* Excedente = inteligencia de repricing: cuánto NO estás cobrando según tu propuesta (no es una acción de cobro) */}
+              {over && (()=>{ const exceso=cons-est; const valorUF=Number(r.valor_hora_excedente_uf)||0; const monto=excedenteCLP(exceso,valorUF); return (
+                <div style={{marginTop:8,fontSize:10.5,color:C.overdueText,lineHeight:1.4}}>{valorUF>0
+                  ? <>Excediste <b>{fh(exceso)}</b> · <b>{f0(monto)}</b> que no estás cobrando ({valorUF.toLocaleString('es-CL')} UF/h). Base para reajustar la tarifa.</>
+                  : <>Excediste <b>{fh(exceso)}</b>. <span onClick={()=>{ setCfgF({horas_estimadas:r?.horas_estimadas||'',tarifa_mensual:r?.tarifa_mensual||'',valor_hora_excedente_uf:''}); setCfgOpen(cid) }} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Define el valor hora excedente</span> para ver cuánto es.</>}</div>
               )})()}
               {isAdmin && (!rep || String(rep.cid)!==String(cid)) && <div onClick={()=>abrirReporte(cid)} style={{marginTop:9,fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer'}}>Reportar horas al cliente →</div>}
               {isAdmin && rep && String(rep.cid)===String(cid) && (()=>{ const ents=entriesRep(cid,rep.mes); const cons=ents.reduce((a,h)=>a+(Number(h.horas)||0),0); return (

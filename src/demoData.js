@@ -132,7 +132,6 @@ export const demoData = {
     { id:'r1', client_id:'c1', sale_id:'s1', horas_estimadas:20, tarifa_mensual:2000000, valor_hora_excedente_uf:2 },
     { id:'r2', client_id:'c4', sale_id:'s4', horas_estimadas:8,  tarifa_mensual:1500000, valor_hora_excedente_uf:2 },
   ],
-  excedente_cobros: [],
   horas: [
     { id:'h1', user_name:'Cristóbal', client_id:'c1', fecha:'2026-08-27', horas:1.5, glosa:'Reunión de asesoría mensual', billable:true, source:'tarea' },
     { id:'h2', user_name:'Cristóbal', client_id:'c1', fecha:'2026-08-26', horas:2,   glosa:'Revisión de contrato', billable:true, source:'manual' },
