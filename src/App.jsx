@@ -20570,6 +20570,8 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const [grpOpen,setGrpOpen] = useState({})           // clientes con varios proyectos: abiertos/cerrados
   const [notaDraft,setNotaDraft] = useState('')       // borrador de nota nueva en la bitácora abierta
   const [bitFull,setBitFull] = useState({})           // { proyecto_id: true } → bitácora completa (por defecto colapsada a los últimos)
+  const [rentOpen,setRentOpen] = useState(false)      // panel de rentabilidad agregada
+  const [rentBy,setRentBy] = useState('abogado')      // abogado | cliente
   const [semanalOn,setSemanalOn] = useState(false)    // interruptor del correo semanal de cartera
   const [pruebaMsg,setPruebaMsg] = useState('')       // feedback del botón "Enviarme una prueba"
   useEffect(()=>{ if(DEMO){ return } supabase.from('learnings').select('value').eq('kind','config').eq('key','cartera_semanal').maybeSingle().then(({data})=>{ setSemanalOn((data?.value||'off')==='on') },()=>{}) },[])
@@ -20960,6 +20962,42 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
           <input key={'vhg'+valorHora.general} type='number' step='0.5' defaultValue={valorHora.general} onBlur={e=>saveVH('general',e.target.value)} style={{ width:52, padding:'3px 6px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/> UF general
           <span style={{ color:C.done }}>·</span>
           <input key={'vhp'+valorHora.permanente} type='number' step='0.5' defaultValue={valorHora.permanente} onBlur={e=>saveVH('permanente',e.target.value)} style={{ width:52, padding:'3px 6px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/> UF asesorías permanentes
+        </div>
+      )}
+
+      {esAdmin&&(
+        <div style={{ border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden', marginBottom:10, background:C.surface }}>
+          <div onClick={()=>setRentOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', cursor:'pointer' }}>
+            <span style={{ fontSize:12, fontWeight:600, color:C.accent, flex:1 }}>Rentabilidad · margen por {rentBy==='abogado'?'abogado':'cliente'}</span>
+            <span style={{ fontSize:12, color:C.muted }}>{rentOpen?'▾':'▸'}</span>
+          </div>
+          {rentOpen&&(()=>{
+            const activos=(proyectos||[]).filter(p=>p.activo!==false&&!p.pausado)
+            const agg={}; let cov=0, tot=0
+            activos.forEach(p=>{ const r=rentabilidadDe(p); if(!r) return; tot++; const has=(parseFloat(p.esfuerzo_horas)||0)>0; if(has)cov++
+              const key=rentBy==='abogado'?(p.responsable||'—'):String(p.cliente_id||'—')
+              const m=agg[key]=agg[key]||{honor:0,terc:0,esf:0,margen:0,n:0,sinEsf:0}
+              m.honor+=r.honor;m.terc+=r.terc;m.esf+=r.esf;m.margen+=r.margen;m.n++;if(!has)m.sinEsf++ })
+            const rows=Object.entries(agg).map(([k,v])=>({k,...v,pct:v.honor>0?v.margen/v.honor:null,label:rentBy==='abogado'?k:(cnm(k)||'—')})).sort((a,b)=>b.margen-a.margen)
+            return <div style={{ padding:'0 12px 12px' }}>
+              <div style={{ display:'flex', gap:6, marginBottom:8 }}>
+                {[['abogado','Por abogado'],['cliente','Por cliente']].map(([k,l])=><button key={k} onClick={()=>setRentBy(k)} style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'3px 11px', border:`1px solid ${rentBy===k?C.accent:C.border}`, background:rentBy===k?C.accent:'#fff', color:rentBy===k?'#fff':C.muted, cursor:'pointer' }}>{l}</button>)}
+              </div>
+              {!rows.length ? <div style={{ fontSize:12, color:C.grisText }}>Sin ventas vinculadas en estos proyectos.</div> : rows.map(r=>(
+                <div key={r.k} onClick={()=>rentBy==='cliente'&&onOpenClientFicha&&onOpenClientFicha(r.k)} style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 0', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}`, cursor:rentBy==='cliente'?'pointer':'default' }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.label}</div>
+                    <div style={{ fontSize:10, color:C.muted }}>{r.n} proy · {fmt(r.honor)} honorarios{r.sinEsf?` · ${r.sinEsf} sin esfuerzo`:''}</div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:r.margen>=0?C.greenText:C.overdue, fontVariantNumeric:'tabular-nums' }}>{fmt(r.margen)}</div>
+                    <div style={{ fontSize:10, color:C.muted }}>{r.pct!=null?`${Math.round(r.pct*100)}% margen`:''}</div>
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontSize:10, color:C.grisText, marginTop:8, lineHeight:1.4 }}>Esfuerzo estimado en {cov} de {tot} proyectos. Donde falta, el margen aún no descuenta horas (queda optimista).</div>
+            </div>
+          })()}
         </div>
       )}
 
