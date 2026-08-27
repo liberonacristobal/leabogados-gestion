@@ -32,15 +32,15 @@ function eventosDe(p:any, d:any){
   const linkCli = (x:any)=> cid && String(x)===cid;
   const mine = (x:any)=> linkCli(x.client_id) || (sid && String(x.sale_id)===sid);
   const evs:any[] = [];
-  const push=(fecha:any,texto:string)=>{ if(!fecha) return; const iso=String(fecha).slice(0,10); if(iso.length<10) return; evs.push({iso,texto}); };
+  const push=(fecha:any,tipo:string,texto:string)=>{ if(!fecha) return; const iso=String(fecha).slice(0,10); if(iso.length<10) return; evs.push({iso,tipo,texto}); };
   (d.billing||[]).filter((b:any)=>!b.deleted_at && b.billing_type!=="reembolso" && mine(b)).forEach((b:any)=>{
-    if(b.paid_at && b.status==="Pagado") push(b.paid_at, `Pago recibido${b.amount?` · ${fmt(b.amount)}`:""}`);
-    else if(facturaEmitida(b)) push(b.issued_at||b.due, `Factura emitida${b.invoice_no?` N° ${b.invoice_no}`:""}`);
+    if(b.paid_at && b.status==="Pagado") push(b.paid_at, "pago", `Pago recibido${b.amount?` · ${fmt(b.amount)}`:""}`);
+    else if(facturaEmitida(b)) push(b.issued_at||b.due, "factura", `Factura emitida${b.invoice_no?` N° ${b.invoice_no}`:""}`);
   });
   (d.tasks||[]).forEach((t:any)=>{ const linked=(String(t.project_id||"")===String(p.id)) || (!t.project_id && linkCli(t.client_id)); if(!linked) return;
-    if(t.completed_at) push(t.completed_at,"Tarea terminada"); else push(t.created_at,"Tarea nueva"); });
-  (d.anticipos||[]).forEach((a:any)=>{ if(linkCli(a.client_id)) push(a.fecha, `Anticipo recibido${a.monto?` · ${fmt(a.monto)}`:""}`); });
-  (d.expenses||[]).forEach((e:any)=>{ if(linkCli(e.client_id)) push(e.rendered_at||e.date||e.created_at,"Movimiento de gastos"); });
+    if(t.completed_at) push(t.completed_at,"tarea","Tarea terminada"); else push(t.created_at,"tarea","Tarea nueva"); });
+  (d.anticipos||[]).forEach((a:any)=>{ if(linkCli(a.client_id)) push(a.fecha, "anticipo", `Anticipo recibido${a.monto?` · ${fmt(a.monto)}`:""}`); });
+  (d.expenses||[]).forEach((e:any)=>{ if(linkCli(e.client_id)) push(e.rendered_at||e.date||e.created_at,"gasto","Movimiento de gastos"); });
   evs.sort((a,b)=>b.iso.localeCompare(a.iso));
   return evs;
 }
@@ -103,9 +103,11 @@ serve(async (req) => {
       const movio:any[] = [], detenidos:any[] = [];
       for (const p of mis) {
         const evs = eventosDe(p, d);
-        const ult = evs[0] || null;
+        const ult = evs[0] || null;                       // cualquier actividad (para "detenido")
         const dd = ult ? diasDe(ult.iso) : null;
-        if (ult && dd!=null && dd<=7) movio.push({ p, ult, dd });
+        const mov = evs.find((e:any)=> e.tipo==="pago" || e.tipo==="factura" || e.tipo==="anticipo");   // "Se movió" = solo plata/facturas (las tareas van en Tus tareas)
+        const dmov = mov ? diasDe(mov.iso) : null;
+        if (mov && dmov!=null && dmov<=7) movio.push({ p, ult:mov, dd:dmov });
         else if (!ult || (dd!=null && dd>=21)) detenidos.push({ p, dd });
       }
       movio.sort((a,b)=>a.dd-b.dd);
@@ -136,7 +138,7 @@ serve(async (req) => {
     <div style="font-size:16px;color:#1a1a1a;font-weight:700;margin:0 0 4px;">Tus proyectos de la semana</div>
     <div style="font-size:13px;color:#666;margin:0 0 20px;">Hola ${esc(nombre)} — ${dg.nProy} proyecto${dg.nProy!==1?"s":""} activo${dg.nProy!==1?"s":""} · ${dg.nTareas} tarea${dg.nTareas!==1?"s":""} abierta${dg.nTareas!==1?"s":""}${dg.nVencen?` · <span style="color:#A32D2D;font-weight:600;">${dg.nVencen} vencida${dg.nVencen!==1?"s":""}</span>`:""}.</div>
     ${tusTareas}
-    ${dg.movio.length ? `${secTitle("Se movió","#0F6E56")}<table style="width:100%;border-collapse:collapse;margin-bottom:18px;">${dg.movio.map(rowSig).join("")}</table>` : ""}
+    ${dg.movio.length ? `${secTitle("Se movió","#0F6E56")}<table style="width:100%;border-collapse:collapse;">${dg.movio.slice(0,5).map(rowSig).join("")}</table>${dg.movio.length>5?`<div style="font-size:11px;color:#888;margin:6px 0 0;">y ${dg.movio.length-5} más</div>`:""}<div style="height:18px;"></div>` : ""}
     ${dg.detenidos.length ? `${secTitle("Detenidos — conviene revisar","#A32D2D")}<div style="font-size:12.5px;color:#444;margin-bottom:18px;">${dg.detenidos.slice(0,8).map((r:any)=>esc(cname(r.p.cliente_id))||"Cliente").join(", ")}${dg.detenidos.length>8?` y ${dg.detenidos.length-8} más`:""}</div>` : ""}
     ${(!dg.nTareas && !dg.movio.length && !dg.detenidos.length) ? `<div style="font-size:13px;color:#888;margin-bottom:12px;">Sin novedades esta semana.</div>` : ""}
     ${equipoBloque}
