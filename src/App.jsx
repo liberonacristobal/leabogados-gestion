@@ -20627,14 +20627,19 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const [bitFull,setBitFull] = useState({})           // { proyecto_id: true } → bitácora completa (por defecto colapsada a los últimos)
   const [rentOpen,setRentOpen] = useState(false)      // panel de rentabilidad agregada
   const [rentBy,setRentBy] = useState('abogado')      // abogado | cliente
-  const [semanalOn,setSemanalOn] = useState(false)    // interruptor del correo semanal de cartera
+  // Interruptor del correo semanal. value: 'off' · 'on' (todo el equipo) · iniciales ('CL') = solo esa persona.
+  const [semanalVal,setSemanalVal] = useState('off')
   const [pruebaMsg,setPruebaMsg] = useState('')       // feedback del botón "Enviarme una prueba"
-  useEffect(()=>{ if(DEMO){ return } supabase.from('learnings').select('value').eq('kind','config').eq('key','cartera_semanal').maybeSingle().then(({data})=>{ setSemanalOn((data?.value||'off')==='on') },()=>{}) },[])
-  const toggleSemanal = async () => {
-    const next = !semanalOn; setSemanalOn(next)
+  const miIniSemanal = INICIALES_RESP[currentUserName] || 'CL'
+  const semanalOn = semanalVal !== 'off'
+  const semanalTodos = semanalVal === 'on'
+  useEffect(()=>{ if(DEMO){ return } supabase.from('learnings').select('value').eq('kind','config').eq('key','cartera_semanal').maybeSingle().then(({data})=>{ setSemanalVal((data?.value||'off').trim()||'off') },()=>{}) },[])
+  const setSemanal = async (v) => {
+    const prev = semanalVal; setSemanalVal(v)
     if(DEMO) return
-    try{ await supabase.from('learnings').delete().eq('kind','config').eq('key','cartera_semanal'); await supabase.from('learnings').insert({kind:'config',key:'cartera_semanal',value:next?'on':'off'}) }catch(e){ setSemanalOn(!next); appAlert('No se pudo guardar: '+e.message) }
+    try{ await supabase.from('learnings').delete().eq('kind','config').eq('key','cartera_semanal'); await supabase.from('learnings').insert({kind:'config',key:'cartera_semanal',value:v}) }catch(e){ setSemanalVal(prev); appAlert('No se pudo guardar: '+e.message) }
   }
+  const toggleSemanal = () => setSemanal(semanalOn ? 'off' : miIniSemanal)   // al prender, por defecto solo tú
   const enviarPrueba = async () => {
     setPruebaMsg('Enviando…')
     if(DEMO){ setPruebaMsg('En demo no se envía.'); return }
@@ -21001,8 +21006,14 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
         <div style={{ display:'flex', alignItems:'center', gap:10, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:'9px 12px', marginBottom:10, flexWrap:'wrap' }}>
           <div style={{ flex:1, minWidth:150 }}>
             <div style={{ fontSize:12, fontWeight:600, color:C.accent }}>Resumen semanal por correo</div>
-            <div style={{ fontSize:10.5, color:C.muted, marginTop:1 }}>Cada lunes, a cada abogado, con sus proyectos de la semana. {semanalOn?'Activo.':'Apagado.'}</div>
+            <div style={{ fontSize:10.5, color:C.muted, marginTop:1 }}>Cada lunes, con sus proyectos de la semana. {semanalOn?(semanalTodos?'Activo para todo el equipo.':'Activo solo para ti.'):'Apagado.'}</div>
           </div>
+          {semanalOn&&(
+            <div style={{ display:'inline-flex', border:`1px solid ${C.border}`, borderRadius:20, overflow:'hidden', flexShrink:0 }}>
+              <button onClick={()=>setSemanal(miIniSemanal)} style={{ fontSize:11, fontWeight:600, color:semanalTodos?C.muted:'#fff', background:semanalTodos?'transparent':C.accent, border:'none', padding:'4px 11px', cursor:'pointer' }}>Solo tú</button>
+              <button onClick={()=>setSemanal('on')} style={{ fontSize:11, fontWeight:600, color:semanalTodos?'#fff':C.muted, background:semanalTodos?C.accent:'transparent', border:'none', padding:'4px 11px', cursor:'pointer' }}>Todo el equipo</button>
+            </div>
+          )}
           {pruebaMsg&&<span style={{ fontSize:11, color:C.muted }}>{pruebaMsg}</span>}
           <button onClick={enviarPrueba} style={{ fontSize:11, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'4px 12px', cursor:'pointer', whiteSpace:'nowrap' }}>Enviarme una prueba</button>
           <button onClick={toggleSemanal} title={semanalOn?'Apagar':'Encender'} style={{ width:38, height:22, borderRadius:12, border:'none', background:semanalOn?C.normal:C.done, position:'relative', cursor:'pointer', flexShrink:0, padding:0 }}>

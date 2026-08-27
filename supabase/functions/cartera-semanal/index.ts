@@ -66,10 +66,15 @@ serve(async (req) => {
     }
 
     // Interruptor (solo aplica a la corrida real por cron; una prueba dirigida siempre manda).
+    // value: "off"=apagado · "on"=todo el equipo · lista de iniciales ("CL" o "CL,EE")=solo a esas personas.
+    let scope = "on";
     if (esCron && !testTo) {
       const { data: cfg } = await sb.from("learnings").select("value").eq("kind","config").eq("key","cartera_semanal").maybeSingle();
-      if ((cfg?.value || "off") !== "on") return new Response(JSON.stringify({ ok:true, skipped:"apagado" }), { headers:{ "Content-Type":"application/json" } });
+      const val = (cfg?.value || "off").trim();
+      if (val === "off") return new Response(JSON.stringify({ ok:true, skipped:"apagado" }), { headers:{ "Content-Type":"application/json" } });
+      scope = val;
     }
+    const soloInis: string[] | null = (scope && scope !== "on") ? scope.toUpperCase().split(/[,\s]+/).filter(Boolean) : null;
 
     // ── Datos. El cron arranca en frío y a veces alguna consulta en paralelo falla en silencio
     // (data null) → reintentar hasta que las 6 vengan completas, para no enviar un correo con cifras vacías.
@@ -230,7 +235,8 @@ serve(async (req) => {
     const sent:any[] = [];
     const dryRun = !!body.dryRun;
 
-    const destinos: string[] = testTo ? [ INI_DE_EMAIL[testTo] || "CL" ] : Object.keys(FIRST).filter(i=> (porResp[i]||[]).length || tareasDe(FIRST[i]).length);
+    let destinos: string[] = testTo ? [ INI_DE_EMAIL[testTo] || "CL" ] : Object.keys(FIRST).filter(i=> (porResp[i]||[]).length || tareasDe(FIRST[i]).length);
+    if (soloInis) destinos = destinos.filter(i => soloInis.includes(i));   // alcance por persona (interruptor = lista de iniciales)
     for (const ini of destinos) {
       const to = testTo || EMAIL[ini];
       if (!to) continue;
