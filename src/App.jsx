@@ -23584,6 +23584,98 @@ const PALETTE_ACTIONS = [
   {id:'plazos', label:'Plazos y obligaciones'},
   {id:'aprendizaje', label:'Lo que aprendí'},
 ]
+// Copiloto: responde con los datos reales (blindado a no inventar) y, si le pides HACER algo,
+// propone una acción (crear tarea / abrir cliente) que se ejecuta SOLO tras tu confirmación (compuerta).
+function CopilotoModal({ clients=[], sales=[], billing=[], tasks=[], proyectosCartera=[], user, onSaveTask, onOpenClientFicha, onClose }){
+  const [q,setQ] = useState('')
+  const [busy,setBusy] = useState(false)
+  const [hist,setHist] = useState([])
+  const NOMBRE_INI = { CL:'Cristóbal', EE:'Erasmo', MC:'Martín', MP:'Martina', RD:'Rodrigo' }
+  const brief = () => {
+    const cl = (clients||[]).filter(c=>c.status!=='Terminado')
+    const nombres = cl.slice(0,150).map(c=>c.name).filter(Boolean).join(', ')
+    const hoy = new Date().toISOString().slice(0,10)
+    const emit = (billing||[]).filter(b=>!b.deleted_at && b.invoice_no && b.status!=='Programada' && b.status!=='Anulada' && b.billing_type!=='reembolso')
+    const porCobrar = emit.filter(b=>!b.paid_at).reduce((a,b)=>a+(b.amount||0),0)
+    const vencidas = emit.filter(b=>!b.paid_at && b.due && String(b.due).slice(0,10)<hoy).length
+    const tksAb = (tasks||[]).filter(t=>t.status!=='Terminado' && !t.archived)
+    const vencTk = tksAb.filter(t=>t.due && String(t.due).slice(0,10)<hoy).length
+    const proy = (proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado)
+    return `Clientes activos (${cl.length}): ${nombres}.
+Por cobrar (facturas emitidas impagas): ${fmt(porCobrar)} · ${vencidas} vencidas.
+Tareas abiertas: ${tksAb.length} (${vencTk} vencidas).
+Proyectos activos en cartera: ${proy.length}.
+Responsables: CL=Cristóbal, EE=Erasmo, MC=Martín, MP=Martina, RD=Rodrigo.`
+  }
+  const matchCliente = name => { if(!name) return null; const s=String(name).toLowerCase().trim(); return (clients||[]).find(c=>(c.name||'').toLowerCase()===s) || (clients||[]).find(c=>(c.name||'').toLowerCase().includes(s)) || null }
+  const ask = async (texto) => {
+    const t=(texto||q).trim(); if(!t||busy) return
+    setHist(h=>[...h,{role:'user',text:t}]); setQ(''); setBusy(true)
+    try{
+      const sys = `Eres el copiloto de un estudio de abogados chileno (app de gestión). Usa los DATOS de abajo; NO inventes clientes ni cifras que no estén ahí.
+- PREGUNTA → responde en español de Chile, directo, máximo 4 frases, con cifras cuando aporten.
+- Si te piden HACER algo, responde SOLO un JSON (sin markdown, sin texto extra):
+  crear tarea → {"accion":"crear_tarea","titulo":"...","cliente":"nombre EXACTO de la lista o vacío","responsable":"CL|EE|MC|MP|RD o vacío","plazo":"YYYY-MM-DD o vacío","nota":"..."}
+  abrir la ficha de un cliente → {"accion":"abrir_cliente","cliente":"nombre EXACTO de la lista"}
+Nunca ejecutas nada tú: solo propones y el humano confirma.
+
+DATOS:
+${brief()}`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:500,system:sys,messages:[{role:'user',content:t}]})
+      const txt = (data?.content?.[0]?.text||'').trim()
+      const m = txt.match(/\{[\s\S]*"accion"[\s\S]*\}/)
+      if(m){ let a=null; try{ a=JSON.parse(m[0]) }catch(_){}; if(a&&a.accion){ setHist(h=>[...h,{role:'bot',action:a}]); setBusy(false); return } }
+      setHist(h=>[...h,{role:'bot',text:txt||'No pude responder con los datos disponibles.'}])
+    }catch(e){ setHist(h=>[...h,{role:'bot',text:'No se pudo: '+(e?.message||'reintenta')}]) }
+    setBusy(false)
+  }
+  const ejecutar = (a,idx) => {
+    if(a.accion==='crear_tarea'){ const cli=matchCliente(a.cliente); const resp=NOMBRE_INI[a.responsable]||null
+      onSaveTask&&onSaveTask({ title:a.titulo||'Tarea', client_id:cli?cli.id:null, assignees:resp?[resp]:(user?.name?[user.name]:[]), who:resp||user?.name||null, due:a.plazo||null, note:a.nota||null, status:'Activo' })
+      setHist(h=>h.map((x,i)=>i===idx?{...x,done:`Tarea creada${cli?` para ${cli.name}`:''}.`}:x)) }
+    else if(a.accion==='abrir_cliente'){ const cli=matchCliente(a.cliente); if(cli&&onOpenClientFicha){ onOpenClientFicha(cli.id); onClose&&onClose() } else setHist(h=>h.map((x,i)=>i===idx?{...x,done:'No encontré ese cliente.'}:x)) } }
+  const cardAccion = (a,idx,done) => {
+    const cli = matchCliente(a.cliente)
+    if(a.accion==='crear_tarea') return (
+      <div style={{ border:`1px solid ${C.accent}`, borderRadius:10, padding:'10px 12px', background:C.azulBg }}>
+        <div style={{ fontSize:10, fontWeight:700, color:C.accent, textTransform:'uppercase', letterSpacing:.3, marginBottom:4 }}>Crear tarea</div>
+        <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{a.titulo||'Tarea'}</div>
+        <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>{cli?cli.name:(a.cliente?`⚠ "${a.cliente}" (no encontrado)`:'sin cliente')}{a.responsable?` · ${NOMBRE_INI[a.responsable]||a.responsable}`:''}{a.plazo?` · vence ${a.plazo}`:''}</div>
+        {a.nota&&<div style={{ fontSize:11, color:C.muted, marginTop:3 }}>{a.nota}</div>}
+        {done ? <div style={{ fontSize:11.5, fontWeight:600, color:C.greenText, marginTop:8 }}>{done}</div>
+          : <div style={{ display:'flex', gap:8, marginTop:9 }}><button onClick={()=>ejecutar(a,idx)} style={{ fontSize:12, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>Crear</button><button onClick={()=>setHist(h=>h.map((x,i)=>i===idx?{...x,done:'Descartada.'}:x))} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Descartar</button></div>}
+      </div> )
+    if(a.accion==='abrir_cliente') return (
+      <div style={{ border:`1px solid ${C.accent}`, borderRadius:10, padding:'10px 12px', background:C.azulBg }}>
+        <div style={{ fontSize:13, color:C.text }}>Abrir la ficha de <b>{cli?cli.name:a.cliente}</b></div>
+        {done ? <div style={{ fontSize:11.5, color:C.muted, marginTop:6 }}>{done}</div>
+          : <button onClick={()=>ejecutar(a,idx)} style={{ fontSize:12, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer', marginTop:8 }}>Abrir ficha</button>}
+      </div> )
+    return null
+  }
+  const sugerencias = ['¿Quién me debe plata?','¿Qué está detenido?','Crea una tarea para llamar a…']
+  return (
+    <Modal title={<span style={{display:'inline-flex',alignItems:'center',gap:7}}><svg width="16" height="16" viewBox="0 0 24 24" fill={C.accent}><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Copiloto</span>} onClose={onClose} maxWidth={480}>
+      <div style={{ fontSize:11.5, color:C.muted, marginBottom:12, lineHeight:1.5 }}>Pregúntame por tus clientes, cobros o tareas — responde con tus datos. Y si me pides <b>crear una tarea</b> o <b>abrir una ficha</b>, lo propongo y tú confirmas.</div>
+      {hist.length===0&&(
+        <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:12 }}>
+          {sugerencias.map((s,i)=><button key={i} onClick={()=>ask(s)} style={{ textAlign:'left', fontSize:12.5, color:C.accent, background:C.bgSoft, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 11px', cursor:'pointer' }}>{s}</button>)}
+        </div>
+      )}
+      <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:12 }}>
+        {hist.map((m,i)=> m.role==='user'
+          ? <div key={i} style={{ alignSelf:'flex-end', maxWidth:'85%', fontSize:13, color:'#fff', background:C.accent, borderRadius:'12px 12px 3px 12px', padding:'8px 12px' }}>{m.text}</div>
+          : <div key={i} style={{ alignSelf:'flex-start', maxWidth:'92%', width:m.action?'92%':'auto' }}>{m.action ? cardAccion(m.action,i,m.done) : <div style={{ fontSize:13, color:C.text, background:C.bgSoft, borderRadius:'12px 12px 12px 3px', padding:'8px 12px', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{m.text}</div>}</div>
+        )}
+        {busy&&<div style={{ alignSelf:'flex-start', display:'inline-flex' }}><Spin/></div>}
+      </div>
+      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+        <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') ask() }} autoFocus placeholder='Escribe tu pregunta o pídeme algo…' style={{ flex:1, fontSize:13, padding:'10px 12px', borderRadius:10, border:`1px solid ${C.border}`, background:'#fff', color:C.text, outline:'none', boxSizing:'border-box' }}/>
+        <button onClick={()=>ask()} disabled={busy||!q.trim()} style={{ fontSize:13, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:10, padding:'10px 15px', cursor:(busy||!q.trim())?'default':'pointer', opacity:(busy||!q.trim())?.6:1 }}>Enviar</button>
+      </div>
+    </Modal>
+  )
+}
 function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=[],expenses=[],anticipos=[],recents=[],onSelect}){
   const [q,setQ]=useState('')
   const inputRef=useRef(null)
@@ -23700,6 +23792,7 @@ export default function App() {
     return ()=>{alive=false} },[userRole,tab])
   const [menuOpen,setMenuOpen]=useState(false)
   const [paletteOpen,setPaletteOpen]=useState(false)
+  const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
   const [undoToast,setUndoToast]=useState(null)   // {msg, onUndo} — eliminar reversible al toque (soft-delete)
   useEffect(()=>{ if(undoToast){ const t=setTimeout(()=>setUndoToast(null),6000); return ()=>clearTimeout(t) } },[undoToast])
@@ -25315,6 +25408,9 @@ export default function App() {
                   </button>
                   )
                 })()}
+                {userRole==='admin'&&<button onClick={e=>{e.stopPropagation();setCopilotoOpen(true)}} title='Copiloto' aria-label='Copiloto' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='currentColor'><path d='M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z'/></svg>
+                </button>}
                 <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
                 </button>
@@ -25428,6 +25524,7 @@ export default function App() {
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')}} onClose={()=>setModal(null)}/>}
         {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
+        {copilotoOpen&&<CopilotoModal clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
