@@ -416,10 +416,10 @@ const ddItem = { padding:'9px 14px', fontSize:13, color:C.text, cursor:'pointer'
 const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina':'MP','Rodrigo':'RD'}
 // Responsables de una tarea: usa assignees (multi); si no hay, cae a who (tareas antiguas).
 const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignees : (t && t.who ? [t.who] : [])
-// Color de pill por persona, para distinguir responsables de un vistazo (Martín/Martina reusan los tonos de Caja Chica).
+// Color de pill por persona (CANON único, igual a CART_AV): Cristóbal navy · Erasmo azul · Martín verde · Martina rosa · Rodrigo ámbar.
 const PERSON_CHIP = {
-  'Martín':{bg:'#F3EFD8',color:'#8A7012'}, 'Martina':{bg:C.overdueBg,color:C.overdueText},
-  'Rodrigo':{bg:'#F7E7E1',color:'#A8472A'}, 'Erasmo':{bg:'#EAF3DE',color:'#3B6D11'}, 'Cristóbal':{bg:C.azulBg,color:C.accent},
+  'Cristóbal':{bg:C.azulBg,color:C.accent}, 'Erasmo':{bg:C.azulBg,color:C.azulInfo},
+  'Martín':{bg:C.greenBg,color:C.greenText}, 'Martina':{bg:'#F6E7EC',color:'#993556'}, 'Rodrigo':{bg:C.ambarBg,color:C.soonText},
 }
 const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:C.bgWarm,color:C.grisText}
 const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
@@ -744,7 +744,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     if(sFilter==='Activo' && (c.status||'Activo')!=='Activo') return false
     if(sFilter==='Terminado' && c.status!=='Terminado') return false
     if(sFilter==='Prospecto' && c.status!=='Prospecto') return false
-    if(q.trim() && !c.name.toLowerCase().includes(q.toLowerCase())) return false
+    if(q.trim() && !(c.name||'').toLowerCase().includes(q.toLowerCase())) return false
     return true
   }).sort((a,b)=>(a.name||'').localeCompare(b.name||''))
 
@@ -1022,8 +1022,8 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
     if(name.trim().length<3) return []
     const q = name.trim().toLowerCase()
     return clients.filter(c=>
-      c.name.toLowerCase().includes(q) ||
-      q.split(' ').some(w=>w.length>2&&c.name.toLowerCase().includes(w))
+      (c.name||'').toLowerCase().includes(q) ||
+      q.split(' ').some(w=>w.length>2&&(c.name||'').toLowerCase().includes(w))
     ).slice(0,5)
   },[name,clients])
 
@@ -2686,8 +2686,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       propTardias.length&&{sev:2,dot:C.done,ico:'clock',lbl:'Propuestas tardías (+14d)',sub:`${propTardias.length} propuesta${propTardias.length!==1?'s':''}`,amt:fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0))),go:'sales',navLbl:`Ver las ${propTardias.length}`,rows:propTardias.slice(0,3).map(s=>({name:s.title||cnD(s.client_id),val:'',cid:s.client_id})),iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
       plzVenc.length&&{sev:0,dot:C.overdue,ico:'clock',lbl:'Plazos vencidos',sub:`${plzVenc.length} plazo${plzVenc.length!==1?'s':''}`,amt:'',onNav:()=>onOpenPlazos&&onOpenPlazos(),navLbl:'Ver plazos',rows:plzVenc.slice(0,3).map(p=>({name:p.titulo||'Plazo',val:fmtPlz(p.fecha),cid:p.client_id})),iaTxt:`${plzVenc.length} plazos vencidos`},
       plzProx.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Plazos esta semana',sub:`${plzProx.length} plazo${plzProx.length!==1?'s':''}`,amt:'',onNav:()=>onOpenPlazos&&onOpenPlazos(),navLbl:'Ver plazos',rows:plzProx.slice(0,3).map(p=>({name:p.titulo||'Plazo',val:fmtPlz(p.fecha),cid:p.client_id})),iaTxt:`${plzProx.length} plazos vencen esta semana`},
-      cartCrit.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Proyectos críticos',sub:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''}`,amt:'',onNav:()=>setTab&&setTab('cartera'),navLbl:'Ver cartera',rows:cartCrit.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''} en rojo`},
-      cartStale.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Proyectos sin mover +2 semanas',sub:`${cartStale.length} proyecto${cartStale.length!==1?'s':''}`,amt:'',onNav:()=>setTab&&setTab('cartera'),navLbl:'Ver cartera',rows:cartStale.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartStale.length} proyecto${cartStale.length!==1?'s':''} sin mover +2 semanas`},
+      cartCrit.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Proyectos críticos',sub:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''}`,amt:'',onNav:()=>setTab&&setTab('cartera'),navLbl:'Ver proyectos',rows:cartCrit.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''} en rojo`},
+      cartStale.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Proyectos sin mover +2 semanas',sub:`${cartStale.length} proyecto${cartStale.length!==1?'s':''}`,amt:'',onNav:()=>setTab&&setTab('cartera'),navLbl:'Ver proyectos',rows:cartStale.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartStale.length} proyecto${cartStale.length!==1?'s':''} sin mover +2 semanas`},
     ].filter(Boolean).sort((a,b)=>a.sev-b.sev)
     const head = vencidas.length ? `Hoy prioriza la cobranza: ${fmtShort(sum(vencidas))} en ${vencidas.length} factura${vencidas.length!==1?'s':''} vencida${vencidas.length!==1?'s':''}.`
       : tareasVenc.length ? `Tienes ${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''} vencida${tareasVenc.length!==1?'s':''} por resolver.`
@@ -3667,7 +3667,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div><div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Inteligencia</div><div style={{fontSize:10.5,color:C.muted,fontWeight:500,marginTop:1}}>oportunidades y salud de la cartera</div></div>
+          <div><div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Inteligencia</div><div style={{fontSize:10.5,color:C.muted,fontWeight:500,marginTop:1}}>oportunidades y salud de los proyectos</div></div>
           <button onClick={()=>setTab&&setTab('dashboard')} style={chipBtn('soft')}>← Inicio</button>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
@@ -3740,7 +3740,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
           {(()=>{ const oportN=OPPS.reduce((a,o)=>a+o.rows.length,0); const ico={fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round'}; const SECS=[
             {k:'oport',bg:C.azulBg,fg:C.azulInfo,t:'Oportunidades',sub:'dormidos · cobranza · cross-sell',ct:oportN,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg>},
-            {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Cartera · salud de clientes',sub:`${cartera.riesgo.length} en riesgo · ${cartera.dormido.length} dormidos`,ct:carteraTot.activos,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
+            {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Proyectos · salud de clientes',sub:`${cartera.riesgo.length} en riesgo · ${cartera.dormido.length} dormidos`,ct:carteraTot.activos,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
             {k:'servicios',bg:C.ambarBg,fg:C.soonText,t:'Servicios y precios',sub:serviciosTot.areas&&servicios[0]?`Top: ${servicios[0].area}`:'',ct:serviciosTot.areas,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3.5 3.5h7l9.5 9.5-7 7L3.5 10.5z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>},
             {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot}%`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
             {k:'ia',bg:'#EFEAF7',fg:'#5B3E8E',t:'Asesor IA · Foco y Plan',sub:'Pregúntale · Foco semana · Plan del Año',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>},
@@ -3817,7 +3817,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
             <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Clientes activos</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{carteraTot.activos}</div></div>
-            <div style={{textAlign:'right'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Valor cartera · histórico</div><div style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(carteraTot.ufTotal)}</div></div>
+            <div style={{textAlign:'right'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Valor proyectos · histórico</div><div style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(carteraTot.ufTotal)}</div></div>
           </div>
           {carteraTot.ufTotal>0&&<div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',background:C.bgWarm,marginBottom:12}}>
             {[['sano','#1D9E75'],['riesgo','#C77F18'],['dormido','#E24B4A'],['ocasional','#99ABB4']].map(([k,c])=>{ const w=carteraTot.ufSeg[k]/carteraTot.ufTotal*100; return w>0?<div key={k} style={{width:`${w}%`,background:c}}/>:null })}
@@ -4555,7 +4555,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   }
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
-  const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
+  const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>(c.name||'').toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
   const clientEntitiesList = useMemo(()=>{ if(!f.client_id) return []; const base=(clientEntities||[]).filter(e=>e.client_id===f.client_id); const extra=extraEntities.filter(e=>e.client_id===f.client_id&&!base.some(b=>String(b.id)===String(e.id))); return [...base,...extra] },[clientEntities,extraEntities,f.client_id])
   // Regla: al elegir cliente, si tiene 1 razón social se asigna sola; si tiene varias se propone la primera. Siempre se puede Cambiar.
   useEffect(()=>{
@@ -4873,7 +4873,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <Lbl>Buscar cliente</Lbl>
           <Inp value={propSearchQ} onChange={e=>setPropSearchQ(e.target.value)} placeholder='Escribe nombre o RUT...' style={{marginBottom:8}}/>
           <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12,maxHeight:180,overflowY:'auto'}}>
-            {(propSearchQ.trim().length>=2?clients.filter(c=>c.name.toLowerCase().includes(propSearchQ.toLowerCase())||((c.rut||'').includes(propSearchQ))):clients.slice(0,8)).map(c=>(
+            {(propSearchQ.trim().length>=2?clients.filter(c=>(c.name||'').toLowerCase().includes(propSearchQ.toLowerCase())||((c.rut||'').includes(propSearchQ))):clients.slice(0,8)).map(c=>(
               <button key={c.id} type='button' onClick={()=>{setPropClientMatch(c);setPropClientMode('asociar');const ents=(clientEntities||[]).filter(e=>e.client_id===c.id);setPropEntitySel(ents[0]?.id||'')}}
                 style={{padding:'10px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,textAlign:'left',cursor:'pointer'}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{c.name}</div>
@@ -6139,7 +6139,7 @@ function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
   if(k){ const ce=clientEntities.find(e=>nr(e.rut)===k); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
   if(nombre){ const ce=clientEntities.find(e=>e.name&&e.name.toLowerCase()===String(nombre).toLowerCase()); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
   if(k){ const c=clients.find(c=>nr(c.rut)===k); if(c) return c }
-  if(nombre){ const c=clients.find(c=>c.name&&c.name.toLowerCase()===String(nombre).toLowerCase()); if(c) return c }
+  if(nombre){ const c=clients.find(c=>c.name&&(c.name||'').toLowerCase()===String(nombre).toLowerCase()); if(c) return c }
   return null
 }
 
@@ -7187,7 +7187,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d
   }
   const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); appAlert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ appAlert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
-  const siiVerificarEstados = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'verificar-estados'}); appAlert(`Estados verificados en el SII:\n${d.revisados} revisado(s) · ${d.cambiados} actualizado(s)${d.rechazadas?`\n⚠ ${d.rechazadas} rechazada(s) — revisa tu correo`:''}.`); if(d.cambiados&&onRefresh) await onRefresh() }catch(e){ appAlert('No se pudo verificar estados: '+e.message) } setSiiBusy(false) }
+  const siiVerificarEstados = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'verificar-estados'}); appAlert(`Estados verificados en el SII:\n${d.revisados} revisado(s) · ${d.cambiados} actualizado(s)${d.rechazadas?`\n${d.rechazadas} rechazada(s) — revisa tu correo`:''}.`); if(d.cambiados&&onRefresh) await onRefresh() }catch(e){ appAlert('No se pudo verificar estados: '+e.message) } setSiiBusy(false) }
   const siiResumenSemanal = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'resumen-semanal'}); appAlert(`Resumen semanal enviado a los admins.\nEmitidas (7d): ${d.emitidasSemana} · Por cobrar: $${(d.porCobrar||0).toLocaleString('es-CL')} · Vencido: $${(d.vencido||0).toLocaleString('es-CL')}.`) }catch(e){ appAlert('No se pudo enviar el resumen: '+e.message) } setSiiBusy(false) }
   const [foliosEstado,setFoliosEstado] = useState(null)   // [{tipoDte,disponibles}] folios CAF disponibles (para la alerta de folios bajos)
   useEffect(()=>{ let on=true; siiCall({action:'folios-estado'}).then(d=>{ if(on&&Array.isArray(d?.folios)) setFoliosEstado(d.folios) }).catch(()=>{}); return ()=>{on=false} },[])
@@ -8425,7 +8425,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <SIcon n={est.icon} s={15} c={col}/>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}><span style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{rsN&&<span style={{color:C.muted,fontWeight:500}}> · {rsN}</span>}</span>{porConciliar&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.soonBg,borderRadius:6,padding:'1px 7px',whiteSpace:'nowrap',flexShrink:0}}>Por conciliar</span>}</div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?(b.concept||'—'):''}{ui?`${b.invoice_no?' · ':''}${fmtUF(ui.uf)}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}{conciliable&&!b.invoice_no&&<span style={{color:C.soonText,fontWeight:700}}> · ⚠ ya facturada</span>}</div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?(b.concept||'—'):''}{ui?`${b.invoice_no?' · ':''}${fmtUF(ui.uf)}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}{conciliable&&!b.invoice_no&&<span style={{color:C.soonText,fontWeight:700}}> · ya facturada</span>}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ const hayAb=saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status); return <><div style={{fontSize:13,fontWeight:600,color:hayAb?(er==='Vencido'?C.overdueText:C.accent):C.text}}>{fmt(hayAb?saldoBill(b):(ui?ui.clpHoy:b.amount))}</div>{hayAb&&<div style={{fontSize:9,color:C.muted}}>de {fmt(ui?ui.clpHoy:b.amount)}</div>}</> })()}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
@@ -8945,10 +8945,10 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
             <input value={clientQuery} onChange={e=>setClientQuery(e.target.value)} placeholder='Buscar cliente por nombre...' style={inp}/>
             {clientQuery.trim()&&(
               <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:4,background:'#fff'}}>
-                {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).slice(0,30).map(c=>(
+                {clients.filter(c=>(c.name||'').toLowerCase().includes(clientQuery.toLowerCase())).slice(0,30).map(c=>(
                   <div key={c.id} onClick={()=>{up('client_id',c.id);setClientQuery('')}} style={{padding:'9px 11px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
                 ))}
-                {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).length===0&&<div style={{padding:'9px 11px',fontSize:13,color:C.muted}}>Sin resultados</div>}
+                {clients.filter(c=>(c.name||'').toLowerCase().includes(clientQuery.toLowerCase())).length===0&&<div style={{padding:'9px 11px',fontSize:13,color:C.muted}}>Sin resultados</div>}
               </div>
             )}
           </div>
@@ -9156,7 +9156,7 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
             <input value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente por nombre...' style={{...inp,height:42,borderRadius:10}}/>
             {clientQ.trim()&&(
               <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10,marginTop:4,background:'#fff'}}>
-                {[...clients].filter(c=>c.status!=='Terminado'&&c.name.toLowerCase().includes(clientQ.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
+                {[...clients].filter(c=>c.status!=='Terminado'&&(c.name||'').toLowerCase().includes(clientQ.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
                   <div key={c.id} onClick={()=>{up('client_id',c.id);up('sale_id','');up('proyecto','');up('entity_id','');setClientQ('')}} style={{padding:'9px 11px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
                 ))}
               </div>
@@ -13041,7 +13041,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
             <input value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente por nombre...' style={{...inp,height:42,borderRadius:10}}/>
             {clientQ.trim()&&(
               <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10,marginTop:4,background:'#fff'}}>
-                {[...clients].filter(c=>c.status!=='Terminado'&&c.name.toLowerCase().includes(clientQ.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
+                {[...clients].filter(c=>c.status!=='Terminado'&&(c.name||'').toLowerCase().includes(clientQ.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
                   <div key={c.id} onClick={()=>{setSelectedClient(c);setClientQ('')}} style={{padding:'9px 11px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
                 ))}
               </div>
@@ -13129,7 +13129,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     return Object.keys(m).sort((a,b)=>(m[b]||'').localeCompare(m[a]||''))   // más reciente primero
   },[tasks,sales,selectedClient])
   useEffect(()=>{ setProject(clientProjects[0]||''); setNewProject(false) },[clientProjects])   // pre-poblar con el proyecto más reciente
-  const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
+  const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
   const balance = selectedClient ? saldoCliente(expenses, selectedClient.id) : null
   const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
 
@@ -13465,7 +13465,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
   const matches = useMemo(()=>{
     if(!q.trim()) return []
-    return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6)
+    return clients.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())).slice(0,6)
   },[clients,q])
 
   // Proyectos existentes del cliente: de tareas + de ventas
@@ -15976,7 +15976,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
     if(sFilter==='Activo') base=base.filter(c=>(c.status||'Activo')==='Activo')
     else if(sFilter==='Terminado') base=base.filter(c=>c.status==='Terminado')
     else if(sFilter==='Prospecto') base=base.filter(c=>c.status==='Prospecto')
-    if(q.trim()) base=base.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()))
+    if(q.trim()) base=base.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase()))
     if(respSel.size>0) base=base.filter(c=>respSel.has(responsableDe[c.id]))
     return [...base].sort((a,b)=>{ const ta=tareasDe[a.id]||0,tb=tareasDe[b.id]||0; if((ta>0)!==(tb>0)) return tb>0?1:-1; return tb-ta })
   },[clients,sFilter,q,respSel,responsableDe,tareasDe])
@@ -17014,7 +17014,7 @@ function ClienteDriveImporter({clients,onImported,onClose}){
       // Clientes activos
       const resActivos=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${CLIENTES_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
       const activos=(resActivos.files||[]).filter(f=>!f.name.startsWith('1. CLIENTES'))
-      const existingNames=clients.map(c=>c.name.toLowerCase().trim())
+      const existingNames=clients.map(c=>(c.name||'').toLowerCase().trim())
       const nuevos=activos.filter(f=>!existingNames.includes(f.name.toLowerCase().trim()))
       setNewClients(nuevos)
 
@@ -19134,7 +19134,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
   const SII_TIPOS = ['memo','informe','presentacion','plan']
   useEffect(()=>{ supabase.from('sii_novedades').select('tipo,numero,titulo,areas,prioridad,resumen,brief,fecha,vigente').then(({data})=>setSiiNov((data||[]).filter(n=>n.vigente!==false)),()=>{}) },[])
   const [cruzarCliente,setCruzarCliente] = useState(true)
-  const cliObj = (clients||[]).find(c=>c.name&&c.name.trim()===cliente.trim()) || (cliente.trim().length>=3 ? (clients||[]).find(c=>c.name&&c.name.toLowerCase().includes(cliente.trim().toLowerCase())) : null)
+  const cliObj = (clients||[]).find(c=>c.name&&c.name.trim()===cliente.trim()) || (cliente.trim().length>=3 ? (clients||[]).find(c=>c.name&&(c.name||'').toLowerCase().includes(cliente.trim().toLowerCase())) : null)
   const perfilCliente = (c)=>{   // fuente única: ventaHistoricaUF + saldoBill (sin re-implementar fórmulas)
     const cid=c.id
     const rs=rsLabel(cid, clients, clientEntities)
@@ -19482,7 +19482,7 @@ const PLAZO_TIPO_COL = { 'plazo':C.azulInfo, 'obligación':C.soonText||C.soon, '
 function PlazosModal({clients=[], onClose}){
   const [rows,setRows]=useState(null)
   const [cliente,setCliente]=useState('')
-  const cliObj=(clients||[]).find(c=>c.name&&c.name.trim()===cliente.trim())||(cliente.trim().length>=3?(clients||[]).find(c=>c.name&&c.name.toLowerCase().includes(cliente.trim().toLowerCase())):null)
+  const cliObj=(clients||[]).find(c=>c.name&&c.name.trim()===cliente.trim())||(cliente.trim().length>=3?(clients||[]).find(c=>c.name&&(c.name||'').toLowerCase().includes(cliente.trim().toLowerCase())):null)
   const [mostrarPicker,setMostrarPicker]=useState(false)
   const [extBusy,setExtBusy]=useState(false); const [extErr,setExtErr]=useState(null)
   const [extracted,setExtracted]=useState(null); const [saving,setSaving]=useState(false)
@@ -23615,7 +23615,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
   return (
     <div>
       <div style={{display:'flex',gap:8,alignItems:'flex-start',background:'#FFF8E1',borderRadius:8,padding:'9px 11px',marginBottom:16}}>
-        <span style={{fontSize:15,color:C.soonText,lineHeight:1,marginTop:1}}>⚠</span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={C.soonText} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:1}}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         <div style={{fontSize:11,color:C.soonText,lineHeight:1.5}}>Cambia el saldo a mano. Úsalo solo para reflejar gastos antiguos que no están cargados.</div>
       </div>
       <Lbl>Monto <span style={{textTransform:'none',letterSpacing:0,color:C.done}}>(rebaja el saldo)</span></Lbl>
@@ -23635,8 +23635,8 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Conciliación',inteligencia:'Inteligencia',cajachica:'Caja chica'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Panel de Cartera'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
-  limited:[['tasks','Tareas'],['cartera','Panel de Cartera'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
+  limited:[['tasks','Tareas'],['cartera','Proyectos'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
@@ -23717,7 +23717,7 @@ ${brief()}`
       <div style={{ border:`1px solid ${C.accent}`, borderRadius:10, padding:'10px 12px', background:C.azulBg }}>
         <div style={{ fontSize:10, fontWeight:700, color:C.accent, textTransform:'uppercase', letterSpacing:.3, marginBottom:4 }}>Crear tarea</div>
         <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{a.titulo||'Tarea'}</div>
-        <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>{cli?cli.name:(a.cliente?`⚠ "${a.cliente}" (no encontrado)`:'sin cliente')}{a.responsable?` · ${NOMBRE_INI[a.responsable]||a.responsable}`:''}{a.plazo?` · vence ${a.plazo}`:''}</div>
+        <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>{cli?cli.name:(a.cliente?`"${a.cliente}" (no encontrado)`:'sin cliente')}{a.responsable?` · ${NOMBRE_INI[a.responsable]||a.responsable}`:''}{a.plazo?` · vence ${a.plazo}`:''}</div>
         {a.nota&&<div style={{ fontSize:11, color:C.muted, marginTop:3 }}>{a.nota}</div>}
         {done ? <div style={{ fontSize:11.5, fontWeight:600, color:C.greenText, marginTop:8 }}>{done}</div>
           : <div style={{ display:'flex', gap:8, marginTop:9 }}><button onClick={()=>ejecutar(a,idx)} style={{ fontSize:12, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>Crear</button><button onClick={()=>setHist(h=>h.map((x,i)=>i===idx?{...x,done:'Descartada.'}:x))} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Descartar</button></div>}
