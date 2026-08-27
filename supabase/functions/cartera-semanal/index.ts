@@ -51,10 +51,12 @@ serve(async (req) => {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    // ── Autorización: (a) cron con secreto → corrida completa; (b) usuario @leabogados.cl con testTo → solo a él.
+    // ── Autorización: (a) cron con secreto → corrida completa (o prueba dirigida si trae testTo); (b) usuario @leabogados.cl → solo a él.
     let testTo: string | null = null;
     const esCron = !!CRON_SECRET && body.secret === CRON_SECRET;
-    if (!esCron) {
+    if (esCron) {
+      if (body.testTo) testTo = String(body.testTo).toLowerCase().trim();   // prueba dirigida a un solo correo
+    } else {
       const auth = req.headers.get("authorization") || "";
       const jwt = auth.replace(/^Bearer\s+/i, "");
       const { data: u } = await sb.auth.getUser(jwt);
@@ -63,8 +65,8 @@ serve(async (req) => {
       testTo = email;   // prueba: se manda solo a quien lo pide
     }
 
-    // Interruptor (solo aplica a la corrida real por cron; la prueba siempre manda).
-    if (esCron) {
+    // Interruptor (solo aplica a la corrida real por cron; una prueba dirigida siempre manda).
+    if (esCron && !testTo) {
       const { data: cfg } = await sb.from("learnings").select("value").eq("kind","config").eq("key","cartera_semanal").maybeSingle();
       if ((cfg?.value || "off") !== "on") return new Response(JSON.stringify({ ok:true, skipped:"apagado" }), { headers:{ "Content-Type":"application/json" } });
     }
