@@ -20,7 +20,7 @@ const fmt = (n:number) => new Intl.NumberFormat("es-CL",{style:"currency",curren
 
 async function sendMail(to:string, subject:string, html:string){
   const client = new SMTPClient({ connection:{ hostname:"smtp.gmail.com", port:465, tls:true, auth:{ username:GMAIL_USER, password:GMAIL_PASS } } });
-  try { await client.send({ from:`Liberona Escala Abogados - Cartera <${GMAIL_USER}>`, to, subject:toAscii(subject), content:"Ver el contenido en formato HTML.", html:qpSafe(html) }); }
+  try { await client.send({ from:`Liberona Escala Abogados - Proyectos <${GMAIL_USER}>`, to, subject:toAscii(subject), content:"Ver el contenido en formato HTML.", html:qpSafe(html) }); }
   finally { await client.close(); }
 }
 
@@ -126,14 +126,14 @@ serve(async (req) => {
 <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb;">
   <div style="background:#003C50;padding:20px 28px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div>
   <div style="padding:28px;">
-    <div style="font-size:16px;color:#1a1a1a;font-weight:700;margin:0 0 4px;">Tu semana en la cartera</div>
+    <div style="font-size:16px;color:#1a1a1a;font-weight:700;margin:0 0 4px;">Tus proyectos de la semana</div>
     <div style="font-size:13px;color:#666;margin:0 0 20px;">Hola ${esc(nombre)} — ${dg.nProy} proyecto${dg.nProy!==1?"s":""} activo${dg.nProy!==1?"s":""} · ${dg.nTareas} tarea${dg.nTareas!==1?"s":""} abierta${dg.nTareas!==1?"s":""} · ${dg.nVencen} plazo${dg.nVencen!==1?"s":""} esta semana.</div>
     ${dg.movio.length ? `<div style="font-size:10px;font-weight:bold;color:#0F6E56;text-transform:uppercase;letter-spacing:.5px;margin:0 0 2px;">Se movió</div><table style="width:100%;border-collapse:collapse;margin-bottom:18px;">${dg.movio.map(rowSig).join("")}</table>` : ""}
     ${dg.plazos.length ? `<div style="font-size:10px;font-weight:bold;color:#854F0B;text-transform:uppercase;letter-spacing:.5px;margin:0 0 2px;">Plazos de la semana</div><table style="width:100%;border-collapse:collapse;margin-bottom:18px;">${dg.plazos.map(rowPlazo).join("")}</table>` : ""}
     ${dg.detenidos.length ? `<div style="font-size:10px;font-weight:bold;color:#A32D2D;text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px;">Detenidos — conviene revisar</div><div style="font-size:12.5px;color:#444;margin-bottom:18px;">${dg.detenidos.slice(0,8).map((r:any)=>esc(cname(r.p.cliente_id))||"Cliente").join(", ")}${dg.detenidos.length>8?` y ${dg.detenidos.length-8} más`:""}</div>` : ""}
     ${(!dg.movio.length && !dg.plazos.length && !dg.detenidos.length) ? `<div style="font-size:13px;color:#888;margin-bottom:12px;">Sin novedades esta semana.</div>` : ""}
     ${equipoTabla}
-    <div style="margin-top:14px;"><a href="https://gestion.leabogados.cl" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:9px 18px;border-radius:18px;font-size:12px;font-weight:bold;">Abrir mi cartera &rarr;</a></div>
+    <div style="margin-top:14px;"><a href="https://gestion.leabogados.cl" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:9px 18px;border-radius:18px;font-size:12px;font-weight:bold;">Abrir mis proyectos &rarr;</a></div>
   </div>
   <div style="padding:16px 28px;border-top:1px solid #eee;"><div style="font-size:11px;color:#999;">gestion.leabogados.cl &middot; Liberona Escala Abogados</div></div>
 </div></body></html>`;
@@ -156,7 +156,7 @@ serve(async (req) => {
       const dg = digestDe(ini);
       const equipoTabla = (ini==="CL") ? tablaEquipo() : "";   // el resumen de equipo solo a Cristóbal
       const html = armarHtml(ini, dg, equipoTabla);
-      const subject = `Tu semana en la cartera · ${dg.nProy} proyectos, ${dg.nVencen} plazos`;
+      const subject = `Tus proyectos de la semana · ${dg.nProy} proyectos, ${dg.nVencen} plazos`;
       if (!dryRun) await sendMail(to, subject, html);
       sent.push({ ini, to, nProy:dg.nProy, movio:dg.movio.length, plazos:dg.plazos.length, detenidos:dg.detenidos.length });
     }

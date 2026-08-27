@@ -21000,8 +21000,8 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
       {esAdmin&&(
         <div style={{ display:'flex', alignItems:'center', gap:10, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:'9px 12px', marginBottom:10, flexWrap:'wrap' }}>
           <div style={{ flex:1, minWidth:150 }}>
-            <div style={{ fontSize:12, fontWeight:600, color:C.accent }}>Correo semanal de cartera</div>
-            <div style={{ fontSize:10.5, color:C.muted, marginTop:1 }}>Lunes AM a cada abogado con su cartera. {semanalOn?'Activo.':'Apagado.'}</div>
+            <div style={{ fontSize:12, fontWeight:600, color:C.accent }}>Resumen semanal por correo</div>
+            <div style={{ fontSize:10.5, color:C.muted, marginTop:1 }}>Cada lunes, a cada abogado, con sus proyectos de la semana. {semanalOn?'Activo.':'Apagado.'}</div>
           </div>
           {pruebaMsg&&<span style={{ fontSize:11, color:C.muted }}>{pruebaMsg}</span>}
           <button onClick={enviarPrueba} style={{ fontSize:11, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'4px 12px', cursor:'pointer', whiteSpace:'nowrap' }}>Enviarme una prueba</button>
@@ -23809,8 +23809,10 @@ export function PortalApp(){
   const [session,setSession] = useState(null)
   const [checking,setChecking] = useState(true)
   const [email,setEmail] = useState('')
-  const [sent,setSent] = useState(false)
+  const [code,setCode] = useState('')
+  const [step,setStep] = useState('email')   // email | code
   const [sending,setSending] = useState(false)
+  const [verifying,setVerifying] = useState(false)
   const [data,setData] = useState(null)
   const [err,setErr] = useState(null)
   const [loadingData,setLoadingData] = useState(false)
@@ -23822,9 +23824,12 @@ export function PortalApp(){
       .catch(e=>setErr(e.message==='sin_acceso'?'sin_acceso':(e.message||'error'))).finally(()=>setLoadingData(false))
   },[session])
   const enviar = async()=>{ const e=email.trim().toLowerCase(); if(!e||sending) return; setSending(true); setErr(null)
-    try{ const {error}=await supabase.auth.signInWithOtp({ email:e, options:{ emailRedirectTo:window.location.origin+'/portal' } }); if(error) throw error; setSent(true) }catch(x){ setErr(x.message||'No se pudo enviar el enlace') }
+    try{ const {error}=await supabase.auth.signInWithOtp({ email:e, options:{ shouldCreateUser:true } }); if(error) throw error; setStep('code'); setCode('') }catch(x){ setErr(x.message||'No se pudo enviar el código') }
     setSending(false) }
-  const salir = ()=>{ supabase.auth.signOut(); setSession(null); setData(null); setSent(false); setEmail('') }
+  const verificar = async()=>{ const t=(code||'').trim(); if(!t||verifying) return; setVerifying(true); setErr(null)
+    try{ const {error}=await supabase.auth.verifyOtp({ email:email.trim().toLowerCase(), token:t, type:'email' }); if(error) throw error }catch(x){ setErr('Código incorrecto o vencido. Revisa el correo o pide uno nuevo.') }
+    setVerifying(false) }
+  const salir = ()=>{ supabase.auth.signOut(); setSession(null); setData(null); setStep('email'); setEmail(''); setCode('') }
   const Brand = ({right}) => <div style={{background:C.accent,padding:'16px 18px',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}><div style={{textAlign:'center',color:'#fff'}}><div style={{fontSize:13,fontWeight:600,letterSpacing:2.5}}>LIBERONA ESCALA</div><div style={{fontSize:8,letterSpacing:4,opacity:.85,marginTop:2}}>ABOGADOS</div></div>{right&&<div style={{position:'absolute',right:16,top:'50%',transform:'translateY(-50%)'}}>{right}</div>}</div>
   const wrap = { minHeight:'100vh', background:C.bg, fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif", padding:'22px 14px 50px', display:'flex', justifyContent:'center' }
   const card = { width:'100%', maxWidth:460, background:'#fff', border:`1px solid ${C.border}`, borderRadius:18, overflow:'hidden', boxShadow:'0 10px 30px rgba(0,40,60,.08)' }
@@ -23836,18 +23841,24 @@ export function PortalApp(){
     <div style={wrap}><div style={card}>
       <Brand/>
       <div style={{padding:'22px 20px 26px'}}>
-        {!sent ? <>
+        {step==='email' ? <>
           <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:5}}>Entra a tu espacio</div>
-          <div style={{fontSize:12.5,color:C.muted,lineHeight:1.5,marginBottom:16}}>Escribe tu correo y te enviamos un enlace para entrar de forma segura. No necesitas contraseña.</div>
+          <div style={{fontSize:12.5,color:C.muted,lineHeight:1.5,marginBottom:16}}>Escribe tu correo y te enviamos un código para entrar de forma segura. No necesitas contraseña.</div>
           <input value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') enviar() }} type='email' placeholder='tu@correo.cl' style={{width:'100%',boxSizing:'border-box',fontSize:14,padding:'12px',borderRadius:11,border:`1px solid ${C.border}`,marginBottom:12}}/>
-          <button onClick={enviar} disabled={sending||!email.trim()} style={{width:'100%',background:C.accent,color:'#fff',border:'none',borderRadius:11,padding:13,fontSize:14,fontWeight:700,cursor:(sending||!email.trim())?'default':'pointer',opacity:(sending||!email.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{sending&&<Spin/>}Enviarme el enlace</button>
+          <button onClick={enviar} disabled={sending||!email.trim()} style={{width:'100%',background:C.accent,color:'#fff',border:'none',borderRadius:11,padding:13,fontSize:14,fontWeight:700,cursor:(sending||!email.trim())?'default':'pointer',opacity:(sending||!email.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{sending&&<Spin/>}Enviarme el código</button>
           {err&&<div style={{fontSize:11.5,color:C.overdue,marginTop:10,textAlign:'center'}}>{err}</div>}
           <div style={{fontSize:10,color:C.done,textAlign:'center',marginTop:14}}>Tu información es privada y solo tú la ves.</div>
-        </> : <div style={{textAlign:'center',padding:'12px 0'}}>
-          <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:8}}>Revisa tu correo</div>
-          <div style={{fontSize:13,color:C.muted,lineHeight:1.5}}>Te enviamos un enlace a <b style={{color:C.text}}>{email}</b>. Ábrelo desde este dispositivo para entrar.</div>
-          <button onClick={()=>{setSent(false)}} style={{marginTop:16,fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>Usar otro correo</button>
-        </div>}
+        </> : <>
+          <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:5}}>Revisa tu correo</div>
+          <div style={{fontSize:12.5,color:C.muted,lineHeight:1.5,marginBottom:16}}>Te enviamos un código a <b style={{color:C.text}}>{email}</b>. Escríbelo aquí para entrar.</div>
+          <input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9]/g,''))} onKeyDown={e=>{ if(e.key==='Enter') verificar() }} inputMode='numeric' autoFocus placeholder='Código' style={{width:'100%',boxSizing:'border-box',fontSize:22,letterSpacing:6,textAlign:'center',padding:'12px',borderRadius:11,border:`1px solid ${C.border}`,marginBottom:12}}/>
+          <button onClick={verificar} disabled={verifying||!code.trim()} style={{width:'100%',background:C.accent,color:'#fff',border:'none',borderRadius:11,padding:13,fontSize:14,fontWeight:700,cursor:(verifying||!code.trim())?'default':'pointer',opacity:(verifying||!code.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{verifying&&<Spin/>}Entrar</button>
+          {err&&<div style={{fontSize:11.5,color:C.overdue,marginTop:10,textAlign:'center'}}>{err}</div>}
+          <div style={{display:'flex',justifyContent:'center',gap:16,marginTop:14}}>
+            <span onClick={enviar} style={{fontSize:11.5,fontWeight:600,color:C.accent,cursor:'pointer'}}>Reenviar código</span>
+            <span onClick={()=>{setStep('email');setCode('');setErr(null)}} style={{fontSize:11.5,fontWeight:600,color:C.muted,cursor:'pointer'}}>Usar otro correo</span>
+          </div>
+        </>}
       </div>
     </div></div>
   )
