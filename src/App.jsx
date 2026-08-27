@@ -711,6 +711,7 @@ const TABS_ADMIN = [
 const TABS_LIMITED = [
   {id:'tasks',icon:'check',label:'Tareas'},
   {id:'cartera',icon:'folder',label:'Proyectos'},
+  {id:'horas',icon:'clock',label:'Horas'},
   {id:'expenses',icon:'card',label:'Gastos'},
   {id:'cajachica',icon:'coins',label:'Caja chica'},
   {id:'clients',icon:'idcard',label:'Clientes'},
@@ -20616,6 +20617,148 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
   )
 }
 
+// ── Registro de horas (Fase 1) — módulo autónomo. Carga= confirmar lo que la app ya sabe.
+function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, onOpenClientFicha }){
+  const me = currentUserName || ''
+  const [horas,setHoras] = useState([])
+  const [retainers,setRetainers] = useState([])
+  const [manual,setManual] = useState(false)
+  const [mq,setMq] = useState('')
+  const [mf,setMf] = useState({client_id:'',fecha:'',horas:1,glosa:'',billable:true})
+  const [dur,setDur] = useState({})
+  const [cfgOpen,setCfgOpen] = useState(null)
+  const [cfgF,setCfgF] = useState({horas_estimadas:'',tarifa_mensual:''})
+  const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+  const mesActual = hoy.slice(0,7)
+  const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
+  const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
+  const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' h'
+
+  useEffect(()=>{
+    if(DEMO){ setHoras(demoData.horas||[]); setRetainers(demoData.retainers||[]); return }
+    let ok=true
+    supabase.from('horas').select('*').order('fecha',{ascending:false}).then(({data})=>{ if(ok&&data) setHoras(data) },()=>{})
+    supabase.from('retainers').select('*').then(({data})=>{ if(ok&&data) setRetainers(data) },()=>{})
+    return ()=>{ ok=false }
+  },[])
+
+  const permanentes = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(esRecurrente(s)&&s.client_id) m[String(s.client_id)]=s }); return Object.entries(m).map(([cid,s])=>({cid,sale:s})) },[sales])
+  const misTareasHoy = useMemo(()=> (tasks||[]).filter(t=> String(t.completed_at||'').slice(0,10)===hoy && (isAssignee(t,me)||t.who===me)).filter(t=> !horas.some(h=>h.source==='tarea'&&String(h.source_ref)===String(t.id))), [tasks,horas,me,hoy])
+  const misHoras = useMemo(()=> (isAdmin?horas:horas.filter(h=>h.user_name===me)), [horas,isAdmin,me])
+  const semana = useMemo(()=>{ const d=new Date(hoy+'T00:00:00'); const dow=(d.getDay()+6)%7; const lun=new Date(d); lun.setDate(d.getDate()-dow); const li=lun.toISOString().slice(0,10); return misHoras.filter(h=> (h.fecha||'')>=li) }, [misHoras,hoy])
+  const totSem = semana.reduce((a,h)=>a+(Number(h.horas)||0),0)
+
+  async function addHora(row){
+    const full = { user_name:me, billable:true, source:'manual', created_by:me, ...row }
+    if(DEMO){ setHoras(p=>[{ id:'h'+Date.now(), created_at:new Date().toISOString(), ...full },...p]); return }
+    const { data,error } = await supabase.from('horas').insert(full).select().single()
+    if(error||!data){ appAlert('No se pudo guardar: '+(error?.message||'')); return }
+    setHoras(p=>[data,...p])
+  }
+  const registrarTarea = t => addHora({ client_id:t.client_id, fecha:hoy, horas:(dur[t.id]||1), glosa:t.title||'', source:'tarea', source_ref:String(t.id) })
+  const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
+  const bump = (id,delta) => setDur(p=>({...p,[id]:Math.max(0.1,Math.round(((p[id]||1)+delta)*10)/10)}))
+  const consumoMes = cid => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  const retDe = cid => retainers.find(r=>String(r.client_id)===String(cid))
+  async function guardarCfg(cid,sale_id){
+    const est=Number(cfgF.horas_estimadas)||0, tar=Number(cfgF.tarifa_mensual)||0, ex=retDe(cid)
+    if(DEMO){ setRetainers(p=>[...p.filter(r=>String(r.client_id)!==String(cid)),{id:ex?.id||'r'+Date.now(),client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar}]); setCfgOpen(null); return }
+    if(ex) await supabase.from('retainers').update({horas_estimadas:est,tarifa_mensual:tar}).eq('id',ex.id)
+    else await supabase.from('retainers').insert({client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar})
+    const {data}=await supabase.from('retainers').select('*'); if(data) setRetainers(data); setCfgOpen(null)
+  }
+  const cliOpen = cid => onOpenClientFicha&&onOpenClientFicha(cid)
+  const step = {display:'inline-flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden',background:'#fff'}
+  const stepB = {width:26,height:30,display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontSize:15,background:C.bgSoft,cursor:'pointer',userSelect:'none'}
+  const inp = {width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:9,padding:'0 11px',fontSize:13,background:'#fff',color:C.text,boxSizing:'border-box',outline:'none'}
+  const lbl = {fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'2px 2px 8px'}
+
+  return (
+    <div style={{padding:'12px 14px 40px',maxWidth:560,margin:'0 auto'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
+        <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Horas</div>
+        <span style={{fontSize:11,color:C.done}}>Esta semana: <b style={{color:C.accent}}>{fh(totSem)}</b></span>
+      </div>
+      <div style={{fontSize:11.5,color:C.muted,marginBottom:14}}>Confirma lo que hiciste hoy — solo teclea las horas.</div>
+
+      {/* ¿Qué hiciste hoy? */}
+      <div style={lbl}>Sugeridas de hoy</div>
+      {misTareasHoy.length===0 && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'14px',marginBottom:9}}>Sin tareas terminadas hoy. Usa “+ Registrar tiempo”.</div>}
+      {misTareasHoy.map(t=>(
+        <div key={t.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+          <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.azulBg,color:C.azulInfo,letterSpacing:'.02em'}}>TAREA</span>
+          <div onClick={()=>cliOpen(t.client_id)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(t.client_id)}</div>
+          <div style={{fontSize:11.5,color:C.muted,lineHeight:1.35}}>{t.title||'Tarea'}</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:10,gap:8}}>
+            <div style={step}><span style={stepB} onClick={()=>bump(t.id,-0.1)}>−</span><b style={{fontSize:14,color:C.accent,padding:'0 4px',minWidth:44,textAlign:'center',fontVariantNumeric:'tabular-nums'}}>{fh(dur[t.id]||1)}</b><span style={stepB} onClick={()=>bump(t.id,0.1)}>+</span></div>
+            <button onClick={()=>registrarTarea(t)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'8px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Registrar</button>
+          </div>
+        </div>
+      ))}
+      {!manual && <div onClick={()=>{setManual(true);setMf(f=>({...f,fecha:hoy}))}} style={{textAlign:'center',fontSize:12,fontWeight:600,color:C.accent,padding:11,border:`1px dashed ${C.border}`,borderRadius:11,background:'#fff',cursor:'pointer',marginBottom:14}}>+ Registrar tiempo</div>}
+      {manual && (
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:13,marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.accent,marginBottom:10}}>Registrar tiempo</div>
+          <div style={{marginBottom:10}}><div style={lbl}>Cliente</div>
+            {mf.client_id ? <div style={{...inp,display:'flex',alignItems:'center',justifyContent:'space-between'}}>{cn(mf.client_id)}<span onClick={()=>{setMf(f=>({...f,client_id:''}));setMq('')}} style={{color:C.done,cursor:'pointer',fontSize:12}}>cambiar</span></div>
+              : <><input value={mq} onChange={e=>setMq(e.target.value)} placeholder='Buscar cliente…' style={inp}/>
+                {mq.trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:9,marginTop:4,overflow:'hidden',maxHeight:150,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(mq))).slice(0,8).map(c=><div key={c.id} onClick={()=>{setMf(f=>({...f,client_id:c.id}));setMq('')}} style={{padding:'8px 11px',fontSize:12.5,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</>}
+          </div>
+          <div style={{display:'flex',gap:9,marginBottom:10}}>
+            <div style={{flex:1}}><div style={lbl}>Fecha</div><input type='date' value={mf.fecha} onChange={e=>setMf(f=>({...f,fecha:e.target.value}))} style={inp}/></div>
+            <div style={{width:118}}><div style={lbl}>Horas (0,1)</div><input type='number' step='0.1' min='0' value={mf.horas} onChange={e=>setMf(f=>({...f,horas:e.target.value}))} style={{...inp,textAlign:'right'}}/></div>
+          </div>
+          <div style={{marginBottom:10}}><div style={lbl}>Glosa</div><input value={mf.glosa} onChange={e=>setMf(f=>({...f,glosa:e.target.value}))} placeholder='Qué hiciste' style={inp}/></div>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,fontSize:12,color:C.muted,cursor:'pointer'}} onClick={()=>setMf(f=>({...f,billable:!f.billable}))}><span style={{width:34,height:20,borderRadius:11,background:mf.billable?C.normal:C.done,position:'relative',display:'inline-block'}}><span style={{position:'absolute',top:2,left:mf.billable?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></span>Facturable al cliente</div>
+          <div style={{display:'flex',gap:8}}><button onClick={guardarManual} style={{flex:1,background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'10px',fontSize:12.5,fontWeight:600,cursor:'pointer'}}>Guardar</button><button onClick={()=>{setManual(false);setMq('')}} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.accent,borderRadius:9,padding:'10px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button></div>
+        </div>
+      )}
+
+      {/* Retainer de clientes permanentes */}
+      {permanentes.length>0 && <>
+        <div style={lbl}>Asesorías permanentes · {mesActual}</div>
+        {permanentes.map(({cid,sale})=>{ const r=retDe(cid); const cons=consumoMes(cid); const est=Number(r?.horas_estimadas)||0; const pct=est>0?Math.min(100,Math.round(cons/est*100)):0; const over=est>0&&cons>est; const editing=String(cfgOpen)===String(cid)
+          return (
+          <div key={cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+              <span onClick={()=>cliOpen(cid)} style={{fontSize:13,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(cid)}</span>
+              <span onClick={()=>{ setCfgF({horas_estimadas:r?.horas_estimadas||'',tarifa_mensual:r?.tarifa_mensual||''}); setCfgOpen(editing?null:cid) }} style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>{r?'editar':'definir'}</span>
+            </div>
+            {!r && !editing && <div style={{fontSize:11,color:C.done,marginTop:5}}>Sin config. Define horas estimadas y tarifa.</div>}
+            {r && <>
+              <div style={{height:22,borderRadius:7,background:over?C.overdueBg:C.greenBg,overflow:'hidden',marginTop:8}}><span style={{display:'block',height:'100%',width:pct+'%',background:over?C.overdue:C.normal}}/></div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:7,fontSize:10.5,color:C.muted}}><span>Estimadas {fh(est)}</span><span>Consumidas {fh(cons)}</span><span style={{color:over?C.overdueText:C.greenText,fontWeight:600}}>{over?'Excedido '+fh(cons-est):'Saldo '+fh(est-cons)}</span></div>
+              {r.tarifa_mensual>0 && <div style={{fontSize:10,color:C.done,marginTop:4}}>{f0(r.tarifa_mensual)}/mes · implícita {est>0?f0(r.tarifa_mensual/est)+'/h':'—'}{over?' · conviene reajustar':''}</div>}
+            </>}
+            {editing && (
+              <div style={{marginTop:10,borderTop:`1px solid ${C.bgSoft}`,paddingTop:10}}>
+                <div style={{display:'flex',gap:9}}>
+                  <div style={{flex:1}}><div style={lbl}>Horas est./mes</div><input type='number' step='0.5' value={cfgF.horas_estimadas} onChange={e=>setCfgF(f=>({...f,horas_estimadas:e.target.value}))} style={{...inp,textAlign:'right'}}/></div>
+                  <div style={{flex:1}}><div style={lbl}>Tarifa mensual $</div><input type='number' value={cfgF.tarifa_mensual} onChange={e=>setCfgF(f=>({...f,tarifa_mensual:e.target.value}))} style={{...inp,textAlign:'right'}}/></div>
+                </div>
+                <button onClick={()=>guardarCfg(cid,sale?.id||null)} style={{marginTop:9,width:'100%',background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'9px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Guardar config</button>
+              </div>
+            )}
+          </div>
+        )})}
+      </>}
+
+      {/* Mis horas de la semana */}
+      {semana.length>0 && <>
+        <div style={{...lbl,marginTop:14}}>{isAdmin?'Horas de la semana':'Mis horas de la semana'}</div>
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 12px'}}>
+          {semana.map(h=>(
+            <div key={h.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:`1px solid ${C.bgSoft}`,fontSize:11.5}}>
+              <div style={{minWidth:0}}><div onClick={()=>cliOpen(h.client_id)} style={{color:C.text,fontWeight:600,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(h.client_id)}</div><div style={{color:C.done,fontSize:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{h.fecha}{h.glosa?' · '+h.glosa:''}{isAdmin&&h.user_name?' · '+h.user_name:''}{h.billable===false?' · interno':''}</div></div>
+              <span style={{fontWeight:700,color:C.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fh(h.horas)}</span>
+            </div>
+          ))}
+        </div>
+      </>}
+    </div>
+  )
+}
+
 function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
@@ -23679,8 +23822,8 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Conciliación',inteligencia:'Inteligencia',cajachica:'Caja chica'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
-  limited:[['tasks','Tareas'],['cartera','Proyectos'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
+  limited:[['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
@@ -25748,6 +25891,7 @@ export default function App() {
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
