@@ -128,6 +128,18 @@ export const demoData = {
     { id:'con2', movimiento_id:'mov2', tipo_destino:'factura', factura_id:'b11', anticipo_id:null, monto_aplicado:23400000, origen:'demo', marco_pago:true },
   ],
   rendiciones: [],
+  retainers: [
+    { id:'r1', client_id:'c1', sale_id:'s1', horas_estimadas:20, tarifa_mensual:2000000 },
+    { id:'r2', client_id:'c4', sale_id:'s4', horas_estimadas:8,  tarifa_mensual:1500000 },
+  ],
+  horas: [
+    { id:'h1', user_name:'Cristóbal', client_id:'c1', fecha:'2026-08-27', horas:1.5, glosa:'Reunión de asesoría mensual', billable:true, source:'tarea' },
+    { id:'h2', user_name:'Cristóbal', client_id:'c1', fecha:'2026-08-26', horas:2,   glosa:'Revisión de contrato', billable:true, source:'manual' },
+    { id:'h3', user_name:'Martín',    client_id:'c1', fecha:'2026-08-25', horas:3,   glosa:'Minuta societaria', billable:true, source:'manual' },
+    { id:'h4', user_name:'Cristóbal', client_id:'c4', fecha:'2026-08-27', horas:2.5, glosa:'Contestación de demanda', billable:true, source:'manual' },
+    { id:'h5', user_name:'Martina',   client_id:'c4', fecha:'2026-08-26', horas:4,   glosa:'Audiencia preparatoria', billable:true, source:'manual' },
+    { id:'h6', user_name:'Cristóbal', client_id:'c4', fecha:'2026-08-25', horas:3,   glosa:'Estudio de antecedentes', billable:true, source:'manual' },
+  ],
   vacaciones: [
     { id:'vac1', user_name:'Demo', desde:new Date(Date.now()+5*864e5).toISOString().slice(0,10), hasta:new Date(Date.now()+9*864e5).toISOString().slice(0,10) },
   ],
