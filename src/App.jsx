@@ -794,7 +794,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     const {fondos,gastos,saldo} = fgCliente(expenses, cl.id)   // fuente única (no duplicar la fórmula de saldo inline)
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
-    const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':C.bgSoft}
+    const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
     const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
 
     return (
@@ -963,7 +963,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
             <button onClick={onAdd} style={chipBtn('primary')}>+ Cliente</button>
           </div>
         </div>
-        <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:8}}/>
+        <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={{marginBottom:8}}/>
         <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN} prospectoN={prospectoN}/>
       </div>
       <div style={{padding:'4px 20px 100px'}}>
@@ -1106,6 +1106,8 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const [fHasta,setFHasta] = useState('')
   const [fCliente,setFCliente] = useState('')
   const [fCat,setFCat] = useState('')
+  const [pettyQ,setPettyQ] = useState('')            // buscador libre de pendientes
+  const [pettyOrd,setPettyOrd] = useState('nuevo')   // orden por fecha: nuevo↔antiguo
   // Asistente IA de liquidación: revisa pendientes (determinista) + sugiere cliente/categoría (IA), aprende.
   const [asistOpen,setAsistOpen] = useState(false)
   const [asistBusy,setAsistBusy] = useState(false)
@@ -1118,7 +1120,10 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
 
   // Gastos pendientes de liquidar DEL USUARIO (tipo gasto, no rendidos, created_by = me)
   const misPendientes = expenses.filter(e=>e.type==='gasto'&&!e.rendered_at&&!e.paid_by_client&&e.created_by===me)
-  const pendientes = misPendientes.filter(e=>!fCat||e.category===fCat).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
+  const pendientes = misPendientes
+    .filter(e=>!fCat||e.category===fCat)
+    .filter(e=>{ const q=pettyQ.trim().toLowerCase(); if(!q) return true; return (e.concept||'').toLowerCase().includes(q) || String(Math.round(e.amount||0)).includes(q.replace(/[.$\s]/g,'')) })
+    .sort((a,b)=>{ const c=(a.date||'')<(b.date||'')?1:-1; return pettyOrd==='nuevo'?c:-c })
   // "Sin liquidar": total pendiente del usuario, independiente del filtro de categoría
   const sinLiquidar = misPendientes.reduce((a,e)=>a+(e.amount||0),0)
 
@@ -1135,7 +1140,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const totalSel = seleccionados.reduce((a,e)=>a+(e.amount||0),0)
 
   const fmtCLP = fmtN
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':C.bgSoft}
+  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
   // Pills de categoría en PENDIENTES: [valor en DB, etiqueta mostrada]
   const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Movilización','Movil.'],['Archivo Judicial','Archivo'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
   const CAT_LIST = ['Notaria','CBR','Movilización','Archivo Judicial','Diario Oficial','Registro Civil','Fondo','Otro']
@@ -1538,8 +1543,14 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 border:on?'0.5px solid #003C50':'0.5px solid #E4E8EB',background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{lbl}</button>
             )})}
           </div>
+          {misPendientes.length>=6&&(
+            <div style={{display:'flex',gap:8,alignItems:'center',padding:'0 14px 10px'}}>
+              <input value={pettyQ} onChange={e=>setPettyQ(e.target.value)} placeholder='Buscar concepto o monto…' style={{flex:1,height:32,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:13,background:C.bgSoft,color:C.text,outline:'none'}}/>
+              <button onClick={()=>setPettyOrd(o=>o==='nuevo'?'antiguo':'nuevo')} title='Orden por fecha' style={{height:32,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{pettyOrd==='nuevo'?'Nuevo → antiguo':'Antiguo → nuevo'}</button>
+            </div>
+          )}
           {/* Filas de gasto */}
-          {pendientes.length===0&&<div style={{color:C.done,textAlign:'center',padding:36,fontSize:13}}>No tienes gastos pendientes de liquidar</div>}
+          {pendientes.length===0&&<div style={{color:C.done,textAlign:'center',padding:36,fontSize:13}}>{pettyQ?'Sin resultados para la búsqueda':'No tienes gastos pendientes de liquidar'}</div>}
           {pendientes.map(e=>{
             const client=clients.find(cl=>cl.id===e.client_id)
             const isSel=selected.has(e.id)
@@ -4917,7 +4928,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         <Fld label={reasignCli?<>Reasignar a otro cliente {selectedClient&&<span style={{fontWeight:400,color:C.muted}}>· hoy: {selectedClient.name}</span>}</>:'Cliente'}>
           <div style={{position:'relative'}}>
             <div style={{display:'flex',gap:6}}>
-              <Inp value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente...' autoFocus style={{flex:1}}/>
+              <Inp value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente…' autoFocus style={{flex:1}}/>
               {reasignCli
                 ? <button onClick={()=>{setReasignCli(false);setClientQ('')}} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>Cancelar</button>
                 : <button onClick={()=>setShowNewClient(true)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>+ Nuevo</button>}
@@ -4956,7 +4967,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {showNewClient&&<MiniClientForm defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
       {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se crea como Prospecto; al activar la propuesta pasa a Activo.</div>}
 
-      <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
+      <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganización societaria…'/></Fld>
 
       {/* 2. Razón social — 1 se asigna sola · varias propone la 1ª · siempre se puede Cambiar / agregar */}
       {f.client_id&&(
@@ -5581,7 +5592,7 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
     </div>
   )
 }
-function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',placeholder='Buscar cliente...'}) {
+function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',placeholder='Buscar cliente…'}) {
   const [open,setOpen] = useState(false)
   const [q,setQ] = useState('')
   const wrapRef = useRef(null)
@@ -8134,7 +8145,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </div>
           </div>
         </div>}
-        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt} onFusionar={onFusionarAnticipos} onAbrir={onAbrirAnticipo}/>}
+        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt} onFusionar={onFusionarAnticipos} onAbrir={onAbrirAnticipo} onOpenClientFicha={onOpenClientFicha} onOpenFactura={onEdit}/>}
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&filter!=='sinanio'&&filter!=='resumen'&&<>
@@ -9463,7 +9474,7 @@ function FusionAnticiposModal({bank, manual, clients=[], sales=[], clientEntitie
   )
 }
 
-function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar,onFusionar,onAbrir}) {
+function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar,onFusionar,onAbrir,onOpenClientFicha,onOpenFactura}) {
   const [fusionPair,setFusionPair] = useState(null)
   const [fil,setFil] = useState('disponible')
   const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
@@ -9510,7 +9521,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
         return (
           <div key={cid} style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:C.bgSoft,padding:'8px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-              <div><div style={{fontSize:12,fontWeight:600,color:C.accent}}>{cliName(cid)}</div>{rs&&<div style={{fontSize:11,color:C.done}}>{rs}</div>}</div>
+              <div><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(cid)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cliName(cid)}</div>{rs&&<div style={{fontSize:11,color:C.done}}>{rs}</div>}</div>
               <div style={{textAlign:'right'}}><div style={flabel}>Disponible</div><div style={{fontSize:14,fontWeight:600,color:C.normal}}>{fmtCLP0(totCli)}</div></div>
             </div>
             {(()=>{ const disp=arr.filter(a=>a.estado==='disponible'); const pairs=[]
@@ -9528,7 +9539,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
                   {bigDate(a.fecha)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{a.proyecto||'Anticipo'}</div>{a.nota&&<div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
                   <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>Factura N°{folio}</span>}
+                      {!disp&&folio&&<span onClick={e=>{e.stopPropagation();const bf=billing.find(b=>String(b.id)===String(a.billing_id));bf&&onOpenFactura&&onOpenFactura(bf)}} style={{fontSize:11,color:C.muted,textDecoration:'underline',cursor:onOpenFactura?'pointer':'default'}}>Factura N°{folio}</span>}
                       <span style={{fontSize:9,fontWeight:600,letterSpacing:'.03em',padding:'1px 7px',borderRadius:20,background:disp?C.greenBg:cubreCuotas?C.azulBg:C.bgSoft,color:disp?C.greenText:cubreCuotas?C.accent:C.done}}>{disp?'DISPONIBLE':cubreCuotas?'EN CUOTAS':'CONSUMIDO'}</span>
                       <span style={{fontSize:13,fontWeight:600,color:disp?C.normal:C.muted}}>{fmtCLP0(a.monto)}</span>
                     </div>
@@ -9929,7 +9940,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     else setSelected(new Set(disponibles.map(e=>e.id)))
   }
   const toggleOne = id => setSelected(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':C.bgSoft}
+  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
 
@@ -11856,7 +11867,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     }catch(e){appAlert('Error al añadir: '+e.message)}
   }
 
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':C.bgSoft}
+  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
   useEffect(()=>{
@@ -13176,7 +13187,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       {!selectedClient&&(
         <Fld label='Cliente'>
           <div style={{position:'relative'}}>
-            <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' autoFocus/>
+            <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' autoFocus/>
             {matches.length>0&&(
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:220,overflowY:'auto'}}>
                 {matches.map(c=>(
@@ -13545,7 +13556,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
       {!selectedClient ? (
         <>
           <Fld label='Cliente'>
-            <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Escribe para buscar cliente...' autoFocus/>
+            <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' autoFocus/>
           </Fld>
           {(()=>{ const lista = q.trim()?matches:recientes; return lista.length>0 ? (
             <>
@@ -13977,7 +13988,7 @@ function DestinatarioFacturasCard({client, contacts=[], embedded=false}){
       {saved&&<span style={{fontSize:10,color:C.greenText,fontWeight:600}}>guardado ✓</span>}
       <span style={{fontSize:9,color:C.muted,background:C.bgWarm,borderRadius:10,padding:'2px 8px'}}>Se aprende del envío</span>
     </div>}
-    <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:4}}>Para {embedded&&saved&&<span style={{color:C.greenText}}>· guardado ✓</span>}{embedded&&<span style={{fontWeight:400,color:C.done}}> · se aprende del envío</span>}</div>
+    <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:4}}>Para {embedded&&saved&&<span style={{color:C.greenText}}>· guardado ✓</span>}</div>
     {conEmail.length>0
       ? <select value={to} onChange={e=>saveTo(e.target.value)} style={inpS}>
           <option value=''>— Elegir contacto —</option>
@@ -15529,7 +15540,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const taskGroups = {}
   clientTasks.forEach(t=>{ const k=t.project||'__none__'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
 
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':C.bgSoft}
+  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
 
   // Chevron de affordance (fila clickeable) — paleta corporativa, hover lo oscurece vía .lf-row:hover
   const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
@@ -16046,7 +16057,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
           </div>
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
-          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{flex:1}}/>
+          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={{flex:1}}/>
           <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:32,color:C.accent}}>Mis Proveedores</button>
         </div>
         {sFilter ? (
@@ -17335,7 +17346,7 @@ function InvoiceClientPicker({inv,clients,assigned,onAssign}) {
         </div>
       ):(
         <div style={{position:'relative'}}>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Escribe para buscar cliente...'
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…'
             style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:13,boxSizing:'border-box',outline:'none'}}/>
           {matches.length>0&&(
             <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
@@ -18272,7 +18283,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           <BloqueTitulo>Mis tareas</BloqueTitulo>
           <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end',flex:1,minWidth:0}}>
             <div style={{position:'relative',display:'flex',alignItems:'center',flex:'1 1 130px',minWidth:120,maxWidth:220}}>
-              <input value={filterClient} onChange={e=>{setFilterClient(e.target.value);setFilterProject('')}} placeholder='Buscar cliente...' style={{width:'100%',padding:'5px 22px 5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:12,background:filterClient?C.azulBg:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none'}}/>
+              <input value={filterClient} onChange={e=>{setFilterClient(e.target.value);setFilterProject('')}} placeholder='Buscar cliente…' style={{width:'100%',padding:'5px 22px 5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:12,background:filterClient?C.azulBg:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none'}}/>
               {filterClient&&<button onClick={()=>{setFilterClient('');setFilterProject('')}} style={{position:'absolute',right:5,background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer',lineHeight:1}}>×</button>}
             </div>
             <button onClick={()=>onAddTask&&onAddTask()} style={{padding:'5px 12px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>+ Nueva tarea</button>
@@ -18394,7 +18405,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           }).slice(0,3)
           const fmtCLP = fmtN
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
-          const CAT_BG = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':C.bgSoft}
+          const CAT_BG = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
           const GREEN={num:C.normal,bg:C.greenBg,bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:C.soon,bg:'#FEF6EE',bd:'#F5E2CC',label:C.soon}
           const RED={num:C.overdue,bg:C.overdueBg,bd:'#F2D5D5',label:C.muted}
@@ -18764,7 +18775,7 @@ ${muestra}`
             )}
             {editRow===r.id&&(
               <div style={{marginTop:6}}>
-                <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={inp}/>
+                <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={inp}/>
                 {matches.length>0&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:4,overflow:'hidden'}}>
                   {matches.map(c=>(<div key={c.id} onClick={()=>asignar(r.id,c.id)} style={{padding:'8px 11px',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}><div style={{fontSize:13,fontWeight:500,color:C.text}}>{c.name}</div>{c.rut&&<div style={{fontSize:10,color:C.muted}}>{c.rut}</div>}</div>))}
                 </div>}
@@ -19480,7 +19491,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
 }
 // Calendario de plazos y obligaciones: extrae de un contrato del Drive (IA) y los agenda por urgencia.
 const PLAZO_TIPO_COL = { 'plazo':C.azulInfo, 'obligación':C.soonText||C.soon, 'hito':C.normal }
-function PlazosModal({clients=[], onClose}){
+function PlazosModal({clients=[], onClose, onOpenClientFicha}){
   const [rows,setRows]=useState(null)
   const [cliente,setCliente]=useState('')
   const cliObj=(clients||[]).find(c=>c.name&&c.name.trim()===cliente.trim())||(cliente.trim().length>=3?(clients||[]).find(c=>c.name&&(c.name||'').toLowerCase().includes(cliente.trim().toLowerCase())):null)
@@ -19546,7 +19557,7 @@ function PlazosModal({clients=[], onClose}){
         <div style={{fontSize:10.5,color:C.muted,marginTop:1,display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
           {p.fecha&&<span style={{fontWeight:600,color:C.text}}>{fmtF(p.fecha)}</span>}
           <span style={{color:PLAZO_TIPO_COL[p.tipo]||C.muted,fontWeight:600}}>{p.tipo}</span>
-          {p.client_id&&<span>· {cn(p.client_id)}</span>}
+          {p.client_id&&<span>· <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.client_id)} style={{color:C.accent,fontWeight:600,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(p.client_id)}</span></span>}
           {p.fuente&&<span>· {p.fuente}</span>}
         </div>
         {p.descripcion&&<div style={{fontSize:10.5,color:C.muted,marginTop:2,lineHeight:1.35}}>{p.descripcion}</div>}
@@ -23131,7 +23142,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   )})}
                   </div>
                 </div>}
-                <div style={{fontSize:9,color:C.grisText,textAlign:'center',marginTop:10,paddingTop:8,borderTop:`1px solid ${C.border}`}}>Solo calce de monto EXACTO se concilia en lote · lo demás lo confirmas tú · todo reversible</div>
               </div>}
             </div>
           )
@@ -23569,7 +23579,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             )
           })}
         </div>
-        <div style={{fontSize:10,color:C.muted,marginTop:10,lineHeight:1.5}}>Toca un movimiento para ver el detalle y conciliar. Calce exacto en pesos · todo reversible y trazable.</div>
       </div>
       {revSugOpen&&(
         <div onClick={()=>setRevSugOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -23579,7 +23588,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 <span style={{fontSize:18,fontWeight:500,color:C.accent}}>Identificar por nombre</span>
                 <span onClick={()=>setRevSugOpen(false)} style={{fontSize:21,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
               </div>
-              <div style={{fontSize:11,color:C.muted,marginTop:3}}>Abonos sin identificar con un cliente sugerido por nombre (único). Confirma los correctos → quedan listos para conciliar y se aprende el patrón.</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:3}}>Abonos con un cliente sugerido por nombre único — confirma los correctos.</div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:'4px 18px 10px'}}>
               {sugeridosId.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:24}}>Sin sugerencias pendientes.</div>}
@@ -25794,7 +25803,7 @@ export default function App() {
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='aprendizaje'&&<Modal title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redaccion'&&<Modal title='Redactar con IA' onClose={()=>setModal(null)}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='plazos'&&<Modal title='Plazos y obligaciones' onClose={()=>setModal(null)}><PlazosModal clients={clients} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='plazos'&&<Modal title='Plazos y obligaciones' onClose={()=>setModal(null)}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}}/></Modal>}
         {modal?.type==='miCarga'&&<Modal title='Mi carga' onClose={()=>setModal(null)}><MiCargaModal tasks={tasks} proyectosCartera={proyectosCartera} setProyectosCartera={setProyectosCartera} clients={clients} user={user} onClose={()=>setModal(null)} onOpenClientFicha={handleOpenClientFicha}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
