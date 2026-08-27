@@ -20700,6 +20700,87 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
 }
 
 // ── Registro de horas (Fase 1) — módulo autónomo. Carga= confirmar lo que la app ya sabe.
+// ─── COPILOTO DE REPRICING (Fase 1: propone la tarifa nueva desde el consumo real de horas; gate humano) ──
+// Señal: si el cliente consume en promedio más horas/mes de las que su honorario incluye (a la tarifa del estudio),
+// el honorario quedó corto. Propone subirlo a lo que valdría el consumo real. Genera carta borrador (no envía).
+function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
+  const [horas,setHoras] = useState([])
+  const [tarifaUF,setTarifaUF] = useState(3)
+  const [ufAnio,setUfAnio] = useState(0)
+  const [decid,setDecid] = useState({})   // client_id → 'ver'|'descartado' (aprendizaje)
+  const ufHoy = useUF().uf || UF_FALLBACK
+  const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+  const anio = hoy.slice(0,4); const mesesYTD = (new Date().getMonth()+1)
+  const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
+  const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
+  const ufFmt = n => 'UF '+(Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
+  const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' h'
+  useEffect(()=>{
+    if(DEMO){ setHoras(demoData.horas||[]); setTarifaUF(3); setUfAnio(UF_FALLBACK); setDecid({}); return }
+    supabase.from('horas').select('client_id,fecha,horas').gte('fecha',anio+'-01-01').then(({data})=>{ if(data) setHoras(data) },()=>{})
+    supabase.from('learnings').select('kind,key,value').in('kind',['config','repricing_decision']).then(({data})=>{ if(!data) return; const t=data.find(r=>r.kind==='config'&&r.key==='tarifa_hora_permanente_uf'); const u=data.find(r=>r.kind==='config'&&r.key==='uf_anio_'+anio); if(t&&parseFloat(t.value)>0) setTarifaUF(parseFloat(t.value)); if(u&&parseFloat(u.value)>0) setUfAnio(parseFloat(u.value)); const d={}; data.forEach(r=>{ if(r.kind==='repricing_decision') d[r.key]=r.value }); setDecid(d) },()=>{})
+  },[])
+  const ufAnioEff = ufAnio>0?ufAnio:ufHoy
+  const permanentes = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(esRecurrente(s)&&s.client_id) m[String(s.client_id)]=s }); return Object.entries(m).map(([cid,s])=>({cid,s})) },[sales])
+  const recos = useMemo(()=> permanentes.map(({cid,s})=>{
+    const feeUF = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s.amount_uf)||0)
+    const incl = feeUF>0 ? Math.ceil(feeUF/(tarifaUF||3)) : 0
+    const hCli = horas.filter(h=>String(h.client_id)===String(cid))
+    const totYear = hCli.reduce((a,h)=>a+(Number(h.horas)||0),0)
+    const activos = new Set(hCli.map(h=>String(h.fecha||'').slice(0,7)).filter(Boolean)).size   // meses con actividad
+    const avg = activos>0 ? totYear/activos : 0
+    const recUF = Math.max(feeUF, Math.ceil(avg)*(tarifaUF||3))
+    const subir = recUF > feeUF + .01 && avg>0
+    const deltaPct = feeUF>0 ? Math.round((recUF-feeUF)/feeUF*100) : 0
+    return { cid, s, moneda:s.moneda, feeUF, incl, avg, recUF, subir, deltaPct, deltaUF:recUF-feeUF }
+  }).filter(r=>r.subir).sort((a,b)=>b.deltaUF-a.deltaUF), [permanentes,horas,tarifaUF,ufAnioEff,mesesYTD])
+  const totalUpliftUF = recos.reduce((a,r)=>a+r.deltaUF,0)
+
+  const verCarta = r => {
+    setDecid(d=>({...d,[r.cid]:'ver'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'ver'},{onConflict:'kind,key'}) }catch(_){} }
+    const nuevoStr = r.moneda==='CLP' ? f0(Math.round(r.recUF*ufHoy))+' (aprox. '+ufFmt(r.recUF)+')' : ufFmt(r.recUF)
+    const hoyStr = r.moneda==='CLP' ? f0(parseFloat(r.s.amount_clp)||0) : ufFmt(r.feeUF)
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Propuesta de reajuste — ${cn(r.cid).replace(/</g,'&lt;')}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:600px;margin:0 auto;padding:26px 30px'><div style='display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #003C50;padding-bottom:14px;margin-bottom:22px'><div style='font-size:16px;font-weight:700;color:#003C50'>Liberona Escala Abogados</div><span style='font-size:10px;font-weight:700;background:#FFF8E1;color:#854F0B;padding:3px 9px;border-radius:5px'>BORRADOR · REVISAR ANTES DE ENVIAR</span></div><p style='font-size:13px;line-height:1.65'>Estimados,</p><p style='font-size:13px;line-height:1.65'>Junto con saludar, y en el marco de nuestra asesoría permanente, queremos proponerles una actualización del honorario mensual.</p><p style='font-size:13px;line-height:1.65'>Durante ${anio} la dedicación efectiva a sus asuntos ha promediado <b>${fh(r.avg)} al mes</b>, por sobre las <b>${fh(r.incl)}</b> contempladas en el plan actual de <b>${hoyStr} mensuales</b>. En consideración a ello, proponemos ajustar el honorario a <b>${nuevoStr} mensuales</b>, a partir del próximo período.</p><p style='font-size:13px;line-height:1.65'>Quedamos atentos a comentar los detalles y a cualquier ajuste que estimen pertinente.</p><p style='font-size:13px;line-height:1.65'>Saludos cordiales,<br><b>Liberona Escala Abogados</b></p><div style='margin-top:20px;font-size:10px;color:#537281;border-top:1px solid #E4E8EB;padding-top:12px'>Documento borrador de uso interno — revísalo y ajústalo antes de enviarlo al cliente. Cálculo: consumo real ${fh(r.avg)}/mes × ${tarifaUF} UF/h.</div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
+  }
+  const descartar = r => { setDecid(d=>({...d,[r.cid]:'descartado'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'descartado'},{onConflict:'kind,key'}) }catch(_){} } }
+  const visibles = recos.filter(r=>decid[r.cid]!=='descartado')
+
+  return (
+    <div style={{padding:'12px 14px 40px',maxWidth:560,margin:'0 auto'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
+        <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Repricing</div>
+        {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
+      </div>
+      {visibles.length>0 && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:14,color:'#fff'}}>
+        <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Reajuste potencial · {anio}</div>
+        <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>+{ufFmt(totalUpliftUF)}/mes</div>
+        <div style={{fontSize:10.5,opacity:.85}}>{visibles.length} asesoría{visibles.length!==1?'s':''} que hoy rinde{visibles.length!==1?'n':''} bajo su consumo. Tú apruebas cada carta.</div>
+      </div>}
+      {visibles.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Ninguna asesoría permanente está bajo su consumo. Las tarifas están en línea.</div>}
+      {visibles.map(r=>{ const hoyStr = r.moneda==='CLP' ? f0(parseFloat(r.s.amount_clp)||0) : ufFmt(r.feeUF); const nuevoStr = r.moneda==='CLP' ? f0(Math.round(r.recUF*ufHoy)) : ufFmt(r.recUF); return (
+        <div key={r.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+            <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(r.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(r.cid)}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'3px 9px'}}>+{r.deltaPct}%</span>
+          </div>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,margin:'8px 0 2px'}}>
+            <span style={{fontSize:13,color:C.done,textDecoration:'line-through'}}>{hoyStr}</span>
+            <span style={{fontSize:16,fontWeight:800,color:C.accent}}>→ {nuevoStr}</span>
+            <span style={{fontSize:11,color:C.muted}}>/mes</span>
+          </div>
+          <div style={{fontSize:11,color:C.muted,lineHeight:1.45}}>Consume ~<b style={{color:C.text}}>{fh(r.avg)}</b>/mes; su plan incluye {fh(r.incl)}. A {tarifaUF} UF/h, el consumo real vale {ufFmt(r.recUF)}.</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,marginTop:10}}>
+            <button onClick={()=>descartar(r)} style={{background:'none',border:'none',color:C.done,fontSize:11.5,cursor:'pointer'}}>Descartar</button>
+            <button onClick={()=>verCarta(r)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Preparar carta</button>
+          </div>
+        </div>
+      )})}
+      <div style={{fontSize:10,color:C.done,marginTop:12,lineHeight:1.5}}>La carta es un borrador para que la revises y la envíes tú. El copiloto aprende de lo que apruebas y descartas.</div>
+    </div>
+  )
+}
+
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
@@ -24252,10 +24333,10 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Conciliación',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Conciliación',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
   limited:[['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
@@ -26326,6 +26407,7 @@ export default function App() {
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setTab('dashboard')}/>}
+            {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
