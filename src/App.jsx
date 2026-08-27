@@ -20672,7 +20672,9 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   },[])
 
   const permanentes = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(esRecurrente(s)&&s.client_id) m[String(s.client_id)]=s }); return Object.entries(m).map(([cid,s])=>({cid,sale:s})) },[sales])
-  const misTareasHoy = useMemo(()=> (tasks||[]).filter(t=> String(t.completed_at||'').slice(0,10)===hoy && (isAssignee(t,me)||t.who===me)).filter(t=> !horas.some(h=>h.source==='tarea'&&String(h.source_ref)===String(t.id))), [tasks,horas,me,hoy])
+  // Detector de fugas: tareas terminadas en los últimos días (por mí) sin hora cargada aún.
+  const misTareasHoy = useMemo(()=>{ const c=new Date(hoy+'T00:00:00'); c.setDate(c.getDate()-3); const cut=c.toISOString().slice(0,10)
+    return (tasks||[]).filter(t=>{ const d=String(t.completed_at||'').slice(0,10); return d>=cut && d<=hoy && (isAssignee(t,me)||t.who===me) }).filter(t=> !horas.some(h=>h.source==='tarea'&&String(h.source_ref)===String(t.id))) }, [tasks,horas,me,hoy])
   const misHoras = useMemo(()=> (isAdmin?horas:horas.filter(h=>h.user_name===me)), [horas,isAdmin,me])
   const semana = useMemo(()=>{ const d=new Date(hoy+'T00:00:00'); const dow=(d.getDay()+6)%7; const lun=new Date(d); lun.setDate(d.getDate()-dow); const li=lun.toISOString().slice(0,10); return misHoras.filter(h=> (h.fecha||'')>=li) }, [misHoras,hoy])
   const totSem = semana.reduce((a,h)=>a+(Number(h.horas)||0),0)
@@ -20684,7 +20686,34 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     if(error||!data){ appAlert('No se pudo guardar: '+(error?.message||'')); return }
     setHoras(p=>[data,...p])
   }
-  const registrarTarea = t => addHora({ client_id:t.client_id, fecha:hoy, horas:(dur[t.id]||1), glosa:t.title||'', source:'tarea', source_ref:String(t.id) })
+  const registrarTarea = t => addHora({ client_id:t.client_id, fecha:String(t.completed_at||'').slice(0,10)||hoy, horas:(dur[t.id]||1), glosa:t.title||'', source:'tarea', source_ref:String(t.id) })
+  // Read-back del calendario (Fase 3): lee la agenda del día y propone entradas (duración = duración del evento).
+  const [agenda,setAgenda] = useState([]); const [agLoading,setAgLoading]=useState(false); const [agDone,setAgDone]=useState(false); const [agq,setAgq]=useState({})
+  const stripLegal = s => _normTxt(s).replace(/\b(spa|s a|ltda|limitada|sa|eirl|e i r l|y cia|cia|inversiones|abogados)\b/g,'').replace(/\s+/g,' ').trim()
+  const matchCli = ev => { const t=stripLegal(ev.titulo||''); const byName=clients.find(c=>{ const n=stripLegal(c.name); return c.status!=='Terminado'&&n.length>2&&t.includes(n) }); if(byName) return String(byName.id); const doms=(ev.asistentes||[]).map(a=>String(a).split('@')[1]||'').filter(Boolean); const byMail=clients.find(c=>c.email&&doms.includes(String(c.email).split('@')[1]||'')); return byMail?String(byMail.id):null }
+  async function revisarAgenda(){
+    setAgLoading(true); setAgDone(false)
+    try{
+      let events=[]
+      if(DEMO){ events=[
+        {id:'ev1',titulo:'Reunión asesoría mensual — Comercial Andes SpA',fecha:hoy,horas:1,asistentes:[]},
+        {id:'ev2',titulo:'Audiencia preparatoria Tech Araucanía',fecha:hoy,horas:2,asistentes:[]},
+        {id:'ev3',titulo:'Almuerzo equipo',fecha:hoy,horas:1,asistentes:[]},
+      ] }
+      else {
+        const token=await driveToken(); if(!token){ appAlert('Para leer tu agenda, cierra sesión y vuelve a entrar con tu cuenta de Google.'); setAgLoading(false); return }
+        const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(new Date(hoy+'T00:00:00').toISOString())}&timeMax=${encodeURIComponent(new Date(hoy+'T23:59:59').toISOString())}&singleEvents=true&orderBy=startTime`
+        const r=await fetch(url,{headers:{Authorization:'Bearer '+token}})
+        if(!r.ok){ appAlert(r.status===401?'Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.':'No pude leer el calendario ('+r.status+').'); setAgLoading(false); return }
+        const j=await r.json()
+        events=(j.items||[]).filter(e=>e.status!=='cancelled'&&(e.summary||'').trim()&&e.start?.dateTime&&e.end?.dateTime).map(e=>({ id:e.id, titulo:e.summary, fecha:String(e.start.dateTime||'').slice(0,10), horas:Math.max(0.1,Math.round((new Date(e.end.dateTime)-new Date(e.start.dateTime))/360000)/10), asistentes:(e.attendees||[]).map(a=>a.email).filter(Boolean) }))
+      }
+      setAgenda(events.filter(ev=>!horas.some(h=>h.source==='calendar'&&String(h.source_ref)===String(ev.id))).map(ev=>({...ev,client_id:matchCli(ev)}))); setAgDone(true)
+    }catch(e){ appAlert('No se pudo leer la agenda: '+(e.message||e)) }
+    setAgLoading(false)
+  }
+  const registrarAgenda = ev => { if(!ev.client_id){ appAlert('Elige el cliente del evento.'); return } addHora({ client_id:ev.client_id, fecha:ev.fecha||hoy, horas:ev.horas||1, glosa:ev.titulo, source:'calendar', source_ref:String(ev.id) }); setAgenda(a=>a.filter(x=>x.id!==ev.id)) }
+  const bumpAg = (id,delta) => setAgenda(a=>a.map(ev=>ev.id===id?{...ev,horas:Math.max(0.1,Math.round(((ev.horas||1)+delta)*10)/10)}:ev))
   const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
   const bump = (id,delta) => setDur(p=>({...p,[id]:Math.max(0.1,Math.round(((p[id]||1)+delta)*10)/10)}))
   const consumoMes = cid => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
@@ -20734,8 +20763,23 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       <div style={{fontSize:11.5,color:C.muted,marginBottom:14}}>Confirma lo que hiciste hoy — solo teclea las horas.</div>
 
       {/* ¿Qué hiciste hoy? */}
-      <div style={lbl}>Sugeridas de hoy</div>
-      {misTareasHoy.length===0 && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'14px',marginBottom:9}}>Sin tareas terminadas hoy. Usa “+ Registrar tiempo”.</div>}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'2px 2px 8px'}}>
+        <span style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>Por cargar</span>
+        <button onClick={revisarAgenda} disabled={agLoading} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:agLoading?'default':'pointer'}}>{agLoading?'Leyendo…':'Revisar mi agenda'}</button>
+      </div>
+      {agenda.map(ev=>(
+        <div key={ev.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+          <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.tealBg,color:C.tealText,letterSpacing:'.02em'}}>AGENDA</span>
+          {ev.client_id ? <div onClick={()=>cliOpen(ev.client_id)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(ev.client_id)}</div>
+            : <div style={{margin:'7px 0 4px'}}><input value={agq[ev.id]||''} onChange={e=>setAgq(q=>({...q,[ev.id]:e.target.value}))} placeholder='¿De qué cliente? Buscar…' style={{...inp,height:32,fontSize:12}}/>{(agq[ev.id]||'').trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:3,overflow:'hidden',maxHeight:120,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(agq[ev.id]))).slice(0,6).map(c=><div key={c.id} onClick={()=>{setAgenda(a=>a.map(x=>x.id===ev.id?{...x,client_id:String(c.id)}:x));setAgq(q=>({...q,[ev.id]:''}))}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</div>}
+          <div style={{fontSize:11.5,color:C.muted,lineHeight:1.35}}>{ev.titulo}</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:10,gap:8}}>
+            <div style={step}><span style={stepB} onClick={()=>bumpAg(ev.id,-0.1)}>−</span><b style={{fontSize:14,color:C.accent,padding:'0 4px',minWidth:44,textAlign:'center',fontVariantNumeric:'tabular-nums'}}>{fh(ev.horas)}</b><span style={stepB} onClick={()=>bumpAg(ev.id,0.1)}>+</span></div>
+            <button onClick={()=>registrarAgenda(ev)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'8px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Registrar</button>
+          </div>
+        </div>
+      ))}
+      {(misTareasHoy.length===0 && agenda.length===0) && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'14px',marginBottom:9}}>{agDone?'Nada pendiente por cargar.':'Toca “Revisar mi agenda” para traer tus reuniones, o “+ Registrar tiempo”.'}</div>}
       {misTareasHoy.map(t=>(
         <div key={t.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
           <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.azulBg,color:C.azulInfo,letterSpacing:'.02em'}}>TAREA</span>
