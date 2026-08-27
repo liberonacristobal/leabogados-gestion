@@ -20917,19 +20917,23 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const ventaUFmes = s => s?.moneda==='CLP' ? (parseFloat(s?.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s?.amount_uf)||0)
   const estDe = s => { const u=ventaUFmes(s), t=tarifaUF||3; return u>0&&t>0 ? Math.ceil(u/t) : 0 }   // horas/mes autodefinidas (redondeo hacia arriba)
   const saleDe = cid => permanentes.find(p=>String(p.cid)===String(cid))?.sale
+  // Propuestas descartadas (la app APRENDE): lo que botas no vuelve a proponerse. Clave = source:ref | tarea:id | coord:cid.
+  const [desc,setDesc] = useState(()=>new Set())
+  const descartar = key => { setDesc(s=>{ const n=new Set(s); n.add(key); return n }); setAgenda(a=>a.filter(x=>x.id!==key)); if(DEMO) return; try{ supabase.from('learnings').insert({kind:'horas_descartado',key,value:'1'}) }catch(_){} }
 
   useEffect(()=>{
     if(DEMO){ setHoras(demoData.horas||[]); setTarifaUF(3); setUfAnio(UF_FALLBACK); return }
     let ok=true
     supabase.from('horas').select('*').order('fecha',{ascending:false}).then(({data})=>{ if(ok&&data) setHoras(data) },()=>{})
     supabase.from('learnings').select('key,value').eq('kind','config').in('key',['tarifa_hora_permanente_uf','uf_anio_'+mesActual.slice(0,4)]).then(({data})=>{ if(!ok||!data) return; const t=data.find(r=>r.key==='tarifa_hora_permanente_uf'); const u=data.find(r=>String(r.key).startsWith('uf_anio_')); if(t&&parseFloat(t.value)>0) setTarifaUF(parseFloat(t.value)); if(u&&parseFloat(u.value)>0) setUfAnio(parseFloat(u.value)) },()=>{})
+    supabase.from('learnings').select('key').eq('kind','horas_descartado').then(({data})=>{ if(ok&&data) setDesc(new Set(data.map(r=>r.key))) },()=>{})
     return ()=>{ ok=false }
   },[])
 
   const permanentes = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(esRecurrente(s)&&s.client_id) m[String(s.client_id)]=s }); return Object.entries(m).map(([cid,s])=>({cid,sale:s})) },[sales])
   // Detector de fugas: tareas terminadas en los últimos días (por mí) sin hora cargada aún.
   const misTareasHoy = useMemo(()=>{ const c=new Date(hoy+'T00:00:00'); c.setDate(c.getDate()-3); const cut=c.toISOString().slice(0,10)
-    return (tasks||[]).filter(t=>{ const d=String(t.completed_at||'').slice(0,10); return d>=cut && d<=hoy && (isAssignee(t,me)||t.who===me) }).filter(t=> !horas.some(h=>h.source==='tarea'&&String(h.source_ref)===String(t.id))) }, [tasks,horas,me,hoy])
+    return (tasks||[]).filter(t=>{ const d=String(t.completed_at||'').slice(0,10); return d>=cut && d<=hoy && (isAssignee(t,me)||t.who===me) }).filter(t=> !horas.some(h=>h.source==='tarea'&&String(h.source_ref)===String(t.id)) && !desc.has('tarea:'+t.id)) }, [tasks,horas,me,hoy,desc])
   const misHoras = useMemo(()=> (isAdmin?horas:horas.filter(h=>h.user_name===me)), [horas,isAdmin,me])
   const semana = useMemo(()=>{ const d=new Date(hoy+'T00:00:00'); const dow=(d.getDay()+6)%7; const lun=new Date(d); lun.setDate(d.getDate()-dow); const li=lun.toISOString().slice(0,10); return misHoras.filter(h=> (h.fecha||'')>=li) }, [misHoras,hoy])
   const totSem = semana.reduce((a,h)=>a+(Number(h.horas)||0),0)
@@ -20968,7 +20972,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         try{ const extra=await capturaHorasFuentes(token, clients); props.push(...extra) }catch(_){}
       }
       const conCli = props.map(p=> p.client_id!==undefined ? p : {...p, client_id:matchCli(p)})
-      const nuevos = conCli.filter(p=> !horas.some(h=>h.source===p.source && String(h.source_ref)===String(p.source_ref)))
+      const nuevos = conCli.filter(p=> !desc.has(p.source+':'+p.source_ref) && !horas.some(h=>h.source===p.source && String(h.source_ref)===String(p.source_ref)))
       setAgenda(nuevos.map(p=>({...p, id:p.source+':'+p.source_ref}))); setAgDone(true)
     }catch(e){ appAlert('No se pudo leer tu día: '+(e.message||e)) }
     setAgLoading(false)
@@ -21031,7 +21035,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const delegadasHoy = (()=>{ if(!isAdmin) return []; const c=new Date(hoy+'T00:00:00'); c.setDate(c.getDate()-1); const cut=c.toISOString().slice(0,10)
     const del=(tasks||[]).filter(t=> t.assigned_by===me && t.client_id && String(t.created_at||'').slice(0,10)>=cut && !(isAssignee(t,me)||t.who===me))
     const by={}; del.forEach(t=>{ (by[String(t.client_id)]=by[String(t.client_id)]||[]).push(t) })
-    return Object.entries(by).filter(([cid])=>!horas.some(h=>h.source==='coordinacion'&&String(h.client_id)===cid&&h.fecha===hoy&&h.user_name===me)).map(([cid,ts])=>({cid,n:ts.length})) })()
+    return Object.entries(by).filter(([cid])=> !desc.has('coord:'+cid) && !horas.some(h=>h.source==='coordinacion'&&String(h.client_id)===cid&&h.fecha===hoy&&h.user_name===me)).map(([cid,ts])=>({cid,n:ts.length})) })()
   const registrarCoord = (cid,n) => addHora({ client_id:cid, fecha:hoy, horas:0.2, glosa:`Coordinación · delegación de ${n} tarea${n!==1?'s':''}`, source:'coordinacion', billable:true })
   const consumoMes = cid => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
   // Excedente = inteligencia de repricing (no cobro): $ que no estamos cobrando según la propuesta (valor hora excedente).
@@ -21185,7 +21189,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         <button onClick={revisarAgenda} disabled={agLoading} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:agLoading?'default':'pointer'}}>{agLoading?'Leyendo…':'Revisar mi día'}</button>
       </div>
       {agenda.map(ev=>(
-        <div key={ev.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+        <div key={ev.id} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+          <span onClick={()=>descartar(ev.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.done,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}>×</span>
           {(()=>{ const tg={AGENDA:[C.tealBg,C.tealText],CORREO:[C.azulBg,C.azulInfo],DOCUMENTO:[C.greenBg,C.greenText]}[ev.tag||'AGENDA']||[C.tealBg,C.tealText]; return <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:tg[0],color:tg[1],letterSpacing:'.02em'}}>{ev.tag||'AGENDA'}</span> })()}
           {ev.client_id ? <div onClick={()=>cliOpen(ev.client_id)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(ev.client_id)}</div>
             : <div style={{margin:'7px 0 4px'}}><input value={agq[ev.id]||''} onChange={e=>setAgq(q=>({...q,[ev.id]:e.target.value}))} placeholder='¿De qué cliente? Buscar…' style={{...inp,height:32,fontSize:12}}/>{(agq[ev.id]||'').trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:3,overflow:'hidden',maxHeight:120,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(agq[ev.id]))).slice(0,6).map(c=><div key={c.id} onClick={()=>{setAgenda(a=>a.map(x=>x.id===ev.id?{...x,client_id:String(c.id)}:x));setAgq(q=>({...q,[ev.id]:''}))}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</div>}
@@ -21197,7 +21202,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         </div>
       ))}
       {delegadasHoy.map(d=>(
-        <div key={'co'+d.cid} style={{background:'#FFFDF6',border:`1px solid ${C.soonBg}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+        <div key={'co'+d.cid} style={{position:'relative',background:'#FFFDF6',border:`1px solid ${C.soonBg}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+          <span onClick={()=>descartar('coord:'+d.cid)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.done,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}>×</span>
           <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.ambarBg,color:C.soonText,letterSpacing:'.02em'}}>COORDINACIÓN</span>
           <div onClick={()=>cliOpen(d.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</div>
           <div style={{fontSize:11.5,color:C.muted,lineHeight:1.35}}>Delegaste {d.n} tarea{d.n!==1?'s':''} — coordinación (facturable)</div>
@@ -21206,7 +21212,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       ))}
       {(misTareasHoy.length===0 && agenda.length===0 && delegadasHoy.length===0) && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'14px',marginBottom:9}}>{agDone?'Nada pendiente por registrar.':'Toca “Revisar mi día” para traer tus reuniones, correos y documentos, o registra el tiempo con “+ Registrar tiempo”.'}</div>}
       {misTareasHoy.map(t=>(
-        <div key={t.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+        <div key={t.id} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+          <span onClick={()=>descartar('tarea:'+t.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.done,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}>×</span>
           <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.azulBg,color:C.azulInfo,letterSpacing:'.02em'}}>TAREA</span>
           <div onClick={()=>cliOpen(t.client_id)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(t.client_id)}</div>
           <div style={{fontSize:11.5,color:C.muted,lineHeight:1.35}}>{t.title||'Tarea'}</div>
