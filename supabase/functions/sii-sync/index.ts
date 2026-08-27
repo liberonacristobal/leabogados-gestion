@@ -262,7 +262,9 @@ serve(async (req) => {
       const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
       const hoy = nowChileIso().slice(0, 10)
       const hace7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
-      const { data: bills } = await sb.from('billing').select('amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at').limit(5000)
+      const { data: bills, error: billsErr } = await sb.from('billing').select('amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at').limit(5000)
+      // Si la lectura falla (p. ej. permission denied), abortar: NO enviar un resumen con cifras en $0 falsas.
+      if (billsErr || !bills) return new Response(JSON.stringify({ ok:false, error:'No se pudo leer billing: '+(billsErr?.message||'sin datos') }), { status:500, headers:{ 'Content-Type':'application/json' } })
       // deno-lint-ignore no-explicit-any
       const vivos = (bills || []).filter((b: any) => !b.deleted_at)
       // deno-lint-ignore no-explicit-any

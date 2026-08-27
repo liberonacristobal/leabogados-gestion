@@ -31,10 +31,14 @@ serve(async (req) => {
       if (!clientIds.length) return new Response(JSON.stringify({ error:"sin_acceso" }), { status:403, headers:{ ...CORS, "Content-Type":"application/json" } });
     }
 
-    // ── Datos (solo de esos clientes)
-    const { data: clients } = await sb.from("clients").select("id,name,portal_activo").in("id", clientIds);
-    const { data: proyectos } = await sb.from("proyectos_cartera").select("*").in("cliente_id", clientIds).eq("activo", true);
-    const { data: billing } = await sb.from("billing").select("id,client_id,invoice_no,status,billing_type,concept,amount,issued_at,paid_at,due,deleted_at").in("client_id", clientIds);
+    // ── Datos (solo de esos clientes). Chequear error de cada consulta: si una falla (p. ej. permission
+    // denied de service_role), devolver 500 en vez de mostrarle al cliente un portal vacío como si no tuviera nada.
+    const rC = await sb.from("clients").select("id,name,portal_activo").in("id", clientIds);
+    const rP = await sb.from("proyectos_cartera").select("*").in("cliente_id", clientIds).eq("activo", true);
+    const rB = await sb.from("billing").select("id,client_id,invoice_no,status,billing_type,concept,amount,issued_at,paid_at,due,deleted_at").in("client_id", clientIds);
+    const dbErr = rC.error || rP.error || rB.error;
+    if (dbErr) return new Response(JSON.stringify({ error:"db", detail:dbErr.message }), { status:500, headers:{ ...CORS, "Content-Type":"application/json" } });
+    const clients = rC.data, proyectos = rP.data, billing = rB.data;
 
     const out = (clients||[]).map((c:any) => {
       const asuntos = (proyectos||[]).filter((p:any)=> String(p.cliente_id)===String(c.id) && !p.pausado).map((p:any)=>({

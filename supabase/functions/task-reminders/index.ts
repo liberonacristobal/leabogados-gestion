@@ -43,8 +43,10 @@ serve(async (req) => {
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
     // Activa = status != 'Terminado'. OJO: el status NULL en SQL no pasa un .neq (NULL != x da NULL), así que filtramos en JS.
     const { data: tasksRaw, error: tasksErr } = await sb.from("tasks").select("*");
+    if (tasksErr) return new Response(JSON.stringify({ error: "No se pudo leer tasks: " + tasksErr.message }), { status: 500, headers: { "Content-Type": "application/json" } });
     const tasks = (tasksRaw || []).filter((t: any) => t.status !== "Terminado");
-    const { data: clients } = await sb.from("clients").select("id,name");
+    const { data: clients, error: clientsErr } = await sb.from("clients").select("id,name");
+    if (clientsErr) return new Response(JSON.stringify({ error: "No se pudo leer clients: " + clientsErr.message }), { status: 500, headers: { "Content-Type": "application/json" } });
     const cname = (id: string) => (clients || []).find((c: any) => String(c.id) === String(id))?.name || "";
 
     // Hoy en Chile (date-only). dueDays = días desde hoy hasta el vencimiento.

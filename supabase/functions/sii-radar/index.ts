@@ -102,8 +102,9 @@ serve(async (req) => {
         if (!d?.titulo) continue;
         const numero = String(d.numero || "").trim();
         if (numero) {
-          const { data: ex } = await sb.from("sii_novedades").select("id").eq("tipo", f.tipo).eq("numero", numero).limit(1);
-          if (ex && ex.length) continue; // dedupe por tipo+número
+          const { data: ex, error: exErr } = await sb.from("sii_novedades").select("id").eq("tipo", f.tipo).eq("numero", numero).limit(1);
+          if (exErr) continue;            // si no se puede confirmar el dedupe, NO insertar (evita duplicados del SII)
+          if (ex && ex.length) continue;  // dedupe por tipo+número
         }
         const areas = Array.isArray(d.areas) ? d.areas.filter((a: string) => AREAS.includes(a)) : [];
         const fecha = (d.fecha && /^\d{4}-\d{2}-\d{2}$/.test(d.fecha)) ? d.fecha : null;
