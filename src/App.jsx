@@ -20002,6 +20002,42 @@ async function escanearTareasGmail(clients=[], onProgress){
   return out
 }
 
+// Captura automática de horas (client-side): correos ENVIADOS (trabajo hecho) + documentos de Drive modificados
+// hace poco. Devuelve propuestas {source,source_ref,client_id,glosa,horas,fecha,tag}; el humano confirma/edita (compuerta).
+// Heurística sobria: correo = 0,2 h c/u (agrupa por cliente y día); documento = 0,5 h. Nunca inventa horas ni cliente.
+async function capturaHorasFuentes(token, clients=[]){
+  const norm = s => _normTxt(s)
+  const genericDom = d => /^(gmail|hotmail|outlook|yahoo|icloud|live|me|proton|protonmail)\./.test(d+'.') || ['gmail.com','hotmail.com','outlook.com','yahoo.com','icloud.com','live.com'].includes(d)
+  const activos = clients.filter(c=>c.status!=='Terminado')
+  const cliByEmail = raw => { const em=String(raw||'').toLowerCase().trim(); if(!em.includes('@')||em.endsWith('@leabogados.cl')) return null
+    let c=activos.find(x=>String(x.email||'').toLowerCase()===em); if(c) return String(c.id)
+    const dom=em.split('@')[1]||''; if(dom&&!genericDom(dom)){ c=activos.find(x=>String(x.email||'').toLowerCase().split('@')[1]===dom); if(c) return String(c.id) }
+    return null }
+  const cliByName = txt => { const t=norm(txt); const c=activos.find(x=>{ const n=norm(x.name); return n.length>2 && t.includes(n) }); return c?String(c.id):null }
+  const out=[]
+  // ── Gmail: enviados de los últimos 2 días ──
+  try{
+    const q=encodeURIComponent('in:sent newer_than:2d -in:chats')
+    const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=60`,{headers:{Authorization:'Bearer '+token}})
+    if(r.ok){ const j=await r.json(); const ids=(j.messages||[]).map(m=>m.id).slice(0,60)
+      const msgs=[]
+      const fetchMeta=async id=>{ try{ const rr=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=To&metadataHeaders=Subject`,{headers:{Authorization:'Bearer '+token}}); if(!rr.ok) return; const jj=await rr.json(); const H={}; (jj.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value); const fecha=jj.internalDate?new Date(Number(jj.internalDate)).toLocaleDateString('en-CA',{timeZone:'America/Santiago'}):null; const dest=(H['to']||'').split(',').map(s=>{const m=s.match(/<(.+?)>/);return (m?m[1]:s).trim()}).filter(Boolean); let cid=null; for(const d of dest){ cid=cliByEmail(d); if(cid) break } msgs.push({id,cid,subject:H['subject']||'(sin asunto)',fecha}) }catch(_){}}
+      for(let i=0;i<ids.length;i+=8){ await Promise.all(ids.slice(i,i+8).map(fetchMeta)) }
+      const grupos={}
+      msgs.forEach(m=>{ if(!m.cid||!m.fecha) return; const k=m.cid+'|'+m.fecha; (grupos[k]=grupos[k]||{cid:m.cid,fecha:m.fecha,subs:[],ids:[]}); grupos[k].subs.push(m.subject); grupos[k].ids.push(m.id) })
+      Object.values(grupos).forEach(g=>{ const n=g.ids.length; const horas=Math.min(1.5,Math.max(0.2,Math.round(n*0.2*10)/10)); out.push({ source:'gmail', source_ref:g.ids.sort().join(','), client_id:g.cid, tag:'CORREO', titulo:n>1?`${n} correos · ${g.subs[0]}`:g.subs[0], glosa:n>1?`${n} correos enviados`:('Correo: '+g.subs[0]), horas, fecha:g.fecha }) })
+    }
+  }catch(_){}
+  // ── Drive: documentos modificados en las últimas 48 h (donde puedo escribir) ──
+  try{
+    const cut=new Date(Date.now()-2*864e5).toISOString()
+    const dq=encodeURIComponent(`modifiedTime > '${cut}' and trashed=false and mimeType != 'application/vnd.google-apps.folder' and 'me' in writers`)
+    const data=await driveGet(token,`https://www.googleapis.com/drive/v3/files?q=${dq}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=40&supportsAllDrives=true&includeItemsFromAllDrives=true`)
+    ;(data?.files||[]).forEach(f=>{ const cid=cliByName(f.name); const fecha=String(f.modifiedTime||'').slice(0,10); if(!fecha) return; out.push({ source:'drive', source_ref:f.id, client_id:cid, tag:'DOCUMENTO', titulo:f.name, glosa:'Documento: '+f.name, horas:0.5, fecha }) })
+  }catch(_){}
+  return out
+}
+
 // Fase 2B — Escáner Gmail → novedades de CARTERA (client-side, tu buzón). La IA cruza correos con proyectos activos
 // y propone: (update) nuevo "en qué está" de un proyecto; (nuevo) proyecto para un cliente sin uno. Compuerta humana.
 async function escanearCarteraGmail(clients=[], proyectos=[], onProgress){
@@ -20705,28 +20741,34 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const [agenda,setAgenda] = useState([]); const [agLoading,setAgLoading]=useState(false); const [agDone,setAgDone]=useState(false); const [agq,setAgq]=useState({})
   const stripLegal = s => _normTxt(s).replace(/\b(spa|s a|ltda|limitada|sa|eirl|e i r l|y cia|cia|inversiones|abogados)\b/g,'').replace(/\s+/g,' ').trim()
   const matchCli = ev => { const t=stripLegal(ev.titulo||''); const byName=clients.find(c=>{ const n=stripLegal(c.name); return c.status!=='Terminado'&&n.length>2&&t.includes(n) }); if(byName) return String(byName.id); const doms=(ev.asistentes||[]).map(a=>String(a).split('@')[1]||'').filter(Boolean); const byMail=clients.find(c=>c.email&&doms.includes(String(c.email).split('@')[1]||'')); return byMail?String(byMail.id):null }
+  // "Revisar mi día": junta agenda (calendario) + correos enviados (Gmail) + documentos recientes (Drive) → propuestas de horas.
   async function revisarAgenda(){
     setAgLoading(true); setAgDone(false)
     try{
-      let events=[]
-      if(DEMO){ events=[
-        {id:'ev1',titulo:'Reunión asesoría mensual — Comercial Andes SpA',fecha:hoy,horas:1,asistentes:[]},
-        {id:'ev2',titulo:'Audiencia preparatoria Tech Araucanía',fecha:hoy,horas:2,asistentes:[]},
-        {id:'ev3',titulo:'Almuerzo equipo',fecha:hoy,horas:1,asistentes:[]},
+      let props=[]
+      if(DEMO){ props=[
+        {source:'calendar',source_ref:'ev1',tag:'AGENDA',titulo:'Reunión asesoría mensual — Comercial Andes SpA',fecha:hoy,horas:1,asistentes:[]},
+        {source:'calendar',source_ref:'ev2',tag:'AGENDA',titulo:'Audiencia preparatoria Tech Araucanía',fecha:hoy,horas:2,asistentes:[]},
+        {source:'gmail',source_ref:'g1',tag:'CORREO',titulo:'3 correos · Contrato de arriendo',glosa:'3 correos enviados',fecha:hoy,horas:0.6,client_id:'c1'},
+        {source:'drive',source_ref:'d1',tag:'DOCUMENTO',titulo:'Minuta societaria Tech Araucanía.docx',glosa:'Documento: Minuta societaria Tech Araucanía.docx',fecha:hoy,horas:0.5,client_id:'c4'},
       ] }
       else {
-        const token=await driveToken(); if(!token){ appAlert('Para leer tu agenda, cierra sesión y vuelve a entrar con tu cuenta de Google.'); setAgLoading(false); return }
-        const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(new Date(hoy+'T00:00:00').toISOString())}&timeMax=${encodeURIComponent(new Date(hoy+'T23:59:59').toISOString())}&singleEvents=true&orderBy=startTime`
-        const r=await fetch(url,{headers:{Authorization:'Bearer '+token}})
-        if(!r.ok){ appAlert(r.status===401?'Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.':'No pude leer el calendario ('+r.status+').'); setAgLoading(false); return }
-        const j=await r.json()
-        events=(j.items||[]).filter(e=>e.status!=='cancelled'&&(e.summary||'').trim()&&e.start?.dateTime&&e.end?.dateTime).map(e=>({ id:e.id, titulo:e.summary, fecha:String(e.start.dateTime||'').slice(0,10), horas:Math.max(0.1,Math.round((new Date(e.end.dateTime)-new Date(e.start.dateTime))/360000)/10), asistentes:(e.attendees||[]).map(a=>a.email).filter(Boolean) }))
+        const token=await driveToken(); if(!token){ appAlert('Para leer tu día, cierra sesión y vuelve a entrar con tu cuenta de Google.'); setAgLoading(false); return }
+        try{
+          const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(new Date(hoy+'T00:00:00').toISOString())}&timeMax=${encodeURIComponent(new Date(hoy+'T23:59:59').toISOString())}&singleEvents=true&orderBy=startTime`
+          const r=await fetch(url,{headers:{Authorization:'Bearer '+token}})
+          if(r.status===401){ appAlert('Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.'); setAgLoading(false); return }
+          if(r.ok){ const j=await r.json(); (j.items||[]).filter(e=>e.status!=='cancelled'&&(e.summary||'').trim()&&e.start?.dateTime&&e.end?.dateTime).forEach(e=>props.push({ source:'calendar', source_ref:e.id, tag:'AGENDA', titulo:e.summary, fecha:String(e.start.dateTime||'').slice(0,10), horas:Math.max(0.1,Math.round((new Date(e.end.dateTime)-new Date(e.start.dateTime))/360000)/10), asistentes:(e.attendees||[]).map(a=>a.email).filter(Boolean) })) }
+        }catch(_){}
+        try{ const extra=await capturaHorasFuentes(token, clients); props.push(...extra) }catch(_){}
       }
-      setAgenda(events.filter(ev=>!horas.some(h=>h.source==='calendar'&&String(h.source_ref)===String(ev.id))).map(ev=>({...ev,client_id:matchCli(ev)}))); setAgDone(true)
-    }catch(e){ appAlert('No se pudo leer la agenda: '+(e.message||e)) }
+      const conCli = props.map(p=> p.client_id!==undefined ? p : {...p, client_id:matchCli(p)})
+      const nuevos = conCli.filter(p=> !horas.some(h=>h.source===p.source && String(h.source_ref)===String(p.source_ref)))
+      setAgenda(nuevos.map(p=>({...p, id:p.source+':'+p.source_ref}))); setAgDone(true)
+    }catch(e){ appAlert('No se pudo leer tu día: '+(e.message||e)) }
     setAgLoading(false)
   }
-  const registrarAgenda = ev => { if(!ev.client_id){ appAlert('Elige el cliente del evento.'); return } addHora({ client_id:ev.client_id, fecha:ev.fecha||hoy, horas:ev.horas||1, glosa:ev.titulo, source:'calendar', source_ref:String(ev.id) }); setAgenda(a=>a.filter(x=>x.id!==ev.id)) }
+  const registrarAgenda = ev => { if(!ev.client_id){ appAlert('Elige el cliente.'); return } addHora({ client_id:ev.client_id, fecha:ev.fecha||hoy, horas:ev.horas||0.2, glosa:ev.glosa||ev.titulo, source:ev.source||'calendar', source_ref:String(ev.source_ref||ev.id) }); setAgenda(a=>a.filter(x=>x.id!==ev.id)) }
   const bumpAg = (id,delta) => setAgenda(a=>a.map(ev=>ev.id===id?{...ev,horas:Math.max(0.1,Math.round(((ev.horas||1)+delta)*10)/10)}:ev))
   // Fase 4 (INTERNA, formato oficina): panel de equipo + rentabilidad YTD. Solo admin.
   const [vista,setVista] = useState('mias')     // mias | equipo | ytd
@@ -20935,11 +20977,11 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       {/* ¿Qué hiciste hoy? */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'2px 2px 8px'}}>
         <span style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>Por registrar</span>
-        <button onClick={revisarAgenda} disabled={agLoading} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:agLoading?'default':'pointer'}}>{agLoading?'Leyendo…':'Revisar mi agenda'}</button>
+        <button onClick={revisarAgenda} disabled={agLoading} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:agLoading?'default':'pointer'}}>{agLoading?'Leyendo…':'Revisar mi día'}</button>
       </div>
       {agenda.map(ev=>(
         <div key={ev.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
-          <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.tealBg,color:C.tealText,letterSpacing:'.02em'}}>AGENDA</span>
+          {(()=>{ const tg={AGENDA:[C.tealBg,C.tealText],CORREO:[C.azulBg,C.azulInfo],DOCUMENTO:[C.greenBg,C.greenText]}[ev.tag||'AGENDA']||[C.tealBg,C.tealText]; return <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:tg[0],color:tg[1],letterSpacing:'.02em'}}>{ev.tag||'AGENDA'}</span> })()}
           {ev.client_id ? <div onClick={()=>cliOpen(ev.client_id)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(ev.client_id)}</div>
             : <div style={{margin:'7px 0 4px'}}><input value={agq[ev.id]||''} onChange={e=>setAgq(q=>({...q,[ev.id]:e.target.value}))} placeholder='¿De qué cliente? Buscar…' style={{...inp,height:32,fontSize:12}}/>{(agq[ev.id]||'').trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:3,overflow:'hidden',maxHeight:120,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(agq[ev.id]))).slice(0,6).map(c=><div key={c.id} onClick={()=>{setAgenda(a=>a.map(x=>x.id===ev.id?{...x,client_id:String(c.id)}:x));setAgq(q=>({...q,[ev.id]:''}))}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</div>}
           <div style={{fontSize:11.5,color:C.muted,lineHeight:1.35}}>{ev.titulo}</div>
@@ -20957,7 +20999,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',marginTop:10,gap:9}}><span style={{fontSize:11,color:C.done}}>0,2 h</span><button onClick={()=>registrarCoord(d.cid,d.n)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'8px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Registrar</button></div>
         </div>
       ))}
-      {(misTareasHoy.length===0 && agenda.length===0 && delegadasHoy.length===0) && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'14px',marginBottom:9}}>{agDone?'Nada pendiente por registrar.':'Revisa tu agenda para traer tus reuniones, o registra el tiempo con “+ Registrar tiempo”.'}</div>}
+      {(misTareasHoy.length===0 && agenda.length===0 && delegadasHoy.length===0) && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'14px',marginBottom:9}}>{agDone?'Nada pendiente por registrar.':'Toca “Revisar mi día” para traer tus reuniones, correos y documentos, o registra el tiempo con “+ Registrar tiempo”.'}</div>}
       {misTareasHoy.map(t=>(
         <div key={t.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
           <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.azulBg,color:C.azulInfo,letterSpacing:'.02em'}}>TAREA</span>
