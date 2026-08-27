@@ -20523,7 +20523,7 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
   )
 }
 
-function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
   // Motor de movimiento = FUENTE ÚNICA global carteraMovimiento (definida a nivel módulo; la comparte el Inicio).
@@ -20613,6 +20613,35 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
     return out.slice(0,40)
   }
   const clickEvento = e => { if(!e.ref) return; if(e.ref.kind==='task'){ const t=(tasks||[]).find(x=>String(x.id)===String(e.ref.id)); if(t&&onPreviewTask) onPreviewTask(t) } else if(e.ref.kind==='ficha'&&onOpenClientFicha){ onOpenClientFicha(e.ref.id) } }
+  // ── Rentabilidad (fuente única): Margen = Honorarios − Costos de terceros − (horas × valor hora).
+  const [valorHora,setValorHora] = useState({ general:4.5, permanente:2 })
+  const [sugEsf,setSugEsf] = useState({})
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','config').in('key',['valor_hora_uf','valor_hora_permanente_uf']).then(({data})=>{ if(!data) return; const g=data.find(r=>r.key==='valor_hora_uf'), pm=data.find(r=>r.key==='valor_hora_permanente_uf'); setValorHora(v=>({ general:g?parseFloat(g.value)||v.general:v.general, permanente:pm?parseFloat(pm.value)||v.permanente:v.permanente })) },()=>{}) },[])
+  const saveVH = async (campo,val) => { const v=parseFloat(val); if(!(v>0)) return; setValorHora(o=>({...o,[campo]:v})); if(DEMO) return; const key=campo==='general'?'valor_hora_uf':'valor_hora_permanente_uf'; try{ await supabase.from('learnings').delete().eq('kind','config').eq('key',key); await supabase.from('learnings').insert({kind:'config',key,value:String(v)}) }catch(_){} }
+  const esPermanente = (p,s) => (s?.cobro_type==='mensual') || /permanente/i.test((p.nombre_proyecto||'')+' '+(s?.title||''))
+  const rentabilidadDe = p => {
+    const s = saleDe(p); if(!s) return null
+    const uf = readUFCache()?.value || parseFloat(s.uf_value) || 0
+    const moneda = s.moneda||'UF'
+    const honor = moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : (parseFloat(s.amount_uf)||0)*uf
+    const terc = (terceros||[]).filter(t=>String(t.sale_id)===String(p.sale_id)).reduce((a,t)=>a+(t.monto||0),0)
+    const perm = esPermanente(p,s); const vh = perm?valorHora.permanente:valorHora.general
+    const horas = parseFloat(p.esfuerzo_horas)||0
+    const esf = horas*vh*uf
+    const margen = honor - terc - esf
+    return { honor, terc, esf, horas, vh, perm, margen, pct: honor>0?margen/honor:null, uf }
+  }
+  const sugerirEsfuerzo = async (p) => {
+    setSugEsf(o=>({...o,[p.id]:'busy'}))
+    const s = saleDe(p); const area = s?.area||p.area||'General'
+    let previo=null
+    try{ const {data}=await supabase.from('learnings').select('value').eq('kind','esfuerzo_area').eq('key',area).maybeSingle(); if(data?.value) previo=parseFloat(data.value) }catch(_){}
+    const prompt = `Eres socio de un estudio de abogados chileno. Estima en CUÁNTAS HORAS de trabajo total se hace este encargo, de principio a fin. Devuelve SOLO un número entero de horas, nada más.\n\nEncargo: "${p.nombre_proyecto||s?.title||''}"\nÁrea: ${area}\nHonorario: ${s?(s.moneda==='CLP'?fmt(s.amount_clp):`UF ${s.amount_uf}`):'—'}${previo?`\nEn casos anteriores de esta área estimaste alrededor de ${previo} horas.`:''}`
+    try{ const data=await claudeCall({model:'claude-opus-4-8',max_tokens:20,messages:[{role:'user',content:prompt}]}); const n=parseInt(((data?.content?.[0]?.text||'').match(/\d+/)||[])[0])
+      if(n>0){ updP(p,{esfuerzo_horas:n}); try{ await supabase.from('learnings').delete().eq('kind','esfuerzo_area').eq('key',area); await supabase.from('learnings').insert({kind:'esfuerzo_area',key:area,value:String(n)}) }catch(_){} }
+    }catch(e){ appAlert('No se pudo sugerir: '+(e?.message||'reintenta')) }
+    setSugEsf(o=>({...o,[p.id]:null}))
+  }
   // Resumen del proyecto de un vistazo (rule-based, datos reales): etapa · tareas abiertas · estado de facturación.
   const resumenDe = p => {
     const bMine = (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && (String(b.client_id)===String(p.cliente_id) || (p.sale_id&&String(b.sale_id)===String(p.sale_id))))
@@ -20827,6 +20856,24 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
                 <input type='date' value={p.plazo||''} onChange={e=>patch(p,{plazo:e.target.value||null})} style={inp}/>
                 <button onClick={()=>avanzar(p)} disabled={(p.etapa_idx||0)>=5} style={{ fontSize:11, fontWeight:600, color:(p.etapa_idx||0)>=5?C.grisText:C.accent, background:'none', border:'none', cursor:(p.etapa_idx||0)>=5?'default':'pointer', padding:0, marginLeft:'auto' }}>→ Avanzar etapa</button>
               </div>
+              {/* RENTABILIDAD */}
+              {(()=>{ const r=rentabilidadDe(p); if(!r) return null; const busy=sugEsf[p.id]==='busy'
+                return <div style={{ border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10, background:'#fff' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:r.horas?7:0, flexWrap:'wrap', gap:6 }}>
+                    <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Rentabilidad</span>
+                    <span style={{ fontSize:11, color:C.muted, display:'inline-flex', alignItems:'center', gap:4 }}>Esfuerzo
+                      <input type='number' value={p.esfuerzo_horas??''} onChange={e=>updP(p,{esfuerzo_horas:e.target.value===''?null:parseFloat(e.target.value)})} placeholder='—' style={{ width:46, padding:'2px 5px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/>h
+                      <span onClick={()=>!busy&&sugerirEsfuerzo(p)} style={{ marginLeft:4, color:C.azulInfo, fontWeight:600, cursor:busy?'default':'pointer' }}>{busy?'…':'Sugerir IA'}</span>
+                    </span>
+                  </div>
+                  {p.esfuerzo_horas ? <>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5, padding:'2px 0' }}><span style={{ color:C.muted }}>Honorarios</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.honor)}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5, padding:'2px 0' }}><span style={{ color:C.muted }}>− Terceros</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.terc)}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5, padding:'2px 0' }}><span style={{ color:C.muted }}>− Esfuerzo · {r.horas}h × {r.vh} UF{r.perm?' (perm.)':''}</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.esf)}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700, padding:'6px 0 0', marginTop:3, borderTop:`1px solid ${C.border}`, color:r.margen>=0?C.greenText:C.overdue }}><span>Margen</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.margen)}{r.pct!=null?` · ${Math.round(r.pct*100)}%`:''}</span></div>
+                  </> : <div style={{ fontSize:11, color:C.grisText }}>Ingresa las horas (o toca “Sugerir IA”) para ver el margen.</div>}
+                </div>
+              })()}
               {p.alcance&&<div style={{ fontSize:12, color:C.text, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{p.alcance}</div>}
               {tks.length>0&&<div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 10px', marginBottom:12 }}>{tks.slice(0,6).map((t,ti)=>{ const d=daysLeft(t.due); const col=d==null?C.muted:d<0?'#A32D2D':d<=2?'#854F0B':C.muted; return (
                 <div key={t.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'6px 0', borderTop:ti?`1px solid ${C.border}`:'none' }}>
@@ -20904,6 +20951,15 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
           <button onClick={toggleSemanal} title={semanalOn?'Apagar':'Encender'} style={{ width:38, height:22, borderRadius:12, border:'none', background:semanalOn?C.normal:C.done, position:'relative', cursor:'pointer', flexShrink:0, padding:0 }}>
             <span style={{ position:'absolute', top:2, left:semanalOn?18:2, width:18, height:18, borderRadius:'50%', background:'#fff', transition:'left .15s' }}/>
           </button>
+        </div>
+      )}
+
+      {esAdmin&&(
+        <div style={{ display:'flex', alignItems:'center', gap:7, fontSize:11, color:C.muted, marginBottom:10, flexWrap:'wrap' }}>
+          <span style={{ fontWeight:600, color:C.accent }}>Valor hora (para el margen)</span>
+          <input key={'vhg'+valorHora.general} type='number' step='0.5' defaultValue={valorHora.general} onBlur={e=>saveVH('general',e.target.value)} style={{ width:52, padding:'3px 6px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/> UF general
+          <span style={{ color:C.done }}>·</span>
+          <input key={'vhp'+valorHora.permanente} type='number' step='0.5' defaultValue={valorHora.permanente} onBlur={e=>saveVH('permanente',e.target.value)} style={{ width:52, padding:'3px 6px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/> UF asesorías permanentes
         </div>
       )}
 
@@ -25293,7 +25349,7 @@ export default function App() {
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
-            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
