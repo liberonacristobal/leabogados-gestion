@@ -20656,7 +20656,9 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const [mf,setMf] = useState({client_id:'',fecha:'',horas:1,glosa:'',billable:true})
   const [dur,setDur] = useState({})
   const [cfgOpen,setCfgOpen] = useState(null)
-  const [cfgF,setCfgF] = useState({horas_estimadas:'',tarifa_mensual:''})
+  const [cfgF,setCfgF] = useState({horas_estimadas:'',tarifa_mensual:'',valor_hora_excedente_uf:''})
+  const [excCobros,setExcCobros] = useState([])   // puente excedente→facturar (horas_excedente_cobros)
+  const ufHoy = useUF().uf || UF_FALLBACK
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const mesActual = hoy.slice(0,7)
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
@@ -20665,10 +20667,11 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const retDe = cid => retainers.find(r=>String(r.client_id)===String(cid))
 
   useEffect(()=>{
-    if(DEMO){ setHoras(demoData.horas||[]); setRetainers(demoData.retainers||[]); return }
+    if(DEMO){ setHoras(demoData.horas||[]); setRetainers(demoData.retainers||[]); setExcCobros(demoData.excedente_cobros||[]); return }
     let ok=true
     supabase.from('horas').select('*').order('fecha',{ascending:false}).then(({data})=>{ if(ok&&data) setHoras(data) },()=>{})
     supabase.from('retainers').select('*').then(({data})=>{ if(ok&&data) setRetainers(data) },()=>{})
+    supabase.from('horas_excedente_cobros').select('*').then(({data})=>{ if(ok&&data) setExcCobros(data) },()=>{})
     return ()=>{ ok=false }
   },[])
 
@@ -20730,6 +20733,22 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const horasPeriodo = name => horas.filter(h=> h.user_name===name && (mView==='mes' ? String(h.fecha||'').startsWith(mesActual) : (h.fecha||'')>=lunISO)).reduce((a,h)=>a+(Number(h.horas)||0),0)
   const bookingDe = name => (tasks||[]).filter(t=> t.status!=='Terminado' && (isAssignee(t,name)||t.who===name)).length
   const metaPeriodo = name => { const w=Number(metas[name])||0; return mView==='mes'? Math.round(w*4.33) : w }
+  // Vista calendario del equipo (pantalla 8): grilla semana × persona con carga (horas + tareas del día).
+  const [eqView,setEqView] = useState('carga')   // carga (barras) | agenda (calendario)
+  const [wkOff,setWkOff] = useState(0)            // semanas de desplazamiento
+  const [cellSel,setCellSel] = useState(null)     // {name,iso} para detalle
+  // Interruptor del recordatorio de viernes por correo (cron horas-recordatorio). 'off' · 'on' (equipo) · iniciales.
+  const [recVal,setRecVal] = useState('off'); const [recMsg,setRecMsg] = useState('')
+  const recOn = recVal!=='off'
+  useEffect(()=>{ if(DEMO){ setRecVal('on'); return } supabase.from('learnings').select('value').eq('kind','config').eq('key','recordatorio_horas').maybeSingle().then(({data})=>{ setRecVal((data?.value||'off').trim()||'off') },()=>{}) },[])
+  const setRec = async v => { const prev=recVal; setRecVal(v); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','config').eq('key','recordatorio_horas'); await supabase.from('learnings').insert({kind:'config',key:'recordatorio_horas',value:v}) }catch(e){ setRecVal(prev); appAlert('No se pudo guardar: '+e.message) } }
+  const enviarPruebaRec = async () => { setRecMsg('Enviando…'); if(DEMO){ setRecMsg('En demo no se envía.'); setTimeout(()=>setRecMsg(''),4000); return }
+    try{ const {data:{session}}=await supabase.auth.getSession(); const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/horas-recordatorio',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(session?.access_token||''),'apikey':supabase.supabaseKey},body:JSON.stringify({})}); const j=await res.json().catch(()=>({})); if(!res.ok) throw new Error(j.error||('Error '+res.status)); setRecMsg('Listo — revisa tu correo.') }catch(e){ setRecMsg('No se pudo: '+(e?.message||'reintenta')) }
+    setTimeout(()=>setRecMsg(''),6000) }
+  const weekMon = (()=>{ const d=new Date(lunISO+'T00:00:00'); d.setDate(d.getDate()+wkOff*7); return d.toISOString().slice(0,10) })()
+  const weekDias = (()=>{ const d=new Date(weekMon+'T00:00:00'); return [0,1,2,3,4].map(i=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+i).toISOString().slice(0,10)) })()
+  const horasDiaDe = (name,iso) => horas.filter(h=>h.user_name===name && h.fecha===iso).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  const tareasDiaDe = (name,iso) => (tasks||[]).filter(t=>t.due===iso && t.status!=='Terminado' && (isAssignee(t,name)||t.who===name))
   const anioAct = mesActual.slice(0,4)
   const mesesYTD = (new Date().getMonth()+1)
   const ytdData = permanentes.map(({cid})=>{ const r=retDe(cid); const est=(Number(r?.horas_estimadas)||0)*mesesYTD; const cons=horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct).reduce((a,h)=>a+(Number(h.horas)||0),0); return { cid, est, cons, over:cons>est, sinCfg:!r } })
@@ -20753,11 +20772,21 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const registrarCoord = (cid,n) => addHora({ client_id:cid, fecha:hoy, horas:0.2, glosa:`Coordinación · delegación de ${n} tarea${n!==1?'s':''}`, source:'coordinacion', billable:true })
   const consumoMes = cid => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
   async function guardarCfg(cid,sale_id){
-    const est=Number(cfgF.horas_estimadas)||0, tar=Number(cfgF.tarifa_mensual)||0, ex=retDe(cid)
-    if(DEMO){ setRetainers(p=>[...p.filter(r=>String(r.client_id)!==String(cid)),{id:ex?.id||'r'+Date.now(),client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar}]); setCfgOpen(null); return }
-    if(ex) await supabase.from('retainers').update({horas_estimadas:est,tarifa_mensual:tar}).eq('id',ex.id)
-    else await supabase.from('retainers').insert({client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar})
+    const est=Number(cfgF.horas_estimadas)||0, tar=Number(cfgF.tarifa_mensual)||0, vex=Number(cfgF.valor_hora_excedente_uf)||0, ex=retDe(cid)
+    if(DEMO){ setRetainers(p=>[...p.filter(r=>String(r.client_id)!==String(cid)),{id:ex?.id||'r'+Date.now(),client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar,valor_hora_excedente_uf:vex}]); setCfgOpen(null); return }
+    if(ex) await supabase.from('retainers').update({horas_estimadas:est,tarifa_mensual:tar,valor_hora_excedente_uf:vex}).eq('id',ex.id)
+    else await supabase.from('retainers').insert({client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar,valor_hora_excedente_uf:vex})
     const {data}=await supabase.from('retainers').select('*'); if(data) setRetainers(data); setCfgOpen(null)
+  }
+  // Puente excedente→facturar: registra el exceso del mes como cobro por facturar (según la propuesta = valor hora excedente).
+  const excDeMes = (cid,mes) => excCobros.find(e=>String(e.client_id)===String(cid)&&e.periodo===mes)
+  async function marcarExcedente(cid,sale_id,exceso,valorUF){
+    const mes=mesActual, monto=Math.round(exceso*valorUF*ufHoy)
+    const row={ client_id:cid, sale_id:sale_id||null, periodo:mes, horas_exceso:exceso, valor_hora_uf:valorUF, uf_valor:ufHoy, monto, estado:'por_facturar', created_by:me }
+    if(DEMO){ setExcCobros(p=>[...p.filter(e=>!(String(e.client_id)===String(cid)&&e.periodo===mes)),{id:'ex'+Date.now(),created_at:new Date().toISOString(),...row}]); return }
+    const {data,error}=await supabase.from('horas_excedente_cobros').insert(row).select().single()
+    if(error||!data){ appAlert('No se pudo marcar: '+(error?.message||'')); return }
+    setExcCobros(p=>[...p.filter(e=>!(String(e.client_id)===String(cid)&&e.periodo===mes)),data])
   }
   const cliOpen = cid => onOpenClientFicha&&onOpenClientFicha(cid)
   // Reporte de horas al cliente (Fase 2). Solo el socio (admin) reporta = visado.
@@ -20798,7 +20827,10 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       {isAdmin && <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:14}}>{[['mias','Mis horas'],['equipo','Equipo'],['ytd','Rentabilidad']].map(([k,l])=><button key={k} onClick={()=>setVista(k)} style={{fontSize:11,fontWeight:700,padding:'5px 13px',border:'none',background:vista===k?C.accent:'#fff',color:vista===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>}
 
       {isAdmin && vista==='equipo' && <>
-        <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:12}}>{[['semana','Semana'],['mes','Mes']].map(([k,l])=><button key={k} onClick={()=>setMView(k)} style={{fontSize:11,fontWeight:700,padding:'5px 14px',border:'none',background:mView===k?C.accent:'#fff',color:mView===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>
+        <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:12}}>{[['carga','Carga'],['agenda','Calendario']].map(([k,l])=><button key={k} onClick={()=>setEqView(k)} style={{fontSize:11,fontWeight:700,padding:'5px 14px',border:'none',background:eqView===k?C.accent:'#fff',color:eqView===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>
+
+        {eqView==='carga' && <>
+        <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:12,marginLeft:8}}>{[['semana','Semana'],['mes','Mes']].map(([k,l])=><button key={k} onClick={()=>setMView(k)} style={{fontSize:11,fontWeight:700,padding:'5px 14px',border:'none',background:mView===k?C.accent:'#fff',color:mView===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>
         <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'0 2px 8px'}}>Horas reales vs meta · {mView==='mes'?'mes':'semana'}</div>
         {EQUIPO.map(name=>{ const real=horasPeriodo(name); const meta=metaPeriodo(name); const pct=meta>0?Math.round(real/meta*100):0; const book=bookingDe(name); const col=personChip(name).color; const util=pct>100?C.overdue:pct>=70?C.normal:'#EF9F27'; return (
           <div key={name} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginBottom:8}}>
@@ -20813,6 +20845,53 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           </div>
         )})}
         {(()=>{ const libres=EQUIPO.filter(n=>{ const m=metaPeriodo(n); return m>0 && horasPeriodo(n)/m < 0.7 }); if(!libres.length) return null; return <div style={{background:C.greenBg,borderRadius:11,padding:'11px 12px',fontSize:11.5,color:C.greenText,lineHeight:1.5,marginTop:2}}><b style={{color:C.accent}}>{libres.join(', ')}</b> con holgura {mView==='mes'?'este mes':'esta semana'}. Buen momento para ofrecer más al cliente o tomar un nuevo encargo.</div> })()}
+        </>}
+
+        {eqView==='agenda' && (()=>{ const MD=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return <>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <button onClick={()=>setWkOff(o=>o-1)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,width:30,height:30,fontSize:15,color:C.muted,cursor:'pointer'}}>‹</button>
+            <span style={{fontSize:11.5,fontWeight:700,color:C.accent}}>{wkOff===0?'Esta semana':wkOff===1?'Próxima semana':wkOff===-1?'Semana pasada':`Semana del ${new Date(weekMon+'T00:00').getDate()} ${MD[new Date(weekMon+'T00:00').getMonth()]}`}</span>
+            <button onClick={()=>setWkOff(o=>o+1)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,width:30,height:30,fontSize:15,color:C.muted,cursor:'pointer'}}>›</button>
+          </div>
+          <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}><div style={{minWidth:420}}>
+            <div style={{display:'grid',gridTemplateColumns:'58px repeat(5,1fr)',gap:3,marginBottom:3}}>
+              <div/>{weekDias.map(iso=>{ const dd=new Date(iso+'T00:00'); const isHoy=iso===hoy; return <div key={iso} style={{textAlign:'center',fontSize:8.5,fontWeight:700,color:isHoy?C.azulInfo:C.done,textTransform:'uppercase'}}>{['lun','mar','mié','jue','vie'][weekDias.indexOf(iso)]}<div style={{fontSize:11,color:isHoy?C.azulInfo:C.muted}}>{dd.getDate()}</div></div> })}
+            </div>
+            {EQUIPO.map(name=>{ const col=personChip(name).color; return (
+              <div key={name} style={{display:'grid',gridTemplateColumns:'58px repeat(5,1fr)',gap:3,marginBottom:3,alignItems:'stretch'}}>
+                <div style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:20,height:20,borderRadius:'50%',background:col,color:'#fff',fontSize:8.5,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{INICIALES_RESP[name]||name.slice(0,2)}</span></div>
+                {weekDias.map(iso=>{ const h=horasDiaDe(name,iso); const tk=tareasDiaDe(name,iso); const load=h+tk.length*1.5; const bg=load<=0?'#fff':load<3?C.greenBg:load<6?C.ambarBg:C.overdueBg; const tc=load<3?C.greenText:load<6?C.soonText:C.overdueText; const sel=cellSel&&cellSel.name===name&&cellSel.iso===iso; const empty=h<=0&&tk.length===0; return (
+                  <div key={iso} onClick={()=>!empty&&setCellSel(sel?null:{name,iso})} style={{background:bg,border:`1px solid ${sel?C.accent:(iso===hoy?C.azulInfo+'55':C.border)}`,borderRadius:7,minHeight:38,padding:'4px 2px',textAlign:'center',cursor:empty?'default':'pointer'}}>
+                    {h>0&&<div style={{fontSize:11,fontWeight:700,color:tc,fontVariantNumeric:'tabular-nums'}}>{fh(h).replace(' h','')}</div>}
+                    {tk.length>0&&<div style={{fontSize:8,color:h>0?tc:C.soonText,marginTop:h>0?0:6}}>{tk.length} plazo{tk.length!==1?'s':''}</div>}
+                    {empty&&<div style={{fontSize:11,color:'#C4CDD2',marginTop:6}}>·</div>}
+                  </div>
+                )})}
+              </div>
+            )})}
+          </div></div>
+          {cellSel && (()=>{ const h=horas.filter(x=>x.user_name===cellSel.name&&x.fecha===cellSel.iso); const tk=tareasDiaDe(cellSel.name,cellSel.iso); const dd=new Date(cellSel.iso+'T00:00'); return (
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginTop:10}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:7}}>{cellSel.name} · {['lun','mar','mié','jue','vie','sáb','dom'][(dd.getDay()+6)%7]} {dd.getDate()} {MD[dd.getMonth()]}</div>
+              {h.map(x=><div key={x.id} onClick={()=>cliOpen(x.client_id)} style={{display:'flex',justifyContent:'space-between',fontSize:11.5,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:onOpenClientFicha?'pointer':'default'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.text}}>{cn(x.client_id)}</b><span style={{color:C.done}}>{x.glosa?' · '+x.glosa:''}</span></span><span style={{color:C.accent,fontWeight:700,flexShrink:0,marginLeft:8}}>{fh(x.horas)}</span></div>)}
+              {tk.map(t=><div key={t.id} onClick={()=>cliOpen(t.client_id)} style={{display:'flex',justifyContent:'space-between',fontSize:11.5,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:onOpenClientFicha?'pointer':'default'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{fontSize:8,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:5,padding:'1px 5px',marginRight:5}}>PLAZO</span><b style={{color:C.text}}>{cn(t.client_id)}</b><span style={{color:C.done}}>{t.title?' · '+t.title:''}</span></span></div>)}
+              {h.length===0&&tk.length===0&&<div style={{fontSize:11,color:C.done}}>Sin carga ese día.</div>}
+            </div>
+          )})()}
+          <div style={{fontSize:9.5,color:C.done,marginTop:9,display:'flex',gap:10,flexWrap:'wrap'}}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:9,height:9,borderRadius:2,background:C.greenBg,border:`1px solid ${C.border}`}}/>Liviano</span><span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:9,height:9,borderRadius:2,background:C.ambarBg,border:`1px solid ${C.border}`}}/>Cargado</span><span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:9,height:9,borderRadius:2,background:C.overdueBg,border:`1px solid ${C.border}`}}/>Muy cargado</span></div>
+        </>})()}
+
+        {/* Recordatorio de viernes por correo (cron horas-recordatorio) — interruptor + prueba */}
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',marginTop:14}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{flex:1}}><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>Recordatorio de viernes por correo</div><div style={{fontSize:10.5,color:C.done,marginTop:2}}>Cada viernes el equipo recibe un correo para cargar sus horas antes del fin de semana.</div></div>
+            <span onClick={()=>setRec(recOn?'off':'on')} style={{width:40,height:23,borderRadius:12,background:recOn?C.normal:C.border,position:'relative',display:'inline-block',cursor:'pointer',flexShrink:0}}><span style={{position:'absolute',top:2,left:recOn?19:2,width:19,height:19,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/></span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginTop:10}}>
+            <button onClick={enviarPruebaRec} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>Enviarme una prueba</button>
+            {recMsg && <span style={{fontSize:10.5,color:/No se pudo/.test(recMsg)?C.overdueText:C.greenText}}>{recMsg}</span>}
+          </div>
+        </div>
       </>}
 
       {isAdmin && vista==='ytd' && <>
@@ -20911,7 +20990,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           <div key={cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
               <span onClick={()=>cliOpen(cid)} style={{fontSize:13,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(cid)}</span>
-              <span onClick={()=>{ setCfgF({horas_estimadas:r?.horas_estimadas||'',tarifa_mensual:r?.tarifa_mensual||''}); setCfgOpen(editing?null:cid) }} style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>{r?'editar':'definir'}</span>
+              <span onClick={()=>{ setCfgF({horas_estimadas:r?.horas_estimadas||'',tarifa_mensual:r?.tarifa_mensual||'',valor_hora_excedente_uf:r?.valor_hora_excedente_uf||''}); setCfgOpen(editing?null:cid) }} style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>{r?'editar':'definir'}</span>
             </div>
             {!r && !editing && <div style={{fontSize:11,color:C.done,marginTop:5}}>Sin config. Define horas estimadas y tarifa.</div>}
             {r && <>
@@ -20919,6 +20998,19 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               <div style={{display:'flex',justifyContent:'space-between',marginTop:7,fontSize:10.5,color:C.muted}}><span>Estimadas {fh(est)}</span><span>Consumidas {fh(cons)}</span><span style={{color:over?C.overdueText:C.greenText,fontWeight:600}}>{over?'Excedido '+fh(cons-est):'Saldo '+fh(est-cons)}</span></div>
               {r.tarifa_mensual>0 && <div style={{fontSize:10,color:C.done,marginTop:4}}>{f0(r.tarifa_mensual)}/mes · implícita {est>0?f0(r.tarifa_mensual/est)+'/h':'—'}{over?' · conviene reajustar':''}</div>}
               {(()=>{ const diaMes=new Date().getDate(); const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate(); const rate=diaMes>0?cons/diaMes:0; if(est>0&&rate>0&&!over&&rate*diasMes>est){ const dia=Math.min(diasMes,Math.ceil(est/rate)); return <div style={{fontSize:10,color:C.soonText,marginTop:3}}>A este ritmo, agotas las {fh(est)} cerca del día {dia}.</div> } return null })()}
+              {/* Puente excedente→acción: informar (reporte), registrado (horas), facturar (según propuesta = valor hora excedente) */}
+              {over && (()=>{ const exceso=cons-est; const valorUF=Number(r.valor_hora_excedente_uf)||0; const monto=Math.round(exceso*valorUF*ufHoy); const marc=excDeMes(cid,mesActual); return (
+                <div style={{marginTop:10,background:C.overdueBg,border:`1px solid ${C.overdue}22`,borderRadius:9,padding:'9px 10px'}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:C.overdueText}}>Excedente del mes · {fh(exceso)}</div>
+                  <div style={{fontSize:10.5,color:C.overdueText,opacity:.9,marginTop:2}}>{valorUF>0?<>Según tu propuesta: {fh(exceso)} × {valorUF.toLocaleString('es-CL')} UF = <b>{f0(monto)}</b> facturable.</>:'Registrado en tus horas. Define el valor hora excedente para poder facturarlo.'}</div>
+                  {isAdmin && <div style={{display:'flex',gap:7,marginTop:9,alignItems:'center',flexWrap:'wrap'}}>
+                    <button onClick={()=>abrirReporte(cid)} style={{background:'#fff',border:`1px solid ${C.overdue}55`,color:C.overdueText,borderRadius:8,padding:'6px 11px',fontSize:11,fontWeight:600,cursor:'pointer'}}>Informar al cliente</button>
+                    {valorUF>0 ? (marc ? <span style={{fontSize:10.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 10px'}}>✓ Marcado para facturar · {f0(marc.monto)}</span>
+                      : <button onClick={()=>appConfirm(`¿Marcar ${fh(exceso)} de excedente (${f0(monto)}) para facturar a ${cn(cid)}?`).then(ok=>ok&&marcarExcedente(cid,sale?.id,exceso,valorUF))} style={{background:C.overdue,color:'#fff',border:'none',borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:600,cursor:'pointer'}}>Facturar excedente</button>)
+                      : <span onClick={()=>{ setCfgF({horas_estimadas:r?.horas_estimadas||'',tarifa_mensual:r?.tarifa_mensual||'',valor_hora_excedente_uf:''}); setCfgOpen(cid) }} style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Definir valor hora →</span>}
+                  </div>}
+                </div>
+              )})()}
               {isAdmin && (!rep || String(rep.cid)!==String(cid)) && <div onClick={()=>abrirReporte(cid)} style={{marginTop:9,fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer'}}>Reportar horas al cliente →</div>}
               {isAdmin && rep && String(rep.cid)===String(cid) && (()=>{ const ents=entriesRep(cid,rep.mes); const cons=ents.reduce((a,h)=>a+(Number(h.horas)||0),0); return (
                 <div style={{marginTop:10,borderTop:`1px solid ${C.bgSoft}`,paddingTop:10}}>
@@ -20942,6 +21034,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
                   <div style={{flex:1}}><div style={lbl}>Horas est./mes</div><input type='number' step='0.5' value={cfgF.horas_estimadas} onChange={e=>setCfgF(f=>({...f,horas_estimadas:e.target.value}))} style={{...inp,textAlign:'right'}}/></div>
                   <div style={{flex:1}}><div style={lbl}>Tarifa mensual $</div><input type='number' value={cfgF.tarifa_mensual} onChange={e=>setCfgF(f=>({...f,tarifa_mensual:e.target.value}))} style={{...inp,textAlign:'right'}}/></div>
                 </div>
+                <div style={{marginTop:9}}><div style={lbl}>Valor hora excedente (UF) · según tu propuesta</div><input type='number' step='0.1' value={cfgF.valor_hora_excedente_uf} onChange={e=>setCfgF(f=>({...f,valor_hora_excedente_uf:e.target.value}))} placeholder='Ej: 2' style={{...inp,textAlign:'right'}}/></div>
                 <button onClick={()=>guardarCfg(cid,sale?.id||null)} style={{marginTop:9,width:'100%',background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'9px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Guardar config</button>
               </div>
             )}
