@@ -2401,6 +2401,15 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   const lvlLabel = t => <div style={{padding:'14px 22px 0',fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.5px'}}>{t}</div>
   const [plazos,setPlazos] = useState([])   // plazos vencidos/próximos para "qué atender hoy"
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
+  // "Ingresado a caja" ANCLADO A LA CARTOLA (regla 2026-08-27: debe cuadrar con el banco). Honorarios cobrados =
+  // abonos (no internos) conciliados a factura/anticipo, por fecha del depósito. El fondo por rendir NO cuenta.
+  const [ingConc,setIngConc] = useState([])     // conciliacion a factura/anticipo
+  const [ingAbonos,setIngAbonos] = useState([]) // cartola: abonos no internos
+  useEffect(()=>{
+    if(DEMO){ setIngConc((demoData.conciliacion||[]).filter(c=>['factura','anticipo'].includes(c.tipo_destino))); setIngAbonos((demoData.cartola_movimientos||[]).filter(m=>m.tipo==='abono'&&!m.es_interno)); return }
+    supabase.from('conciliacion').select('movimiento_id,factura_id,anticipo_id,tipo_destino,monto_aplicado').in('tipo_destino',['factura','anticipo']).then(({data})=>setIngConc(data||[]),()=>{})
+    supabase.from('cartola_movimientos').select('id,fecha,monto,monto_conciliado,cliente_id').eq('tipo','abono').neq('es_interno',true).then(({data})=>setIngAbonos(data||[]),()=>{})
+  },[])
   // Accesos que aprenden: se ordenan por frecuencia de uso de ESTE usuario (cache instantáneo en localStorage) + registro durable en usage_events. Un punto verde marca el último abierto.
   const accUsoKey = `accesoUso_${user?.name||user?.email||'x'}`
   const [accUso,setAccUso] = useState(()=>{ try{ return JSON.parse(localStorage.getItem(accUsoKey))||{c:{},last:''} }catch(_){ return {c:{},last:''} } })
@@ -2497,38 +2506,42 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   // Para cifras de VENTAS (tienen UF nominal): en modo UF usa el UF nominal directo (cuadra con la pestaña Ventas); en CLP usa el monto en pesos. NO reconvertir CLP↔UF con la UF de hoy.
   const vMon = (uf,clp) => dashMoneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
   const metaUF = ufRef>0 ? m.meta/ufRef : 0
-  // Ingresos cobrados en el año seleccionado, separados por AÑO DE VENTA (de sales.year vía sale_id, o sale_year manual).
-  // Lo que no tiene año resuelto cae en "sin asignar" → se asigna en la cola de Facturación.
+  // "Ingresado a caja" = HONORARIOS COBRADOS anclados a la CARTOLA (regla 2026-08-27: debe cuadrar con el banco).
+  // = abonos (no internos) conciliados a factura/anticipo, por AÑO DE INGRESO = fecha del depósito. El fondo por rendir NO cuenta.
+  // Desglose por AÑO DE VENTA (factura→sale.year / anticipo→sale.year). Lo no conciliado = "por identificar" (alerta, aparte).
   const ingresosPorAnioVenta = useMemo(()=>{
     const saleYrById={}; sales.forEach(s=>{ if(s.year!=null) saleYrById[String(s.id)]=s.year })
-    // Cobrado = fuente única cobradoBill (incluye abonos PARCIALES, igual que las fichas). Base de fecha para el año de caja:
-    // pagada → paid_at (entró al pagarse); parcial → issued_at (no guardamos la fecha del abono).
-    const cobradas = bb.filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').startsWith(_sySel))
+    const billById={}; (billing||[]).forEach(b=>{ billById[String(b.id)]=b })
+    const antById={}; (anticipos||[]).forEach(a=>{ antById[String(a.id)]=a })
+    const abonoById={}; ingAbonos.forEach(m=>{ abonoById[String(m.id)]=m })
+    const anioVentaDe = c => {
+      let sid=null, sy=null
+      if(c.tipo_destino==='factura'){ const b=billById[String(c.factura_id)]; sid=b?.sale_id; sy=b?.sale_year }
+      else { const a=antById[String(c.anticipo_id)]; sid=a?.sale_id; sy=a?.sale_year }
+      if(sid&&saleYrById[String(sid)]!=null) return saleYrById[String(sid)]
+      return sy!=null?sy:null
+    }
     let total=0, sinMonto=0, sinN=0; const byYear={}; const listByYear={}; const sinList=[]
-    cobradas.forEach(b=>{
-      const ay = (b.sale_id&&saleYrById[String(b.sale_id)]!=null) ? saleYrById[String(b.sale_id)] : (b.sale_year!=null?b.sale_year:null)
-      const monto=cobradoBill(b); const item = monto<montoFactura(b) ? {...b,_cobrado:monto,_parcial:true} : {...b,_cobrado:monto}
+    ingConc.forEach(c=>{
+      const m=abonoById[String(c.movimiento_id)]; if(!m) return
+      if(!String(m.fecha||'').startsWith(_sySel)) return          // AÑO DE INGRESO A CAJA = fecha del depósito
+      const monto=Number(c.monto_aplicado)||0; if(monto<=0) return
+      const ay=anioVentaDe(c)
+      let item
+      if(c.tipo_destino==='factura'){ const b=billById[String(c.factura_id)]||{}; item={ id:'cf-'+c.movimiento_id+'-'+String(c.factura_id), client_id:b.client_id||m.cliente_id, invoice_no:b.invoice_no, folio:b.invoice_no, sale_id:b.sale_id||null, paid_at:m.fecha, _cobrado:monto, concept:b.concept } }
+      else { const a=antById[String(c.anticipo_id)]||{}; item={ id:'ca-'+c.movimiento_id+'-'+String(c.anticipo_id), client_id:a.client_id||m.cliente_id, invoice_no:null, folio:null, sale_id:a.sale_id||null, paid_at:m.fecha, _cobrado:monto, _esAnticipo:true, concept:a.nota||'Anticipo' } }
       total+=monto
       if(ay==null){ sinMonto+=monto; sinN++; sinList.push(item); return }
       byYear[ay]=(byYear[ay]||0)+monto; (listByYear[ay]=listByYear[ay]||[]).push(item)
     })
-    // Anticipos DISPONIBLES = plata que ya ingresó a la cartola (fecha=mov.fecha) sin factura aún → base caja. Suman al total por AÑO DE INGRESO
-    // (fecha); en el desglose van por AÑO DE VENTA (sale_id) o "sin asignar". Los CONSUMIDOS ya están representados por su factura (no se recuentan).
-    ;(anticipos||[]).forEach(a=>{
-      if(a.estado!=='disponible' || !String(a.fecha||'').startsWith(_sySel)) return
-      const monto=a.monto||0
-      const ay = (a.sale_id&&saleYrById[String(a.sale_id)]!=null) ? saleYrById[String(a.sale_id)] : null
-      const item={ id:'ant-'+a.id, client_id:a.client_id, amount:monto, invoice_no:null, folio:null, sale_id:a.sale_id||null, paid_at:a.fecha, _esAnticipo:true, concept:a.nota||'Anticipo' }
-      total+=monto
-      if(ay==null){ sinMonto+=monto; sinN++; sinList.push(item); return }
-      byYear[ay]=(byYear[ay]||0)+monto; (listByYear[ay]=listByYear[ay]||[]).push(item)
-    })
+    // Por identificar = abonos del año que aún no se conciliaron (cola de conciliación) → ALERTA de acción, no plata perdida.
+    const porIdentificar = ingAbonos.filter(m=>String(m.fecha||'').startsWith(_sySel)).reduce((a,m)=>a+Math.max(0,(Number(m.monto)||0)-(Number(m.monto_conciliado)||0)),0)
     const delAnio = byYear[selYear]||0
     const anteriores = Math.max(0, total - delAnio - sinMonto)
     const prioYears = Object.keys(byYear).map(Number).filter(y=>y<selYear).sort((a,b)=>b-a)
     const allYears = Object.keys(byYear).map(Number).sort((a,b)=>b-a)
-    return {total,byYear,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList}
-  },[bb,sales,anticipos,selYear])
+    return {total,byYear,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar}
+  },[ingConc,ingAbonos,billing,anticipos,sales,selYear])
   // Meta de cobranza del año (annual_targets.collection_target). % y faltante para la foto de ingresos.
   const metaCobranza = Number(targets.find(t=>t.year===selYear)?.collection_target) || 0
   const [ingDrill,setIngDrill] = usePersistedState('d_ingdrill',null)   // año de venta cuyo detalle (facturas) está abierto ('sin' = sin año)
@@ -2909,6 +2922,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               <div style={{fontSize:9.5,color:'#2E7D5B',marginTop:4}}>{metaCobranza>0?`${metaPct}% · faltan ${fmtMon(falta)}`:'sin meta'}</div>
             </div>
           </div>
+          {iv.porIdentificar>0&&<div onClick={()=>onAcceso&&onAcceso('conciliacion')} style={{display:'flex',alignItems:'center',gap:8,marginTop:9,padding:'8px 12px',background:C.ambarBg,borderRadius:10,cursor:'pointer'}}><span style={{width:6,height:6,borderRadius:'50%',background:C.soonText,flexShrink:0}}/><span style={{flex:1,fontSize:11.5,color:C.soonText,fontWeight:600}}>{fmtMon(iv.porIdentificar)} por identificar en el banco</span><span style={{fontSize:11,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Conciliar &rarr;</span></div>}
           <div onClick={()=>kToggle('cobrado')} style={{display:'flex',justifyContent:'center',alignItems:'center',gap:5,marginTop:9,cursor:'pointer',fontSize:10.5,fontWeight:600,color:C.muted}}>{abierto?'Ocultar detalle':'Ver detalle del año'}<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:abierto?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg></div>
           {abierto&&<>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:10}}>

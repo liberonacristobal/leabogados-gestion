@@ -115,15 +115,18 @@ export const demoData = {
   anticipos: [],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.
   cartola_movimientos: [
-    { id:'mov1', fecha:'2026-07-10', monto:40000000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:'c6', rut_contraparte:'77.444.555-6', nombre_contraparte:'Clínica San Rafael SpA', descripcion:'Abono por transferencia de Clinica San Rafael SpA Rut 77444555-6 desde BCI', n_operacion:'6618172' },
-    { id:'mov2', fecha:'2026-06-28', monto:23400000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:'c5', rut_contraparte:'76.222.333-4', nombre_contraparte:'Viñedos del Maipo Ltda', descripcion:'Transferencia de Viñedos del Maipo Ltda', n_operacion:'4358120' },
+    { id:'mov1', fecha:'2026-07-10', monto:40000000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:40000000, rol_cuenta:'honorarios', cliente_id:'c6', rut_contraparte:'77.444.555-6', nombre_contraparte:'Clínica San Rafael SpA', descripcion:'Abono por transferencia de Clinica San Rafael SpA Rut 77444555-6 desde BCI', n_operacion:'6618172' },
+    { id:'mov2', fecha:'2026-06-28', monto:23400000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:23400000, rol_cuenta:'honorarios', cliente_id:'c5', rut_contraparte:'76.222.333-4', nombre_contraparte:'Viñedos del Maipo Ltda', descripcion:'Transferencia de Viñedos del Maipo Ltda', n_operacion:'4358120' },
     { id:'mov3', fecha:'2026-06-20', monto:4000000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:'77.777.888-9', nombre_contraparte:'Tech Araucanía SpA', descripcion:'Abono por transferencia de Tech Araucania SpA', n_operacion:'237500' },
     { id:'mov4', fecha:'2026-06-26', monto:677309, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Depositos con documentos misma plaza sucursal APOQUINDO', n_operacion:'237515' },
     { id:'mov5', fecha:'2026-07-05', monto:500000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:'76.111.222-3', nombre_contraparte:'Comercial Andes SpA', descripcion:'Transferencia de Comercial Andes SpA', n_operacion:'889001' },
     { id:'mov6', fecha:'2026-07-08', monto:450000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:null, nombre_contraparte:'Notaría Achondo', descripcion:'Pago servicios notariales', n_operacion:'55012' },
   ],
   cliente_alias: [],
-  conciliacion: [],
+  conciliacion: [
+    { id:'con1', movimiento_id:'mov1', tipo_destino:'factura', factura_id:'b10', anticipo_id:null, monto_aplicado:40000000, origen:'demo', marco_pago:true },
+    { id:'con2', movimiento_id:'mov2', tipo_destino:'factura', factura_id:'b11', anticipo_id:null, monto_aplicado:23400000, origen:'demo', marco_pago:true },
+  ],
   rendiciones: [],
   vacaciones: [
     { id:'vac1', user_name:'Demo', desde:new Date(Date.now()+5*864e5).toISOString().slice(0,10), hasta:new Date(Date.now()+9*864e5).toISOString().slice(0,10) },
