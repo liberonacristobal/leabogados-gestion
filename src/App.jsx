@@ -677,27 +677,26 @@ function DialogHost(){
 }
 
 function LoginScreen({loading}) {
+  // Pantalla de acceso = marca del PRODUCTO (FirmDesk, dirección "Ledger"), no del estudio.
+  // Colores propios de FirmDesk (fuera de la paleta C del tenant, a propósito). El ingreso sigue siendo Google corporativo, sin cambios.
   const sm = typeof window!=='undefined' && window.innerWidth < 600
-  const bz = {sw: sm?23:29, gap: sm?9:11, pad: sm?'6px 19px':'7px 24px', br: sm?10:13, pb: sm?7:9, fd: sm?14:18}
+  const INK='#101418', GRN='#12A150', GREY='#5B6570', MONO="'Space Mono',ui-monospace,SFMono-Regular,Menlo,monospace"
   return (
-    <div style={{height:'100dvh',minHeight:'100svh',background:C.bg,position:'relative',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',boxSizing:'border-box',overflow:'hidden',padding:'20px 32px 72px'}}>
-      <div style={{width:28,height:2,background:C.accent,marginBottom:24}}/>
-      <div style={{fontFamily:"'Fraunces',serif",fontStyle:'italic',fontWeight:300,fontSize:20,color:C.muted,marginBottom:16}}>Bienvenido</div>
-      <img src={logoColor} alt="Liberona Escala Abogados" style={{display:'block',width:'min(300px,78vw)',height:'auto',marginBottom:14}}/>
-      <div style={{fontFamily:"'Fraunces',serif",fontStyle:'normal',fontWeight:300,fontSize:12.5,color:'rgba(83,114,129,0.6)',marginTop:2,marginBottom:30}}>Gestión Oficina</div>
-      <button onClick={signInWithGoogle} disabled={loading} style={{display:'inline-flex',alignItems:'center',gap:7,background:'transparent',border:`0.5px solid ${C.border}`,borderRadius:20,padding:'5px 13px',color:C.accent,fontSize:12,fontWeight:500,cursor:'pointer'}}>
+    <div style={{height:'100dvh',minHeight:'100svh',background:C.bg,position:'relative',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',boxSizing:'border-box',overflow:'hidden',padding:'20px 32px'}}>
+      <div style={{width:sm?54:60,height:sm?54:60,borderRadius:'22%',background:INK,display:'flex',flexDirection:'column',justifyContent:'center',gap:'14%',padding:sm?14:16,marginBottom:16}}>
+        <span style={{display:'block',height:'11%',width:'100%',borderRadius:2,background:GRN}}/>
+        <span style={{display:'block',height:'11%',width:'68%',borderRadius:2,background:GREY}}/>
+        <span style={{display:'block',height:'11%',width:'84%',borderRadius:2,background:GREY}}/>
+      </div>
+      <div style={{fontFamily:MONO,fontWeight:700,fontSize:sm?27:31,letterSpacing:'-.02em',color:INK}}>Firm<span style={{color:GRN}}>Desk</span></div>
+      <div style={{fontFamily:MONO,fontSize:12,color:'#95A0A2',marginTop:8,marginBottom:38}}>Every number, in its place.</div>
+      <button onClick={signInWithGoogle} disabled={loading} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:9,minWidth:sm?220:240,background:'#fff',border:'1px solid #DADFDE',borderRadius:11,padding:'13px 18px',color:INK,fontSize:14,fontWeight:600,cursor:loading?'default':'pointer'}}>
         {loading?<Spin/>:<>
-          <span style={{width:14,height:14,borderRadius:'50%',background:C.accent,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>G</span>
-          Entrar
+          <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-3.9H24v7.1h12c-.2 1.9-1.5 4.7-4.3 6.6l6.6 5.1C42.6 41.6 45 33.6 45 24z"/><path fill="#34A853" d="M24 46c5.9 0 10.8-1.9 14.4-5.3l-6.6-5.1c-1.8 1.2-4.2 2-7.8 2-6 0-11-4-12.8-9.5l-6.8 5.3C7.9 40.9 15.3 46 24 46z"/><path fill="#FBBC05" d="M11.2 28.1c-.5-1.4-.7-2.8-.7-4.1s.3-2.8.7-4.1l-6.8-5.3C3 17.4 2 20.6 2 24s1 6.6 2.4 9.4l6.8-5.3z"/><path fill="#EA4335" d="M24 10.5c3.3 0 5.6 1.4 6.9 2.6l5.8-5.7C33.1 4.1 28.9 2 24 2 15.3 2 7.9 7.1 4.4 14.6l6.8 5.3C13 14.5 18 10.5 24 10.5z"/></svg>
+          Continuar con Google
         </>}
       </button>
-      <a href="https://firmdesk.app" target="_blank" rel="noreferrer" style={{position:'absolute',bottom:sm?14:18,textDecoration:'none',display:'inline-flex',alignItems:'center',gap:bz.gap,padding:bz.pad,border:'1px solid #E6E8E3',borderRadius:bz.br,background:'#FBFCFB',fontFamily:"system-ui,'Segoe UI',Roboto,sans-serif"}}>
-        <svg width={bz.sw} height={bz.sw} viewBox='0 0 100 100'><rect width='100' height='100' rx='23' fill='#0E3B49'/><g fill='#fff'><rect x='38' y='27' width='10' height='38' rx='2'/><rect x='38' y='27' width='27' height='10' rx='2'/><rect x='38' y='42' width='20' height='10' rx='2'/></g><rect x='29' y='69' width='43' height='5' rx='2.5' fill='#17A06B'/><rect x='29' y='74' width='43' height='5' rx='2' fill='#0F8455'/></svg>
-        <span style={{display:'inline-flex',flexDirection:'column',lineHeight:1.15}}>
-          <span style={{fontSize:bz.pb,fontWeight:500,letterSpacing:'.2em',color:'#9AA3A7'}}>POWERED BY</span>
-          <span style={{fontSize:bz.fd,fontWeight:600,letterSpacing:'-.01em'}}><span style={{color:'#0E3B49'}}>Firm</span><span style={{color:'#17A06B'}}>Desk</span></span>
-        </span>
-      </a>
+      <div style={{fontSize:12,color:'#95A0A2',marginTop:14}}>Acceso con tu cuenta corporativa</div>
     </div>
   )
 }
