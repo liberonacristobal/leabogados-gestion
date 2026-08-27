@@ -23624,38 +23624,46 @@ const PALETTE_ACTIONS = [
 ]
 // Copiloto: responde con los datos reales (blindado a no inventar) y, si le pides HACER algo,
 // propone una acción (crear tarea / abrir cliente) que se ejecuta SOLO tras tu confirmación (compuerta).
-function CopilotoModal({ clients=[], sales=[], billing=[], tasks=[], proyectosCartera=[], user, onSaveTask, onOpenClientFicha, onClose }){
+function CopilotoModal({ role='admin', clients=[], sales=[], billing=[], tasks=[], proyectosCartera=[], user, onSaveTask, onOpenClientFicha, onNav, onClose }){
   const [q,setQ] = useState('')
   const [busy,setBusy] = useState(false)
   const [hist,setHist] = useState([])
+  const [copiado,setCopiado] = useState(null)
+  const esAdmin = role==='admin'
+  const miIni = INICIALES_RESP[user?.name]||null
   const NOMBRE_INI = { CL:'Cristóbal', EE:'Erasmo', MC:'Martín', MP:'Martina', RD:'Rodrigo' }
   const brief = () => {
     const cl = (clients||[]).filter(c=>c.status!=='Terminado')
     const nombres = cl.slice(0,150).map(c=>c.name).filter(Boolean).join(', ')
     const hoy = new Date().toISOString().slice(0,10)
-    const emit = (billing||[]).filter(b=>!b.deleted_at && b.invoice_no && b.status!=='Programada' && b.status!=='Anulada' && b.billing_type!=='reembolso')
-    const porCobrar = emit.filter(b=>!b.paid_at).reduce((a,b)=>a+(b.amount||0),0)
-    const vencidas = emit.filter(b=>!b.paid_at && b.due && String(b.due).slice(0,10)<hoy).length
-    const tksAb = (tasks||[]).filter(t=>t.status!=='Terminado' && !t.archived)
+    // El equipo (limited) solo ve SUS tareas y los clientes; sin cifras del negocio.
+    const tksAb = (tasks||[]).filter(t=>t.status!=='Terminado' && !t.archived && (esAdmin || !miIni || (t.assignees&&t.assignees.includes(user?.name)) || t.who===user?.name))
     const vencTk = tksAb.filter(t=>t.due && String(t.due).slice(0,10)<hoy).length
-    const proy = (proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado)
-    return `Clientes activos (${cl.length}): ${nombres}.
-Por cobrar (facturas emitidas impagas): ${fmt(porCobrar)} · ${vencidas} vencidas.
-Tareas abiertas: ${tksAb.length} (${vencTk} vencidas).
-Proyectos activos en cartera: ${proy.length}.
-Responsables: CL=Cristóbal, EE=Erasmo, MC=Martín, MP=Martina, RD=Rodrigo.`
+    let s = `Clientes activos (${cl.length}): ${nombres}.\nTareas abiertas${esAdmin?'':' tuyas'}: ${tksAb.length} (${vencTk} vencidas).`
+    if(esAdmin){
+      const emit = (billing||[]).filter(b=>!b.deleted_at && b.invoice_no && b.status!=='Programada' && b.status!=='Anulada' && b.billing_type!=='reembolso')
+      const porCobrar = emit.filter(b=>!b.paid_at).reduce((a,b)=>a+(b.amount||0),0)
+      const vencidas = emit.filter(b=>!b.paid_at && b.due && String(b.due).slice(0,10)<hoy).length
+      const proy = (proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado)
+      s += `\nPor cobrar (facturas emitidas impagas): ${fmt(porCobrar)} · ${vencidas} vencidas.\nProyectos activos en cartera: ${proy.length}.`
+    }
+    s += `\nResponsables: CL=Cristóbal, EE=Erasmo, MC=Martín, MP=Martina, RD=Rodrigo.`
+    return s
   }
   const matchCliente = name => { if(!name) return null; const s=String(name).toLowerCase().trim(); return (clients||[]).find(c=>(c.name||'').toLowerCase()===s) || (clients||[]).find(c=>(c.name||'').toLowerCase().includes(s)) || null }
   const ask = async (texto) => {
     const t=(texto||q).trim(); if(!t||busy) return
     setHist(h=>[...h,{role:'user',text:t}]); setQ(''); setBusy(true)
     try{
-      const sys = `Eres el copiloto de un estudio de abogados chileno (app de gestión). Usa los DATOS de abajo; NO inventes clientes ni cifras que no estén ahí.
+      const vistas = esAdmin ? 'inicio, ventas, facturacion, gastos, clientes, tareas, cartera, conciliacion, inteligencia' : 'tareas, gastos, clientes, cajachica, cartera'
+      const sys = `Eres el copiloto de un estudio de abogados chileno (app de gestión). Usa los DATOS de abajo; NO inventes clientes ni cifras que no estén ahí. Hoy es ${new Date().toISOString().slice(0,10)}.
 - PREGUNTA → responde en español de Chile, directo, máximo 4 frases, con cifras cuando aporten.
-- Si te piden HACER algo, responde SOLO un JSON (sin markdown, sin texto extra):
+- Si te piden HACER algo, responde SOLO un JSON (sin markdown, sin texto extra), una de estas acciones:
   crear tarea → {"accion":"crear_tarea","titulo":"...","cliente":"nombre EXACTO de la lista o vacío","responsable":"CL|EE|MC|MP|RD o vacío","plazo":"YYYY-MM-DD o vacío","nota":"..."}
   abrir la ficha de un cliente → {"accion":"abrir_cliente","cliente":"nombre EXACTO de la lista"}
-Nunca ejecutas nada tú: solo propones y el humano confirma.
+  redactar un borrador de correo → {"accion":"redactar_correo","para":"nombre o correo","asunto":"...","cuerpo":"texto del correo, español de Chile, cordial y directo, con saludo y despedida"}
+  ir a una vista de la app → {"accion":"ir_a","vista":"una de: ${vistas}"}
+Nunca ejecutas nada tú: solo propones y el humano confirma (o copia el borrador).
 
 DATOS:
 ${brief()}`
@@ -23672,7 +23680,9 @@ ${brief()}`
     if(a.accion==='crear_tarea'){ const cli=matchCliente(a.cliente); const resp=NOMBRE_INI[a.responsable]||null
       onSaveTask&&onSaveTask({ title:a.titulo||'Tarea', client_id:cli?cli.id:null, assignees:resp?[resp]:(user?.name?[user.name]:[]), who:resp||user?.name||null, due:a.plazo||null, note:a.nota||null, status:'Activo' })
       setHist(h=>h.map((x,i)=>i===idx?{...x,done:`Tarea creada${cli?` para ${cli.name}`:''}.`}:x)) }
-    else if(a.accion==='abrir_cliente'){ const cli=matchCliente(a.cliente); if(cli&&onOpenClientFicha){ onOpenClientFicha(cli.id); onClose&&onClose() } else setHist(h=>h.map((x,i)=>i===idx?{...x,done:'No encontré ese cliente.'}:x)) } }
+    else if(a.accion==='abrir_cliente'){ const cli=matchCliente(a.cliente); if(cli&&onOpenClientFicha){ onOpenClientFicha(cli.id); onClose&&onClose() } else setHist(h=>h.map((x,i)=>i===idx?{...x,done:'No encontré ese cliente.'}:x)) }
+    else if(a.accion==='ir_a'){ onNav&&onNav(a.vista) } }
+  const copiarCorreo = (a,idx) => { const txt=`${a.asunto?`Asunto: ${a.asunto}\n\n`:''}${a.cuerpo||''}`; try{ navigator.clipboard.writeText(txt) }catch(_){}; setCopiado(idx); setTimeout(()=>setCopiado(null),2500) }
   const cardAccion = (a,idx,done) => {
     const cli = matchCliente(a.cliente)
     if(a.accion==='crear_tarea') return (
@@ -23689,6 +23699,23 @@ ${brief()}`
         <div style={{ fontSize:13, color:C.text }}>Abrir la ficha de <b>{cli?cli.name:a.cliente}</b></div>
         {done ? <div style={{ fontSize:11.5, color:C.muted, marginTop:6 }}>{done}</div>
           : <button onClick={()=>ejecutar(a,idx)} style={{ fontSize:12, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer', marginTop:8 }}>Abrir ficha</button>}
+      </div> )
+    if(a.accion==='redactar_correo') return (
+      <div style={{ border:`1px solid ${C.accent}`, borderRadius:10, padding:'10px 12px', background:'#fff' }}>
+        <div style={{ fontSize:10, fontWeight:700, color:C.accent, textTransform:'uppercase', letterSpacing:.3, marginBottom:4 }}>Borrador de correo</div>
+        {a.para&&<div style={{ fontSize:11.5, color:C.muted }}>Para: <b style={{color:C.text}}>{a.para}</b></div>}
+        {a.asunto&&<div style={{ fontSize:12.5, fontWeight:600, color:C.text, margin:'2px 0 4px' }}>{a.asunto}</div>}
+        <div style={{ fontSize:12, color:C.text, whiteSpace:'pre-wrap', lineHeight:1.5, background:C.bgSoft, borderRadius:8, padding:'8px 10px', marginTop:4 }}>{a.cuerpo}</div>
+        <div style={{ display:'flex', gap:8, marginTop:9, alignItems:'center' }}>
+          <button onClick={()=>copiarCorreo(a,idx)} style={{ fontSize:12, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>Copiar</button>
+          {copiado===idx&&<span style={{ fontSize:11, color:C.greenText, fontWeight:600 }}>Copiado</span>}
+          <span style={{ fontSize:10.5, color:C.grisText, marginLeft:'auto' }}>No se envía; lo mandas tú.</span>
+        </div>
+      </div> )
+    if(a.accion==='ir_a') return (
+      <div style={{ border:`1px solid ${C.accent}`, borderRadius:10, padding:'10px 12px', background:C.azulBg }}>
+        <div style={{ fontSize:13, color:C.text }}>Ir a <b style={{textTransform:'capitalize'}}>{a.vista}</b></div>
+        <button onClick={()=>ejecutar(a,idx)} style={{ fontSize:12, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer', marginTop:8 }}>Ir</button>
       </div> )
     return null
   }
@@ -25447,9 +25474,9 @@ export default function App() {
                   </button>
                   )
                 })()}
-                {userRole==='admin'&&<button onClick={e=>{e.stopPropagation();setCopilotoOpen(true)}} title='Copiloto' aria-label='Copiloto' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <button onClick={e=>{e.stopPropagation();setCopilotoOpen(true)}} title='Copiloto' aria-label='Copiloto' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='currentColor'><path d='M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z'/></svg>
-                </button>}
+                </button>
                 <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
                 </button>
@@ -25563,7 +25590,7 @@ export default function App() {
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')}} onClose={()=>setModal(null)}/>}
         {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
-        {copilotoOpen&&<CopilotoModal clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setCopilotoOpen(false)}/>}
+        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else setTab('cajachica') } else if(map[vista]) setTab(map[vista]) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
