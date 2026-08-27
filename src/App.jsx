@@ -738,6 +738,7 @@ const TABS_ADMIN = [
   {id:'sales',icon:'trending',label:'Ventas'},
   {id:'billing',icon:'receipt',label:'Facturación'},
   {id:'expenses',icon:'card',label:'Gastos'},
+  {id:'horas',icon:'clock',label:'Horas'},
   {id:'clients',icon:'idcard',label:'Clientes'},
 ]
 const TABS_LIMITED = [
@@ -1847,6 +1848,7 @@ function BottomNav({tab,setTab,overdueN,userRole}) {
     coins:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><ellipse cx="12" cy="6.5" rx="7" ry="3"/><path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/><path d="M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg>,
     check:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><path d="M4 12l5 5L20 6"/></svg>,
     folder:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
+    clock:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>,
   }
   return (
     <div className='bottomnav' style={{position:'fixed',bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:'flex',zIndex:50,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
