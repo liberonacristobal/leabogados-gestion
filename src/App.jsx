@@ -423,6 +423,8 @@ const PERSON_CHIP = {
   'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:C.overdueBg,color:C.overdueText}, 'Rodrigo':{bg:'#F7E7E1',color:'#A8472A'},
 }
 const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:C.bgWarm,color:C.grisText}
+// Colores de categoría de gasto — FUENTE ÚNICA (antes duplicado 5× inline). CBR beige es el único fuera de token de C.
+const CAT_COLORS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
 const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
 // "En mi lista": soy responsable o me delegaron la tarea (los delegados también la ven).
 const enMiLista = (t,name) => isAssignee(t,name) || (!!name && ((t&&t.delegated_to)||[]).includes(name))
@@ -745,7 +747,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     if(sFilter==='Activo' && (c.status||'Activo')!=='Activo') return false
     if(sFilter==='Terminado' && c.status!=='Terminado') return false
     if(sFilter==='Prospecto' && c.status!=='Prospecto') return false
-    if(q.trim() && !(c.name||'').toLowerCase().includes(q.toLowerCase())) return false
+    if(q.trim() && !_normTxt(c.name).includes(_normTxt(q))) return false
     return true
   }).sort((a,b)=>(a.name||'').localeCompare(b.name||''))
 
@@ -794,7 +796,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     const {fondos,gastos,saldo} = fgCliente(expenses, cl.id)   // fuente única (no duplicar la fórmula de saldo inline)
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
-    const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
+    const CATS = CAT_COLORS
     const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
 
     return (
@@ -1023,8 +1025,8 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
     if(name.trim().length<3) return []
     const q = name.trim().toLowerCase()
     return clients.filter(c=>
-      (c.name||'').toLowerCase().includes(q) ||
-      q.split(' ').some(w=>w.length>2&&(c.name||'').toLowerCase().includes(w))
+      _normTxt(c.name).includes(_normTxt(q)) ||
+      _normTxt(q).split(' ').some(w=>w.length>2&&_normTxt(c.name).includes(w))
     ).slice(0,5)
   },[name,clients])
 
@@ -1140,7 +1142,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const totalSel = seleccionados.reduce((a,e)=>a+(e.amount||0),0)
 
   const fmtCLP = fmtN
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
+  const CATS = CAT_COLORS
   // Pills de categoría en PENDIENTES: [valor en DB, etiqueta mostrada]
   const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Movilización','Movil.'],['Archivo Judicial','Archivo'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
   const CAT_LIST = ['Notaria','CBR','Movilización','Archivo Judicial','Diario Oficial','Registro Civil','Fondo','Otro']
@@ -4584,7 +4586,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   }
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
-  const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>(c.name||'').toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
+  const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>_normTxt(c.name).includes(_normTxt(clientQ))).slice(0,6) },[clients,clientQ])
   const clientEntitiesList = useMemo(()=>{ if(!f.client_id) return []; const base=(clientEntities||[]).filter(e=>e.client_id===f.client_id); const extra=extraEntities.filter(e=>e.client_id===f.client_id&&!base.some(b=>String(b.id)===String(e.id))); return [...base,...extra] },[clientEntities,extraEntities,f.client_id])
   // Regla: al elegir cliente, si tiene 1 razón social se asigna sola; si tiene varias se propone la primera. Siempre se puede Cambiar.
   useEffect(()=>{
@@ -4902,7 +4904,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <Lbl>Buscar cliente</Lbl>
           <Inp value={propSearchQ} onChange={e=>setPropSearchQ(e.target.value)} placeholder='Escribe nombre o RUT...' style={{marginBottom:8}}/>
           <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12,maxHeight:180,overflowY:'auto'}}>
-            {(propSearchQ.trim().length>=2?clients.filter(c=>(c.name||'').toLowerCase().includes(propSearchQ.toLowerCase())||((c.rut||'').includes(propSearchQ))):clients.slice(0,8)).map(c=>(
+            {(propSearchQ.trim().length>=2?clients.filter(c=>_normTxt(c.name).includes(_normTxt(propSearchQ))||((c.rut||'').includes(propSearchQ))):clients.slice(0,8)).map(c=>(
               <button key={c.id} type='button' onClick={()=>{setPropClientMatch(c);setPropClientMode('asociar');const ents=(clientEntities||[]).filter(e=>e.client_id===c.id);setPropEntitySel(ents[0]?.id||'')}}
                 style={{padding:'10px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,textAlign:'left',cursor:'pointer'}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{c.name}</div>
@@ -5614,7 +5616,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
   const [q,setQ] = useState('')
   const wrapRef = useRef(null)
   const [pos,setPos] = useState(null)
-  const matches = useMemo(()=>{ if(!q.trim()) return []; const t=q.toLowerCase(); return (clients||[]).filter(c=>(c.name||'').toLowerCase().includes(t)||(c.rut||'').toLowerCase().includes(t)).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,8) },[q,clients])
+  const matches = useMemo(()=>{ if(!q.trim()) return []; const t=q.toLowerCase(); return (clients||[]).filter(c=>_normTxt(c.name).includes(_normTxt(q))||(c.rut||'').toLowerCase().includes(t)).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,8) },[q,clients])
   // El dropdown va por PORTAL con position:fixed para no quedar recortado por contenedores con overflow (listas/modales).
   useEffect(()=>{ if(open&&wrapRef.current){ const r=wrapRef.current.getBoundingClientRect(); setPos({top:r.bottom+4,left:r.left,width:Math.max(r.width,200)}) } },[open,q,matches.length])
   if(!open) return (
@@ -8974,10 +8976,10 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
             <input value={clientQuery} onChange={e=>setClientQuery(e.target.value)} placeholder='Buscar cliente por nombre...' style={inp}/>
             {clientQuery.trim()&&(
               <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:4,background:'#fff'}}>
-                {clients.filter(c=>(c.name||'').toLowerCase().includes(clientQuery.toLowerCase())).slice(0,30).map(c=>(
+                {clients.filter(c=>_normTxt(c.name).includes(_normTxt(clientQuery))).slice(0,30).map(c=>(
                   <div key={c.id} onClick={()=>{up('client_id',c.id);setClientQuery('')}} style={{padding:'9px 11px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
                 ))}
-                {clients.filter(c=>(c.name||'').toLowerCase().includes(clientQuery.toLowerCase())).length===0&&<div style={{padding:'9px 11px',fontSize:13,color:C.muted}}>Sin resultados</div>}
+                {clients.filter(c=>_normTxt(c.name).includes(_normTxt(clientQuery))).length===0&&<div style={{padding:'9px 11px',fontSize:13,color:C.muted}}>Sin resultados</div>}
               </div>
             )}
           </div>
@@ -9185,7 +9187,7 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
             <input value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente por nombre...' style={{...inp,height:42,borderRadius:10}}/>
             {clientQ.trim()&&(
               <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10,marginTop:4,background:'#fff'}}>
-                {[...clients].filter(c=>c.status!=='Terminado'&&(c.name||'').toLowerCase().includes(clientQ.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
+                {[...clients].filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(clientQ))).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
                   <div key={c.id} onClick={()=>{up('client_id',c.id);up('sale_id','');up('proyecto','');up('entity_id','');setClientQ('')}} style={{padding:'9px 11px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
                 ))}
               </div>
@@ -9957,7 +9959,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     else setSelected(new Set(disponibles.map(e=>e.id)))
   }
   const toggleOne = id => setSelected(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
+  const CATS = CAT_COLORS
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
 
@@ -11541,7 +11543,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     if(q.trim()){
       const nq=q.toLowerCase()
       list = list.filter(c=>{
-        if((c.name||'').toLowerCase().includes(nq)) return true
+        if(_normTxt(c.name).includes(_normTxt(nq))) return true
         if((c.rut||'').toLowerCase().includes(nq)) return true
         return (clientEntities||[]).some(e=>e.client_id===c.id&&(((e.name||'').toLowerCase().includes(nq))||((e.rut||'').toLowerCase().includes(nq))))
       })
@@ -11884,7 +11886,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     }catch(e){appAlert('Error al añadir: '+e.message)}
   }
 
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
+  const CATS = CAT_COLORS
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
   useEffect(()=>{
@@ -13070,7 +13072,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
             <input value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente por nombre...' style={{...inp,height:42,borderRadius:10}}/>
             {clientQ.trim()&&(
               <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10,marginTop:4,background:'#fff'}}>
-                {[...clients].filter(c=>c.status!=='Terminado'&&(c.name||'').toLowerCase().includes(clientQ.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
+                {[...clients].filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(clientQ))).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
                   <div key={c.id} onClick={()=>{setSelectedClient(c);setClientQ('')}} style={{padding:'9px 11px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
                 ))}
               </div>
@@ -13158,7 +13160,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     return Object.keys(m).sort((a,b)=>(m[b]||'').localeCompare(m[a]||''))   // más reciente primero
   },[tasks,sales,selectedClient])
   useEffect(()=>{ setProject(clientProjects[0]||''); setNewProject(false) },[clientProjects])   // pre-poblar con el proyecto más reciente
-  const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
+  const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>_normTxt(c.name).includes(_normTxt(q))).slice(0,6) },[clients,q])
   const balance = selectedClient ? saldoCliente(expenses, selectedClient.id) : null
   const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
 
@@ -13494,7 +13496,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
   const matches = useMemo(()=>{
     if(!q.trim()) return []
-    return clients.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())).slice(0,6)
+    return clients.filter(c=>_normTxt(c.name).includes(_normTxt(q))).slice(0,6)
   },[clients,q])
 
   // Proyectos existentes del cliente: de tareas + de ventas
@@ -15557,7 +15559,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const taskGroups = {}
   clientTasks.forEach(t=>{ const k=t.project||'__none__'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
 
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
+  const CATS = CAT_COLORS
 
   // Chevron de affordance (fila clickeable) — paleta corporativa, hover lo oscurece vía .lf-row:hover
   const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
@@ -16005,7 +16007,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
     if(sFilter==='Activo') base=base.filter(c=>(c.status||'Activo')==='Activo')
     else if(sFilter==='Terminado') base=base.filter(c=>c.status==='Terminado')
     else if(sFilter==='Prospecto') base=base.filter(c=>c.status==='Prospecto')
-    if(q.trim()) base=base.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase()))
+    if(q.trim()) base=base.filter(c=>_normTxt(c.name).includes(_normTxt(q)))
     if(respSel.size>0) base=base.filter(c=>respSel.has(responsableDe[c.id]))
     return [...base].sort((a,b)=>{ const ta=tareasDe[a.id]||0,tb=tareasDe[b.id]||0; if((ta>0)!==(tb>0)) return tb>0?1:-1; return tb-ta })
   },[clients,sFilter,q,respSel,responsableDe,tareasDe])
@@ -17344,7 +17346,7 @@ function InvoiceClientPicker({inv,clients,assigned,onAssign}) {
   const [q,setQ] = useState('')
   const matches = useMemo(()=>{
     if(!q.trim()) return []
-    return clients.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,6)
+    return clients.filter(c=>_normTxt(c.name).includes(_normTxt(q))).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,6)
   },[q,clients])
   return (
     <div style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${assigned?C.accent:C.border}`}}>
@@ -18422,7 +18424,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           }).slice(0,3)
           const fmtCLP = fmtN
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
-          const CAT_BG = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
+          const CAT_BG = CAT_COLORS
           const GREEN={num:C.normal,bg:C.greenBg,bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:C.soon,bg:'#FEF6EE',bd:'#F5E2CC',label:C.soon}
           const RED={num:C.overdue,bg:C.overdueBg,bd:'#F2D5D5',label:C.muted}
@@ -19586,8 +19588,16 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
     <div style={{padding:'2px 2px 6px'}}>
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 10px',marginBottom:12}}>
         <div style={{fontSize:11,color:C.muted,marginBottom:7}}>Extrae los plazos y obligaciones de un contrato del cliente — la IA los lee y tú los agendas.</div>
-        <input value={cliente} onChange={e=>setCliente(e.target.value)} placeholder='Cliente' style={{...inp,marginBottom:7}} list='plz-cli'/>
-        <datalist id='plz-cli'>{(clients||[]).map(c=><option key={c.id} value={c.name}/>)}</datalist>
+        <div style={{position:'relative',marginBottom:7}}>
+          <input value={cliente} onChange={e=>setCliente(e.target.value)} placeholder='Buscar cliente…' style={inp}/>
+          {cliente.trim().length>=1 && !(clients||[]).some(c=>c.name===cliente) && (()=>{
+            const ms=(clients||[]).filter(c=>_normTxt(c.name).includes(_normTxt(cliente))).slice(0,6)
+            if(!ms.length) return null
+            return <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:6,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,marginTop:2,overflow:'hidden',boxShadow:'0 6px 20px rgba(0,0,0,.12)'}}>
+              {ms.map(c=><div key={c.id} onClick={()=>setCliente(c.name)} style={{padding:'8px 11px',fontSize:12.5,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}
+            </div>
+          })()}
+        </div>
         <div style={{marginBottom:2}}>
           <button type='button' onClick={()=>setMManual(v=>!v)} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{mManual?'Ocultar':'+ Agregar un plazo a mano'}</button>
           {mManual&&<div style={{marginTop:7,display:'flex',flexDirection:'column',gap:6}}>
@@ -19902,7 +19912,7 @@ const ME_DOMAIN = 'leabogados.cl'
 // Buscador de cliente (escribe para filtrar) — para asignar contactos sin cliente claro.
 function ClientePicker({clients=[], onPick}){
   const [q,setQ]=useState(''); const [open,setOpen]=useState(false)
-  const matches = q.trim()? clients.filter(c=>String(c.name||'').toLowerCase().includes(q.toLowerCase())).slice(0,8):[]
+  const matches = q.trim()? clients.filter(c=>String_normTxt(c.name).includes(_normTxt(q))).slice(0,8):[]
   return (
     <div style={{position:'relative',marginTop:4}}>
       <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder='Buscar cliente…' style={{width:'100%',maxWidth:240,height:32,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:12,color:C.text,background:C.bgSoft,colorScheme:'light',WebkitTextFillColor:C.text,outline:'none',boxSizing:'border-box'}}/>
@@ -21140,7 +21150,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
             <input value={clientQ} onChange={e=>{ setClientQ(e.target.value); setNf(f=>({...f,cliente_id:''})) }} placeholder='Buscar cliente…' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff' }}/>
             {clientQ&&!nf.cliente_id&&(
               <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, marginTop:2, maxHeight:180, overflowY:'auto' }}>
-                {clients.filter(c=>(c.name||'').toLowerCase().includes(clientQ.toLowerCase())).slice(0,7).map(c=>(
+                {clients.filter(c=>_normTxt(c.name).includes(_normTxt(clientQ))).slice(0,7).map(c=>(
                   <div key={c.id} onClick={()=>{ setNf(f=>({...f,cliente_id:c.id})); setClientQ(c.name) }} style={{ padding:'8px 10px', fontSize:13, color:C.text, cursor:'pointer', borderBottom:`1px solid ${C.bgSoft||'#F5F7F9'}` }}>{c.name}</div>
                 ))}
               </div>
