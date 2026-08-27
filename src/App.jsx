@@ -20656,6 +20656,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const [bitFull,setBitFull] = useState({})           // { proyecto_id: true } → bitácora completa (por defecto colapsada a los últimos)
   const [rentOpen,setRentOpen] = useState(false)      // panel de rentabilidad agregada
   const [rentBy,setRentBy] = useState('abogado')      // abogado | cliente
+  const [rentBase,setRentBase] = useState('mes')      // base del margen: mes | ano | ytd (recurrentes)
   // Interruptor del correo semanal. value: 'off' · 'on' (todo el equipo) · iniciales ('CL') = solo esa persona.
   const [semanalVal,setSemanalVal] = useState('off')
   const [pruebaMsg,setPruebaMsg] = useState('')       // feedback del botón "Enviarme una prueba"
@@ -20713,14 +20714,18 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const rentabilidadDe = p => {
     const s = saleDe(p); if(!s) return null
     const uf = readUFCache()?.value || parseFloat(s.uf_value) || 0
-    const moneda = s.moneda||'UF'
-    const honor = moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : (parseFloat(s.amount_uf)||0)*uf
-    const terc = (terceros||[]).filter(t=>String(t.sale_id)===String(p.sale_id)).reduce((a,t)=>a+(t.monto||0),0)
+    const rec = esRecurrente(s)
+    // Base ELEGIBLE (rentBase): 'mes' (default) · 'ano' · 'ytd' (acumulado del año). Solo afecta a RECURRENTES; un encargo one-off es fijo.
+    // Fuentes únicas: ventaCLP (honorario) y costoVentaUF (costo de terceros), ambas anuales → se llevan a la base. El esfuerzo (horas) escala igual.
+    const mesesYTD = new Date().getMonth()+1                              // meses transcurridos del año en curso (1..12)
+    const meses = rentBase==='ano' ? 12 : rentBase==='ytd' ? mesesYTD : 1
+    const honor = rec ? (ventaCLP(s, uf)/12)*meses : ventaCLP(s, uf)
+    const terc  = rec ? ((costoVentaUF(s, uf)*uf)/12)*meses : (costoVentaUF(s, uf)*uf)
     const perm = esPermanente(p,s); const vh = perm?valorHora.permanente:valorHora.general
-    const horas = parseFloat(p.esfuerzo_horas)||0
+    const horas = (parseFloat(p.esfuerzo_horas)||0) * (rec ? meses : 1)
     const esf = horas*vh*uf
     const margen = honor - terc - esf
-    return { honor, terc, esf, horas, vh, perm, margen, pct: honor>0?margen/honor:null, uf }
+    return { honor, terc, esf, horas, vh, perm, margen, pct: honor>0?margen/honor:null, uf, rec, base:rentBase }
   }
   const sugerirEsfuerzo = async (p) => {
     setSugEsf(o=>({...o,[p.id]:'busy'}))
@@ -20951,7 +20956,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
               {(()=>{ const r=rentabilidadDe(p); if(!r) return null; const busy=sugEsf[p.id]==='busy'
                 return <div style={{ border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10, background:'#fff' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:r.horas?7:0, flexWrap:'wrap', gap:6 }}>
-                    <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Rentabilidad</span>
+                    <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Rentabilidad{r.rec?` · ${r.base==='ano'?'al año':r.base==='ytd'?'YTD':'por mes'}`:''}</span>
                     <span style={{ fontSize:11, color:C.muted, display:'inline-flex', alignItems:'center', gap:4 }}>Esfuerzo
                       <input type='number' value={p.esfuerzo_horas??''} onChange={e=>updP(p,{esfuerzo_horas:e.target.value===''?null:parseFloat(e.target.value)})} placeholder='—' style={{ width:46, padding:'2px 5px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/>h
                       <span onClick={()=>!busy&&sugerirEsfuerzo(p)} style={{ marginLeft:4, color:C.azulInfo, fontWeight:600, cursor:busy?'default':'pointer' }}>{busy?'…':'Sugerir IA'}</span>
@@ -20962,6 +20967,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5, padding:'2px 0' }}><span style={{ color:C.muted }}>− Terceros</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.terc)}</span></div>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5, padding:'2px 0' }}><span style={{ color:C.muted }}>− Esfuerzo · {r.horas}h × {r.vh} UF{r.perm?' (perm.)':''}</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.esf)}</span></div>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700, padding:'6px 0 0', marginTop:3, borderTop:`1px solid ${C.border}`, color:r.margen>=0?C.greenText:C.overdue }}><span>Margen</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.margen)}{r.pct!=null?` · ${Math.round(r.pct*100)}%`:''}</span></div>
+                    {r.margen<0&&<div style={{ marginTop:7, background:C.ambarBg, borderRadius:7, padding:'6px 9px', fontSize:10.5, color:C.soonText, lineHeight:1.45 }}>El esfuerzo supera al honorario{r.rec?' en esta base':''} — conviene <b>reajustar el honorario</b> o revisar las horas cargadas.</div>}
                   </> : <div style={{ fontSize:11, color:C.grisText }}>Ingresa las horas (o toca “Sugerir IA”) para ver el margen.</div>}
                 </div>
               })()}
@@ -21075,8 +21081,10 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
               m.honor+=r.honor;m.terc+=r.terc;m.esf+=r.esf;m.margen+=r.margen;m.n++;if(!has)m.sinEsf++ })
             const rows=Object.entries(agg).map(([k,v])=>({k,...v,pct:v.honor>0?v.margen/v.honor:null,label:rentBy==='abogado'?k:(cnm(k)||'—')})).sort((a,b)=>b.margen-a.margen)
             return <div style={{ padding:'0 12px 12px' }}>
-              <div style={{ display:'flex', gap:6, marginBottom:8 }}>
+              <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap', alignItems:'center' }}>
                 {[['abogado','Por abogado'],['cliente','Por cliente']].map(([k,l])=><button key={k} onClick={()=>setRentBy(k)} style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'3px 11px', border:`1px solid ${rentBy===k?C.accent:C.border}`, background:rentBy===k?C.accent:'#fff', color:rentBy===k?'#fff':C.muted, cursor:'pointer' }}>{l}</button>)}
+                <span style={{ width:1, height:16, background:C.border, margin:'0 2px' }}/>
+                {[['mes','Mes'],['ano','Año'],['ytd','YTD']].map(([k,l])=><button key={k} onClick={()=>setRentBase(k)} style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'3px 11px', border:`1px solid ${rentBase===k?C.accent:C.border}`, background:rentBase===k?C.accent:'#fff', color:rentBase===k?'#fff':C.muted, cursor:'pointer' }} title='Base para asesorías recurrentes'>{l}</button>)}
               </div>
               {!rows.length ? <div style={{ fontSize:12, color:C.grisText }}>Sin ventas vinculadas en estos proyectos.</div> : rows.map(r=>(
                 <div key={r.k} onClick={()=>rentBy==='cliente'&&onOpenClientFicha&&onOpenClientFicha(r.k)} style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 0', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}`, cursor:rentBy==='cliente'?'pointer':'default' }}>
