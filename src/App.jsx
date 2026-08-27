@@ -23804,6 +23804,121 @@ function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=
     </div>
   )
 }
+// ── PORTAL DEL CLIENTE (Fase 1b) — página externa, login por correo (magic-link), muestra solo sus datos vía la edge function `portal`.
+export function PortalApp(){
+  const [session,setSession] = useState(null)
+  const [checking,setChecking] = useState(true)
+  const [email,setEmail] = useState('')
+  const [sent,setSent] = useState(false)
+  const [sending,setSending] = useState(false)
+  const [data,setData] = useState(null)
+  const [err,setErr] = useState(null)
+  const [loadingData,setLoadingData] = useState(false)
+  const [verPag,setVerPag] = useState(false)
+  useEffect(()=>{ supabase.auth.getSession().then(({data})=>{ setSession(data?.session||null); setChecking(false) },()=>setChecking(false)); const sub=supabase.auth.onAuthStateChange((_e,s)=>setSession(s)); return ()=>{ try{ sub?.data?.subscription?.unsubscribe?.() }catch(_){} } },[])
+  useEffect(()=>{ if(!session){ setData(null); return } setLoadingData(true); setErr(null)
+    fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/portal',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey}, body:'{}' })
+      .then(async r=>{ const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||('Error '+r.status)); setData(j) })
+      .catch(e=>setErr(e.message==='sin_acceso'?'sin_acceso':(e.message||'error'))).finally(()=>setLoadingData(false))
+  },[session])
+  const enviar = async()=>{ const e=email.trim().toLowerCase(); if(!e||sending) return; setSending(true); setErr(null)
+    try{ const {error}=await supabase.auth.signInWithOtp({ email:e, options:{ emailRedirectTo:window.location.origin+'/portal' } }); if(error) throw error; setSent(true) }catch(x){ setErr(x.message||'No se pudo enviar el enlace') }
+    setSending(false) }
+  const salir = ()=>{ supabase.auth.signOut(); setSession(null); setData(null); setSent(false); setEmail('') }
+  const Brand = ({right}) => <div style={{background:C.accent,padding:'16px 18px',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}><div style={{textAlign:'center',color:'#fff'}}><div style={{fontSize:13,fontWeight:600,letterSpacing:2.5}}>LIBERONA ESCALA</div><div style={{fontSize:8,letterSpacing:4,opacity:.85,marginTop:2}}>ABOGADOS</div></div>{right&&<div style={{position:'absolute',right:16,top:'50%',transform:'translateY(-50%)'}}>{right}</div>}</div>
+  const wrap = { minHeight:'100vh', background:C.bg, fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif", padding:'22px 14px 50px', display:'flex', justifyContent:'center' }
+  const card = { width:'100%', maxWidth:460, background:'#fff', border:`1px solid ${C.border}`, borderRadius:18, overflow:'hidden', boxShadow:'0 10px 30px rgba(0,40,60,.08)' }
+
+  if(checking) return <div style={{...wrap,alignItems:'center'}}><Spin/></div>
+
+  // No autenticado → login por correo
+  if(!session) return (
+    <div style={wrap}><div style={card}>
+      <Brand/>
+      <div style={{padding:'22px 20px 26px'}}>
+        {!sent ? <>
+          <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:5}}>Entra a tu espacio</div>
+          <div style={{fontSize:12.5,color:C.muted,lineHeight:1.5,marginBottom:16}}>Escribe tu correo y te enviamos un enlace para entrar de forma segura. No necesitas contraseña.</div>
+          <input value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') enviar() }} type='email' placeholder='tu@correo.cl' style={{width:'100%',boxSizing:'border-box',fontSize:14,padding:'12px',borderRadius:11,border:`1px solid ${C.border}`,marginBottom:12}}/>
+          <button onClick={enviar} disabled={sending||!email.trim()} style={{width:'100%',background:C.accent,color:'#fff',border:'none',borderRadius:11,padding:13,fontSize:14,fontWeight:700,cursor:(sending||!email.trim())?'default':'pointer',opacity:(sending||!email.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{sending&&<Spin/>}Enviarme el enlace</button>
+          {err&&<div style={{fontSize:11.5,color:C.overdue,marginTop:10,textAlign:'center'}}>{err}</div>}
+          <div style={{fontSize:10,color:C.done,textAlign:'center',marginTop:14}}>Tu información es privada y solo tú la ves.</div>
+        </> : <div style={{textAlign:'center',padding:'12px 0'}}>
+          <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:8}}>Revisa tu correo</div>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.5}}>Te enviamos un enlace a <b style={{color:C.text}}>{email}</b>. Ábrelo desde este dispositivo para entrar.</div>
+          <button onClick={()=>{setSent(false)}} style={{marginTop:16,fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>Usar otro correo</button>
+        </div>}
+      </div>
+    </div></div>
+  )
+
+  // Autenticado
+  const salirBtn = <span onClick={salir} style={{fontSize:11,color:'#fff',opacity:.9,cursor:'pointer'}}>Salir</span>
+  if(loadingData) return <div style={wrap}><div style={card}><Brand right={salirBtn}/><div style={{padding:40,display:'flex',justifyContent:'center'}}><Spin/></div></div></div>
+  if(err==='sin_acceso' || !data?.clientes?.length) return (
+    <div style={wrap}><div style={card}><Brand right={salirBtn}/>
+      <div style={{padding:'30px 22px',textAlign:'center'}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.accent,marginBottom:6}}>Aún no tienes acceso</div>
+        <div style={{fontSize:12.5,color:C.muted,lineHeight:1.5}}>Este correo no tiene un espacio habilitado. Escríbele a tu abogado del estudio para que active tu portal.</div>
+      </div>
+    </div></div>
+  )
+  if(err) return <div style={wrap}><div style={card}><Brand right={salirBtn}/><div style={{padding:'30px 22px',textAlign:'center',fontSize:13,color:C.overdue}}>No pudimos cargar tu información. Reintenta más tarde.</div></div></div>
+
+  const ESTCHIP = { Pagada:{bg:C.greenBg,c:C.greenText}, Pendiente:{bg:C.ambarBg,c:C.coralText}, Vencida:{bg:C.overdueBg,c:C.overdueText} }
+  const fMonto = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
+  const fFecha = iso => { try{ return new Date(String(iso).slice(0,10)+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'}) }catch(e){ return iso } }
+  return (
+    <div style={wrap}><div style={{width:'100%',maxWidth:460}}>
+      <div style={card}>
+        <Brand right={salirBtn}/>
+        {data.clientes.map((c,ci)=>{ const pend=c.facturas.filter(f=>!f.pagada); const pag=c.facturas.filter(f=>f.pagada); return (
+        <div key={ci} style={{padding:'20px 18px 24px',borderTop:ci?`8px solid ${C.bg}`:'none'}}>
+          <div style={{fontSize:18,fontWeight:700,color:C.accent}}>Hola, {c.cliente.name}</div>
+          <div style={{fontSize:11.5,color:C.muted,marginBottom:18}}>Aquí ves cómo van tus asuntos y tus facturas.</div>
+
+          {/* Asuntos */}
+          {c.asuntos.length>0&&<>
+            <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Tus asuntos</div>
+            {c.asuntos.map((a,ai)=>(
+              <div key={ai} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',marginBottom:10}}>
+                <div style={{fontSize:13.5,fontWeight:700,color:C.accent,lineHeight:1.35}}>{a.nombre}</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'7px 0 6px'}}><span style={{fontSize:11,color:C.muted}}>{a.etapa}</span><span style={{fontSize:11,fontWeight:700,color:C.accent}}>{a.avance}%</span></div>
+                <div style={{height:6,borderRadius:4,background:'#EAEEF1',overflow:'hidden'}}><div style={{height:'100%',width:a.avance+'%',background:C.accent,borderRadius:4}}/></div>
+                {a.proximo&&<div style={{fontSize:11,color:C.muted,marginTop:7}}>Próximo: <b style={{color:C.text}}>{a.proximo}</b>{a.vence?` · ${fFecha(a.vence)}`:''}</div>}
+              </div>
+            ))}
+          </>}
+
+          {/* Facturas */}
+          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,margin:'18px 0 8px'}}>Tus facturas</div>
+          <div style={{background:C.bgSoft,borderRadius:12,padding:'14px',marginBottom:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Por pagar</div>
+            <div style={{fontSize:23,fontWeight:800,color:c.saldo>0?C.accent:C.greenText,marginTop:2}}>{c.saldo>0?fMonto(c.saldo):'Al día'}</div>
+            {c.saldo>0&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{pend.length} factura{pend.length!==1?'s':''} pendiente{pend.length!==1?'s':''}</div>}
+          </div>
+          {pend.map((f,fi)=>{ const s=ESTCHIP[f.estado]||ESTCHIP.Pendiente; return (
+            <div key={fi} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 0',borderTop:fi?`1px solid ${C.border}`:'none'}}>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {f.folio}</div><div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.concepto}{f.vence?` · vence ${fFecha(f.vence)}`:''}</div></div>
+              <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fMonto(f.monto)}</div><span style={{fontSize:9,fontWeight:700,borderRadius:20,padding:'2px 8px',background:s.bg,color:s.c}}>{f.estado}</span></div>
+            </div>
+          )})}
+          {pag.length>0&&<div style={{marginTop:8}}><span onClick={()=>setVerPag(v=>!v)} style={{fontSize:11.5,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>{verPag?'Ocultar pagadas':`Ver ${pag.length} pagada${pag.length!==1?'s':''} →`}</span>
+            {verPag&&pag.map((f,fi)=>(<div key={fi} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`1px solid ${C.border}`,opacity:.75}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,color:C.text}}>Factura N° {f.folio}</div><div style={{fontSize:10,color:C.muted}}>{f.concepto}</div></div><div style={{textAlign:'right'}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fMonto(f.monto)}</div><span style={{fontSize:9,fontWeight:700,color:C.greenText}}>Pagada</span></div></div>))}
+          </div>}
+          {c.saldo>0&&<div style={{fontSize:11,color:C.muted,background:C.azulBg,borderRadius:10,padding:'10px 12px',marginTop:12,lineHeight:1.5}}>Para pagar, coordina la transferencia con tu abogado a cargo. Muy pronto podrás pagar en línea desde aquí.</div>}
+
+          {/* Documentos */}
+          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,margin:'18px 0 8px'}}>Documentos</div>
+          <div style={{fontSize:11.5,color:C.muted,border:`1px dashed ${C.border}`,borderRadius:10,padding:'12px',textAlign:'center'}}>Tu abogado podrá compartir documentos aquí muy pronto.</div>
+        </div>
+        )})}
+        <div style={{padding:'14px 18px',borderTop:`1px solid ${C.border}`,fontSize:10.5,color:C.done,textAlign:'center'}}>Liberona Escala Abogados · gestion.leabogados.cl</div>
+      </div>
+    </div></div>
+  )
+}
+
 export default function App() {
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
