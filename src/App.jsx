@@ -15581,6 +15581,23 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           ))}
         </div>
 
+        {/* Portal del cliente (Fase 1a): interruptor para compartir su estado */}
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:8}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='user' s={15} c={C.accent}/></span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.accent}}>Portal del cliente</div>
+              <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{client.portal_activo?'Activo — el cliente puede ver el estado de sus asuntos, facturas y documentos.':'Comparte el estado de sus asuntos, facturas y documentos con el cliente.'}</div>
+            </div>
+            <button onClick={()=>onSaveFields&&onSaveFields(client.id,{portal_activo:!client.portal_activo})} title={client.portal_activo?'Desactivar':'Activar'} style={{width:40,height:23,borderRadius:12,border:'none',background:client.portal_activo?C.normal:C.done,position:'relative',cursor:'pointer',flexShrink:0,padding:0}}>
+              <span style={{position:'absolute',top:2,left:client.portal_activo?19:2,width:19,height:19,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
+            </button>
+          </div>
+          {client.portal_activo&&<div style={{fontSize:11,color:C.muted,marginTop:9,borderTop:`1px solid ${C.border}`,paddingTop:9,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+            <span>Entra en <b style={{color:C.text}}>portal.leabogados.cl</b> con su correo:</span><b style={{color:client.email?C.accent:C.overdue}}>{client.email||'falta el correo del cliente'}</b>
+          </div>}
+        </div>
+
         {/* Actividad — bitácora del cliente, se llena sola con pagos/facturas/tareas/anticipos/gastos */}
         {(()=>{ const evs=eventosCliente(client.id,{billing,tasks,anticipos,expenses})
           const fD=iso=>{ try{ return new Date(iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) }catch(e){ return iso } }
