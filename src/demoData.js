@@ -139,6 +139,9 @@ export const demoData = {
     { id:'h4', user_name:'Cristóbal', client_id:'c4', fecha:'2026-08-27', horas:2.5, glosa:'Contestación de demanda', billable:true, source:'manual' },
     { id:'h5', user_name:'Martina',   client_id:'c4', fecha:'2026-08-26', horas:4,   glosa:'Audiencia preparatoria', billable:true, source:'manual' },
     { id:'h6', user_name:'Cristóbal', client_id:'c4', fecha:'2026-08-25', horas:3,   glosa:'Estudio de antecedentes', billable:true, source:'manual' },
+    { id:'h7', user_name:'Demo', client_id:'c1', fecha:'2026-08-27', horas:1.5, glosa:'Reunión con el cliente', billable:true, source:'manual' },
+    { id:'h8', user_name:'Demo', client_id:'c1', fecha:'2026-08-26', horas:2,   glosa:'Revisión de minuta', billable:true, source:'manual' },
+    { id:'h9', user_name:'Demo', client_id:'c4', fecha:'2026-08-24', horas:1,   glosa:'Llamada de coordinación', billable:true, source:'manual' },
   ],
   vacaciones: [
     { id:'vac1', user_name:'Demo', desde:new Date(Date.now()+5*864e5).toISOString().slice(0,10), hasta:new Date(Date.now()+9*864e5).toISOString().slice(0,10) },

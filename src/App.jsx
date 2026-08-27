@@ -20740,6 +20740,17 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   }
   const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
   const bump = (id,delta) => setDur(p=>({...p,[id]:Math.max(0.1,Math.round(((p[id]||1)+delta)*10)/10)}))
+  // Mejoras: Mi semana + recordatorio de viernes + coordinación del socio (sugerida, facturable).
+  const dow = (new Date(hoy+'T00:00:00').getDay()+6)%7   // 0=lun … 6=dom
+  const semDias = (()=>{ const d=new Date(lunISO+'T00:00:00'); return [0,1,2,3,4].map(i=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+i).toISOString().slice(0,10)) })()
+  const misHorasDia = iso => horas.filter(h=>h.user_name===me && h.fecha===iso).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  const misTareasDia = iso => (tasks||[]).filter(t=>t.due===iso && t.status!=='Terminado' && (isAssignee(t,me)||t.who===me)).length
+  const misHorasSem = horas.filter(h=>h.user_name===me && (h.fecha||'')>=lunISO).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  const delegadasHoy = (()=>{ if(!isAdmin) return []; const c=new Date(hoy+'T00:00:00'); c.setDate(c.getDate()-1); const cut=c.toISOString().slice(0,10)
+    const del=(tasks||[]).filter(t=> t.assigned_by===me && t.client_id && String(t.created_at||'').slice(0,10)>=cut && !(isAssignee(t,me)||t.who===me))
+    const by={}; del.forEach(t=>{ (by[String(t.client_id)]=by[String(t.client_id)]||[]).push(t) })
+    return Object.entries(by).filter(([cid])=>!horas.some(h=>h.source==='coordinacion'&&String(h.client_id)===cid&&h.fecha===hoy&&h.user_name===me)).map(([cid,ts])=>({cid,n:ts.length})) })()
+  const registrarCoord = (cid,n) => addHora({ client_id:cid, fecha:hoy, horas:0.2, glosa:`Coordinación · delegación de ${n} tarea${n!==1?'s':''}`, source:'coordinacion', billable:true })
   const consumoMes = cid => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
   async function guardarCfg(cid,sale_id){
     const est=Number(cfgF.horas_estimadas)||0, tar=Number(cfgF.tarifa_mensual)||0, ex=retDe(cid)
@@ -20783,6 +20794,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Horas</div>
         <span style={{fontSize:11,color:C.done}}>Esta semana: <b style={{color:C.accent}}>{fh(totSem)}</b></span>
       </div>
+      {(dow===3||dow===4) && <div style={{background:C.soonBg,borderRadius:11,padding:'10px 12px',marginBottom:12,display:'flex',alignItems:'center',gap:8}}><span style={{width:6,height:6,borderRadius:'50%',background:C.soonText,flexShrink:0}}/><span style={{flex:1,fontSize:11.5,color:C.soonText,fontWeight:600}}>{dow===4?'Es viernes':'Ya es jueves'} — llevas <b>{fh(misHorasSem)}</b> esta semana. Revisa que no falte cargar nada.</span></div>}
       {isAdmin && <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:14}}>{[['mias','Mis horas'],['equipo','Equipo'],['ytd','Rentabilidad']].map(([k,l])=><button key={k} onClick={()=>setVista(k)} style={{fontSize:11,fontWeight:700,padding:'5px 13px',border:'none',background:vista===k?C.accent:'#fff',color:vista===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>}
 
       {isAdmin && vista==='equipo' && <>
@@ -20824,6 +20836,17 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       {vista==='mias' && <>
       <div style={{fontSize:11.5,color:C.muted,marginBottom:14}}>Confirma lo que hiciste hoy — solo teclea las horas.</div>
 
+      <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'0 2px 8px'}}>Mi semana</div>
+      <div style={{display:'flex',gap:6,marginBottom:16}}>
+        {semDias.map((iso,i)=>{ const hh=misHorasDia(iso); const td=misTareasDia(iso); const isHoy=iso===hoy; return (
+          <div key={iso} style={{flex:1,textAlign:'center',background:isHoy?C.azulBg:'#fff',border:`1px solid ${isHoy?C.azulInfo:C.border}`,borderRadius:9,padding:'8px 2px'}}>
+            <div style={{fontSize:8.5,color:C.done,textTransform:'uppercase',fontWeight:700}}>{['lun','mar','mié','jue','vie'][i]}</div>
+            <div style={{fontSize:13,fontWeight:700,color:hh>0?C.accent:'#99ABB4',marginTop:2,fontVariantNumeric:'tabular-nums'}}>{hh>0?fh(hh).replace(' h',''):'·'}</div>
+            {td>0 && <div style={{fontSize:8,color:C.soonText,marginTop:2}}>{td} plazo{td!==1?'s':''}</div>}
+          </div>
+        )})}
+      </div>
+
       {/* ¿Qué hiciste hoy? */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'2px 2px 8px'}}>
         <span style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>Por cargar</span>
@@ -20841,7 +20864,15 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           </div>
         </div>
       ))}
-      {(misTareasHoy.length===0 && agenda.length===0) && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'14px',marginBottom:9}}>{agDone?'Nada pendiente por cargar.':'Toca “Revisar mi agenda” para traer tus reuniones, o “+ Registrar tiempo”.'}</div>}
+      {delegadasHoy.map(d=>(
+        <div key={'co'+d.cid} style={{background:'#FFFDF6',border:`1px solid ${C.soonBg}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+          <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.ambarBg,color:C.soonText,letterSpacing:'.02em'}}>COORDINACIÓN</span>
+          <div onClick={()=>cliOpen(d.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</div>
+          <div style={{fontSize:11.5,color:C.muted,lineHeight:1.35}}>Delegaste {d.n} tarea{d.n!==1?'s':''} — coordinación (facturable)</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',marginTop:10,gap:9}}><span style={{fontSize:11,color:C.done}}>0,2 h</span><button onClick={()=>registrarCoord(d.cid,d.n)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'8px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Cargar</button></div>
+        </div>
+      ))}
+      {(misTareasHoy.length===0 && agenda.length===0 && delegadasHoy.length===0) && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'14px',marginBottom:9}}>{agDone?'Nada pendiente por cargar.':'Toca “Revisar mi agenda” para traer tus reuniones, o “+ Registrar tiempo”.'}</div>}
       {misTareasHoy.map(t=>(
         <div key={t.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
           <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.azulBg,color:C.azulInfo,letterSpacing:'.02em'}}>TAREA</span>
@@ -20887,6 +20918,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               <div style={{height:22,borderRadius:7,background:over?C.overdueBg:C.greenBg,overflow:'hidden',marginTop:8}}><span style={{display:'block',height:'100%',width:pct+'%',background:over?C.overdue:C.normal}}/></div>
               <div style={{display:'flex',justifyContent:'space-between',marginTop:7,fontSize:10.5,color:C.muted}}><span>Estimadas {fh(est)}</span><span>Consumidas {fh(cons)}</span><span style={{color:over?C.overdueText:C.greenText,fontWeight:600}}>{over?'Excedido '+fh(cons-est):'Saldo '+fh(est-cons)}</span></div>
               {r.tarifa_mensual>0 && <div style={{fontSize:10,color:C.done,marginTop:4}}>{f0(r.tarifa_mensual)}/mes · implícita {est>0?f0(r.tarifa_mensual/est)+'/h':'—'}{over?' · conviene reajustar':''}</div>}
+              {(()=>{ const diaMes=new Date().getDate(); const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate(); const rate=diaMes>0?cons/diaMes:0; if(est>0&&rate>0&&!over&&rate*diasMes>est){ const dia=Math.min(diasMes,Math.ceil(est/rate)); return <div style={{fontSize:10,color:C.soonText,marginTop:3}}>A este ritmo, agotas las {fh(est)} cerca del día {dia}.</div> } return null })()}
               {isAdmin && (!rep || String(rep.cid)!==String(cid)) && <div onClick={()=>abrirReporte(cid)} style={{marginTop:9,fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer'}}>Reportar horas al cliente →</div>}
               {isAdmin && rep && String(rep.cid)===String(cid) && (()=>{ const ents=entriesRep(cid,rep.mes); const cons=ents.reduce((a,h)=>a+(Number(h.horas)||0),0); return (
                 <div style={{marginTop:10,borderTop:`1px solid ${C.bgSoft}`,paddingTop:10}}>
