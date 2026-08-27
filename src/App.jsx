@@ -15581,6 +15581,27 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           ))}
         </div>
 
+        {/* Actividad — bitácora del cliente, se llena sola con pagos/facturas/tareas/anticipos/gastos */}
+        {(()=>{ const evs=eventosCliente(client.id,{billing,tasks,anticipos,expenses})
+          const fD=iso=>{ try{ return new Date(iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) }catch(e){ return iso } }
+          const dias=iso=>Math.round((Date.now()-new Date(iso+'T00:00').getTime())/86400000)
+          return <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+            {RHdr({icon:'clock',title:'Actividad',purpose:'qué ha pasado con este cliente',k:'actividad',summary:evs.length||null})}
+            {rSec.actividad&&(!evs.length
+              ? <div style={{padding:'2px 13px 14px',fontSize:12,color:C.muted}}>Sin actividad registrada.</div>
+              : <div style={{padding:'4px 13px 14px'}}><div style={{position:'relative',paddingLeft:16}}>
+                  <div style={{position:'absolute',left:4,top:4,bottom:6,width:2,background:C.border}}/>
+                  {evs.slice(0,12).map((e,i)=>{ const dd=dias(e.iso); const cu=dd<=0?'hoy':dd===1?'ayer':`hace ${dd} d`; const t=e.ref&&e.ref.kind==='task'?(tasks||[]).find(x=>String(x.id)===String(e.ref.id)):null; const clickable=!!t||e.tipo==='pago'||e.tipo==='factura'; return (
+                    <div key={i} onClick={clickable?()=>{ if(t&&onEditTask)onEditTask(t); else setFtab('financiero') }:undefined} style={{position:'relative',display:'flex',gap:8,alignItems:'flex-start',paddingBottom:9,cursor:clickable?'pointer':'default'}}>
+                      <span style={{position:'absolute',left:-15,top:3,width:10,height:10,borderRadius:'50%',border:'2px solid #fff',background:SEÑAL_COL[e.tipo]||C.muted}}/>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:clickable?C.accent:C.text}}>{e.count>1?`${e.texto} · ${e.count}`:e.texto}</div></div>
+                      <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:C.muted,whiteSpace:'nowrap'}}>{fD(e.iso)}</div><div style={{fontSize:9,color:C.done,whiteSpace:'nowrap'}}>{cu}</div></div>
+                    </div>
+                  )})}
+                </div></div>)}
+          </div>
+        })()}
+
         {/* Ventas */}
         <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
           {RHdr({icon:'briefcase',title:'Ventas',purpose:'qué le vendiste',k:'ventas',summary:`${clientSales.filter(s=>s.status==='Activo').length} activas`})}
@@ -20306,6 +20327,23 @@ const SEÑAL_COL = { pago:'#0F6E56', factura:'#185FA5', anticipo:'#185FA5', tare
 // Una factura está EMITIDA solo si tiene folio y no es Programada/Anulada. Una cuota Programada NO es "emitida"
 // (bug real: se marcaba issued_at de programadas como "Factura emitida" a clientes sin facturar).
 const facturaEmitida = b => !!b && !!b.invoice_no && b.status!=='Programada' && b.status!=='Anulada' && b.billing_type!=='reembolso'
+// Timeline de actividad de un CLIENTE (todos sus eventos reales, agrupando los iguales del mismo día).
+// Usa el mismo criterio que Cartera (facturaEmitida con folio). Para la bitácora en la ficha del cliente.
+const eventosCliente = (clientId, { billing=[], tasks=[], anticipos=[], expenses=[] }={}) => {
+  const cid = String(clientId||''); if(!cid) return []
+  const evs=[]; const push=(fecha,tipo,texto,ref)=>{ if(!fecha) return; const iso=String(fecha).slice(0,10); if(iso.length<10) return; evs.push({iso,tipo,texto,ref:ref||null}) }
+  billing.filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && String(b.client_id)===cid).forEach(b=>{
+    if(b.paid_at && b.status==='Pagado') push(b.paid_at,'pago',`Pago recibido${b.amount?` · ${fmt(b.amount)}`:''}`)
+    else if(facturaEmitida(b)) push(b.issued_at||b.due,'factura',`Factura emitida${b.invoice_no?` N° ${b.invoice_no}`:''}`)
+  })
+  tasks.filter(t=>String(t.client_id)===cid).forEach(t=>{ if(t.completed_at) push(t.completed_at,'tarea','Tarea terminada',{kind:'task',id:t.id}); else push(t.created_at,'tarea','Tarea nueva',{kind:'task',id:t.id}) })
+  anticipos.filter(a=>String(a.client_id)===cid).forEach(a=>push(a.fecha,'anticipo',`Anticipo recibido${a.monto?` · ${fmt(a.monto)}`:''}`))
+  expenses.filter(e=>String(e.client_id)===cid).forEach(e=>push(e.rendered_at||e.date||e.created_at,'gasto','Movimiento de gastos'))
+  evs.sort((a,b)=>b.iso.localeCompare(a.iso))
+  const out=[], seen=new Map()
+  evs.forEach(e=>{ const k=e.tipo+'|'+e.texto+'|'+e.iso; if(seen.has(k)){ seen.get(k).count++ } else { const o={...e,count:1}; seen.set(k,o); out.push(o) } })
+  return out.slice(0,40)
+}
 // FUENTE ÚNICA del movimiento de un proyecto (la usan Cartera y el strip "Mis proyectos" del Inicio).
 // Barre eventos REALES (pagos, facturas EMITIDAS, tareas, anticipos, gastos) + un resumen del plan de cobro → última señal + score 30d + eventos (ref clickeable).
 const carteraMovimiento = (p, { billing=[], tasks=[], anticipos=[], expenses=[] }={}) => {
@@ -23621,7 +23659,8 @@ Nunca ejecutas nada tú: solo propones y el humano confirma.
 
 DATOS:
 ${brief()}`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:500,system:sys,messages:[{role:'user',content:t}]})
+      const msgs=[]; hist.slice(-8).forEach(x=>{ if(x.role==='user'&&x.text) msgs.push({role:'user',content:x.text}); else if(x.role==='bot'&&x.text) msgs.push({role:'assistant',content:x.text}) }); msgs.push({role:'user',content:t})
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:500,system:sys,messages:msgs})
       const txt = (data?.content?.[0]?.text||'').trim()
       const m = txt.match(/\{[\s\S]*"accion"[\s\S]*\}/)
       if(m){ let a=null; try{ a=JSON.parse(m[0]) }catch(_){}; if(a&&a.accion){ setHist(h=>[...h,{role:'bot',action:a}]); setBusy(false); return } }
