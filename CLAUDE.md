@@ -2,6 +2,16 @@
 
 App de gestión legal para Liberona Escala Abogados. Estas reglas son permanentes y guían toda decisión.
 
+## REGLA DE ORO: vendible por diseño (mirada de producto)
+
+Construimos para **muchos estudios, no para el nuestro**. Cada decisión —dato, texto, color, integración, tabla, flujo— se toma como si mañana la usara **otro estudio, en otro país**. La herramienta interna de hoy no es el producto: es su **primer cliente**; se sirve impecable, pero se construye para el segundo. El norte es transformarla en un SaaS vendible en Chile y LatAm (ver artifact "De estudio a producto" y [[roadmap-vision-estrategica]]).
+
+- **La pregunta de diseño (hazla siempre):** "¿esto obliga a hardcodear algo NUESTRO —un correo `@leabogados.cl`, un color de persona, una regla del SII, el nombre del estudio—?" Si la respuesta es sí, está mal diseñada; busca la forma parametrizable.
+- **Nada cableado a Liberona Escala:** nombre, logo, paleta, firmas, roles, áreas, correos y equipo son (o van camino a ser) **datos configurables por estudio**, no constantes en el código. Al tocar código con estas constantes cableadas, prefiere dejarlo un paso más cerca de configurable (no romper lo actual, pero no agravar la deuda).
+- **Aislamiento por estudio (multi-tenant) es el norte de datos:** hoy RLS = `@leabogados.cl` (monoinquilino); el destino es `estudio_id` + RLS por estudio. Toda tabla/feature nueva debe poder convivir con eso (pensar "¿de qué estudio es esta fila?").
+- **Lo "Chile" es un módulo país:** SII, UF, RUT, IVA, factura electrónica y formatos son de Chile; trátalos como algo que se enchufa, no como el core. Idea a futuro: moneda/impuestos/idioma (es/pt/en) parametrizables.
+- **Pragmatismo:** esto NO frena el avance ni obliga a construir el multi-tenant hoy. Es una **mirada**: entre dos soluciones equivalentes, elige la que escala a más estudios; y no agregues deuda nueva de cableado. Esta regla convive con "menos es más" y con la autonomía autorizada.
+
 ## Arquitectura
 
 - Archivo único: `src/App.jsx` (~16.250 líneas). React + Vite. Supabase (proyecto `kibuwhtpoxrnfowfdolu`, **RLS ON** desde 2026-06-19: política `team_all` permite solo a usuarios autenticados con email `@leabogados.cl`; las edge functions usan `service_role` y saltan RLS). Deploy en Vercel.
