@@ -1870,7 +1870,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
       const label = d.toLocaleDateString('es-CL',{month:'short'})
       const labelFull = d.toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())
       if(i<0){
-        const cobrado = pagadas.filter(b=>b.paid_at?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
+        const cobrado = billing.filter(b=>b.billing_type!=='reembolso'&&okResp(b)&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').startsWith(key)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única)
         result.push({key,label,labelFull,past:true,cobrado,emitido:0,programado:0,overdue:0,total:cobrado})
       } else {
         const emitidoMes = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+saldoBill(b),0)
@@ -2501,13 +2501,16 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   // Lo que no tiene año resuelto cae en "sin asignar" → se asigna en la cola de Facturación.
   const ingresosPorAnioVenta = useMemo(()=>{
     const saleYrById={}; sales.forEach(s=>{ if(s.year!=null) saleYrById[String(s.id)]=s.year })
-    const pagadas = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.paid_at?.startsWith(_sySel))
+    // Cobrado = fuente única cobradoBill (incluye abonos PARCIALES, igual que las fichas). Base de fecha para el año de caja:
+    // pagada → paid_at (entró al pagarse); parcial → issued_at (no guardamos la fecha del abono).
+    const cobradas = bb.filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').startsWith(_sySel))
     let total=0, sinMonto=0, sinN=0; const byYear={}; const listByYear={}; const sinList=[]
-    pagadas.forEach(b=>{
+    cobradas.forEach(b=>{
       const ay = (b.sale_id&&saleYrById[String(b.sale_id)]!=null) ? saleYrById[String(b.sale_id)] : (b.sale_year!=null?b.sale_year:null)
-      total+=(b.amount||0)
-      if(ay==null){ sinMonto+=(b.amount||0); sinN++; sinList.push(b); return }
-      byYear[ay]=(byYear[ay]||0)+(b.amount||0); (listByYear[ay]=listByYear[ay]||[]).push(b)
+      const monto=cobradoBill(b); const item = monto<montoFactura(b) ? {...b,_cobrado:monto,_parcial:true} : {...b,_cobrado:monto}
+      total+=monto
+      if(ay==null){ sinMonto+=monto; sinN++; sinList.push(item); return }
+      byYear[ay]=(byYear[ay]||0)+monto; (listByYear[ay]=listByYear[ay]||[]).push(item)
     })
     // Anticipos DISPONIBLES = plata que ya ingresó a la cartola (fecha=mov.fecha) sin factura aún → base caja. Suman al total por AÑO DE INGRESO
     // (fecha); en el desglose van por AÑO DE VENTA (sale_id) o "sin asignar". Los CONSUMIDOS ya están representados por su factura (no se recuentan).
@@ -2945,9 +2948,9 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                 <div key={b.id} onClick={()=>abreFac(b)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
                   <div style={{minWidth:0,flex:1}}>
                     <div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(b)}</div>
-                    <div style={{fontSize:9.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b._esAnticipo?`Anticipo${b.concept?` · ${b.concept}`:''}`:`N°${folioN(b.invoice_no)||b.folio||'—'}`}{vt?` · ${vt}`:''}{b.paid_at?` · ${b._esAnticipo?'ingresó':'pagada'} ${fmtFechaDMY(b.paid_at)}`:''}</div>
+                    <div style={{fontSize:9.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b._esAnticipo?`Anticipo${b.concept?` · ${b.concept}`:''}`:`N°${folioN(b.invoice_no)||b.folio||'—'}`}{vt?` · ${vt}`:''}{b.paid_at?` · ${b._esAnticipo?'ingresó':'pagada'} ${fmtFechaDMY(b.paid_at)}`:''}{b._parcial?' · abono parcial':''}</div>
                   </div>
-                  <span style={{fontSize:12,fontWeight:700,color:C.greenText,whiteSpace:'nowrap'}}>{fmtMon(b.amount)}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:C.greenText,whiteSpace:'nowrap'}}>{fmtMon(b._cobrado!=null?b._cobrado:b.amount)}</span>
                 </div> )})}
             </div>}
           </>}
@@ -3520,7 +3523,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
 
     const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&Number(s.year)===yr).reduce((a,s)=>a+ventaUF(s,ufRef),0)
     const porCobrar = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
-    const cobradoYTD = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.status==='Pagado'&&String(b.paid_at||'').slice(0,4)===String(yr)).reduce((a,b)=>a+(b.amount||0),0)
+    const cobradoYTD = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').slice(0,4)===String(yr)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única, coincide con fichas/dashboard)
     // Cartera: TODOS los no-internos segmentados por salud (cascada, cada cliente cae en uno). Terminados fuera.
     const noInt = (clients||[]).filter(c=>!c.is_internal)
     const segCli = c => {
@@ -7364,7 +7367,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   // KPIs — MISMA fuente que el landing: Por cobrar = total cuentas por cobrar (emitidas con saldo, NO depende del año); Por facturar = sin folio real (excluye las ya facturadas).
   const pending=bb.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
   const overdue=bb.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((s,b)=>s+saldoBill(b),0)
-  const paid=bb.filter(b=>b.status==='Pagado'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
+  const paid=bb.filter(b=>cobradoBill(b)>0&&matchYM(kpiDate(b))).reduce((s,b)=>s+cobradoBill(b),0)   // incluye parciales (fuente única cobradoBill)
   const programado=bb.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&!yaFacturadasIds.has(b.id)&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
   // Contadores por nº de documentos para las tabs
   const nEmitidas=bb.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status)).length
@@ -8231,7 +8234,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const dias=b=>b.due?Math.round((new Date(hoy)-new Date(b.due))/86400000):0
           const porCobrar=pend.reduce((a,b)=>a+saldoBill(b),0)
           const inResYear=(dateStr)=> !fYear || String(dateStr||'').slice(0,4)===fYear
-          const cobAll=bb.filter(b=>b.status==='Pagado'&&inResYear(b.paid_at||b.issued_at)).reduce((a,b)=>a+(b.amount||0),0)
+          const cobAll=bb.filter(b=>cobradoBill(b)>0&&inResYear(b.status==='Pagado'?(b.paid_at||b.issued_at):b.issued_at)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única)
           const progAll=bb.filter(b=>b.status==='Programada'&&inResYear(b.due)).reduce((a,b)=>a+(b.amount||0),0)
           // "Por facturar" = todo sin folio (no pagado/anulado). Se separa: real (falta emitir) vs ya facturadas (duplicado, su factura emitida ya existe → vincular).
           const porFactBucket=bb.filter(b=>!b.deleted_at&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&inResYear(b.due))
