@@ -416,10 +416,11 @@ const ddItem = { padding:'9px 14px', fontSize:13, color:C.text, cursor:'pointer'
 const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina':'MP','Rodrigo':'RD'}
 // Responsables de una tarea: usa assignees (multi); si no hay, cae a who (tareas antiguas).
 const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignees : (t && t.who ? [t.who] : [])
-// Color de pill por persona (CANON único, igual a CART_AV): Cristóbal navy · Erasmo azul · Martín verde · Martina rosa · Rodrigo ámbar.
+// Color de pill por persona = FUENTE ÚNICA del color por integrante (CART_AV deriva de acá). Canon 2026-06-27:
+// Cristóbal navy · Erasmo oro/mostaza · Martín verde · Martina rojo/rosa · Rodrigo terracota (Erasmo NO azul, para no confundirse con el navy de Cristóbal).
 const PERSON_CHIP = {
-  'Cristóbal':{bg:C.azulBg,color:C.accent}, 'Erasmo':{bg:C.azulBg,color:C.azulInfo},
-  'Martín':{bg:C.greenBg,color:C.greenText}, 'Martina':{bg:'#F6E7EC',color:'#993556'}, 'Rodrigo':{bg:C.ambarBg,color:C.soonText},
+  'Cristóbal':{bg:C.azulBg,color:C.accent}, 'Erasmo':{bg:'#F3EFD8',color:'#8A7012'},
+  'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:C.overdueBg,color:C.overdueText}, 'Rodrigo':{bg:'#F7E7E1',color:'#A8472A'},
 }
 const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:C.bgWarm,color:C.grisText}
 const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
@@ -20339,7 +20340,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
 // ─── PANEL DE CARTERA (Fase 1: vista limpia de proyectos activos, orden por "sin mover") ────
 const ETAPAS_CARTERA = ['Diagnóstico','Análisis','Borrador','Revisión cliente','Ejecución','Cierre']
 const CART_DOT = { rojo:'#E24B4A', ambar:'#EF9F27', verde:'#1D9E75' }   // semáforo (eje nuevo: salud del proyecto)
-const CART_AV  = { CL:'#003C50', EE:'#185FA5', MC:'#3B6D11', MP:'#993556', RD:'#854F0B' }  // color por persona (canon)
+const CART_AV  = (()=>{ const N={CL:'Cristóbal',EE:'Erasmo',MC:'Martín',MP:'Martina',RD:'Rodrigo'}; const o={}; for(const i in N) o[i]=personChip(N[i]).color; return o })()  // color por persona: DERIVA de PERSON_CHIP (fuente única, no duplicar)
 const SEÑAL_COL = { pago:'#0F6E56', factura:'#185FA5', anticipo:'#185FA5', tarea:'#854F0B', gasto:'#537281', plan:'#537281', genesis:'#003C50', nota:'#99ABB4' }
 // Una factura está EMITIDA solo si tiene folio y no es Programada/Anulada. Una cuota Programada NO es "emitida"
 // (bug real: se marcaba issued_at de programadas como "Factura emitida" a clientes sin facturar).
