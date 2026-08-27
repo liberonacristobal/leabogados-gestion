@@ -509,6 +509,35 @@ function rsBalances(clientId, expenses, entities){
 // FUENTE ÚNICA del documento de rendición (HTML imprimible). La usan el historial ("Ver PDF")
 // y RendicionModal (al enviar), para que ambos PDFs sean idénticos. Recibe datos ya normalizados.
 // gastos: [{date,concept,category,amount}] · fondos: [{date,concept,amount}]
+// Reporte de horas al cliente (Fase 2) — statement mensual. forPrint=true envuelve con botón de imprimir; si no, sirve como cuerpo de correo.
+function horasReporteHtml({ razon, periodo, dirigidoA, entradas, estimadas, consumidas, lang='es', forPrint=false }){
+  const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', TXT='#3D3D3D'
+  const EN = lang==='en'
+  const T = EN ? {title:'Hours Report', date:'Date', desc:'Description', by:'By', hours:'Hours', total:'Total hours', est:'Estimated', cons:'Consumed', bal:'Balance', over:'Over', attn:'Attn', print:'Print / Save PDF'}
+             : {title:'Reporte de horas', date:'Fecha', desc:'Descripción', by:'Abogado', hours:'Horas', total:'Total de horas', est:'Estimadas', cons:'Consumidas', bal:'Saldo', over:'Excedido', attn:'Dirigido a', print:'Imprimir / Guardar PDF'}
+  const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
+  const rows = (entradas||[]).map(h=>`<tr><td style='padding:6px 8px;border-bottom:1px solid #EFF1F3'>${String(h.fecha||'').split('-').reverse().join('-')}</td><td style='padding:6px 8px;border-bottom:1px solid #EFF1F3'>${String(h.glosa||'').replace(/</g,'&lt;')}</td><td style='padding:6px 8px;border-bottom:1px solid #EFF1F3'>${String(h.user_name||'').replace(/</g,'&lt;')}</td><td style='padding:6px 8px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(h.horas)}</td></tr>`).join('')
+  const total = (entradas||[]).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  const saldo = (Number(estimadas)||0) - (Number(consumidas)||0)
+  const over = saldo < 0
+  const body = `<div style='max-width:600px;margin:0 auto;font-family:DM Sans,Arial,sans-serif;color:${TXT}'>
+    <div style='background:${A};padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><img src='${location.origin}/le-logo-blanco.png' alt='Liberona Escala' style='height:26px;display:block'/><div style='text-align:right;color:#fff'><div style='font-size:13px;font-weight:700'>${razon||''}</div><div style='font-size:10px;opacity:.85'>${T.title} · ${periodo}</div></div></div>
+    ${dirigidoA?`<div style='background:${GRAY};padding:7px 24px;font-size:10px;color:${TXT}'>${T.attn}: ${dirigidoA}</div>`:''}
+    <div style='padding:18px 24px'>
+      <table style='width:100%;border-collapse:collapse;font-size:11px'><thead><tr style='color:${MUTED};text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 8px;border-bottom:1px solid ${GRAY}'>${T.date}</th><th style='text-align:left;padding:6px 8px;border-bottom:1px solid ${GRAY}'>${T.desc}</th><th style='text-align:left;padding:6px 8px;border-bottom:1px solid ${GRAY}'>${T.by}</th><th style='text-align:right;padding:6px 8px;border-bottom:1px solid ${GRAY}'>${T.hours}</th></tr></thead><tbody>${rows}</tbody></table>
+      <div style='display:flex;justify-content:space-between;padding:8px;border-top:1.5px solid ${A};font-weight:700;font-size:12px;margin-top:2px'><span>${T.total}</span><span>${fh(total)} h</span></div>
+      <div style='display:flex;gap:8px;margin-top:14px'>
+        <div style='flex:1;background:#F5F7F9;border-radius:8px;padding:9px;text-align:center'><div style='font-size:14px;font-weight:700;color:${A}'>${fh(estimadas)}</div><div style='font-size:8px;color:${MUTED};text-transform:uppercase'>${T.est}</div></div>
+        <div style='flex:1;background:#F5F7F9;border-radius:8px;padding:9px;text-align:center'><div style='font-size:14px;font-weight:700;color:${A}'>${fh(consumidas)}</div><div style='font-size:8px;color:${MUTED};text-transform:uppercase'>${T.cons}</div></div>
+        <div style='flex:1;background:${over?'#FCEBEB':'#E1F5EE'};border-radius:8px;padding:9px;text-align:center'><div style='font-size:14px;font-weight:700;color:${over?'#A32D2D':'#0F6E56'}'>${fh(Math.abs(saldo))}</div><div style='font-size:8px;color:${MUTED};text-transform:uppercase'>${over?T.over:T.bal}</div></div>
+      </div>
+    </div>
+    <div style='padding:12px 24px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED};display:flex;justify-content:space-between'><span>Av. Kennedy 7900, Of. 905, Vitacura · leabogados.cl</span><span>${periodo}</span></div>
+  </div>`
+  if(!forPrint) return body
+  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>${T.title} — ${razon||''}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;background:#fff'>${body}<button class='print-btn no-print' onclick='window.print()'>${T.print}</button></body></html>`
+}
+
 function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null, project=null, subproject=null, lang='es' }){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4', TXT='#3D3D3D'
   const EN = lang==='en'
@@ -20668,6 +20697,29 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     const {data}=await supabase.from('retainers').select('*'); if(data) setRetainers(data); setCfgOpen(null)
   }
   const cliOpen = cid => onOpenClientFicha&&onOpenClientFicha(cid)
+  // Reporte de horas al cliente (Fase 2). Solo el socio (admin) reporta = visado.
+  const [rep,setRep] = useState(null)   // {cid,mes,para,lang,sending}
+  const abrirReporte = cid => { const cl=clients.find(c=>String(c.id)===String(cid)); setRep({cid,mes:mesActual,para:cl?.email||'',lang:'es',sending:false}) }
+  const entriesRep = (cid,mes) => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mes))
+  const verPdfRep = () => { const {cid,mes,lang}=rep; const ents=entriesRep(cid,mes); const r=retDe(cid); const html=horasReporteHtml({razon:cn(cid),periodo:mes,entradas:ents,estimadas:r?.horas_estimadas||0,consumidas:ents.reduce((a,h)=>a+(+h.horas||0),0),lang,forPrint:true}); const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() } }
+  async function enviarReporte(){
+    const {cid,mes,para,lang}=rep, ents=entriesRep(cid,mes)
+    if(!ents.length){ appAlert('No hay horas cargadas en ese mes.'); return }
+    if(!para||!/@/.test(para)){ appAlert('Ingresa el correo del cliente.'); return }
+    setRep(r=>({...r,sending:true}))
+    const razon=cn(cid), r=retDe(cid), cons=ents.reduce((a,h)=>a+(+h.horas||0),0)
+    const html=horasReporteHtml({razon,periodo:mes,dirigidoA:para,entradas:ents,estimadas:r?.horas_estimadas||0,consumidas:cons,lang})
+    const subject=(lang==='en'?'Hours report':'Reporte de horas')+` · ${razon} · ${mes}`
+    if(DEMO){ appAlert('En demo no se envía; el reporte se armó correcto. Usa “Ver PDF” para verlo.'); setRep(null); return }
+    try{
+      const via=await enviarComoUsuario({to:para,subject,html,text:`${razon} · ${mes} · ${cons} h`})
+      if(!via){ setRep(r=>({...r,sending:false})); return }
+      const {data:rr}=await supabase.from('reportes_horas').insert({client_id:cid,periodo:mes,total_horas:cons,n_entradas:ents.length,dirigido_a:para,estimadas:r?.horas_estimadas||0,consumidas:cons,estado_envio:'enviado',sent_at:new Date().toISOString(),sent_by:me}).select().single()
+      if(rr?.id){ await supabase.from('horas').update({report_id:rr.id}).in('id',ents.map(e=>e.id)) }
+      try{ await supabase.from('learnings').delete().eq('kind','horas_para').eq('key',String(cid)); await supabase.from('learnings').insert({kind:'horas_para',key:String(cid),value:para}) }catch(_){}
+      appAlert(`Reporte enviado a ${para}${via==='oficina'?' (desde la cuenta de oficina)':''}.`); setRep(null)
+    }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)); setRep(r=>({...r,sending:false})) }
+  }
   const step = {display:'inline-flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden',background:'#fff'}
   const stepB = {width:26,height:30,display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontSize:15,background:C.bgSoft,cursor:'pointer',userSelect:'none'}
   const inp = {width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:9,padding:'0 11px',fontSize:13,background:'#fff',color:C.text,boxSizing:'border-box',outline:'none'}
@@ -20729,6 +20781,22 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               <div style={{height:22,borderRadius:7,background:over?C.overdueBg:C.greenBg,overflow:'hidden',marginTop:8}}><span style={{display:'block',height:'100%',width:pct+'%',background:over?C.overdue:C.normal}}/></div>
               <div style={{display:'flex',justifyContent:'space-between',marginTop:7,fontSize:10.5,color:C.muted}}><span>Estimadas {fh(est)}</span><span>Consumidas {fh(cons)}</span><span style={{color:over?C.overdueText:C.greenText,fontWeight:600}}>{over?'Excedido '+fh(cons-est):'Saldo '+fh(est-cons)}</span></div>
               {r.tarifa_mensual>0 && <div style={{fontSize:10,color:C.done,marginTop:4}}>{f0(r.tarifa_mensual)}/mes · implícita {est>0?f0(r.tarifa_mensual/est)+'/h':'—'}{over?' · conviene reajustar':''}</div>}
+              {isAdmin && (!rep || String(rep.cid)!==String(cid)) && <div onClick={()=>abrirReporte(cid)} style={{marginTop:9,fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer'}}>Reportar horas al cliente →</div>}
+              {isAdmin && rep && String(rep.cid)===String(cid) && (()=>{ const ents=entriesRep(cid,rep.mes); const cons=ents.reduce((a,h)=>a+(Number(h.horas)||0),0); return (
+                <div style={{marginTop:10,borderTop:`1px solid ${C.bgSoft}`,paddingTop:10}}>
+                  <div style={{display:'flex',gap:9,marginBottom:9,alignItems:'flex-end'}}>
+                    <div style={{flex:1}}><div style={lbl}>Mes</div><input type='month' value={rep.mes} onChange={e=>setRep(x=>({...x,mes:e.target.value}))} style={inp}/></div>
+                    <div style={{width:88}}><div style={lbl}>Horas</div><div style={{...inp,display:'flex',alignItems:'center',justifyContent:'center',color:C.accent,fontWeight:700}}>{fh(cons)}</div></div>
+                  </div>
+                  <div style={{marginBottom:9}}><div style={lbl}>Para (correo del cliente)</div><input value={rep.para} onChange={e=>setRep(x=>({...x,para:e.target.value}))} placeholder='correo@cliente.cl' style={inp}/></div>
+                  <div style={{display:'flex',gap:7,alignItems:'center'}}>
+                    <button onClick={enviarReporte} disabled={rep.sending} style={{flex:1,background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'9px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{rep.sending?'Enviando…':'Enviar al cliente'}</button>
+                    <button onClick={verPdfRep} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.accent,borderRadius:9,padding:'9px 11px',fontSize:11.5,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
+                    <button onClick={()=>setRep(x=>({...x,lang:x.lang==='es'?'en':'es'}))} title='Idioma' style={{background:'#fff',border:`1px solid ${C.border}`,color:rep.lang==='en'?C.accent:C.done,borderRadius:9,padding:'9px 10px',fontSize:11,fontWeight:700,cursor:'pointer'}}>{rep.lang==='en'?'EN':'ES'}</button>
+                    <button onClick={()=>setRep(null)} style={{background:'none',border:'none',color:C.done,fontSize:11,cursor:'pointer'}}>Cancelar</button>
+                  </div>
+                </div>
+              )})()}
             </>}
             {editing && (
               <div style={{marginTop:10,borderTop:`1px solid ${C.bgSoft}`,paddingTop:10}}>
