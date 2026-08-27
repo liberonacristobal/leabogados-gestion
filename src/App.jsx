@@ -513,8 +513,8 @@ function rsBalances(clientId, expenses, entities){
 function horasReporteHtml({ razon, periodo, dirigidoA, entradas, estimadas, consumidas, lang='es', forPrint=false }){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', TXT='#3D3D3D'
   const EN = lang==='en'
-  const T = EN ? {title:'Hours Report', date:'Date', desc:'Description', by:'By', hours:'Hours', total:'Total hours', est:'Estimated', cons:'Consumed', bal:'Balance', over:'Over', attn:'Attn', print:'Print / Save PDF'}
-             : {title:'Reporte de horas', date:'Fecha', desc:'Descripción', by:'Abogado', hours:'Horas', total:'Total de horas', est:'Estimadas', cons:'Consumidas', bal:'Saldo', over:'Excedido', attn:'Dirigido a', print:'Imprimir / Guardar PDF'}
+  const T = EN ? {title:'Hours Report', date:'Date', desc:'Description', by:'By', hours:'Hours', total:'Total hours', est:'Included', cons:'Consumed', bal:'Balance', over:'Over', attn:'Attn', print:'Print / Save PDF'}
+             : {title:'Reporte de horas', date:'Fecha', desc:'Descripción', by:'Abogado', hours:'Horas', total:'Total de horas', est:'Incluidas', cons:'Consumidas', bal:'Saldo', over:'Excedido', attn:'Dirigido a', print:'Imprimir / Guardar PDF'}
   const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
   const _mEs=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'], _mEn=['January','February','March','April','May','June','July','August','September','October','November','December']
   const _pp=String(periodo||'').split('-'), _mi=(+_pp[1]||0)-1
@@ -20655,13 +20655,14 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
 function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, onOpenClientFicha }){
   const me = currentUserName || ''
   const [horas,setHoras] = useState([])
-  const [retainers,setRetainers] = useState([])
   const [manual,setManual] = useState(false)
   const [mq,setMq] = useState('')
   const [mf,setMf] = useState({client_id:'',fecha:'',horas:1,glosa:'',billable:true})
   const [dur,setDur] = useState({})
-  const [cfgOpen,setCfgOpen] = useState(null)
-  const [cfgF,setCfgF] = useState({horas_estimadas:'',tarifa_mensual:'',valor_hora_excedente_uf:''})
+  // Horas de asesoría permanente AUTODEFINIDAS: horas/mes = ceil(valor asesoría ÷ tarifa hora).
+  // Tarifa = 3 UF/h (config del estudio, learnings); las asesorías en pesos se convierten con la UF del primer día hábil del año.
+  const [tarifaUF,setTarifaUF] = useState(3)
+  const [ufAnio,setUfAnio] = useState(0)
   const ufHoy = useUF().uf || UF_FALLBACK
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const mesActual = hoy.slice(0,7)
@@ -20670,13 +20671,17 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
   const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' h'
-  const retDe = cid => retainers.find(r=>String(r.client_id)===String(cid))
+  // Valor mensual de la asesoría en UF (fuente: la venta recurrente); pesos → UF del primer día hábil del año.
+  const ufAnioEff = ufAnio>0 ? ufAnio : ufHoy
+  const ventaUFmes = s => s?.moneda==='CLP' ? (parseFloat(s?.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s?.amount_uf)||0)
+  const estDe = s => { const u=ventaUFmes(s), t=tarifaUF||3; return u>0&&t>0 ? Math.ceil(u/t) : 0 }   // horas/mes autodefinidas (redondeo hacia arriba)
+  const saleDe = cid => permanentes.find(p=>String(p.cid)===String(cid))?.sale
 
   useEffect(()=>{
-    if(DEMO){ setHoras(demoData.horas||[]); setRetainers(demoData.retainers||[]); return }
+    if(DEMO){ setHoras(demoData.horas||[]); setTarifaUF(3); setUfAnio(UF_FALLBACK); return }
     let ok=true
     supabase.from('horas').select('*').order('fecha',{ascending:false}).then(({data})=>{ if(ok&&data) setHoras(data) },()=>{})
-    supabase.from('retainers').select('*').then(({data})=>{ if(ok&&data) setRetainers(data) },()=>{})
+    supabase.from('learnings').select('key,value').eq('kind','config').in('key',['tarifa_hora_permanente_uf','uf_anio_'+mesActual.slice(0,4)]).then(({data})=>{ if(!ok||!data) return; const t=data.find(r=>r.key==='tarifa_hora_permanente_uf'); const u=data.find(r=>String(r.key).startsWith('uf_anio_')); if(t&&parseFloat(t.value)>0) setTarifaUF(parseFloat(t.value)); if(u&&parseFloat(u.value)>0) setUfAnio(parseFloat(u.value)) },()=>{})
     return ()=>{ ok=false }
   },[])
 
@@ -20756,16 +20761,16 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const tareasDiaDe = (name,iso) => (tasks||[]).filter(t=>t.due===iso && t.status!=='Terminado' && (isAssignee(t,name)||t.who===name))
   const anioAct = mesActual.slice(0,4)
   const mesesYTD = (new Date().getMonth()+1)
-  const ytdData = permanentes.map(({cid})=>{ const r=retDe(cid); const estMes=Number(r?.horas_estimadas)||0; const est=estMes*mesesYTD; const valorUF=Number(r?.valor_hora_excedente_uf)||0
+  const ytdData = permanentes.map(({cid,sale})=>{ const estMes=estDe(sale); const est=estMes*mesesYTD; const valorUF=tarifaUF||3
     const hCli=horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct); const cons=hCli.reduce((a,h)=>a+(Number(h.horas)||0),0)
     // Excedente = suma de sobre-cupos MENSUALES (el balde se llena cada mes; no netear meses bajos con altos).
     let excesoMeses=0; for(let m=1;m<=mesesYTD;m++){ const mm=anioAct+'-'+String(m).padStart(2,'0'); const cm=hCli.filter(h=>String(h.fecha||'').slice(0,7)===mm).reduce((a,h)=>a+(Number(h.horas)||0),0); excesoMeses+=Math.max(0,cm-estMes) }
-    const exCLP=Math.round(excesoMeses*valorUF*ufHoy); return { cid, est, cons, over:cons>est, exceso:excesoMeses, valorUF, exCLP, sinCfg:!r } })
+    const exCLP=Math.round(excesoMeses*valorUF*ufHoy); return { cid, est, cons, over:cons>est, exceso:excesoMeses, valorUF, exCLP, sinCfg:estMes<=0 } })
   const excedenteYTD = ytdData.reduce((a,d)=>a+(d.exCLP||0),0)
   const exportYTD = () => {
     const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#537281'}'>${d.exCLP>0?f0(d.exCLP):'—'}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#0F6E56'}'>${d.exCLP>0?'Reajustar':'OK'}</td></tr>`).join('')
     const heroExc = excedenteYTD>0?`<div style='background:#F5F7F9;border-radius:8px;padding:12px 14px;margin-bottom:16px'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#537281;font-weight:700'>Excedente no facturado · ${anioAct}</div><div style='font-size:22px;font-weight:800;color:#003C50;margin-top:2px'>${f0(excedenteYTD)}</div><div style='font-size:10px;color:#537281;margin-top:2px'>Horas trabajadas por sobre lo pactado cada mes, a tu valor hora excedente. Base para el reajuste ${Number(anioAct)+1}.</div></div>`:''
-    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'>${heroExc}<table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Estimadas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Consumidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Sin facturar</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno del estudio — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'>${heroExc}<table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Incluidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Consumidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Sin facturar</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno del estudio — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
   const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
@@ -20782,13 +20787,6 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     return Object.entries(by).filter(([cid])=>!horas.some(h=>h.source==='coordinacion'&&String(h.client_id)===cid&&h.fecha===hoy&&h.user_name===me)).map(([cid,ts])=>({cid,n:ts.length})) })()
   const registrarCoord = (cid,n) => addHora({ client_id:cid, fecha:hoy, horas:0.2, glosa:`Coordinación · delegación de ${n} tarea${n!==1?'s':''}`, source:'coordinacion', billable:true })
   const consumoMes = cid => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
-  async function guardarCfg(cid,sale_id){
-    const est=Number(cfgF.horas_estimadas)||0, tar=Number(cfgF.tarifa_mensual)||0, vex=Number(cfgF.valor_hora_excedente_uf)||0, ex=retDe(cid)
-    if(DEMO){ setRetainers(p=>[...p.filter(r=>String(r.client_id)!==String(cid)),{id:ex?.id||'r'+Date.now(),client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar,valor_hora_excedente_uf:vex}]); setCfgOpen(null); return }
-    if(ex) await supabase.from('retainers').update({horas_estimadas:est,tarifa_mensual:tar,valor_hora_excedente_uf:vex}).eq('id',ex.id)
-    else await supabase.from('retainers').insert({client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar,valor_hora_excedente_uf:vex})
-    const {data}=await supabase.from('retainers').select('*'); if(data) setRetainers(data); setCfgOpen(null)
-  }
   // Excedente = inteligencia de repricing (no cobro): $ que no estamos cobrando según la propuesta (valor hora excedente).
   const excedenteCLP = (excesoH,valorUF) => Math.round((Number(excesoH)||0)*(Number(valorUF)||0)*ufHoy)
   const cliOpen = cid => onOpenClientFicha&&onOpenClientFicha(cid)
@@ -20796,20 +20794,20 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const [rep,setRep] = useState(null)   // {cid,mes,para,lang,sending}
   const abrirReporte = cid => { const cl=clients.find(c=>String(c.id)===String(cid)); setRep({cid,mes:mesActual,para:cl?.email||'',lang:'es',sending:false}) }
   const entriesRep = (cid,mes) => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mes))
-  const verPdfRep = () => { const {cid,mes,lang}=rep; const ents=entriesRep(cid,mes); const r=retDe(cid); const html=horasReporteHtml({razon:cn(cid),periodo:mes,entradas:ents,estimadas:r?.horas_estimadas||0,consumidas:ents.reduce((a,h)=>a+(+h.horas||0),0),lang,forPrint:true}); const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() } }
+  const verPdfRep = () => { const {cid,mes,lang}=rep; const ents=entriesRep(cid,mes); const html=horasReporteHtml({razon:cn(cid),periodo:mes,entradas:ents,estimadas:estDe(saleDe(cid)),consumidas:ents.reduce((a,h)=>a+(+h.horas||0),0),lang,forPrint:true}); const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() } }
   async function enviarReporte(){
     const {cid,mes,para,lang}=rep, ents=entriesRep(cid,mes)
     if(!ents.length){ appAlert('No hay horas cargadas en ese mes.'); return }
     if(!para||!/@/.test(para)){ appAlert('Ingresa el correo del cliente.'); return }
     setRep(r=>({...r,sending:true}))
-    const razon=cn(cid), r=retDe(cid), cons=ents.reduce((a,h)=>a+(+h.horas||0),0)
-    const html=horasReporteHtml({razon,periodo:mes,dirigidoA:para,entradas:ents,estimadas:r?.horas_estimadas||0,consumidas:cons,lang})
+    const razon=cn(cid), estMes=estDe(saleDe(cid)), cons=ents.reduce((a,h)=>a+(+h.horas||0),0)
+    const html=horasReporteHtml({razon,periodo:mes,dirigidoA:para,entradas:ents,estimadas:estMes,consumidas:cons,lang})
     const subject=(lang==='en'?'Hours report':'Reporte de horas')+` · ${razon} · ${lang==='en'?mes:mesLabel(mes)}`
     if(DEMO){ appAlert('En demo no se envía; el reporte se armó correcto. Usa “Ver PDF” para verlo.'); setRep(null); return }
     try{
       const via=await enviarComoUsuario({to:para,subject,html,text:`${razon} · ${mes} · ${cons} h`})
       if(!via){ setRep(r=>({...r,sending:false})); return }
-      const {data:rr}=await supabase.from('reportes_horas').insert({client_id:cid,periodo:mes,total_horas:cons,n_entradas:ents.length,dirigido_a:para,estimadas:r?.horas_estimadas||0,consumidas:cons,estado_envio:'enviado',sent_at:new Date().toISOString(),sent_by:me}).select().single()
+      const {data:rr}=await supabase.from('reportes_horas').insert({client_id:cid,periodo:mes,total_horas:cons,n_entradas:ents.length,dirigido_a:para,estimadas:estMes,consumidas:cons,estado_envio:'enviado',sent_at:new Date().toISOString(),sent_by:me}).select().single()
       if(rr?.id){ await supabase.from('horas').update({report_id:rr.id}).in('id',ents.map(e=>e.id)) }
       try{ await supabase.from('learnings').delete().eq('kind','horas_para').eq('key',String(cid)); await supabase.from('learnings').insert({kind:'horas_para',key:String(cid),value:para}) }catch(_){}
       appAlert(`Reporte enviado a ${para}${via==='oficina'?' (desde la cuenta de oficina)':''}.`); setRep(null)
@@ -20908,17 +20906,15 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         {ytdData.map(d=>(
           <div key={d.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginBottom:8}}>
             <div onClick={()=>cliOpen(d.cid)} style={{fontSize:13,fontWeight:700,color:C.accent,marginBottom:7,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</div>
-            {d.sinCfg ? <div style={{fontSize:11,color:C.done}}>Falta definir horas y tarifa (en Mis horas).</div> : <>
+            {d.sinCfg ? <div style={{fontSize:11,color:C.done}}>Sin valor de asesoría para calcular las horas.</div> : <>
               <div style={{display:'flex',gap:6}}>
-                <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.est)}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Estimadas</div></div>
+                <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.est)}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Incluidas</div></div>
                 <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.cons)}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Consumidas</div></div>
                 <div style={{flex:1,textAlign:'center',background:d.over?C.overdueBg:C.greenBg,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:d.over?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{d.est>0?Math.round((d.est-d.cons)/d.est*100)+'%':'—'}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Holgura</div></div>
               </div>
-              <div style={{fontSize:10.5,fontWeight:600,marginTop:7,color:d.exCLP>0?C.overdueText:d.over?C.soonText:C.greenText}}>{d.exCLP>0
+              <div style={{fontSize:10.5,fontWeight:600,marginTop:7,color:d.exceso>0?C.overdueText:C.greenText}}>{d.exceso>0
                 ? <>Excediste {fh(d.exceso)} en el año → <b>{f0(d.exCLP)}</b> sin facturar. Base para reajustar la tarifa.</>
-                : d.exceso>0
-                  ? <>Excediste {fh(d.exceso)} en algún mes. <span onClick={()=>setVista('mias')} style={{color:C.azulInfo,cursor:'pointer'}}>Define el valor hora excedente</span> para cuantificarlo.</>
-                  : 'Dentro del estimado — con espacio para ofrecer más.'}</div>
+                : 'Dentro de lo incluido — con espacio para ofrecer más.'}</div>
             </>}
           </div>
         ))}
@@ -20995,24 +20991,20 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       {/* Retainer de clientes permanentes */}
       {permanentes.length>0 && <>
         <div style={lbl}>Asesorías permanentes · {mesLabel(mesActual)}</div>
-        {permanentes.map(({cid,sale})=>{ const r=retDe(cid); const cons=consumoMes(cid); const est=Number(r?.horas_estimadas)||0; const pct=est>0?Math.min(100,Math.round(cons/est*100)):0; const over=est>0&&cons>est; const editing=String(cfgOpen)===String(cid)
+        {permanentes.map(({cid,sale})=>{ const cons=consumoMes(cid); const est=estDe(sale); const pct=est>0?Math.min(100,Math.round(cons/est*100)):0; const over=est>0&&cons>est; const fee=sale?.moneda==='UF'?('UF '+(parseFloat(sale.amount_uf)||0).toLocaleString('es-CL')):f0(sale?.amount_clp)
           return (
           <div key={cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
               <span onClick={()=>cliOpen(cid)} style={{fontSize:13,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(cid)}</span>
-              <span onClick={()=>{ setCfgF({horas_estimadas:r?.horas_estimadas||'',tarifa_mensual:r?.tarifa_mensual||'',valor_hora_excedente_uf:r?.valor_hora_excedente_uf||''}); setCfgOpen(editing?null:cid) }} style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>{r?'editar':'definir'}</span>
+              <span style={{fontSize:10,color:C.done}}>{fee}/mes</span>
             </div>
-            {!r && !editing && <div style={{fontSize:11,color:C.done,marginTop:5}}>Falta definir las horas del mes y la tarifa.</div>}
-            {r && <>
+            {est>0 ? <>
               <div style={{height:22,borderRadius:7,background:over?C.overdueBg:C.greenBg,overflow:'hidden',marginTop:8}}><span style={{display:'block',height:'100%',width:pct+'%',background:over?C.overdue:C.normal}}/></div>
-              <div style={{display:'flex',justifyContent:'space-between',marginTop:7,fontSize:10.5,color:C.muted}}><span>Estimadas {fh(est)}</span><span>Consumidas {fh(cons)}</span><span style={{color:over?C.overdueText:C.greenText,fontWeight:600}}>{over?'Excedido '+fh(cons-est):'Saldo '+fh(est-cons)}</span></div>
-              {r.tarifa_mensual>0 && <div style={{fontSize:10,color:C.done,marginTop:4}}>{f0(r.tarifa_mensual)}/mes · tarifa hora implícita {est>0?f0(r.tarifa_mensual/est)+'/h':'—'}{over?' · revisar tarifa':''}</div>}
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:7,fontSize:10.5,color:C.muted}}><span>Incluidas {fh(est)}</span><span>Consumidas {fh(cons)}</span><span style={{color:over?C.overdueText:C.greenText,fontWeight:600}}>{over?'Excedido '+fh(cons-est):'Saldo '+fh(est-cons)}</span></div>
+              <div style={{fontSize:10,color:C.done,marginTop:4}}>{fee}/mes ÷ {tarifaUF} UF/h → {est} h incluidas{over?' · revisar tarifa':''}</div>
               {(()=>{ const diaMes=new Date().getDate(); const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate(); const rate=diaMes>0?cons/diaMes:0; if(est>0&&rate>0&&!over&&rate*diasMes>est){ const dia=Math.min(diasMes,Math.ceil(est/rate)); return <div style={{fontSize:10,color:C.soonText,marginTop:3}}>A este ritmo, agotas las {fh(est)} cerca del día {dia}.</div> } return null })()}
-              {/* Excedente = inteligencia de repricing: cuánto NO estás cobrando según tu propuesta (no es una acción de cobro) */}
-              {over && (()=>{ const exceso=cons-est; const valorUF=Number(r.valor_hora_excedente_uf)||0; const monto=excedenteCLP(exceso,valorUF); return (
-                <div style={{marginTop:8,fontSize:10.5,color:C.overdueText,lineHeight:1.4}}>{valorUF>0
-                  ? <>Excediste <b>{fh(exceso)}</b> · <b>{f0(monto)}</b> sin facturar ({valorUF.toLocaleString('es-CL')} UF/h). Base para reajustar la tarifa.</>
-                  : <>Excediste <b>{fh(exceso)}</b>. <span onClick={()=>{ setCfgF({horas_estimadas:r?.horas_estimadas||'',tarifa_mensual:r?.tarifa_mensual||'',valor_hora_excedente_uf:''}); setCfgOpen(cid) }} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Define el valor hora excedente</span> para ver cuánto es.</>}</div>
+              {over && (()=>{ const exceso=cons-est; const monto=excedenteCLP(exceso,tarifaUF); return (
+                <div style={{marginTop:8,fontSize:10.5,color:C.overdueText,lineHeight:1.4}}>Excediste <b>{fh(exceso)}</b> · <b>{f0(monto)}</b> sin facturar ({tarifaUF} UF/h). Base para reajustar la tarifa.</div>
               )})()}
               {isAdmin && (!rep || String(rep.cid)!==String(cid)) && <div onClick={()=>abrirReporte(cid)} style={{marginTop:9,fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer'}}>Reportar horas al cliente →</div>}
               {isAdmin && rep && String(rep.cid)===String(cid) && (()=>{ const ents=entriesRep(cid,rep.mes); const cons=ents.reduce((a,h)=>a+(Number(h.horas)||0),0); return (
@@ -21030,17 +21022,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
                   </div>
                 </div>
               )})()}
-            </>}
-            {editing && (
-              <div style={{marginTop:10,borderTop:`1px solid ${C.bgSoft}`,paddingTop:10}}>
-                <div style={{display:'flex',gap:9}}>
-                  <div style={{flex:1}}><div style={lbl}>Horas al mes</div><input type='number' step='0.5' value={cfgF.horas_estimadas} onChange={e=>setCfgF(f=>({...f,horas_estimadas:e.target.value}))} style={{...inp,textAlign:'right'}}/></div>
-                  <div style={{flex:1}}><div style={lbl}>Tarifa mensual $</div><input type='number' value={cfgF.tarifa_mensual} onChange={e=>setCfgF(f=>({...f,tarifa_mensual:e.target.value}))} style={{...inp,textAlign:'right'}}/></div>
-                </div>
-                <div style={{marginTop:9}}><div style={lbl}>Valor hora excedente (UF) · según tu propuesta</div><input type='number' step='0.1' value={cfgF.valor_hora_excedente_uf} onChange={e=>setCfgF(f=>({...f,valor_hora_excedente_uf:e.target.value}))} placeholder='Ej: 2' style={{...inp,textAlign:'right'}}/></div>
-                <button onClick={()=>guardarCfg(cid,sale?.id||null)} style={{marginTop:9,width:'100%',background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'9px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Guardar</button>
-              </div>
-            )}
+            </> : <div style={{fontSize:11,color:C.done,marginTop:5}}>Sin valor de asesoría para calcular las horas.</div>}
           </div>
         )})}
       </>}
