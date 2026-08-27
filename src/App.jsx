@@ -14955,6 +14955,18 @@ function recordatorioCobro(b){
   const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${DATOS_PAGO_HTML}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
   return { nivel, folio, monto, subject:`${nivel==='amable'?'Recordatorio de cobro':'Pago vencido'} — ${folio}`, html, text }
 }
+// Cadencia de cobranza (fuente única): ¿toca recordatorio para esta factura hoy? Escala por mora,
+// respeta un piso de días entre envíos para no spamear. lastISO = fecha del último recordatorio (factura_recordado).
+const COBRANZA_GAP = 7   // días mínimos entre recordatorios de una misma factura
+function facturaCobrable(b){ return b && saldoBill(b)>0 && b.invoice_no && b.status!=='Programada' && b.status!=='Anulada' && b.billing_type!=='reembolso' && !b.deleted_at }
+function cobranzaAccion(b, lastISO, hoyISO){
+  if(!facturaCobrable(b)) return null
+  const dl=daysLeft(b.due); const diasVenc=(dl!=null&&dl<0)?-dl:0
+  if(diasVenc<=0) return null   // solo vencidas (la etapa amable pre-vencimiento no se automatiza)
+  const gap = lastISO ? Math.round((new Date(hoyISO+'T00:00')-new Date(String(lastISO).slice(0,10)+'T00:00'))/86400000) : null
+  if(gap!=null && gap<COBRANZA_GAP) return null   // aún dentro del piso, no reenviar
+  return { nivel: diasVenc<=30?'firme':'final', diasVenc, gap }
+}
 // Monto REAL de una factura emitida = MntTotal de su DTE (autoridad legal), no el monto programado de la venta.
 // Barato: regex sobre el XML, sin generar el PDF. Devuelve número o null si no hay DTE.
 function dteMontoTotal(dteXml){ if(!dteXml) return null; const m=String(dteXml).match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); return m?Math.round(+m[1]):null }
@@ -20688,6 +20700,100 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
 }
 
 // ── Registro de horas (Fase 1) — módulo autónomo. Carga= confirmar lo que la app ya sabe.
+// ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
+// Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
+// Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
+function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFicha, onClose }){
+  const LIBERAR_UMBRAL = 3
+  const [recMap,setRecMap] = useState({})      // factura.id → fecha ISO último recordatorio
+  const [okCount,setOkCount] = useState({})    // client_id → nº de tandas confirmadas (aprendizaje)
+  const [autoCli,setAutoCli] = useState({})    // client_id → true si liberado a automático
+  const [sending,setSending] = useState(null)  // client_id en envío
+  const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+  const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
+  const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
+  useEffect(()=>{
+    if(DEMO){ setRecMap({}); setOkCount({c4:3}); setAutoCli({}); return }
+    supabase.from('learnings').select('kind,key,value').in('kind',['factura_recordado','cobranza_ok','fd_auto']).then(({data})=>{
+      const rm={},ok={},au={}; (data||[]).forEach(r=>{ if(r.kind==='factura_recordado') rm[r.key]=r.value; else if(r.kind==='cobranza_ok') ok[r.key]=Number(r.value)||0; else if(r.kind==='fd_auto'&&String(r.key).startsWith('cobranza:')) au[String(r.key).slice(9)]=true })
+      setRecMap(rm); setOkCount(ok); setAutoCli(au)
+    },()=>{})
+  },[])
+  // Agrupa las facturas VENCIDAS con acción pendiente hoy por cliente.
+  const grupos = useMemo(()=>{
+    const by={}
+    ;(billing||[]).forEach(b=>{ const acc=cobranzaAccion(b, recMap[String(b.id)], hoy); if(!acc) return; const cid=String(b.client_id); (by[cid]=by[cid]||{cid,items:[],total:0,maxDias:0,nivel:'firme'}); by[cid].items.push({b,acc}); by[cid].total+=saldoBill(b); by[cid].maxDias=Math.max(by[cid].maxDias,acc.diasVenc); if(acc.nivel==='final') by[cid].nivel='final' })
+    return Object.values(by).sort((a,b)=>b.total-a.total)
+  },[billing,recMap,hoy])
+  // Facturas vencidas ya contactadas hace poco (dentro del piso) — contexto, sin acción.
+  const enEspera = useMemo(()=> (billing||[]).filter(b=>{ if(!facturaCobrable(b)) return false; const dl=daysLeft(b.due); if(!(dl!=null&&dl<0)) return false; const last=recMap[String(b.id)]; if(!last) return false; const gap=Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000); return gap<COBRANZA_GAP }).length, [billing,recMap,hoy])
+  const totalDue = grupos.reduce((a,g)=>a+g.total,0)
+  const nFacturas = grupos.reduce((a,g)=>a+g.items.length,0)
+
+  async function enviarCliente(g){
+    const cl=clients.find(c=>String(c.id)===String(g.cid)); const to=(cl?.email||'').trim()
+    if(!to||!/@/.test(to)){ appAlert('Ese cliente no tiene correo. Agrégalo en su ficha.'); return }
+    setSending(g.cid)
+    if(DEMO){ await new Promise(r=>setTimeout(r,400)); const now=new Date().toISOString(); setRecMap(m=>{ const n={...m}; g.items.forEach(({b})=>n[String(b.id)]=now); return n }); setOkCount(o=>({...o,[g.cid]:(o[g.cid]||0)+1})); setSending(null); appAlert('En demo no se envía; se registró la cadencia.'); return }
+    let ok=0
+    for(const {b} of g.items){ try{ const r=recordatorioCobro(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}) }catch(_){}; setRecMap(m=>({...m,[String(b.id)]:at})) } }catch(_){} }
+    if(ok){ const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); try{ await supabase.from('learnings').upsert({kind:'cobranza_ok',key:String(g.cid),value:String(nc)},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio enviado a ${cn(g.cid)} (${ok} factura${ok!==1?'s':''}).`) }
+    setSending(null)
+  }
+  async function enviarTodos(){
+    if(!(await appConfirm(`¿Enviar el recordatorio que corresponde a ${grupos.length} cliente${grupos.length!==1?'s':''} (${nFacturas} factura${nFacturas!==1?'s':''}, ${f0(totalDue)})?`))) return
+    for(const g of grupos){ if(!autoCli[g.cid]) await enviarCliente(g) }
+  }
+  async function liberar(cid){
+    if(!(await appConfirm(`¿Liberar la cobranza de ${cn(cid)} a automático? La app enviará sola los recordatorios que correspondan (siempre puedes pausarlo y queda en bitácora).`))) return
+    setAutoCli(a=>({...a,[cid]:true})); if(DEMO) return
+    try{ await supabase.from('learnings').upsert({kind:'fd_auto',key:'cobranza:'+cid,value:'1'},{onConflict:'kind,key'}) }catch(e){ setAutoCli(a=>{const n={...a};delete n[cid];return n}); appAlert('No se pudo liberar: '+e.message) }
+  }
+  async function pausar(cid){
+    setAutoCli(a=>{const n={...a};delete n[cid];return n}); if(DEMO) return
+    try{ await supabase.from('learnings').delete().eq('kind','fd_auto').eq('key','cobranza:'+cid) }catch(_){}
+  }
+  const NIV = { firme:{bg:C.soonBg,tx:C.soonText,lbl:'Firme'}, final:{bg:C.overdueBg,tx:C.overdueText,lbl:'Final'} }
+
+  return (
+    <div style={{padding:'12px 14px 40px',maxWidth:560,margin:'0 auto'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
+        <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Cobranza</div>
+        {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
+      </div>
+      <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:14,color:'#fff'}}>
+        <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Por cobrar hoy · recordatorios que tocan</div>
+        <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(totalDue)}</div>
+        <div style={{fontSize:10.5,opacity:.85}}>{grupos.length} cliente{grupos.length!==1?'s':''} · {nFacturas} factura{nFacturas!==1?'s':''} vencida{nFacturas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
+      </div>
+      {grupos.length>1 && <button onClick={enviarTodos} disabled={sending} style={{width:'100%',background:'#fff',border:`1px solid ${C.border}`,color:C.accent,borderRadius:10,padding:'10px',fontSize:12.5,fontWeight:700,cursor:'pointer',marginBottom:12}}>Enviar a todos los que toca · {grupos.filter(g=>!autoCli[g.cid]).length}</button>}
+      {grupos.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
+      {grupos.map(g=>{ const nv=NIV[g.nivel]; const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
+        <div key={g.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+            <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(g.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span>
+            <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{f0(g.total)}</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap'}}>
+            <span style={{fontSize:9.5,fontWeight:700,padding:'3px 9px',borderRadius:20,background:nv.bg,color:nv.tx}}>{nv.lbl}</span>
+            <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} · vencida hasta {g.maxDias} d · {gapTxt}</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:9,marginTop:10}}>
+            {auto ? <span style={{fontSize:11,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 11px'}}>En automático</span>
+                  : <div style={{fontSize:10,color:C.done}}>{nc>0?`${nc} envío${nc!==1?'s':''} confirmado${nc!==1?'s':''}`:'Sugerido'}</div>}
+            <div style={{display:'flex',gap:7,alignItems:'center'}}>
+              {auto ? <button onClick={()=>pausar(g.cid)} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.done,borderRadius:8,padding:'7px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer'}}>Pausar</button>
+                : <>{nc>=LIBERAR_UMBRAL && <button onClick={()=>liberar(g.cid)} style={{background:'#fff',border:`1px solid ${C.greenText}55`,color:C.greenText,borderRadius:8,padding:'7px 11px',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Liberar automático →</button>}
+                  <button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></>}
+            </div>
+          </div>
+        </div>
+      )})}
+      <div style={{fontSize:10,color:C.done,marginTop:12,lineHeight:1.5}}>Escala sola: amable antes de vencer, firme hasta 30 días, final después. No reenvía antes de {COBRANZA_GAP} días. Al confirmar {LIBERAR_UMBRAL} veces un cliente, puedes liberarlo a automático.</div>
+    </div>
+  )
+}
+
 function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, onOpenClientFicha }){
   const me = currentUserName || ''
   const [horas,setHoras] = useState([])
@@ -24146,10 +24252,10 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Conciliación',inteligencia:'Inteligencia',cajachica:'Caja chica'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Conciliación',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
   limited:[['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
@@ -26219,6 +26325,7 @@ export default function App() {
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
