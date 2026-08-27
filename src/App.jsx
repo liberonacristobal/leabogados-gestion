@@ -20662,6 +20662,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
   const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' h'
+  const retDe = cid => retainers.find(r=>String(r.client_id)===String(cid))
 
   useEffect(()=>{
     if(DEMO){ setHoras(demoData.horas||[]); setRetainers(demoData.retainers||[]); return }
@@ -20714,10 +20715,32 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   }
   const registrarAgenda = ev => { if(!ev.client_id){ appAlert('Elige el cliente del evento.'); return } addHora({ client_id:ev.client_id, fecha:ev.fecha||hoy, horas:ev.horas||1, glosa:ev.titulo, source:'calendar', source_ref:String(ev.id) }); setAgenda(a=>a.filter(x=>x.id!==ev.id)) }
   const bumpAg = (id,delta) => setAgenda(a=>a.map(ev=>ev.id===id?{...ev,horas:Math.max(0.1,Math.round(((ev.horas||1)+delta)*10)/10)}:ev))
+  // Fase 4 (INTERNA, formato oficina): panel de equipo + rentabilidad YTD. Solo admin.
+  const [vista,setVista] = useState('mias')     // mias | equipo | ytd
+  const [mView,setMView] = useState('semana')   // semana | mes
+  const [metas,setMetas] = useState({})         // meta horas/semana por persona
+  const [metaEdit,setMetaEdit] = useState(null)
+  useEffect(()=>{
+    if(DEMO){ setMetas({'Cristóbal':40,'Erasmo':40,'Martín':40,'Martina':40,'Rodrigo':30}); return }
+    supabase.from('learnings').select('key,value').eq('kind','meta_horas').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setMetas(m) },()=>{})
+  },[])
+  async function setMeta(name,val){ const v=Number(val)||0; setMetas(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','meta_horas').eq('key',name); await supabase.from('learnings').insert({kind:'meta_horas',key:name,value:String(v)}) }catch(_){} }
+  const EQUIPO = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const lunISO = (()=>{ const d=new Date(hoy+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d.toISOString().slice(0,10) })()
+  const horasPeriodo = name => horas.filter(h=> h.user_name===name && (mView==='mes' ? String(h.fecha||'').startsWith(mesActual) : (h.fecha||'')>=lunISO)).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  const bookingDe = name => (tasks||[]).filter(t=> t.status!=='Terminado' && (isAssignee(t,name)||t.who===name)).length
+  const metaPeriodo = name => { const w=Number(metas[name])||0; return mView==='mes'? Math.round(w*4.33) : w }
+  const anioAct = mesActual.slice(0,4)
+  const mesesYTD = (new Date().getMonth()+1)
+  const ytdData = permanentes.map(({cid})=>{ const r=retDe(cid); const est=(Number(r?.horas_estimadas)||0)*mesesYTD; const cons=horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct).reduce((a,h)=>a+(Number(h.horas)||0),0); return { cid, est, cons, over:cons>est, sinCfg:!r } })
+  const exportYTD = () => {
+    const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.over?'#A32D2D':'#0F6E56'}'>${d.over?'Reajustar':'OK'}</td></tr>`).join('')
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'><table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Estimadas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Reales YTD</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno del estudio — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
+  }
   const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
   const bump = (id,delta) => setDur(p=>({...p,[id]:Math.max(0.1,Math.round(((p[id]||1)+delta)*10)/10)}))
   const consumoMes = cid => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
-  const retDe = cid => retainers.find(r=>String(r.client_id)===String(cid))
   async function guardarCfg(cid,sale_id){
     const est=Number(cfgF.horas_estimadas)||0, tar=Number(cfgF.tarifa_mensual)||0, ex=retDe(cid)
     if(DEMO){ setRetainers(p=>[...p.filter(r=>String(r.client_id)!==String(cid)),{id:ex?.id||'r'+Date.now(),client_id:cid,sale_id,horas_estimadas:est,tarifa_mensual:tar}]); setCfgOpen(null); return }
@@ -20760,6 +20783,45 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Horas</div>
         <span style={{fontSize:11,color:C.done}}>Esta semana: <b style={{color:C.accent}}>{fh(totSem)}</b></span>
       </div>
+      {isAdmin && <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:14}}>{[['mias','Mis horas'],['equipo','Equipo'],['ytd','Rentabilidad']].map(([k,l])=><button key={k} onClick={()=>setVista(k)} style={{fontSize:11,fontWeight:700,padding:'5px 13px',border:'none',background:vista===k?C.accent:'#fff',color:vista===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>}
+
+      {isAdmin && vista==='equipo' && <>
+        <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:12}}>{[['semana','Semana'],['mes','Mes']].map(([k,l])=><button key={k} onClick={()=>setMView(k)} style={{fontSize:11,fontWeight:700,padding:'5px 14px',border:'none',background:mView===k?C.accent:'#fff',color:mView===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>
+        <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'0 2px 8px'}}>Horas reales vs meta · {mView==='mes'?'mes':'semana'}</div>
+        {EQUIPO.map(name=>{ const real=horasPeriodo(name); const meta=metaPeriodo(name); const pct=meta>0?Math.round(real/meta*100):0; const book=bookingDe(name); const col=personChip(name).color; const util=pct>100?C.overdue:pct>=70?C.normal:'#EF9F27'; return (
+          <div key={name} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
+              <span style={{width:24,height:24,borderRadius:'50%',background:col,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{INICIALES_RESP[name]||name.slice(0,2)}</span>
+              <span style={{fontSize:13,fontWeight:700,color:C.text}}>{name}</span>
+              <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:pct>100?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{meta>0?pct+'%':'sin meta'}</span>
+            </div>
+            <div style={{height:8,borderRadius:5,background:C.bgSoft,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:Math.min(100,pct)+'%',background:util,borderRadius:5}}/></div>
+            <div style={{fontSize:10,color:C.done,marginTop:5,display:'flex',justifyContent:'space-between'}}><span>{fh(real)} de {meta?fh(meta):'—'} · {book} tarea{book!==1?'s':''} abierta{book!==1?'s':''}</span><span onClick={()=>setMetaEdit(metaEdit===name?null:name)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>meta</span></div>
+            {metaEdit===name && <div style={{marginTop:7,display:'flex',gap:7,alignItems:'center'}}><span style={{fontSize:11,color:C.muted}}>Meta h/semana</span><input type='number' defaultValue={metas[name]||''} onBlur={e=>{setMeta(name,e.target.value);setMetaEdit(null)}} style={{...inp,height:32,width:80,textAlign:'right'}} autoFocus/></div>}
+          </div>
+        )})}
+        {(()=>{ const libres=EQUIPO.filter(n=>{ const m=metaPeriodo(n); return m>0 && horasPeriodo(n)/m < 0.7 }); if(!libres.length) return null; return <div style={{background:C.greenBg,borderRadius:11,padding:'11px 12px',fontSize:11.5,color:C.greenText,lineHeight:1.5,marginTop:2}}><b style={{color:C.accent}}>{libres.join(', ')}</b> con holgura {mView==='mes'?'este mes':'esta semana'}. Buen momento para ofrecer más al cliente o tomar un nuevo encargo.</div> })()}
+      </>}
+
+      {isAdmin && vista==='ytd' && <>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontSize:11,color:C.muted}}>Acumulado {anioAct} · para reajustar tarifas</span><button onClick={exportYTD} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:'pointer'}}>Exportar · uso interno</button></div>
+        {ytdData.length===0 && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:14}}>Sin asesorías permanentes configuradas.</div>}
+        {ytdData.map(d=>(
+          <div key={d.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginBottom:8}}>
+            <div onClick={()=>cliOpen(d.cid)} style={{fontSize:13,fontWeight:700,color:C.accent,marginBottom:7,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</div>
+            {d.sinCfg ? <div style={{fontSize:11,color:C.done}}>Sin config de horas/tarifa (defínela en “Mis horas”).</div> : <>
+              <div style={{display:'flex',gap:6}}>
+                <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.est)}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Estimadas</div></div>
+                <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.cons)}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Reales</div></div>
+                <div style={{flex:1,textAlign:'center',background:d.over?C.overdueBg:C.greenBg,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:d.over?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{d.est>0?Math.round((d.est-d.cons)/d.est*100)+'%':'—'}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Holgura</div></div>
+              </div>
+              <div style={{fontSize:10.5,fontWeight:600,marginTop:7,color:d.over?C.overdueText:C.greenText}}>{d.over?'Tomó más horas de lo estimado → reajustar tarifa el próximo año.':'Dentro del estimado — con espacio para ofrecer más.'}</div>
+            </>}
+          </div>
+        ))}
+      </>}
+
+      {vista==='mias' && <>
       <div style={{fontSize:11.5,color:C.muted,marginBottom:14}}>Confirma lo que hiciste hoy — solo teclea las horas.</div>
 
       {/* ¿Qué hiciste hoy? */}
@@ -20866,6 +20928,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             </div>
           ))}
         </div>
+      </>}
       </>}
     </div>
   )
