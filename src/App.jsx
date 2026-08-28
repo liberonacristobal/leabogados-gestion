@@ -6218,6 +6218,73 @@ function ModulosModal({ onChange }){
     </div>
   )
 }
+// Roles y permisos: refleja el estado REAL de hoy — miembros desde user_roles, acceso derivado de VIEWS_PALETTE
+// (misma fuente que usa la navegación). No inventa permisos: muestra "como está" en Liberona Escala. Editar quién
+// pertenece a cada rol vive en Gestión de usuarios; el acceso por rol se define por la app (data-driven a futuro).
+const ROLES_DEF = [
+  { id:'admin', label:'Administrador', desc:'Acceso completo' },
+  { id:'limited', label:'Abogado', desc:'Equipo · trabajo diario' },
+]
+const CAP_ROWS = [
+  ['dashboard','Inicio'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],
+  ['clients','Clientes'],['expenses','Gastos'],['cajachica','Caja chica'],
+  ['sales','Ventas'],['billing','Facturación'],['cobranza','Cobranza'],
+  ['repricing','Repricing'],['conciliacion','Conciliación'],['inteligencia','Inteligencia'],
+  ['__sistema','Ajustes y sistema'],
+]
+function RolesModal({ onOpenUsers }){
+  const [miembros,setMiembros] = useState(null)   // { admin:[nombres], limited:[nombres] }
+  useEffect(()=>{ let alive=true
+    if(DEMO){ setMiembros({ admin:['Cristóbal Liberona','Erasmo Escala'], limited:['Martín Campero','Martina Pérez','Rodrigo'] }); return }
+    supabase.from('user_roles').select('email,role,name').then(({data})=>{ if(!alive) return
+      const g={admin:[],limited:[]}; (data||[]).forEach(u=>{ const nm=u.name||(FIRMA_DEFAULTS[u.email]||{}).nombre||String(u.email||'').split('@')[0]; (g[u.role]||(g[u.role]=[])).push(nm) }); setMiembros(g)
+    },()=>setMiembros({admin:[],limited:[]}))
+    return ()=>{alive=false} },[])
+  const puede = (roleId,capId)=> capId==='__sistema' ? roleId==='admin' : (VIEWS_PALETTE[roleId]||[]).some(([v])=>v===capId)
+  return (
+    <div>
+      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>Qué ve cada rol. Refleja la configuración actual del estudio; para cambiar quién pertenece a cada rol usa Gestión de usuarios.</div>
+      {/* Miembros por rol */}
+      <div style={{display:'flex',gap:10,marginBottom:16}}>
+        {ROLES_DEF.map(r=>(
+          <div key={r.id} style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}>
+            <div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>{r.label}</div>
+            <div style={{fontSize:9.5,color:C.done,marginBottom:6,textTransform:'uppercase',letterSpacing:'.03em'}}>{r.desc}</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              {miembros===null ? <span style={{fontSize:11,color:C.done}}>…</span>
+               : (miembros[r.id]||[]).length ? miembros[r.id].map((n,i)=>(
+                  <span key={i} style={{fontSize:10.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'2px 8px'}}>{n}</span>
+                )) : <span style={{fontSize:10.5,color:C.done}}>Sin miembros</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Matriz de acceso */}
+      <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+        <div style={{display:'flex',background:C.bgSoft,fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.03em',color:C.muted,padding:'7px 12px'}}>
+          <span style={{flex:1}}>Vista</span>
+          {ROLES_DEF.map(r=><span key={r.id} style={{width:96,textAlign:'center'}}>{r.label}</span>)}
+        </div>
+        {CAP_ROWS.map(([id,lbl])=>(
+          <div key={id} style={{display:'flex',alignItems:'center',padding:'8px 12px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5}}>
+            <span style={{flex:1,fontWeight:600,color:C.text}}>{lbl}</span>
+            {ROLES_DEF.map(r=>(
+              <span key={r.id} style={{width:96,textAlign:'center'}}>
+                {puede(r.id,id)
+                  ? <span style={{color:C.normal,fontWeight:700}}>✓</span>
+                  : <span style={{color:C.border,fontWeight:700}}>—</span>}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div onClick={onOpenUsers} style={{marginTop:14,fontSize:12,fontWeight:600,color:C.azulInfo,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
+        <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/></svg>
+        Gestión de usuarios →
+      </div>
+    </div>
+  )
+}
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
 function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], onOpenClientFicha, onOpenFactura}){
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
@@ -26451,6 +26518,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polygon points='12 2 2 7 12 12 22 7 12 2'/><polyline points='2 17 12 22 22 17'/><polyline points='2 12 12 17 22 12'/></svg>
                   Módulos del estudio
                 </div>
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'roles'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
+                  Roles y permisos
+                </div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redProfesional'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='3.2'/><path d='M5.5 20a6.5 6.5 0 0 1 13 0'/><circle cx='19' cy='6' r='2'/><circle cx='5' cy='6' r='2'/></svg>
                   Red profesional
@@ -26613,6 +26684,7 @@ export default function App() {
         }}/></Modal>}
         {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
         {modal?.type==='modulos'&&<Modal title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
+        {modal?.type==='roles'&&<Modal title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
