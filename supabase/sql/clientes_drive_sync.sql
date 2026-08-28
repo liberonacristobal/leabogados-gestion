@@ -23,15 +23,19 @@ CREATE POLICY team_all ON clientes_drive_sync FOR ALL TO authenticated
   WITH CHECK ((auth.jwt() ->> 'email') LIKE '%@leabogados.cl');
 NOTIFY pgrst, 'reload schema';
 
--- ── Agenda del cron (opcional, requiere extensiones pg_cron + pg_net) ─────────────────────────
--- El interruptor vive en learnings(kind='config', key='clientes_drive_sync'); default 'off'.
--- Recién cuando lo pongas en 'on' el cron aplicará (hasta entonces salta). Haz primero una corrida
--- MANUAL supervisada desde la app, revisa el resultado, y después activa el cron.
+-- ── Agenda del cron ───────────────────────────────────────────────────────────────────────────
+-- YA AGENDADO en producción (2026-08-28, cron.job jobid 7): 'clientes-drive-sync' cada 2h ('17 */2 * * *').
+-- Reusa el CRON_SECRET compartido del proyecto (el mismo de cartera-semanal / horas-recordatorio) por
+-- fallback en la fn → no hubo que crear ni exponer ningún secreto. Verificado: responde 200 y, con el
+-- interruptor OFF, {"ok":true,"skipped":"apagado"} (no hace nada).
 --
--- select cron.schedule('clientes-drive-sync', '17 */2 * * *', $$
---   select net.http_post(
---     url    := 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/clientes-drive-sync',
---     headers:= '{"Content-Type":"application/json"}'::jsonb,
---     body   := json_build_object('secret', '<CLIENTES_DRIVE_SECRET>')::jsonb
---   );
--- $$);
+-- El interruptor vive en learnings(kind='config', key='clientes_drive_sync'); default 'off'. El cron
+-- SALTA hasta que se ponga 'on' (toggle "Sincronización automática" del modal de Drive en la app).
+-- Secuencia segura: 1) corrida MANUAL supervisada ("Sincronizar ahora"), revisar duplicados por nombre;
+-- 2) recién ahí prender el toggle → el cron toma el relevo cada 2h.
+--
+-- Cómo se agendó (extrae el secreto server-side, no lo escribe a mano):
+-- select cron.schedule('clientes-drive-sync', '17 */2 * * *', format(
+--   $f$select net.http_post(url := 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/clientes-drive-sync',
+--     headers := '{"Content-Type":"application/json"}'::jsonb, body := jsonb_build_object('secret', %L));$f$,
+--   (regexp_match((select command from cron.job where jobname='cartera-semanal-lunes'), '"secret":"([^"]+)"'))[1]));
