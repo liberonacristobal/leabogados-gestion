@@ -17261,12 +17261,12 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
   }
   const syncNow=async()=>{
     setSyncing(true); setSyncMsg(null)
-    if(DEMO){ await new Promise(r=>setTimeout(r,700)); setSyncMsg('Demo: +2 clientes nuevos incorporados.'); setSyncing(false); return }
+    if(DEMO){ await new Promise(r=>setTimeout(r,700)); setSyncMsg('Demo: +2 nuevos incorporados, 3 archivados.'); setSyncing(false); return }
     try{
       const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
       if(error) throw error
       if(data?.error) throw new Error(data.error)
-      setSyncMsg(`Listo: ${data.addedN||0} cliente(s) nuevo(s) incorporado(s).`)
+      setSyncMsg(`Listo: ${data.addedN||0} nuevo(s) incorporado(s), ${data.terminatedN||0} archivado(s).`)
       await cargarSync(); await init(); onChanged&&onChanged()
     }catch(e){ setSyncMsg('Error al sincronizar: '+(e.message||e)) }
     setSyncing(false)
@@ -17345,7 +17345,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Sincronización automática</div>
-            <div style={{fontSize:10.5,color:C.muted}}>Al abrir la app y cada 2h: incorpora los clientes nuevos que aparecen en Drive.</div>
+            <div style={{fontSize:10.5,color:C.muted}}>Al abrir la app y cada 2h: incorpora los nuevos y archiva los que mueves a "1. CLIENTES TERMINADOS". Drive manda.</div>
           </div>
           <div onClick={toggleAuto} style={{width:40,height:23,borderRadius:12,background:autoOn?C.normal:C.done,position:'relative',cursor:'pointer',transition:'.15s',flexShrink:0}}>
             <div style={{position:'absolute',top:2,left:autoOn?19:2,width:19,height:19,borderRadius:'50%',background:'#fff',transition:'.15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/>
@@ -17354,7 +17354,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <button onClick={syncNow} disabled={syncing} style={{height:34,padding:'0 16px',background:syncing?C.done:C.accent,color:'#fff',border:'none',borderRadius:8,fontSize:12.5,fontWeight:600,cursor:syncing?'default':'pointer',flexShrink:0}}>{syncing?'Sincronizando…':'Sincronizar ahora'}</button>
           <div style={{flex:1,fontSize:10.5,color:syncMsg&&syncMsg.startsWith('Error')?C.overdue:C.muted}}>
-            {syncMsg ? syncMsg : lastSync ? `Última: ${new Date(lastSync.at).toLocaleString('es-CL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} · +${lastSync.addedN||0} nuevos` : 'Aún no se ha sincronizado.'}
+            {syncMsg ? syncMsg : lastSync ? `Última: ${new Date(lastSync.at).toLocaleString('es-CL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} · +${lastSync.addedN||0} nuevos${lastSync.terminatedN?`, ${lastSync.terminatedN} archivados`:''}` : 'Aún no se ha sincronizado.'}
           </div>
         </div>
       </div>
