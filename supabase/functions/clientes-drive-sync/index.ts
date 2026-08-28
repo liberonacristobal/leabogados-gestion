@@ -1,16 +1,11 @@
-// clientes-drive-sync — mantiene el padrón de clientes en sincronía con las carpetas de Drive.
+// clientes-drive-sync — INCORPORA a nuevos clientes desde las carpetas de Drive.
 //
-// Qué hace (por cron cada 2h, o manual/al abrir la app):
-//   • AGREGA (automático): carpeta nueva bajo CLIENTES_ROOT cuyo nombre no corresponde a ningún
-//     cliente → crea el cliente (status 'Activo').
-//   • SACAR (con compuerta): cliente 'Activo' cuyo nombre aparece como carpeta en la raíz de
-//     TERMINADOS y ya NO en activos → encola una "baja pendiente" en clientes_drive_sync para que
-//     un humano la confirme con un toque. NO cambia el status por su cuenta.
+// Qué hace (por cron cada 2h, o manual/al abrir la app): cada carpeta bajo CLIENTES_ROOT cuyo nombre
+// no corresponde a ningún cliente → crea el cliente (status 'Activo'). Las carpetas AGRUPADORAS
+// ("Clientes X") se recorren un nivel (no son un cliente). Coincidencia por NOMBRE normalizado (sin acentos).
 //
-// Coincidencia por NOMBRE (normalizado). NO usa la tabla client_drive: esa guarda la carpeta que el
-// usuario vincula para "Documentos del cliente" (puede ser otra carpeta) → usarla daba falsos positivos.
-// Se descartó el caso "no está en activos" (movido_fuera) por lo mismo: solo se propone baja cuando la
-// carpeta aparece EXPLÍCITAMENTE en Terminados.
+// El lado "SACAR" (dar de baja los movidos) se RETIRÓ (decisión del usuario 2026-08-28): en este Drive
+// el match por nombre daba falsos positivos sobre clientes activos. Las bajas se hacen a mano.
 //
 // Auth: verify_jwt=false. (a) cron con secreto (body.secret === CLIENTES_DRIVE_SECRET) → corrida
 // completa, pero SOLO si el interruptor learnings config/clientes_drive_sync = 'on'. (b) usuario
@@ -122,35 +117,29 @@ serve(async (req) => {
   try {
     const token = await getToken();
 
-    // Carpetas activas (hijas directas de CLIENTES_ROOT) y terminadas (nietas: raíz → año → cliente)
-    const activos = (await listFolders(token, CLIENTES_ROOT)).filter((f) => !esTemplate(f.name));
-    const years = await listFolders(token, CLIENTES_TERMINADOS_ROOT);
-    const terminados: any[] = [];
-    for (const y of years) { (await listFolders(token, y.id)).forEach((c) => terminados.push(c)); }
-    const activosByName = new Set(activos.map((f) => norm(f.name)));
-    const terminadosByName = new Map<string, any>();   // norm(name) -> carpeta en Terminados (para el folder_id de referencia)
-    for (const f of terminados) { if (!terminadosByName.has(norm(f.name))) terminadosByName.set(norm(f.name), f); }
+    // Carpetas de clientes activos: hijas directas de CLIENTES_ROOT. Las carpetas AGRUPADORAS ("Clientes X",
+    // ej. "Clientes Erasmo") NO son un cliente → se recorren un nivel para incluir a los clientes de adentro.
+    const activos: any[] = [];
+    for (const f of await listFolders(token, CLIENTES_ROOT)) {
+      if (esTemplate(f.name)) continue;
+      if (norm(f.name).startsWith("clientes ")) {
+        (await listFolders(token, f.id)).forEach((sub) => { if (!esTemplate(sub.name)) activos.push(sub); });
+        continue;
+      }
+      activos.push(f);
+    }
 
     const { data: clients } = await sb.from("clients").select("id,name,status");
     const clientByName = new Map<string, any>();
     (clients || []).forEach((c) => { if (!clientByName.has(norm(c.name))) clientByName.set(norm(c.name), c); });
 
-    // Candidatos (para dry-run y para aplicar). AGREGAR = carpeta activa sin cliente por nombre.
+    // Solo INCORPORAR NUEVOS (decisión del usuario 2026-08-28): el "sacar" por nombre daba falsos positivos
+    // en este Drive, así que se retiró. AGREGAR = carpeta activa cuyo nombre no corresponde a ningún cliente.
     const wouldAdd = activos.filter((f) => !clientByName.has(norm(f.name))).map((f) => f.name);
-    // SACAR = cliente Activo cuyo nombre está en Terminados y ya no en activos.
-    const wouldRemove: string[] = [];
-    for (const c of (clients || [])) {
-      if (c.status !== "Activo") continue;
-      const nm = norm(c.name);
-      if (!activosByName.has(nm) && terminadosByName.has(nm)) wouldRemove.push(c.name);
-    }
     if (body.dryRun) {
-      return json({ ok: true, dryRun: true, activos: activos.length, terminados: terminados.length,
-        wouldAddN: wouldAdd.length, wouldAdd: wouldAdd.slice(0, 60),
-        wouldRemoveN: wouldRemove.length, wouldRemove: wouldRemove.slice(0, 60) });
+      return json({ ok: true, dryRun: true, activos: activos.length, wouldAddN: wouldAdd.length, wouldAdd: wouldAdd.slice(0, 80) });
     }
 
-    // ── 1) AGREGAR (auto): NO tocamos client_drive (esa tabla es de "Documentos del cliente").
     const added: string[] = [];
     for (const f of activos) {
       if (clientByName.has(norm(f.name))) continue;
@@ -158,23 +147,7 @@ serve(async (req) => {
       if (!error && nc) { added.push(f.name); clientByName.set(norm(f.name), nc); }
     }
 
-    // ── 2) SACAR (compuerta, SOLO señal confiable: aparece en TERMINADOS y no en activos).
-    let pendingNew = 0;
-    for (const c of (clients || [])) {
-      if (c.status !== "Activo") continue;
-      const nm = norm(c.name);
-      if (activosByName.has(nm)) continue;
-      const tf = terminadosByName.get(nm);
-      if (!tf) continue;
-      const { data: ex } = await sb.from("clientes_drive_sync").select("id").eq("client_id", c.id).eq("folder_id", tf.id).limit(1);
-      if (ex && ex.length) continue;
-      await sb.from("clientes_drive_sync").insert({
-        client_id: c.id, folder_id: tf.id, folder_name: c.name, motivo: "movido_terminados", status: "pendiente",
-      });
-      pendingNew++;
-    }
-
-    const summary = { at: new Date().toISOString(), added, addedN: added.length, pendingNew, activos: activos.length };
+    const summary = { at: new Date().toISOString(), added, addedN: added.length, activos: activos.length };
     await setConfig(sb, "clientes_drive_sync_last", JSON.stringify(summary));
     return json({ ok: true, ...summary });
   } catch (e) {
