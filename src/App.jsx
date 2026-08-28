@@ -21142,6 +21142,31 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     setHoras(p=>[data,...p])
   }
   const registrarTarea = t => addHora({ client_id:t.client_id, fecha:String(t.completed_at||'').slice(0,10)||hoy, horas:(dur[t.id]||1), glosa:t.title||'', source:'tarea', source_ref:String(t.id) })
+  // A2 — Cronómetro en vivo. Persiste en localStorage (sobrevive navegación/recarga); al detener pre-llena el registro.
+  const [timer,setTimer] = useState(()=>{ try{ const t=JSON.parse(localStorage.getItem('horas_timer')||'null'); return t&&t.startMs?t:null }catch(_){ return null } })
+  const [tq,setTq] = useState(''); const [,forceTick] = useState(0)
+  useEffect(()=>{ if(!timer) return; const i=setInterval(()=>forceTick(x=>x+1),1000); return ()=>clearInterval(i) },[timer])
+  const persistTimer = t => { try{ t?localStorage.setItem('horas_timer',JSON.stringify(t)):localStorage.removeItem('horas_timer') }catch(_){}; setTimer(t) }
+  const startTimer = () => persistTimer({ startMs:Date.now(), clientId:'', clientName:'' })
+  const cancelTimer = () => { persistTimer(null); setTq('') }
+  const stopTimer = () => { const ms=Date.now()-(timer?.startMs||Date.now()); const h=Math.max(0.1,Math.round(ms/360000)/10); setMf({ client_id:timer?.clientId||'', fecha:hoy, horas:h, glosa:'', billable:true }); setManual(true); persistTimer(null); setTq('') }
+  const elapsedTxt = () => { const s=Math.max(0,Math.floor((Date.now()-(timer?.startMs||Date.now()))/1000)); const p=n=>String(n).padStart(2,'0'); return `${p(Math.floor(s/3600))}:${p(Math.floor(s%3600/60))}:${p(s%60)}` }
+  // E1 — Editar / corregir / borrar una hora (con deshacer).
+  const [editH,setEditH] = useState(null); const [ef,setEf] = useState({}); const [eq,setEq] = useState(''); const [undoH,setUndoH] = useState(null)
+  const abrirEdit = h => { setEditH(h.id); setEf({ client_id:h.client_id, fecha:h.fecha, horas:h.horas, glosa:h.glosa||'', billable:h.billable!==false }); setEq('') }
+  const guardarEdit = async () => { const patch={ client_id:ef.client_id, fecha:ef.fecha, horas:parseFloat(ef.horas)||0, glosa:ef.glosa, billable:!!ef.billable }; setHoras(p=>p.map(x=>x.id===editH?{...x,...patch}:x)); const id=editH; setEditH(null); if(DEMO) return; try{ await supabase.from('horas').update(patch).eq('id',id) }catch(e){ appAlert('No se pudo guardar: '+e.message) } }
+  const borrarHora = async h => { setHoras(p=>p.filter(x=>x.id!==h.id)); setEditH(null); setUndoH(h); if(DEMO) return; try{ await supabase.from('horas').delete().eq('id',h.id) }catch(_){} }
+  const deshacerBorrar = async () => { const h=undoH; setUndoH(null); if(!h) return; setHoras(p=>[h,...p]); if(DEMO) return; const {id,created_at,report_id,...rest}=h; try{ const {data}=await supabase.from('horas').insert(rest).select().single(); if(data) setHoras(p=>p.map(x=>x.id===h.id?data:x)) }catch(_){} }
+  useEffect(()=>{ if(undoH){ const t=setTimeout(()=>setUndoH(null),6000); return ()=>clearTimeout(t) } },[undoH])
+  // F4 — Exportar mis horas a CSV (separador ';' y coma decimal para Excel es-CL; BOM para acentos).
+  const exportarCSV = () => {
+    const esc = v => { const s=String(v==null?'':v); return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }
+    const head = ['fecha','cliente','horas','glosa','facturable','abogado','fuente']
+    const body = misHoras.map(h=>[h.fecha, cn(h.client_id), String(Number(h.horas)||0).replace('.',','), h.glosa||'', h.billable===false?'no':'si', h.user_name||'', h.source||''].map(esc).join(';'))
+    const csv = '﻿'+[head.join(';'),...body].join('\n')
+    const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}))
+    const a=document.createElement('a'); a.href=url; a.download='horas_'+hoy+'.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500)
+  }
   // Read-back del calendario (Fase 3): lee la agenda del día y propone entradas (duración = duración del evento).
   const [agenda,setAgenda] = useState([]); const [agLoading,setAgLoading]=useState(false); const [agDone,setAgDone]=useState(false); const [agq,setAgq]=useState({})
   const stripLegal = s => _normTxt(s).replace(/\b(spa|s a|ltda|limitada|sa|eirl|e i r l|y cia|cia|inversiones|abogados)\b/g,'').replace(/\s+/g,' ').trim()
@@ -21368,6 +21393,33 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       </>}
 
       {vista==='mias' && <>
+      {/* Cronómetro en vivo (A2) */}
+      {!timer ? (
+        <div onClick={startTimer} style={{display:'flex',alignItems:'center',gap:9,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:12,cursor:'pointer'}}>
+          <span style={{width:26,height:26,borderRadius:'50%',background:C.greenBg,color:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,flexShrink:0}}>▶</span>
+          <span style={{fontSize:13,fontWeight:600,color:C.accent}}>Iniciar cronómetro</span>
+        </div>
+      ) : (
+        <div style={{background:C.accent,borderRadius:12,padding:'11px 12px',marginBottom:12}}>
+          <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:9}}>
+            <span style={{width:9,height:9,borderRadius:'50%',background:'#5FE0A0',boxShadow:'0 0 0 4px rgba(95,224,160,.22)',flexShrink:0}}/>
+            <span style={{fontFamily:'ui-monospace,monospace',fontSize:23,fontWeight:700,color:'#fff',letterSpacing:'.02em',fontVariantNumeric:'tabular-nums'}}>{elapsedTxt()}</span>
+            <span onClick={cancelTimer} style={{marginLeft:'auto',color:'#fff',opacity:.7,fontSize:11.5,cursor:'pointer'}}>Cancelar</span>
+          </div>
+          {timer.clientId ? (
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span onClick={()=>persistTimer({...timer,clientId:'',clientName:''})} style={{flex:1,minWidth:0,color:'#fff',fontSize:12.5,fontWeight:600,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{timer.clientName} <span style={{opacity:.6}}>▾</span></span>
+              <button onClick={stopTimer} style={{background:'#fff',color:C.accent,border:'none',borderRadius:9,padding:'8px 14px',fontSize:12.5,fontWeight:700,cursor:'pointer',flexShrink:0}}>Detener y registrar</button>
+            </div>
+          ) : (
+            <div>
+              <input value={tq} onChange={e=>setTq(e.target.value)} placeholder='¿De qué cliente?…' style={{...inp,height:34,fontSize:12}}/>
+              {tq.trim() && <div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:4,background:'#fff',overflow:'hidden',maxHeight:130,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(tq))).slice(0,6).map(c=><div key={c.id} onClick={()=>persistTimer({...timer,clientId:String(c.id),clientName:c.name})} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}
+              <div style={{marginTop:8,textAlign:'right'}}><button onClick={stopTimer} style={{background:'rgba(255,255,255,.15)',color:'#fff',border:'1px solid rgba(255,255,255,.3)',borderRadius:9,padding:'7px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Detener sin cliente</button></div>
+            </div>
+          )}
+        </div>
+      )}
       <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'6px 2px 8px'}}>Mi semana</div>
       <div style={{display:'flex',gap:6,marginBottom:16}}>
         {semDias.map((iso,i)=>{ const hh=misHorasDia(iso); const td=misTareasDia(iso); const isHoy=iso===hoy; return (
@@ -21477,17 +21529,38 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         )})}
       </>}
 
-      {/* Mis horas de la semana */}
+      {/* Mis horas de la semana — con editar/borrar (E1) y exportar CSV (F4) */}
       {semana.length>0 && <>
-        <div style={{...lbl,marginTop:14}}>{isAdmin?'Horas de la semana':'Mis horas de la semana'}</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'14px 2px 7px'}}>
+          <span style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>{isAdmin?'Horas de la semana':'Mis horas de la semana'}</span>
+          <button onClick={exportarCSV} title='Exportar mis horas a CSV' style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>↓ CSV</button>
+        </div>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 12px'}}>
-          {semana.map(h=>(
+          {semana.map(h=> editH===h.id ? (
+            <div key={h.id} style={{padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+              <div style={{marginBottom:7}}>{ef.client_id ? <div style={{...inp,height:34,display:'flex',alignItems:'center',justifyContent:'space-between',fontSize:12}}>{cn(ef.client_id)}<span onClick={()=>{setEf(f=>({...f,client_id:''}));setEq('')}} style={{color:C.done,cursor:'pointer',fontSize:11}}>cambiar</span></div>
+                : <><input value={eq} onChange={e=>setEq(e.target.value)} placeholder='Buscar cliente…' style={{...inp,height:34,fontSize:12}}/>{eq.trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:3,overflow:'hidden',maxHeight:120,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(eq))).slice(0,6).map(c=><div key={c.id} onClick={()=>{setEf(f=>({...f,client_id:String(c.id)}));setEq('')}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</>}</div>
+              <div style={{display:'flex',gap:7,marginBottom:7}}>
+                <input type='date' value={ef.fecha} onChange={e=>setEf(f=>({...f,fecha:e.target.value}))} style={{...inp,height:34,flex:1,fontSize:12}}/>
+                <input type='number' step='0.1' min='0' value={ef.horas} onChange={e=>setEf(f=>({...f,horas:e.target.value}))} style={{...inp,height:34,width:74,textAlign:'right',fontSize:12}}/>
+              </div>
+              <input value={ef.glosa} onChange={e=>setEf(f=>({...f,glosa:e.target.value}))} placeholder='Glosa' style={{...inp,height:34,fontSize:12,marginBottom:7}}/>
+              <div onClick={()=>setEf(f=>({...f,billable:!f.billable}))} style={{display:'flex',alignItems:'center',gap:7,fontSize:11,color:C.muted,marginBottom:9,cursor:'pointer'}}><span style={{width:32,height:19,borderRadius:11,background:ef.billable?C.normal:C.done,position:'relative',display:'inline-block'}}><span style={{position:'absolute',top:2,left:ef.billable?15:2,width:15,height:15,borderRadius:'50%',background:'#fff'}}/></span>Facturable al cliente</div>
+              <div style={{display:'flex',gap:6}}>
+                <button onClick={guardarEdit} style={{flex:1,background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer'}}>Guardar</button>
+                <button onClick={()=>borrarHora(h)} style={{background:'#fff',border:'1px solid #F2C4BE',color:C.overdue,borderRadius:8,padding:'8px 12px',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Borrar</button>
+                <button onClick={()=>setEditH(null)} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:'8px 11px',fontSize:12,cursor:'pointer'}}>✕</button>
+              </div>
+            </div>
+          ) : (
             <div key={h.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:`1px solid ${C.bgSoft}`,fontSize:11.5}}>
-              <div style={{minWidth:0}}><div onClick={()=>cliOpen(h.client_id)} style={{color:C.text,fontWeight:600,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(h.client_id)}</div><div style={{color:C.done,fontSize:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fFecha(h.fecha)}{h.glosa?' · '+h.glosa:''}{isAdmin&&h.user_name?' · '+h.user_name:''}{h.billable===false?' · no facturable':''}</div></div>
-              <span style={{fontWeight:700,color:C.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fh(h.horas)}</span>
+              <div style={{minWidth:0,flex:1}}><div onClick={()=>cliOpen(h.client_id)} style={{color:C.text,fontWeight:600,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(h.client_id)}</div><div style={{color:C.done,fontSize:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fFecha(h.fecha)}{h.glosa?' · '+h.glosa:''}{isAdmin&&h.user_name?' · '+h.user_name:''}{h.billable===false?' · no facturable':''}</div></div>
+              <span style={{fontWeight:700,color:C.accent,flexShrink:0,fontVariantNumeric:'tabular-nums',marginLeft:8}}>{fh(h.horas)}</span>
+              <span onClick={()=>abrirEdit(h)} title='Editar' style={{marginLeft:9,color:C.done,cursor:'pointer',fontSize:14,flexShrink:0}}>✎</span>
             </div>
           ))}
         </div>
+        {undoH && <div style={{background:'#10171B',color:'#fff',borderRadius:9,padding:'8px 12px',fontSize:11.5,display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}><span>Hora borrada.</span><span onClick={deshacerBorrar} style={{color:'#7FE0A9',fontWeight:700,cursor:'pointer'}}>Deshacer</span></div>}
       </>}
       </>}
     </div>
