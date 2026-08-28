@@ -17385,7 +17385,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Sincronización automática</div>
-            <div style={{fontSize:10.5,color:C.muted}}>Cada 1–2h: crea los clientes nuevos de Drive y detecta los movidos.</div>
+            <div style={{fontSize:10.5,color:C.muted}}>Al abrir la app y cada 2h: crea los clientes nuevos de Drive y detecta los movidos.</div>
           </div>
           <div onClick={toggleAuto} style={{width:40,height:23,borderRadius:12,background:autoOn?C.normal:C.done,position:'relative',cursor:'pointer',transition:'.15s',flexShrink:0}}>
             <div style={{position:'absolute',top:2,left:autoOn?19:2,width:19,height:19,borderRadius:'50%',background:'#fff',transition:'.15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/>
@@ -24991,6 +24991,20 @@ export default function App() {
   const [menuOpen,setMenuOpen]=useState(false)
   const [modVer,setModVer]=useState(0)   // se incrementa al cambiar los módulos del estudio → refiltra nav y guard
   useEffect(()=>{ if(DEMO) return; let alive=true; supabase.from('learnings').select('key,value').eq('kind','fd_modulo_off').then(({data})=>{ if(!alive) return; MODULOS_OFF.clear(); (data||[]).forEach(r=>{ if(String(r.value)==='off') MODULOS_OFF.add(String(r.key)) }); setModVer(v=>v+1) },()=>{}); return ()=>{alive=false} },[])
+  // Sync de clientes con Drive AL ABRIR (además del cron). Respeta el interruptor (solo si auto=on → mantiene el gate),
+  // throttle 30min (no en cada recarga) y solo admin. La corrida de fondo del cron sigue igual.
+  useEffect(()=>{ if(DEMO||userRole!=='admin') return; let alive=true
+    ;(async()=>{ try{
+      const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync').maybeSingle()
+      if((cfg?.value||'off').trim()!=='on') return   // auto apagado → no toca nada (gate hasta la 1ª corrida supervisada)
+      const {data:ls}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').maybeSingle()
+      let last=0; try{ if(ls?.value) last=new Date(JSON.parse(ls.value).at).getTime() }catch(_){}
+      if(Date.now()-last < 30*60000) return          // ya sincronizó hace <30min → no repetir
+      const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
+      if(!alive||error||data?.error) return
+      const c=await getClients(); if(alive&&c) setClients(c)
+    }catch(_){} })()
+    return ()=>{alive=false} },[userRole])
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
