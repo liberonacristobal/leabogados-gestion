@@ -20921,7 +20921,8 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
   const [horas,setHoras] = useState([])
   const [tarifaUF,setTarifaUF] = useState(3)
   const [ufAnio,setUfAnio] = useState(0)
-  const [decid,setDecid] = useState({})   // client_id → 'ver'|'descartado' (aprendizaje)
+  const [decid,setDecid] = useState({})   // client_id → 'ver'|'descartado'|'enviado' (aprendizaje)
+  const [sendingCid,setSendingCid] = useState(null)
   const ufHoy = useUF().uf || UF_FALLBACK
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const anio = hoy.slice(0,4); const mesesYTD = (new Date().getMonth()+1)
@@ -20950,12 +20951,31 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
   }).filter(r=>r.subir).sort((a,b)=>b.deltaUF-a.deltaUF), [permanentes,horas,tarifaUF,ufAnioEff,mesesYTD])
   const totalUpliftUF = recos.reduce((a,r)=>a+r.deltaUF,0)
 
-  const verCarta = r => {
-    setDecid(d=>({...d,[r.cid]:'ver'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'ver'},{onConflict:'kind,key'}) }catch(_){} }
+  // Cuerpo de la carta (reutilizado para el PDF y para el correo). forEmail quita el sello BORRADOR y la nota interna.
+  const cartaInner = (r, forEmail=false) => {
     const nuevoStr = r.moneda==='CLP' ? f0(Math.round(r.recUF*ufHoy))+' (aprox. '+ufFmt(r.recUF)+')' : ufFmt(r.recUF)
     const hoyStr = r.moneda==='CLP' ? f0(parseFloat(r.s.amount_clp)||0) : ufFmt(r.feeUF)
-    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Propuesta de reajuste — ${cn(r.cid).replace(/</g,'&lt;')}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:600px;margin:0 auto;padding:26px 30px'><div style='display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #003C50;padding-bottom:14px;margin-bottom:22px'><div style='font-size:16px;font-weight:700;color:#003C50'>${BRAND.nombre}</div><span style='font-size:10px;font-weight:700;background:#FFF8E1;color:#854F0B;padding:3px 9px;border-radius:5px'>BORRADOR · REVISAR ANTES DE ENVIAR</span></div><p style='font-size:13px;line-height:1.65'>Estimados,</p><p style='font-size:13px;line-height:1.65'>Junto con saludar, y en el marco de nuestra asesoría permanente, queremos proponerles una actualización del honorario mensual.</p><p style='font-size:13px;line-height:1.65'>Durante ${anio} la dedicación efectiva a sus asuntos ha promediado <b>${fh(r.avg)} al mes</b>, por sobre las <b>${fh(r.incl)}</b> contempladas en el plan actual de <b>${hoyStr} mensuales</b>. En consideración a ello, proponemos ajustar el honorario a <b>${nuevoStr} mensuales</b>, a partir del próximo período.</p><p style='font-size:13px;line-height:1.65'>Quedamos atentos a comentar los detalles y a cualquier ajuste que estimen pertinente.</p><p style='font-size:13px;line-height:1.65'>Saludos cordiales,<br><b>${BRAND.nombre}</b></p><div style='margin-top:20px;font-size:10px;color:#537281;border-top:1px solid #E4E8EB;padding-top:12px'>Documento borrador de uso interno — revísalo y ajústalo antes de enviarlo al cliente. Cálculo: consumo real ${fh(r.avg)}/mes × ${tarifaUF} UF/h.</div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const badge = forEmail ? '' : `<span style='font-size:10px;font-weight:700;background:#FFF8E1;color:#854F0B;padding:3px 9px;border-radius:5px'>BORRADOR · REVISAR ANTES DE ENVIAR</span>`
+    const footer = forEmail ? '' : `<div style='margin-top:20px;font-size:10px;color:#537281;border-top:1px solid #E4E8EB;padding-top:12px'>Documento borrador de uso interno — revísalo y ajústalo antes de enviarlo al cliente. Cálculo: consumo real ${fh(r.avg)}/mes × ${tarifaUF} UF/h.</div>`
+    return `<div style='max-width:600px;margin:0 auto;padding:26px 30px;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D'><div style='display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #003C50;padding-bottom:14px;margin-bottom:22px'><div style='font-size:16px;font-weight:700;color:#003C50'>${BRAND.nombre}</div>${badge}</div><p style='font-size:13px;line-height:1.65'>Estimados,</p><p style='font-size:13px;line-height:1.65'>Junto con saludar, y en el marco de nuestra asesoría permanente, queremos proponerles una actualización del honorario mensual.</p><p style='font-size:13px;line-height:1.65'>Durante ${anio} la dedicación efectiva a sus asuntos ha promediado <b>${fh(r.avg)} al mes</b>, por sobre las <b>${fh(r.incl)}</b> contempladas en el plan actual de <b>${hoyStr} mensuales</b>. En consideración a ello, proponemos ajustar el honorario a <b>${nuevoStr} mensuales</b>, a partir del próximo período.</p><p style='font-size:13px;line-height:1.65'>Quedamos atentos a comentar los detalles y a cualquier ajuste que estimen pertinente.</p><p style='font-size:13px;line-height:1.65'>Saludos cordiales,<br><b>${BRAND.nombre}</b></p>${footer}</div>`
+  }
+  const verCarta = r => {
+    setDecid(d=>({...d,[r.cid]:'ver'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'ver'},{onConflict:'kind,key'}) }catch(_){} }
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Propuesta de reajuste — ${cn(r.cid).replace(/</g,'&lt;')}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;background:#fff'>${cartaInner(r,false)}<button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
+  }
+  // F1 — enviar la carta al cliente por correo (desde tu cuenta). Confirma antes; aprende el destinatario.
+  const enviarCarta = async r => {
+    const cli = clients.find(c=>String(c.id)===String(r.cid))
+    const to = await appPrompt({ message:`Correo del cliente para enviar la propuesta de ${cn(r.cid)}:`, def:cli?.email||'' })
+    if(!to || !to.trim()) return
+    if(!await appConfirm(`¿Enviar la propuesta de reajuste a ${to.trim()}? Se envía desde tu correo. Revisa que el texto y el monto estén bien (usa “Preparar carta” para verlo).`)) return
+    setSendingCid(r.cid)
+    try{
+      const via = await enviarComoUsuario({ to:to.trim(), subject:`Propuesta de actualización de honorarios — ${BRAND.nombre}`, html:cartaInner(r,true), text:'Adjuntamos nuestra propuesta de actualización del honorario mensual.' })
+      if(via){ setDecid(d=>({...d,[r.cid]:'enviado'})); if(!DEMO){ try{ await supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'enviado'},{onConflict:'kind,key'}) }catch(_){} }; appAlert('Propuesta enviada'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') }
+    }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
+    setSendingCid(null)
   }
   const descartar = r => { setDecid(d=>({...d,[r.cid]:'descartado'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'descartado'},{onConflict:'kind,key'}) }catch(_){} } }
   const visibles = recos.filter(r=>decid[r.cid]!=='descartado')
@@ -20985,8 +21005,10 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
           </div>
           <div style={{fontSize:11,color:C.muted,lineHeight:1.45}}>Consume ~<b style={{color:C.text}}>{fh(r.avg)}</b>/mes; su plan incluye {fh(r.incl)}. A {tarifaUF} UF/h, el consumo real vale {ufFmt(r.recUF)}.</div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,marginTop:10}}>
+            {decid[r.cid]==='enviado' && <span style={{marginRight:'auto',fontSize:10.5,fontWeight:700,color:C.greenText}}>Propuesta enviada</span>}
             <button onClick={()=>descartar(r)} style={{background:'none',border:'none',color:C.done,fontSize:11.5,cursor:'pointer'}}>Descartar</button>
-            <button onClick={()=>verCarta(r)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Preparar carta</button>
+            <button onClick={()=>verCarta(r)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Preparar carta</button>
+            <button onClick={()=>enviarCarta(r)} disabled={sendingCid===r.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:sendingCid===r.cid?'default':'pointer'}}>{sendingCid===r.cid?'Enviando…':'Enviar al cliente'}</button>
           </div>
         </div>
       )})}
@@ -21213,6 +21235,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const EQUIPO = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   const lunISO = (()=>{ const d=new Date(hoy+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d.toISOString().slice(0,10) })()
   const horasPeriodo = name => horas.filter(h=> h.user_name===name && (mView==='mes' ? String(h.fecha||'').startsWith(mesActual) : (h.fecha||'')>=lunISO)).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  // D3 — horas facturables del período (excluye las marcadas no facturables). Métrica de utilización que de verdad importa.
+  const horasPeriodoFact = name => horas.filter(h=> h.user_name===name && h.billable!==false && (mView==='mes' ? String(h.fecha||'').startsWith(mesActual) : (h.fecha||'')>=lunISO)).reduce((a,h)=>a+(Number(h.horas)||0),0)
   const bookingDe = name => (tasks||[]).filter(t=> t.status!=='Terminado' && (isAssignee(t,name)||t.who===name)).length
   const metaPeriodo = name => { const w=Number(metas[name])||0; return mView==='mes'? Math.round(w*4.33) : w }
   // Vista calendario del equipo (pantalla 8): grilla semana × persona con carga (horas + tareas del día).
@@ -21305,7 +21329,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         {eqView==='carga' && <>
         <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:12,marginLeft:8}}>{[['semana','Semana'],['mes','Mes']].map(([k,l])=><button key={k} onClick={()=>setMView(k)} style={{fontSize:11,fontWeight:700,padding:'5px 14px',border:'none',background:mView===k?C.accent:'#fff',color:mView===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>
         <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'0 2px 8px'}}>Horas reales vs meta · {mView==='mes'?'mes':'semana'}</div>
-        {EQUIPO.map(name=>{ const real=horasPeriodo(name); const meta=metaPeriodo(name); const pct=meta>0?Math.round(real/meta*100):0; const book=bookingDe(name); const col=personChip(name).color; const util=pct>100?C.overdue:pct>=70?C.normal:'#EF9F27'; return (
+        {EQUIPO.map(name=>{ const real=horasPeriodo(name); const fact=horasPeriodoFact(name); const factPct=real>0?Math.round(fact/real*100):0; const meta=metaPeriodo(name); const pct=meta>0?Math.round(real/meta*100):0; const book=bookingDe(name); const col=personChip(name).color; const util=pct>100?C.overdue:pct>=70?C.normal:'#EF9F27'; return (
           <div key={name} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginBottom:8}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
               <span style={{width:24,height:24,borderRadius:'50%',background:col,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{INICIALES_RESP[name]||name.slice(0,2)}</span>
@@ -21314,6 +21338,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             </div>
             <div style={{height:8,borderRadius:5,background:C.bgSoft,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:Math.min(100,pct)+'%',background:util,borderRadius:5}}/></div>
             <div style={{fontSize:10,color:C.done,marginTop:5,display:'flex',justifyContent:'space-between'}}><span>{fh(real)} de {meta?fh(meta):'—'} · {book} tarea{book!==1?'s':''} abierta{book!==1?'s':''}</span><span onClick={()=>setMetaEdit(metaEdit===name?null:name)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>meta</span></div>
+            {real>0 && <div style={{fontSize:9.5,marginTop:3,fontWeight:600,color:factPct>=70?C.greenText:factPct>=40?C.soonText:C.overdueText}}>{fh(fact)} facturables · {factPct}% del tiempo{factPct<70?' · revisar':''}</div>}
             {metaEdit===name && <div style={{marginTop:7,display:'flex',gap:7,alignItems:'center'}}><span style={{fontSize:11,color:C.muted}}>Meta h/semana</span><input type='number' defaultValue={metas[name]||''} onBlur={e=>{setMeta(name,e.target.value);setMetaEdit(null)}} style={{...inp,height:32,width:80,textAlign:'right'}} autoFocus/></div>}
           </div>
         )})}
@@ -21492,6 +21517,15 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
 
       {/* Retainer de clientes permanentes */}
       {permanentes.length>0 && <>
+        {/* F3 — alertas de consumo: asesorías por sobre lo pactado o en camino a excederse este mes */}
+        {(()=>{ const alertas = permanentes.map(({cid,sale})=>{ const cons=consumoMes(cid); const est=estDe(sale); const diaMes=new Date().getDate(); const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate(); const proj=diaMes>0?cons/diaMes*diasMes:0; const over=est>0&&cons>est; const willOver=est>0&&!over&&proj>est*1.05; return {cid,over,willOver,est} }).filter(a=>a.over||a.willOver).sort((a,b)=>(b.over?1:0)-(a.over?1:0))
+          if(!alertas.length) return null
+          return <div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:11,padding:'10px 12px',marginBottom:10}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:C.soonText,marginBottom:5}}>{alertas.length} asesoría{alertas.length!==1?'s':''} por revisar este mes</div>
+            {alertas.map(a=><div key={a.cid} onClick={()=>cliOpen(a.cid)} style={{fontSize:11,color:C.soonText,padding:'2px 0',cursor:onOpenClientFicha?'pointer':'default'}}>· <b>{cn(a.cid)}</b> — {a.over?`excedió las ${fh(a.est)} incluidas`:'va camino a excederse'}</div>)}
+            {isAdmin && <div style={{fontSize:10.5,color:C.accent,fontWeight:700,marginTop:6}}>Base para reajustar la tarifa en Repricing.</div>}
+          </div>
+        })()}
         <div style={lbl}>Asesorías permanentes · {mesLabel(mesActual)}</div>
         {permanentes.map(({cid,sale})=>{ const cons=consumoMes(cid); const est=estDe(sale); const pct=est>0?Math.min(100,Math.round(cons/est*100)):0; const over=est>0&&cons>est; const fee=sale?.moneda==='UF'?('UF '+(parseFloat(sale.amount_uf)||0).toLocaleString('es-CL')):f0(sale?.amount_clp)
           return (
