@@ -33,3 +33,8 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/procesar-cartola/deno.json"
 entrypoint = "./functions/procesar-cartola/index.ts"
+
+[functions.clientes-drive-sync]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/clientes-drive-sync/index.ts"
