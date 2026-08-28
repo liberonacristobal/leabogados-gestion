@@ -48,6 +48,29 @@ const C = {
   // sub-paleta SOBRE NAVY (heroes con fondo accent #003C50, p.ej. Saldo del cliente / Vendido): label azul claro, botón navy profundo, divisor, verde/rojo claros legibles sobre navy
   onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
 }
+// ── BRAND — identidad del ESTUDIO (tenant). LEA es el tenant #1. Todo lo identitario se lee de aquí
+// para poder adaptar a OTRO estudio cambiando SOLO esta config (regla de oro: vendible por diseño).
+// Inicializado con los valores actuales de LEA → cero cambio visible. Migración de literales, gradual.
+const BRAND = {
+  nombre: 'Liberona Escala Abogados',
+  nombreLegal: 'Liberona Escala Abogados Limitada',
+  rut: '77.700.387-9',
+  dominio: 'gestion.leabogados.cl',                 // dominio de la app (links en correos)
+  web: 'leabogados.cl',
+  direccion: 'Av. Kennedy 7900, Of. 905, Vitacura · Santiago',
+  logoUrl: 'https://gestion.leabogados.cl',          // base ABSOLUTA para logos en correos (fuera de la app)
+  logo: { blanco:'/le-logo-blanco.png', color:'/le-logo-color.png', full:'/le-logo-full-blanco.png' },
+}
+// ── MÓDULOS (catálogo) + entitlements por estudio. Habilitador de la venta por módulos.
+// HOY: todo habilitado para LEA → cero cambio. FUTURO (Fase 3): habilitados por estudio_id.
+const MODULOS = [
+  { id:'nucleo', label:'Núcleo', core:true }, { id:'horas', label:'Horas & Rentabilidad' },
+  { id:'finanzas', label:'Finanzas' }, { id:'sii', label:'Facturación SII' },
+  { id:'gastos', label:'Gastos & Rendiciones' }, { id:'proyectos', label:'Proyectos' },
+  { id:'bi', label:'Inteligencia' }, { id:'ialegal', label:'IA Legal' }, { id:'portal', label:'Portal del Cliente' },
+]
+const MODULOS_HABILITADOS = MODULOS.map(m=>m.id)          // LEA: todos ON
+const moduloOn = id => MODULOS_HABILITADOS.includes(id)   // se usará en la nav cuando se enchufen entitlements
 // Único puente a Claude. La API key NO vive en el front (sería pública en el bundle):
 // vive como secreto en la edge function claude-proxy, que valida el JWT del equipo.
 // Devuelve el JSON de Anthropic tal cual (el llamador lee data.content[0].text).
@@ -5855,7 +5878,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                 <span style={{color:C.done,fontSize:11}}>N° {folioN(b.invoice_no)||b.folio||'—'}</span>
               </div>
               <div style={{padding:'9px 11px',display:'flex',flexDirection:'column',gap:6,background:'#fff'}}>
-                {row('Emisor', `${dte?.rznE||'Liberona Escala Abogados'}${dte?.rutE?` · ${dte.rutE}`:''}`)}
+                {row('Emisor', `${dte?.rznE||BRAND.nombre}${dte?.rutE?` · ${dte.rutE}`:''}`)}
                 {row('Receptor', `${recRs||'—'}${recRut?` · ${recRut}`:''}`)}
                 {row('Emisión', fmtFechaDMY(b.issued_at||b.due))}
                 <div style={{borderTop:`1px solid ${C.border}`,paddingTop:7}}>
@@ -20758,7 +20781,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
     setDecid(d=>({...d,[r.cid]:'ver'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'ver'},{onConflict:'kind,key'}) }catch(_){} }
     const nuevoStr = r.moneda==='CLP' ? f0(Math.round(r.recUF*ufHoy))+' (aprox. '+ufFmt(r.recUF)+')' : ufFmt(r.recUF)
     const hoyStr = r.moneda==='CLP' ? f0(parseFloat(r.s.amount_clp)||0) : ufFmt(r.feeUF)
-    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Propuesta de reajuste — ${cn(r.cid).replace(/</g,'&lt;')}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:600px;margin:0 auto;padding:26px 30px'><div style='display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #003C50;padding-bottom:14px;margin-bottom:22px'><div style='font-size:16px;font-weight:700;color:#003C50'>Liberona Escala Abogados</div><span style='font-size:10px;font-weight:700;background:#FFF8E1;color:#854F0B;padding:3px 9px;border-radius:5px'>BORRADOR · REVISAR ANTES DE ENVIAR</span></div><p style='font-size:13px;line-height:1.65'>Estimados,</p><p style='font-size:13px;line-height:1.65'>Junto con saludar, y en el marco de nuestra asesoría permanente, queremos proponerles una actualización del honorario mensual.</p><p style='font-size:13px;line-height:1.65'>Durante ${anio} la dedicación efectiva a sus asuntos ha promediado <b>${fh(r.avg)} al mes</b>, por sobre las <b>${fh(r.incl)}</b> contempladas en el plan actual de <b>${hoyStr} mensuales</b>. En consideración a ello, proponemos ajustar el honorario a <b>${nuevoStr} mensuales</b>, a partir del próximo período.</p><p style='font-size:13px;line-height:1.65'>Quedamos atentos a comentar los detalles y a cualquier ajuste que estimen pertinente.</p><p style='font-size:13px;line-height:1.65'>Saludos cordiales,<br><b>Liberona Escala Abogados</b></p><div style='margin-top:20px;font-size:10px;color:#537281;border-top:1px solid #E4E8EB;padding-top:12px'>Documento borrador de uso interno — revísalo y ajústalo antes de enviarlo al cliente. Cálculo: consumo real ${fh(r.avg)}/mes × ${tarifaUF} UF/h.</div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Propuesta de reajuste — ${cn(r.cid).replace(/</g,'&lt;')}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:600px;margin:0 auto;padding:26px 30px'><div style='display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #003C50;padding-bottom:14px;margin-bottom:22px'><div style='font-size:16px;font-weight:700;color:#003C50'>${BRAND.nombre}</div><span style='font-size:10px;font-weight:700;background:#FFF8E1;color:#854F0B;padding:3px 9px;border-radius:5px'>BORRADOR · REVISAR ANTES DE ENVIAR</span></div><p style='font-size:13px;line-height:1.65'>Estimados,</p><p style='font-size:13px;line-height:1.65'>Junto con saludar, y en el marco de nuestra asesoría permanente, queremos proponerles una actualización del honorario mensual.</p><p style='font-size:13px;line-height:1.65'>Durante ${anio} la dedicación efectiva a sus asuntos ha promediado <b>${fh(r.avg)} al mes</b>, por sobre las <b>${fh(r.incl)}</b> contempladas en el plan actual de <b>${hoyStr} mensuales</b>. En consideración a ello, proponemos ajustar el honorario a <b>${nuevoStr} mensuales</b>, a partir del próximo período.</p><p style='font-size:13px;line-height:1.65'>Quedamos atentos a comentar los detalles y a cualquier ajuste que estimen pertinente.</p><p style='font-size:13px;line-height:1.65'>Saludos cordiales,<br><b>${BRAND.nombre}</b></p><div style='margin-top:20px;font-size:10px;color:#537281;border-top:1px solid #E4E8EB;padding-top:12px'>Documento borrador de uso interno — revísalo y ajústalo antes de enviarlo al cliente. Cálculo: consumo real ${fh(r.avg)}/mes × ${tarifaUF} UF/h.</div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
   const descartar = r => { setDecid(d=>({...d,[r.cid]:'descartado'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'descartado'},{onConflict:'kind,key'}) }catch(_){} } }
