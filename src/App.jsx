@@ -378,6 +378,14 @@ const simTexto = (a,b) => { const A=new Set(_normTxt(a).split(' ').filter(w=>w.l
 // La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
+// Valor SINGLETON en learnings (config, interruptores): update si existe, insert si no. NO usar upsert
+// onConflict:'kind,key' — la tabla admite (kind,key) duplicados a propósito y ese upsert falla en silencio.
+async function setLearningKV(kind,key,value){
+  const v = value==null?null:String(value)
+  const {data} = await supabase.from('learnings').select('id').eq('kind',kind).eq('key',String(key)).limit(1)
+  if(data&&data.length) await supabase.from('learnings').update({value:v}).eq('id',data[0].id)
+  else await supabase.from('learnings').insert({kind,key:String(key),value:v})
+}
 const logEvent = (area,action,detail,user) => { try{ supabase.from('usage_events').insert({area,action,detail:detail||{},user_name:user||null}).then(()=>{},()=>{}) }catch(e){} }
 // Razón social a mostrar en encabezados: si se pasa entityId se usa esa RS; con 1 RS, esa; si hay varias o ninguna,
 // el nombre del cliente (con conteo de RS si aplica). Devuelve {name, rut, multi}.
@@ -6202,7 +6210,7 @@ function ModulosModal({ onChange }){
     const next = new Set(off); willOff?next.add(m.id):next.delete(m.id); setOff(next)
     if(willOff) MODULOS_OFF.add(m.id); else MODULOS_OFF.delete(m.id)
     onChange&&onChange()
-    if(!DEMO){ setBusy(true); try{ await supabase.from('learnings').upsert({kind:'fd_modulo_off',key:m.id,value:willOff?'off':'on'},{onConflict:'kind,key'}) }catch(_){}; setBusy(false) }
+    if(!DEMO){ setBusy(true); try{ await setLearningKV('fd_modulo_off',m.id,willOff?'off':'on') }catch(_){}; setBusy(false) }
   }
   return (
     <div>
@@ -17301,7 +17309,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
   const toggleAuto=async()=>{
     const nv=!autoOn; setAutoOn(nv)
     if(DEMO) return
-    try{ await supabase.from('learnings').upsert({kind:'config',key:'clientes_drive_sync',value:nv?'on':'off'},{onConflict:'kind,key'}) }catch(_){ setAutoOn(!nv) }
+    try{ await setLearningKV('config','clientes_drive_sync',nv?'on':'off') }catch(_){ setAutoOn(!nv) }
   }
   const terminarBaja=async(b)=>{
     if(!await appConfirm(`¿Marcar "${b.folder_name}" como Terminado? Se archiva (reversible); su carpeta ya no está en clientes activos de Drive.`)) return

@@ -1,13 +1,16 @@
 // clientes-drive-sync — mantiene el padrón de clientes en sincronía con las carpetas de Drive.
 //
-// Qué hace (por cron cada 1–2h, o manual desde la app):
-//   • AGREGA (automático): cada carpeta nueva bajo CLIENTES_ROOT que no corresponde a ningún
-//     cliente → crea el cliente (status 'Activo') y guarda el vínculo carpeta↔cliente en client_drive.
-//   • SACAR (con compuerta): cuando una carpeta YA VINCULADA a un cliente 'Activo' deja de estar
-//     bajo CLIENTES_ROOT (se movió a Terminados o fuera) → NO lo termina solo; encola una "baja
-//     pendiente" en clientes_drive_sync para que un humano la confirme con un toque en la app.
+// Qué hace (por cron cada 2h, o manual/al abrir la app):
+//   • AGREGA (automático): carpeta nueva bajo CLIENTES_ROOT cuyo nombre no corresponde a ningún
+//     cliente → crea el cliente (status 'Activo').
+//   • SACAR (con compuerta): cliente 'Activo' cuyo nombre aparece como carpeta en la raíz de
+//     TERMINADOS y ya NO en activos → encola una "baja pendiente" en clientes_drive_sync para que
+//     un humano la confirme con un toque. NO cambia el status por su cuenta.
 //
-// La detección de movimientos es por folder_id (identidad), no por nombre → a prueba de renombres.
+// Coincidencia por NOMBRE (normalizado). NO usa la tabla client_drive: esa guarda la carpeta que el
+// usuario vincula para "Documentos del cliente" (puede ser otra carpeta) → usarla daba falsos positivos.
+// Se descartó el caso "no está en activos" (movido_fuera) por lo mismo: solo se propone baja cuando la
+// carpeta aparece EXPLÍCITAMENTE en Terminados.
 //
 // Auth: verify_jwt=false. (a) cron con secreto (body.secret === CLIENTES_DRIVE_SECRET) → corrida
 // completa, pero SOLO si el interruptor learnings config/clientes_drive_sync = 'on'. (b) usuario
@@ -61,16 +64,28 @@ async function getToken(): Promise<string> {
   return _tok;
 }
 
-const norm = (s: string) => String(s || "").toLowerCase().trim();
+// Normaliza para comparar nombres: minúsculas, SIN acentos, sin espacios dobles → evita duplicados
+// del tipo "Martínez" vs "Martinez" o "Cabañas " con espacio final.
+const norm = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
 // Carpetas que NO son un cliente (plantillas/secciones del Drive). Mantener alineado con el importador de la app.
-const esTemplate = (name: string) => !name || name.startsWith("1. CLIENTES");
+const esTemplate = (name: string) => !name || name.toLowerCase().startsWith("1. clientes");
+
+// Escribe una fila singleton en learnings SIN depender de un índice único (la tabla admite (kind,key)
+// duplicados a propósito, así que upsert onConflict:'kind,key' falla). Update si existe, insert si no.
+// deno-lint-ignore no-explicit-any
+async function setConfig(sb: any, key: string, value: string) {
+  const { data } = await sb.from("learnings").select("id").eq("kind", "config").eq("key", key).limit(1);
+  if (data && data.length) await sb.from("learnings").update({ value }).eq("id", data[0].id);
+  else await sb.from("learnings").insert({ kind: "config", key, value });
+}
 
 // deno-lint-ignore no-explicit-any
 async function listFolders(token: string, parentId: string): Promise<any[]> {
   const out: any[] = []; let pageToken = "";
   do {
     const url = `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false` +
-      `&fields=nextPageToken,files(id,name)&pageSize=1000&orderBy=name` + (pageToken ? `&pageToken=${pageToken}` : "");
+      `&fields=nextPageToken,files(id,name)&pageSize=1000&orderBy=name&supportsAllDrives=true&includeItemsFromAllDrives=true` +
+      (pageToken ? `&pageToken=${pageToken}` : "");
     const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
     const d = await r.json();
     if (!r.ok) throw new Error(d?.error?.message || "Error listando carpetas en Drive");
@@ -98,8 +113,8 @@ serve(async (req) => {
     const email = (u?.user?.email || "").toLowerCase();
     if (!email.endsWith("@leabogados.cl")) return json({ error: "No autorizado" }, 403);
   }
-  // Interruptor: solo aplica a la corrida por cron. La corrida manual (usuario) siempre corre.
-  if (esCron) {
+  // Interruptor: solo aplica a la corrida por cron. La corrida manual (usuario) y el dry-run siempre corren.
+  if (esCron && !body.dryRun) {
     const { data: cfg } = await sb.from("learnings").select("value").eq("kind", "config").eq("key", "clientes_drive_sync").maybeSingle();
     if ((cfg?.value || "off").trim() !== "on") return json({ ok: true, skipped: "apagado" });
   }
@@ -112,60 +127,55 @@ serve(async (req) => {
     const years = await listFolders(token, CLIENTES_TERMINADOS_ROOT);
     const terminados: any[] = [];
     for (const y of years) { (await listFolders(token, y.id)).forEach((c) => terminados.push(c)); }
-    const activoIds = new Set(activos.map((f) => f.id));
-    const terminadoIds = new Set(terminados.map((f) => f.id));
+    const activosByName = new Set(activos.map((f) => norm(f.name)));
+    const terminadosByName = new Map<string, any>();   // norm(name) -> carpeta en Terminados (para el folder_id de referencia)
+    for (const f of terminados) { if (!terminadosByName.has(norm(f.name))) terminadosByName.set(norm(f.name), f); }
 
     const { data: clients } = await sb.from("clients").select("id,name,status");
-    const { data: links } = await sb.from("client_drive").select("client_id,folder_id,folder_name");
-    const linkByFolder = new Map<string, any>();
-    const linkByClient = new Map<string, any>();
-    (links || []).forEach((l) => { linkByFolder.set(l.folder_id, l); linkByClient.set(String(l.client_id), l); });
     const clientByName = new Map<string, any>();
     (clients || []).forEach((c) => { if (!clientByName.has(norm(c.name))) clientByName.set(norm(c.name), c); });
 
-    // ── 1) AGREGAR (auto) + backfill de vínculos
-    const added: string[] = [];
-    for (const f of activos) {
-      if (linkByFolder.has(f.id)) continue;                 // carpeta ya vinculada → nada
-      const existing = clientByName.get(norm(f.name));
-      if (existing) {                                        // existe por nombre pero sin vínculo → backfill
-        await sb.from("client_drive").upsert(
-          { client_id: String(existing.id), folder_id: f.id, folder_name: f.name, updated_at: new Date().toISOString() },
-          { onConflict: "client_id" });
-        linkByFolder.set(f.id, { client_id: existing.id, folder_id: f.id });
-        linkByClient.set(String(existing.id), { client_id: existing.id, folder_id: f.id, folder_name: f.name });
-        continue;
-      }
-      const { data: nc, error } = await sb.from("clients").insert({ name: f.name, status: "Activo" }).select("id,name").single();
-      if (!error && nc) {
-        await sb.from("client_drive").upsert(
-          { client_id: String(nc.id), folder_id: f.id, folder_name: f.name, updated_at: new Date().toISOString() },
-          { onConflict: "client_id" });
-        added.push(f.name);
-      }
+    // Candidatos (para dry-run y para aplicar). AGREGAR = carpeta activa sin cliente por nombre.
+    const wouldAdd = activos.filter((f) => !clientByName.has(norm(f.name))).map((f) => f.name);
+    // SACAR = cliente Activo cuyo nombre está en Terminados y ya no en activos.
+    const wouldRemove: string[] = [];
+    for (const c of (clients || [])) {
+      if (c.status !== "Activo") continue;
+      const nm = norm(c.name);
+      if (!activosByName.has(nm) && terminadosByName.has(nm)) wouldRemove.push(c.name);
+    }
+    if (body.dryRun) {
+      return json({ ok: true, dryRun: true, activos: activos.length, terminados: terminados.length,
+        wouldAddN: wouldAdd.length, wouldAdd: wouldAdd.slice(0, 60),
+        wouldRemoveN: wouldRemove.length, wouldRemove: wouldRemove.slice(0, 60) });
     }
 
-    // ── 2) SACAR (compuerta): cliente Activo con carpeta vinculada que ya no está en activos → baja pendiente
+    // ── 1) AGREGAR (auto): NO tocamos client_drive (esa tabla es de "Documentos del cliente").
+    const added: string[] = [];
+    for (const f of activos) {
+      if (clientByName.has(norm(f.name))) continue;
+      const { data: nc, error } = await sb.from("clients").insert({ name: f.name, status: "Activo" }).select("id,name").single();
+      if (!error && nc) { added.push(f.name); clientByName.set(norm(f.name), nc); }
+    }
+
+    // ── 2) SACAR (compuerta, SOLO señal confiable: aparece en TERMINADOS y no en activos).
     let pendingNew = 0;
     for (const c of (clients || [])) {
       if (c.status !== "Activo") continue;
-      const link = linkByClient.get(String(c.id));
-      if (!link || !link.folder_id) continue;               // sin vínculo confiable → no arriesgar (evita falsos positivos)
-      if (activoIds.has(link.folder_id)) continue;          // sigue bajo activos → ok
-      const motivo = terminadoIds.has(link.folder_id) ? "movido_terminados" : "movido_fuera";
-      const { data: ex } = await sb.from("clientes_drive_sync")
-        .select("id").eq("client_id", c.id).eq("folder_id", link.folder_id).limit(1);
-      if (ex && ex.length) continue;                        // ya registrada (pendiente/aplicada/descartada) → no repetir
+      const nm = norm(c.name);
+      if (activosByName.has(nm)) continue;
+      const tf = terminadosByName.get(nm);
+      if (!tf) continue;
+      const { data: ex } = await sb.from("clientes_drive_sync").select("id").eq("client_id", c.id).eq("folder_id", tf.id).limit(1);
+      if (ex && ex.length) continue;
       await sb.from("clientes_drive_sync").insert({
-        client_id: c.id, folder_id: link.folder_id, folder_name: link.folder_name || c.name, motivo, status: "pendiente",
+        client_id: c.id, folder_id: tf.id, folder_name: c.name, motivo: "movido_terminados", status: "pendiente",
       });
       pendingNew++;
     }
 
     const summary = { at: new Date().toISOString(), added, addedN: added.length, pendingNew, activos: activos.length };
-    await sb.from("learnings").upsert(
-      { kind: "config", key: "clientes_drive_sync_last", value: JSON.stringify(summary) },
-      { onConflict: "kind,key" });
+    await setConfig(sb, "clientes_drive_sync_last", JSON.stringify(summary));
     return json({ ok: true, ...summary });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
