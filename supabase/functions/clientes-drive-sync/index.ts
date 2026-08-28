@@ -1,11 +1,13 @@
-// clientes-drive-sync — INCORPORA a nuevos clientes desde las carpetas de Drive.
+// clientes-drive-sync — sincroniza el padrón de clientes con las carpetas de Drive (Drive manda).
 //
-// Qué hace (por cron cada 2h, o manual/al abrir la app): cada carpeta bajo CLIENTES_ROOT cuyo nombre
-// no corresponde a ningún cliente → crea el cliente (status 'Activo'). Las carpetas AGRUPADORAS
-// ("Clientes X") se recorren un nivel (no son un cliente). Coincidencia por NOMBRE normalizado (sin acentos).
+// Por cron cada 2h, o manual/al abrir la app:
+//   • INCORPORA: carpeta bajo CLIENTES_ROOT sin cliente por nombre → crea el cliente (Activo).
+//   • ARCHIVA: cliente no-Terminado cuya carpeta está en "1. CLIENTES TERMINADOS/<año>" y NO en activos
+//     → lo marca Terminado (reversible; ended_at = fin del año de la carpeta).
 //
-// El lado "SACAR" (dar de baja los movidos) se RETIRÓ (decisión del usuario 2026-08-28): en este Drive
-// el match por nombre daba falsos positivos sobre clientes activos. Las bajas se hacen a mano.
+// Enumeración de activos COMPLETA: sueltos + los de adentro de las carpetas AGRUPADORAS ("Clientes X",
+// ej. "Clientes Erasmo"). Así un homónimo con carpeta activa NUNCA se archiva por error. Match por NOMBRE
+// normalizado (sin acentos). NO usa client_drive (esa es la carpeta de "Documentos del cliente").
 //
 // Auth: verify_jwt=false. (a) cron con secreto (body.secret === CLIENTES_DRIVE_SECRET) → corrida
 // completa, pero SOLO si el interruptor learnings config/clientes_drive_sync = 'on'. (b) usuario
@@ -117,39 +119,81 @@ serve(async (req) => {
   try {
     const token = await getToken();
 
-    // Carpetas de clientes activos: hijas directas de CLIENTES_ROOT. Las carpetas AGRUPADORAS ("Clientes X",
-    // ej. "Clientes Erasmo") NO son un cliente → se recorren un nivel para incluir a los clientes de adentro.
-    const activos: any[] = [];
+    // Un solo listado de la raíz Clientes; clasificamos sus hijas.
+    let terminadosRootId = "";
+    const groupings: any[] = [];     // carpetas AGRUPADORAS por abogado ("Clientes X")
+    const flatClients: any[] = [];   // clientes sueltos directos
     for (const f of await listFolders(token, CLIENTES_ROOT)) {
-      if (esTemplate(f.name)) continue;
-      if (norm(f.name).startsWith("clientes ")) {
-        (await listFolders(token, f.id)).forEach((sub) => { if (!esTemplate(sub.name)) activos.push(sub); });
-        continue;
+      const nm = norm(f.name);
+      if (nm.startsWith("1. clientes terminados") || nm === "clientes terminados") { terminadosRootId = f.id; continue; }
+      if (esTemplate(f.name)) continue;                       // otras plantillas/secciones "1. ..."
+      if (nm.startsWith("clientes ")) { groupings.push(f); continue; }
+      flatClients.push(f);
+    }
+    if (!terminadosRootId) terminadosRootId = CLIENTES_TERMINADOS_ROOT;   // fallback al id conocido
+
+    // Activos = sueltos + los de adentro de cada agrupadora (enumeración COMPLETA → sin falsos archivados).
+    const activos: any[] = [...flatClients];
+    for (const g of groupings) { (await listFolders(token, g.id)).forEach((sub) => { if (!esTemplate(sub.name)) activos.push(sub); }); }
+    const activosByName = new Set(activos.map((f) => norm(f.name)));
+
+    // Terminados = raíz Terminados → carpeta de AÑO → cliente. Guardamos el año para ended_at.
+    const terminadosByName = new Map<string, { id: string; year: number | null }>();
+    for (const y of await listFolders(token, terminadosRootId)) {
+      const ym = String(y.name).match(/(20\d{2})/); const year = ym ? Number(ym[1]) : null;
+      for (const c of await listFolders(token, y.id)) {
+        const k = norm(c.name);
+        if (!terminadosByName.has(k)) terminadosByName.set(k, { id: c.id, year });
       }
-      activos.push(f);
     }
 
     const { data: clients } = await sb.from("clients").select("id,name,status");
     const clientByName = new Map<string, any>();
     (clients || []).forEach((c) => { if (!clientByName.has(norm(c.name))) clientByName.set(norm(c.name), c); });
 
-    // Solo INCORPORAR NUEVOS (decisión del usuario 2026-08-28): el "sacar" por nombre daba falsos positivos
-    // en este Drive, así que se retiró. AGREGAR = carpeta activa cuyo nombre no corresponde a ningún cliente.
+    // Candidatos (para dry-run y para aplicar).
     const wouldAdd = activos.filter((f) => !clientByName.has(norm(f.name))).map((f) => f.name);
+    const wouldTerminate: string[] = [];
+    for (const c of (clients || [])) {
+      if (c.status === "Terminado") continue;
+      const nm = norm(c.name);
+      if (activosByName.has(nm)) continue;                    // tiene carpeta activa → NO archivar
+      if (terminadosByName.has(nm)) wouldTerminate.push(c.name);
+    }
     if (body.dryRun) {
-      return json({ ok: true, dryRun: true, activos: activos.length, wouldAddN: wouldAdd.length, wouldAdd: wouldAdd.slice(0, 80) });
+      return json({ ok: true, dryRun: true, activos: activos.length, terminados: terminadosByName.size,
+        wouldAddN: wouldAdd.length, wouldAdd: wouldAdd.slice(0, 80),
+        wouldTerminateN: wouldTerminate.length, wouldTerminate: wouldTerminate.slice(0, 80) });
     }
 
+    // 1) INCORPORAR nuevos: carpeta activa sin cliente por nombre.
     const added: string[] = [];
+    const addErrors: string[] = [];
     for (const f of activos) {
       if (clientByName.has(norm(f.name))) continue;
       const { data: nc, error } = await sb.from("clients").insert({ name: f.name, status: "Activo" }).select("id,name").single();
       if (!error && nc) { added.push(f.name); clientByName.set(norm(f.name), nc); }
+      else if (error) addErrors.push(`${f.name}: ${error.message || error.code || "?"}`);
     }
 
-    const summary = { at: new Date().toISOString(), added, addedN: added.length, activos: activos.length };
+    // 2) ARCHIVAR: cliente no-Terminado cuya carpeta está en Terminados (Drive manda). Reversible; ended_at por el año.
+    const terminated: string[] = [];
+    for (const c of (clients || [])) {
+      if (c.status === "Terminado") continue;
+      const nm = norm(c.name);
+      if (activosByName.has(nm)) continue;
+      const t = terminadosByName.get(nm);
+      if (!t) continue;
+      // deno-lint-ignore no-explicit-any
+      const patch: any = { status: "Terminado", updated_at: new Date().toISOString() };
+      if (t.year) patch.ended_at = `${t.year}-12-31`;
+      const { error } = await sb.from("clients").update(patch).eq("id", c.id);
+      if (!error) terminated.push(c.name);
+    }
+
+    const summary = { at: new Date().toISOString(), added, addedN: added.length, terminated, terminatedN: terminated.length, activos: activos.length };
     await setConfig(sb, "clientes_drive_sync_last", JSON.stringify(summary));
-    return json({ ok: true, ...summary });
+    return json({ ok: true, ...summary, addErrors });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }

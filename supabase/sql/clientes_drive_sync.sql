@@ -39,3 +39,10 @@ NOTIFY pgrst, 'reload schema';
 --   $f$select net.http_post(url := 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/clientes-drive-sync',
 --     headers := '{"Content-Type":"application/json"}'::jsonb, body := jsonb_build_object('secret', %L));$f$,
 --   (regexp_match((select command from cron.job where jobname='cartera-semanal-lunes'), '"secret":"([^"]+)"'))[1]));
+
+-- ── Permiso necesario para que el edge fn (service_role) pueda CREAR clientes ────────────────────
+-- clients.estudio_id tiene default COALESCE(mi_estudio(),'lea'); ese default corre en cada INSERT y
+-- llama mi_estudio(). service_role no tenía EXECUTE sobre esa función → los INSERT de la fn fallaban
+-- ("permission denied for function mi_estudio"), mientras la app (authenticated) sí podía. Fix:
+grant execute on function mi_estudio() to service_role;
+-- (Aplica a CUALQUIER edge fn que inserte en tablas con esa columna multi-tenant, no solo esta.)
