@@ -54,11 +54,20 @@ const C = {
 const BRAND = {
   nombre: 'Liberona Escala Abogados',
   nombreLegal: 'Liberona Escala Abogados Limitada',
+  nombreLegalCorto: 'Liberona Escala Abogados Ltda.',
   rut: '77.700.387-9',
   dominio: 'gestion.leabogados.cl',                 // dominio de la app (links en correos)
   web: 'leabogados.cl',
+  portal: 'portal.leabogados.cl',                   // dominio del portal del cliente
   direccion: 'Av. Kennedy 7900, Of. 905, Vitacura · Santiago',
+  telefono: '+56 2 2405 3800',
+  socios: 'Cristóbal Liberona y Erasmo Escala',
   logo: { blanco:'/le-logo-blanco.png', color:'/le-logo-color.png', full:'/le-logo-full-blanco.png' },
+  // Datos de cobro (transferencia). Fuente ÚNICA — CUENTA_HONORARIOS/CUENTA_GASTOS y todo texto de pago leen de aquí.
+  pago: {
+    honorarios: { banco:'Banco BICE', cuenta:'1403834', email:'contacto@leabogados.cl' },
+    gastos:     { banco:'Banco BICE', cuenta:'1383922', cuentaFmt:'138392-2', email:'administracion@leabogados.cl' },
+  },
 }
 BRAND.logoUrl = 'https://' + BRAND.dominio         // base ABSOLUTA para logos en correos (deriva del dominio, no se cablea)
 // ── MÓDULOS (catálogo) + entitlements por estudio. Habilitador de la venta por módulos.
@@ -578,7 +587,7 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
   let saldoBox=''
   // Solo para saldo EN CONTRA: datos de la cuenta de LEA (útil tenerlos en el documento). La ACCIÓN (devolver / queda
   // para próximos trabajos / transferir) la define el CORREO según el estado del cliente — el PDF no la repite para no contradecir.
-  if(saldo<0){ const row=(l,v)=>`<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #F1D4D4;font-size:10px'><span style='color:${MUTED}'>${l}</span><span style='font-weight:600;color:${TXT}'>${v}</span></div>`; saldoBox=`<div class='saldo-box' style='border:1px solid #F7C1C1;background:#FCEBEB;border-radius:8px;padding:14px 18px;margin-top:18px'><div style='font-size:11px;font-weight:700;color:${TXT};margin-bottom:10px'>${T.outstanding}</div>${row(T.company,'Liberona Escala Abogados Limitada')}${row(T.rut,'77.700.387-9')}${row(T.bank,'Banco BICE')}${row(T.account,'138392-2')}${row(T.confEmail,'administracion@leabogados.cl')}</div>` }
+  if(saldo<0){ const row=(l,v)=>`<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #F1D4D4;font-size:10px'><span style='color:${MUTED}'>${l}</span><span style='font-weight:600;color:${TXT}'>${v}</span></div>`; saldoBox=`<div class='saldo-box' style='border:1px solid #F7C1C1;background:#FCEBEB;border-radius:8px;padding:14px 18px;margin-top:18px'><div style='font-size:11px;font-weight:700;color:${TXT};margin-bottom:10px'>${T.outstanding}</div>${row(T.company,BRAND.nombreLegal)}${row(T.rut,BRAND.rut)}${row(T.bank,BRAND.pago.gastos.banco)}${row(T.account,BRAND.pago.gastos.cuentaFmt)}${row(T.confEmail,BRAND.pago.gastos.email)}</div>` }
   const sep='border-left:1px solid #B9C2C8;margin-left:12px;padding-left:12px'
   // Recuadro "Resumen del fondo": ledger auditable — fondos − (rendiciones previas) − esta rendición = saldo.
   const lrow=(l,v,neg)=>`<div style='display:flex;justify-content:space-between;align-items:baseline;padding:4px 0'><span style='font-size:10px;color:${AZUL3}'>${l}</span><span style='font-size:12px;font-weight:600;color:#fff;white-space:nowrap'>${neg?'−':''}${v}</span></div>`
@@ -14960,8 +14969,8 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
   )
 }
 // Cuentas del estudio (fuente única). Honorarios: fija. Gastos: default editable/recordado por el usuario.
-const CUENTA_HONORARIOS = { razon:BRAND.nombreLegal, rut:'77.700.387-9', banco:'Banco BICE', cuenta:'1403834', email:'contacto@leabogados.cl' }
-const CUENTA_GASTOS_DEFAULT = { razon:BRAND.nombreLegal, rut:'77.700.387-9', banco:'Banco BICE', cuenta:'1383922', email:'administracion@leabogados.cl' }
+const CUENTA_HONORARIOS = { razon:BRAND.nombreLegal, rut:BRAND.rut, banco:BRAND.pago.honorarios.banco, cuenta:BRAND.pago.honorarios.cuenta, email:BRAND.pago.honorarios.email }
+const CUENTA_GASTOS_DEFAULT = { razon:BRAND.nombreLegal, rut:BRAND.rut, banco:BRAND.pago.gastos.banco, cuenta:BRAND.pago.gastos.cuenta, email:BRAND.pago.gastos.email }
 // Recuadro de una cuenta bancaria (texto + HTML) con encabezado libre. ambar=true → estilo cuenta de gastos.
 const cuentaTxt = (header, cta) => `${header}:\n  ${cta.razon}\n  RUT: ${cta.rut}\n  ${cta.banco} · Cuenta corriente ${cta.cuenta}\n  Confirmación a: ${cta.email}`
 const cuentaHtml = (header, cta, ambar=false) => `<div style="margin:14px 0;padding:12px 16px;background:${ambar?'#FAEEDA':'#F7F9FA'};border:1px solid ${ambar?'#F0C784':'#E4E8EB'};border-radius:8px;font-size:13px;line-height:1.7"><div style="color:${ambar?'#854F0B':'#537281'};font-weight:600;margin-bottom:3px">${header}</div><div>${cta.razon}</div><div><span style="color:#537281">RUT:</span> <b>${cta.rut}</b></div><div><span style="color:#537281">${cta.banco} · Cuenta corriente:</span> <b>${cta.cuenta}</b></div><div><span style="color:#537281">Confirmación a:</span> ${cta.email}</div></div>`
@@ -15417,12 +15426,12 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const cuerpoCorreo = (lang='es') => {
     const abs = fmtN(Math.abs(saldoCliente))
     if(lang==='en'){
-      const cuentaLEA = `\n  Tax ID (RUT): 77.700.387-9\n  Bank: Banco BICE\n  Checking account: 138392-2\n  Confirmation to: administracion@leabogados.cl`
+      const cuentaLEA = `\n  Tax ID (RUT): ${BRAND.rut}\n  Bank: ${BRAND.pago.gastos.banco}\n  Checking account: ${BRAND.pago.gastos.cuentaFmt}\n  Confirmation to: ${BRAND.pago.gastos.email}`
       let cierre = ''
       if(saldoCliente < 0){
-        cierre = `\n\nThis report results in a balance of ${abs} payable by you, which we kindly ask you to transfer to the account of Liberona Escala Abogados Limitada:${cuentaLEA}`
+        cierre = `\n\nThis report results in a balance of ${abs} payable by you, which we kindly ask you to transfer to the account of ${BRAND.nombreLegal}:${cuentaLEA}`
       } else if(saldoCliente > 0){
-        cierre = `\n\nThe funds received amounted to ${fmtN(totFondosCli)} and the reported expenses total ${fmtN(_rs.rendido)}, leaving a balance of ${abs} in your favor. Please let us know the bank account to which you would like the surplus refunded, by writing to contacto@leabogados.cl.`
+        cierre = `\n\nThe funds received amounted to ${fmtN(totFondosCli)} and the reported expenses total ${fmtN(_rs.rendido)}, leaving a balance of ${abs} in your favor. Please let us know the bank account to which you would like the surplus refunded, by writing to ${BRAND.pago.honorarios.email}.`
       }
       return `${saludoCliEn(client?.name)},
 
@@ -15432,12 +15441,12 @@ We remain at your disposal for any questions.
 
 Kind regards,`
     }
-    const cuentaLEA = `\n  RUT: 77.700.387-9\n  Banco: Banco BICE\n  Cuenta Corriente: 138392-2\n  Comprobante a: administracion@leabogados.cl`
+    const cuentaLEA = `\n  RUT: ${BRAND.rut}\n  Banco: ${BRAND.pago.gastos.banco}\n  Cuenta Corriente: ${BRAND.pago.gastos.cuentaFmt}\n  Comprobante a: ${BRAND.pago.gastos.email}`
     let cierre = ''
     if(saldoCliente < 0){
-      cierre = `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}, que le agradeceremos transferir a la cuenta de Liberona Escala Abogados Limitada:${cuentaLEA}`
+      cierre = `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}, que le agradeceremos transferir a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
     } else if(saldoCliente > 0){
-      cierre = `\n\nEl fondo recibido fue de ${fmtN(totFondosCli)} y los gastos rendidos suman ${fmtN(_rs.rendido)}, resultando un saldo a su favor de ${abs}. Le agradeceremos indicarnos la cuenta corriente a la que prefiere que le devolvamos el excedente, escribiéndonos a contacto@leabogados.cl.`
+      cierre = `\n\nEl fondo recibido fue de ${fmtN(totFondosCli)} y los gastos rendidos suman ${fmtN(_rs.rendido)}, resultando un saldo a su favor de ${abs}. Le agradeceremos indicarnos la cuenta corriente a la que prefiere que le devolvamos el excedente, escribiéndonos a ${BRAND.pago.honorarios.email}.`
     }
     return `${saludoCli(client?.name)}:
 
@@ -15474,7 +15483,7 @@ Saludos cordiales,`
   const enviar = async() => {
     if(!para.trim()){ appAlert('Falta el email del cliente.'); return }
     const texto = body
-    const firmaTxt = firma.nombre ? [firma.nombre, firma.cargo, firma.telefono, 'Av. Kennedy Lateral 7900, Of. 905, Vitacura', 'Santiago - Chile', 'www.leabogados.cl'].filter(Boolean).join('\n') : ''
+    const firmaTxt = firma.nombre ? [firma.nombre, firma.cargo, firma.telefono, 'Av. Kennedy Lateral 7900, Of. 905, Vitacura', 'Santiago - Chile', 'www.'+BRAND.web].filter(Boolean).join('\n') : ''
     const textoFull = firmaTxt ? texto+'\n\n'+firmaTxt : texto
     const _stripD = u=>String(u||'').replace(/^data:[^,]+,/,'')
     const logosInline = [{cid:'lealogow',b64:_stripD(logoBlanco),mime:'image/png'},{cid:'lealogoc',b64:_stripD(logoColor),mime:'image/png'}]
@@ -15712,7 +15721,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             </button>
           </div>
           {client.portal_activo&&<div style={{fontSize:11,color:C.muted,marginTop:9,borderTop:`1px solid ${C.border}`,paddingTop:9,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-            <span>Entra en <b style={{color:C.text}}>portal.leabogados.cl</b> con su correo:</span><b style={{color:client.email?C.accent:C.overdue}}>{client.email||'falta el correo del cliente'}</b>
+            <span>Entra en <b style={{color:C.text}}>{BRAND.portal}</b> con su correo:</span><b style={{color:client.email?C.accent:C.overdue}}>{client.email||'falta el correo del cliente'}</b>
           </div>}
         </div>
 
@@ -16622,7 +16631,7 @@ async function facturaDtePdfBase64(docXml){
   inl('Dirección:','Cam. Las Hualtatas 4901, C. 11, Lo Barnechea, Santiago')
   p.setFontSize(8.5)
   p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Email:',M,ye); let cx=M+p.getTextWidth('Email:  ')
-  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text('contacto@leabogados.cl',cx,ye); cx+=p.getTextWidth('contacto@leabogados.cl')
+  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(BRAND.pago.honorarios.email,cx,ye); cx+=p.getTextWidth(BRAND.pago.honorarios.email)
   p.setTextColor(...MUT); p.text('     ·     ',cx,ye); cx+=p.getTextWidth('     ·     ')
   p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Teléfono:',cx,ye); cx+=p.getTextWidth('Teléfono:  ')
   p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text('+56991556769',cx,ye); ye+=6
@@ -16658,7 +16667,7 @@ async function facturaDtePdfBase64(docXml){
   p.text('Monto exento',138,ty+7.5); p.text('$ '+fmtN(D.exe),W-M,ty+7.5,{align:'right'})
   p.setDrawColor(...NAVY); p.setLineWidth(0.5); p.line(138,ty+10.5,W-M,ty+10.5)
   p.setFont('helvetica','bold'); p.setFontSize(12); p.setTextColor(...NAVY); p.text('TOTAL',138,ty+16.5); p.text('$ '+fmtN(D.total),W-M,ty+16.5,{align:'right'})
-  p.setTextColor(...MUT); p.setFontSize(7); p.text('leabogados.cl',W/2,270,{align:'center'})
+  p.setTextColor(...MUT); p.setFontSize(7); p.text(BRAND.web,W/2,270,{align:'center'})
   return { base64: p.output('datauristring').split(',')[1], folio:D.folio, rznR:D.rznR, rutR:D.rutR, total:D.total }
 }
 // Parte un SetDTE/EnvioDTE en sus <Documento> individuales.
@@ -16754,7 +16763,7 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
   }
   // ===== Saldo a su cargo (si el cliente debe) =====
   if(saldo<0){
-    const rows = EN?['Account holder: Liberona Escala Abogados Ltda.','Tax ID (RUT): 77.700.387-9','Bank: Banco BICE','Checking account: 138392-2','Confirmation: administracion@leabogados.cl']:['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl']
+    const rows = EN?[`Account holder: ${BRAND.nombreLegalCorto}`,`Tax ID (RUT): ${BRAND.rut}`,`Bank: ${BRAND.pago.gastos.banco}`,`Checking account: ${BRAND.pago.gastos.cuentaFmt}`,`Confirmation: ${BRAND.pago.gastos.email}`]:[`Titular: ${BRAND.nombreLegalCorto}`,`RUT: ${BRAND.rut}`,`Banco: ${BRAND.pago.gastos.banco}`,`Cuenta Corriente: ${BRAND.pago.gastos.cuentaFmt}`,`Confirmación: ${BRAND.pago.gastos.email}`]
     const boxH = 30 + rows.length*15
     ensure(boxH+10); doc.setFillColor(252,235,235); doc.roundedRect(M,y,W-2*M,boxH,6,6,'F')
     let yy=y+20; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(`${T.due}: ${fmtN(Math.abs(saldo))}`, M+16, yy); yy+=17
@@ -16764,7 +16773,7 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
   // ===== Footer =====
   const fy=H-28; doc.setDrawColor(228,232,235); doc.setLineWidth(0.5); doc.line(M,fy-12,W-M,fy-12)
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(83,114,129)
-  doc.text('Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl', M, fy)
+  doc.text(`${BRAND.direccion} · ${BRAND.web}`, M, fy)
   doc.text(T.footer, W-M, fy, {align:'right'})
   return doc.output('datauristring').split(',')[1]
 }
@@ -17754,7 +17763,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         <div class="report-title">
           <h1>Reporte de Gestión</h1>
           <p>${label} · Generado ${now}</p>
-          <p class="firma-sub-url">leabogados.cl</p>
+          <p class="firma-sub-url">${BRAND.web}</p>
         </div>
       </div>
     </div>`
@@ -19176,7 +19185,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
 
 // ─── CENTRO DE APRENDIZAJE: lo que la app aprendió (learnings) — visible y borrable (des-aprender un match errado) ──
 // Asistente de redacción legal con IA (claudeCall). Redacta en el FORMATO del estudio; el usuario valida/edita (compuerta humana).
-const ESTUDIO_BRIEF = `Eres redactor del estudio jurídico chileno ${BRAND.nombre} (práctica corporativa y tributaria). Socios: Cristóbal Liberona y Erasmo Escala. Membrete/firma del estudio: "Avenida Kennedy 7900, of. 905, Vitacura, Santiago", "+56 2 2405 3800", "leabogados.cl". Escribe en español jurídico chileno, formal, claro y preciso. El estudio factura SIEMPRE exento de IVA; los honorarios se expresan en UF. Usa SOLO los datos que entregue el usuario; si falta un dato clave (honorarios, alcance, nombres), déjalo marcado como [completar] en vez de inventarlo. Devuelve solo el documento, sin comentarios ni explicaciones.`
+const ESTUDIO_BRIEF = `Eres redactor del estudio jurídico chileno ${BRAND.nombre} (práctica corporativa y tributaria). Socios: ${BRAND.socios}. Membrete/firma del estudio: "Avenida Kennedy 7900, of. 905, Vitacura, Santiago", "${BRAND.telefono}", "${BRAND.web}". Escribe en español jurídico chileno, formal, claro y preciso. El estudio factura SIEMPRE exento de IVA; los honorarios se expresan en UF. Usa SOLO los datos que entregue el usuario; si falta un dato clave (honorarios, alcance, nombres), déjalo marcado como [completar] en vez de inventarlo. Devuelve solo el documento, sin comentarios ni explicaciones.`
 const TIPOS_REDACCION = [
   {k:'propuesta', lbl:'Propuesta de honorarios', max:2600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una PROPUESTA DE SERVICIOS PROFESIONALES con la estructura exacta del estudio:\n· Encabezado: "Propuesta de Servicios Profesionales" + subtítulo con el tipo de asesoría; destinatario(s) y empresa; "PRESENTE"; "Santiago, <fecha>"; "CONFIDENCIAL"; "Ref.: Propuesta de Servicios Legales - <tema>"; "De mi consideración:".\n· Intro: "Liberona Escala Abogados tiene el agrado de someter a su consideración la presente propuesta de servicios profesionales. El objeto de nuestro encargo es...".\n· "I. Alcance de los Servicios" (subsecciones A/B e ítems numerados según corresponda).\n· "II. Honorarios Profesionales" (Honorario Fijo / Retainer en UF; Honorario de Éxito / Success Fee como % si aplica).\n· "III. Forma de Pago" (ej. Retainer 50% a la aceptación y 50% al cierre; "la facturación se realizará mediante factura exenta de IVA").\n· "IV. Condiciones y Exclusiones" (no incluye litigios/arbitrajes salvo indicación expresa; un cambio sustancial de alcance requiere revisión de honorarios; los gastos de terceros —derechos notariales, CBR, certificados— son de cargo del cliente).\n· Cierre cordial + firma de un Socio (Cristóbal Liberona o Erasmo Escala), bajo él "Socio" y "Liberona Escala Abogados".`},
   {k:'memo', lbl:'Memo', max:2200, sys:`${ESTUDIO_BRIEF}\n\nRedacta un MEMORÁNDUM legal: membrete del estudio ("CONFIDENCIAL", fecha, dirección, teléfono, leabogados.cl), una exposición ordenada de los hechos, el análisis jurídico/tributario aplicable y conclusiones/recomendaciones.`},
@@ -19995,7 +20004,7 @@ function RedProfesionalModal({preset=null, onClose, onSaved}){
   )
 }
 
-const ME_DOMAIN = 'leabogados.cl'
+const ME_DOMAIN = BRAND.web
 // Buscador de cliente (escribe para filtrar) — para asignar contactos sin cliente claro.
 function ClientePicker({clients=[], onPick}){
   const [q,setQ]=useState(''); const [open,setOpen]=useState(false)
