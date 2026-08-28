@@ -2475,11 +2475,6 @@ function computeAgingCartera(billingRows, clientesMap){
 
 function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
-  // Salud del sync con Drive: nº de clientes movidos por confirmar (alerta accionable → Clientes).
-  const [driveBajasN,setDriveBajasN] = useState(0)
-  useEffect(()=>{ if(DEMO){ setDriveBajasN(1); return } let alive=true
-    supabase.from('clientes_drive_sync').select('id').eq('status','pendiente').then(({data})=>{ if(alive) setDriveBajasN((data||[]).length) },()=>{})
-    return ()=>{alive=false} },[])
   // KPIs colapsables: "Cómo va el año" queda fijo (hero); el resto arranca en mini y se abre al tocar (recuerda por usuario).
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
   const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
@@ -3025,7 +3020,6 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
             </div>
           </div>
           {iv.porIdentificar>0&&<div onClick={()=>onAcceso&&onAcceso('conciliacion')} style={{display:'flex',alignItems:'center',gap:8,marginTop:9,padding:'8px 12px',background:C.ambarBg,borderRadius:10,cursor:'pointer'}}><span style={{width:6,height:6,borderRadius:'50%',background:C.soonText,flexShrink:0}}/><span style={{flex:1,fontSize:11.5,color:C.soonText,fontWeight:600}}>{fmtMon(iv.porIdentificar)} por identificar en el banco</span><span style={{fontSize:11,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Conciliar &rarr;</span></div>}
-          {driveBajasN>0&&<div onClick={()=>setTab&&setTab('clients')} style={{display:'flex',alignItems:'center',gap:8,marginTop:9,padding:'8px 12px',background:C.soonBg,borderRadius:10,cursor:'pointer'}}><span style={{width:6,height:6,borderRadius:'50%',background:C.soonText,flexShrink:0}}/><span style={{flex:1,fontSize:11.5,color:C.soonText,fontWeight:600}}>{driveBajasN} cliente{driveBajasN>1?'s':''} movido{driveBajasN>1?'s':''} en Drive por revisar</span><span style={{fontSize:11,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Revisar &rarr;</span></div>}
           <div onClick={()=>kToggle('cobrado')} style={{display:'flex',justifyContent:'center',alignItems:'center',gap:5,marginTop:9,cursor:'pointer',fontSize:10.5,fontWeight:600,color:C.muted}}>{abierto?'Ocultar detalle':'Ver detalle del año'}<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:abierto?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg></div>
           {abierto&&<>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:10}}>
@@ -16175,24 +16169,11 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
 function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin}) {
   const [verProv,setVerProv] = useState(false)
-  // Bajas pendientes que detectó el sync de Drive (clientes cuya carpeta se movió). Se resuelven con 1 toque en el modal de Drive.
-  const [driveBajas,setDriveBajas] = useState([])
-  const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())   // clientes creados por el último sync (tag "Nuevo · Drive" unos días)
-  useEffect(()=>{ if(DEMO){ setDriveBajas([{id:'d1',client_id:'c3',folder_name:'Constructora Pehuén SA',motivo:'movido_terminados'}]); setNuevosDrive(new Set(['tech araucanía spa'])); return } let alive=true
-    supabase.from('clientes_drive_sync').select('id,client_id,folder_name,motivo').eq('status','pendiente').then(({data})=>{ if(alive) setDriveBajas(data||[]) },()=>{})
+  // Clientes creados por el último sync de Drive → tag "Nuevo · Drive" unos días.
+  const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())
+  useEffect(()=>{ if(DEMO){ setNuevosDrive(new Set(['tech araucanía spa'])); return } let alive=true
     supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; try{ const s=JSON.parse(data.value); if(s.at&&(Date.now()-new Date(s.at).getTime())<7*86400000&&Array.isArray(s.added)) setNuevosDrive(new Set(s.added.map(n=>String(n).toLowerCase().trim()))) }catch(_){} },()=>{})
     return ()=>{alive=false} },[clients])
-  const bajaByClient = useMemo(()=>{ const m={}; driveBajas.forEach(b=>{ m[String(b.client_id)]=b }); return m },[driveBajas])
-  const terminarBajaRow = async(c,b)=>{
-    setDriveBajas(p=>p.filter(x=>x.id!==b.id))
-    if(DEMO) return
-    onToggleStatus&&onToggleStatus(c)   // Activo → Terminado (archiva, reversible con el mismo botón) + refresca la app
-    try{ await supabase.from('clientes_drive_sync').update({status:'aplicado',resolved_at:new Date().toISOString()}).eq('id',b.id) }catch(_){}
-  }
-  const descartarBajaRow = async(b)=>{
-    setDriveBajas(p=>p.filter(x=>x.id!==b.id))
-    if(!DEMO){ try{ await supabase.from('clientes_drive_sync').update({status:'descartado',resolved_at:new Date().toISOString()}).eq('id',b.id) }catch(_){} }
-  }
 
   const handleAnularRendicion = async(r) => {
     if(!await appConfirm('\u00bfAnular esta rendici\u00f3n? Queda registrada como ANULADA (con su PDF para auditor\u00eda), los gastos vuelven a estar disponibles para rendir y se anula el cobro de reembolso asociado.')) return
@@ -16302,7 +16283,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <button onClick={onImportDrive} title='Sincronizar con Drive' style={{...driveBtn,position:'relative'}}><DriveIcon size={20}/>{driveBajas.length>0&&<span style={{position:'absolute',top:-2,right:-2,minWidth:14,height:14,borderRadius:7,background:C.overdue,color:'#fff',fontSize:8,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px'}}>{driveBajas.length}</span>}</button>
+            <button onClick={onImportDrive} title='Sincronizar con Drive' style={driveBtn}><DriveIcon size={20}/></button>
             <button onClick={onAdd} style={chipBtn('soft')}>+ Cliente</button>
             <button onClick={()=>onAddTask(null)} style={chipBtn('primary')}>+ Tarea</button>
           </div>
@@ -16326,12 +16307,6 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
           </div>
         )}
       </div>
-      {driveBajas.length>0&&(
-        <div onClick={onImportDrive} style={{margin:'0 20px 4px',padding:'9px 12px',borderRadius:8,background:C.soonBg,border:`1px solid ${C.soon}`,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
-          <span style={{fontSize:12,color:C.soonText,fontWeight:600,flex:1}}>{driveBajas.length} cliente{driveBajas.length>1?'s':''} movido{driveBajas.length>1?'s':''} en Drive — confirmar baja</span>
-          <span style={{fontSize:11,color:C.soonText,fontWeight:700,whiteSpace:'nowrap'}}>Revisar →</span>
-        </div>
-      )}
       <div style={{padding:'10px 20px 100px'}}>
         {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes</div>}
         {cl.length>0&&(()=>{
@@ -16343,7 +16318,6 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
           const idFor=L=>'cli-letter-'+(L==='#'?'num':L)
           const card=c=>{
             const ended=c.status==='Terminado'
-            const baja=bajaByClient[String(c.id)]
             const esNuevoDrive=nuevosDrive.has((c.name||'').toLowerCase().trim())
             const resp=responsableDe[c.id]; const pc=resp?personChip(resp):{bg:C.bgWarm,color:C.done}
             const esEmpresa=/\b(spa|s\.?p\.?a|ltda|limitada|s\.?a|sociedad|inversiones|comercial|constructora|consultores|holding|cia|cía|asociados|partners)\b/i.test(c.name||'')||/empresa|corp|sociedad/i.test(c.type||'')
@@ -16351,23 +16325,16 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
             const rs=rsLabel(c.id,clients,clientEntities)
             const sub=rs.multi?`${rs.multi} razones sociales`:(rs.name&&rs.name!==c.name?rsDisplay(rs.name):(c.type||''))
             return (
-              <div key={c.id} onClick={()=>{setForceFtab(null);setExtOpen(false);setSelected(c)}} style={{background:C.card,borderRadius:11,padding:'10px 12px',marginBottom:6,border:`1px solid ${baja?C.soon:C.border}`,opacity:ended?.55:1,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}
+              <div key={c.id} onClick={()=>{setForceFtab(null);setExtOpen(false);setSelected(c)}} style={{background:C.card,borderRadius:11,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`,opacity:ended?.55:1,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=C.muted}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=baja?C.soon:C.border}>
+                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
                 <span style={{width:38,height:38,borderRadius:9,background:pc.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={esEmpresa?'building':'user'} s={18} c={pc.color}/></span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:C.border,borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4,marginLeft:6}}>Interno</span>}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:C.soon,background:'#FFF8E1',borderRadius:20,padding:'1px 8px',marginLeft:6}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}{esNuevoDrive&&<span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'1px 8px',marginLeft:6,whiteSpace:'nowrap'}}>Nuevo · Drive</span>}</div>
-                  {(baja||sub)&&<div style={{fontSize:10,color:baja?C.soonText:C.muted,fontWeight:baja?600:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{baja?(baja.motivo==='movido_terminados'?'Movido a Terminados en Drive':'Carpeta movida fuera de activos'):sub}</div>}
+                  {sub&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{sub}</div>}
                 </div>
-                {baja ? (
-                  <div onClick={ev=>ev.stopPropagation()} style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                    <button onClick={()=>terminarBajaRow(c,baja)} style={{height:26,padding:'0 10px',background:C.overdue,color:'#fff',border:'none',borderRadius:6,fontSize:10.5,fontWeight:700,cursor:'pointer'}}>Terminar</button>
-                    <button onClick={()=>descartarBajaRow(baja)} title='Descartar (no era una baja)' style={{height:26,width:26,background:'#fff',color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,fontSize:13,cursor:'pointer',lineHeight:1}}>×</button>
-                  </div>
-                ) : (<>
                 {resp&&<span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{resp}</span>}
                 <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} title={ended?'Reactivar cliente':'Archivar cliente'} style={{flexShrink:0,width:24,height:24,borderRadius:6,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.greenText:C.done,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>{ended?<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>:<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}</button>
-                </>)}
               </div>
             )
           }
@@ -17279,8 +17246,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
   const [saving,setSaving]=useState(false)
   const [log,setLog]=useState([])
   const addLog=msg=>setLog(p=>[...p,msg])
-  // Sincronización automática (cron) + bajas por confirmar (clientes movidos en Drive)
-  const [bajas,setBajas]=useState([])
+  // Sincronización automática (cron / al abrir) de incorporación de clientes nuevos desde Drive.
   const [autoOn,setAutoOn]=useState(false)
   const [syncing,setSyncing]=useState(false)
   const [syncMsg,setSyncMsg]=useState(null)
@@ -17289,19 +17255,18 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
   useEffect(()=>{init();cargarSync()},[])
 
   async function cargarSync(){
-    if(DEMO){ setBajas([{id:'d1',client_id:'c9',folder_name:'Constructora Andes SpA',motivo:'movido_terminados'}]); setLastSync({at:new Date().toISOString(),addedN:2,pendingNew:1}); setAutoOn(false); return }
-    try{ const {data}=await supabase.from('clientes_drive_sync').select('id,client_id,folder_name,motivo').eq('status','pendiente'); setBajas(data||[]) }catch(_){}
+    if(DEMO){ setLastSync({at:new Date().toISOString(),addedN:2}); setAutoOn(false); return }
     try{ const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync').maybeSingle(); setAutoOn((cfg?.value||'off').trim()==='on') }catch(_){}
     try{ const {data:ls}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').maybeSingle(); if(ls?.value) setLastSync(JSON.parse(ls.value)) }catch(_){}
   }
   const syncNow=async()=>{
     setSyncing(true); setSyncMsg(null)
-    if(DEMO){ await new Promise(r=>setTimeout(r,700)); setSyncMsg('Demo: +2 clientes nuevos, 1 baja por confirmar.'); setSyncing(false); return }
+    if(DEMO){ await new Promise(r=>setTimeout(r,700)); setSyncMsg('Demo: +2 clientes nuevos incorporados.'); setSyncing(false); return }
     try{
       const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
       if(error) throw error
       if(data?.error) throw new Error(data.error)
-      setSyncMsg(`Listo: ${data.addedN||0} cliente(s) nuevo(s), ${data.pendingNew||0} baja(s) por confirmar.`)
+      setSyncMsg(`Listo: ${data.addedN||0} cliente(s) nuevo(s) incorporado(s).`)
       await cargarSync(); await init(); onChanged&&onChanged()
     }catch(e){ setSyncMsg('Error al sincronizar: '+(e.message||e)) }
     setSyncing(false)
@@ -17310,19 +17275,6 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
     const nv=!autoOn; setAutoOn(nv)
     if(DEMO) return
     try{ await setLearningKV('config','clientes_drive_sync',nv?'on':'off') }catch(_){ setAutoOn(!nv) }
-  }
-  const terminarBaja=async(b)=>{
-    if(!await appConfirm(`¿Marcar "${b.folder_name}" como Terminado? Se archiva (reversible); su carpeta ya no está en clientes activos de Drive.`)) return
-    if(DEMO){ setBajas(p=>p.filter(x=>x.id!==b.id)); return }
-    try{
-      await supabase.from('clients').update({status:'Terminado',ended_at:new Date().toISOString().slice(0,10)}).eq('id',b.client_id)
-      await supabase.from('clientes_drive_sync').update({status:'aplicado',resolved_at:new Date().toISOString()}).eq('id',b.id)
-      setBajas(p=>p.filter(x=>x.id!==b.id)); onChanged&&onChanged()
-    }catch(e){ appAlert('Error: '+(e.message||e)) }
-  }
-  const descartarBaja=async(b)=>{
-    if(DEMO){ setBajas(p=>p.filter(x=>x.id!==b.id)); return }
-    try{ await supabase.from('clientes_drive_sync').update({status:'descartado',resolved_at:new Date().toISOString()}).eq('id',b.id); setBajas(p=>p.filter(x=>x.id!==b.id)) }catch(e){ appAlert('Error: '+(e.message||e)) }
   }
 
   async function init(){
@@ -17393,7 +17345,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Sincronización automática</div>
-            <div style={{fontSize:10.5,color:C.muted}}>Al abrir la app y cada 2h: crea los clientes nuevos de Drive y detecta los movidos.</div>
+            <div style={{fontSize:10.5,color:C.muted}}>Al abrir la app y cada 2h: incorpora los clientes nuevos que aparecen en Drive.</div>
           </div>
           <div onClick={toggleAuto} style={{width:40,height:23,borderRadius:12,background:autoOn?C.normal:C.done,position:'relative',cursor:'pointer',transition:'.15s',flexShrink:0}}>
             <div style={{position:'absolute',top:2,left:autoOn?19:2,width:19,height:19,borderRadius:'50%',background:'#fff',transition:'.15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/>
@@ -17406,22 +17358,6 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
           </div>
         </div>
       </div>
-      {/* Clientes movidos: baja con compuerta humana (1 toque) */}
-      {bajas.length>0&&(
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.overdue,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Clientes movidos — confirmar baja ({bajas.length})</div>
-          {bajas.map(b=>(
-            <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,marginBottom:4,background:C.overdueBg,border:`1px solid ${C.overdue}`}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.folder_name}</div>
-                <div style={{fontSize:10,color:C.muted}}>{b.motivo==='movido_terminados'?'Movido a Terminados en Drive':'Carpeta movida fuera de activos'}</div>
-              </div>
-              <button onClick={()=>terminarBaja(b)} style={{height:30,padding:'0 12px',background:C.overdue,color:'#fff',border:'none',borderRadius:7,fontSize:11.5,fontWeight:600,cursor:'pointer',flexShrink:0}}>Terminar</button>
-              <button onClick={()=>descartarBaja(b)} style={{height:30,padding:'0 10px',background:'#fff',color:C.muted,border:`1px solid ${C.border}`,borderRadius:7,fontSize:11.5,fontWeight:600,cursor:'pointer',flexShrink:0}}>Descartar</button>
-            </div>
-          ))}
-        </div>
-      )}
       {step==='loading'&&<div style={{textAlign:'center',padding:20}}><Spin/><p style={{fontSize:13,color:C.muted,marginTop:12}}>Conectando con Drive...</p></div>}
       {step==='notoken'&&<div style={{textAlign:'center',padding:20}}><p style={{fontSize:13,marginBottom:16}}>Necesitas autorizar Drive.</p><button onClick={()=>getDriveToken().then(t=>{setToken(t);init()})} style={{padding:'10px 20px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Autorizar Drive</button></div>}
       {step==='error'&&<div style={{padding:20}}>{log.map((l,i)=><div key={i} style={{fontSize:12,color:C.overdue}}>{l}</div>)}</div>}
