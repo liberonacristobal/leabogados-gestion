@@ -78,8 +78,11 @@ const MODULOS = [
   { id:'gastos', label:'Gastos & Rendiciones' }, { id:'proyectos', label:'Proyectos' },
   { id:'bi', label:'Inteligencia' }, { id:'ialegal', label:'IA Legal' }, { id:'portal', label:'Portal del Cliente' },
 ]
-const MODULOS_HABILITADOS = MODULOS.map(m=>m.id)          // LEA: todos ON
-const moduloOn = id => MODULOS_HABILITADOS.includes(id)   // se usará en la nav cuando se enchufen entitlements
+const MODULOS_CORE = new Set(MODULOS.filter(m=>m.core).map(m=>m.id))   // Núcleo: nunca se apaga
+const MODULOS_OFF = new Set()   // se hidrata desde learnings 'fd_modulo_off' al iniciar; vacío = todo ON (LEA)
+const moduloOn = id => !id || MODULOS_CORE.has(id) || !MODULOS_OFF.has(id)   // core siempre ON; el resto ON salvo apagado explícito
+// Vista → módulo que la habilita. Sirve para ocultarla de la nav y bloquear su acceso si el módulo está apagado (para LEA: inerte, todo ON).
+const VIEW_MODULO = { horas:'horas', repricing:'horas', sales:'finanzas', billing:'finanzas', cobranza:'finanzas', conciliacion:'finanzas', anticipos:'finanzas', expenses:'gastos', cajachica:'gastos', cartera:'proyectos', inteligencia:'bi', bi:'bi', portal:'portal' }
 // Único puente a Claude. La API key NO vive en el front (sería pública en el bundle):
 // vive como secreto en la edge function claude-proxy, que valida el JWT del equipo.
 // Devuelve el JSON de Anthropic tal cual (el llamador lee data.content[0].text).
@@ -766,20 +769,20 @@ function LoginScreen({loading}) {
 }
 
 const TABS_ADMIN = [
-  {id:'dashboard',icon:'grid',label:'Inicio'},
-  {id:'sales',icon:'trending',label:'Ventas'},
-  {id:'billing',icon:'receipt',label:'Facturación'},
-  {id:'expenses',icon:'card',label:'Gastos'},
-  {id:'horas',icon:'clock',label:'Horas'},
-  {id:'clients',icon:'idcard',label:'Clientes'},
+  {id:'dashboard',icon:'grid',label:'Inicio',mod:'nucleo'},
+  {id:'sales',icon:'trending',label:'Ventas',mod:'finanzas'},
+  {id:'billing',icon:'receipt',label:'Facturación',mod:'finanzas'},
+  {id:'expenses',icon:'card',label:'Gastos',mod:'gastos'},
+  {id:'horas',icon:'clock',label:'Horas',mod:'horas'},
+  {id:'clients',icon:'idcard',label:'Clientes',mod:'nucleo'},
 ]
 const TABS_LIMITED = [
-  {id:'tasks',icon:'check',label:'Tareas'},
-  {id:'cartera',icon:'folder',label:'Proyectos'},
-  {id:'horas',icon:'clock',label:'Horas'},
-  {id:'expenses',icon:'card',label:'Gastos'},
-  {id:'cajachica',icon:'coins',label:'Caja chica'},
-  {id:'clients',icon:'idcard',label:'Clientes'},
+  {id:'tasks',icon:'check',label:'Tareas',mod:'nucleo'},
+  {id:'cartera',icon:'folder',label:'Proyectos',mod:'proyectos'},
+  {id:'horas',icon:'clock',label:'Horas',mod:'horas'},
+  {id:'expenses',icon:'card',label:'Gastos',mod:'gastos'},
+  {id:'cajachica',icon:'coins',label:'Caja chica',mod:'gastos'},
+  {id:'clients',icon:'idcard',label:'Clientes',mod:'nucleo'},
 ]
 
 
@@ -1885,7 +1888,7 @@ class ViewErrorBoundary extends Component {
   }
 }
 function BottomNav({tab,setTab,overdueN,userRole}) {
-  const tabs = userRole==='admin' ? TABS_ADMIN : TABS_LIMITED
+  const tabs = (userRole==='admin' ? TABS_ADMIN : TABS_LIMITED).filter(t=>moduloOn(t.mod))
   const sp = {fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
   const icons = {
     grid:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>,
@@ -6180,6 +6183,40 @@ function parseDTE(d){
     nmb, dsc, glosa:[nmb,dsc].filter(Boolean).join(' — ').trim(),
     ref:{ folio:((refB.match(/<FolioRef>([^<]+)<\/FolioRef>/)||[])[1]||'').trim(), cod:+((refB.match(/<CodRef>(\d+)<\/CodRef>/)||[])[1]||0)||null, razon:(refB.match(/<RazonRef>([^<]+)<\/RazonRef>/)||[])[1]||'' }
   }
+}
+// Módulos del estudio (entitlements): qué tiene contratado el estudio. Apagar uno lo oculta de la nav para todos.
+// Fuente de verdad: learnings 'fd_modulo_off' (value 'off'/'on'). Para LEA: sin filas = todo ON = sin cambio.
+const MODULOS_DESC = { nucleo:'Clientes, tareas, dashboard', horas:'Timesheet, rentabilidad, repricing', finanzas:'Ventas, facturación, cobranza, conciliación', sii:'DTE, RCV, factura electrónica', gastos:'Rendición, caja chica, notaría', proyectos:'Cartera, plazos, calendario', bi:'Inteligencia, márgenes, oportunidades', ialegal:'Redacción, plazos, Drive', portal:'Portal externo del cliente' }
+function ModulosModal({ onChange }){
+  const [off,setOff] = useState(()=>new Set(MODULOS_OFF))
+  const [busy,setBusy] = useState(false)
+  const toggle = async(m)=>{
+    if(m.core||busy) return
+    const willOff = !off.has(m.id)
+    const next = new Set(off); willOff?next.add(m.id):next.delete(m.id); setOff(next)
+    if(willOff) MODULOS_OFF.add(m.id); else MODULOS_OFF.delete(m.id)
+    onChange&&onChange()
+    if(!DEMO){ setBusy(true); try{ await supabase.from('learnings').upsert({kind:'fd_modulo_off',key:m.id,value:willOff?'off':'on'},{onConflict:'kind,key'}) }catch(_){}; setBusy(false) }
+  }
+  return (
+    <div>
+      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>Qué módulos tiene activos el estudio. Apagar uno lo oculta de la navegación para todo el equipo. El Núcleo va siempre.</div>
+      {MODULOS.map(m=>{
+        const on = m.core || !off.has(m.id)
+        return (
+          <div key={m.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 2px',borderBottom:`1px solid ${C.bgSoft}`}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.text}}>{m.label}{m.core&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:5,padding:'1px 5px',marginLeft:6,textTransform:'uppercase'}}>Base</span>}</div>
+              <div style={{fontSize:10.5,color:C.done,marginTop:1}}>{MODULOS_DESC[m.id]||''}</div>
+            </div>
+            <div onClick={()=>toggle(m)} style={{width:40,height:23,borderRadius:12,background:on?(m.core?C.accent:C.normal):C.done,opacity:m.core?.5:1,position:'relative',cursor:m.core?'default':'pointer',transition:'.15s',flexShrink:0}}>
+              <div style={{position:'absolute',top:2,left:on?19:2,width:19,height:19,borderRadius:'50%',background:'#fff',transition:'.15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
 function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], onOpenClientFicha, onOpenFactura}){
@@ -24769,6 +24806,8 @@ export default function App() {
       .then(([a,c])=>{ if(!alive) return; const done=new Set((c.data||[]).map(x=>x.movimiento_id)); setConcPend((a.data||[]).filter(m=>!done.has(m.id)).length) }).catch(()=>{})
     return ()=>{alive=false} },[userRole,tab])
   const [menuOpen,setMenuOpen]=useState(false)
+  const [modVer,setModVer]=useState(0)   // se incrementa al cambiar los módulos del estudio → refiltra nav y guard
+  useEffect(()=>{ if(DEMO) return; let alive=true; supabase.from('learnings').select('key,value').eq('kind','fd_modulo_off').then(({data})=>{ if(!alive) return; MODULOS_OFF.clear(); (data||[]).forEach(r=>{ if(String(r.value)==='off') MODULOS_OFF.add(String(r.key)) }); setModVer(v=>v+1) },()=>{}); return ()=>{alive=false} },[])
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
@@ -24824,7 +24863,9 @@ export default function App() {
     if(userRole==='limited' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
     if(userRole==='admin' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')
-  },[userRole,tab])
+    // Módulo apagado (entitlements): si la vista actual pertenece a un módulo no contratado, redirige. Para LEA (todo ON) es inerte.
+    if(VIEW_MODULO[tab] && !moduloOn(VIEW_MODULO[tab])) setTab(userRole==='admin'?'dashboard':'tasks')
+  },[userRole,tab,modVer])
 
   const [clientEntities,setClientEntities] = useState([])
   // Suma conciliada por factura (respaldo bancario) — fuente única del badge en Facturación y la ficha.
@@ -26406,6 +26447,10 @@ export default function App() {
                   {concPend>0&&<span style={{marginLeft:'auto',minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:C.normal,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{concPend}</span>}
                 </div>
                 <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>SISTEMA</div>
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'modulos'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polygon points='12 2 2 7 12 12 22 7 12 2'/><polyline points='2 17 12 22 22 17'/><polyline points='2 12 12 17 22 12'/></svg>
+                  Módulos del estudio
+                </div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redProfesional'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='3.2'/><path d='M5.5 20a6.5 6.5 0 0 1 13 0'/><circle cx='19' cy='6' r='2'/><circle cx='5' cy='6' r='2'/></svg>
                   Red profesional
@@ -26567,6 +26612,7 @@ export default function App() {
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
         {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
+        {modal?.type==='modulos'&&<Modal title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
