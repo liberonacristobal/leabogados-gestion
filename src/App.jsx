@@ -21572,6 +21572,17 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     return { cid, ingCLP, costoCLP, margen, pct, sinIng:feeUF<=0, faltaCosto }
   }), [permanentes, horas, costoHora, mesesYTD, ufHoy, anioAct, cargarOverhead, overheadHora])
   const margenTot = margenData.filter(d=>!d.sinIng).reduce((a,d)=>({ing:a.ing+d.ingCLP,costo:a.costo+d.costoCLP,margen:a.margen+d.margen}),{ing:0,costo:0,margen:0})
+  // ④ Rentabilidad por abogado: valor generado (horas facturables × tarifa) vs costo cargado (horas × costo/hora cargado).
+  const tarifaCLP = (Number(tarifaUF)||3) * ufHoy
+  const margenAbogado = useMemo(()=> EQUIPO.filter(n=>Number(costoHora[n])>0).map(name=>{
+    const hs = horas.filter(h=>h.user_name===name && String(h.fecha||'').slice(0,4)===anioAct)
+    const horasTot = hs.reduce((a,h)=>a+(Number(h.horas)||0),0)
+    const horasFact = hs.filter(h=>h.billable!==false).reduce((a,h)=>a+(Number(h.horas)||0),0)
+    const cargado = (Number(costoHora[name])||0) + (hayOverhead?overheadHora:0)
+    const costo = Math.round(horasTot*cargado), genera = Math.round(horasFact*tarifaCLP)
+    const margen = genera-costo, pct = genera>0?Math.round(margen/genera*100):0
+    return { name, horasTot, horasFact, costo, genera, margen, pct }
+  }).filter(x=>x.horasTot>0).sort((a,b)=>b.margen-a.margen), [horas, costoHora, overheadHora, hayOverhead, anioAct, tarifaCLP])
   const exportYTD = () => {
     const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#537281'}'>${d.exCLP>0?f0(d.exCLP):'—'}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#0F6E56'}'>${d.exCLP>0?'Reajustar':'OK'}</td></tr>`).join('')
     const heroExc = excedenteYTD>0?`<div style='background:#F5F7F9;border-radius:8px;padding:12px 14px;margin-bottom:16px'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#537281;font-weight:700'>Podrías haber facturado · ${anioAct}</div><div style='font-size:22px;font-weight:800;color:#003C50;margin-top:2px'>${f0(excedenteYTD)}</div><div style='font-size:10px;color:#537281;margin-top:2px'>Trabajo facturable por sobre lo incluido cada mes, a tu valor hora (cobrarlo es opcional). Base para el reajuste ${Number(anioAct)+1}.</div></div>`:''
@@ -21768,6 +21779,20 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               {d.faltaCosto && <div style={{fontSize:9,color:C.soonText,marginTop:4}}>Falta costo/hora de algún abogado — el costo está subestimado.</div>}
             </div>
           )})}
+          {hayCostos && margenAbogado.length>0 && <>
+            <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'13px 2px 7px'}}>Rentabilidad por abogado</div>
+            {margenAbogado.map(a=>{ const neg=a.margen<0; return (
+              <div key={a.name} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',marginBottom:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:C.accent}}>{a.name}</span>
+                  <span style={{fontSize:12,fontWeight:800,color:neg?C.overdueText:C.greenText}}>{a.genera>0?((a.margen>=0?'+':'')+a.pct+'%'):'—'}</span>
+                </div>
+                <div style={{height:18,borderRadius:6,background:C.bgSoft,overflow:'hidden',display:'flex',margin:'8px 0 5px'}}>{neg?<span style={{width:'100%',height:'100%',background:C.overdue}}/>:<><span style={{width:(a.genera>0?Math.round(a.costo/a.genera*100):0)+'%',height:'100%',background:'#E9A9A0'}}/><span style={{flex:1,height:'100%',background:C.normal}}/></>}</div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:9.5,color:C.muted}}><span>genera {f0(a.genera)}</span><span>cuesta {f0(a.costo)}</span><span style={{color:neg?C.overdueText:C.greenText,fontWeight:700}}>{neg?'pierdes '+f0(-a.margen):'margen '+f0(a.margen)}</span></div>
+                <div style={{fontSize:9,color:C.done,marginTop:4}}>{fh(a.horasFact)} facturables de {fh(a.horasTot)} · valoradas a {tarifaUF} UF/h</div>
+              </div>
+            )})}
+          </>}
           <div style={{height:6}}/>
         </>}
         {excedenteYTD>0 && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:10,color:'#fff'}}>
