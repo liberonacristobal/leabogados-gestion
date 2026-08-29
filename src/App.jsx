@@ -25212,7 +25212,7 @@ const PALETTE_ACTIONS = [
 ]
 // Copiloto: responde con los datos reales (blindado a no inventar) y, si le pides HACER algo,
 // propone una acción (crear tarea / abrir cliente) que se ejecuta SOLO tras tu confirmación (compuerta).
-function CopilotoModal({ role='admin', clients=[], sales=[], billing=[], tasks=[], proyectosCartera=[], user, onSaveTask, onOpenClientFicha, onNav, onClose }){
+function CopilotoModal({ role='admin', clients=[], sales=[], billing=[], tasks=[], proyectosCartera=[], costosOfiRows=[], user, onSaveTask, onOpenClientFicha, onNav, onClose }){
   const [q,setQ] = useState('')
   const [busy,setBusy] = useState(false)
   const [hist,setHist] = useState([])
@@ -25234,6 +25234,12 @@ function CopilotoModal({ role='admin', clients=[], sales=[], billing=[], tasks=[
       const vencidas = emit.filter(b=>!b.paid_at && b.due && String(b.due).slice(0,10)<hoy).length
       const proy = (proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado)
       s += `\nPor cobrar (facturas emitidas impagas): ${fmt(porCobrar)} · ${vencidas} vencidas.\nProyectos activos en cartera: ${proy.length}.`
+      // Contexto FINANCIERO: cobrado, costos de oficina y resultado (mismo criterio que el Inicio).
+      const yr=new Date().getFullYear(), mNow=new Date().getMonth()+1
+      const cobradoYr=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.paid_at||'').startsWith(String(yr))).reduce((a,b)=>a+cobradoBill(b),0)
+      let costosYr=0; for(let i=1;i<=mNow;i++) costosYr+=costosOficinaMes(costosOfiRows,`${yr}-${String(i).padStart(2,'0')}`)
+      const costosMes=costosOficinaMes(costosOfiRows)
+      if((costosOfiRows||[]).length) s += `\nCobrado a caja en el año: ${fmt(cobradoYr)}.\nCostos de oficina: ${fmt(costosMes)}/mes · ${fmt(costosYr)} en el año.\nResultado del año (cobrado − costos): ${fmt(cobradoYr-costosYr)}.`
     }
     s += `\nResponsables: CL=Cristóbal, EE=Erasmo, MC=Martín, MP=Martina, RD=Rodrigo.`
     return s
@@ -25307,10 +25313,12 @@ ${brief()}`
       </div> )
     return null
   }
-  const sugerencias = ['¿Quién me debe plata?','¿Qué está detenido?','Crea una tarea para llamar a…']
+  const sugerencias = esAdmin
+    ? ['¿Cómo voy este mes?','¿Quién me debe plata?','¿Cuánto cobré y cuánto cuesta la oficina?','¿Qué está detenido?']
+    : ['¿Qué está detenido?','¿Qué tengo pendiente?','Crea una tarea para llamar a…']
   return (
     <Modal title={<span style={{display:'inline-flex',alignItems:'center',gap:7}}><svg width="16" height="16" viewBox="0 0 24 24" fill={C.accent}><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Copiloto</span>} onClose={onClose} maxWidth={480}>
-      <div style={{ fontSize:11.5, color:C.muted, marginBottom:12, lineHeight:1.5 }}>Pregúntame por tus clientes, cobros o tareas — responde con tus datos. Y si me pides <b>crear una tarea</b> o <b>abrir una ficha</b>, lo propongo y tú confirmas.</div>
+      <div style={{ fontSize:11.5, color:C.muted, marginBottom:12, lineHeight:1.5 }}>Pregúntame por tus clientes, cobros, {esAdmin?'costos, resultado ':''}o tareas — responde con tus datos. Y si me pides <b>crear una tarea</b> o <b>abrir una ficha</b>, lo propongo y tú confirmas.</div>
       {hist.length===0&&(
         <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:12 }}>
           {sugerencias.map((s,i)=><button key={i} onClick={()=>ask(s)} style={{ textAlign:'left', fontSize:12.5, color:C.accent, background:C.bgSoft, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 11px', cursor:'pointer' }}>{s}</button>)}
@@ -27343,7 +27351,7 @@ export default function App() {
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')}} onClose={()=>setModal(null)}/>}
         {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
-        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else setTab('cajachica') } else if(map[vista]) setTab(map[vista]) }} onClose={()=>setCopilotoOpen(false)}/>}
+        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else setTab('cajachica') } else if(map[vista]) setTab(map[vista]) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
