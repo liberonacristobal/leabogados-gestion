@@ -2519,7 +2519,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
+function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   // Alertas del dueño ("Requiere atención"): replegado por defecto; descartadas persisten (reaparecen si el monto empeora >20%).
   const [alertExp,setAlertExp] = usePersistedState('dash_alert_exp',false)
@@ -3034,8 +3034,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               <div style={{fontSize:24,fontWeight:800,margin:'2px 0',fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmtMon(Math.abs(resultado))}</div>
               <div style={{fontSize:9,opacity:.9}}>Ingresos {fmtMon(ingYTD)} − costos {fmtMon(costosOfiYTD)} · estructura {bePct}% cubierta</div>
             </div>}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px'}}>
-              <div><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Proyección a diciembre</div><div style={{fontSize:8.5,color:C.done}}>si cobras lo pendiente</div></div>
+            <div onClick={onOpenFlujoCaja} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px',cursor:onOpenFlujoCaja?'pointer':'default'}}>
+              <div><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Proyección a diciembre{onOpenFlujoCaja?<span style={{color:C.azulInfo,marginLeft:5}}>· flujo semanal ›</span>:''}</div><div style={{fontSize:8.5,color:C.done}}>si cobras lo pendiente</div></div>
               <div style={{fontSize:15,fontWeight:800,color:proyR>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{proyR>=0?'':'−'}{fmtMon(Math.abs(proyR))}</div>
             </div>
           </div>
@@ -6637,6 +6637,46 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[] }){
         </div>
       </div>
       <div style={{fontSize:10,color:C.done,marginTop:9,lineHeight:1.5}}>Ingresos = lo cobrado a caja ese mes. Costos = presupuesto de oficina vigente (con el quiebre de mes). El año se arma solo, mes a mes.</div>
+    </div>
+  )
+}
+// Flujo de caja proyectado, semana a semana: entra (cobros esperados + programadas) vs sale (costos de oficina + proveedores). Marca la semana apretada.
+function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[] }){
+  const [saldo0,setSaldo0] = useState(0)
+  const now=new Date(); const day=(now.getDay()+6)%7; const mon=new Date(now); mon.setDate(now.getDate()-day); mon.setHours(0,0,0,0)
+  const iso=d=>d.toISOString().slice(0,10)
+  const costosMes=costosOficinaMes(costosOfiRows); const costoSem=costosMes/4.3333
+  const cxp=(()=>{ const billOk=bid=>{ if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }; return (terceros||[]).filter(t=>t&&(t.estado==='por_pagar'||t.estado==='pendiente')&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0) })()
+  const pend=(billing||[]).filter(b=>b&&!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido','Programada'].includes(b.status)&&b.due)
+  const weeks=[]; let run=Number(saldo0)||0
+  for(let i=0;i<8;i++){ const ws=new Date(mon); ws.setDate(mon.getDate()+i*7); const we=new Date(ws); we.setDate(ws.getDate()+7); const wsI=iso(ws), weI=iso(we)
+    const entra=pend.filter(b=>{ const d=String(b.due).slice(0,10); return d>=wsI && d<weI }).reduce((a,b)=>a+saldoBill(b),0)
+    const sale=costoSem + (i===0?cxp:0)
+    run += entra - sale
+    weeks.push({ lbl:`${ws.getDate()}-${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][ws.getMonth()]}`, entra, sale, run })
+  }
+  const maxV=Math.max(1,...weeks.map(w=>Math.max(w.entra,w.sale)))
+  const apretada=weeks.find(w=>w.run<0)
+  return (
+    <div style={{padding:'2px 0 4px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:8}}>
+        <span style={{fontSize:11.5,color:C.muted}}>Próximas 8 semanas · entra vs sale</span>
+        <div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontSize:10,color:C.done}}>Saldo hoy $</span><input type='number' value={saldo0} onChange={e=>setSaldo0(e.target.value)} style={{height:28,width:96,textAlign:'right',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 8px',color:C.text,background:'#fff',outline:'none'}}/></div>
+      </div>
+      <div style={{display:'flex',alignItems:'stretch',gap:5,height:130,borderBottom:`1px solid ${C.border}`,marginBottom:6}}>
+        {weeks.map((w,i)=>(<div key={i} style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'flex-end',alignItems:'center',gap:1}}>
+          <div style={{display:'flex',gap:2,alignItems:'flex-end',height:'100%',width:'100%',justifyContent:'center'}}>
+            <span title='entra' style={{width:'40%',height:Math.round(w.entra/maxV*100)+'%',background:C.normal,borderRadius:'3px 3px 0 0',minHeight:w.entra>0?2:0}}/>
+            <span title='sale' style={{width:'40%',height:Math.round(w.sale/maxV*100)+'%',background:'#E9A9A0',borderRadius:'3px 3px 0 0',minHeight:w.sale>0?2:0}}/>
+          </div>
+        </div>))}
+      </div>
+      <div style={{display:'flex',gap:5,marginBottom:9}}>{weeks.map((w,i)=>(<div key={i} style={{flex:1,textAlign:'center',fontSize:8,color:w.run<0?C.overdueText:C.done,fontWeight:w.run<0?700:400}}>{w.lbl}</div>))}</div>
+      <div style={{display:'flex',gap:14,justifyContent:'center',fontSize:9.5,color:C.muted,marginBottom:10}}><span style={{display:'inline-flex',alignItems:'center',gap:5}}><i style={{width:9,height:9,borderRadius:2,background:C.normal,display:'inline-block'}}/>entra (cobros)</span><span style={{display:'inline-flex',alignItems:'center',gap:5}}><i style={{width:9,height:9,borderRadius:2,background:'#E9A9A0',display:'inline-block'}}/>sale (costos/pagos)</span></div>
+      {apretada
+        ? <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.overdueBg,borderRadius:10,padding:'10px 12px'}}><span style={{fontSize:11,fontWeight:700,color:C.overdueText}}>Semana del {apretada.lbl} · saldo proyectado</span><span style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>−{fmt(Math.abs(apretada.run))}</span></div>
+        : <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.greenBg,borderRadius:10,padding:'10px 12px'}}><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Saldo proyectado en 8 semanas</span><span style={{fontSize:14,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(weeks[weeks.length-1].run)}</span></div>}
+      <div style={{fontSize:10,color:C.done,marginTop:9,lineHeight:1.5}}>Entra = cobros esperados (por cobrar + programadas por su vencimiento). Sale = costos de oficina prorrateados por semana + proveedores por pagar. Estimación — ajusta el saldo de hoy para verlo real.</div>
     </div>
   )
 }
@@ -27342,7 +27382,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>setModal({type:'costosOficina'})} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>{ setCarteraFocus(pid); setTab('cartera') }} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')setTab('cobranza'); else if(id==='repricing')setTab('repricing'); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>setModal({type:'costosOficina'})} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>{ setCarteraFocus(pid); setTab('cartera') }} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')setTab('cobranza'); else if(id==='repricing')setTab('repricing'); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
@@ -27458,6 +27498,7 @@ export default function App() {
         {modal?.type==='roles'&&<Modal title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='costosOficina'&&<Modal title='Costos de oficina' maxWidth={520} onClose={()=>{setModal(null);loadCostosOfi()}}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
         {modal?.type==='estadoResultados'&&<Modal title='Estado de resultados' maxWidth={480} onClose={()=>setModal(null)}><EstadoResultadosModal billing={billing} costosOfiRows={costosOfiRows}/></Modal>}
+        {modal?.type==='flujoCaja'&&<Modal title='Flujo de caja proyectado' maxWidth={480} onClose={()=>setModal(null)}><FlujoCajaModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
