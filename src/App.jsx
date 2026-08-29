@@ -21111,6 +21111,14 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   )
 }
 
+// Extrae el texto plano de un mensaje de Gmail (formato full). Prioriza text/plain; si no, quita el HTML.
+function extraerTextoGmail(msg){
+  const dec = s => { try{ return decodeURIComponent(escape(atob(String(s||'').replace(/-/g,'+').replace(/_/g,'/')))) }catch(_){ try{ return atob(String(s||'').replace(/-/g,'+').replace(/_/g,'/')) }catch(e){ return '' } } }
+  const walk = (p,mime) => { if(!p) return ''; if(p.mimeType===mime && p.body?.data) return dec(p.body.data); if(p.parts) return p.parts.map(x=>walk(x,mime)).join(' '); return '' }
+  let t = walk(msg?.payload,'text/plain')
+  if(!t.trim()){ t = walk(msg?.payload,'text/html').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ') }
+  return t.replace(/\r?\n/g,' ').replace(/&nbsp;/g,' ').trim()
+}
 function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, onOpenClientFicha }){
   const me = currentUserName || ''
   const [horas,setHoras] = useState([])
@@ -21216,12 +21224,43 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       }
       const conCli = props.map(p=> p.client_id!==undefined ? p : {...p, client_id:matchCli(p)})
       const nuevos = conCli.filter(p=> !desc.has(p.source+':'+p.source_ref) && !horas.some(h=>h.source===p.source && String(h.source_ref)===String(p.source_ref)))
-      setAgenda(nuevos.map(p=>({...p, id:p.source+':'+p.source_ref}))); setAgDone(true)
+      const items=nuevos.map(p=>({...p, id:p.source+':'+p.source_ref})); setAgenda(items); setAgDone(true)
+      redactarIA(items)   // A1: la IA redacta glosa + duración de los correos/documentos (progresivo)
     }catch(e){ appAlert('No se pudo leer tu día: '+(e.message||e)) }
     setAgLoading(false)
   }
   const registrarAgenda = ev => { if(!ev.client_id){ appAlert('Elige el cliente.'); return } addHora({ client_id:ev.client_id, fecha:ev.fecha||hoy, horas:ev.horas||0.2, glosa:ev.glosa||ev.titulo, source:ev.source||'calendar', source_ref:String(ev.source_ref||ev.id) }); setAgenda(a=>a.filter(x=>x.id!==ev.id)) }
   const bumpAg = (id,delta) => setAgenda(a=>a.map(ev=>ev.id===id?{...ev,horas:Math.max(0.1,Math.round(((ev.horas||1)+delta)*10)/10)}:ev))
+  // A1 — la IA lee el CONTENIDO (cuerpo del correo / texto del documento) y redacta la glosa facturable + estima la duración.
+  async function redactarIA(items){
+    const targets = items.filter(p=> p.source==='gmail'||p.source==='drive')
+    if(!targets.length) return
+    setAgenda(a=>a.map(x=> targets.some(t=>t.id===x.id)?{...x,iaLoading:true}:x))
+    try{
+      let withContent
+      if(DEMO){
+        await new Promise(r=>setTimeout(r,1000))
+        const demoOut = { 'gmail:g1':{glosa:'Revisión y comentarios al borrador de contrato de arriendo; coordinación de observaciones con la contraparte.',horas:1.3}, 'drive:d1':{glosa:'Preparación de minuta societaria y revisión de estatutos de la sociedad.',horas:1.5} }
+        setAgenda(a=>a.map(x=>{ const o=demoOut[x.id]; return o?{...x,glosa:o.glosa,horas:o.horas,ia:true,iaLoading:false}:(targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x) }))
+        return
+      }
+      const token = await driveToken().catch(()=>null)
+      if(!token){ setAgenda(a=>a.map(x=> targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x)); return }
+      withContent = []
+      for(const p of targets){
+        let content=''
+        try{
+          if(p.source==='gmail'){ const ids=String(p.source_ref||'').split(',').filter(Boolean).slice(0,3); for(const id of ids){ const rr=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,{headers:{Authorization:'Bearer '+token}}); if(rr.ok) content+=' '+extraerTextoGmail(await rr.json()) } }
+          else if(p.source==='drive'){ const rr=await fetch(`https://www.googleapis.com/drive/v3/files/${p.source_ref}/export?mimeType=text/plain&supportsAllDrives=true`,{headers:{Authorization:'Bearer '+token}}); if(rr.ok) content=await rr.text() }
+        }catch(_){}
+        withContent.push({ id:p.id, tipo:p.tag, titulo:p.titulo, contenido:(content||p.titulo).replace(/\s+/g,' ').trim().slice(0,2200) })
+      }
+      const prompt=`Eres asistente de un abogado chileno. Para CADA ítem escribe una "glosa" facturable BREVE (1 sola línea, español jurídico de Chile, describe la gestión efectivamente realizada; NO inventes datos ni cifras que no aparezcan en el contenido; sin exagerar) y estima "horas" dedicadas (número entre 0.1 y 8 según el trabajo). Devuelve SOLO un JSON array [{"id":"<id>","glosa":"...","horas":<num>}].\nITEMS: ${JSON.stringify(withContent)}`
+      const j=await claudeCall({model:'claude-opus-4-8',max_tokens:1200,messages:[{role:'user',content:prompt}]})
+      const txt=j?.content?.[0]?.text||''; const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
+      setAgenda(a=>a.map(x=>{ const o=arr.find(y=>String(y.id)===String(x.id)); if(!o) return targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x; const h=Math.max(0.1,Math.min(8,parseFloat(o.horas)||x.horas)); return {...x, glosa:o.glosa||x.glosa, horas:h, ia:true, iaLoading:false} }))
+    }catch(_){ setAgenda(a=>a.map(x=> targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x)) }
+  }
   // Fase 4 (INTERNA, formato oficina): panel de equipo + rentabilidad YTD. Solo admin.
   const [vista,setVista] = useState('mias')     // mias | equipo | ytd
   const [mView,setMView] = useState('semana')   // semana | mes
@@ -21469,9 +21508,12 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         <div key={ev.id} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
           <span onClick={()=>descartar(ev.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.done,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}>×</span>
           {(()=>{ const tg={AGENDA:[C.tealBg,C.tealText],CORREO:[C.azulBg,C.azulInfo],DOCUMENTO:[C.greenBg,C.greenText]}[ev.tag||'AGENDA']||[C.tealBg,C.tealText]; return <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:tg[0],color:tg[1],letterSpacing:'.02em'}}>{ev.tag||'AGENDA'}</span> })()}
+          {ev.iaLoading&&<span style={{fontSize:9,fontWeight:700,color:C.azulInfo,marginLeft:6}}>Redactando con IA…</span>}
+          {ev.ia&&<span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.greenBg,color:C.greenText,marginLeft:6,letterSpacing:'.02em'}}>✨ IA</span>}
           {ev.client_id ? <div onClick={()=>cliOpen(ev.client_id)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(ev.client_id)}</div>
             : <div style={{margin:'7px 0 4px'}}><input value={agq[ev.id]||''} onChange={e=>setAgq(q=>({...q,[ev.id]:e.target.value}))} placeholder='¿De qué cliente? Buscar…' style={{...inp,height:32,fontSize:12}}/>{(agq[ev.id]||'').trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:3,overflow:'hidden',maxHeight:120,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(agq[ev.id]))).slice(0,6).map(c=><div key={c.id} onClick={()=>{setAgenda(a=>a.map(x=>x.id===ev.id?{...x,client_id:String(c.id)}:x));setAgq(q=>({...q,[ev.id]:''}))}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</div>}
-          <div style={{fontSize:11.5,color:C.muted,lineHeight:1.35}}>{ev.titulo}</div>
+          <div style={{fontSize:11.5,color:ev.ia?C.text:C.muted,lineHeight:1.35}}>{ev.iaLoading ? <span style={{color:C.done}}>Leyendo el contenido y redactando la glosa…</span> : (ev.ia ? ev.glosa : ev.titulo)}</div>
+          {ev.ia && ev.titulo && <div style={{fontSize:9.5,color:C.done,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.titulo}</div>}
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:10,gap:8}}>
             <div style={step}><span style={stepB} onClick={()=>bumpAg(ev.id,-0.1)}>−</span><b style={{fontSize:14,color:C.accent,padding:'0 4px',minWidth:44,textAlign:'center',fontVariantNumeric:'tabular-nums'}}>{fh(ev.horas)}</b><span style={stepB} onClick={()=>bumpAg(ev.id,0.1)}>+</span></div>
             <button onClick={()=>registrarAgenda(ev)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'8px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Registrar</button>
