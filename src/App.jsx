@@ -6361,7 +6361,7 @@ function RolesModal({ onOpenUsers }){
 }
 // Costos de Oficina (presupuesto editable de la firma). Categorías + desglose; cada ítem con su monto mensual.
 // Soporta aumentos a mitad de año (monto + monto_prev + desde). El total del mes usa el valor vigente de ESE mes.
-function CostosOficinaModal(){
+function CostosOficinaModal({ expenses=[], clients=[] }){
   const [rows,setRows] = useState(null)
   const [open,setOpen] = useState(()=>new Set())      // categorías desplegadas
   const [edId,setEdId] = useState(null)                // fila en edición
@@ -6369,6 +6369,7 @@ function CostosOficinaModal(){
   const [addCat,setAddCat] = useState(null)            // categoría en la que se agrega ítem
   const [af,setAf] = useState({item:'',monto:''})
   const [extraCats,setExtraCats] = useState([])        // categorías nuevas creadas a mano (aún sin ítems)
+  const [verReal,setVerReal] = useState(false)         // ③ comparar presupuesto vs lo realmente gastado este mes
   const ym0 = new Date().toISOString().slice(0,7)
   const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const anio = ym0.slice(0,4)
@@ -6391,6 +6392,10 @@ function CostosOficinaModal(){
   const signo = r => (r.es_ingreso?-1:1)
   const totalMes = costosOficinaMes(rows, ym0)
   const totalCat = cat => (rows||[]).filter(r=>r.categoria===cat).reduce((a,r)=>a+eff(r)*signo(r),0)
+  // ③ Real este mes = gastos del cliente interno (Oficina) del mes, agrupados por categoría (mapeadas). La nómina no se registra como gasto → esas categorías quedan "sin registro".
+  const ofiCli = (clients||[]).find(c=>c.is_internal || /liberona\s+escala/i.test(c.name||''))
+  const realPorCat = (()=>{ const m={}; if(!ofiCli) return m; (expenses||[]).forEach(e=>{ if(e.deleted_at||e.type!=='gasto') return; if(String(e.client_id)!==String(ofiCli.id)) return; if(String(e.date||'').slice(0,7)!==ym0) return; const cat=catOficinaNueva(e.category); m[cat]=(m[cat]||0)+(Number(e.amount)||0) }); return m })()
+  const hayReal = Object.keys(realPorCat).length>0
   const catsPresentes = [...new Set((rows||[]).map(r=>r.categoria))]
   const cats = [...CATS_OFICINA_NUEVAS, ...catsPresentes.filter(c=>!CATS_OFICINA_NUEVAS.includes(c)), ...extraCats.filter(c=>!CATS_OFICINA_NUEVAS.includes(c)&&!catsPresentes.includes(c))]
   const tog = c => setOpen(p=>{const s=new Set(p); s.has(c)?s.delete(c):s.add(c); return s})
@@ -6426,10 +6431,15 @@ function CostosOficinaModal(){
         <div style={{fontSize:9,textTransform:'uppercase',letterSpacing:'.06em',opacity:.8,fontWeight:700}}>Total del mes · {MESES[+ym0.slice(5,7)-1]?.charAt(0).toUpperCase()+MESES[+ym0.slice(5,7)-1]?.slice(1)} {anio}</div>
         <div style={{fontSize:22,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(totalMes)}</div>
       </div>
+      {hayReal && <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:11}}>
+        {[[false,'Presupuesto'],[true,'vs Real · '+MESES[+ym0.slice(5,7)-1]]].map(([v,l])=><span key={l} onClick={()=>setVerReal(v)} style={{fontSize:11,fontWeight:700,padding:'6px 12px',cursor:'pointer',background:verReal===v?C.accent:'#fff',color:verReal===v?'#fff':C.muted}}>{l}</span>)}
+      </div>}
       {cats.map(cat=>{ const op=open.has(cat); const items=(rows||[]).filter(r=>r.categoria===cat); const subs=SUBCATS_OFICINA[cat]||[]; return (
         <div key={cat} style={{border:`1px solid ${C.border}`,borderRadius:11,marginBottom:7,overflow:'hidden'}}>
           <div onClick={()=>tog(cat)} style={{display:'flex',alignItems:'center',gap:9,padding:'11px 12px',cursor:'pointer',background:op?C.bgSoft:'transparent'}}>
-            <span style={{flex:1,fontSize:13,fontWeight:700,color:C.accent}}>{cat}</span>
+            <div style={{flex:1,minWidth:0}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{cat}</span>
+              {verReal && items.length>0 && (()=>{ const pres=totalCat(cat); const real=realPorCat[cat]; const tiene=real!=null; const dif=tiene?real-pres:0; const col=dif>pres*0.05?C.overdueText:(dif<-pres*0.05?C.greenText:C.muted); return <div style={{fontSize:9.5,marginTop:1}}>{tiene?<span style={{color:C.done}}>real {fmt(real)} · <b style={{color:col}}>{dif>=0?'+':''}{fmt(dif)}</b></span>:<span style={{color:C.done}}>sin registro este mes</span>}</div> })()}
+            </div>
             <span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{items.length?fmt(totalCat(cat)):'—'}</span>
             <span style={{fontSize:9,color:C.done,fontWeight:700}}>{items.length||''}</span>
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:op?'rotate(180deg)':'none'}}><path d='M6 9l6 6 6-6'/></svg>
@@ -27295,7 +27305,7 @@ export default function App() {
         {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
         {modal?.type==='modulos'&&<Modal title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
-        {modal?.type==='costosOficina'&&<Modal title='Costos de oficina' maxWidth={520} onClose={()=>{setModal(null);loadCostosOfi()}}><CostosOficinaModal/></Modal>}
+        {modal?.type==='costosOficina'&&<Modal title='Costos de oficina' maxWidth={520} onClose={()=>{setModal(null);loadCostosOfi()}}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
