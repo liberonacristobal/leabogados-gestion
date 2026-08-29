@@ -2500,7 +2500,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,onOpenCostosOfi,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
+function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   // KPIs colapsables: "Cómo va el año" queda fijo (hero); el resto arranca en mini y se abre al tocar (recuerda por usuario).
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
@@ -2551,6 +2551,10 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   const vendidoBrutoUF = salesYr.reduce((a,s)=>a+ufDeVenta(s),0)
   const costoUF = salesYr.reduce((a,s)=>a+((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))+(s.moneda==='CLP'&&s.cost_clp&&ufRef>0?((parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1)):0),0)
   const vendidoNetoUF = vendidoBrutoUF - costoUF
+  // ① P&L / ② break-even — costos de oficina acumulados (respetan el quiebre de mes vía costosOficinaMes).
+  const _mNow = new Date().getMonth()+1
+  const costosOfiYTD = useMemo(()=>{ let t=0; for(let i=1;i<=_mNow;i++) t+=costosOficinaMes(costosOfiRows, `${yr}-${String(i).padStart(2,'0')}`); return t },[costosOfiRows,yr,_mNow])
+  const costosOfiAnual = useMemo(()=>{ let t=0; for(let i=1;i<=12;i++) t+=costosOficinaMes(costosOfiRows, `${yr}-${String(i).padStart(2,'0')}`); return t },[costosOfiRows,yr])
   const vendidoBrutoCLP = Math.round(salesYr.reduce((a,s)=>a+clpDeVenta(s),0))
   const costoCLP = Math.round(costoUF * ufRef)
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
@@ -3192,6 +3196,33 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
           </div>
         </div>
         )
+      })()}
+
+      {/* ① Resultado de la firma (P&L en vivo) + ② break-even. Ingresos cobrados YTD − costos de oficina YTD. */}
+      {costosOfiAnual>0&&(()=>{
+        const ingYTD=ingresosPorAnioVenta.total||0
+        const resultado=ingYTD-costosOfiYTD
+        const cubrePct=costosOfiAnual>0?Math.min(100,Math.round(ingYTD/costosOfiAnual*100)):0
+        const faltaBE=Math.max(0,costosOfiAnual-ingYTD)
+        const pos=resultado>=0
+        return (<>
+          {lvlLabel('Resultado de la firma')}
+          <div style={{padding:'6px 20px 0'}}>
+            <div onClick={onOpenCostosOfi} style={{background:pos?C.greenText:C.overdue,color:'#fff',borderRadius:14,padding:'14px 16px',cursor:onOpenCostosOfi?'pointer':'default'}}>
+              <div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',opacity:.85}}>Resultado {selYear} · {pos?'utilidad':'pérdida'}</div>
+              <div style={{fontSize:26,fontWeight:800,lineHeight:1.05,margin:'3px 0 2px',fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmtMon(Math.abs(resultado))}</div>
+              <div style={{fontSize:10.5,opacity:.9}}>Ingresos cobrados {fmtMon(ingYTD)} − costos {fmtMon(costosOfiYTD)}</div>
+            </div>
+            <div style={{background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginTop:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Punto de equilibrio</span>
+                <span style={{fontSize:11,fontWeight:700,color:cubrePct>=100?C.greenText:C.accent}}>{cubrePct}%</span>
+              </div>
+              <div style={{height:10,borderRadius:6,background:C.border,overflow:'hidden'}}><div style={{width:cubrePct+'%',height:'100%',background:cubrePct>=100?C.normal:C.accent,transition:'width .3s'}}/></div>
+              <div style={{fontSize:10,color:C.muted,marginTop:6}}>{cubrePct>=100?'Estructura anual cubierta · lo demás es utilidad':`Cubres ${fmtMon(ingYTD)} de ${fmtMon(costosOfiAnual)} de estructura anual · faltan ${fmtMon(faltaBE)}`}</div>
+            </div>
+          </div>
+        </>)
       })()}
 
       {lvlLabel('Cobros y pagos')}
@@ -27090,7 +27121,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>setModal({type:'costosOficina'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>{ setCarteraFocus(pid); setTab('cartera') }} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')setTab('cobranza'); else if(id==='repricing')setTab('repricing'); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>setModal({type:'costosOficina'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>{ setCarteraFocus(pid); setTab('cartera') }} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')setTab('cobranza'); else if(id==='repricing')setTab('repricing'); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>setTab('conciliacion')} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
