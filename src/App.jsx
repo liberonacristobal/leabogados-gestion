@@ -2502,6 +2502,10 @@ function computeAgingCartera(billingRows, clientesMap){
 
 function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
+  // Alertas del dueño ("Requiere atención"): replegado por defecto; descartadas persisten (reaparecen si el monto empeora >20%).
+  const [alertExp,setAlertExp] = usePersistedState('dash_alert_exp',false)
+  const [alertOff,setAlertOff] = usePersistedState('dash_alert_off',{})
+  const descartarAlerta = a => setAlertOff(p=>({...(p&&typeof p==='object'?p:{}), [a.key]: a.monto||0}))
   // KPIs colapsables: "Cómo va el año" queda fijo (hero); el resto arranca en mini y se abre al tocar (recuerda por usuario).
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
   const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
@@ -2898,6 +2902,53 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               ))}
             </div>
           </div>
+        )
+      })()}
+
+      {/* REQUIERE ATENCIÓN — alertas del dueño, replegado por defecto. Iconos SIcon, paleta C, sin emojis. De datos que ya existen. */}
+      {(()=>{
+        const hoy=new Date().toISOString().slice(0,10)
+        const vencMonto=agingData?.buckets?.overdue?.monto||0
+        const vencN=agingData?.buckets?.overdue?.items?.length||0
+        const progVenc=(billing||[]).filter(b=> b && !b.deleted_at && b.status==='Programada' && b.due && b.due<hoy)
+        const progMonto=progVenc.reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
+        const porIdent=ingresosPorAnioVenta.porIdentificar||0
+        const ingYTD_a=ingresosPorAnioVenta.total||0
+        const raw=[
+          vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>setTab('cobranza')},
+          progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
+          porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
+          (costosOfiYTD>0 && ingYTD_a>0 && ingYTD_a<costosOfiYTD) && {key:'estructura',sev:'a',icon:'wallet',monto:costosOfiYTD-ingYTD_a,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(ingYTD_a)} < costos ${fmtMon(costosOfiYTD)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
+        ].filter(Boolean)
+        const off=(alertOff&&typeof alertOff==='object')?alertOff:{}
+        const alertas=raw.filter(a=> off[a.key]==null || (a.monto||0) > off[a.key]*1.2 )
+        if(!alertas.length) return null
+        const SEV={r:{bg:C.overdueBg,fg:C.overdueText},a:{bg:C.soonBg,fg:C.soonText},b:{bg:C.azulBg,fg:C.azulInfo}}
+        const hayR=alertas.some(a=>a.sev==='r')
+        return (
+        <div style={{padding:'6px 20px 0'}}>
+          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+            <div onClick={()=>setAlertExp(v=>!v)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',cursor:'pointer',background:alertExp?C.bgSoft:'transparent'}}>
+              <span style={{width:26,height:26,borderRadius:8,background:hayR?C.overdueBg:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='alert' s={15} c={hayR?C.overdueText:C.soonText}/></span>
+              <span style={{flex:1,fontSize:12,fontWeight:700,color:C.accent}}>Requiere atención</span>
+              <span style={{fontSize:10,fontWeight:800,color:'#fff',background:hayR?C.overdue:C.soon,borderRadius:20,padding:'1px 8px'}}>{alertas.length}</span>
+              <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:alertExp?'rotate(180deg)':'none'}}><path d='M6 9l6 6 6-6'/></svg>
+            </div>
+            {alertExp && <div style={{borderTop:`1px solid ${C.border}`}}>
+              {alertas.map((a,i)=>{ const sv=SEV[a.sev]||SEV.b; return (
+                <div key={a.key} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+                  <span style={{width:28,height:28,borderRadius:8,background:sv.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={a.icon} s={15} c={sv.fg}/></span>
+                  <div onClick={a.go} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+                    <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1.2}}>{a.t}</div>
+                    <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>{a.s}</div>
+                  </div>
+                  <span onClick={a.go} style={{fontSize:9,fontWeight:800,color:C.accent,whiteSpace:'nowrap',cursor:'pointer'}}>{a.goLbl} →</span>
+                  <span onClick={e=>{e.stopPropagation();descartarAlerta(a)}} title='Descartar' style={{color:C.done,cursor:'pointer',flexShrink:0,display:'flex'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></span>
+                </div>
+              )})}
+            </div>}
+          </div>
+        </div>
         )
       })()}
 
