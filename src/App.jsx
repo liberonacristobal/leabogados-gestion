@@ -2914,9 +2914,16 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const progMonto=progVenc.reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
         const porIdent=ingresosPorAnioVenta.porIdentificar||0
         const ingYTD_a=ingresosPorAnioVenta.total||0
+        const cxpN=new Set((terceros||[]).filter(t=>t&&(t.estado==='por_pagar'||t.estado==='pendiente')).map(t=>t.proveedor_id)).size
+        const _pd=new Date(); _pd.setDate(1); _pd.setMonth(_pd.getMonth()-1); const prevYm=_pd.toISOString().slice(0,7)
+        const _pdLbl=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+prevYm.slice(5,7)-1]
+        const entraPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm)).reduce((s,a)=>s+(Number(a.monto)||0),0)
+        const cuestaPrev=costosOficinaMes(costosOfiRows, prevYm)
         const raw=[
           vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>setTab('cobranza')},
+          (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
           progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
+          cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Cuentas por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>setTab('billing')},
           porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
           (costosOfiYTD>0 && ingYTD_a>0 && ingYTD_a<costosOfiYTD) && {key:'estructura',sev:'a',icon:'wallet',monto:costosOfiYTD-ingYTD_a,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(ingYTD_a)} < costos ${fmtMon(costosOfiYTD)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
         ].filter(Boolean)
@@ -2929,8 +2936,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         <div style={{padding:'6px 20px 0'}}>
           <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             <div onClick={()=>setAlertExp(v=>!v)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',cursor:'pointer',background:alertExp?C.bgSoft:'transparent'}}>
-              <span style={{width:26,height:26,borderRadius:8,background:hayR?C.overdueBg:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='alert' s={15} c={hayR?C.overdueText:C.soonText}/></span>
-              <span style={{flex:1,fontSize:12,fontWeight:700,color:C.accent}}>Requiere atención</span>
+              <span style={{width:26,height:26,borderRadius:8,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={15} c={C.accent}/></span>
+              <span style={{flex:1,fontSize:12,fontWeight:700,color:C.accent}}>Prioridades financieras</span>
               <span style={{fontSize:10,fontWeight:800,color:'#fff',background:hayR?C.overdue:C.soon,borderRadius:20,padding:'1px 8px'}}>{alertas.length}</span>
               <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:alertExp?'rotate(180deg)':'none'}}><path d='M6 9l6 6 6-6'/></svg>
             </div>
