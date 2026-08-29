@@ -20231,7 +20231,7 @@ async function escanearTareasGmail(clients=[], onProgress){
 // Captura automática de horas (client-side): correos ENVIADOS (trabajo hecho) + documentos de Drive modificados
 // hace poco. Devuelve propuestas {source,source_ref,client_id,glosa,horas,fecha,tag}; el humano confirma/edita (compuerta).
 // Heurística sobria: correo = 0,2 h c/u (agrupa por cliente y día); documento = 0,5 h. Nunca inventa horas ni cliente.
-async function capturaHorasFuentes(token, clients=[]){
+async function capturaHorasFuentes(token, clients=[], dias=2){
   const norm = s => _normTxt(s)
   const genericDom = d => /^(gmail|hotmail|outlook|yahoo|icloud|live|me|proton|protonmail)\./.test(d+'.') || ['gmail.com','hotmail.com','outlook.com','yahoo.com','icloud.com','live.com'].includes(d)
   const activos = clients.filter(c=>c.status!=='Terminado')
@@ -20243,7 +20243,7 @@ async function capturaHorasFuentes(token, clients=[]){
   const out=[]
   // ── Gmail: enviados de los últimos 2 días ──
   try{
-    const q=encodeURIComponent('in:sent newer_than:2d -in:chats')
+    const q=encodeURIComponent('in:sent newer_than:'+dias+'d -in:chats')
     const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=60`,{headers:{Authorization:'Bearer '+token}})
     if(r.ok){ const j=await r.json(); const ids=(j.messages||[]).map(m=>m.id).slice(0,60)
       const msgs=[]
@@ -20256,7 +20256,7 @@ async function capturaHorasFuentes(token, clients=[]){
   }catch(_){}
   // ── Drive: documentos modificados en las últimas 48 h (donde puedo escribir) ──
   try{
-    const cut=new Date(Date.now()-2*864e5).toISOString()
+    const cut=new Date(Date.now()-dias*864e5).toISOString()
     const dq=encodeURIComponent(`modifiedTime > '${cut}' and trashed=false and mimeType != 'application/vnd.google-apps.folder' and 'me' in writers`)
     const data=await driveGet(token,`https://www.googleapis.com/drive/v3/files?q=${dq}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=40&supportsAllDrives=true&includeItemsFromAllDrives=true`)
     ;(data?.files||[]).forEach(f=>{ const cid=cliByName(f.name); const fecha=String(f.modifiedTime||'').slice(0,10); if(!fecha) return; out.push({ source:'drive', source_ref:f.id, client_id:cid, tag:'DOCUMENTO', titulo:f.name, glosa:'Documento: '+f.name, horas:0.5, fecha }) })
@@ -21202,25 +21202,32 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const stripLegal = s => _normTxt(s).replace(/\b(spa|s a|ltda|limitada|sa|eirl|e i r l|y cia|cia|inversiones|abogados)\b/g,'').replace(/\s+/g,' ').trim()
   const matchCli = ev => { const t=stripLegal(ev.titulo||''); const byName=clients.find(c=>{ const n=stripLegal(c.name); return c.status!=='Terminado'&&n.length>2&&t.includes(n) }); if(byName) return String(byName.id); const doms=(ev.asistentes||[]).map(a=>String(a).split('@')[1]||'').filter(Boolean); const byMail=clients.find(c=>c.email&&doms.includes(String(c.email).split('@')[1]||'')); return byMail?String(byMail.id):null }
   // "Revisar mi día": junta agenda (calendario) + correos enviados (Gmail) + documentos recientes (Drive) → propuestas de horas.
-  async function revisarAgenda(){
+  async function revisarAgenda(scope='dia'){
+    const esSemana = scope==='semana'
     setAgLoading(true); setAgDone(false)
     try{
       let props=[]
       if(DEMO){ props=[
-        {source:'calendar',source_ref:'ev1',tag:'AGENDA',titulo:'Reunión asesoría mensual — Comercial Andes SpA',fecha:hoy,horas:1,asistentes:[]},
-        {source:'calendar',source_ref:'ev2',tag:'AGENDA',titulo:'Audiencia preparatoria Tech Araucanía',fecha:hoy,horas:2,asistentes:[]},
+        {source:'calendar',source_ref:'ev1',tag:'AGENDA',titulo:'Reunión asesoría mensual — Comercial Andes SpA',descripcion:'Revisión de estados de causas y próximos vencimientos.',fecha:hoy,horas:1,asistentes:[]},
+        {source:'calendar',source_ref:'ev2',tag:'AGENDA',titulo:'Audiencia preparatoria Tech Araucanía',descripcion:'',fecha:hoy,horas:2,asistentes:[]},
         {source:'gmail',source_ref:'g1',tag:'CORREO',titulo:'3 correos · Contrato de arriendo',glosa:'3 correos enviados',fecha:hoy,horas:0.6,client_id:'c1'},
         {source:'drive',source_ref:'d1',tag:'DOCUMENTO',titulo:'Minuta societaria Tech Araucanía.docx',glosa:'Documento: Minuta societaria Tech Araucanía.docx',fecha:hoy,horas:0.5,client_id:'c4'},
-      ] }
+      ]; if(esSemana){ const d2=new Date(hoy+'T12:00'); d2.setDate(d2.getDate()-2); const f2=d2.toISOString().slice(0,10); props.push(
+        {source:'calendar',source_ref:'ev3',tag:'AGENDA',titulo:'Reunión de directorio — Viñedos del Maipo',descripcion:'',fecha:f2,horas:1.5,asistentes:[]},
+        {source:'gmail',source_ref:'g2',tag:'CORREO',titulo:'Correo · Envío de escritura de compraventa',glosa:'1 correo enviado',fecha:f2,horas:0.3,client_id:'c5'}
+      ) } }
       else {
-        const token=await driveToken(); if(!token){ appAlert('Para leer tu día, cierra sesión y vuelve a entrar con tu cuenta de Google.'); setAgLoading(false); return }
+        const token=await driveToken(); if(!token){ appAlert('Para leer tu agenda, cierra sesión y vuelve a entrar con tu cuenta de Google.'); setAgLoading(false); return }
+        const lun=new Date(hoy+'T12:00'); lun.setDate(lun.getDate()-((lun.getDay()+6)%7)); const lunI=lun.toISOString().slice(0,10)
+        const diasSem = ((new Date(hoy+'T12:00').getDay()+6)%7)+1
+        const tMin = esSemana ? lunI+'T00:00:00' : hoy+'T00:00:00'
         try{
-          const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(new Date(hoy+'T00:00:00').toISOString())}&timeMax=${encodeURIComponent(new Date(hoy+'T23:59:59').toISOString())}&singleEvents=true&orderBy=startTime`
+          const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(new Date(tMin).toISOString())}&timeMax=${encodeURIComponent(new Date(hoy+'T23:59:59').toISOString())}&singleEvents=true&orderBy=startTime`
           const r=await fetch(url,{headers:{Authorization:'Bearer '+token}})
           if(r.status===401){ appAlert('Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.'); setAgLoading(false); return }
-          if(r.ok){ const j=await r.json(); (j.items||[]).filter(e=>e.status!=='cancelled'&&(e.summary||'').trim()&&e.start?.dateTime&&e.end?.dateTime).forEach(e=>props.push({ source:'calendar', source_ref:e.id, tag:'AGENDA', titulo:e.summary, fecha:String(e.start.dateTime||'').slice(0,10), horas:Math.max(0.1,Math.round((new Date(e.end.dateTime)-new Date(e.start.dateTime))/360000)/10), asistentes:(e.attendees||[]).map(a=>a.email).filter(Boolean) })) }
+          if(r.ok){ const j=await r.json(); (j.items||[]).filter(e=>e.status!=='cancelled'&&(e.summary||'').trim()&&e.start?.dateTime&&e.end?.dateTime).forEach(e=>props.push({ source:'calendar', source_ref:e.id, tag:'AGENDA', titulo:e.summary, descripcion:e.description||'', fecha:String(e.start.dateTime||'').slice(0,10), horas:Math.max(0.1,Math.round((new Date(e.end.dateTime)-new Date(e.start.dateTime))/360000)/10), asistentes:(e.attendees||[]).map(a=>a.email).filter(Boolean) })) }
         }catch(_){}
-        try{ const extra=await capturaHorasFuentes(token, clients); props.push(...extra) }catch(_){}
+        try{ const extra=await capturaHorasFuentes(token, clients, esSemana?diasSem:2); props.push(...extra) }catch(_){}
       }
       const conCli = props.map(p=> p.client_id!==undefined ? p : {...p, client_id:matchCli(p)})
       const nuevos = conCli.filter(p=> !desc.has(p.source+':'+p.source_ref) && !horas.some(h=>h.source===p.source && String(h.source_ref)===String(p.source_ref)))
@@ -21233,15 +21240,16 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const bumpAg = (id,delta) => setAgenda(a=>a.map(ev=>ev.id===id?{...ev,horas:Math.max(0.1,Math.round(((ev.horas||1)+delta)*10)/10)}:ev))
   // A1 — la IA lee el CONTENIDO (cuerpo del correo / texto del documento) y redacta la glosa facturable + estima la duración.
   async function redactarIA(items){
-    const targets = items.filter(p=> p.source==='gmail'||p.source==='drive')
+    const targets = items.filter(p=> p.source==='gmail'||p.source==='drive'||p.source==='calendar'||p.source==='pega')
     if(!targets.length) return
+    const keepHoras = x => x.source==='calendar'   // en reuniones la duración es la del evento; la IA solo redacta la glosa
     setAgenda(a=>a.map(x=> targets.some(t=>t.id===x.id)?{...x,iaLoading:true}:x))
     try{
       let withContent
       if(DEMO){
         await new Promise(r=>setTimeout(r,1000))
-        const demoOut = { 'gmail:g1':{glosa:'Revisión y comentarios al borrador de contrato de arriendo; coordinación de observaciones con la contraparte.',horas:1.3}, 'drive:d1':{glosa:'Preparación de minuta societaria y revisión de estatutos de la sociedad.',horas:1.5} }
-        setAgenda(a=>a.map(x=>{ const o=demoOut[x.id]; return o?{...x,glosa:o.glosa,horas:o.horas,ia:true,iaLoading:false}:(targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x) }))
+        const demoOut = { 'gmail:g1':{glosa:'Revisión y comentarios al borrador de contrato de arriendo; coordinación de observaciones con la contraparte.',horas:1.3}, 'drive:d1':{glosa:'Preparación de minuta societaria y revisión de estatutos de la sociedad.',horas:1.5}, 'calendar:ev1':{glosa:'Reunión mensual de asesoría: revisión de estado de causas y próximos vencimientos.'}, 'calendar:ev2':{glosa:'Audiencia preparatoria: comparecencia y gestión ante el tribunal.'}, 'calendar:ev3':{glosa:'Reunión de directorio: asistencia y minuta de acuerdos.'} }
+        setAgenda(a=>a.map(x=>{ const o=demoOut[x.id]; return o?{...x,glosa:o.glosa,horas:keepHoras(x)?x.horas:(o.horas??x.horas),ia:true,iaLoading:false}:(targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x) }))
         return
       }
       const token = await driveToken().catch(()=>null)
@@ -21252,14 +21260,37 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         try{
           if(p.source==='gmail'){ const ids=String(p.source_ref||'').split(',').filter(Boolean).slice(0,3); for(const id of ids){ const rr=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,{headers:{Authorization:'Bearer '+token}}); if(rr.ok) content+=' '+extraerTextoGmail(await rr.json()) } }
           else if(p.source==='drive'){ const rr=await fetch(`https://www.googleapis.com/drive/v3/files/${p.source_ref}/export?mimeType=text/plain&supportsAllDrives=true`,{headers:{Authorization:'Bearer '+token}}); if(rr.ok) content=await rr.text() }
+          else if(p.source==='calendar'){ content = p.descripcion||'' }
+          else if(p.source==='pega'){ content = p.contenido||'' }
         }catch(_){}
-        withContent.push({ id:p.id, tipo:p.tag, titulo:p.titulo, contenido:(content||p.titulo).replace(/\s+/g,' ').trim().slice(0,2200) })
+        withContent.push({ id:p.id, tipo:p.tag, titulo:p.titulo, contenido:((content||'')+' '+(p.titulo||'')).replace(/\s+/g,' ').trim().slice(0,2200) })
       }
       const prompt=`Eres asistente de un abogado chileno. Para CADA ítem escribe una "glosa" facturable BREVE (1 sola línea, español jurídico de Chile, describe la gestión efectivamente realizada; NO inventes datos ni cifras que no aparezcan en el contenido; sin exagerar) y estima "horas" dedicadas (número entre 0.1 y 8 según el trabajo). Devuelve SOLO un JSON array [{"id":"<id>","glosa":"...","horas":<num>}].\nITEMS: ${JSON.stringify(withContent)}`
       const j=await claudeCall({model:'claude-opus-4-8',max_tokens:1200,messages:[{role:'user',content:prompt}]})
       const txt=j?.content?.[0]?.text||''; const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
-      setAgenda(a=>a.map(x=>{ const o=arr.find(y=>String(y.id)===String(x.id)); if(!o) return targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x; const h=Math.max(0.1,Math.min(8,parseFloat(o.horas)||x.horas)); return {...x, glosa:o.glosa||x.glosa, horas:h, ia:true, iaLoading:false} }))
+      setAgenda(a=>a.map(x=>{ const o=arr.find(y=>String(y.id)===String(x.id)); if(!o) return targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x; const h=keepHoras(x)?x.horas:Math.max(0.1,Math.min(8,parseFloat(o.horas)||x.horas)); return {...x, glosa:o.glosa||x.glosa, horas:h, ia:true, iaLoading:false} }))
     }catch(_){ setAgenda(a=>a.map(x=> targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x)) }
+  }
+  // A4 — "Pegar y redactar": pegas un chat de WhatsApp / correo / nota y la IA arma glosa + horas + cliente.
+  const [pega,setPega] = useState(false); const [pegaTxt,setPegaTxt] = useState(''); const [pegaBusy,setPegaBusy] = useState(false)
+  async function redactarPegado(){
+    const t = pegaTxt.trim(); if(!t) return
+    setPegaBusy(true)
+    try{
+      let glosa='', hh=0.5, cid=null
+      if(DEMO){ await new Promise(r=>setTimeout(r,900)); glosa='Coordinación con el cliente por WhatsApp sobre el estado del contrato y próximos pasos.'; hh=0.4; cid='c1' }
+      else{
+        const lista = clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name})).slice(0,400)
+        const prompt=`Eres asistente de un abogado chileno. Del siguiente texto (chat de WhatsApp, correo o nota) escribe una "glosa" facturable BREVE (1 línea, español jurídico de Chile; describe la gestión; NO inventes), estima "horas" (0.1 a 8) y elige el "client_id" de la lista si es claro (si no, null). Devuelve SOLO JSON {"glosa":"...","horas":<num>,"client_id":"<id o null>"}.\nCLIENTES: ${JSON.stringify(lista)}\nTEXTO: ${t.slice(0,4000)}`
+        const j=await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
+        const txt=j?.content?.[0]?.text||''; const m=txt.match(/\{[\s\S]*\}/); const o=m?JSON.parse(m[0]):{}
+        glosa=o.glosa||'Gestión registrada desde una nota.'; hh=Math.max(0.1,Math.min(8,parseFloat(o.horas)||0.5)); cid=(o.client_id&&clients.some(c=>String(c.id)===String(o.client_id)))?String(o.client_id):null
+      }
+      const ref='n'+Date.now()
+      setAgenda(a=>[{ id:'pega:'+ref, source:'pega', source_ref:ref, tag:'NOTA', titulo:t.slice(0,90), glosa, horas:hh, fecha:hoy, client_id:cid, ia:true }, ...a])
+      setPega(false); setPegaTxt(''); setAgDone(true)
+    }catch(e){ appAlert('No se pudo redactar: '+(e.message||e)) }
+    setPegaBusy(false)
   }
   // Fase 4 (INTERNA, formato oficina): panel de equipo + rentabilidad YTD. Solo admin.
   const [vista,setVista] = useState('mias')     // mias | equipo | ytd
@@ -21500,16 +21531,31 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       </div>
 
       {/* ¿Qué hiciste hoy? */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'2px 2px 8px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'2px 2px 8px',gap:6,flexWrap:'wrap'}}>
         <span style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>Por registrar</span>
-        <button onClick={revisarAgenda} disabled={agLoading} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:agLoading?'default':'pointer'}}>{agLoading?'Leyendo…':'Revisar mi día'}</button>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <button onClick={()=>setPega(p=>!p)} disabled={agLoading} title='Pegar un chat de WhatsApp o una nota' style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 10px',cursor:'pointer'}}>Pegar</button>
+          <button onClick={()=>revisarAgenda('dia')} disabled={agLoading} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:agLoading?'default':'pointer'}}>{agLoading?'Leyendo…':'Revisar mi día'}</button>
+          <button onClick={()=>revisarAgenda('semana')} disabled={agLoading} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:20,padding:'4px 11px',cursor:agLoading?'default':'pointer'}}>Reconstruir semana</button>
+        </div>
       </div>
+      {pega && (
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:11,marginBottom:9}}>
+          <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Pega un chat de WhatsApp, un correo o una nota. La IA arma la glosa, estima las horas y sugiere el cliente.</div>
+          <textarea value={pegaTxt} onChange={e=>setPegaTxt(e.target.value)} rows={4} placeholder='Pega aquí el texto…' style={{...inp,height:'auto',minHeight:80,fontSize:12,resize:'vertical',fontFamily:'inherit',padding:'8px 10px'}}/>
+          <div style={{display:'flex',gap:8,marginTop:8}}>
+            <button onClick={redactarPegado} disabled={pegaBusy||!pegaTxt.trim()} style={{flex:1,background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'9px',fontSize:12,fontWeight:600,cursor:(pegaBusy||!pegaTxt.trim())?'default':'pointer',opacity:(pegaBusy||!pegaTxt.trim())?.6:1}}>{pegaBusy?'Redactando…':'Redactar con IA'}</button>
+            <button onClick={()=>{setPega(false);setPegaTxt('')}} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.muted,borderRadius:9,padding:'9px 12px',fontSize:12,cursor:'pointer'}}>Cerrar</button>
+          </div>
+        </div>
+      )}
       {agenda.map(ev=>(
         <div key={ev.id} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
           <span onClick={()=>descartar(ev.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.done,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}>×</span>
-          {(()=>{ const tg={AGENDA:[C.tealBg,C.tealText],CORREO:[C.azulBg,C.azulInfo],DOCUMENTO:[C.greenBg,C.greenText]}[ev.tag||'AGENDA']||[C.tealBg,C.tealText]; return <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:tg[0],color:tg[1],letterSpacing:'.02em'}}>{ev.tag||'AGENDA'}</span> })()}
+          {(()=>{ const tg={AGENDA:[C.tealBg,C.tealText],CORREO:[C.azulBg,C.azulInfo],DOCUMENTO:[C.greenBg,C.greenText],NOTA:[C.soonBg,C.soonText]}[ev.tag||'AGENDA']||[C.tealBg,C.tealText]; return <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:tg[0],color:tg[1],letterSpacing:'.02em'}}>{ev.tag||'AGENDA'}</span> })()}
           {ev.iaLoading&&<span style={{fontSize:9,fontWeight:700,color:C.azulInfo,marginLeft:6}}>Redactando con IA…</span>}
           {ev.ia&&<span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.greenBg,color:C.greenText,marginLeft:6,letterSpacing:'.02em'}}>✨ IA</span>}
+          {ev.fecha&&<span style={{fontSize:9,color:C.done,marginLeft:6}}>{fFecha(ev.fecha)}</span>}
           {ev.client_id ? <div onClick={()=>cliOpen(ev.client_id)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(ev.client_id)}</div>
             : <div style={{margin:'7px 0 4px'}}><input value={agq[ev.id]||''} onChange={e=>setAgq(q=>({...q,[ev.id]:e.target.value}))} placeholder='¿De qué cliente? Buscar…' style={{...inp,height:32,fontSize:12}}/>{(agq[ev.id]||'').trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:3,overflow:'hidden',maxHeight:120,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(agq[ev.id]))).slice(0,6).map(c=><div key={c.id} onClick={()=>{setAgenda(a=>a.map(x=>x.id===ev.id?{...x,client_id:String(c.id)}:x));setAgq(q=>({...q,[ev.id]:''}))}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</div>}
           <div style={{fontSize:11.5,color:ev.ia?C.text:C.muted,lineHeight:1.35}}>{ev.iaLoading ? <span style={{color:C.done}}>Leyendo el contenido y redactando la glosa…</span> : (ev.ia ? ev.glosa : ev.titulo)}</div>
