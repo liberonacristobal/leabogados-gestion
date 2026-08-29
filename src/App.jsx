@@ -20635,6 +20635,26 @@ async function escanearTareasGmail(clients=[], onProgress){
   return out
 }
 
+// Lee el último correo "VALORES MM-YYYY" de la contadora y la IA extrae los costos del mes (Cotizaciones→Leyes sociales, IVA=PPM→Impuestos, Contadora→Remuneraciones) con monto y fecha. PROD (Gmail + IA); compuerta humana en la UI.
+async function leerValoresClaudia(){
+  const token=await driveToken()
+  if(!token){ const e=new Error('Sin token de Google'); e.code=401; throw e }
+  const q=encodeURIComponent('from:clsvsaez6@hotmail.com subject:VALORES')
+  const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=3`,{headers:{Authorization:'Bearer '+token}})
+  if(!r.ok){ const e=new Error('Gmail '+r.status); e.code=r.status; throw e }
+  const j=await r.json(); const id=(j.messages||[])[0]?.id
+  if(!id) return null
+  const rm=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,{headers:{Authorization:'Bearer '+token}})
+  if(!rm.ok){ const e=new Error('Gmail '+rm.status); e.code=rm.status; throw e }
+  const jm=await rm.json()
+  const H={}; (jm.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
+  const subject=H['subject']||''; const body=extraerTextoGmail(jm)||''
+  const prompt=`De este correo de la contadora del estudio (asunto "${subject}"), extrae los costos a pagar del mes. IMPORTANTE: lo que ella llama "IVA" es en realidad el PPM. Devuelve SOLO un JSON array, sin texto extra: [{"item":"Cotizaciones Sueldos","categoria":"Leyes sociales","monto":2076519,"vence":"YYYY-MM-DD o null"}]. Categorías válidas EXACTAS: "Leyes sociales" (para cotizaciones/imposiciones), "Impuestos y patentes" (para PPM o lo que ella llame IVA), "Remuneraciones" (para contadora o sueldos). El monto es un número entero, sin puntos ni signos. La fecha del correo puede decir "se paga el jueves 20-08" → 2026-08-20. No inventes nada que no esté en el correo.\n\nCORREO:\n${String(body).slice(0,3000)}`
+  const data=await claudeCall({model:'claude-opus-4-8',max_tokens:900,messages:[{role:'user',content:prompt}]})
+  const arr=JSON.parse((data.content?.[0]?.text||'').match(/\[[\s\S]*\]/)?.[0]||'[]')
+  return { subject, mes:(subject.match(/(\d{2}-\d{4})/)||[])[1]||'', items:(arr||[]).filter(o=>o&&o.item&&Number(o.monto)>0).map(o=>({item:String(o.item),categoria:String(o.categoria||'Impuestos y patentes'),monto:Math.round(Number(o.monto)||0),vence:(/^\d{4}-\d{2}-\d{2}$/.test(o.vence||'')?o.vence:null)})) }
+}
+
 // Captura automática de horas (client-side): correos ENVIADOS (trabajo hecho) + documentos de Drive modificados
 // hace poco. Devuelve propuestas {source,source_ref,client_id,glosa,horas,fecha,tag}; el humano confirma/edita (compuerta).
 // Heurística sobria: correo = 0,2 h c/u (agrupa por cliente y día); documento = 0,5 h. Nunca inventa horas ni cliente.
@@ -23118,6 +23138,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
   const [costosOfi,setCostosOfi] = useState([])  // presupuesto de oficina, para cruzar cargos ↔ línea de costo (por monto exacto + glosa)
   useEffect(()=>{ if(DEMO){ setCostosOfi([{categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000},{categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Impuestos y patentes',item:'PPM',monto:800000},{categoria:'Remuneraciones',item:'Martín Campero',monto:1679268}]); return } supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfi(data||[]),()=>{}) },[])
+  const [costosClaudia,setCostosClaudia] = useState([])   // costos EXACTOS del mes leídos del correo "VALORES" de la contadora (alimentan el cruce)
+  const [valoresBusy,setValoresBusy] = useState(false); const [valoresInfo,setValoresInfo] = useState(null)
+  const leerValores = async()=>{ if(valoresBusy) return; setValoresBusy(true); setValoresInfo(null)
+    try{ const r=await leerValoresClaudia()
+      if(!r||!r.items.length){ setValoresInfo({err:'No encontré un correo "VALORES" de la contadora, o no pude leer los montos.'}); }
+      else { setCostosClaudia(r.items); setValoresInfo({mes:r.mes,n:r.items.length,items:r.items}) }
+    }catch(e){ setValoresInfo({err: e?.code===401?'Reconéctate a Google (falta permiso de Gmail).':'No se pudo leer: '+(e?.message||'reintenta')}) }
+    setValoresBusy(false)
+  }
+  const poolCostos = useMemo(()=>[...(costosClaudia||[]), ...(costosOfi||[])], [costosClaudia, costosOfi])   // primero los exactos del correo, luego el presupuesto
   const [gcFor,setGcFor] = useState(null)        // Fase 3.D: cargo en flujo "por cuenta de cliente" (mov id)
   const [gcCli,setGcCli] = useState(null)        // cliente elegido para el gasto por cuenta de cliente
   const [gcEnt,setGcEnt] = useState(null)        // razón social elegida para ese gasto
@@ -24121,22 +24151,22 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Cruce del cargo con el PRESUPUESTO de oficina: el monto del cargo calza (exacto) con una línea del presupuesto vigente ese mes → la sugiere.
   const _glosaHas = (desc,item,cat) => { const nz=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); const g=nz(desc); const words=(nz(item)+' '+nz(cat)).split(/[^a-z0-9]+/).filter(w=>w.length>=4); return words.some(w=>g.includes(w)) }
   const matchPresupuesto = m => {
-    if(m.tipo!=='cargo'||m.es_interno||!(costosOfi||[]).length) return null
+    if(m.tipo!=='cargo'||m.es_interno||!(poolCostos||[]).length) return null
     const abs=Math.abs(Number(m.monto)||0); if(abs<=0) return null
     const ym=String(m.fecha||'').slice(0,7)||new Date().toISOString().slice(0,7)
     const eff=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
-    const exact=(costosOfi||[]).filter(r=>!r.es_ingreso && Math.round(Number(eff(r))||0)===Math.round(abs))
+    const exact=(poolCostos||[]).filter(r=>!r.es_ingreso && Math.round(Number(eff(r))||0)===Math.round(abs))
     if(!exact.length) return null
     const pick=exact.find(r=>_glosaHas(m.descripcion,r.item,r.categoria))||exact[0]
     return {fam:'oficina', category:pick.categoria, sub:pick.item, via:'presupuesto'}
   }
   // Cargo AGRUPADO: el monto del cargo = suma EXACTA de 2-3 líneas del presupuesto (pago único por el total) → propone repartirlo.
   const matchGrupoPresupuesto = m => {
-    if(m.tipo!=='cargo'||m.es_interno||!(costosOfi||[]).length) return null
+    if(m.tipo!=='cargo'||m.es_interno||!(poolCostos||[]).length) return null
     const abs=Math.round(Math.abs(Number(m.monto)||0)); if(abs<=0) return null
     const ym=String(m.fecha||'').slice(0,7)||new Date().toISOString().slice(0,7)
     const eff=r=>Math.round(Number((r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto)||0)
-    const it=(costosOfi||[]).filter(r=>!r.es_ingreso && eff(r)>0).map(r=>({categoria:r.categoria,item:r.item,monto:eff(r)}))
+    const it=(poolCostos||[]).filter(r=>!r.es_ingreso && eff(r)>0).map(r=>({categoria:r.categoria,item:r.item,monto:eff(r)}))
     for(let i=0;i<it.length;i++) for(let j=i+1;j<it.length;j++){ if(it[i].monto+it[j].monto===abs) return {items:[it[i],it[j]]} }
     for(let i=0;i<it.length;i++) for(let j=i+1;j<it.length;j++) for(let k=j+1;k<it.length;k++){ if(it[i].monto+it[j].monto+it[k].monto===abs) return {items:[it[i],it[j],it[k]]} }
     return null
@@ -24775,6 +24805,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             </div>
           )
         })()}
+
+        {/* Leer los "VALORES" de la contadora: la IA extrae los costos exactos del mes → alimentan el cruce cargo↔presupuesto (incl. pagos agrupados). */}
+        {sub==='cargos'&&<div style={{background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:9}}>
+            <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={15} c={C.accent}/></span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent}}>Valores del mes (contadora)</div><div style={{fontSize:9.5,color:C.muted}}>{costosClaudia.length?`${costosClaudia.length} costos leídos · cruzan con los cargos`:'lee el correo "VALORES" y cruza los montos del mes'}</div></div>
+            <button disabled={valoresBusy} onClick={leerValores} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:valoresBusy?'default':'pointer',flexShrink:0}}>{valoresBusy?'Leyendo…':'Leer valores'}</button>
+          </div>
+          {valoresInfo&&(valoresInfo.err
+            ? <div style={{fontSize:10.5,color:C.overdueText,marginTop:7}}>{valoresInfo.err}</div>
+            : <div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:7}}>{valoresInfo.items.map((it,ix)=>(<div key={ix} style={{display:'flex',justifyContent:'space-between',fontSize:10.5,padding:'2px 0'}}><span style={{color:C.text}}>{it.item} <span style={{color:C.done}}>· {it.categoria}</span>{it.vence?<span style={{color:C.soonText}}> · vence {it.vence}</span>:''}</span><span style={{fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtM(it.monto)}</span></div>))}<div style={{fontSize:9,color:C.done,marginTop:5}}>Ya cruzan con los cargos del banco (montos exactos + pagos agrupados).</div></div>)}
+        </div>}
 
         {/* Conciliar en lote: calces exactos y únicos de una; el resto (varios candidatos / sin factura) se cuenta y se resuelve abajo. */}
         {sub==='abonos'&&(()=>{
