@@ -3205,6 +3205,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const cubrePct=costosOfiAnual>0?Math.min(100,Math.round(ingYTD/costosOfiAnual*100)):0
         const faltaBE=Math.max(0,costosOfiAnual-ingYTD)
         const pos=resultado>=0
+        const proyR=(ingYTD+proyIngresosDash)-costosOfiAnual   // ⑤ utilidad proyectada a dic = cobrado + por cobrar/programado − costos del año
         return (<>
           {lvlLabel('Resultado de la firma')}
           <div style={{padding:'6px 20px 0'}}>
@@ -3220,6 +3221,10 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               </div>
               <div style={{height:10,borderRadius:6,background:C.border,overflow:'hidden'}}><div style={{width:cubrePct+'%',height:'100%',background:cubrePct>=100?C.normal:C.accent,transition:'width .3s'}}/></div>
               <div style={{fontSize:10,color:C.muted,marginTop:6}}>{cubrePct>=100?'Estructura anual cubierta · lo demás es utilidad':`Cubres ${fmtMon(ingYTD)} de ${fmtMon(costosOfiAnual)} de estructura anual · faltan ${fmtMon(faltaBE)}`}</div>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,padding:'10px 13px',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>
+              <div><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Proyección a diciembre</div><div style={{fontSize:9.5,color:C.done,marginTop:1}}>cobrado + por cobrar/programado − costos del año</div></div>
+              <div style={{fontSize:16,fontWeight:800,color:proyR>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{proyR>=0?'':'−'}{fmtMon(Math.abs(proyR))}</div>
             </div>
           </div>
         </>)
