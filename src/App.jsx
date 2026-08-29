@@ -8677,8 +8677,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   const rol=(m.rol_cuenta==='gastos'?'GASTOS':'HONORARIOS')
                   return (
                   <div key={m.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:8}}>
-                    <div style={{fontSize:14,fontWeight:600,color:C.accent,marginBottom:9}}>{cliName}</div>
-                    {facturas.map(f=>{
+                    <div style={{fontSize:14,fontWeight:600,color:C.accent,marginBottom:2}}>{cliName}</div>
+                    <div style={{fontSize:9.5,color:C.muted,marginBottom:9}}>Mismo monto en {facturas.length} facturas · <b style={{color:C.accent}}>se sugiere la más antigua</b> (se cobra primero lo más viejo)</div>
+                    {[...facturas].sort((a,b)=>String(a.issued_at||a.due||'').localeCompare(String(b.issued_at||b.due||''))).map((f,fi)=>{
+                      const esFifo=fi===0   // la más antigua = sugerida (FIFO): se salda primero lo que lleva más tiempo pendiente
                       const rRut=f.receptor_rut||''
                       const rN=f.receptor_name||(rRut?clientEntities.find(e=>nrG(e.rut)===nrG(rRut))?.name:'')||''
                       const sameRut=!!rRut&&!!m.rut_contraparte&&nrG(rRut)===nrG(m.rut_contraparte)
@@ -8692,8 +8694,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                             <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}</div>
                             <div style={{fontSize:10,color:C.muted}}>{m.rut_contraparte||''}</div>
                           </div>
-                          <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px',minWidth:0,overflow:'hidden',border:(rRut&&!sameRut)?`1px solid ${C.soon}`:'1px solid transparent'}}>
-                            <div style={{fontSize:9,fontWeight:700,color:C.muted,marginBottom:4,letterSpacing:'.2px'}}>FACTURA N° {folioN(f.invoice_no)}</div>
+                          <div style={{background:esFifo?C.greenBg:C.bgSoft,borderRadius:9,padding:'8px 9px',minWidth:0,overflow:'hidden',border:esFifo?`1px solid ${C.normal}`:((rRut&&!sameRut)?`1px solid ${C.soon}`:'1px solid transparent')}}>
+                            <div style={{fontSize:9,fontWeight:700,color:C.muted,marginBottom:4,letterSpacing:'.2px',display:'flex',alignItems:'center',gap:5}}>FACTURA N° {folioN(f.invoice_no)}{esFifo&&<span style={{fontSize:8,fontWeight:800,color:C.greenText,background:'#fff',borderRadius:20,padding:'1px 6px'}}>más antigua · sugerida</span>}</div>
                             <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(saldoBill(f))}</div>
                             <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(f.issued_at)}</div>
                             <div style={{fontSize:10,fontWeight:sameRut?600:400,color:sameRut?C.greenText:(rRut?C.soonText:C.muted),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rN||'sin RS'}</div>
@@ -8703,7 +8705,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                         </div>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:7,gap:8}}>
                           {contested?<span style={{fontSize:9,fontWeight:600,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>Otro abono también la reclama</span>:<span/>}
-                          <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 14px',cursor:pagoBusy?'default':'pointer',flexShrink:0}}>Conciliar</button>
+                          <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:11,fontWeight:esFifo?800:600,color:'#fff',background:esFifo?C.normal:C.accent,border:'none',borderRadius:8,padding:'6px 14px',cursor:pagoBusy?'default':'pointer',flexShrink:0}}>Conciliar{esFifo?' (sugerida)':''}</button>
                         </div>
                       </div>)})}
                     {otraFor!==m.id
