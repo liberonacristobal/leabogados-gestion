@@ -21495,6 +21495,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const [mView,setMView] = useState('semana')   // semana | mes
   const [metas,setMetas] = useState({})         // meta horas/semana por persona
   const [metaEdit,setMetaEdit] = useState(null)
+  const [metaUnit,setMetaUnit] = useState('semana')   // ajustable: la meta se ingresa en h/día o h/semana (se guarda semanal)
   useEffect(()=>{
     if(DEMO){ setMetas({'Cristóbal':40,'Erasmo':40,'Martín':40,'Martina':40,'Rodrigo':30}); return }
     supabase.from('learnings').select('key,value').eq('kind','meta_horas').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setMetas(m) },()=>{})
@@ -21536,7 +21537,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   // ── Apuesta 3 f1 — Margen real por cliente: ingreso (honorario) − costo (horas × costo/hora del abogado, en pesos). ──
   const [costoHora,setCostoHora] = useState({})   // nombre → costo/hora en pesos (lo define el usuario)
   const [costosOpen,setCostosOpen] = useState(false)
-  useEffect(()=>{ if(DEMO){ setCostoHora({'Cristóbal':18000,'Erasmo':18000,'Martín':11250,'Martina':6159,'Rodrigo':11250}); return } supabase.from('learnings').select('key,value').eq('kind','costo_hora').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setCostoHora(m) },()=>{}) },[])
+  useEffect(()=>{ if(DEMO){ setCostoHora({'Cristóbal':18000,'Erasmo':18000,'Martín':11250,'Martina':6159}); return } supabase.from('learnings').select('key,value').eq('kind','costo_hora').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setCostoHora(m) },()=>{}) },[])
   async function setCosto(name,val){ const v=Math.max(0,Math.round(parseFloat(val)||0)); setCostoHora(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','costo_hora').eq('key',name); await supabase.from('learnings').insert({kind:'costo_hora',key:name,value:String(v)}) }catch(_){} }
   const hayCostos = Object.values(costoHora).some(v=>Number(v)>0)
   // ── Apuesta 3 f2 — Costo CARGADO: suma el overhead de oficina (Costos de Oficina, sin remuneraciones) prorrateado por hora. ──
@@ -21549,8 +21550,9 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfi(data||[]),()=>{}) },[])
   const effCosto = r => (r.desde && ym0mes < String(r.desde).slice(0,7)) ? (r.monto_prev??r.monto) : r.monto
   const overheadMes = costosOfi.filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).reduce((a,r)=>a+(r.es_ingreso?-1:1)*effCosto(r),0)
-  const metasSemTot = EQUIPO.reduce((a,n)=>a+(Number(metas[n])||0),0)
-  const capacidadMes = metasSemTot*4.33 || (DEMO?700:0)   // horas/mes del equipo (Σ metas semanales ×4,33)
+  // Solo el equipo CON COSTO (costo/hora definido) absorbe el overhead — excluye colaboradores externos (ej. quien no genera costo de oficina). Configurable, sin nombres cableados.
+  const metasSemTot = EQUIPO.filter(n=>Number(costoHora[n])>0).reduce((a,n)=>a+(Number(metas[n])||0),0)
+  const capacidadMes = metasSemTot*4.33 || (DEMO?560:0)   // horas/mes del equipo con costo (Σ metas semanales ×4,33)
   const overheadHora = capacidadMes>0 ? overheadMes/capacidadMes : 0
   const hayOverhead = overheadMes>0 && capacidadMes>0
   const margenData = useMemo(()=> permanentes.map(({cid,sale})=>{
@@ -21641,7 +21643,12 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             <div style={{height:8,borderRadius:5,background:C.bgSoft,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:Math.min(100,pct)+'%',background:util,borderRadius:5}}/></div>
             <div style={{fontSize:10,color:C.done,marginTop:5,display:'flex',justifyContent:'space-between'}}><span>{fh(real)} de {meta?fh(meta):'—'} · {book} tarea{book!==1?'s':''} abierta{book!==1?'s':''}</span><span onClick={()=>setMetaEdit(metaEdit===name?null:name)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>meta</span></div>
             {real>0 && <div style={{fontSize:9.5,marginTop:3,fontWeight:600,color:factPct>=70?C.greenText:factPct>=40?C.soonText:C.overdueText}}>{fh(fact)} facturables · {factPct}% del tiempo{factPct<70?' · revisar':''}</div>}
-            {metaEdit===name && <div style={{marginTop:7,display:'flex',gap:7,alignItems:'center'}}><span style={{fontSize:11,color:C.muted}}>Meta h/semana</span><input type='number' defaultValue={metas[name]||''} onBlur={e=>{setMeta(name,e.target.value);setMetaEdit(null)}} style={{...inp,height:32,width:80,textAlign:'right'}} autoFocus/></div>}
+            {metaEdit===name && (()=>{ const dia=metaUnit==='dia'; const wk=Number(metas[name])||0; return <div style={{marginTop:7,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
+              <span style={{fontSize:11,color:C.muted}}>Meta</span>
+              <input key={name+metaUnit} type='number' step='0.5' defaultValue={dia?(wk?+(wk/5).toFixed(1):''):(wk||'')} onBlur={e=>{ const v=parseFloat(e.target.value)||0; setMeta(name, dia? Math.round(v*5*10)/10 : v); setMetaEdit(null) }} style={{...inp,height:32,width:72,textAlign:'right'}} autoFocus/>
+              <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:7,overflow:'hidden'}}>{[['dia','h/día'],['semana','h/sem']].map(([u,l])=><span key={u} onMouseDown={e=>{e.preventDefault();setMetaUnit(u)}} style={{fontSize:10.5,padding:'6px 9px',fontWeight:700,cursor:'pointer',background:metaUnit===u?C.accent:'#fff',color:metaUnit===u?'#fff':C.muted}}>{l}</span>)}</div>
+              <span style={{fontSize:9.5,color:C.done}}>{dia?'× 5 días':'se guarda semanal'}</span>
+            </div> })()}
           </div>
         )})}
         {(()=>{ const libres=EQUIPO.filter(n=>{ const m=metaPeriodo(n); return m>0 && horasPeriodo(n)/m < 0.7 }); if(!libres.length) return null; return <div style={{background:C.greenBg,borderRadius:11,padding:'11px 12px',fontSize:11.5,color:C.greenText,lineHeight:1.5,marginTop:2}}><b style={{color:C.accent}}>{libres.join(', ')}</b> con holgura {mView==='mes'?'este mes':'esta semana'}. Buen momento para ofrecer más al cliente o tomar un nuevo encargo.</div> })()}
