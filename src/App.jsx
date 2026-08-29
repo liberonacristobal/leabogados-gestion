@@ -20932,7 +20932,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
   const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' h'
   useEffect(()=>{
     if(DEMO){ setHoras(demoData.horas||[]); setTarifaUF(3); setUfAnio(UF_FALLBACK); setDecid({}); return }
-    supabase.from('horas').select('client_id,fecha,horas').gte('fecha',anio+'-01-01').then(({data})=>{ if(data) setHoras(data) },()=>{})
+    supabase.from('horas').select('client_id,fecha,horas,billable').gte('fecha',anio+'-01-01').then(({data})=>{ if(data) setHoras(data) },()=>{})
     supabase.from('learnings').select('kind,key,value').in('kind',['config','repricing_decision']).then(({data})=>{ if(!data) return; const t=data.find(r=>r.kind==='config'&&r.key==='tarifa_hora_permanente_uf'); const u=data.find(r=>r.kind==='config'&&r.key==='uf_anio_'+anio); if(t&&parseFloat(t.value)>0) setTarifaUF(parseFloat(t.value)); if(u&&parseFloat(u.value)>0) setUfAnio(parseFloat(u.value)); const d={}; data.forEach(r=>{ if(r.kind==='repricing_decision') d[r.key]=r.value }); setDecid(d) },()=>{})
   },[])
   const ufAnioEff = ufAnio>0?ufAnio:ufHoy
@@ -20940,9 +20940,9 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
   const recos = useMemo(()=> permanentes.map(({cid,s})=>{
     const feeUF = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s.amount_uf)||0)
     const incl = feeUF>0 ? Math.ceil(feeUF/(tarifaUF||3)) : 0
-    const hCli = horas.filter(h=>String(h.client_id)===String(cid))
+    const hCli = horas.filter(h=>String(h.client_id)===String(cid) && h.billable!==false)   // D2: se repriza sobre lo FACTURABLE (lo que cobrarías)
     const totYear = hCli.reduce((a,h)=>a+(Number(h.horas)||0),0)
-    const activos = new Set(hCli.map(h=>String(h.fecha||'').slice(0,7)).filter(Boolean)).size   // meses con actividad
+    const activos = new Set(hCli.map(h=>String(h.fecha||'').slice(0,7)).filter(Boolean)).size   // meses con actividad facturable
     const avg = activos>0 ? totYear/activos : 0
     const recUF = Math.max(feeUF, Math.ceil(avg)*(tarifaUF||3))
     const subir = recUF > feeUF + .01 && avg>0
@@ -21259,14 +21259,16 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const mesesYTD = (new Date().getMonth()+1)
   const ytdData = permanentes.map(({cid,sale})=>{ const estMes=estDe(sale); const est=estMes*mesesYTD; const valorUF=tarifaUF||3
     const hCli=horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct); const cons=hCli.reduce((a,h)=>a+(Number(h.horas)||0),0)
-    // Excedente = suma de sobre-cupos MENSUALES (el balde se llena cada mes; no netear meses bajos con altos).
-    let excesoMeses=0; for(let m=1;m<=mesesYTD;m++){ const mm=anioAct+'-'+String(m).padStart(2,'0'); const cm=hCli.filter(h=>String(h.fecha||'').slice(0,7)===mm).reduce((a,h)=>a+(Number(h.horas)||0),0); excesoMeses+=Math.max(0,cm-estMes) }
-    const exCLP=Math.round(excesoMeses*valorUF*ufHoy); return { cid, est, cons, over:cons>est, exceso:excesoMeses, valorUF, exCLP, sinCfg:estMes<=0 } })
+    // Sobre-cupos MENSUALES (el balde se llena cada mes; no netear). `exceso`=sobre-trabajo TOTAL (esfuerzo);
+    // `excesoFact`=lo FACTURABLE de ese sobre-trabajo (lo que podrías cobrar; cobrarlo es opcional).
+    let excesoMeses=0, excesoFactMeses=0
+    for(let m=1;m<=mesesYTD;m++){ const mm=anioAct+'-'+String(m).padStart(2,'0'); const hm=hCli.filter(h=>String(h.fecha||'').slice(0,7)===mm); const cm=hm.reduce((a,h)=>a+(Number(h.horas)||0),0); const cmF=hm.filter(h=>h.billable!==false).reduce((a,h)=>a+(Number(h.horas)||0),0); excesoMeses+=Math.max(0,cm-estMes); excesoFactMeses+=Math.max(0,cmF-estMes) }
+    const exCLP=Math.round(excesoFactMeses*valorUF*ufHoy); return { cid, est, cons, over:cons>est, exceso:excesoMeses, excesoFact:excesoFactMeses, valorUF, exCLP, sinCfg:estMes<=0 } })
   const excedenteYTD = ytdData.reduce((a,d)=>a+(d.exCLP||0),0)
   const exportYTD = () => {
     const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#537281'}'>${d.exCLP>0?f0(d.exCLP):'—'}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#0F6E56'}'>${d.exCLP>0?'Reajustar':'OK'}</td></tr>`).join('')
-    const heroExc = excedenteYTD>0?`<div style='background:#F5F7F9;border-radius:8px;padding:12px 14px;margin-bottom:16px'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#537281;font-weight:700'>Excedente no facturado · ${anioAct}</div><div style='font-size:22px;font-weight:800;color:#003C50;margin-top:2px'>${f0(excedenteYTD)}</div><div style='font-size:10px;color:#537281;margin-top:2px'>Horas trabajadas por sobre lo pactado cada mes, a tu valor hora excedente. Base para el reajuste ${Number(anioAct)+1}.</div></div>`:''
-    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>${BRAND.nombre}</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'>${heroExc}<table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Incluidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Consumidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Sin facturar</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno del estudio — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const heroExc = excedenteYTD>0?`<div style='background:#F5F7F9;border-radius:8px;padding:12px 14px;margin-bottom:16px'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#537281;font-weight:700'>Podrías haber facturado · ${anioAct}</div><div style='font-size:22px;font-weight:800;color:#003C50;margin-top:2px'>${f0(excedenteYTD)}</div><div style='font-size:10px;color:#537281;margin-top:2px'>Trabajo facturable por sobre lo incluido cada mes, a tu valor hora (cobrarlo es opcional). Base para el reajuste ${Number(anioAct)+1}.</div></div>`:''
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>${BRAND.nombre}</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'>${heroExc}<table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Incluidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Consumidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Podrías facturar</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno del estudio — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
   const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
@@ -21283,6 +21285,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     return Object.entries(by).filter(([cid])=> !desc.has('coord:'+cid) && !horas.some(h=>h.source==='coordinacion'&&String(h.client_id)===cid&&h.fecha===hoy&&h.user_name===me)).map(([cid,ts])=>({cid,n:ts.length})) })()
   const registrarCoord = (cid,n) => addHora({ client_id:cid, fecha:hoy, horas:0.2, glosa:`Coordinación · delegación de ${n} tarea${n!==1?'s':''}`, source:'coordinacion', billable:true })
   const consumoMes = cid => horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  // D2 — consumo FACTURABLE del mes (excluye las horas marcadas no facturables). Base del "podrías facturar".
+  const consumoMesFact = cid => horas.filter(h=>String(h.client_id)===String(cid)&&h.billable!==false&&String(h.fecha||'').startsWith(mesActual)).reduce((a,h)=>a+(Number(h.horas)||0),0)
   // Excedente = inteligencia de repricing (no cobro): $ que no estamos cobrando según la propuesta (valor hora excedente).
   const excedenteCLP = (excesoH,valorUF) => Math.round((Number(excesoH)||0)*(Number(valorUF)||0)*ufHoy)
   const cliOpen = cid => onOpenClientFicha&&onOpenClientFicha(cid)
@@ -21395,9 +21399,9 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       {isAdmin && vista==='ytd' && <>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontSize:11,color:C.muted}}>YTD {anioAct} · para reajustar tarifas</span><button onClick={exportYTD} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:'pointer'}}>Exportar · uso interno</button></div>
         {excedenteYTD>0 && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:10,color:'#fff'}}>
-          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Excedente no facturado · {anioAct}</div>
+          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Podrías haber facturado · {anioAct}</div>
           <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(excedenteYTD)}</div>
-          <div style={{fontSize:10.5,opacity:.85,lineHeight:1.4}}>Horas trabajadas por sobre lo pactado cada mes, a tu valor hora excedente. Base para reajustar tarifas el próximo año.</div>
+          <div style={{fontSize:10.5,opacity:.85,lineHeight:1.4}}>Trabajo facturable por sobre lo incluido cada mes, a tu valor hora. Cobrarlo es opcional — es tu base para reajustar tarifas.</div>
         </div>}
         {ytdData.length===0 && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:14}}>Sin asesorías permanentes configuradas.</div>}
         {ytdData.map(d=>(
@@ -21410,7 +21414,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
                 <div style={{flex:1,textAlign:'center',background:d.over?C.overdueBg:C.greenBg,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:d.over?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{d.est>0?Math.round((d.est-d.cons)/d.est*100)+'%':'—'}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>Holgura</div></div>
               </div>
               <div style={{fontSize:10.5,fontWeight:600,marginTop:7,color:d.exceso>0?C.overdueText:C.greenText}}>{d.exceso>0
-                ? <>Excediste {fh(d.exceso)} en el año → <b>{f0(d.exCLP)}</b> sin facturar. Base para reajustar la tarifa.</>
+                ? <>Trabajaste <b>{fh(d.exceso)}</b> de más este año{d.excesoFact>0 ? <> · <b>{f0(d.exCLP)}</b> facturable que podrías cobrar (opcional)</> : <> · nada facturable por sobre lo incluido</>}. Base para reajustar la tarifa.</>
                 : 'Dentro de lo incluido — con espacio para ofrecer más.'}</div>
             </>}
           </div>
@@ -21527,7 +21531,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           </div>
         })()}
         <div style={lbl}>Asesorías permanentes · {mesLabel(mesActual)}</div>
-        {permanentes.map(({cid,sale})=>{ const cons=consumoMes(cid); const est=estDe(sale); const pct=est>0?Math.min(100,Math.round(cons/est*100)):0; const over=est>0&&cons>est; const fee=sale?.moneda==='UF'?('UF '+(parseFloat(sale.amount_uf)||0).toLocaleString('es-CL')):f0(sale?.amount_clp)
+        {permanentes.map(({cid,sale})=>{ const cons=consumoMes(cid); const consFact=consumoMesFact(cid); const est=estDe(sale); const pct=est>0?Math.min(100,Math.round(cons/est*100)):0; const over=est>0&&cons>est; const fee=sale?.moneda==='UF'?('UF '+(parseFloat(sale.amount_uf)||0).toLocaleString('es-CL')):f0(sale?.amount_clp)
           return (
           <div key={cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
@@ -21539,8 +21543,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               <div style={{display:'flex',justifyContent:'space-between',marginTop:7,fontSize:10.5,color:C.muted}}><span>Incluidas {fh(est)}</span><span>Consumidas {fh(cons)}</span><span style={{color:over?C.overdueText:C.greenText,fontWeight:600}}>{over?'Excedido '+fh(cons-est):'Saldo '+fh(est-cons)}</span></div>
               <div style={{fontSize:10,color:C.done,marginTop:4}}>{fee}/mes ÷ {tarifaUF} UF/h → {est} h incluidas{over?' · revisar tarifa':''}</div>
               {(()=>{ const diaMes=new Date().getDate(); const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate(); const rate=diaMes>0?cons/diaMes:0; if(est>0&&rate>0&&!over&&rate*diasMes>est){ const dia=Math.min(diasMes,Math.ceil(est/rate)); return <div style={{fontSize:10,color:C.soonText,marginTop:3}}>A este ritmo, agotas las {fh(est)} cerca del día {dia}.</div> } return null })()}
-              {over && (()=>{ const exceso=cons-est; const monto=excedenteCLP(exceso,tarifaUF); return (
-                <div style={{marginTop:8,fontSize:10.5,color:C.overdueText,lineHeight:1.4}}>Excediste <b>{fh(exceso)}</b> · <b>{f0(monto)}</b> sin facturar ({tarifaUF} UF/h). Base para reajustar la tarifa.</div>
+              {over && (()=>{ const exceso=cons-est; const excFact=Math.max(0,consFact-est); const monto=excedenteCLP(excFact,tarifaUF); return (
+                <div style={{marginTop:8,fontSize:10.5,color:C.overdueText,lineHeight:1.4}}>Excediste <b>{fh(exceso)}</b> este mes{excFact>0 ? <> · podrías facturar <b>{f0(monto)}</b> ({tarifaUF} UF/h) — opcional</> : <> · nada facturable por sobre lo incluido</>}. Base para reajustar la tarifa.</div>
               )})()}
               {isAdmin && (!rep || String(rep.cid)!==String(cid)) && <div onClick={()=>abrirReporte(cid)} style={{marginTop:9,fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer'}}>Reportar horas al cliente →</div>}
               {isAdmin && rep && String(rep.cid)===String(cid) && (()=>{ const ents=entriesRep(cid,rep.mes); const cons=ents.reduce((a,h)=>a+(Number(h.horas)||0),0); return (
