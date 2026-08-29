@@ -21317,7 +21317,7 @@ function extraerTextoGmail(msg){
   if(!t.trim()){ t = walk(msg?.payload,'text/html').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ') }
   return t.replace(/\r?\n/g,' ').replace(/&nbsp;/g,' ').trim()
 }
-function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, onOpenClientFicha }){
+function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, onOpenClientFicha, onOpenCostosOfi }){
   const me = currentUserName || ''
   const [horas,setHoras] = useState([])
   const [manual,setManual] = useState(false)
@@ -21542,7 +21542,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const hayCostos = Object.values(costoHora).some(v=>Number(v)>0)
   // ── Apuesta 3 f2 — Costo CARGADO: suma el overhead de oficina (Costos de Oficina, sin remuneraciones) prorrateado por hora. ──
   const [costosOfi,setCostosOfi] = useState([])
-  const [cargarOverhead,setCargarOverhead] = useState(false)
+  const [cargarOverhead,setCargarOverhead] = useState(true)   // por defecto el margen usa el costo CARGADO (real neto); el toggle permite ver solo-sueldo
   const ym0mes = new Date().toISOString().slice(0,7)
   useEffect(()=>{ if(DEMO){ setCostosOfi([
       {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:900000,es_ingreso:true},
@@ -21555,6 +21555,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const capacidadMes = metasSemTot*4.33 || (DEMO?560:0)   // horas/mes del equipo con costo (Σ metas semanales ×4,33)
   const overheadHora = capacidadMes>0 ? overheadMes/capacidadMes : 0
   const hayOverhead = overheadMes>0 && capacidadMes>0
+  const [ohOpen,setOhOpen] = useState(false)   // desglose del overhead por categoría (clickeable → Costos de Oficina)
+  const overheadPorCat = useMemo(()=>{ const m={}; costosOfi.filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).forEach(r=>{ m[r.categoria]=(m[r.categoria]||0)+(r.es_ingreso?-1:1)*effCosto(r) }); return Object.entries(m).map(([cat,mes])=>({cat,mes,hora:capacidadMes>0?mes/capacidadMes:0})).filter(x=>x.mes!==0).sort((a,b)=>b.mes-a.mes) },[costosOfi,capacidadMes])
   const margenData = useMemo(()=> permanentes.map(({cid,sale})=>{
     const feeUF = ventaUFmes(sale); const ingCLP = Math.round(feeUF*mesesYTD*ufHoy)
     const hCli = horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct)
@@ -21715,8 +21717,29 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             <span onClick={()=>setCostosOpen(o=>!o)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Costo/hora {costosOpen?'▴':'▾'}</span>
           </div>
           {costosOpen && <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px',marginBottom:9}}>
-            <div style={{fontSize:9.5,color:C.muted,marginBottom:6}}>Costo/hora por abogado, en pesos (sueldo costo-empresa ÷ horas del mes). El margen se recalcula.</div>
-            {EQUIPO.map(name=>(<div key={name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0'}}><span style={{fontSize:12,color:C.text}}>{name}</span><div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontSize:11,color:C.done}}>$</span><input key={name+':'+(costoHora[name]??'')} type='number' step='100' min='0' defaultValue={costoHora[name]||''} onBlur={e=>setCosto(name,e.target.value)} placeholder='—' style={{...inp,height:30,width:88,textAlign:'right',fontSize:12}}/><span style={{fontSize:10,color:C.done}}>/h</span></div></div>))}
+            <div style={{fontSize:9.5,color:C.muted,marginBottom:8}}>Editas el sueldo/hora (costo-empresa ÷ horas del mes). El overhead de oficina se suma solo → costo cargado. El margen se recalcula.</div>
+            {hayOverhead && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 11px',marginBottom:9}}>
+              <div onClick={()=>setOhOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
+                <div><div style={{fontSize:12,fontWeight:700,color:C.accent}}>Overhead de oficina</div><div style={{fontSize:9.5,color:C.muted,marginTop:1}}>{f0(overheadMes)}/mes ÷ {Math.round(capacidadMes)} h del equipo</div></div>
+                <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{f0(Math.round(overheadHora))}/h</div><span style={{fontSize:11,color:C.done}}>{ohOpen?'▴':'▾'}</span></div>
+              </div>
+              {ohOpen && <div style={{marginTop:9,borderTop:`1px dashed ${C.border}`,paddingTop:8}}>
+                {overheadPorCat.map(x=>(<div key={x.cat} onClick={()=>onOpenCostosOfi&&onOpenCostosOfi()} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',cursor:onOpenCostosOfi?'pointer':'default'}}><span style={{fontSize:11.5,color:C.text}}>{x.cat}</span><span style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11.5,fontWeight:600,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{f0(Math.round(x.hora))}/h</span>{onOpenCostosOfi&&<span style={{color:C.done,fontSize:12}}>›</span>}</span></div>))}
+                {onOpenCostosOfi&&<div onClick={()=>onOpenCostosOfi()} style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginTop:7,cursor:'pointer'}}>Ver y editar Costos de oficina →</div>}
+              </div>}
+            </div>}
+            {EQUIPO.map(name=>{ const s=Number(costoHora[name])||0; const tiene=s>0; const oh=(hayOverhead&&tiene)?overheadHora:0; const cargado=s+oh; const sPct=cargado>0?Math.round(s/cargado*100):0; return (
+              <div key={name} style={{borderTop:`0.5px solid ${C.border}`,padding:'8px 0'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:12,color:tiene?C.text:C.done}}>{name}</span>
+                  <div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontSize:11,color:C.done}}>$</span><input key={name+':'+(costoHora[name]??'')} type='number' step='100' min='0' defaultValue={costoHora[name]||''} onBlur={e=>setCosto(name,e.target.value)} placeholder='—' style={{...inp,height:30,width:82,textAlign:'right',fontSize:12}}/><span style={{fontSize:10,color:C.done}}>/h</span></div>
+                </div>
+                {tiene&&hayOverhead&&<>
+                  <div style={{height:13,borderRadius:4,background:'#fff',overflow:'hidden',display:'flex',margin:'6px 0 4px'}}><span style={{width:sPct+'%',background:C.accent}}/><span style={{flex:1,background:C.soonText}}/></div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.muted}}><span>sueldo {f0(s)} + oficina {f0(Math.round(oh))}</span><span style={{color:C.accent,fontWeight:800}}>{f0(Math.round(cargado))}/h cargado</span></div>
+                </>}
+              </div>
+            )})}
           </div>}
           {hayCostos && hayOverhead && <div style={{display:'flex',alignItems:'center',gap:9,background:C.bgSoft,borderRadius:10,padding:'9px 12px',marginBottom:9}}>
             <div style={{flex:1,minWidth:0}}>
@@ -27135,7 +27158,7 @@ export default function App() {
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
-            {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>setModal({type:'costosOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setTab('dashboard')}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>setModal({type:'costosOficina'})}/>}
