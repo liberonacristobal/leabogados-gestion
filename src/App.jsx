@@ -2670,6 +2670,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   },[ingConc,ingAbonos,billing,anticipos,sales,selYear])
   // Meta de cobranza del año (annual_targets.collection_target). % y faltante para la foto de ingresos.
   const metaCobranza = Number(targets.find(t=>t.year===selYear)?.collection_target) || 0
+  // Facturado del año = emitidas (con folio) del año, monto del DTE (fuente única montoFactura). Por sale.year, cae al año del vencimiento.
+  const facturadoYr = useMemo(()=>{ const syById={}; sales.forEach(s=>{ if(s.year!=null) syById[String(s.id)]=s.year }); return (billing||[]).filter(b=> b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && !['reembolso','nota_credito'].includes(b.billing_type) && ((syById[String(b.sale_id)] ?? (b.due?Number(String(b.due).slice(0,4)):null))===selYear)).reduce((a,b)=>a+montoFactura(b),0) },[billing,sales,selYear])
   const [ingDrill,setIngDrill] = usePersistedState('d_ingdrill',null)   // año de venta cuyo detalle (facturas) está abierto ('sin' = sin año)
   const [convOpen,setConvOpen] = usePersistedState('d_conv',false)      // explicación de la conversión desplegada
   // Años con meta cargada O con ventas registradas (así 2025/2024 aparecen al ingresar sus ventas, sin necesidad de meta)
@@ -2897,6 +2899,50 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
             </div>
           </div>
         )
+      })()}
+
+      {/* ESTADO DEL NEGOCIO — embudo Vender→Facturar→Cobrar→Ganar. Reusa fuentes únicas (metricasAnio, ingresosPorAnioVenta, aging, costos). */}
+      {(m.bruto>0||costosOfiAnual>0)&&(()=>{
+        const ingYTD=ingresosPorAnioVenta.total||0
+        const resultado=ingYTD-costosOfiYTD
+        const proyR=(ingYTD+proyIngresosDash)-costosOfiAnual
+        const pos=resultado>=0
+        const ventaPct=metaUF>0?Math.min(100,Math.round(m.brutoUF/metaUF*100)):0   // MISMO % que "Cómo va el año" (brutoUF/metaUF), para no mostrar dos cifras distintas
+        const factPct=m.bruto>0?Math.min(100,Math.round(facturadoYr/m.bruto*100)):0
+        const cobroPct=metaCobranza>0?Math.min(100,Math.round(ingYTD/metaCobranza*100)):0
+        const bePct=costosOfiAnual>0?Math.min(100,Math.round(ingYTD/costosOfiAnual*100)):0
+        const margenPct=ingYTD>0?Math.round(resultado/ingYTD*100):0
+        const vencido=agingData?.buckets?.overdue?.monto||0
+        const stepEl=(o)=>(
+          <div onClick={o.go} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px',marginBottom:6,cursor:o.go?'pointer':'default'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+              <span style={{fontSize:9,fontWeight:800,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>{o.stage}</span>
+              {o.pill&&<span style={{fontSize:10,fontWeight:800,padding:'2px 8px',borderRadius:20,color:o.pc,background:o.pb}}>{o.pill}</span>}
+            </div>
+            <div style={{fontSize:18,fontWeight:800,color:C.accent,lineHeight:1.05,margin:'2px 0',fontVariantNumeric:'tabular-nums'}}>{o.val}</div>
+            {o.pct!=null&&<div style={{height:6,borderRadius:4,background:C.bgSoft,overflow:'hidden',margin:'6px 0 3px'}}><span style={{display:'block',height:'100%',width:o.pct+'%',background:o.bar}}/></div>}
+            {o.sub&&<div style={{fontSize:9,color:C.muted}}>{o.sub}</div>}
+          </div>
+        )
+        const connEl=(txt,col,bg)=><div style={{textAlign:'center',margin:'-1px 0 4px'}}><span style={{fontSize:8.5,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'2px 9px'}}>↓ {txt}</span></div>
+        return (<>
+          {lvlLabel('Estado del negocio')}
+          <div style={{padding:'6px 20px 0'}}>
+            {m.bruto>0&&stepEl({stage:'1 · Vendido',val:vMon(m.brutoUF,m.bruto),pill:m.meta>0?ventaPct+'% meta':null,pc:C.accent,pb:C.azulBg,pct:m.meta>0?ventaPct:null,bar:C.accent,sub:m.meta>0?`Meta ${vMon(metaUF,m.meta)}`:'sin meta de venta',go:()=>setTab('sales')})}
+            {m.bruto>0&&facturadoYr>0&&connEl(`facturado ${factPct}% de lo vendido`,C.azulInfo,C.azulBg)}
+            {stepEl({stage:'2 · Cobrado',val:fmtMon(ingYTD),pill:metaCobranza>0?cobroPct+'% meta':null,pc:C.greenText,pb:C.greenBg,pct:metaCobranza>0?cobroPct:null,bar:C.greenText,sub:metaCobranza>0?`Meta ${fmtMon(metaCobranza)} · por cobrar ${fmtMon(totalPorCobrar)}`:`por cobrar ${fmtMon(totalPorCobrar)}`,go:()=>setTab('cobranza')})}
+            {vencido>0?connEl(`vencido ${fmtMon(vencido)}`,C.overdueText,C.overdueBg):(costosOfiYTD>0&&connEl(`− costos ${fmtMon(costosOfiYTD)}`,C.muted,C.bgSoft))}
+            {costosOfiAnual>0&&<div onClick={onOpenCostosOfi} style={{background:pos?C.greenText:C.overdue,color:'#fff',borderRadius:13,padding:'12px 14px',marginBottom:6,cursor:onOpenCostosOfi?'pointer':'default'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.05em',opacity:.85}}>3 · Resultado {selYear} · {pos?'utilidad':'pérdida'}</span>{ingYTD>0&&<span style={{fontSize:10,fontWeight:800,opacity:.9}}>margen {margenPct}%</span>}</div>
+              <div style={{fontSize:24,fontWeight:800,margin:'2px 0',fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmtMon(Math.abs(resultado))}</div>
+              <div style={{fontSize:9,opacity:.9}}>Ingresos {fmtMon(ingYTD)} − costos {fmtMon(costosOfiYTD)} · estructura {bePct}% cubierta</div>
+            </div>}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px'}}>
+              <div><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Proyección a diciembre</div><div style={{fontSize:8.5,color:C.done}}>si cobras lo pendiente</div></div>
+              <div style={{fontSize:15,fontWeight:800,color:proyR>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{proyR>=0?'':'−'}{fmtMon(Math.abs(proyR))}</div>
+            </div>
+          </div>
+        </>)
       })()}
 
       {/* Meta anual */}
@@ -3198,37 +3244,6 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         )
       })()}
 
-      {/* ① Resultado de la firma (P&L en vivo) + ② break-even. Ingresos cobrados YTD − costos de oficina YTD. */}
-      {costosOfiAnual>0&&(()=>{
-        const ingYTD=ingresosPorAnioVenta.total||0
-        const resultado=ingYTD-costosOfiYTD
-        const cubrePct=costosOfiAnual>0?Math.min(100,Math.round(ingYTD/costosOfiAnual*100)):0
-        const faltaBE=Math.max(0,costosOfiAnual-ingYTD)
-        const pos=resultado>=0
-        const proyR=(ingYTD+proyIngresosDash)-costosOfiAnual   // ⑤ utilidad proyectada a dic = cobrado + por cobrar/programado − costos del año
-        return (<>
-          {lvlLabel('Resultado de la firma')}
-          <div style={{padding:'6px 20px 0'}}>
-            <div onClick={onOpenCostosOfi} style={{background:pos?C.greenText:C.overdue,color:'#fff',borderRadius:14,padding:'14px 16px',cursor:onOpenCostosOfi?'pointer':'default'}}>
-              <div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',opacity:.85}}>Resultado {selYear} · {pos?'utilidad':'pérdida'}</div>
-              <div style={{fontSize:26,fontWeight:800,lineHeight:1.05,margin:'3px 0 2px',fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmtMon(Math.abs(resultado))}</div>
-              <div style={{fontSize:10.5,opacity:.9}}>Ingresos cobrados {fmtMon(ingYTD)} − costos {fmtMon(costosOfiYTD)}</div>
-            </div>
-            <div style={{background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginTop:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
-                <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Punto de equilibrio</span>
-                <span style={{fontSize:11,fontWeight:700,color:cubrePct>=100?C.greenText:C.accent}}>{cubrePct}%</span>
-              </div>
-              <div style={{height:10,borderRadius:6,background:C.border,overflow:'hidden'}}><div style={{width:cubrePct+'%',height:'100%',background:cubrePct>=100?C.normal:C.accent,transition:'width .3s'}}/></div>
-              <div style={{fontSize:10,color:C.muted,marginTop:6}}>{cubrePct>=100?'Estructura anual cubierta · lo demás es utilidad':`Cubres ${fmtMon(ingYTD)} de ${fmtMon(costosOfiAnual)} de estructura anual · faltan ${fmtMon(faltaBE)}`}</div>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,padding:'10px 13px',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>
-              <div><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Proyección a diciembre</div><div style={{fontSize:9.5,color:C.done,marginTop:1}}>cobrado + por cobrar/programado − costos del año</div></div>
-              <div style={{fontSize:16,fontWeight:800,color:proyR>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{proyR>=0?'':'−'}{fmtMon(Math.abs(proyR))}</div>
-            </div>
-          </div>
-        </>)
-      })()}
 
       {lvlLabel('Cobros y pagos')}
       {/* Grid 2-col: Cobranza (antigüedad) + Proyección de ingresos (separadas). Cada tile abre su detalle debajo. */}
@@ -3300,16 +3315,13 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         <CashflowProjection embedded billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients} sales={sales} onOpenClientFicha={onOpenClientFicha}/>
       </div>)}
 
-      {/* Fila 2: Cuentas por pagar + Ventas por mes (media columna c/u) con su detalle debajo. */}
+      {/* Fila 2: Cuentas por pagar + Costos de oficina (el "Vendido" ya vive en Estado del negocio → sin duplicar). */}
       <div style={{padding:'8px 20px 0'}}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
           {(terceros||[]).length>0&&kTile('cxp','Cuentas por pagar',cxpTotDash>0?fmtShort(cxpTotDash):'Al día',cxpTotDash>0?C.soonText:C.greenText,'wallet',{fg:C.soonText,bg:C.ambarBg},cxpTotDash>0?'a proveedores':'sin deudas')}
-          {kTile('ventas','Ventas por mes',vMon(m.brutoUF,m.bruto),C.accent,'chart',{fg:C.azulInfo,bg:C.azulBg},'del año')}
+          {onOpenCostosOfi&&costosOfiMes>0&&kTile('costosofi','Costos de oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'por mes',onOpenCostosOfi)}
         </div>
       </div>
-      {onOpenCostosOfi&&costosOfiMes>0&&<div style={{padding:'8px 20px 0'}}>
-        {kTile('costosofi','Costos de oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'por mes · presupuesto y gasto real',onOpenCostosOfi)}
-      </div>}
       {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
         if((terceros||[]).length===0) return null
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
