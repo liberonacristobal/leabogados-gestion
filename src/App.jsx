@@ -23116,6 +23116,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     onFocusConsumed&&onFocusConsumed() },[focusMovId,movs])
   const [verGlosa,setVerGlosa] = useState(false)  // glosa cruda desplegada en el modal
   const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
+  const [costosOfi,setCostosOfi] = useState([])  // presupuesto de oficina, para cruzar cargos ↔ línea de costo (por monto exacto + glosa)
+  useEffect(()=>{ if(DEMO){ setCostosOfi([{categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000},{categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Impuestos y patentes',item:'PPM',monto:800000},{categoria:'Remuneraciones',item:'Martín Campero',monto:1679268}]); return } supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfi(data||[]),()=>{}) },[])
   const [gcFor,setGcFor] = useState(null)        // Fase 3.D: cargo en flujo "por cuenta de cliente" (mov id)
   const [gcCli,setGcCli] = useState(null)        // cliente elegido para el gasto por cuenta de cliente
   const [gcEnt,setGcEnt] = useState(null)        // razón social elegida para ese gasto
@@ -24088,7 +24090,20 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const gk=glosaKey(m.descripcion)
     if(gk&&costoOfiLearn[gk]) return {fam:'oficina',category:costoOfiLearn[gk].category,sub:costoOfiLearn[gk].subcategory||null,via:'glosa'}
     if(gk&&cargoCliLearn[gk]) return {fam:'cliente',clientId:cargoCliLearn[gk],via:'glosa'}
+    const bm=matchPresupuesto(m); if(bm) return bm   // cruce con el presupuesto de oficina: monto exacto (+ glosa)
     return null
+  }
+  // Cruce del cargo con el PRESUPUESTO de oficina: el monto del cargo calza (exacto) con una línea del presupuesto vigente ese mes → la sugiere.
+  const _glosaHas = (desc,item,cat) => { const nz=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); const g=nz(desc); const words=(nz(item)+' '+nz(cat)).split(/[^a-z0-9]+/).filter(w=>w.length>=4); return words.some(w=>g.includes(w)) }
+  const matchPresupuesto = m => {
+    if(m.tipo!=='cargo'||m.es_interno||!(costosOfi||[]).length) return null
+    const abs=Math.abs(Number(m.monto)||0); if(abs<=0) return null
+    const ym=String(m.fecha||'').slice(0,7)||new Date().toISOString().slice(0,7)
+    const eff=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
+    const exact=(costosOfi||[]).filter(r=>!r.es_ingreso && Math.round(Number(eff(r))||0)===Math.round(abs))
+    if(!exact.length) return null
+    const pick=exact.find(r=>_glosaHas(m.descripcion,r.item,r.categoria))||exact[0]
+    return {fam:'oficina', category:pick.categoria, sub:pick.item, via:'presupuesto'}
   }
   // Mes anterior con el mismo costo de oficina (categoría[+sub]) → hint "jul $X" para dar confianza.
   const cargoRachaHint = (cat,sub) => {
@@ -24223,7 +24238,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const sugBar=()=>{ if(!sug) return null
       if(sug.fam==='oficina'){ const hint=cargoRachaHint(sug.category,sug.sub); const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`; const canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
         return <div style={{display:'flex',alignItems:'center',gap:9,background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{path}</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{path}</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
           <button disabled={busy===m.id} onClick={canConfirm?()=>registrarCargoOficina(m,sug.category,sug.sub||null):()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:sug.category}));setCcQ(p=>({...p,[m.id]:''}))}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>{canConfirm?'Confirmar':'Elegir'}</button>
         </div> }
       const cnm=cmap[sug.clientId]||'cliente'
