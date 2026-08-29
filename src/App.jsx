@@ -21338,15 +21338,15 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   // ── Apuesta 3 f1 — Margen real por cliente: ingreso (honorario) − costo (horas × costo/hora del abogado). ──
   const [costoHora,setCostoHora] = useState({})   // nombre → costo/hora en UF (lo define el usuario)
   const [costosOpen,setCostosOpen] = useState(false)
-  useEffect(()=>{ if(DEMO){ setCostoHora({'Cristóbal':2,'Erasmo':2,'Martín':1,'Martina':0.8,'Rodrigo':0.9}); return } supabase.from('learnings').select('key,value').eq('kind','costo_hora').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setCostoHora(m) },()=>{}) },[])
-  async function setCosto(name,val){ const v=Math.max(0,parseFloat(val)||0); setCostoHora(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','costo_hora').eq('key',name); await supabase.from('learnings').insert({kind:'costo_hora',key:name,value:String(v)}) }catch(_){} }
+  useEffect(()=>{ if(DEMO){ setCostoHora({'Cristóbal':18000,'Erasmo':18000,'Martín':11250,'Martina':6159,'Rodrigo':11250}); return } supabase.from('learnings').select('key,value').eq('kind','costo_hora').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setCostoHora(m) },()=>{}) },[])
+  async function setCosto(name,val){ const v=Math.max(0,Math.round(parseFloat(val)||0)); setCostoHora(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','costo_hora').eq('key',name); await supabase.from('learnings').insert({kind:'costo_hora',key:name,value:String(v)}) }catch(_){} }
   const hayCostos = Object.values(costoHora).some(v=>Number(v)>0)
   const margenData = useMemo(()=> permanentes.map(({cid,sale})=>{
     const feeUF = ventaUFmes(sale); const ingCLP = Math.round(feeUF*mesesYTD*ufHoy)
     const hCli = horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct)
-    let costoUF=0, faltaCosto=false
-    hCli.forEach(h=>{ const c=Number(costoHora[h.user_name]); if(!(h.user_name in costoHora)||!c){ faltaCosto=true } costoUF += (Number(h.horas)||0)*(c||0) })
-    const costoCLP=Math.round(costoUF*ufHoy); const margen=ingCLP-costoCLP; const pct=ingCLP>0?Math.round(margen/ingCLP*100):0
+    let costoCLP=0, faltaCosto=false
+    hCli.forEach(h=>{ const c=Number(costoHora[h.user_name]); if(!(h.user_name in costoHora)||!c){ faltaCosto=true } costoCLP += (Number(h.horas)||0)*(c||0) })
+    costoCLP=Math.round(costoCLP); const margen=ingCLP-costoCLP; const pct=ingCLP>0?Math.round(margen/ingCLP*100):0
     return { cid, ingCLP, costoCLP, margen, pct, sinIng:feeUF<=0, faltaCosto }
   }), [permanentes, horas, costoHora, mesesYTD, ufHoy, anioAct])
   const margenTot = margenData.filter(d=>!d.sinIng).reduce((a,d)=>({ing:a.ing+d.ingCLP,costo:a.costo+d.costoCLP,margen:a.margen+d.margen}),{ing:0,costo:0,margen:0})
@@ -21495,8 +21495,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             <span onClick={()=>setCostosOpen(o=>!o)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Costo/hora {costosOpen?'▴':'▾'}</span>
           </div>
           {costosOpen && <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px',marginBottom:9}}>
-            <div style={{fontSize:9.5,color:C.muted,marginBottom:6}}>Costo/hora por abogado, en UF. Lo pones tú (ej. sueldo mensual ÷ horas del mes). El margen se recalcula.</div>
-            {EQUIPO.map(name=>(<div key={name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0'}}><span style={{fontSize:12,color:C.text}}>{name}</span><div style={{display:'flex',alignItems:'center',gap:5}}><input type='number' step='0.1' min='0' defaultValue={costoHora[name]||''} onBlur={e=>setCosto(name,e.target.value)} placeholder='—' style={{...inp,height:30,width:70,textAlign:'right',fontSize:12}}/><span style={{fontSize:10,color:C.done}}>UF/h</span></div></div>))}
+            <div style={{fontSize:9.5,color:C.muted,marginBottom:6}}>Costo/hora por abogado, en pesos (sueldo costo-empresa ÷ horas del mes). El margen se recalcula.</div>
+            {EQUIPO.map(name=>(<div key={name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0'}}><span style={{fontSize:12,color:C.text}}>{name}</span><div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontSize:11,color:C.done}}>$</span><input key={name+':'+(costoHora[name]??'')} type='number' step='100' min='0' defaultValue={costoHora[name]||''} onBlur={e=>setCosto(name,e.target.value)} placeholder='—' style={{...inp,height:30,width:88,textAlign:'right',fontSize:12}}/><span style={{fontSize:10,color:C.done}}>/h</span></div></div>))}
           </div>}
           {!hayCostos && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:13,fontSize:12,color:C.done,marginBottom:10,lineHeight:1.5}}>Define el <b style={{color:C.text}}>costo/hora por abogado</b> (toca “Costo/hora ▾”) para ver el margen real de cada cliente.</div>}
           {hayCostos && margenData.filter(d=>!d.sinIng).map(d=>{ const neg=d.margen<0; return (
