@@ -6508,12 +6508,13 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
   const catsPresentes = [...new Set((rows||[]).map(r=>r.categoria))]
   const cats = [...CATS_OFICINA_NUEVAS, ...catsPresentes.filter(c=>!CATS_OFICINA_NUEVAS.includes(c)), ...extraCats.filter(c=>!CATS_OFICINA_NUEVAS.includes(c)&&!catsPresentes.includes(c))]
   const tog = c => setOpen(p=>{const s=new Set(p); s.has(c)?s.delete(c):s.add(c); return s})
-  const abrirEdit = r => { setAddCat(null); setEdId(r.id); setEf({monto:String(r.monto||''), desde:r.desde||'', prev:r.monto_prev!=null?String(r.monto_prev):''}) }
+  const abrirEdit = r => { setAddCat(null); setEdId(r.id); setEf({item:r.item||'', monto:String(r.monto||''), desde:r.desde||'', prev:r.monto_prev!=null?String(r.monto_prev):''}) }
   const guardarEdit = async r => {
     const nMonto = Math.max(0,Math.round(parseFloat(ef.monto)||0))
     const nDesde = ef.desde||null
     const nPrev = nDesde ? Math.max(0,Math.round(parseFloat(ef.prev)||0)) : null
-    const patch = {monto:nMonto, desde:nDesde, monto_prev:nPrev}
+    const nItem = (ef.item||'').trim() || r.item
+    const patch = {item:nItem, monto:nMonto, desde:nDesde, monto_prev:nPrev}
     setRows(p=>p.map(x=>x.id===r.id?{...x,...patch}:x)); setEdId(null)
     if(!DEMO){ try{ await supabase.from('costos_oficina').update({...patch,updated_at:new Date().toISOString()}).eq('id',r.id) }catch(_){} }
   }
@@ -6558,14 +6559,15 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
               <div key={r.id} style={{borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
                 {edId===r.id ? (
                   <div style={{padding:'9px 12px',background:C.bgSoft}}>
-                    <div style={{fontSize:11,fontWeight:700,color:C.accent,marginBottom:7}}>{r.item}</div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:7}}>Editar ítem</div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}><span style={{fontSize:11,color:C.muted,width:52}}>Nombre</span><input value={ef.item} onChange={e=>setEf(f=>({...f,item:e.target.value}))} placeholder='Nombre del ítem' style={{...inpS,flex:1}}/></div>
                     <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}><span style={{fontSize:11,color:C.muted,width:52}}>Monto</span><span style={{fontSize:12,color:C.done}}>$</span><input type='number' value={ef.monto} onChange={e=>setEf(f=>({...f,monto:e.target.value}))} style={{...inpS,flex:1,textAlign:'right',fontVariantNumeric:'tabular-nums'}}/></div>
                     <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:ef.desde?7:0}}><span style={{fontSize:11,color:C.muted,width:52}}>Rige desde</span><select value={ef.desde} onChange={e=>setEf(f=>({...f,desde:e.target.value, prev:e.target.value&&!f.prev?String(r.monto||''):f.prev}))} style={{...inpS,flex:1}}><option value=''>Siempre</option>{mesesOpt.map(m=><option key={m.v} value={m.v}>{m.l}</option>)}</select></div>
                     {ef.desde&&<div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:C.muted,width:52}}>Antes</span><span style={{fontSize:12,color:C.done}}>$</span><input type='number' value={ef.prev} onChange={e=>setEf(f=>({...f,prev:e.target.value}))} placeholder='monto anterior' style={{...inpS,flex:1,textAlign:'right',fontVariantNumeric:'tabular-nums'}}/></div>}
                     <div style={{display:'flex',gap:7,marginTop:9}}>
                       <button onClick={()=>guardarEdit(r)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Guardar</button>
                       <button onClick={()=>setEdId(null)} style={{padding:'8px 13px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                      <button onClick={()=>borrar(r)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.overdueText,fontSize:12,fontWeight:600,cursor:'pointer'}}>Quitar</button>
+                      <button onClick={()=>borrar(r)} title='Quitar este ítem' style={{padding:'8px 11px',borderRadius:8,border:`1px solid ${C.overdueText}`,background:'transparent',color:C.overdueText,fontSize:12,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14H6L5 6'/><path d='M10 11v6M14 11v6'/></svg>Quitar</button>
                     </div>
                   </div>
                 ) : (
