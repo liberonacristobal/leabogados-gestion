@@ -24005,6 +24005,31 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); appAlert('Error al registrar el costo de oficina: '+e.message) }
     setBusy(null)
   }
+  // Cargo AGRUPADO: reparte un cargo único en varias líneas de costo de oficina (N gastos + N conciliaciones parciales). El total repartido = el cargo.
+  const costoOficinaSplit = async(mov, items)=>{
+    if(busy) return
+    if(!ofiCli){ appAlert('No se encontró el cliente interno (Oficina).'); return }
+    if(!items?.length) return
+    if(!await appConfirm(`Repartir este cargo (${fmtM(mov.monto)}) en ${items.length} costos de oficina?\n\n${items.map(i=>`· ${i.item} · ${fmtM(i.monto)}`).join('\n')}`)) return
+    setBusy(mov.id)
+    const creados=[]
+    try{
+      let aplicadoTot=0
+      for(const it of items){
+        const ins=await supabase.from('expenses').insert({ client_id:ofiCli.id, type:'gasto', amount:it.monto, date:mov.fecha, concept:(it.item||mov.descripcion||'Costo de oficina').slice(0,200), category:it.categoria, subcategory:it.item, created_by:user?.email||null, paid_by_client:false }).select().single()
+        if(ins.error) throw ins.error
+        const ic=await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', gasto_id:ins.data.id, monto_aplicado:it.monto, origen:'manual' }).select().single()
+        if(ic.error) throw ic.error; marcaQuien(ic.data.id)
+        creados.push({gasto:ins.data.id,conc:ic.data.id})
+        setExpenses&&setExpenses(p=>[ins.data,...p]); setConc(p=>[...p,ic.data]); aplicadoTot+=it.monto
+      }
+      const movAplic=(mov.monto_conciliado||0)+aplicadoTot
+      const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Gastos Oficina' }).eq('id',mov.id); if(me) throw me
+      setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Gastos Oficina'}:x)); setOfiFor&&setOfiFor(null)
+    }catch(e){ for(const c of creados){ try{ await supabase.from('conciliacion').delete().eq('id',c.conc); await supabase.from('expenses').delete().eq('id',c.gasto) }catch(_){} } appAlert('No se pudo repartir: '+(e.message||e)) }
+    setBusy(null)
+  }
   // Deshace TODA la conciliación de un movimiento: revierte facturas/anticipos/fondos y deja el movimiento pendiente.
   const deshacer = async(mov)=>{
     if(busy) return
@@ -24104,6 +24129,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(!exact.length) return null
     const pick=exact.find(r=>_glosaHas(m.descripcion,r.item,r.categoria))||exact[0]
     return {fam:'oficina', category:pick.categoria, sub:pick.item, via:'presupuesto'}
+  }
+  // Cargo AGRUPADO: el monto del cargo = suma EXACTA de 2-3 líneas del presupuesto (pago único por el total) → propone repartirlo.
+  const matchGrupoPresupuesto = m => {
+    if(m.tipo!=='cargo'||m.es_interno||!(costosOfi||[]).length) return null
+    const abs=Math.round(Math.abs(Number(m.monto)||0)); if(abs<=0) return null
+    const ym=String(m.fecha||'').slice(0,7)||new Date().toISOString().slice(0,7)
+    const eff=r=>Math.round(Number((r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto)||0)
+    const it=(costosOfi||[]).filter(r=>!r.es_ingreso && eff(r)>0).map(r=>({categoria:r.categoria,item:r.item,monto:eff(r)}))
+    for(let i=0;i<it.length;i++) for(let j=i+1;j<it.length;j++){ if(it[i].monto+it[j].monto===abs) return {items:[it[i],it[j]]} }
+    for(let i=0;i<it.length;i++) for(let j=i+1;j<it.length;j++) for(let k=j+1;k<it.length;k++){ if(it[i].monto+it[j].monto+it[k].monto===abs) return {items:[it[i],it[j],it[k]]} }
+    return null
   }
   // Mes anterior con el mismo costo de oficina (categoría[+sub]) → hint "jul $X" para dar confianza.
   const cargoRachaHint = (cat,sub) => {
@@ -24229,6 +24265,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     // ---- SIN clasificar → combo ----
     const fam=ccFam[m.id]; const cat=ccCat[m.id]; const q=(ccQ[m.id]||'')
     const sug=cargoSugerencia(m)
+    const sugGrupo=(!sug||sug.fam!=='oficina')?matchGrupoPresupuesto(m):null   // cargo = suma de varias líneas del presupuesto → repartir
+    const grupoBar=()=>{ if(!sugGrupo) return null
+      return <div style={{background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:10,padding:'9px 10px',marginBottom:8}}>
+        <div style={{fontSize:11.5,fontWeight:700,color:C.accent,marginBottom:4}}>Pago agrupado · {sugGrupo.items.length} costos de oficina</div>
+        {sugGrupo.items.map((it,ix)=>(<div key={ix} style={{display:'flex',justifyContent:'space-between',fontSize:10,color:C.muted,padding:'1px 0'}}><span>{it.item} <span style={{color:C.done}}>· {it.categoria}</span></span><span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtM(it.monto)}</span></div>))}
+        <div style={{fontSize:9,color:C.greenText,margin:'3px 0 7px'}}>calza con la suma de tu presupuesto · monto exacto</div>
+        <button disabled={busy===m.id} onClick={()=>costoOficinaSplit(m,sugGrupo.items)} style={{width:'100%',fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'7px',cursor:busy===m.id?'default':'pointer',background:C.accent,color:'#fff'}}>Conciliar · repartir en {sugGrupo.items.length}</button>
+      </div> }
     const inp=(ph,onBg)=><div style={{display:'flex',alignItems:'center',gap:8,border:`1.5px solid ${C.accent}`,background:'#fff',borderRadius:10,padding:'8px 10px'}}>
       <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.2' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
       <input value={q} onChange={e=>setCcQ(p=>({...p,[m.id]:e.target.value}))} placeholder={ph} style={{border:'none',outline:'none',fontSize:12.5,color:C.text,flex:1,minWidth:0,background:'none'}}/>
@@ -24250,6 +24294,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     // NIVEL 0 — dos tiles
     if(!fam) return <div style={{marginTop:6}} onClick={stop}>
       {sugBar()}
+      {grupoBar()}
       <div style={{display:'flex',gap:8}}>
         <button onClick={()=>{setCcCat(p=>({...p,[m.id]:undefined}));setCcQ(p=>({...p,[m.id]:''}));setCcFam(p=>({...p,[m.id]:'oficina'}))}} style={{flex:1,background:'#F2F7FB',border:'1px solid #CFE0EC',borderRadius:11,padding:'11px',cursor:'pointer',textAlign:'center'}}>
           <div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Gasto Oficina</div><div style={{fontSize:9,color:C.muted,marginTop:2}}>sueldos, arriendo, retiros…</div>
