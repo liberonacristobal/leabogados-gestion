@@ -493,6 +493,14 @@ const CATS_OFICINA_NUEVAS = CATS_OFICINA_CAT.map(c=>c.g)
 const SUBCATS_OFICINA = Object.fromEntries(CATS_OFICINA_CAT.map(c=>[c.g,c.subs]))
 // Ítems que por defecto son INGRESO (restan al costo, ej. subarriendo recupera parte del arriendo).
 const OFICINA_INGRESO_ITEMS = new Set(['Subarriendo'])
+// Mapeo de las categorías VIEJAS a las 9 nuevas (para no perder los gastos ya clasificados). Las no listadas quedan igual.
+const CAT_OFICINA_ALIAS = {
+  'Sueldos':'Remuneraciones','Retiros':'Remuneraciones','Contadora':'Remuneraciones',
+  'Arriendo':'Arriendo y espacio','Gastos comunes':'Arriendo y espacio',
+  'Servicios':'Servicios y tecnología','Software':'Servicios y tecnología',
+  'Compras':'Insumos de oficina',
+}
+const catOficinaNueva = c => CAT_OFICINA_ALIAS[String(c||'').trim()] || c
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -11747,6 +11755,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [respFilter,setRespFilter] = useState(null)            // filtro por abogado responsable del cliente (null = todos, '__sin__' = sin responsable)
   const [verTodos,setVerTodos] = useState(false)               // "Todos": mostrar la lista completa de clientes (por defecto la lista está oculta = solo resumen)
   const [triageOpen,setTriageOpen] = useState(null)            // id del gasto de oficina cuyo triage de miembros está desplegado
+  const [subMenu,setSubMenu] = useState(null)                  // id del gasto cuyo menú de subcategoría (desglose) está abierto
   const [respPickG,setRespPickG] = useState(false)            // asignar responsable del cliente desde el encabezado de Gastos
   const asignarRespG = async(m)=>{ if(!onSaveClientFields||!selectedClient) return; try{ await onSaveClientFields(selectedClient.id,{abogado_responsable:m}); setSelectedClient(c=>c?{...c,abogado_responsable:m}:c); setRespPickG(false) }catch(_){} }
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
@@ -12042,8 +12051,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     setExpenses(p=>p.filter(x=>!ids.includes(x.id))); setUltRep(null)
   }
   // Catálogo de categorías de oficina que APRENDE: base + las ya usadas en gastos de la oficina (excluye las legales) + ordenadas.
-  const catsOficina = useMemo(()=>{ const s=new Set(CATS_OFICINA_BASE); (expenses||[]).forEach(e=>{ if(esOficina(e.client_id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(e.category) }); return [...s] },[expenses,clients])
-  const setCatOficina = async(e,cat)=>{ setCatMenu(null); try{ await supabase.from('expenses').update({category:cat}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,category:cat}:x)); const gk=glosaKey(e.concept||''); if(gk&&cat) learnPut('gasto_categoria',gk,cat) }catch(err){ appAlert('No se pudo guardar la categoría: '+err.message) } }
+  // Catálogo = las 9 categorías nuevas (CATS_OFICINA_NUEVAS) + las viejas mapeadas + las ya usadas (para no perder datos históricos).
+  const catsOficina = useMemo(()=>{ const s=new Set(CATS_OFICINA_NUEVAS); (expenses||[]).forEach(e=>{ if(esOficina(e.client_id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(catOficinaNueva(e.category)) }); return [...s] },[expenses,clients])
+  const setCatOficina = async(e,cat)=>{ setCatMenu(null); const patch={category:cat}; if(!(SUBCATS_OFICINA[cat]||[]).includes(e.subcategory)) patch.subcategory=null; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); const gk=glosaKey(e.concept||''); if(gk&&cat) learnPut('gasto_categoria',gk,cat) }catch(err){ appAlert('No se pudo guardar la categoría: '+err.message) } }
+  const setSubcatOficina = async(e,sub)=>{ setSubMenu(null); try{ await supabase.from('expenses').update({subcategory:sub||null}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,subcategory:sub||null}:x)) }catch(err){ appAlert('No se pudo guardar el desglose: '+err.message) } }
   const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at){ appAlert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)) }catch(err){appAlert('Error: '+err.message)} }
   const notaRow = (e, bloqueado=false, adelanto=false) => { const on=selNota.has(e.id); return (
     <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?'#EEF3F6':'transparent',opacity:bloqueado?.5:1}}>
@@ -12327,6 +12338,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <button onClick={()=>setCatMenu(catMenu===e.id?null:e.id)} style={{fontSize:11,fontWeight:600,color:catOk?C.accent:C.soonText,background:catOk?C.azulBg:'#FFF8E1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>{catOk?e.category:'Sin categoría'} ▾</button>
                   {catMenu===e.id&&<><div onClick={()=>setCatMenu(null)} style={{position:'fixed',inset:0,zIndex:90}}/><div style={{position:'absolute',top:28,left:0,zIndex:100,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',minWidth:165,overflow:'hidden',maxHeight:250,overflowY:'auto'}}>{catsOficina.map(c=><div key={c} onClick={()=>setCatOficina(e,c)} style={{padding:'7px 12px',fontSize:12,color:c===e.category?C.accent:C.text,fontWeight:c===e.category?600:400,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>{c}</div>)}<div onClick={async()=>{ const nv=await appPrompt('Nueva categoría de oficina:'); if(nv&&nv.trim()) setCatOficina(e,nv.trim()) }} style={{padding:'7px 12px',fontSize:12,color:C.accent,fontWeight:600,cursor:'pointer'}}>+ Nueva categoría…</div></div></>}
                 </div>
+                {catOk && (SUBCATS_OFICINA[catOficinaNueva(e.category)]||[]).length>0 && <div style={{position:'relative'}}>
+                  <button onClick={()=>setSubMenu(subMenu===e.id?null:e.id)} style={{fontSize:11,fontWeight:600,color:e.subcategory?C.accent:C.muted,background:e.subcategory?C.azulBg:C.bgSoft,border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>{e.subcategory||'Desglose'} ▾</button>
+                  {subMenu===e.id&&<><div onClick={()=>setSubMenu(null)} style={{position:'fixed',inset:0,zIndex:90}}/><div style={{position:'absolute',top:28,left:0,zIndex:100,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',minWidth:160,overflow:'hidden',maxHeight:250,overflowY:'auto'}}>{(SUBCATS_OFICINA[catOficinaNueva(e.category)]||[]).map(s=><div key={s} onClick={()=>setSubcatOficina(e,s)} style={{padding:'7px 12px',fontSize:12,color:s===e.subcategory?C.accent:C.text,fontWeight:s===e.subcategory?600:400,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>{s}</div>)}<div onClick={async()=>{ const nv=await appPrompt('Otro desglose:'); if(nv&&nv.trim()) setSubcatOficina(e,nv.trim()) }} style={{padding:'7px 12px',fontSize:12,color:C.accent,fontWeight:600,cursor:'pointer'}}>+ Otro…</div></div></>}
+                </div>}
                 {triageOpen===e.id ? (
                   <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                     {PERSONAS_NOTA.map(p=>{const pc=personChip(p);return <button key={p} onClick={()=>{triagePersonal(e,p);setTriageOpen(null)}} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`0.5px solid ${pc.color}33`}}>{p}</button>})}
@@ -12863,7 +12878,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const nRev = orphans.length+revN(revNoActivo)+revN(revOcasional)
               const notaTot = notariaPend.reduce((a,e)=>a+(e.amount||0),0)
               // Depurar: gastos con categoría de oficina (Arriendo/Sueldos/Contadora/…) que quedaron en otro cliente → deben colgar del cliente interno.
-              const _CATS_OFI_MOVER = CATS_OFICINA_ESTRUCTURAL.filter(c=>c!=='Compras')
+              const _CATS_OFI_MOVER = [...CATS_OFICINA_ESTRUCTURAL.filter(c=>c!=='Compras'), ...CATS_OFICINA_NUEVAS]
               const _ofiCli = (clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
               const gastosOfiFuera = (isAdmin&&_ofiCli) ? (expenses||[]).filter(e=> !e.deleted_at && e.type==='gasto' && _CATS_OFI_MOVER.includes(String(e.category||'').trim()) && String(e.client_id||'')!==String(_ofiCli.id)) : []
               const ofiFueraTot = gastosOfiFuera.reduce((a,e)=>a+(e.amount||0),0)
@@ -21473,20 +21488,35 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     for(let m=1;m<=mesesYTD;m++){ const mm=anioAct+'-'+String(m).padStart(2,'0'); const hm=hCli.filter(h=>String(h.fecha||'').slice(0,7)===mm); const cm=hm.reduce((a,h)=>a+(Number(h.horas)||0),0); const cmF=hm.filter(h=>h.billable!==false).reduce((a,h)=>a+(Number(h.horas)||0),0); excesoMeses+=Math.max(0,cm-estMes); excesoFactMeses+=Math.max(0,cmF-estMes) }
     const exCLP=Math.round(excesoFactMeses*valorUF*ufHoy); return { cid, est, cons, over:cons>est, exceso:excesoMeses, excesoFact:excesoFactMeses, valorUF, exCLP, sinCfg:estMes<=0 } })
   const excedenteYTD = ytdData.reduce((a,d)=>a+(d.exCLP||0),0)
-  // ── Apuesta 3 f1 — Margen real por cliente: ingreso (honorario) − costo (horas × costo/hora del abogado). ──
-  const [costoHora,setCostoHora] = useState({})   // nombre → costo/hora en UF (lo define el usuario)
+  // ── Apuesta 3 f1 — Margen real por cliente: ingreso (honorario) − costo (horas × costo/hora del abogado, en pesos). ──
+  const [costoHora,setCostoHora] = useState({})   // nombre → costo/hora en pesos (lo define el usuario)
   const [costosOpen,setCostosOpen] = useState(false)
   useEffect(()=>{ if(DEMO){ setCostoHora({'Cristóbal':18000,'Erasmo':18000,'Martín':11250,'Martina':6159,'Rodrigo':11250}); return } supabase.from('learnings').select('key,value').eq('kind','costo_hora').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setCostoHora(m) },()=>{}) },[])
   async function setCosto(name,val){ const v=Math.max(0,Math.round(parseFloat(val)||0)); setCostoHora(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','costo_hora').eq('key',name); await supabase.from('learnings').insert({kind:'costo_hora',key:name,value:String(v)}) }catch(_){} }
   const hayCostos = Object.values(costoHora).some(v=>Number(v)>0)
+  // ── Apuesta 3 f2 — Costo CARGADO: suma el overhead de oficina (Costos de Oficina, sin remuneraciones) prorrateado por hora. ──
+  const [costosOfi,setCostosOfi] = useState([])
+  const [cargarOverhead,setCargarOverhead] = useState(false)
+  const ym0mes = new Date().toISOString().slice(0,7)
+  useEffect(()=>{ if(DEMO){ setCostosOfi([
+      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:900000,es_ingreso:true},
+      {categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Impuestos y patentes',item:'PPM',monto:800000}]); return }
+    supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfi(data||[]),()=>{}) },[])
+  const effCosto = r => (r.desde && ym0mes < String(r.desde).slice(0,7)) ? (r.monto_prev??r.monto) : r.monto
+  const overheadMes = costosOfi.filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).reduce((a,r)=>a+(r.es_ingreso?-1:1)*effCosto(r),0)
+  const metasSemTot = EQUIPO.reduce((a,n)=>a+(Number(metas[n])||0),0)
+  const capacidadMes = metasSemTot*4.33 || (DEMO?700:0)   // horas/mes del equipo (Σ metas semanales ×4,33)
+  const overheadHora = capacidadMes>0 ? overheadMes/capacidadMes : 0
+  const hayOverhead = overheadMes>0 && capacidadMes>0
   const margenData = useMemo(()=> permanentes.map(({cid,sale})=>{
     const feeUF = ventaUFmes(sale); const ingCLP = Math.round(feeUF*mesesYTD*ufHoy)
     const hCli = horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct)
+    const oh = cargarOverhead?overheadHora:0
     let costoCLP=0, faltaCosto=false
-    hCli.forEach(h=>{ const c=Number(costoHora[h.user_name]); if(!(h.user_name in costoHora)||!c){ faltaCosto=true } costoCLP += (Number(h.horas)||0)*(c||0) })
+    hCli.forEach(h=>{ const c=Number(costoHora[h.user_name]); if(!(h.user_name in costoHora)||!c){ faltaCosto=true } costoCLP += (Number(h.horas)||0)*((c||0)+oh) })
     costoCLP=Math.round(costoCLP); const margen=ingCLP-costoCLP; const pct=ingCLP>0?Math.round(margen/ingCLP*100):0
     return { cid, ingCLP, costoCLP, margen, pct, sinIng:feeUF<=0, faltaCosto }
-  }), [permanentes, horas, costoHora, mesesYTD, ufHoy, anioAct])
+  }), [permanentes, horas, costoHora, mesesYTD, ufHoy, anioAct, cargarOverhead, overheadHora])
   const margenTot = margenData.filter(d=>!d.sinIng).reduce((a,d)=>({ing:a.ing+d.ingCLP,costo:a.costo+d.costoCLP,margen:a.margen+d.margen}),{ing:0,costo:0,margen:0})
   const exportYTD = () => {
     const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#537281'}'>${d.exCLP>0?f0(d.exCLP):'—'}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#0F6E56'}'>${d.exCLP>0?'Reajustar':'OK'}</td></tr>`).join('')
@@ -21635,6 +21665,15 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           {costosOpen && <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px',marginBottom:9}}>
             <div style={{fontSize:9.5,color:C.muted,marginBottom:6}}>Costo/hora por abogado, en pesos (sueldo costo-empresa ÷ horas del mes). El margen se recalcula.</div>
             {EQUIPO.map(name=>(<div key={name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0'}}><span style={{fontSize:12,color:C.text}}>{name}</span><div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontSize:11,color:C.done}}>$</span><input key={name+':'+(costoHora[name]??'')} type='number' step='100' min='0' defaultValue={costoHora[name]||''} onBlur={e=>setCosto(name,e.target.value)} placeholder='—' style={{...inp,height:30,width:88,textAlign:'right',fontSize:12}}/><span style={{fontSize:10,color:C.done}}>/h</span></div></div>))}
+          </div>}
+          {hayCostos && hayOverhead && <div style={{display:'flex',alignItems:'center',gap:9,background:C.bgSoft,borderRadius:10,padding:'9px 12px',marginBottom:9}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.text}}>Cargar overhead de oficina</div>
+              <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>+{f0(Math.round(overheadHora))}/h · {f0(overheadMes)}/mes de oficina ÷ {Math.round(capacidadMes)} h del equipo → margen real neto</div>
+            </div>
+            <div onClick={()=>setCargarOverhead(v=>!v)} style={{width:40,height:23,borderRadius:12,background:cargarOverhead?C.normal:C.done,position:'relative',cursor:'pointer',transition:'.15s',flexShrink:0}}>
+              <div style={{position:'absolute',top:2,left:cargarOverhead?19:2,width:19,height:19,borderRadius:'50%',background:'#fff',transition:'.15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/>
+            </div>
           </div>}
           {!hayCostos && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:13,fontSize:12,color:C.done,marginBottom:10,lineHeight:1.5}}>Define el <b style={{color:C.text}}>costo/hora por abogado</b> (toca “Costo/hora ▾”) para ver el margen real de cada cliente.</div>}
           {hayCostos && margenData.filter(d=>!d.sinIng).map(d=>{ const neg=d.margen<0; return (
@@ -23638,7 +23677,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   }
   // Pieza 3 — cliente interno (Oficina) y catálogo de categorías que aprende (mismo criterio que ExpensesView).
   const ofiCli = clients.find(c=>c.is_internal || /liberona\s+escala/i.test(c.name||''))
-  const catsOficinaConc = useMemo(()=>{ const s=new Set(CATS_OFICINA_BASE); if(ofiCli){ (expenses||[]).forEach(e=>{ if(String(e.client_id)===String(ofiCli.id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(e.category) }) } return [...s] },[expenses,ofiCli])
+  const catsOficinaConc = useMemo(()=>{ const s=new Set(CATS_OFICINA_NUEVAS); if(ofiCli){ (expenses||[]).forEach(e=>{ if(String(e.client_id)===String(ofiCli.id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(catOficinaNueva(e.category)) }) } return [...s] },[expenses,ofiCli])
   // Costo de OFICINA: el cargo es un gasto operativo de la firma → crea un gasto en el cliente interno con su categoría y concilia (reversible con Deshacer).
   const costoOficina = async(mov, category, subcategory=null)=>{
     if(busy) return
