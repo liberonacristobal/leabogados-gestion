@@ -503,6 +503,25 @@ const CAT_OFICINA_ALIAS = {
 const catOficinaNueva = c => CAT_OFICINA_ALIAS[String(c||'').trim()] || c
 // Fuente ÚNICA del total mensual de Costos de Oficina: valor vigente de cada ítem en el mes ym (desde/monto_prev), ingresos restan.
 function costosOficinaMes(rows, ym){ ym = ym || new Date().toISOString().slice(0,7); return (rows||[]).reduce((a,r)=>{ const eff=(r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; return a + (Number(eff)||0)*(r.es_ingreso?-1:1) },0) }
+// Valor mensual de la asesoría en UF (fuente única): pesos → UF del primer día hábil del año (ufAnioEff).
+const ventaUFmesDe = (s, ufAnioEff) => s?.moneda==='CLP' ? (parseFloat(s?.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s?.amount_uf)||0)
+// Overhead de oficina por hora (fuente única): costos NO-remuneración/mes ÷ horas del equipo CON costo (Σ metas ×4,33).
+function overheadHoraDe(costosOfiRows, metas={}, costoHora={}, ym){
+  ym = ym || new Date().toISOString().slice(0,7)
+  const eff=r=>(r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
+  const overheadMes=(costosOfiRows||[]).filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).reduce((a,r)=>a+(r.es_ingreso?-1:1)*(Number(eff(r))||0),0)
+  const capMes=Object.keys(metas).filter(n=>Number(costoHora[n])>0).reduce((a,n)=>a+(Number(metas[n])||0),0)*4.33
+  return capMes>0 ? overheadMes/capMes : 0
+}
+// Margen real de un cliente permanente (fuente única): ingreso (honorario×meses) − costo (horas×costo cargado). Úsalo en Horas y en la alerta del dueño.
+function margenDeSale(sale, horas, costoHora={}, overheadHora=0, mesesYTD=1, ufHoy=0, ufAnioEff=0, anio){
+  anio = anio || String(new Date().getFullYear())
+  const feeUF=ventaUFmesDe(sale, ufAnioEff); const ingCLP=Math.round(feeUF*mesesYTD*ufHoy)
+  let costoCLP=0, faltaCosto=false
+  ;(horas||[]).forEach(h=>{ if(String(h.client_id)!==String(sale.client_id)||String(h.fecha||'').slice(0,4)!==anio) return; const c=Number(costoHora[h.user_name]); if(!(h.user_name in costoHora)||!c){ faltaCosto=true } costoCLP += (Number(h.horas)||0)*((c||0)+overheadHora) })
+  costoCLP=Math.round(costoCLP); const margen=ingCLP-costoCLP; const pct=ingCLP>0?Math.round(margen/ingCLP*100):0
+  return { cid:sale.client_id, ingCLP, costoCLP, margen, pct, sinIng:feeUF<=0, faltaCosto }
+}
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -2559,6 +2578,24 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   const _mNow = new Date().getMonth()+1
   const costosOfiYTD = useMemo(()=>{ let t=0; for(let i=1;i<=_mNow;i++) t+=costosOficinaMes(costosOfiRows, `${yr}-${String(i).padStart(2,'0')}`); return t },[costosOfiRows,yr,_mNow])
   const costosOfiAnual = useMemo(()=>{ let t=0; for(let i=1;i<=12;i++) t+=costosOficinaMes(costosOfiRows, `${yr}-${String(i).padStart(2,'0')}`); return t },[costosOfiRows,yr])
+  // Clientes permanentes con margen real NEGATIVO (para la alerta "rinde bajo su costo"). Usa el helper único margenDeSale (mismo cálculo que Horas→Rentabilidad).
+  const [margenNeg,setMargenNeg] = useState([])
+  useEffect(()=>{ let alive=true
+    if(DEMO) return   // en demo no hay clientes con margen negativo (todos rinden); en prod usa el cálculo real
+    Promise.all([
+      supabase.from('horas').select('client_id,user_name,horas,fecha').gte('fecha',`${yr}-01-01`),
+      supabase.from('learnings').select('kind,key,value').in('kind',['costo_hora','meta_horas','config']),
+    ]).then(([hr,lr])=>{ if(!alive) return
+      const hrs=hr.data||[]; const costoHora={}, metas={}; let ufAnio=0
+      ;(lr.data||[]).forEach(r=>{ if(r.kind==='costo_hora')costoHora[r.key]=Number(r.value)||0; else if(r.kind==='meta_horas')metas[r.key]=Number(r.value)||0; else if(r.kind==='config'&&r.key==='uf_anio_'+yr)ufAnio=Number(r.value)||0 })
+      const ufAnioEff=ufAnio>0?ufAnio:ufRef
+      const oh=overheadHoraDe(costosOfiRows,metas,costoHora)
+      const mesesYTD=new Date().getMonth()+1
+      const negs=(sales||[]).filter(s=>!s.deleted_at&&esRec(s)).map(s=>margenDeSale(s,hrs,costoHora,oh,mesesYTD,ufRef,ufAnioEff,String(yr))).filter(d=>!d.sinIng&&!d.faltaCosto&&d.margen<0).sort((a,b)=>a.margen-b.margen)
+      setMargenNeg(negs)
+    },()=>{})
+    return ()=>{alive=false}
+  },[sales,costosOfiRows,ufRef,yr])
   const vendidoBrutoCLP = Math.round(salesYr.reduce((a,s)=>a+clpDeVenta(s),0))
   const costoCLP = Math.round(costoUF * ufRef)
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
@@ -2919,11 +2956,13 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const _pdLbl=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+prevYm.slice(5,7)-1]
         const entraPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm)).reduce((s,a)=>s+(Number(a.monto)||0),0)
         const cuestaPrev=costosOficinaMes(costosOfiRows, prevYm)
+        const cnA=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'cliente'
         const raw=[
           vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>setTab('cobranza')},
           (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
           progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
           cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Cuentas por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>setTab('billing')},
+          margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>setTab('repricing')},
           porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
           (costosOfiYTD>0 && ingYTD_a>0 && ingYTD_a<costosOfiYTD) && {key:'estructura',sev:'a',icon:'wallet',monto:costosOfiYTD-ingYTD_a,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(ingYTD_a)} < costos ${fmtMon(costosOfiYTD)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
         ].filter(Boolean)
@@ -21423,7 +21462,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' h'
   // Valor mensual de la asesoría en UF (fuente: la venta recurrente); pesos → UF del primer día hábil del año.
   const ufAnioEff = ufAnio>0 ? ufAnio : ufHoy
-  const ventaUFmes = s => s?.moneda==='CLP' ? (parseFloat(s?.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s?.amount_uf)||0)
+  const ventaUFmes = s => ventaUFmesDe(s, ufAnioEff)
   const estDe = s => { const u=ventaUFmes(s), t=tarifaUF||3; return u>0&&t>0 ? Math.ceil(u/t) : 0 }   // horas/mes autodefinidas (redondeo hacia arriba)
   const saleDe = cid => permanentes.find(p=>String(p.cid)===String(cid))?.sale
   // Propuestas descartadas (la app APRENDE): lo que botas no vuelve a proponerse. Clave = source:ref | tarea:id | coord:cid.
@@ -21642,15 +21681,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const hayOverhead = overheadMes>0 && capacidadMes>0
   const [ohOpen,setOhOpen] = useState(false)   // desglose del overhead por categoría (clickeable → Costos de Oficina)
   const overheadPorCat = useMemo(()=>{ const m={}; costosOfi.filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).forEach(r=>{ m[r.categoria]=(m[r.categoria]||0)+(r.es_ingreso?-1:1)*effCosto(r) }); return Object.entries(m).map(([cat,mes])=>({cat,mes,hora:capacidadMes>0?mes/capacidadMes:0})).filter(x=>x.mes!==0).sort((a,b)=>b.mes-a.mes) },[costosOfi,capacidadMes])
-  const margenData = useMemo(()=> permanentes.map(({cid,sale})=>{
-    const feeUF = ventaUFmes(sale); const ingCLP = Math.round(feeUF*mesesYTD*ufHoy)
-    const hCli = horas.filter(h=>String(h.client_id)===String(cid)&&String(h.fecha||'').slice(0,4)===anioAct)
-    const oh = cargarOverhead?overheadHora:0
-    let costoCLP=0, faltaCosto=false
-    hCli.forEach(h=>{ const c=Number(costoHora[h.user_name]); if(!(h.user_name in costoHora)||!c){ faltaCosto=true } costoCLP += (Number(h.horas)||0)*((c||0)+oh) })
-    costoCLP=Math.round(costoCLP); const margen=ingCLP-costoCLP; const pct=ingCLP>0?Math.round(margen/ingCLP*100):0
-    return { cid, ingCLP, costoCLP, margen, pct, sinIng:feeUF<=0, faltaCosto }
-  }), [permanentes, horas, costoHora, mesesYTD, ufHoy, anioAct, cargarOverhead, overheadHora])
+  const margenData = useMemo(()=> permanentes.map(({sale})=> margenDeSale(sale, horas, costoHora, cargarOverhead?overheadHora:0, mesesYTD, ufHoy, ufAnioEff, anioAct)),
+    [permanentes, horas, costoHora, mesesYTD, ufHoy, ufAnioEff, anioAct, cargarOverhead, overheadHora])
   const margenTot = margenData.filter(d=>!d.sinIng).reduce((a,d)=>({ing:a.ing+d.ingCLP,costo:a.costo+d.costoCLP,margen:a.margen+d.margen}),{ing:0,costo:0,margen:0})
   // ④ Rentabilidad por abogado: valor generado (horas facturables × tarifa) vs costo cargado (horas × costo/hora cargado).
   const tarifaCLP = (Number(tarifaUF)||3) * ufHoy
