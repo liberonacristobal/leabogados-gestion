@@ -23147,7 +23147,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ setValoresInfo({err: e?.code===401?'Reconéctate a Google (falta permiso de Gmail).':'No se pudo leer: '+(e?.message||'reintenta')}) }
     setValoresBusy(false)
   }
-  const poolCostos = useMemo(()=>[...(costosClaudia||[]), ...(costosOfi||[])], [costosClaudia, costosOfi])   // primero los exactos del correo, luego el presupuesto
+  const poolCostos = useMemo(()=>[...(costosClaudia||[]).map(x=>({...x,_src:'claudia'})), ...(costosOfi||[]).map(x=>({...x,_src:'presupuesto'}))], [costosClaudia, costosOfi])   // primero los exactos del correo, luego el presupuesto
   const [gcFor,setGcFor] = useState(null)        // Fase 3.D: cargo en flujo "por cuenta de cliente" (mov id)
   const [gcCli,setGcCli] = useState(null)        // cliente elegido para el gasto por cuenta de cliente
   const [gcEnt,setGcEnt] = useState(null)        // razón social elegida para ese gasto
@@ -24160,16 +24160,24 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const pick=exact.find(r=>_glosaHas(m.descripcion,r.item,r.categoria))||exact[0]
     return {fam:'oficina', category:pick.categoria, sub:pick.item, via:'presupuesto'}
   }
-  // Cargo AGRUPADO: el monto del cargo = suma EXACTA de 2-3 líneas del presupuesto (pago único por el total) → propone repartirlo.
+  // Cargo AGRUPADO: el monto del cargo = suma EXACTA de 2-3 líneas → propone repartirlo. Blindado contra falsos positivos:
+  // (1) umbral de monto (los pagos agrupados reales son grandes; montos chicos generan combinaciones espurias);
+  // (2) UNICIDAD — si más de una combinación suma el total, es ambiguo → no sugiere (no adivina);
+  // (3) SEÑAL — al menos un componente debe venir del correo de Claudia o calzar con la glosa (evita sumas coincidentes del presupuesto).
   const matchGrupoPresupuesto = m => {
     if(m.tipo!=='cargo'||m.es_interno||!(poolCostos||[]).length) return null
-    const abs=Math.round(Math.abs(Number(m.monto)||0)); if(abs<=0) return null
+    const abs=Math.round(Math.abs(Number(m.monto)||0)); if(abs<300000) return null
     const ym=String(m.fecha||'').slice(0,7)||new Date().toISOString().slice(0,7)
     const eff=r=>Math.round(Number((r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto)||0)
-    const it=(poolCostos||[]).filter(r=>!r.es_ingreso && eff(r)>0).map(r=>({categoria:r.categoria,item:r.item,monto:eff(r)}))
-    for(let i=0;i<it.length;i++) for(let j=i+1;j<it.length;j++){ if(it[i].monto+it[j].monto===abs) return {items:[it[i],it[j]]} }
-    for(let i=0;i<it.length;i++) for(let j=i+1;j<it.length;j++) for(let k=j+1;k<it.length;k++){ if(it[i].monto+it[j].monto+it[k].monto===abs) return {items:[it[i],it[j],it[k]]} }
-    return null
+    const it=(poolCostos||[]).filter(r=>!r.es_ingreso && eff(r)>0).map(r=>({categoria:r.categoria,item:r.item,monto:eff(r),src:r._src}))
+    const combos=[]
+    for(let i=0;i<it.length;i++) for(let j=i+1;j<it.length;j++){ if(it[i].monto+it[j].monto===abs) combos.push([it[i],it[j]]) }
+    for(let i=0;i<it.length;i++) for(let j=i+1;j<it.length;j++) for(let k=j+1;k<it.length;k++){ if(it[i].monto+it[j].monto+it[k].monto===abs) combos.push([it[i],it[j],it[k]]) }
+    if(combos.length!==1) return null   // 0 = no calza · >1 = ambiguo → no adivina
+    const combo=combos[0]
+    const conSenal = combo.some(x=> x.src==='claudia' || _glosaHas(m.descripcion,x.item,x.categoria))
+    if(!conSenal) return null   // sin señal (correo/glosa) = probable coincidencia → no sugiere
+    return {items:combo}
   }
   // Mes anterior con el mismo costo de oficina (categoría[+sub]) → hint "jul $X" para dar confianza.
   const cargoRachaHint = (cat,sub) => {
