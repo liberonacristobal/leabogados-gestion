@@ -476,6 +476,23 @@ const ADMIN_NAMES = ['Cristóbal','Erasmo']
 const CATS_OFICINA_ESTRUCTURAL = ['Sueldos','Retiros','Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Proveedores','Comisiones','Compras']
 // Un gasto de oficina es de GESTIÓN si su categoría NO es estructural (criterio por CATEGORÍA, determinista — no por quién lo cargó).
 const esGestionGasto = g => !CATS_OFICINA_ESTRUCTURAL.includes(String(g?.category||'').trim())
+// CATÁLOGO de Costos de Oficina (presupuesto de la firma): 9 categorías con su desglose. Reconstruido del Presupuesto 2026.
+// Parametrizable por estudio (regla de oro): las personas van como MONTO dentro de Socios/Abogados/etc., no cableadas como subcategoría.
+const CATS_OFICINA_CAT = [
+  { g:'Remuneraciones',          subs:['Socios','Abogados','Procurador','Abogado junior','Contadora','Aumentos y bonos'] },
+  { g:'Leyes sociales',          subs:['Cotizaciones','Mutual / cesantía','Gratificación'] },
+  { g:'Impuestos y patentes',    subs:['PPM','Patente municipal','Otros tributarios'] },
+  { g:'Arriendo y espacio',      subs:['Arriendo','Gastos comunes','Limpieza','Subarriendo'] },
+  { g:'Servicios y tecnología',  subs:['Cuentas (luz/agua/gas)','Internet','Telefonía','Google Workspace','ChatGPT','Software legal','FirmDesk','Respaldo / ciberseguridad'] },
+  { g:'Insumos de oficina',      subs:['Agua y bebidas','Café y supermercado','Artículos de oficina','Insumos tecnológicos'] },
+  { g:'Movilización y operación',subs:['Transporte / Uber','Tarjeta BIP','Estacionamiento','Varios'] },
+  { g:'Desarrollo de negocio',   subs:['Membresías','Regalos','Comidas y eventos','Almuerzos con clientes'] },
+  { g:'Seguros y contingencias', subs:['RC profesional','Seguro oficina','Provisión incobrables'] },
+]
+const CATS_OFICINA_NUEVAS = CATS_OFICINA_CAT.map(c=>c.g)
+const SUBCATS_OFICINA = Object.fromEntries(CATS_OFICINA_CAT.map(c=>[c.g,c.subs]))
+// Ítems que por defecto son INGRESO (restan al costo, ej. subarriendo recupera parte del arriendo).
+const OFICINA_INGRESO_ITEMS = new Set(['Subarriendo'])
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -6290,6 +6307,127 @@ function RolesModal({ onOpenUsers }){
         <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/></svg>
         Gestión de usuarios →
       </div>
+    </div>
+  )
+}
+// Costos de Oficina (presupuesto editable de la firma). Categorías + desglose; cada ítem con su monto mensual.
+// Soporta aumentos a mitad de año (monto + monto_prev + desde). El total del mes usa el valor vigente de ESE mes.
+function CostosOficinaModal(){
+  const [rows,setRows] = useState(null)
+  const [open,setOpen] = useState(()=>new Set())      // categorías desplegadas
+  const [edId,setEdId] = useState(null)                // fila en edición
+  const [ef,setEf] = useState({monto:'',desde:'',prev:''})
+  const [addCat,setAddCat] = useState(null)            // categoría en la que se agrega ítem
+  const [af,setAf] = useState({item:'',monto:''})
+  const [extraCats,setExtraCats] = useState([])        // categorías nuevas creadas a mano (aún sin ítems)
+  const ym0 = new Date().toISOString().slice(0,7)
+  const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  const anio = ym0.slice(0,4)
+  const mesesOpt = MESES.map((m,i)=>({v:`${anio}-${String(i+1).padStart(2,'0')}-01`, l:`${m.charAt(0).toUpperCase()+m.slice(1)} ${anio}`}))
+  useEffect(()=>{ let alive=true
+    if(DEMO){ setRows([
+      {id:'co1',categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000,desde:'2026-03-01',monto_prev:780000},
+      {id:'co2',categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000,desde:'2026-03-01',monto_prev:240000},
+      {id:'co3',categoria:'Arriendo y espacio',item:'Limpieza',monto:270000},
+      {id:'co4',categoria:'Arriendo y espacio',item:'Subarriendo',monto:900000,es_ingreso:true},
+      {id:'co5',categoria:'Servicios y tecnología',item:'Internet',monto:34200},
+      {id:'co6',categoria:'Servicios y tecnología',item:'Google Workspace',monto:90000},
+      {id:'co7',categoria:'Servicios y tecnología',item:'ChatGPT',monto:20000},
+      {id:'co8',categoria:'Impuestos y patentes',item:'PPM',monto:800000},
+    ]); return }
+    supabase.from('costos_oficina').select('*').eq('activo',true).order('orden').then(({data})=>{ if(alive) setRows(data||[]) },()=>{ if(alive) setRows([]) })
+    return ()=>{alive=false}
+  },[])
+  const eff = r => (r.desde && ym0 < String(r.desde).slice(0,7)) ? (r.monto_prev??r.monto) : r.monto
+  const signo = r => (r.es_ingreso?-1:1)
+  const totalMes = (rows||[]).reduce((a,r)=>a+eff(r)*signo(r),0)
+  const totalCat = cat => (rows||[]).filter(r=>r.categoria===cat).reduce((a,r)=>a+eff(r)*signo(r),0)
+  const catsPresentes = [...new Set((rows||[]).map(r=>r.categoria))]
+  const cats = [...CATS_OFICINA_NUEVAS, ...catsPresentes.filter(c=>!CATS_OFICINA_NUEVAS.includes(c)), ...extraCats.filter(c=>!CATS_OFICINA_NUEVAS.includes(c)&&!catsPresentes.includes(c))]
+  const tog = c => setOpen(p=>{const s=new Set(p); s.has(c)?s.delete(c):s.add(c); return s})
+  const abrirEdit = r => { setAddCat(null); setEdId(r.id); setEf({monto:String(r.monto||''), desde:r.desde||'', prev:r.monto_prev!=null?String(r.monto_prev):''}) }
+  const guardarEdit = async r => {
+    const nMonto = Math.max(0,Math.round(parseFloat(ef.monto)||0))
+    const nDesde = ef.desde||null
+    const nPrev = nDesde ? Math.max(0,Math.round(parseFloat(ef.prev)||0)) : null
+    const patch = {monto:nMonto, desde:nDesde, monto_prev:nPrev}
+    setRows(p=>p.map(x=>x.id===r.id?{...x,...patch}:x)); setEdId(null)
+    if(!DEMO){ try{ await supabase.from('costos_oficina').update({...patch,updated_at:new Date().toISOString()}).eq('id',r.id) }catch(_){} }
+  }
+  const borrar = async r => { if(!await appConfirm(`Quitar "${r.item}" de ${r.categoria}?`)) return
+    setRows(p=>p.filter(x=>x.id!==r.id)); setEdId(null)
+    if(!DEMO){ try{ await supabase.from('costos_oficina').update({activo:false}).eq('id',r.id) }catch(_){} }
+  }
+  const agregar = async cat => {
+    const item=(af.item||'').trim(); const monto=Math.max(0,Math.round(parseFloat(af.monto)||0))
+    if(!item){ appAlert('Ponle un nombre al ítem.'); return }
+    const es_ingreso = OFICINA_INGRESO_ITEMS.has(item)
+    const nuevo = {categoria:cat, item, monto, es_ingreso, activo:true}
+    if(DEMO){ setRows(p=>[...p,{...nuevo,id:'co'+Math.random().toString(36).slice(2,7)}]); setAf({item:'',monto:''}); setAddCat(null); return }
+    try{ const {data}=await supabase.from('costos_oficina').insert(nuevo).select().single(); setRows(p=>[...p,data||{...nuevo,id:'tmp'+Date.now()}]) }catch(e){ appAlert('No se pudo agregar: '+(e.message||e)); return }
+    setAf({item:'',monto:''}); setAddCat(null)
+  }
+  const nuevaCat = async () => { const nv=await appPrompt('Nueva categoría de costo:'); if(nv&&nv.trim()){ const c=nv.trim(); setExtraCats(p=>[...p,c]); setOpen(p=>new Set([...p,c])); setAddCat(c) } }
+  if(rows===null) return <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>
+  const inpS = {height:32,border:`1px solid ${C.border}`,borderRadius:8,background:'#fff',fontSize:12.5,color:C.text,padding:'0 9px',outline:'none'}
+  return (
+    <div style={{padding:'2px 0 6px'}}>
+      <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,marginBottom:12}}>El presupuesto de la firma. Toca un monto para ajustarlo (si subió a mitad de año, marca <b>“rige desde”</b> y guarda el valor anterior). Agrega ítems o categorías cuando aparezca un costo nuevo.</div>
+      <div style={{background:C.accent,borderRadius:12,padding:'12px 14px',marginBottom:12,color:'#fff'}}>
+        <div style={{fontSize:9,textTransform:'uppercase',letterSpacing:'.06em',opacity:.8,fontWeight:700}}>Total del mes · {MESES[+ym0.slice(5,7)-1]?.charAt(0).toUpperCase()+MESES[+ym0.slice(5,7)-1]?.slice(1)} {anio}</div>
+        <div style={{fontSize:22,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(totalMes)}</div>
+      </div>
+      {cats.map(cat=>{ const op=open.has(cat); const items=(rows||[]).filter(r=>r.categoria===cat); const subs=SUBCATS_OFICINA[cat]||[]; return (
+        <div key={cat} style={{border:`1px solid ${C.border}`,borderRadius:11,marginBottom:7,overflow:'hidden'}}>
+          <div onClick={()=>tog(cat)} style={{display:'flex',alignItems:'center',gap:9,padding:'11px 12px',cursor:'pointer',background:op?C.bgSoft:'transparent'}}>
+            <span style={{flex:1,fontSize:13,fontWeight:700,color:C.accent}}>{cat}</span>
+            <span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{items.length?fmt(totalCat(cat)):'—'}</span>
+            <span style={{fontSize:9,color:C.done,fontWeight:700}}>{items.length||''}</span>
+            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:op?'rotate(180deg)':'none'}}><path d='M6 9l6 6 6-6'/></svg>
+          </div>
+          {op && <div style={{borderTop:`1px solid ${C.border}`}}>
+            {items.map((r,i)=>(
+              <div key={r.id} style={{borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+                {edId===r.id ? (
+                  <div style={{padding:'9px 12px',background:C.bgSoft}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.accent,marginBottom:7}}>{r.item}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}><span style={{fontSize:11,color:C.muted,width:52}}>Monto</span><span style={{fontSize:12,color:C.done}}>$</span><input type='number' value={ef.monto} onChange={e=>setEf(f=>({...f,monto:e.target.value}))} style={{...inpS,flex:1,textAlign:'right',fontVariantNumeric:'tabular-nums'}}/></div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:ef.desde?7:0}}><span style={{fontSize:11,color:C.muted,width:52}}>Rige desde</span><select value={ef.desde} onChange={e=>setEf(f=>({...f,desde:e.target.value, prev:e.target.value&&!f.prev?String(r.monto||''):f.prev}))} style={{...inpS,flex:1}}><option value=''>Siempre</option>{mesesOpt.map(m=><option key={m.v} value={m.v}>{m.l}</option>)}</select></div>
+                    {ef.desde&&<div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:C.muted,width:52}}>Antes</span><span style={{fontSize:12,color:C.done}}>$</span><input type='number' value={ef.prev} onChange={e=>setEf(f=>({...f,prev:e.target.value}))} placeholder='monto anterior' style={{...inpS,flex:1,textAlign:'right',fontVariantNumeric:'tabular-nums'}}/></div>}
+                    <div style={{display:'flex',gap:7,marginTop:9}}>
+                      <button onClick={()=>guardarEdit(r)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Guardar</button>
+                      <button onClick={()=>setEdId(null)} style={{padding:'8px 13px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                      <button onClick={()=>borrar(r)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.overdueText,fontSize:12,fontWeight:600,cursor:'pointer'}}>Quitar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div onClick={()=>abrirEdit(r)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,color:C.text}}>{r.item}</div>
+                      {r.desde&&r.monto_prev!=null&&<div style={{fontSize:9.5,color:C.soonText,fontWeight:600,marginTop:1}}>subió en {MESES[+String(r.desde).slice(5,7)-1]} · antes {fmt(r.monto_prev)}</div>}
+                    </div>
+                    <span style={{fontSize:12.5,fontWeight:600,color:r.es_ingreso?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{r.es_ingreso?'−':''}{fmt(eff(r))}</span>
+                    <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'/></svg>
+                  </div>
+                )}
+              </div>
+            ))}
+            {addCat===cat ? (
+              <div style={{padding:'9px 12px',background:C.bgSoft,borderTop:`0.5px solid ${C.border}`}}>
+                <input list={`sub-${cat}`} value={af.item} onChange={e=>setAf(f=>({...f,item:e.target.value}))} placeholder='Ítem (subcategoría)' style={{...inpS,width:'100%',marginBottom:7}}/>
+                <datalist id={`sub-${cat}`}>{subs.map(s=><option key={s} value={s}/>)}</datalist>
+                <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:12,color:C.done}}>$</span><input type='number' value={af.monto} onChange={e=>setAf(f=>({...f,monto:e.target.value}))} placeholder='monto/mes' style={{...inpS,flex:1,textAlign:'right'}}/>
+                  <button onClick={()=>agregar(cat)} style={{padding:'8px 13px',borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Agregar</button>
+                  <button onClick={()=>{setAddCat(null);setAf({item:'',monto:''})}} style={{padding:'8px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>×</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={()=>{setEdId(null);setAddCat(cat);setAf({item:'',monto:''})}} style={{width:'100%',textAlign:'left',padding:'8px 12px',border:'none',borderTop:`0.5px dashed ${C.border}`,background:'none',color:C.azulInfo,fontSize:11.5,fontWeight:600,cursor:'pointer'}}>+ Agregar ítem</button>
+            )}
+          </div>}
+        </div>
+      )})}
+      <button onClick={nuevaCat} style={{width:'100%',padding:'10px',border:`1px dashed ${C.border}`,background:'transparent',borderRadius:10,color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',marginTop:3}}>+ Nueva categoría</button>
     </div>
   )
 }
@@ -26840,6 +26978,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
                   Roles y permisos
                 </div>
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'costosOficina'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='16' rx='2'/><path d='M3 10h18M8 4v16'/></svg>
+                  Costos de oficina
+                </div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redProfesional'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='3.2'/><path d='M5.5 20a6.5 6.5 0 0 1 13 0'/><circle cx='19' cy='6' r='2'/><circle cx='5' cy='6' r='2'/></svg>
                   Red profesional
@@ -27003,6 +27145,7 @@ export default function App() {
         {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
         {modal?.type==='modulos'&&<Modal title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
+        {modal?.type==='costosOficina'&&<Modal title='Costos de oficina' maxWidth={520} onClose={()=>setModal(null)}><CostosOficinaModal/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
