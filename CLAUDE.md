@@ -36,6 +36,28 @@ Principio rector más importante. La app debe ser muy autónoma y construir memo
 - La app anticipa: autocompleta, sugiere, recuerda. Si ya tiene el dato, lo usa; solo pregunta ante ambigüedad real que no puede resolver.
 - Al diseñar cualquier feature preguntarse: "¿esto obliga a repetir algo que la app ya podría saber?". Si sí, está mal diseñada.
 
+## REGLA DE ORO: el valor COMPOUNDING — más datos, más valor
+
+Complemento directo de "la herramienta APRENDE". Mientras APRENDE cubre *no repetir trabajo*, esta regla cubre *devolver cada vez más*. La app acumula datos con el uso (ventas, cobros, horas, gastos, conciliación, tareas, correos); **cada dato nuevo debe convertirse en más valor para el dueño**, no quedarse guardado. El norte: un estudio de abogados **liviano y efectivo**, que con la misma gente rinde más porque el software le da la foto que antes no tenía.
+
+- **Más datos → más métricas.** Cuando una feature junta suficiente historia para calcular algo útil (una tendencia, un margen, una proyección, un ranking, una alerta), **entrégalo** — no esperes a que lo pidan. Pregúntate siempre: "con lo que la app YA tiene, ¿qué métrica/insight puedo mostrar que hoy no muestro?".
+- **Tiempo real por defecto.** Los números se calculan en vivo desde la fuente (helpers únicos), nunca congelados ni cargados a mano. Si algo cambió (un cobro entró, una hora se cargó), la foto lo refleja al instante.
+- **Todo descargable/compartible.** Toda métrica, reporte o lista relevante debe poder **exportarse** (PNG/PDF/Excel/CSV según sirva) para llevar a una reunión, al contador o al cliente. Lo que no se puede sacar de la app, no sirve para decidir afuera.
+- **Anticipar, no solo reportar.** El valor máximo no es mostrar el pasado sino **avisar antes**: proyección de fin de año, cliente que se enfría, cobro que se va a vencer, margen que cae, carga que se desbalancea. Convertir el dato en acción.
+- **Del dato crudo al insight accionable.** No basta con listar; agrupar, rankear, comparar contra meta, marcar el estado. El dueño debe entender "qué hacer" de un vistazo (canon de la foto).
+- **Auditable y de fuente única** (ver "Rigor matemático"): cada métrica nueva sale de su helper único y el usuario puede rastrear de dónde sale cada cifra. Confianza por diseño.
+- Al construir CUALQUIER feature, cerrar con: "¿qué métrica, exportación o alerta puedo sumar ahora que tengo estos datos, para que el estudio sea más liviano y efectivo?".
+
+## REGLA DE ORO: la app se AUTO-ACTUALIZA (mejora desde lo aprendido)
+
+La app no es estática: es capaz de **mejorarse a sí misma** en base a todo lo que aprende. Cada patrón detectado (una decisión que el usuario repite, un descuadre que aparece seguido, una glosa que siempre mapea igual, un flujo que cuesta) es material para que la app **proponga e implemente su próxima mejora**. El conocimiento acumulado (`learnings`, `usage_events`, correcciones, auditorías) es el insumo de la siguiente versión, no solo un registro.
+
+- **De learning a feature.** Cuando la app ya aprendió algo lo suficiente (misma corrección N veces, misma sugerencia aceptada siempre), dar el paso: automatizar ese paso, subir la confianza, o proponer la mejora al usuario. El patrón "compuerta humana → aprende → se libera" ([[firmdesk-back-office-autonomo]]) es el molde.
+- **La app se auto-diagnostica.** Detecta sus propios descuadres, falsos positivos y deuda (paneles de Salud de datos / Revisión), y con eso **propone** qué arreglar — no espera a que el humano lo cace.
+- **La próxima versión sale del conocimiento** ([[plan-nueva-version]]): al planificar mejoras, mirar primero lo que la app YA sabe (datos, learnings, uso real de cada usuario) y derivar de ahí las features, en vez de inventar desde cero.
+- **Con compuerta y auditable.** Auto-mejorar NO es actuar a ciegas: propone, muestra el porqué (los datos que lo respaldan), y deja al humano aprobar lo sensible (cifras, correos, SII, destructivo) — coherente con "Autonomía autorizada" y la pausa de seguridad. Toda auto-mejora es reversible.
+- **Mide su propio impacto.** Cuando implementa una mejora, la app puede medir si funcionó (menos pasos manuales, menos descuadres, más cobrado a tiempo) y seguir ajustando. Ciclo cerrado: aprende → propone → implementa → mide → aprende.
+
 ## Experiencia de uso: que no dé miedo ni sea carga
 
 - Práctica e intuitiva ante todo. Usarla debe ser un alivio, no una complejidad.
@@ -59,6 +81,17 @@ La app maneja dinero, UF, gastos, saldos y proyecciones. Cero tolerancia a error
 - Conversiones UF↔CLP con el valor UF de la fecha correcta, no congelado. Al integrar mindicador.cl, convertir con el valor del día.
 - Verificar que subtotales sumen el total general antes de mostrar agregados.
 - Cifras auditables: el usuario debe poder entender de dónde sale cada número.
+
+## REGLA DE ORO: cuestionar siempre el propio análisis
+
+Antes de entregar cualquier análisis, diagnóstico, causa-raíz o afirmación sobre cifras, **cuestiónalo como si fuera de otro** y busca activamente por qué podría estar mal. No entregues la primera lectura como si fuera la verdad.
+
+- **Enumera hipótesis alternativas, no una sola.** Ante un descuadre o un dato raro, plantea varias causas posibles y descártalas con datos, en vez de casarte con la primera explicación (que suele ser la más alarmista o la más simple).
+- **Revisa tus supuestos de consulta.** El error típico: preguntar en el plano equivocado. Ejemplo real: buscar respaldo bancario solo en `conciliacion.tipo_destino='factura'` dio 21 falsos "sin respaldo / $23M"; la plata estaba conciliada a nivel **abono/anticipo**. Antes de concluir, pregúntate: "¿mi consulta cubre TODOS los caminos por los que este dato puede existir?" (otras tablas, otros `tipo_destino`, columnas como `prepaid_anticipo_id`/`reconciled_at`/`payment_method`).
+- **Distingue "diferencia estructural" de "error".** Dos números que miden cosas distintas (planos, ejes, fechas) NO tienen por qué calzar; eso no es un bug ni fraude. No presentes una diferencia esperada como una fuga.
+- **Calibra el tono al evidencia.** Nada de "riesgo/fraude/$23M" sin haber agotado las explicaciones benignas. La conclusión alarmista es la que más hay que auditar antes de decirla.
+- **Escucha la corrección del usuario como señal.** Si el usuario dice "puede que estés analizando mal", asume que probablemente lo estás; re-levanta TODO el dato desde cero, no defiendas la lectura anterior.
+- Esto refuerza (no reemplaza) "Cifras auditables" y la pausa de seguridad en cambios de cifras: primero dudar, verificar y recién ahí afirmar.
 
 ## Economía de espacio en formularios
 
