@@ -17711,9 +17711,12 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
     try{
       // Clientes activos
       const resActivos=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${CLIENTES_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
+      // Dedup ROBUSTO = mismo criterio que el edge function clientes-drive-sync: colapsa espacios y quita acentos.
+      // (Antes .toLowerCase().trim() dejaba pasar "Fernando  Oliver" vs "Fernando Oliver" y "Survias" vs "Survías" → duplicados.)
+      const nrmName=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim()
       const activos=(resActivos.files||[]).filter(f=>!f.name.startsWith('1. CLIENTES'))
-      const existingNames=clients.map(c=>(c.name||'').toLowerCase().trim())
-      const nuevos=activos.filter(f=>!existingNames.includes(f.name.toLowerCase().trim()))
+      const existingNames=clients.map(c=>nrmName(c.name))
+      const nuevos=activos.filter(f=>!existingNames.includes(nrmName(f.name)))
       setNewClients(nuevos)
 
       // Clientes terminados - buscar subcarpetas 2024 y 2025
@@ -17722,7 +17725,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
 
       for(const yf of yearFolders){
         const resYear=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${yf.id}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
-        const yearClients=(resYear.files||[]).filter(f=>!existingNames.includes(f.name.toLowerCase().trim()))
+        const yearClients=(resYear.files||[]).filter(f=>!existingNames.includes(nrmName(f.name)))
         if(yf.name.includes('2024')) setTerminados2024(yearClients)
         if(yf.name.includes('2025')) setTerminados2025(yearClients)
       }
