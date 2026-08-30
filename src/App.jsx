@@ -17676,6 +17676,18 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
     setSyncing(true); setSyncMsg(null)
     if(DEMO){ await new Promise(r=>setTimeout(r,700)); setSyncMsg('Demo: +2 nuevos incorporados, 3 archivados.'); setSyncing(false); return }
     try{
+      // 1) Previa (dryRun): NO escribe. Muestra qué incorporaría y qué archivaría → corrida supervisada.
+      const {data:prev,error:pe}=await supabase.functions.invoke('clientes-drive-sync',{body:{dryRun:true}})
+      if(pe) throw pe
+      if(prev?.error) throw new Error(prev.error)
+      const addN=prev.wouldAddN||0, termN=prev.wouldTerminateN||0
+      if(!addN && !termN){ setSyncMsg('Todo al día: no hay nada nuevo que incorporar ni archivar.'); setSyncing(false); return }
+      const lista=(arr,n)=>{ const a=(arr||[]).slice(0,12); return a.join(', ')+(n>a.length?` y ${n-a.length} más`:'') }
+      const partes=[]
+      if(addN) partes.push(`Incorporar ${addN} cliente${addN!==1?'s':''} nuevo${addN!==1?'s':''}: ${lista(prev.wouldAdd,addN)}`)
+      if(termN) partes.push(`Archivar ${termN} cliente${termN!==1?'s':''} movido${termN!==1?'s':''} a Terminados: ${lista(prev.wouldTerminate,termN)}`)
+      if(!await appConfirm(`Drive propone:\n\n${partes.join('\n\n')}\n\n¿Aplicar? Es reversible.`)){ setSyncMsg('Cancelado — no se aplicó nada.'); setSyncing(false); return }
+      // 2) Aplicar de verdad.
       const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
       if(error) throw error
       if(data?.error) throw new Error(data.error)
