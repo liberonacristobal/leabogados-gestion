@@ -2580,6 +2580,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   const costosOfiAnual = useMemo(()=>{ let t=0; for(let i=1;i<=12;i++) t+=costosOficinaMes(costosOfiRows, `${yr}-${String(i).padStart(2,'0')}`); return t },[costosOfiRows,yr])
   // Clientes permanentes con margen real NEGATIVO (para la alerta "rinde bajo su costo"). Usa el helper único margenDeSale (mismo cálculo que Horas→Rentabilidad).
   const [margenNeg,setMargenNeg] = useState([])
+  // Puesta en marcha de Horas: horas propias cargadas ESTA semana (null=aún no sé; 0=no cargó → nudge para encender el módulo).
+  const [misHorasSem,setMisHorasSem] = useState(null)
   useEffect(()=>{ let alive=true
     if(DEMO) return   // en demo no hay clientes con margen negativo (todos rinden); en prod usa el cálculo real
     Promise.all([
@@ -2587,6 +2589,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       supabase.from('learnings').select('kind,key,value').in('kind',['costo_hora','meta_horas','config']),
     ]).then(([hr,lr])=>{ if(!alive) return
       const hrs=hr.data||[]; const costoHora={}, metas={}; let ufAnio=0
+      const _me=user?.name||''
+      if(_me){ const _d=new Date(); const _lun=new Date(_d); _lun.setDate(_d.getDate()-((_d.getDay()+6)%7)); const _li=_lun.toLocaleDateString('en-CA'); setMisHorasSem(hrs.filter(h=>h.user_name===_me && String(h.fecha||'')>=_li).reduce((a,h)=>a+(Number(h.horas)||0),0)) }
       ;(lr.data||[]).forEach(r=>{ if(r.kind==='costo_hora')costoHora[r.key]=Number(r.value)||0; else if(r.kind==='meta_horas')metas[r.key]=Number(r.value)||0; else if(r.kind==='config'&&r.key==='uf_anio_'+yr)ufAnio=Number(r.value)||0 })
       const ufAnioEff=ufAnio>0?ufAnio:ufRef
       const oh=overheadHoraDe(costosOfiRows,metas,costoHora)
@@ -2957,12 +2961,14 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const entraPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm)).reduce((s,a)=>s+(Number(a.monto)||0),0)
         const cuestaPrev=costosOficinaMes(costosOfiRows, prevYm)
         const cnA=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'cliente'
+        const _wk=(()=>{ const d=new Date(); const m=new Date(d); m.setDate(d.getDate()-((d.getDay()+6)%7)); return m.toLocaleDateString('en-CA') })()   // lunes de la semana → el nudge de horas se puede descartar por semana y reaparece el lunes
         const raw=[
           vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>setTab('cobranza')},
           (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
           progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
           cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Cuentas por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>setTab('billing')},
           margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>setTab('repricing')},
+          (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>setTab('horas')},
           porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
           (costosOfiYTD>0 && ingYTD_a>0 && ingYTD_a<costosOfiYTD) && {key:'estructura',sev:'a',icon:'wallet',monto:costosOfiYTD-ingYTD_a,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(ingYTD_a)} < costos ${fmtMon(costosOfiYTD)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
         ].filter(Boolean)
