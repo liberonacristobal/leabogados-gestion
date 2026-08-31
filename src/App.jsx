@@ -11691,6 +11691,21 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 
   const inS = {padding:'7px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none',width:'100%'}
 
+  // Pieza 5a: aviso a los socios tras la carga de notaría (resumen + alarmas). Cifras al final, con total. Compuerta: lo envías tú.
+  const [avisadoSocios,setAvisadoSocios] = useState(false)
+  const avisarSocios = async () => {
+    const conCli=(rows||[]).filter(r=>r.client_id||r.personal_de).length
+    const sinCli=(rows||[]).filter(r=>!r.error&&!r.client_id&&!r.personal_de).length
+    const nImp=resultado?.imported||resultado?.actualizados||0
+    const al=(rows||[]).filter(r=>['pagada','rendida'].includes(dupInfo[r.id]?.otState)).map(r=>{ const e=dupInfo[r.id].otDup, st=dupInfo[r.id].otState; const otL=String(r.ot).toUpperCase().startsWith('OT')?String(r.ot).toUpperCase():'OT-'+r.ot; const cn=e.client_id?(clients.find(c=>String(c.id)===String(e.client_id))?.name||'cliente'):'cliente'; return {otL,st,cn,monto:r.monto||0} })
+    const totAl=al.reduce((a,x)=>a+x.monto,0)
+    const li=(t,m)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid #E4E8EB;font-size:12px"><span>${t}</span><span style="font-weight:700;color:#003C50;white-space:nowrap">${m}</span></div>`
+    const alarmasHtml = al.length ? `<div style="margin-top:14px"><b style="color:#9A3A24">Alarmas — estas OT no se cargaron, revísalas:</b>${al.map(x=>li(`${x.otL} · ya ${x.st==='pagada'?'pagada a la notaría':'rendida a '+x.cn}`, '$'+x.monto.toLocaleString('es-CL'))).join('')}${li('<b>Total en alarma</b>','<b>$'+totAl.toLocaleString('es-CL')+'</b>')}</div>` : ''
+    const html=`<div style="font-family:Arial,Helvetica,sans-serif;color:#26333A;font-size:13px;line-height:1.6">Hola,<br><br>Cargué <b>${nImp}</b> OT${nImp!==1?'s':''} de la notaría.${li('Con cliente identificado','<b>'+conCli+'</b>')}${li('Por asignar','<b>'+sinCli+'</b>')}${alarmasHtml}<br>Saludos.</div>`
+    if(!await appConfirm(`¿Avisar a los socios (Cristóbal y Erasmo) el resumen de esta carga${al.length?` y las ${al.length} alarma${al.length!==1?'s':''}`:''}?`)) return
+    try{ const via=await enviarComoUsuario({to:'cl@leabogados.cl, ee@leabogados.cl', subject:`Carga de notaría — ${nImp} OT${nImp!==1?'s':''}${al.length?` · ${al.length} alarma${al.length!==1?'s':''}`:''}`, html, text:`Cargué ${nImp} OTs de la notaría.${al.length?` ${al.length} alarmas detectadas.`:''}`}); if(via){ setAvisadoSocios(true); appAlert('Aviso enviado a los socios'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') } }catch(e){ appAlert('No se pudo enviar el aviso: '+(e.message||e)) }
+  }
+
   if(resultado) return (
     <div style={{textAlign:'center',padding:'8px 4px 4px'}}>
       <div style={{width:54,height:54,borderRadius:'50%',background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',margin:'4px auto 12px'}}>
@@ -11708,6 +11723,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Parte por parte: tras Corregir queda el paso de Importar (y viceversa), sin perder el otro */}
       {resultado.corregirDone&&!resultado.importarDone&&resultado.nuevosPend>0&&<button disabled={guardando} onClick={aplicarImportar} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.greenText,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora importa las ${resultado.nuevosPend} nuevas →`}</button>}
       {resultado.importarDone&&!resultado.corregirDone&&resultado.actualizarPend>0&&<button disabled={guardando} onClick={aplicarCorregir} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.azulInfo,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora corrige las ${resultado.actualizarPend} →`}</button>}
+      {notaria&&<button onClick={avisarSocios} disabled={avisadoSocios} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:avisadoSocios?C.done:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:avisadoSocios?'default':'pointer',marginBottom:9}}>{avisadoSocios?'Socios avisados':'Avisar a los socios'}</button>}
       <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
       {resultado.concil&&concilBefore&&concilBefore.length>0&&<button onClick={async()=>{ if(await appConfirm('¿Revertir las correcciones de cliente/categoría a como estaban antes?')){ const ok=await onUndoConciliar(concilBefore); if(ok){ setConcilBefore(null); onClose() } } }} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Revertir correcciones ({concilBefore.length})</button>}
       {resultado.batchId&&resultado.imported>0&&<button onClick={()=>setUndoTarget({batchId:resultado.batchId,count:resultado.imported})} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Deshacer importación</button>}
