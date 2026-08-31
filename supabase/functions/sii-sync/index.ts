@@ -15,7 +15,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { obtenerToken } from './auth.ts'
-import { getVentas, getCompras } from './rcv.ts'
+import { getVentas, getCompras, getComprasRaw } from './rcv.ts'
 import { conciliar, normalizarRut } from './match.ts'
 import { getConfig, getEmisor, getResol } from './config.ts'
 import { parseCaf } from './caf.ts'
@@ -94,7 +94,8 @@ serve(async (req) => {
 
   // Acceso: admin (email en el JWT) O el cron con su secreto, pero el secreto SOLO autoriza los jobs de reporte
   // (nunca emitir/anular/libro). Así, si el secreto se filtrara, no puede emitir DTE en tu nombre.
-  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal']
+  // sync-compras entra aca: es un sync de solo LECTURA del RCV + escritura en sii_compras_docs (NUNCA emite/anula/libro).
+  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras']
   const email = emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !ADMINS.includes(email))) {
@@ -310,6 +311,11 @@ serve(async (req) => {
       console.log(`[sii-sync] sync-compras ${periodoC} solicitado por ${email}`)
 
       let tokenC = await obtenerToken()
+      // DEBUG (temporal): dump crudo para verificar campos/tipos contra el SII real.
+      if (body.debug) {
+        try { return json({ ok: true, debug: true, raw: await getComprasRaw(periodoC, tokenC) }) }
+        catch (e) { tokenC = await obtenerToken(true); return json({ ok: true, debug: true, raw: await getComprasRaw(periodoC, tokenC) }) }
+      }
       let compras
       try {
         compras = await getCompras(periodoC, tokenC)
