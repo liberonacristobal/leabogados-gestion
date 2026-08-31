@@ -11002,7 +11002,9 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
 
 function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[],onSave,onBulkImport,onConciliar,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
-  const [modo,setModo] = useState('conciliar')   // siempre concilia: actualiza lo existente + importa solo lo nuevo (nunca duplica)
+  // Notaría: modo SIMPLE = cola de confirmación 1×1 (sugerencia + Confirmar por fila, solo importa lo confirmado, muestra todo el documento).
+  // Resto: modo conciliar (actualiza lo existente + importa lo nuevo). El anti-duplicados por OT (handleBulkImport) igual protege en simple.
+  const [modo,setModo] = useState(notaria?'importar':'conciliar')
   const [noTocarRendidos,setNoTocarRendidos] = useState(true)  // en conciliar, no cambiar cliente de gastos ya rendidos
   const [showRend,setShowRend] = useState(false)   // ver detalle de rendidos que calzaron
   const [showDup,setShowDup] = useState(false)     // ver detalle de duplicados del archivo
@@ -11767,6 +11769,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <div style={{background:C.overdueBg,border:`1px solid ${C.overdue}`,borderRadius:10,padding:'9px 11px',marginBottom:10}}>
               <div style={{fontSize:12,fontWeight:800,color:C.overdueText}}>{al.length} alarma{al.length!==1?'s':''} de OT — revísalas antes de importar</div>
               <div style={{fontSize:10.5,color:C.overdueText,marginTop:2}}>{nP>0?`${nP} ya pagada${nP!==1?'s':''} a la notaría`:''}{nP>0&&nR>0?' · ':''}{nR>0?`${nR} ya rendida${nR!==1?'s':''} al cliente`:''}. Aparecen marcadas abajo; no las cargues sin verlas.</div>
+            </div>
+          )})()}
+          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const conf=val.filter(r=>r.client_id||r.personal_de).length; const pend=val.filter(r=>!r.client_id&&!r.personal_de&&r.suggestion).length; const sin=val.filter(r=>!r.client_id&&!r.personal_de&&!r.suggestion).length; const pct=val.length?Math.round(conf/val.length*100):0; return (
+            <div style={{background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:10}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>{conf} de {val.length} confirmadas</span><span style={{fontSize:10,color:C.muted}}>{pend>0?`${pend} sugerida${pend!==1?'s':''} por confirmar`:''}{pend>0&&sin>0?' · ':''}{sin>0?`${sin} sin cliente`:''}</span></div>
+              <div style={{height:6,background:C.border,borderRadius:4,overflow:'hidden'}}><div style={{height:'100%',width:pct+'%',background:C.normal,borderRadius:4,transition:'width .2s'}}/></div>
+              <div style={{fontSize:9.5,color:C.done,marginTop:5}}>Confirma cada OT antes de importar — nada se guarda sin tu confirmación.</div>
             </div>
           )})()}
           {modo!=='conciliar'&&<div style={{display:'flex',gap:6,marginBottom:10}}>
