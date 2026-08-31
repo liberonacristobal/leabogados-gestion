@@ -11513,7 +11513,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const byOt=new Map(); (expenses||[]).forEach(e=>{ if(!e.deleted_at&&e.ot_number){ const o=_normOt(e.ot_number); if(o) byOt.set(o,e) } })
     ;(rows||[]).forEach(r=>{
       const info={}
-      const o=_normOt(r.ot); if(o&&byOt.has(o)) info.otDup=byOt.get(o)
+      const o=_normOt(r.ot); if(o&&byOt.has(o)){ const e=byOt.get(o); info.otDup=e
+        // Estado de la OT que ya existe → alarma respectiva. "Pagada" = está en tu correo/liquidación a la notaría.
+        info.otState = (e.notaria_liquidado_at||e.notaria_render_id) ? 'pagada'
+          : (e.client_render_id||e.client_rendered_at||e.render_id||e.rendered_at) ? 'rendida'
+          : 'cargada' }
       if(r.client_id){
         const rt=_toksDup(`${r.concepto} ${r.subconcepto||''}`)
         const cand=(expenses||[]).find(e=>{ if(e.deleted_at||e.bulk_import_id||e.client_id!==r.client_id) return false; const et=_toksDup(`${e.concept} ${e.subconcept||''}`); let n=0; et.forEach(w=>{ if(rt.has(w)) n++ }); return n>=2 })
@@ -11710,6 +11714,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Paso 2: vista previa */}
       {rows&&(
         <>
+          {/* Alarmas de OT: re-cobro (ya pagada a la notaría) / ya rendida al cliente. Se levantan antes de importar. */}
+          {(()=>{ const al=(rows||[]).filter(r=>['pagada','rendida'].includes(dupInfo[r.id]?.otState)); if(!al.length) return null; const nP=al.filter(r=>dupInfo[r.id].otState==='pagada').length, nR=al.length-nP; return (
+            <div style={{background:C.overdueBg,border:`1px solid ${C.overdue}`,borderRadius:10,padding:'9px 11px',marginBottom:10}}>
+              <div style={{fontSize:12,fontWeight:800,color:C.overdueText}}>{al.length} alarma{al.length!==1?'s':''} de OT — revísalas antes de importar</div>
+              <div style={{fontSize:10.5,color:C.overdueText,marginTop:2}}>{nP>0?`${nP} ya pagada${nP!==1?'s':''} a la notaría`:''}{nP>0&&nR>0?' · ':''}{nR>0?`${nR} ya rendida${nR!==1?'s':''} al cliente`:''}. Aparecen marcadas abajo; no las cargues sin verlas.</div>
+            </div>
+          )})()}
           {modo!=='conciliar'&&<div style={{display:'flex',gap:6,marginBottom:10}}>
             {[['Auto',nAuto,C.normal,'#BFE6D7'],['Sugeridos',sugeridos.length,'#C77F18','#F0D88A'],['Revisar',nRev,C.overdue,'#F3C0C0'],['Manual',nMan,C.muted,C.border]].map(([l,n,col,bd])=>(
               <div key={l} style={{flex:1,border:`1px solid ${bd}`,borderRadius:10,padding:'8px 4px',textAlign:'center'}}>
@@ -11922,7 +11933,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     <span style={{fontSize:13,fontWeight:600,color:C.text}}>{glosaFinal(r)||'—'}</span>
                     {r.conceptoFix&&<span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:4,padding:'1px 6px',flexShrink:0}}>IA</span>}
                   </div>
-                  {dupInfo[r.id]?.otDup&&<div style={{fontSize:11,fontWeight:600,color:C.overdueText,background:C.overdueBg,border:'1px solid #F7C1C1',borderRadius:6,padding:'5px 8px',marginBottom:6}}>OT ya cargada antes — se omitirá al importar (no se duplica).</div>}
+                  {dupInfo[r.id]?.otDup&&(()=>{ const e=dupInfo[r.id].otDup, st=dupInfo[r.id].otState; const otL=String(r.ot).toUpperCase().startsWith('OT')?String(r.ot).toUpperCase():'OT-'+r.ot; const cn=e.client_id?(clients.find(c=>String(c.id)===String(e.client_id))?.name||'el cliente'):'el cliente'
+                    if(st==='pagada') return <div style={{fontSize:11,fontWeight:700,color:C.overdueText,background:C.overdueBg,border:`1px solid ${C.overdue}`,borderRadius:6,padding:'6px 9px',marginBottom:6}}>Alarma · {otL} ya la pagaste a la notaría{e.notaria_liquidado_at?` (liquidación del ${fmtFDMY(e.notaria_liquidado_at)})`:''}. Si te la re-cobran, no la pagues de nuevo.</div>
+                    if(st==='rendida') return <div style={{fontSize:11,fontWeight:700,color:C.coralText,background:'#FAECE7',border:'1px solid #E3C4B8',borderRadius:6,padding:'6px 9px',marginBottom:6}}>Alarma · {otL} ya la rendiste a {cn}{(e.client_rendered_at||e.rendered_at)?` (${fmtFDMY(e.client_rendered_at||e.rendered_at)})`:''}. Ya se cobró — revísala antes de cargar.</div>
+                    return <div style={{fontSize:11,fontWeight:600,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',marginBottom:6}}>{otL} ya cargada — se omite al importar (no se duplica).</div>
+                  })()}
                   {dupInfo[r.id]?.manualDup&&!dupInfo[r.id]?.otDup&&<div style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:6,padding:'5px 8px',marginBottom:6}}>¿Duplica un gasto cargado a mano? «{(dupInfo[r.id].manualDup.concept||'').slice(0,40)}» · {fmt(dupInfo[r.id].manualDup.amount)}. Revísalo antes de importar.</div>}
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} placeholder='Concepto'
