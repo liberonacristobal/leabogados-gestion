@@ -2690,12 +2690,16 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
     const billById={}; (billing||[]).forEach(b=>{ billById[String(b.id)]=b })
     const antById={}; (anticipos||[]).forEach(a=>{ antById[String(a.id)]=a })
     const abonoById={}; ingAbonos.forEach(m=>{ abonoById[String(m.id)]=m })
+    const yrDe = iso => { const y=String(iso||'').slice(0,4); return /^\d{4}$/.test(y)?+y:null }
     const anioVentaDe = c => {
-      let sid=null, sy=null
-      if(c.tipo_destino==='factura'){ const b=billById[String(c.factura_id)]; sid=b?.sale_id; sy=b?.sale_year }
-      else { const a=antById[String(c.anticipo_id)]; sid=a?.sale_id; sy=a?.sale_year }
+      let sid=null, sy=null, docFecha=null
+      if(c.tipo_destino==='factura'){ const b=billById[String(c.factura_id)]; sid=b?.sale_id; sy=b?.sale_year; docFecha=b?.issued_at||b?.due }
+      else { const a=antById[String(c.anticipo_id)]; sid=a?.sale_id; sy=a?.sale_year; docFecha=a?.fecha }
       if(sid&&saleYrById[String(sid)]!=null) return saleYrById[String(sid)]
-      return sy!=null?sy:null
+      if(sy!=null) return sy
+      // Fallback: sin venta enlazada, el año lo da el propio documento (emisión de la factura / fecha del anticipo o pago sin factura).
+      // Antes esto caía a "sin año" aunque el documento SÍ tuviera fecha (facturas emitidas y anticipos/pagos conciliados).
+      return yrDe(docFecha)
     }
     let total=0, sinMonto=0, sinN=0; const byYear={}; const listByYear={}; const sinList=[]
     ingConc.forEach(c=>{
