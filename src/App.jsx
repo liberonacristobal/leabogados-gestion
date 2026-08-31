@@ -11159,27 +11159,29 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
       const headFont={bold:true}, headFill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE4E8EB'}}
       const g = wb.addWorksheet('Gastos')
       g.columns=[
-        {header:'RUT',key:'rut',width:16},
-        {header:'Nombre',key:'nombre',width:28},
+        {header:'OT',key:'ot',width:12},
+        {header:'Requirente',key:'requirente',width:26},
+        {header:'Materia',key:'materia',width:22},
         {header:'Fecha',key:'fecha',width:13},
         {header:'Monto',key:'monto',width:13},
         {header:'Concepto',key:'concepto',width:24},
         {header:'Subconcepto',key:'subconcepto',width:34},
-        {header:'OT',key:'ot',width:12},
+        {header:'RUT',key:'rut',width:16},
+        {header:'Nombre',key:'nombre',width:28},
         {header:'Categoría',key:'categoria',width:14},
       ]
-      g.addRow({rut:'77.245.923-8',nombre:'Inmobiliaria Vista SpA',fecha:new Date(2026,2,12),monto:90000,concepto:'Escritura pública',subconcepto:'Compraventa lote 4, Chicureo',ot:'OT-1284',categoria:'Notaria'})
-      g.addRow({rut:'77.245.923-8',nombre:'Inmobiliaria Vista SpA',fecha:new Date(2026,2,12),monto:90000,concepto:'Escritura pública',subconcepto:'Constitución de sociedad por acciones',ot:'OT-1290',categoria:'Notaria'})
-      g.addRow({rut:'77.981.467-K',nombre:'Trans Alerce SpA',fecha:new Date(2026,2,14),monto:14000,concepto:'Copia con vigencia',subconcepto:'Poder especial',ot:'OT-1305',categoria:'Notaria'})
+      g.addRow({ot:'OT-1284',requirente:'Inmobiliaria Vista',materia:'Compraventa',fecha:new Date(2026,2,12),monto:90000,concepto:'Escritura pública',subconcepto:'Lote 4, Chicureo',categoria:'Notaria'})
+      g.addRow({ot:'OT-1290',requirente:'Inmob. Vista SpA',materia:'Constitución SpA',fecha:new Date(2026,2,12),monto:90000,concepto:'Escritura pública',subconcepto:'Sociedad por acciones',categoria:'Notaria'})
+      g.addRow({ot:'OT-1305',requirente:'Trans Alerce',materia:'Poder',fecha:new Date(2026,2,14),monto:14000,concepto:'Copia con vigencia',subconcepto:'Poder especial',categoria:'Notaria'})
       g.getColumn('fecha').numFmt='dd-mm-yyyy'; g.getColumn('monto').numFmt='#,##0'
       g.getRow(1).eachCell(c=>{ c.font=headFont; c.fill=headFill })
       // Validación: Categoría sugerida Notaria (lista de categorías válidas)
       const cats='"'+CAT_OPCIONES.join(',')+'"'
-      for(let i=2;i<=200;i++){ g.getCell(`H${i}`).dataValidation={type:'list',allowBlank:true,formulae:[cats]} }
+      for(let i=2;i<=200;i++){ g.getCell(`J${i}`).dataValidation={type:'list',allowBlank:true,formulae:[cats]} }
       const ins = wb.addWorksheet('Instrucciones')
       ins.columns=[{header:'Cómo usar este modelo (Notaría)',key:'t',width:100}]
       ;[
-        'Una fila por gasto notarial. RUT o Nombre del cliente, Fecha, Monto y Concepto son lo mínimo.',
+        'Una fila por OT. La notaría manda OT, Requirente, Materia, Fecha, Monto y Concepto — normalmente NO manda el cliente. Requirente y Materia son las señales con que la app sugiere el cliente sola; RUT/Nombre son opcionales si los tienes.',
         'Subconcepto: el detalle que distingue gastos con el MISMO concepto (ej. "Compraventa lote 4" vs "Constitución de sociedad"). Evita que se marquen como duplicados.',
         'OT: el número de orden de la notaría (ej. OT-1284). Se guarda y aparece en la rendición al cliente y queda asociado a la rendición para cruzarlo con la notaría.',
         'Categoría: dejar "Notaria". La IA corrige la redacción y compone la glosa (Concepto + Subconcepto) al cargar.',
@@ -11364,6 +11366,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     monto:     ['monto','importe','valor','amount','total'],
     notas:     ['notas','nota','observaciones','observación','observacion','comments'],
     proyecto:  ['proyecto','propuesta','propuesta - proyecto','project'],
+    requirente:['requirente','solicitante','requerido por','requiere','requirente/interesado','interesado','rogante','peticionario'],
+    materia:   ['materia','asunto','acto','tipo de acto','naturaleza','naturaleza del acto','tramite','trámite'],
     caja_chica:['caja chica','pagado caja chica','pagado con caja chica','con cargo a caja chica','cargo caja chica','pagado con cargo a caja chica','pagada caja chica','caja chica (si/no)','caja chica si/no','¿caja chica?'],
   }
   // Mapea un valor de categoría de la planilla a una categoría válida del sistema (mantiene Registro Civil).
@@ -11403,6 +11407,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const ot = String(getField('ot')||'').trim()                     // N° de orden de la notaría (OT-XXXX)
         const notas = String(getField('notas')||'').trim()
         const proyecto = String(getField('proyecto')||'').trim()
+        const requirente = String(getField('requirente')||'').trim()   // quién pidió el trámite (señal para identificar cliente)
+        const materia = String(getField('materia')||'').trim()          // tipo de acto/asunto (señal + detalle del documento)
         const fecha = parseFecha(getField('fecha'))
         const monto = parseMonto(getField('monto'))
         const cajaRaw = norm(getField('caja_chica'))   // "sí"=pagado con caja chica (paid_by_client=false); "no"=sin caja chica (true)
@@ -11423,7 +11429,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        return {id:idx, rut, nombre, fecha, monto, concepto, subconcepto, ot, notas, proyecto, categoria, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='name_exact'?95:100):undefined), error, dup:false}
+        return {id:idx, rut, nombre, fecha, monto, concepto, subconcepto, ot, notas, proyecto, requirente, materia, categoria, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='name_exact'?95:100):undefined), error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
       let parsed = []
@@ -11933,6 +11939,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     <span style={{fontSize:13,fontWeight:600,color:C.text}}>{glosaFinal(r)||'—'}</span>
                     {r.conceptoFix&&<span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:4,padding:'1px 6px',flexShrink:0}}>IA</span>}
                   </div>
+                  {(r.requirente||r.materia)&&<div style={{fontSize:10,color:C.muted,marginBottom:6,lineHeight:1.4}}>{r.materia?<>Materia: <b style={{color:C.text}}>{r.materia}</b></>:''}{r.materia&&r.requirente?' · ':''}{r.requirente?<>Requirente: <b style={{color:C.text}}>{r.requirente}</b></>:''}</div>}
                   {dupInfo[r.id]?.otDup&&(()=>{ const e=dupInfo[r.id].otDup, st=dupInfo[r.id].otState; const otL=String(r.ot).toUpperCase().startsWith('OT')?String(r.ot).toUpperCase():'OT-'+r.ot; const cn=e.client_id?(clients.find(c=>String(c.id)===String(e.client_id))?.name||'el cliente'):'el cliente'
                     if(st==='pagada') return <div style={{fontSize:11,fontWeight:700,color:C.overdueText,background:C.overdueBg,border:`1px solid ${C.overdue}`,borderRadius:6,padding:'6px 9px',marginBottom:6}}>Alarma · {otL} ya la pagaste a la notaría{e.notaria_liquidado_at?` (liquidación del ${fmtFDMY(e.notaria_liquidado_at)})`:''}. Si te la re-cobran, no la pagues de nuevo.</div>
                     if(st==='rendida') return <div style={{fontSize:11,fontWeight:700,color:C.coralText,background:'#FAECE7',border:'1px solid #E3C4B8',borderRadius:6,padding:'6px 9px',marginBottom:6}}>Alarma · {otL} ya la rendiste a {cn}{(e.client_rendered_at||e.rendered_at)?` (${fmtFDMY(e.client_rendered_at||e.rendered_at)})`:''}. Ya se cobró — revísala antes de cargar.</div>
@@ -26507,6 +26514,7 @@ export default function App() {
         type:tipo, client_id:r.client_id||null, entity_id:r.entity_id||null,
         amount:r.monto||0, concept:_concept, subconcept:_sub||null, ot_number:(r.ot||'').trim()||null, notas:r.notas||null,
         src_name:(r.nombre||'').trim()||null,   // nombre crudo de la planilla: permite aprender el alias al asignar el huérfano después
+        requirente:(r.requirente||'').trim()||null, materia:(r.materia||'').trim()||null,   // señales del documento de notaría (identificación de cliente + detalle)
 
         category: tipo==='fondo'?'Fondo':(r.categoria||'Otro'),
         date:r.fecha||null, project:r.proyecto||null, sale_id:null,
