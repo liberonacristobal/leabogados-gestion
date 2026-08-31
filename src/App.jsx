@@ -11000,7 +11000,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImport,onConciliar,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional}) {
+function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[],onSave,onBulkImport,onConciliar,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const [modo,setModo] = useState('conciliar')   // siempre concilia: actualiza lo existente + importa solo lo nuevo (nunca duplica)
   const [noTocarRendidos,setNoTocarRendidos] = useState(true)  // en conciliar, no cambiar cliente de gastos ya rendidos
@@ -11247,6 +11247,37 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   }
   const candidatos = rawName => clients.map(c=>({c,score:fuzzyScore(rawName,c)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score)
 
+  // ── Identificador de cliente para NOTARÍA (Pieza 3) ──────────────────────────
+  // La notaría no manda el cliente: se deduce de requirente + materia + glosa contra un índice de tokens
+  // distintivos (clientes + razones sociales + proyectos + receptores de factura + alias aprendidos). Estilo
+  // conciliación: SOLO sugiere si los tokens apuntan a UN único cliente; si es ambiguo o nulo, NO adivina.
+  const _NOTA_STOP = new Set(['sociedad','sociedades','anonima','compraventa','escritura','publica','poder','especial','copia','vigencia','constitucion','protocolizacion','acuerdo','mandato','contrato','notaria','notarial','inmobiliaria','comercial','servicios','inversiones','grupo','spa','ltda','limitada','eirl','para','por','con','del','los','las','una','uno','sobre','entre','este','esta'])
+  const _toksNota = s => [...new Set(String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=4 && !_NOTA_STOP.has(w)))]
+  const [notaAlias,setNotaAlias] = useState([])   // learnings kind 'notaria_alias': key (requirente/frase) → value (client_id)
+  useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_alias').then(({data})=>setNotaAlias(data||[]),()=>{}) },[notaria])
+  const notaIdx = useMemo(()=>{ const idx=[]
+    clients.forEach(c=>{ if(c.status==='Terminado') return; const t=_toksNota(c.name); if(t.length) idx.push({cid:c.id,t}) })
+    ;(clientEntities||[]).forEach(e=>{ if(e.name&&e.client_id){ const t=_toksNota(e.name); if(t.length) idx.push({cid:e.client_id,t}) } })
+    ;(sales||[]).forEach(s=>{ if(s.title&&s.client_id&&!s.deleted_at){ const t=_toksNota(s.title); if(t.length) idx.push({cid:s.client_id,t}) } })
+    ;(billing||[]).forEach(f=>{ if(f.receptor_name&&f.client_id){ const t=_toksNota(f.receptor_name); if(t.length) idx.push({cid:f.client_id,t}) } })
+    ;(notaAlias||[]).forEach(a=>{ if(a.key&&a.value){ const t=_toksNota(a.key); if(t.length) idx.push({cid:a.value,t}) } })
+    return idx
+  },[clients,clientEntities,sales,billing,notaAlias])
+  const notaSugerir = r => {
+    const rt=_toksNota(`${r.requirente||''} ${r.materia||''} ${r.concepto||''} ${r.subconcepto||''}`); if(!rt.length) return null
+    const hits=new Map()
+    notaIdx.forEach(e=>{ const inter=e.t.filter(t=>rt.includes(t)); if(inter.length){ const s=hits.get(e.cid)||new Set(); inter.forEach(x=>s.add(x)); hits.set(e.cid,s) } })
+    if(hits.size!==1) return null   // ambiguo o sin match → no adivina (queda sin cliente para que lo asignes)
+    const [cid,toks]=[...hits.entries()][0]
+    const c=clients.find(x=>String(x.id)===String(cid)); if(!c) return null
+    return { id:cid, name:c.name, why:[...toks].slice(0,3) }
+  }
+  // Aprende: requirente → cliente (learning notaria_alias), para que la próxima OT de ese requirente venga sugerida.
+  const learnNota = async (row, clientId) => {
+    const key=String(row?.requirente||'').trim(); if(!key||!clientId||DEMO) return
+    try{ await supabase.from('learnings').insert({kind:'notaria_alias',key,value:String(clientId)}); setNotaAlias(p=>[...p,{key,value:String(clientId)}]) }catch(_){}
+  }
+
   // Nivel 4: lote a Claude (Opus) para nombres sin resolver + corrección de conceptos.
   const aiMatchBatch = async(batch) => {
     const clientesDB = clients.map(c=>`- ID: ${c.id} | Nombre: "${c.name}" | RUT: ${c.rut||'-'} | RS: "${c.razon_social||''}"`).join('\n')
@@ -11285,7 +11316,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       // Fuzzy en bloques, cediendo el hilo cada 20 filas para no congelar Safari.
       for(let i=0;i<rows.length;i++){
         const r = rows[i]
-        if(r.client_id || r.personal_de || (!r.rut && !r.nombre)){ if(!r.client_id && !r.personal_de){ r.matchMethod='none'; r.confidence=0 } continue }
+        if(r.client_id || r.personal_de) continue
+        if(!r.rut && !r.nombre){
+          const ns = notaria ? notaSugerir(r) : null
+          if(ns){ r.suggestion={id:ns.id,name:ns.name}; r.confidence=88; r.matchMethod='notaria'; r.notaWhy=ns.why }
+          else { r.matchMethod='none'; r.confidence=0 }
+          continue
+        }
         const cs = candidatos(r.nombre||r.rut)
         const top = cs[0]
         if(top && top.score>=90){ const ents=entsOf(top.c.id); r.client_id=top.c.id; r.clientName=top.c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='name_fuzzy'; r.confidence=top.score }
@@ -11307,6 +11344,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const r = lote[(o.index||0)-1]; if(!r) return
             const conf = Number(o.confidence)||0
             if(o.concepto_corregido && o.concepto_corregido.trim() && o.concepto_corregido.trim()!==r.concepto){ r.conceptoOrig=r.concepto; r.concepto=o.concepto_corregido.trim(); r.conceptoFix=true }
+            if(r.matchMethod==='notaria' && r.suggestion) return   // ya sugerido por el identificador de notaría (determinista): la IA solo aporta la glosa
             if(r.client_id || r.personal_de) return   // fila ya resuelta: de la IA solo se toma la glosa, no se re-asigna cliente
             if(o.is_internal){ r.isInternal=true; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null; return }
             if(o.client_id && conf>=85){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ const ents=entsOf(c.id); r.client_id=c.id; r.clientName=c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null } }
@@ -11477,10 +11515,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const asignar = (rowId,clientId) => {
     const c = clients.find(x=>x.id===clientId)
     const ents = entsOf(clientId)
-    let srcNombre=null
+    let srcNombre=null, srcRow=null
     setRows(p=>{
       const src = p.find(r=>r.id===rowId)
-      srcNombre = src?.nombre || null
+      srcNombre = src?.nombre || null; srcRow = src || null
       const key = src ? rawKey(src) : null
       const apply = r => ({...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,personal_de:null,matchMethod:'manual'})
       return p.map(r=>{
@@ -11491,13 +11529,17 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     })
     // Aprende: este nombre crudo → este cliente, para que las próximas cargas caigan solas.
     if(onLearnAlias && srcNombre && String(srcNombre).trim()) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
+    if(srcRow && String(srcRow.requirente||'').trim()) learnNota(srcRow, clientId)   // notaría: aprende requirente → cliente
   }
   // Confirma de una vez todas las sugerencias (fuzzy 70-89 / IA 65-84) como cliente asignado.
-  const confirmarSugeridos = () => setRows(p=>p.map(r=>{
-    if(!r.suggestion) return r
-    const c=clients.find(x=>x.id===r.suggestion.id); const ents=entsOf(r.suggestion.id)
-    return {...r,client_id:r.suggestion.id,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,matchMethod:'manual'}
-  }))
+  const confirmarSugeridos = () => {
+    (rows||[]).forEach(r=>{ if(r.suggestion && String(r.requirente||'').trim()) learnNota(r, r.suggestion.id) })   // notaría: aprende cada requirente confirmado
+    setRows(p=>p.map(r=>{
+      if(!r.suggestion) return r
+      const c=clients.find(x=>x.id===r.suggestion.id); const ents=entsOf(r.suggestion.id)
+      return {...r,client_id:r.suggestion.id,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,matchMethod:'manual'}
+    }))
+  }
 
   // Estado de cada fila para la vista previa. montoBad es ortogonal al match.
   const montoBad = r => r.monto==null || r.monto<=0
@@ -11997,7 +12039,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     {bucket==='sug'&&(
                       <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                         <span style={{fontSize:12,color:C.text,fontWeight:600}}>{r.suggestion.name}</span>
-                        {r.aiReason&&<span style={{fontSize:10,color:C.muted,fontStyle:'italic',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.aiReason}</span>}
+                        {(r.notaWhy?.length||r.aiReason)&&<span style={{fontSize:10,color:C.muted,fontStyle:'italic',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.notaWhy?.length?`por ${r.notaWhy.join(', ')}`:r.aiReason}</span>}
                         <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{marginLeft:'auto',fontSize:12,fontWeight:600,padding:'5px 11px',borderRadius:7,border:'none',background:C.normal,color:'#fff',cursor:'pointer'}}>Confirmar</button>
                         <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Cambiar'/>
                       </div>
@@ -27821,7 +27863,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){appAlert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null} preDev={!!modal?.dev}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
