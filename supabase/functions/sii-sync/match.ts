@@ -26,7 +26,10 @@
 import { createClient } from '@supabase/supabase-js'
 import type { VentaSII } from './rcv.ts'
 
-const normalizarRut = (r: string | null | undefined) =>
+// Helper UNICO de normalizacion de RUT (reutilizado por sync-compras en index.ts):
+// minusculas/mayusculas irrelevantes, sin puntos/espacios/guion, sin ceros a la
+// izquierda. "76.811.898-1" y "76811898-1" -> "768118981".
+export const normalizarRut = (r: string | null | undefined) =>
   (r || '').replace(/[.\s]/g, '').toUpperCase().replace(/-/g, '').replace(/^0+/, '')
 
 export interface ResultadoMatch {

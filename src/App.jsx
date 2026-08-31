@@ -24579,6 +24579,89 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     return costoOficina(m, cat, sub||null)
   }
   // Render del clasificador de un cargo: estados resueltos (con Deshacer) o el combo de 3 niveles.
+  // ── Pago a proveedor / comisiones (Fase 1): un cargo del banco salda comisiones por pagar (terceros_pagos).
+  // NO calza exacto: la venta PROYECTA (30% de cada cuota), el banco es lo REALMENTE transferido (en lotes).
+  // FIFO por antigüedad + tolerancia + residual visible ("diferencia esperada", no descuadre).
+  const [terc,setTerc] = useState([])
+  const [pagoSel,setPagoSel] = useState({})   // movId → Set(terceroId) seleccionados
+  useEffect(()=>{ if(DEMO){ setTerc(demoData.terceros_pagos||[]); return } supabase.from('terceros_pagos').select('id,sale_id,billing_id,proveedor_id,proveedor,monto,estado,pagado_at,movimiento_id').then(({data})=>setTerc(data||[]),()=>{}) },[])
+  const provDeCargo = m => { const k=crNormRut(m?.rut_contraparte); if(!k) return null; return (proveedores||[]).find(p=>crNormRut(p.rut)===k)||null }
+  const bDue = id => { const b=(billing||[]).find(x=>String(x.id)===String(id)); return b?.paid_at||b?.due||'' }
+  const comisPorPagar = provId => (terc||[]).filter(t=>String(t.proveedor_id)===String(provId)&&t.estado==='por_pagar').sort((a,b)=>String(bDue(a.billing_id)).localeCompare(String(bDue(b.billing_id))))
+  const preselFifo = (lista,objetivo)=>{ const out=new Set(); let acc=0; for(const t of lista){ if(acc>=objetivo) break; out.add(t.id); acc+=(t.monto||0) } return out }
+  const fFifoDate = iso => { try{ const d=new Date(String(iso).slice(0,10)+'T00:00:00'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${d.getUTCDate()} ${M[d.getUTCMonth()]} ${d.getUTCFullYear()}` }catch{ return '' } }
+  const conciliarComisiones = async (m,prov,selIds)=>{
+    if(!selIds.length||busy===m.id) return
+    setBusy(m.id)
+    try{
+      const sum=(terc||[]).filter(t=>selIds.includes(t.id)).reduce((a,t)=>a+(t.monto||0),0)
+      if(!DEMO){
+        const {error:e1}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:String(m.fecha).slice(0,10),movimiento_id:m.id}).in('id',selIds); if(e1) throw e1
+        const {error:e2}=await supabase.from('conciliacion').insert({movimiento_id:m.id,tipo_destino:'tercero',monto_aplicado:sum,origen:'manual'}); if(e2) throw e2
+        const {error:e3}=await supabase.from('cartola_movimientos').update({categoria:'Proveedor',monto_conciliado:(m.monto_conciliado||0)+sum}).eq('id',m.id); if(e3) throw e3
+      }
+      setTerc(p=>p.map(t=>selIds.includes(t.id)?{...t,estado:'pagado',pagado_at:String(m.fecha).slice(0,10),movimiento_id:m.id}:t))
+      setConc(p=>[...p,{movimiento_id:m.id,tipo_destino:'tercero',monto_aplicado:sum,origen:'manual'}])
+      setMovs(p=>p.map(x=>x.id===m.id?{...x,categoria:'Proveedor',monto_conciliado:(x.monto_conciliado||0)+sum}:x))
+      setPagoSel(s=>{const n={...s}; delete n[m.id]; return n})
+    }catch(e){ appAlert('Error al conciliar el pago de comisiones: '+e.message) }
+    setBusy(null)
+  }
+  const deshacerComisiones = async (m)=>{
+    if(busy===m.id) return; setBusy(m.id)
+    try{
+      const rows=(terc||[]).filter(t=>String(t.movimiento_id)===String(m.id))
+      const ids=rows.map(t=>t.id); const sum=rows.reduce((a,t)=>a+(t.monto||0),0)
+      if(!DEMO){
+        if(ids.length) await supabase.from('terceros_pagos').update({estado:'por_pagar',pagado_at:null,movimiento_id:null}).in('id',ids)
+        await supabase.from('conciliacion').delete().eq('movimiento_id',m.id).eq('tipo_destino','tercero')
+        await supabase.from('cartola_movimientos').update({monto_conciliado:Math.max(0,(m.monto_conciliado||0)-sum)}).eq('id',m.id)
+      }
+      setTerc(p=>p.map(t=>ids.includes(t.id)?{...t,estado:'por_pagar',pagado_at:null,movimiento_id:null}:t))
+      setConc(p=>p.filter(c=>!(String(c.movimiento_id)===String(m.id)&&c.tipo_destino==='tercero')))
+      setMovs(p=>p.map(x=>x.id===m.id?{...x,monto_conciliado:Math.max(0,(x.monto_conciliado||0)-sum)}:x))
+    }catch(e){ appAlert('Error al deshacer: '+e.message) }
+    setBusy(null)
+  }
+  const renderPagoProveedor = (m)=>{
+    if(m.tipo!=='cargo'||m.es_interno) return null
+    const prov=provDeCargo(m); if(!prov) return null
+    const pagadasAqui=(terc||[]).filter(t=>String(t.movimiento_id)===String(m.id))
+    const yaConc=(concByMov[m.id]||[]).some(c=>c.tipo_destino==='tercero')||pagadasAqui.length>0
+    if(yaConc){
+      const sum=pagadasAqui.reduce((a,t)=>a+(t.monto||0),0)
+      return <div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
+        <span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',background:C.greenBg,color:C.greenText}}>→ {pagadasAqui.length} comisión{pagadasAqui.length!==1?'es':''} de {prov.nombre} · {fmtM(sum)}</span>
+        <button disabled={busy===m.id} onClick={()=>deshacerComisiones(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button>
+      </div>
+    }
+    const lista=comisPorPagar(prov.id); if(!lista.length) return null
+    const cargo=(m.monto||0)-(m.monto_conciliado||0)
+    const sel=pagoSel[m.id]||preselFifo(lista,cargo)
+    const selArr=lista.filter(t=>sel.has(t.id))
+    const sumSel=selArr.reduce((a,t)=>a+(t.monto||0),0)
+    const diff=cargo-sumSel
+    const toggle=id=>{ const n=new Set(sel); n.has(id)?n.delete(id):n.add(id); setPagoSel(s=>({...s,[m.id]:n})) }
+    const cTitle=t=>{ const b=(billing||[]).find(x=>String(x.id)===String(t.billing_id)); return b?.concept||prov.nombre }
+    return <div style={{marginTop:6,border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',background:C.bgPanel}} onClick={e=>e.stopPropagation()}>
+      <div style={{fontSize:12.5,fontWeight:700,color:C.accent,marginBottom:2}}>Pago a {prov.nombre}</div>
+      <div style={{fontSize:10.5,color:C.muted,marginBottom:9}}>Comisiones por pagar · más antiguas primero. Marca las que cubre este cargo.</div>
+      {lista.map(t=>{ const on=sel.has(t.id); return (
+        <div key={t.id} onClick={()=>toggle(t.id)} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 0',borderBottom:`1px solid ${C.border}`,cursor:'pointer'}}>
+          <span style={{width:18,height:18,borderRadius:5,flexShrink:0,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'transparent',color:'#fff',fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>{on?'✓':''}</span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cTitle(t)}</div><div style={{fontSize:10,color:C.muted}}>cuota {fFifoDate(bDue(t.billing_id))}</div></div>
+          <span style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap'}}>{fmtM(t.monto)}</span>
+        </div>
+      )})}
+      <div style={{marginTop:9,background:C.bgSoft,borderRadius:9,padding:'9px 11px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:11.5,color:C.muted}}><span>Cargo del banco (real)</span><b style={{color:C.text}}>{fmtM(cargo)}</b></div>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:11.5,color:C.muted,marginTop:2}}><span>Comisiones marcadas</span><b style={{color:C.text}}>{fmtM(sumSel)}</b></div>
+        {Math.abs(diff)>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,paddingTop:7,borderTop:`1px dashed ${C.border}`}}><span style={{fontSize:10.5,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.3}}>Diferencia esperada</span><b style={{fontSize:12.5,color:C.soonText}}>{fmtM(Math.abs(diff))}</b></div>}
+      </div>
+      <button disabled={busy===m.id||!selArr.length} onClick={()=>conciliarComisiones(m,prov,[...sel])} style={{marginTop:10,width:'100%',padding:'10px',borderRadius:9,border:'none',background:selArr.length?C.accent:C.muted,color:'#fff',fontSize:12.5,fontWeight:700,cursor:selArr.length&&busy!==m.id?'pointer':'default'}}>Conciliar y marcar pagadas</button>
+    </div>
+  }
+
   const renderCargoClasificar = (m) => {
     if(m.tipo!=='cargo'||m.es_interno) return null
     const conc=concByMov[m.id]||[]
@@ -25273,6 +25356,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 })()}
                 {!m.es_interno&&m.tipo==='abono'&&<div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Cliente</div>}
                 {!m.es_interno&&m.tipo==='cargo'&&renderCargoClasificar(m)}
+                {!m.es_interno&&m.tipo==='cargo'&&renderPagoProveedor(m)}
                 {!m.es_interno&&m.tipo==='abono'&&(
                   editMov===m.id
                     ? <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
