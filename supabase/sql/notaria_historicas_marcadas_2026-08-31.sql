@@ -1,0 +1,44 @@
+-- 2026-08-31: 71 OT de notaría "por cobrar" SIN fecha de OT (batch histórico cargado el
+-- 2026-06-25/06-19 por Martina) marcadas como histórico (no_descuenta_saldo=true) tras
+-- confirmar el usuario que "OT sin fecha = históricas ya pagadas". Salen de "por cobrar" en
+-- toda la app y del digest de notaría. Total marcado: $4.958.727 · 20 clientes.
+--
+-- PARA REVERTIR (volver a por-cobrar) estas 71:
+-- update expenses set no_descuenta_saldo=false where id in (
+--   '3190df8f-25b0-4153-9653-a56b0024ee6a','aab50c8d-de36-4d2c-9916-41012f1257ce',
+--   '814ef770-3c90-4911-a7f8-dd7403a21787','455c5685-85a5-43e5-b5d3-d4530b021f3f',
+--   '53ef27ef-f719-4009-bb78-55fdb3bef6fc','993e3ba2-cd93-4d99-b75c-0b18031c8360',
+--   '76d44098-7a67-47a2-b8de-054021441c6c','970cfdb8-f81e-45fd-984f-c8e4ba2979c4',
+--   '0ba040cc-7b4e-4048-921b-3a41db72a4ab','489ae5f3-5542-4896-8691-fb97a4d25aba',
+--   '1bd80387-28e4-4e86-855a-5b34f901dbd6','5f190ea9-891a-4d8e-bf0a-e40045be3b99',
+--   'fd0ed480-607a-416f-bc68-b1d7cd9d7246','e9464f74-1f78-439e-af29-4a3aec767ab6',
+--   'd231ee8a-a730-4697-8923-ec156e0d7dc2','adfc7bdf-36e6-41c0-adae-c46b5aae1923',
+--   '53211afb-a6a5-4253-b95a-df1ae8370126','4a75f00e-9bb7-4aae-86b0-a2fb5f0f994b',
+--   'c43e6847-d257-44ea-8d07-f85130236674','ba70c601-6e51-45a9-a869-c6964972f76b',
+--   '8d35a511-d674-4ce9-a94b-a0a1bd92d30b','6d203291-28c6-4e5b-b67a-b3852d0d7753',
+--   '2a0495b8-9f79-460c-ab03-6125a0978c4a','4dd43297-e4d0-4016-b6ce-6d758cd44b6b',
+--   '1ba84571-3b9a-4545-83f8-33e080d10c97','9e306d1b-82ad-4533-a1e6-b7b78851132b',
+--   'a047bf40-a13f-40f6-8ee7-5bb74bcb39ed','95652465-0e94-4198-831b-f283dd47edb2',
+--   '1f51b790-814b-4bb0-a01f-9c7240979295','91ed4c6d-b582-4d68-aa60-1a9d5b5054cc',
+--   'c90c2163-7426-45e9-816b-1c9d95a027b9','2ffb5c74-074b-46c4-8149-0d7e2ef667cd',
+--   'dc92922c-13a9-4141-8a20-8bf667cd0963','3f3d5bbd-601e-4534-b8c2-3c17214d2d6d',
+--   '63a1ae5b-0a9b-4f34-90fd-3740930076dd','a2789ee5-7ef5-4a66-8411-f5e898d8c969',
+--   'a4a18502-b392-4248-b21e-18f179de4d72','fc1399e3-3030-45b0-830d-51f11066adc2',
+--   'e6887268-edd8-41be-ad2c-aad34963d693','e2989b87-ea1c-408c-9d84-39ac7c494ff4',
+--   'd8f14a01-cc8d-47d5-b69c-acc6ffaca3e6','f645947a-8a03-47ad-814a-270cddb34b7a',
+--   '5853395b-efb6-4e78-9ce8-3e5efa8a5c22','b1c3015e-d693-46a1-b473-ae31c734bb03',
+--   'f7d42973-3bae-4933-bc4e-cc4d396299c5','80dabfb7-fb6c-4e4c-b125-9ddc6a14812a',
+--   'f8242317-8604-42f2-b07e-607e8a7c498f','f3156412-42a0-4105-bdab-5441402ecb28',
+--   '44811902-07b2-4b65-82c8-b26e6f83212e','17678ec3-1f43-46b5-8e89-b8f7beb2447c',
+--   '18fae6b6-7933-4fbb-bbba-6ce897246d12','de68734b-c2f6-42db-8c97-8a4f74b17d9f',
+--   '0959a467-8eb1-44d4-a102-9baafab6afc5','8d106ee4-72f3-44f0-be16-1f58043dc7c7',
+--   '430cd8b6-9ac6-4833-ae76-00f0e15f9078','8a634765-b21f-4c29-ac2c-9d2aef880f65',
+--   '71891d7d-c976-42fd-94e7-839e4c6f0071','d3776f52-f266-4c06-bc36-5d7fdf8231d6',
+--   '63bf9aed-dd24-44ad-bf20-c0d780d78f5b','dd5e3fbe-370c-4b91-9f67-449a7f6c2624',
+--   '82be60d1-d797-4ed0-9e33-30c33d74f8fa','a7c9c094-69c7-4c14-9ccf-f08092928682',
+--   '2730be9b-5d91-4348-9e75-4cea4a1c1b5d','d9c961df-5f40-4adc-a701-3fde1254763e',
+--   '0a8bacbd-7466-408c-a427-ef6f5c928ca7','38f1e1b7-7d6d-4822-ab8f-3c498b723b0d',
+--   '6c4eaa49-84db-46bd-b685-a811ff7a4f06','4bdaab8f-bc85-40d6-93f2-5a79b33b7033',
+--   '1c32dac8-59ab-47d7-b9ef-aaec542a43c8','98cb6b0b-fd31-482f-9434-a6fd799ea7ae',
+--   'ebfd60df-8467-4bcd-91bd-721595d9d4de'
+-- );
