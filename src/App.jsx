@@ -6694,7 +6694,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[] }){
   )
 }
 // Fusionar clientes: une dos fichas duplicadas en una SIN perder nada. Sobreviviente = el que tiene datos.
-// Motor server-side (edge fn fusionar-clientes) reasigna todas las FKs; la app previsualiza y avisa al dueño.
+// Motor server-side (edge fn fusionar-clientes) reasigna todas las FKs; la app previsualiza y avisa al abogado responsable.
 function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[], clientEntities=[], proyectosCartera=[], user, pending=null, onClose, onMerged}){
   const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
   const [aId,setAId]=useState(pending?pending.survivor_id:null),[bId,setBId]=useState(pending?pending.loser_id:null)
@@ -6784,7 +6784,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     if(!await appConfirm(`¿Avisar a ${surv.abogado_responsable} (${to}) que se fusionaron las fichas de ${surv.name}?`)) return
     try{
       const via=await enviarComoUsuario({to,subject:`Carpetas duplicadas de ${surv.name} — fusionadas`,html:emailDueno(surv,res._l,res._ks,res._kl),text:`Fusioné las dos fichas duplicadas de ${surv.name} en una sola, sin perder información.`})
-      if(via){ setAvisado(true); appAlert('Aviso enviado al dueño'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') }
+      if(via){ setAvisado(true); appAlert('Aviso enviado al responsable'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') }
     }catch(e){ appAlert('No se pudo enviar el aviso: '+(e.message||e)) }
   }
   if(res) return (
@@ -6792,7 +6792,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
       {res.propuesta ? (
         <div style={{background:C.azulBg,border:`1px solid ${C.azulInfo}`,borderRadius:12,padding:'14px 15px',marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:700,color:C.azulInfo}}>Propuesta enviada</div>
-          <div style={{fontSize:12,color:C.text,marginTop:4}}>Le llegó a <b>{res.owner}</b> ({res.to}) un correo con un enlace para revisar las dos fichas y confirmar. La fusión se hace recién cuando el dueño confirme.</div>
+          <div style={{fontSize:12,color:C.text,marginTop:4}}>Le llegó a <b>{res.owner}</b> ({res.to}) un correo con un enlace para revisar las dos fichas y confirmar. La fusión se hace recién cuando el responsable confirme.</div>
         </div>
       ) : (
         <div style={{background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:12,padding:'14px 15px',marginBottom:12}}>
@@ -6802,7 +6802,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
         </div>
       )}
       <div style={{display:'flex',gap:8}}>
-        {!res.propuesta&&<button onClick={avisar} disabled={avisado} style={{flex:1,padding:'10px',borderRadius:10,border:'none',background:avisado?C.done:C.accent,color:'#fff',fontSize:12.5,fontWeight:700,cursor:avisado?'default':'pointer'}}>{avisado?'Dueño avisado ✓':'Avisar al dueño'}</button>}
+        {!res.propuesta&&<button onClick={avisar} disabled={avisado} style={{flex:1,padding:'10px',borderRadius:10,border:'none',background:avisado?C.done:C.accent,color:'#fff',fontSize:12.5,fontWeight:700,cursor:avisado?'default':'pointer'}}>{avisado?'Responsable avisado ✓':'Avisar al responsable'}</button>}
         <button onClick={onClose} style={{padding:'10px 16px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12.5,fontWeight:600,cursor:'pointer',flex:res.propuesta?1:'unset'}}>Cerrar</button>
       </div>
     </div> )
@@ -6820,7 +6820,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
       {aId&&bId&&<>
         <div style={{display:'flex',gap:8,marginBottom:10}}>{card(aId)}{card(bId)}</div>
         {!pending&&<div style={{fontSize:11,fontWeight:700,borderRadius:8,padding:'8px 11px',marginBottom:10,background:mismoRut?C.greenBg:C.soonBg,color:mismoRut?C.greenText:C.soonText}}>
-          {mismoRut?'Mismo RUT — es claramente el mismo cliente.':'Sin RUT en común — mejor que el dueño confirme antes de fusionar.'}
+          {mismoRut?'Mismo RUT — es claramente el mismo cliente.':'Sin RUT en común — mejor que el abogado responsable confirme antes de fusionar.'}
         </div>}
         <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Sobrevive <b style={{color:C.accent}}>{cli(survId)?.name}</b>; se elimina <b>{cli(loserId)?.name}</b>{!pending&&' (toca "conservar" en la otra para invertir)'}.</div>
         {msg&&<div style={{fontSize:11,color:C.overdue,marginBottom:10}}>{msg}</div>}
@@ -6832,7 +6832,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
           : mismoRut
             ? <button onClick={ejecutar} disabled={busy} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:busy?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:busy?'default':'pointer'}}>{busy?'Fusionando…':`Fusionar en ${cli(survId)?.name}`}</button>
             : <>
-                <button onClick={proponerDueno} disabled={busy} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:busy?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:busy?'default':'pointer'}}>{busy?'Enviando…':'Proponer al dueño para confirmar'}</button>
+                <button onClick={proponerDueno} disabled={busy} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:busy?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:busy?'default':'pointer'}}>{busy?'Enviando…':'Proponer al responsable para confirmar'}</button>
                 <button onClick={ejecutar} disabled={busy} style={{width:'100%',marginTop:7,padding:'8px',borderRadius:9,border:'none',background:'transparent',color:C.muted,fontSize:11.5,fontWeight:600,cursor:'pointer'}}>Fusionar igual (estoy seguro)</button>
               </>}
       </>}
@@ -26000,7 +26000,7 @@ export default function App() {
       const c=await getClients(); if(alive&&c) setClients(c)
     }catch(_){} })()
     return ()=>{alive=false} },[userRole])
-  // Confirmar fusión propuesta: el dueño abre el link del correo (?merge=token) → revisa las dos fichas y aprueba/descarta.
+  // Confirmar fusión propuesta: el abogado responsable abre el link del correo (?merge=token) → revisa las dos fichas y aprueba/descarta.
   useEffect(()=>{ if(DEMO||!user) return; let done=false
     try{ const tok=new URLSearchParams(window.location.search).get('merge'); if(!tok) return
       supabase.from('learnings').select('key,value').eq('kind','merge_pending').eq('key',tok).maybeSingle().then(({data})=>{
