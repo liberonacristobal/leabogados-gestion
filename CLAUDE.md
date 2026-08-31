@@ -36,6 +36,15 @@ Principio rector más importante. La app debe ser muy autónoma y construir memo
 - La app anticipa: autocompleta, sugiere, recuerda. Si ya tiene el dato, lo usa; solo pregunta ante ambigüedad real que no puede resolver.
 - Al diseñar cualquier feature preguntarse: "¿esto obliga a repetir algo que la app ya podría saber?". Si sí, está mal diseñada.
 
+### REGLA: nunca duplicar entidades (clientes, RS, proveedores)
+
+La app **nunca** debe crear una entidad duplicada. Aplica al importar de Drive, al crear a mano, y a cualquier alta automática:
+
+- **Dedup robusto** (no `.toLowerCase().trim()` a secas): normalizar SIEMPRE con el criterio único = minúsculas + sin acentos (NFD) + **colapsar espacios** (`\s+→" "`) + trim. Un solo helper para front y edge functions (el `norm` del edge `clientes-drive-sync` es la referencia).
+- **Fuzzy match antes de crear**: si el nombre se parece mucho a una entidad existente (typos, letras cambiadas — ej. "Migdley" vs "Midgley"), **NO crear**. Proponer "¿es el mismo que X?" (compuerta humana) y, al vincular, **aprender el alias** (`learnings` kind `cliente_folder`: key = nombre normalizado del folder → value = client_id) para no volver a preguntar ni recrear. El sync/edge function DEBE consultar ese alias antes de insertar.
+- **Fusionar conservando datos**: al unir dos fichas, el **sobreviviente es SIEMPRE el que tiene información** en la app (facturas, ventas, gastos, tareas, anticipos, RS). Se le **reasignan TODOS** los registros del otro (todas las FKs `client_id`/`cliente_id`) y su nombre queda como alias, y recién ahí se elimina el vacío. Auditar/permitir deshacer.
+- Es una aplicación directa de "la herramienta APRENDE": cada vinculación/fusión es conocimiento que evita el trabajo repetido de limpiar duplicados.
+
 ## REGLA DE ORO: el valor COMPOUNDING — más datos, más valor
 
 Complemento directo de "la herramienta APRENDE". Mientras APRENDE cubre *no repetir trabajo*, esta regla cubre *devolver cada vez más*. La app acumula datos con el uso (ventas, cobros, horas, gastos, conciliación, tareas, correos); **cada dato nuevo debe convertirse en más valor para el dueño**, no quedarse guardado. El norte: un estudio de abogados **liviano y efectivo**, que con la misma gente rinde más porque el software le da la foto que antes no tenía.
