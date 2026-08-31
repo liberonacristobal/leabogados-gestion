@@ -6695,11 +6695,11 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[] }){
 }
 // Fusionar clientes: une dos fichas duplicadas en una SIN perder nada. Sobreviviente = el que tiene datos.
 // Motor server-side (edge fn fusionar-clientes) reasigna todas las FKs; la app previsualiza y avisa al dueño.
-function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[], clientEntities=[], proyectosCartera=[], user, onClose, onMerged}){
+function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[], clientEntities=[], proyectosCartera=[], user, pending=null, onClose, onMerged}){
   const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
-  const [aId,setAId]=useState(null),[bId,setBId]=useState(null)
+  const [aId,setAId]=useState(pending?pending.survivor_id:null),[bId,setBId]=useState(pending?pending.loser_id:null)
   const [qa,setQa]=useState(''),[qb,setQb]=useState('')
-  const [survId,setSurvId]=useState(null)
+  const [survId,setSurvId]=useState(pending?pending.survivor_id:null)
   const [busy,setBusy]=useState(false),[res,setRes]=useState(null),[msg,setMsg]=useState(null),[avisado,setAvisado]=useState(false)
   const cli=id=>clients.find(c=>String(c.id)===String(id))
   const rsDe=id=>clientEntities.filter(e=>String(e.client_id)===String(id)).map(e=>e.name).filter(Boolean)
@@ -6712,7 +6712,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     proyectos:proyectosCartera.filter(p=>String(p.cliente_id)===String(id)).length,
     rs:rsDe(id) })
   const total=id=>{ const c=cont(id); return c.facturas+c.ventas+c.gastos+c.tareas+c.proyectos }
-  useEffect(()=>{ if(aId&&bId){ const ta=total(aId),tb=total(bId),ra=rsDe(aId).length,rb=rsDe(bId).length; setSurvId((ra!==rb)?(ra>rb?aId:bId):(ta>=tb?aId:bId)); setRes(null); setMsg(null); setAvisado(false) } },[aId,bId])
+  useEffect(()=>{ if(pending) return; if(aId&&bId){ const ta=total(aId),tb=total(bId),ra=rsDe(aId).length,rb=rsDe(bId).length; setSurvId((ra!==rb)?(ra>rb?aId:bId):(ta>=tb?aId:bId)); setRes(null); setMsg(null); setAvisado(false) } },[aId,bId])
   const loserId=survId?(survId===aId?bId:aId):null
   const mismoRut=(()=>{ if(!aId||!bId) return false; const A=new Set(rutsDe(aId)); return rutsDe(bId).some(r=>A.has(r)) })()
   const buscar=(q,otherId)=>{ const t=_normTxt(q); if(t.length<2) return []; return clients.filter(c=>String(c.id)!==String(otherId)&&_normTxt(c.name).includes(t)).slice(0,6) }
@@ -6736,6 +6736,33 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     const li=(t,k)=>[k.facturas&&`${k.facturas} factura(s)`,k.ventas&&`${k.ventas} venta(s)`,k.gastos&&`${k.gastos} gasto(s)`,k.proyectos&&`${k.proyectos} proyecto(s)`].filter(Boolean).join(', ')||'sin registros'
     return `<div style="font-family:Arial,Helvetica,sans-serif;color:#26333A;font-size:13px;line-height:1.6">Hola,<br><br>El cliente <b>${surv.name}</b>, del que eres responsable, tenía <b>dos fichas duplicadas</b> en la app y las fusioné en una sola, <b>sin perder información</b>.<br><br><b>Por qué pasó:</b> al sincronizar con Google Drive, una carpeta con el nombre levemente distinto (un doble espacio, una tilde o un typo) no calzó con la ficha existente y se creó una segunda; los datos quedaron repartidos.<br><br><b>Qué tenía cada una:</b><br>• ${surv.name}: ${li('a',ks)}.<br>• ${loser.name} (duplicada): ${li('b',kl)}.<br><br><b>Ahora</b> quedó todo bajo <b>${surv.name}</b>. Para evitar que se repita, cuida que el nombre de la carpeta en Drive sea idéntico al del cliente.<br><br>Saludos.</div>`
   }
+  const liK=(k)=>[k.facturas&&`${k.facturas} factura(s)`,k.ventas&&`${k.ventas} venta(s)`,k.gastos&&`${k.gastos} gasto(s)`,k.proyectos&&`${k.proyectos} proyecto(s)`].filter(Boolean).join(', ')||'sin registros'
+  const emailPropuesta=(s,l,ks,kl,link)=>`<div style="font-family:Arial,Helvetica,sans-serif;color:#26333A;font-size:13px;line-height:1.6">Hola,<br><br>Detectamos <b>dos fichas parecidas</b> que podrían ser el mismo cliente, y necesitamos que confirmes antes de unirlas (no comparten RUT):<br><br>• <b>${s.name}</b>: ${liK(ks)}.<br>• <b>${l.name}</b>: ${liK(kl)}.<br><br>Si son el mismo cliente, al confirmar quedará todo bajo <b>${s.name}</b>, sin perder nada. Si son distintos, descártalo.<br><br><a href="${link}" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:700">Revisar y confirmar</a><br><br><span style="font-size:11px;color:#7C8D96">O copia este enlace: ${link}</span></div>`
+  const proponerDueno=async()=>{
+    if(!survId||!loserId) return
+    const s=cli(survId),l=cli(loserId),ks=cont(survId),kl=cont(loserId)
+    const owner=s.abogado_responsable||l.abogado_responsable
+    const to=EMAIL_BY_NAME[owner]
+    if(!to){ appAlert('El cliente no tiene abogado responsable con correo. Asígnalo en la ficha para poder proponer.'); return }
+    if(!await appConfirm(`¿Enviar a ${owner} (${to}) para que confirme si "${s.name}" y "${l.name}" son el mismo cliente?`)) return
+    setBusy(true); setMsg(null)
+    try{
+      const token=(typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():('m'+Date.now())).replace(/[^a-z0-9]/gi,'').slice(0,24)
+      const link=`${location.origin}/?merge=${token}`
+      if(!DEMO){
+        await supabase.from('learnings').insert({kind:'merge_pending',key:token,value:JSON.stringify({survivor_id:survId,loser_id:loserId,survivor_name:s.name,loser_name:l.name,by:user?.name||'',at:new Date().toISOString()})})
+        await enviarComoUsuario({to,subject:`¿Son el mismo cliente? Confirma la fusión — ${s.name}`,html:emailPropuesta(s,l,ks,kl,link),text:`¿"${s.name}" y "${l.name}" son el mismo cliente? Revisa y confirma: ${link}`})
+      }
+      setRes({propuesta:true,owner,to})
+    }catch(e){ setMsg('No se pudo proponer: '+(e.message||e)) }
+    setBusy(false)
+  }
+  const descartarPendiente=async()=>{
+    if(!pending?.token){ onClose&&onClose(); return }
+    if(!await appConfirm('¿Descartar esta propuesta? Significa que NO son el mismo cliente; no se fusiona.')) return
+    try{ await supabase.from('learnings').delete().eq('kind','merge_pending').eq('key',pending.token) }catch(_){}
+    onClose&&onClose()
+  }
   const ejecutar=async()=>{
     if(!survId||!loserId) return
     const s=cli(survId),l=cli(loserId); const ks=cont(survId),kl=cont(loserId)
@@ -6745,6 +6772,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     try{
       const {data,error}=await supabase.functions.invoke('fusionar-clientes',{body:{survivor_id:survId,loser_id:loserId}})
       if(error) throw error; if(data?.error) throw new Error(data.error)
+      if(pending?.token){ try{ await supabase.from('learnings').delete().eq('kind','merge_pending').eq('key',pending.token) }catch(_){} }
       setRes({...data,_s:s,_l:l,_ks:ks,_kl:kl}); onMerged&&onMerged()
     }catch(e){ setMsg('Error al fusionar: '+(e.message||e)) }
     setBusy(false)
@@ -6761,31 +6789,52 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
   }
   if(res) return (
     <div style={{padding:'4px 2px'}}>
-      <div style={{background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:12,padding:'14px 15px',marginBottom:12}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.greenText}}>Fusión lista</div>
-        <div style={{fontSize:12,color:C.text,marginTop:4}}>Todo quedó bajo <b>{res.survivor}</b>. "{res.loser}" se eliminó y su nombre quedó como alias (no se recrea).</div>
-        <div style={{fontSize:10.5,color:C.muted,marginTop:6}}>Movido: {Object.entries(res.moved||{}).map(([t,n])=>`${n} ${t}`).join(' · ')||'—'}</div>
-      </div>
+      {res.propuesta ? (
+        <div style={{background:C.azulBg,border:`1px solid ${C.azulInfo}`,borderRadius:12,padding:'14px 15px',marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.azulInfo}}>Propuesta enviada</div>
+          <div style={{fontSize:12,color:C.text,marginTop:4}}>Le llegó a <b>{res.owner}</b> ({res.to}) un correo con un enlace para revisar las dos fichas y confirmar. La fusión se hace recién cuando el dueño confirme.</div>
+        </div>
+      ) : (
+        <div style={{background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:12,padding:'14px 15px',marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.greenText}}>Fusión lista</div>
+          <div style={{fontSize:12,color:C.text,marginTop:4}}>Todo quedó bajo <b>{res.survivor}</b>. "{res.loser}" se eliminó y su nombre quedó como alias (no se recrea).</div>
+          <div style={{fontSize:10.5,color:C.muted,marginTop:6}}>Movido: {Object.entries(res.moved||{}).map(([t,n])=>`${n} ${t}`).join(' · ')||'—'}</div>
+        </div>
+      )}
       <div style={{display:'flex',gap:8}}>
-        <button onClick={avisar} disabled={avisado} style={{flex:1,padding:'10px',borderRadius:10,border:'none',background:avisado?C.done:C.accent,color:'#fff',fontSize:12.5,fontWeight:700,cursor:avisado?'default':'pointer'}}>{avisado?'Dueño avisado ✓':'Avisar al dueño'}</button>
-        <button onClick={onClose} style={{padding:'10px 16px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+        {!res.propuesta&&<button onClick={avisar} disabled={avisado} style={{flex:1,padding:'10px',borderRadius:10,border:'none',background:avisado?C.done:C.accent,color:'#fff',fontSize:12.5,fontWeight:700,cursor:avisado?'default':'pointer'}}>{avisado?'Dueño avisado ✓':'Avisar al dueño'}</button>}
+        <button onClick={onClose} style={{padding:'10px 16px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12.5,fontWeight:600,cursor:'pointer',flex:res.propuesta?1:'unset'}}>Cerrar</button>
       </div>
     </div> )
   return (
     <div style={{padding:'4px 2px'}}>
-      <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}>Une dos fichas del mismo cliente. Se conserva la que tiene datos; a esa se le mueve todo lo de la otra y la otra se elimina. Nada se pierde.</div>
-      <div style={{display:'flex',gap:10,marginBottom:12}}>
-        {picker(aId,setAId,qa,setQa,bId,'Cliente 1')}
-        {picker(bId,setBId,qb,setQb,aId,'Cliente 2')}
-      </div>
+      {pending
+        ? <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}><b style={{color:C.accent}}>{pending.by||'Un colega'}</b> propone unir estas dos fichas por parecerse. Revisa: ¿son el mismo cliente?</div>
+        : <>
+          <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}>Une dos fichas del mismo cliente. Se conserva la que tiene datos; a esa se le mueve todo lo de la otra y la otra se elimina. Nada se pierde.</div>
+          <div style={{display:'flex',gap:10,marginBottom:12}}>
+            {picker(aId,setAId,qa,setQa,bId,'Cliente 1')}
+            {picker(bId,setBId,qb,setQb,aId,'Cliente 2')}
+          </div>
+        </>}
       {aId&&bId&&<>
         <div style={{display:'flex',gap:8,marginBottom:10}}>{card(aId)}{card(bId)}</div>
-        <div style={{fontSize:11,fontWeight:700,borderRadius:8,padding:'8px 11px',marginBottom:10,background:mismoRut?C.greenBg:C.soonBg,color:mismoRut?C.greenText:C.soonText}}>
-          {mismoRut?'Mismo RUT — es claramente el mismo cliente.':'Sin RUT en común — revisa bien que sean el mismo cliente antes de fusionar.'}
-        </div>
-        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Sobrevive <b style={{color:C.accent}}>{cli(survId)?.name}</b>; se elimina <b>{cli(loserId)?.name}</b> (toca "conservar" en la otra para invertir).</div>
+        {!pending&&<div style={{fontSize:11,fontWeight:700,borderRadius:8,padding:'8px 11px',marginBottom:10,background:mismoRut?C.greenBg:C.soonBg,color:mismoRut?C.greenText:C.soonText}}>
+          {mismoRut?'Mismo RUT — es claramente el mismo cliente.':'Sin RUT en común — mejor que el dueño confirme antes de fusionar.'}
+        </div>}
+        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Sobrevive <b style={{color:C.accent}}>{cli(survId)?.name}</b>; se elimina <b>{cli(loserId)?.name}</b>{!pending&&' (toca "conservar" en la otra para invertir)'}.</div>
         {msg&&<div style={{fontSize:11,color:C.overdue,marginBottom:10}}>{msg}</div>}
-        <button onClick={ejecutar} disabled={busy} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:busy?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:busy?'default':'pointer'}}>{busy?'Fusionando…':`Fusionar en ${cli(survId)?.name}`}</button>
+        {pending
+          ? <div style={{display:'flex',gap:8}}>
+              <button onClick={ejecutar} disabled={busy} style={{flex:1,padding:'11px',borderRadius:10,border:'none',background:busy?C.done:C.normal,color:'#fff',fontSize:12.5,fontWeight:700,cursor:busy?'default':'pointer'}}>{busy?'Fusionando…':'Sí, es el mismo — fusionar'}</button>
+              <button onClick={descartarPendiente} disabled={busy} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>No, son distintos</button>
+            </div>
+          : mismoRut
+            ? <button onClick={ejecutar} disabled={busy} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:busy?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:busy?'default':'pointer'}}>{busy?'Fusionando…':`Fusionar en ${cli(survId)?.name}`}</button>
+            : <>
+                <button onClick={proponerDueno} disabled={busy} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:busy?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:busy?'default':'pointer'}}>{busy?'Enviando…':'Proponer al dueño para confirmar'}</button>
+                <button onClick={ejecutar} disabled={busy} style={{width:'100%',marginTop:7,padding:'8px',borderRadius:9,border:'none',background:'transparent',color:C.muted,fontSize:11.5,fontWeight:600,cursor:'pointer'}}>Fusionar igual (estoy seguro)</button>
+              </>}
       </>}
     </div> )
 }
@@ -25951,6 +26000,18 @@ export default function App() {
       const c=await getClients(); if(alive&&c) setClients(c)
     }catch(_){} })()
     return ()=>{alive=false} },[userRole])
+  // Confirmar fusión propuesta: el dueño abre el link del correo (?merge=token) → revisa las dos fichas y aprueba/descarta.
+  useEffect(()=>{ if(DEMO||!user) return; let done=false
+    try{ const tok=new URLSearchParams(window.location.search).get('merge'); if(!tok) return
+      supabase.from('learnings').select('key,value').eq('kind','merge_pending').eq('key',tok).maybeSingle().then(({data})=>{
+        if(done) return
+        try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
+        if(data?.value){ try{ const p=JSON.parse(data.value); setModal({type:'fusionarClientes',pending:{...p,token:tok}}) }catch(_){ appAlert('No se pudo leer la propuesta de fusión.') } }
+        else appAlert('Esta propuesta de fusión ya no está disponible (quizás ya se resolvió o se descartó).')
+      },()=>{})
+    }catch(_){}
+    return ()=>{ done=true }
+  },[user])
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
@@ -27763,7 +27824,7 @@ export default function App() {
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
         {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
-        {modal?.type==='fusionarClientes'&&<Modal title='Fusionar clientes' maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
+        {modal?.type==='fusionarClientes'&&<Modal title={modal.pending?'Confirmar fusión':'Fusionar clientes'} maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={modal.pending||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='costosOficina'&&<Modal title='Costos de oficina' maxWidth={520} onClose={()=>{setModal(null);loadCostosOfi()}}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
