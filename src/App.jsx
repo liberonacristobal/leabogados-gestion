@@ -375,6 +375,11 @@ const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.sta
 // Normaliza texto (sin tildes/símbolos) y mide similitud por tokens (Jaccard) 0..1, para cruzar glosa↔proyecto.
 const _normTxt = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
 const simTexto = (a,b) => { const A=new Set(_normTxt(a).split(' ').filter(w=>w.length>2)), B=new Set(_normTxt(b).split(' ').filter(w=>w.length>2)); if(!A.size||!B.size) return 0; let i=0; A.forEach(w=>{ if(B.has(w)) i++ }); return i/(A.size+B.size-i) }
+// Normalizador ÚNICO de nombres de cliente (mismo criterio que el edge function clientes-drive-sync): minúsculas + sin acentos + espacios colapsados. Anti-duplicados.
+const nrmCliente = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim()
+// Levenshtein → similitud 0..1 para pescar typos que el norm no ve ("Migdley" vs "Midgley").
+function _lev(a,b){ a=a||''; b=b||''; const m=a.length,n=b.length; if(!m) return n; if(!n) return m; let prev=Array.from({length:n+1},(_,j)=>j),cur=new Array(n+1); for(let i=1;i<=m;i++){ cur[0]=i; for(let j=1;j<=n;j++){ cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1)) } [prev,cur]=[cur,prev] } return prev[n] }
+const simNombre = (a,b) => { const x=nrmCliente(a),y=nrmCliente(b); if(!x||!y) return 0; if(x===y) return 1; return 1 - _lev(x,y)/Math.max(x.length,y.length) }
 // La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
@@ -17701,6 +17706,14 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
     if(DEMO) return
     try{ await setLearningKV('config','clientes_drive_sync',nv?'on':'off') }catch(_){ setAutoOn(!nv) }
   }
+  // Compuerta fuzzy: la carpeta se parece a un cliente existente → vincular (aprende alias, no crea) o marcar como nuevo.
+  const vincularFolder = async (f) => {
+    if(!f._maybe) return
+    try{ await supabase.from('learnings').insert({kind:'cliente_folder',key:nrmCliente(f.name),value:f._maybe.id}) }catch(_){}
+    setNewClients(list=>list.filter(x=>x.id!==f.id))
+    setSyncMsg(`"${f.name}" vinculada a ${f._maybe.name} — no se crea duplicado. La app lo recuerda.`)
+  }
+  const marcarNuevo = (f) => setNewClients(list=>list.map(x=>x.id===f.id?{...x,_maybe:null}:x))
 
   async function init(){
     setStep('loading')
@@ -17713,10 +17726,15 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
       const resActivos=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${CLIENTES_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
       // Dedup ROBUSTO = mismo criterio que el edge function clientes-drive-sync: colapsa espacios y quita acentos.
       // (Antes .toLowerCase().trim() dejaba pasar "Fernando  Oliver" vs "Fernando Oliver" y "Survias" vs "Survías" → duplicados.)
-      const nrmName=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim()
       const activos=(resActivos.files||[]).filter(f=>!f.name.startsWith('1. CLIENTES'))
-      const existingNames=clients.map(c=>nrmName(c.name))
-      const nuevos=activos.filter(f=>!existingNames.includes(nrmName(f.name)))
+      const existingNames=new Set(clients.map(c=>nrmCliente(c.name)))
+      // Alias aprendidos (folder→cliente): no volver a proponer lo que ya vinculaste.
+      let aliasSet=new Set()
+      try{ const {data:al}=await supabase.from('learnings').select('key').eq('kind','cliente_folder'); aliasSet=new Set((al||[]).map(r=>nrmCliente(r.key))) }catch(_){}
+      const noExactos=activos.filter(f=>!existingNames.has(nrmCliente(f.name)) && !aliasSet.has(nrmCliente(f.name)))
+      // Fuzzy: si se parece mucho a un cliente existente (typo), marcarlo como POSIBLE duplicado (compuerta), no crear a ciegas.
+      const vivos=clients.filter(c=>c.status!=='Terminado')
+      const nuevos=noExactos.map(f=>{ let best=null; for(const c of vivos){ const s=simNombre(f.name,c.name); if(s>=0.82 && s<1 && (!best||s>best.ratio)) best={id:c.id,name:c.name,ratio:Math.round(s*100)} } return best?{...f,_maybe:best}:f })
       setNewClients(nuevos)
 
       // Clientes terminados - buscar subcarpetas 2024 y 2025
@@ -17791,14 +17809,30 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
       {step==='error'&&<div style={{padding:20}}>{log.map((l,i)=><div key={i} style={{fontSize:12,color:C.overdue}}>{l}</div>)}</div>}
       {(step==='review'||step==='saving')&&(
         <div>
-          {/* Clientes nuevos */}
-          {newClients.length>0&&(
+          {/* Posibles duplicados (compuerta fuzzy): la carpeta se parece a un cliente que ya existe → vincular o marcar nuevo */}
+          {newClients.some(f=>f._maybe)&&(
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Posibles duplicados ({newClients.filter(f=>f._maybe).length})</div>
+              {newClients.filter(f=>f._maybe).map(f=>(
+                <div key={f.id} style={{border:`1px solid ${C.soon}`,borderRadius:10,padding:'10px 11px',marginBottom:7,background:C.soonBg}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color:C.soonText}}>{f.name}</div>
+                  <div style={{fontSize:11,color:C.text,margin:'3px 0 8px'}}>Se parece a <b>{f._maybe.name}</b> ({f._maybe.ratio}%). ¿Es el mismo cliente?</div>
+                  <div style={{display:'flex',gap:7}}>
+                    <button onClick={()=>vincularFolder(f)} style={{flex:1,padding:'7px 10px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Es el mismo · vincular</button>
+                    <button onClick={()=>marcarNuevo(f)} style={{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11.5,fontWeight:600,cursor:'pointer'}}>Es nuevo</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Clientes nuevos (sin parecido, o ya marcados como nuevos) */}
+          {newClients.some(f=>!f._maybe)&&(
             <div style={{marginBottom:16}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                <div style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Clientes nuevos ({newClients.length})</div>
-                <button onClick={()=>toggleAll(newClients)} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{newClients.every(f=>selected[f.id])?'Deseleccionar todos':'Seleccionar todos'}</button>
+                <div style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Clientes nuevos ({newClients.filter(f=>!f._maybe).length})</div>
+                <button onClick={()=>toggleAll(newClients.filter(f=>!f._maybe))} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{newClients.filter(f=>!f._maybe).every(f=>selected[f.id])?'Deseleccionar todos':'Seleccionar todos'}</button>
               </div>
-              {newClients.map(f=>(
+              {newClients.filter(f=>!f._maybe).map(f=>(
                 <div key={f.id} onClick={()=>toggle(f.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,marginBottom:4,background:selected[f.id]?C.azulBg:C.bgSoft,cursor:'pointer',border:`1px solid ${selected[f.id]?C.accent:C.border}`}}>
                   <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${selected[f.id]?C.accent:C.border}`,background:selected[f.id]?C.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                     {selected[f.id]&&<span style={{color:'#fff',fontSize:10,fontWeight:700}}>✓</span>}

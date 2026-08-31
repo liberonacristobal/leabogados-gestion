@@ -151,8 +151,13 @@ serve(async (req) => {
     const clientByName = new Map<string, any>();
     (clients || []).forEach((c) => { if (!clientByName.has(norm(c.name))) clientByName.set(norm(c.name), c); });
 
+    // Alias de folder → cliente (aprendidos al vincular/fusionar). Evita recrear duplicados que el norm no pesca (typos).
+    // learnings kind 'cliente_folder': key = nombre de folder normalizado, value = client_id.
+    const { data: aliasRows } = await sb.from("learnings").select("key,value").eq("kind", "cliente_folder");
+    const aliasSet = new Set<string>((aliasRows || []).map((r) => norm(String(r.key))));
+
     // Candidatos (para dry-run y para aplicar).
-    const wouldAdd = activos.filter((f) => !clientByName.has(norm(f.name))).map((f) => f.name);
+    const wouldAdd = activos.filter((f) => !clientByName.has(norm(f.name)) && !aliasSet.has(norm(f.name))).map((f) => f.name);
     const wouldTerminate: string[] = [];
     for (const c of (clients || [])) {
       if (c.status === "Terminado") continue;
@@ -170,7 +175,7 @@ serve(async (req) => {
     const added: string[] = [];
     const addErrors: string[] = [];
     for (const f of activos) {
-      if (clientByName.has(norm(f.name))) continue;
+      if (clientByName.has(norm(f.name)) || aliasSet.has(norm(f.name))) continue;
       const { data: nc, error } = await sb.from("clients").insert({ name: f.name, status: "Activo" }).select("id,name").single();
       if (!error && nc) { added.push(f.name); clientByName.set(norm(f.name), nc); }
       else if (error) addErrors.push(`${f.name}: ${error.message || error.code || "?"}`);
