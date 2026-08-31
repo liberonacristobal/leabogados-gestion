@@ -6693,6 +6693,102 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[] }){
     </div>
   )
 }
+// Fusionar clientes: une dos fichas duplicadas en una SIN perder nada. Sobreviviente = el que tiene datos.
+// Motor server-side (edge fn fusionar-clientes) reasigna todas las FKs; la app previsualiza y avisa al dueño.
+function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[], clientEntities=[], proyectosCartera=[], user, onClose, onMerged}){
+  const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const [aId,setAId]=useState(null),[bId,setBId]=useState(null)
+  const [qa,setQa]=useState(''),[qb,setQb]=useState('')
+  const [survId,setSurvId]=useState(null)
+  const [busy,setBusy]=useState(false),[res,setRes]=useState(null),[msg,setMsg]=useState(null),[avisado,setAvisado]=useState(false)
+  const cli=id=>clients.find(c=>String(c.id)===String(id))
+  const rsDe=id=>clientEntities.filter(e=>String(e.client_id)===String(id)).map(e=>e.name).filter(Boolean)
+  const rutsDe=id=>{ const c=cli(id); const rs=clientEntities.filter(e=>String(e.client_id)===String(id)); return [c?.rut,...rs.map(e=>e.rut)].map(r=>String(r||'').replace(/[.\-\s]/g,'').toLowerCase()).filter(Boolean) }
+  const cont=id=>({
+    facturas:billing.filter(b=>String(b.client_id)===String(id)&&!b.deleted_at&&b.status!=='Anulada').length,
+    ventas:sales.filter(s=>String(s.client_id)===String(id)&&!s.deleted_at).length,
+    gastos:expenses.filter(e=>String(e.client_id)===String(id)).length,
+    tareas:tasks.filter(t=>String(t.client_id)===String(id)).length,
+    proyectos:proyectosCartera.filter(p=>String(p.cliente_id)===String(id)).length,
+    rs:rsDe(id) })
+  const total=id=>{ const c=cont(id); return c.facturas+c.ventas+c.gastos+c.tareas+c.proyectos }
+  useEffect(()=>{ if(aId&&bId){ const ta=total(aId),tb=total(bId),ra=rsDe(aId).length,rb=rsDe(bId).length; setSurvId((ra!==rb)?(ra>rb?aId:bId):(ta>=tb?aId:bId)); setRes(null); setMsg(null); setAvisado(false) } },[aId,bId])
+  const loserId=survId?(survId===aId?bId:aId):null
+  const mismoRut=(()=>{ if(!aId||!bId) return false; const A=new Set(rutsDe(aId)); return rutsDe(bId).some(r=>A.has(r)) })()
+  const buscar=(q,otherId)=>{ const t=_normTxt(q); if(t.length<2) return []; return clients.filter(c=>String(c.id)!==String(otherId)&&_normTxt(c.name).includes(t)).slice(0,6) }
+  const card=(id)=>{ const c=cli(id),k=cont(id); if(!c) return null; return (
+    <div style={{border:`1px solid ${survId===id?C.normal:C.border}`,borderRadius:11,padding:'10px 11px',background:survId===id?C.greenBg:'#fff',flex:1,minWidth:0}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6}}>
+        <span style={{fontSize:12.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+        <span onClick={()=>setSurvId(id)} style={{fontSize:9,fontWeight:800,cursor:'pointer',borderRadius:20,padding:'2px 7px',flexShrink:0,background:survId===id?C.normal:C.bgSoft,color:survId===id?'#fff':C.muted}}>{survId===id?'CONSERVA':'conservar'}</span>
+      </div>
+      {k.rs.length>0&&<div style={{fontSize:9.5,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{k.rs.join(' · ')}</div>}
+      <div style={{fontSize:10,color:C.text,marginTop:6,lineHeight:1.6}}>{k.facturas} facturas · {k.ventas} ventas · {k.gastos} gastos · {k.tareas} tareas · {k.proyectos} proyectos</div>
+    </div> )}
+  const picker=(id,setId,q,setQ,otherId,label)=>(
+    <div key={label} style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,marginBottom:5}}>{label}</div>
+      {id ? <div style={{display:'flex',alignItems:'center',gap:6,background:C.bgSoft,borderRadius:8,padding:'8px 10px'}}><span style={{flex:1,fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli(id)?.name}</span><span onClick={()=>{setId(null);setQ('')}} style={{fontSize:15,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span></div>
+      : <><input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={{width:'100%',height:34,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:12.5,color:C.text,background:'#fff'}}/>
+        {buscar(q,otherId).map(c=><div key={c.id} onClick={()=>{setId(c.id);setQ('')}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.bgSoft}`}}>{c.name}</div>)}</>}
+    </div>)
+  const emailDueno=(surv,loser,ks,kl)=>{
+    const li=(t,k)=>[k.facturas&&`${k.facturas} factura(s)`,k.ventas&&`${k.ventas} venta(s)`,k.gastos&&`${k.gastos} gasto(s)`,k.proyectos&&`${k.proyectos} proyecto(s)`].filter(Boolean).join(', ')||'sin registros'
+    return `<div style="font-family:Arial,Helvetica,sans-serif;color:#26333A;font-size:13px;line-height:1.6">Hola,<br><br>El cliente <b>${surv.name}</b>, del que eres responsable, tenía <b>dos fichas duplicadas</b> en la app y las fusioné en una sola, <b>sin perder información</b>.<br><br><b>Por qué pasó:</b> al sincronizar con Google Drive, una carpeta con el nombre levemente distinto (un doble espacio, una tilde o un typo) no calzó con la ficha existente y se creó una segunda; los datos quedaron repartidos.<br><br><b>Qué tenía cada una:</b><br>• ${surv.name}: ${li('a',ks)}.<br>• ${loser.name} (duplicada): ${li('b',kl)}.<br><br><b>Ahora</b> quedó todo bajo <b>${surv.name}</b>. Para evitar que se repita, cuida que el nombre de la carpeta en Drive sea idéntico al del cliente.<br><br>Saludos.</div>`
+  }
+  const ejecutar=async()=>{
+    if(!survId||!loserId) return
+    const s=cli(survId),l=cli(loserId); const ks=cont(survId),kl=cont(loserId)
+    if(!await appConfirm(`¿Fusionar "${l.name}" dentro de "${s.name}"?\n\nSe le mueven ${total(loserId)} registro(s) y se elimina "${l.name}". El nombre queda como alias para que no se recree.`)) return
+    setBusy(true); setMsg(null)
+    if(DEMO){ await new Promise(r=>setTimeout(r,600)); setRes({survivor:s.name,loser:l.name,moved:{demo:total(loserId)},_s:s,_l:l,_ks:ks,_kl:kl}); setBusy(false); return }
+    try{
+      const {data,error}=await supabase.functions.invoke('fusionar-clientes',{body:{survivor_id:survId,loser_id:loserId}})
+      if(error) throw error; if(data?.error) throw new Error(data.error)
+      setRes({...data,_s:s,_l:l,_ks:ks,_kl:kl}); onMerged&&onMerged()
+    }catch(e){ setMsg('Error al fusionar: '+(e.message||e)) }
+    setBusy(false)
+  }
+  const avisar=async()=>{
+    if(!res) return; const surv=res._s
+    const to=EMAIL_BY_NAME[surv.abogado_responsable]||null
+    if(!to){ appAlert('Este cliente no tiene un abogado responsable con correo. Asígnalo en la ficha para poder avisar.'); return }
+    if(!await appConfirm(`¿Avisar a ${surv.abogado_responsable} (${to}) que se fusionaron las fichas de ${surv.name}?`)) return
+    try{
+      const via=await enviarComoUsuario({to,subject:`Carpetas duplicadas de ${surv.name} — fusionadas`,html:emailDueno(surv,res._l,res._ks,res._kl),text:`Fusioné las dos fichas duplicadas de ${surv.name} en una sola, sin perder información.`})
+      if(via){ setAvisado(true); appAlert('Aviso enviado al dueño'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') }
+    }catch(e){ appAlert('No se pudo enviar el aviso: '+(e.message||e)) }
+  }
+  if(res) return (
+    <div style={{padding:'4px 2px'}}>
+      <div style={{background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:12,padding:'14px 15px',marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.greenText}}>Fusión lista</div>
+        <div style={{fontSize:12,color:C.text,marginTop:4}}>Todo quedó bajo <b>{res.survivor}</b>. "{res.loser}" se eliminó y su nombre quedó como alias (no se recrea).</div>
+        <div style={{fontSize:10.5,color:C.muted,marginTop:6}}>Movido: {Object.entries(res.moved||{}).map(([t,n])=>`${n} ${t}`).join(' · ')||'—'}</div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={avisar} disabled={avisado} style={{flex:1,padding:'10px',borderRadius:10,border:'none',background:avisado?C.done:C.accent,color:'#fff',fontSize:12.5,fontWeight:700,cursor:avisado?'default':'pointer'}}>{avisado?'Dueño avisado ✓':'Avisar al dueño'}</button>
+        <button onClick={onClose} style={{padding:'10px 16px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+      </div>
+    </div> )
+  return (
+    <div style={{padding:'4px 2px'}}>
+      <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}>Une dos fichas del mismo cliente. Se conserva la que tiene datos; a esa se le mueve todo lo de la otra y la otra se elimina. Nada se pierde.</div>
+      <div style={{display:'flex',gap:10,marginBottom:12}}>
+        {picker(aId,setAId,qa,setQa,bId,'Cliente 1')}
+        {picker(bId,setBId,qb,setQb,aId,'Cliente 2')}
+      </div>
+      {aId&&bId&&<>
+        <div style={{display:'flex',gap:8,marginBottom:10}}>{card(aId)}{card(bId)}</div>
+        <div style={{fontSize:11,fontWeight:700,borderRadius:8,padding:'8px 11px',marginBottom:10,background:mismoRut?C.greenBg:C.soonBg,color:mismoRut?C.greenText:C.soonText}}>
+          {mismoRut?'Mismo RUT — es claramente el mismo cliente.':'Sin RUT en común — revisa bien que sean el mismo cliente antes de fusionar.'}
+        </div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Sobrevive <b style={{color:C.accent}}>{cli(survId)?.name}</b>; se elimina <b>{cli(loserId)?.name}</b> (toca "conservar" en la otra para invertir).</div>
+        {msg&&<div style={{fontSize:11,color:C.overdue,marginBottom:10}}>{msg}</div>}
+        <button onClick={ejecutar} disabled={busy} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:busy?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:busy?'default':'pointer'}}>{busy?'Fusionando…':`Fusionar en ${cli(survId)?.name}`}</button>
+      </>}
+    </div> )
+}
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
 function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], onOpenClientFicha, onOpenFactura}){
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
@@ -27514,6 +27610,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12h-4l-3 9L9 3l-3 9H2'/></svg>
                   Revisión de datos
                 </div>}
+                {actualRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'fusionarClientes'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M7 8V5l-4 4 4 4v-3h8M17 16v3l4-4-4-4v3H9'/></svg>
+                  Fusionar clientes
+                </div>}
                 {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para autorizar el acceso permanente a Drive (con tu cuenta, que ve las carpetas de clientes). Al volver queda conectado para siempre. ¿Continuar?')) connectDrivePermanente()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2v8'/><path d='m8 6 4-4 4 4'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7'/></svg>
                   Conectar Drive
@@ -27663,6 +27763,7 @@ export default function App() {
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
         {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
+        {modal?.type==='fusionarClientes'&&<Modal title='Fusionar clientes' maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='costosOficina'&&<Modal title='Costos de oficina' maxWidth={520} onClose={()=>{setModal(null);loadCostosOfi()}}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
