@@ -157,9 +157,10 @@ export interface CompraSII {
   montoTotal: number
 }
 
-// VERIFICAR (V2): tipos de documento de compra a consultar. Si getDetalleCompra
-// acepta '0' (todos) se puede reemplazar esta iteracion por una sola llamada.
-const COMPRA_TIPOS = [33, 34] // TODO: ampliar (46, 56, 61, 914...) segun (V2)/(V3)
+// VERIFICADO contra prod (2026-06): getDetalleCompra EXIGE codTipoDoc especifico
+// (con '0' responde cdvc17.05.02). El estudio recibe 33 (factura afecta), 34
+// (exenta), 46 (factura de compra), 56 (nota debito) y 61 (nota credito).
+const COMPRA_TIPOS = [33, 34, 46, 56, 61]
 
 // Consulta el detalle de compras de UN tipo de documento. Espejo de detallePorTipo.
 async function detalleComprasPorTipo(tipoDoc: number, periodo: string, token: string): Promise<any[]> {
@@ -223,30 +224,45 @@ async function detalleComprasPorTipo(tipoDoc: number, periodo: string, token: st
   return Array.isArray(json?.data) ? json.data : []
 }
 
+// DEBUG (temporal): devuelve la respuesta CRUDA de getDetalleCompra para verificar
+// contra el SII real los nombres de campo (V1) y si acepta codTipoDoc '0' (V2).
+export async function getComprasRaw(periodo: string, token: string): Promise<any> {
+  const out: any = { periodo, tipos: [] }
+  try {
+    const todos = await detalleComprasPorTipo(0, periodo, token)
+    out.tipo0 = { ok: true, n: todos.length, primer: todos[0] ?? null }
+  } catch (e) { out.tipo0 = { ok: false, error: e instanceof Error ? e.message : String(e) } }
+  for (const t of [33, 34, 46, 61]) {
+    try { const d = await detalleComprasPorTipo(t, periodo, token); out.tipos.push({ tipo: t, n: d.length, primer: d[0] ?? null }) }
+    catch (e) { out.tipos.push({ tipo: t, error: e instanceof Error ? e.message : String(e) }) }
+  }
+  return out
+}
+
 export async function getCompras(periodo: string, token: string): Promise<CompraSII[]> {
   return await conReintentos('consulta RCV compras', async () => {
-    // VERIFICAR (V2): si la API exige tipo especifico, se itera; si acepta todos,
-    // basta una sola llamada con codTipoDoc '0'.
     const porTipo = await Promise.all(COMPRA_TIPOS.map((t) => detalleComprasPorTipo(t, periodo, token)))
-    const docs = porTipo.flat()
-    console.log(`[sii-sync] RCV compras ${periodo}: ${COMPRA_TIPOS.map((t, i) => `${porTipo[i].length} tipo ${t}`).join(' + ')}`)
-
-    return docs
-      .map((d) => ({
-        // VERIFICAR (V1): confirmar TODOS estos nombres de campo con un dump real de
-        // getDetalleCompra. Los de abajo son los de ventas (detRutDoc etc.), que
-        // NO tengo confirmados para compras. El IVA (detMntIVA) en particular no
-        // existe en la respuesta de ventas — confirmar su nombre exacto.
-        tipoDte: Number(d.detTipoDoc ?? 0),
-        folio: Number(d.detNroDoc ?? 0),
-        rutEmisor: `${d.detRutDoc ?? ''}-${String(d.detDvDoc ?? '').toUpperCase()}`,
-        nombreEmisor: String(d.detRznSoc ?? ''),
-        fechaEmision: fechaISO(String(d.detFchDoc ?? '')),
-        montoNeto: Number(d.detMntNeto ?? 0),
-        montoExento: Number(d.detMntExe ?? 0),
-        montoIva: Number(d.detMntIVA ?? 0), // VERIFICAR (V1): nombre del campo IVA
-        montoTotal: Number(d.detMntTotal ?? 0),
-      }))
-      .filter((c) => c.folio > 0)
+    const out: CompraSII[] = []
+    // OJO (verificado prod): detTipoDoc llega NULL en cada fila → el tipo lo da la
+    // consulta, no el campo. Los demas campos (detRutDoc/detRznSoc/detMnt*) confirmados.
+    COMPRA_TIPOS.forEach((tipo, i) => {
+      for (const d of porTipo[i]) {
+        const folio = Number(d.detNroDoc ?? 0)
+        if (folio <= 0) continue
+        out.push({
+          tipoDte: tipo,
+          folio,
+          rutEmisor: `${d.detRutDoc ?? ''}-${String(d.detDvDoc ?? '').toUpperCase()}`,
+          nombreEmisor: String(d.detRznSoc ?? ''),
+          fechaEmision: fechaISO(String(d.detFchDoc ?? '')),
+          montoNeto: Number(d.detMntNeto ?? 0),
+          montoExento: Number(d.detMntExe ?? 0),
+          montoIva: Number(d.detMntIVA ?? 0),
+          montoTotal: Number(d.detMntTotal ?? 0),
+        })
+      }
+    })
+    console.log(`[sii-sync] RCV compras ${periodo}: ${out.length} docs (${COMPRA_TIPOS.map((t, i) => `${porTipo[i].length}×${t}`).join(' ')})`)
+    return out
   })
 }
