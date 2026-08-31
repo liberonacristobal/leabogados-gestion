@@ -4595,9 +4595,9 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
               </div>
               <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
             </div>
-            {r._edit?(
+            {(r._edit || !((parseFloat(r.valor)||0)>0))?(
               <div style={{display:'flex',height:36,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff',marginTop:6}}>
-                <input type='number' value={r.valor??''} onChange={e=>up(i,'valor',e.target.value)} placeholder={tipo==='pct'?'%':tipo==='uf'?'UF':'$'} style={{flex:1,minWidth:0,border:'none',padding:'0 9px',fontSize:13,color:C.text,outline:'none'}}/>
+                <input type='number' value={r.valor??''} onChange={e=>up(i,'valor',e.target.value)} placeholder={tipo==='pct'?'% que te cobra':tipo==='uf'?'Cuánto (UF)':'Cuánto ($)'} style={{flex:1,minWidth:0,border:'none',padding:'0 9px',fontSize:13,color:C.text,outline:'none'}}/>
                 <div style={{display:'flex',flexShrink:0}}>
                   {tipos.map(([v,l])=>(
                     <button key={v} type='button' onClick={()=>up(i,'tipo',v)} style={{padding:'0 8px',border:'none',borderLeft:`1px solid ${C.border}`,background:tipo===v?C.accent:C.bgSoft,color:tipo===v?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
@@ -4901,6 +4901,10 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     ? (moneda==='UF' ? amountUF*(parseFloat(costPct)||0)/100 : montoCLP*(parseFloat(costPct)||0)/100)
     : (moneda==='UF' ? parseFloat(f.cost_uf)||0 : parseFloat(f.cost_clp)||0)
   const hasCost = costMode==='pct' ? (parseFloat(costPct)||0)>0 : costVal>0
+  // Costo derivado del REPARTO (comisión de proveedores) en la unidad de la venta. Espeja enUnidad de RepartoTerceros:
+  // fuente única para que, en una venta sin costo explícito, el reparto (ej. Martín 30%) SÍ entre al margen (cost_uf/clp).
+  const repartoEnUnidad = r => { const v=parseFloat(r.valor)||0; if(r.tipo==='pct') return (moneda==='CLP'?montoCLP:amountUF)*v/100; if(moneda!=='CLP') return r.tipo==='uf'?v:(ufVal>0?v/ufVal:0); return r.tipo==='uf'?v*ufVal:v }
+  const costoReparto = (reparto||[]).filter(r=>r.proveedor_id && (parseFloat(r.valor)||0)>0).reduce((a,r)=>a+repartoEnUnidad(r),0)
   const panelHon = parseFloat(newHon)||0
   const panelCosto = newCostMode==='pct' ? panelHon*(parseFloat(newCostPct)||0)/100 : parseFloat(newCosto)||0
 
@@ -4974,7 +4978,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     if(repartoLimpio.length===0 && hayIncompleto){ appAlert('Elige el proveedor en el reparto de costos antes de guardar (o quita la fila con la ×).'); return }
     await flushCuotaEdits()
     const saveF = {...f}
-    if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
+    if(!hasCost && costoReparto>0) {   // sin costo explícito pero con reparto → el costo de la venta = el reparto (que entre al margen)
+      if(moneda==='UF') { saveF.cost_uf = +costoReparto.toFixed(2)||null; saveF.cost_clp = null }
+      else { saveF.cost_clp = Math.round(costoReparto)||null; saveF.cost_uf = null }
+    }
+    else if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
     else if(costMode==='pct') {
       if(moneda==='UF') saveF.cost_uf = (amountUF*(parseFloat(costPct)||0)/100)||null
       else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
@@ -4992,7 +5000,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
   const handleSaveDraft = () => {
     const saveF = {...f, status:'Borrador'}
-    if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
+    if(!hasCost && costoReparto>0) {
+      if(moneda==='UF') { saveF.cost_uf = +costoReparto.toFixed(2)||null; saveF.cost_clp = null }
+      else { saveF.cost_clp = Math.round(costoReparto)||null; saveF.cost_uf = null }
+    }
+    else if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
     else if(costMode==='pct') {
       if(moneda==='UF') saveF.cost_uf = (amountUF*(parseFloat(costPct)||0)/100)||null
       else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
