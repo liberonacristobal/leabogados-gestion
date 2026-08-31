@@ -94,6 +94,7 @@ serve(async (req) => {
     const t0 = Date.parse(hoyCL);
     const diasDe = (iso:string)=> iso ? Math.round((t0 - Date.parse(String(iso).slice(0,10))) / 86400000) : 0;
     const fDia = (iso:string)=>{ try { return new Date(String(iso).slice(0,10)+"T00:00:00").toLocaleDateString("es-CL",{ day:"numeric", month:"short" }); } catch { return String(iso); } };
+    const fFecha = (iso:string)=>{ try { return new Date(String(iso).slice(0,10)+"T00:00:00").toLocaleDateString("es-CL",{ day:"numeric", month:"short", year:"numeric" }); } catch { return String(iso); } };
 
     const _hoy = new Date(hoyCL+"T00:00:00Z");
     const mesAno = _hoy.toLocaleDateString("es-CL",{ month:"long", year:"numeric", timeZone:"UTC" });
@@ -128,7 +129,8 @@ serve(async (req) => {
       const lineas = items.sort((a:any,b:any)=>b.dias-a.dias).map((x:any)=>{
         const ot = x.g.ot_number ? `OT ${esc(x.g.ot_number)}` : "";
         const det = [x.g.materia, x.g.subcategory, x.g.requirente].map((s:any)=>String(s||"").trim()).filter(Boolean)[0] || x.g.category || "";
-        const sub = [ot, det?esc(det):"", `pagada ${fDia(x.g.notaria_liquidado_at)}`].filter(Boolean).join(" · ");
+        const dOT = x.g.date ? `OT del ${fFecha(x.g.date)}` : `<span style="color:${AMB};">sin fecha de OT</span>`;
+        const sub = [ot, det?esc(det):"", dOT, `pagada ${fDia(x.g.notaria_liquidado_at)}`].filter(Boolean).join(" · ");
         return `<tr><td valign="top" style="padding:7px 0;"><div style="font-size:12.5px;color:${MUT};line-height:1.4;">${sub}</div></td><td valign="top" align="right" style="padding:7px 0 7px 10px;white-space:nowrap;"><span style="font-size:13px;font-weight:700;color:${INK};">${esc(fmt(x.monto))}</span></td></tr>`;
       }).join("");
       return `<tr><td style="padding:14px 0;${bt(first)}">`
