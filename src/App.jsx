@@ -26480,9 +26480,20 @@ ${brief()}`
 }
 function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=[],expenses=[],anticipos=[],recents=[],onSelect}){
   const [q,setQ]=useState('')
+  const [sel,setSel]=useState(-1)   // -1 = sin resaltar (look identico hasta usar flecha); Enter elige el primero
   const inputRef=useRef(null)
-  useEffect(()=>{ if(open){ setQ(''); const t=setTimeout(()=>{ try{inputRef.current&&inputRef.current.focus()}catch(_){}}, 60); return ()=>clearTimeout(t) } },[open])
-  useEffect(()=>{ if(!open) return; const h=e=>{ if(e.key==='Escape'){ e.preventDefault(); onClose() } }; document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h) },[open,onClose])
+  const flatRef=useRef([])
+  const selRef=useRef(-1); selRef.current=sel
+  useEffect(()=>{ if(open){ setQ(''); setSel(-1); const t=setTimeout(()=>{ try{inputRef.current&&inputRef.current.focus()}catch(_){}}, 60); return ()=>clearTimeout(t) } },[open])
+  useEffect(()=>{ setSel(-1) },[q])
+  useEffect(()=>{ if(!open) return; const h=e=>{
+    const f=flatRef.current
+    if(e.key==='ArrowDown'){ e.preventDefault(); setSel(i=>Math.min(f.length-1,(i<0?-1:i)+1)) }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); setSel(i=>Math.max(0,i-1)) }
+    else if(e.key==='Enter'){ const it=f[selRef.current<0?0:selRef.current]; if(it){ e.preventDefault(); onSelect(it) } }
+    else if(e.key==='Escape'){ e.preventDefault(); onClose() }
+  }; document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h) },[open,onClose,onSelect])
+  useEffect(()=>{ if(!open||sel<0) return; try{ document.querySelector('[data-cmdidx="'+sel+'"]')?.scrollIntoView({block:'nearest'}) }catch(_){} },[sel,open])
   if(!open) return null
   const s=q.trim().toLowerCase(), nz=t=>String(t||'').toLowerCase()
   const cname=id=>clients.find(c=>String(c.id)===String(id))?.name||''
@@ -26495,8 +26506,26 @@ function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=
   const gas=s?expenses.filter(e=>nz(e.concept).includes(s)).slice(0,5):[]
   const ant=s?(anticipos||[]).filter(a=>nz(a.proyecto).includes(s)||nz(a.nota).includes(s)).slice(0,5):[]
   const hay=views.length||acts.length||cli.length||fac.length||ven.length||tar.length||gas.length||ant.length
+  // Lista plana en el MISMO orden que se renderiza → habilita navegacion con ↑/↓ + Enter. flatRef la deja disponible al handler de teclado.
+  const recentsShown = !s ? recents : []
+  const flat=[
+    ...views.map(([id,l])=>({type:'view',id,label:l})),
+    ...acts.map(a=>({type:'action',id:a.id,label:a.label})),
+    ...recentsShown.map(r=>r),
+    ...cli.map(c=>({type:'cliente',id:c.id,label:c.name})),
+    ...fac.map(b=>({type:'factura',id:b.id,label:`Factura N°${folioN(b.invoice_no)}`})),
+    ...ven.map(v=>({type:'venta',id:v.id,label:v.title||'Venta'})),
+    ...tar.map(t=>({type:'tarea',id:t.id,label:t.title||'Tarea'})),
+    ...gas.map(e=>({type:'gasto',id:e.id,label:e.concept||'Gasto'})),
+    ...ant.map(a=>({type:'anticipo',id:a.id,label:a.proyecto||'Anticipo'})),
+  ]
+  flatRef.current=flat
+  let _o=0
+  const oViews=_o;_o+=views.length; const oActs=_o;_o+=acts.length; const oRec=_o;_o+=recentsShown.length
+  const oCli=_o;_o+=cli.length; const oFac=_o;_o+=fac.length; const oVen=_o;_o+=ven.length
+  const oTar=_o;_o+=tar.length; const oGas=_o;_o+=gas.length; const oAnt=_o;_o+=ant.length
   const Hdr=t=><div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',margin:'11px 4px 3px'}}>{t}</div>
-  const Row=({label,sub,right,onClick})=>(<div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+  const Row=({label,sub,right,onClick,idx})=>(<div data-cmdidx={idx} onClick={onClick} onMouseEnter={()=>setSel(idx)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,cursor:'pointer',background:sel===idx?C.bgSoft:'none'}}>
     <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div>{sub&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}</div>
     {right&&<span style={{fontSize:11,fontWeight:600,color:C.muted,flexShrink:0,whiteSpace:'nowrap'}}>{right}</span>}</div>)
   return (
@@ -26508,15 +26537,15 @@ function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=
           <span onClick={onClose} style={{fontSize:11,color:C.muted,border:`1px solid ${C.border}`,borderRadius:5,padding:'1px 6px',cursor:'pointer'}}>esc</span>
         </div>
         <div style={{overflowY:'auto',padding:'4px 6px 10px'}}>
-          {views.length>0&&<>{Hdr('IR A')}<div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'2px 4px'}}>{views.map(([id,l])=><span key={id} onClick={()=>onSelect({type:'view',id,label:l})} style={{fontSize:12,color:C.accent,background:C.bgSoft,borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>{l}</span>)}</div></>}
-          {acts.length>0&&<>{Hdr('ACCIONES')}{acts.map(a=><Row key={a.id} label={a.label} onClick={()=>onSelect({type:'action',id:a.id,label:a.label})}/>)}</>}
-          {!s&&recents.length>0&&<>{Hdr('RECIENTES')}{recents.map((r,i)=><Row key={i} label={r.label} onClick={()=>onSelect(r)}/>)}</>}
-          {cli.length>0&&<>{Hdr('CLIENTES')}{cli.map(c=><Row key={c.id} label={c.name} onClick={()=>onSelect({type:'cliente',id:c.id,label:c.name})}/>)}</>}
-          {fac.length>0&&<>{Hdr('FACTURAS')}{fac.map(b=><Row key={b.id} label={`Factura N°${folioN(b.invoice_no)}`} sub={cname(b.client_id)} right={fmt(b.amount)} onClick={()=>onSelect({type:'factura',id:b.id,label:`Factura N°${folioN(b.invoice_no)}`})}/>)}</>}
-          {ven.length>0&&<>{Hdr('VENTAS')}{ven.map(v=><Row key={v.id} label={v.title||'Venta'} sub={cname(v.client_id)} onClick={()=>onSelect({type:'venta',id:v.id,label:v.title||'Venta'})}/>)}</>}
-          {tar.length>0&&<>{Hdr('TAREAS')}{tar.map(t=><Row key={t.id} label={t.title||'Tarea'} sub={cname(t.client_id)} onClick={()=>onSelect({type:'tarea',id:t.id,label:t.title||'Tarea'})}/>)}</>}
-          {gas.length>0&&<>{Hdr('GASTOS')}{gas.map(e=><Row key={e.id} label={e.concept||'Gasto'} sub={cname(e.client_id)} right={fmt(e.amount)} onClick={()=>onSelect({type:'gasto',id:e.id,label:e.concept||'Gasto'})}/>)}</>}
-          {ant.length>0&&<>{Hdr('ANTICIPOS')}{ant.map(a=><Row key={a.id} label={a.proyecto||'Anticipo'} sub={cname(a.client_id)} right={fmt(a.monto)} onClick={()=>onSelect({type:'anticipo',id:a.id,label:a.proyecto||'Anticipo'})}/>)}</>}
+          {views.length>0&&<>{Hdr('IR A')}<div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'2px 4px'}}>{views.map(([id,l],i)=>{const a=sel===(oViews+i);return <span key={id} data-cmdidx={oViews+i} onMouseEnter={()=>setSel(oViews+i)} onClick={()=>onSelect({type:'view',id,label:l})} style={{fontSize:12,color:a?'#fff':C.accent,background:a?C.accent:C.bgSoft,borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>{l}</span>})}</div></>}
+          {acts.length>0&&<>{Hdr('ACCIONES')}{acts.map((a,i)=><Row key={a.id} idx={oActs+i} label={a.label} onClick={()=>onSelect({type:'action',id:a.id,label:a.label})}/>)}</>}
+          {!s&&recents.length>0&&<>{Hdr('RECIENTES')}{recents.map((r,i)=><Row key={i} idx={oRec+i} label={r.label} onClick={()=>onSelect(r)}/>)}</>}
+          {cli.length>0&&<>{Hdr('CLIENTES')}{cli.map((c,i)=><Row key={c.id} idx={oCli+i} label={c.name} onClick={()=>onSelect({type:'cliente',id:c.id,label:c.name})}/>)}</>}
+          {fac.length>0&&<>{Hdr('FACTURAS')}{fac.map((b,i)=><Row key={b.id} idx={oFac+i} label={`Factura N°${folioN(b.invoice_no)}`} sub={cname(b.client_id)} right={fmt(b.amount)} onClick={()=>onSelect({type:'factura',id:b.id,label:`Factura N°${folioN(b.invoice_no)}`})}/>)}</>}
+          {ven.length>0&&<>{Hdr('VENTAS')}{ven.map((v,i)=><Row key={v.id} idx={oVen+i} label={v.title||'Venta'} sub={cname(v.client_id)} onClick={()=>onSelect({type:'venta',id:v.id,label:v.title||'Venta'})}/>)}</>}
+          {tar.length>0&&<>{Hdr('TAREAS')}{tar.map((t,i)=><Row key={t.id} idx={oTar+i} label={t.title||'Tarea'} sub={cname(t.client_id)} onClick={()=>onSelect({type:'tarea',id:t.id,label:t.title||'Tarea'})}/>)}</>}
+          {gas.length>0&&<>{Hdr('GASTOS')}{gas.map((e,i)=><Row key={e.id} idx={oGas+i} label={e.concept||'Gasto'} sub={cname(e.client_id)} right={fmt(e.amount)} onClick={()=>onSelect({type:'gasto',id:e.id,label:e.concept||'Gasto'})}/>)}</>}
+          {ant.length>0&&<>{Hdr('ANTICIPOS')}{ant.map((a,i)=><Row key={a.id} idx={oAnt+i} label={a.proyecto||'Anticipo'} sub={cname(a.client_id)} right={fmt(a.monto)} onClick={()=>onSelect({type:'anticipo',id:a.id,label:a.proyecto||'Anticipo'})}/>)}</>}
           {s&&!hay&&<div style={{fontSize:12,color:C.muted,padding:'14px 10px',textAlign:'center'}}>Sin resultados para "{q}"</div>}
         </div>
       </div>
@@ -26708,7 +26737,14 @@ export default function App() {
     if(item.type==='gasto'){ const e=expenses.find(x=>String(x.id)===String(item.id)); if(e) setModal({type:'expenseEdit',data:e}); return }
     if(item.type==='anticipo'){ const a=(anticipos||[]).find(x=>String(x.id)===String(item.id)); if(a) setAnticipoPanel(a); return }
   }
-  useEffect(()=>{ const h=e=>{ if((e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){ e.preventDefault(); setPaletteOpen(o=>!o) } }; document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h) },[])
+  useEffect(()=>{ const h=e=>{
+    if((e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){ e.preventDefault(); setPaletteOpen(o=>!o); return }
+    // "/" abre la paleta desde cualquier lado (escritorio; solo si no estas escribiendo en un campo)
+    if(e.key==='/'&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&isDesktop){
+      const t=(e.target?.tagName||'').toLowerCase(); if(t==='input'||t==='textarea'||t==='select'||e.target?.isContentEditable) return
+      e.preventDefault(); setPaletteOpen(true)
+    }
+  }; document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h) },[isDesktop])
   const [concFocus,setConcFocus]=useState(null)       // saltar a un movimiento puntual en Conciliación desde el Estado de cuenta del cliente
   const handleOpenConciliacion=useCallback((movId)=>{ setConcFocus(movId||null); setTab('conciliacion') },[])
   const [concPend,setConcPend]=useState(0)            // abonos sin conciliar (burbuja del icono de banco en el landing)
@@ -28381,6 +28417,8 @@ export default function App() {
         body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;font-feature-settings:'tnum'}
         input,select,textarea{font-family:'DM Sans',sans-serif;font-variant-numeric:tabular-nums}
         input:focus,select:focus,textarea:focus{border-color:${C.accent}!important;box-shadow:0 0 0 3px rgba(0,60,80,.10)}
+        /* Anillo de foco por TECLADO (no se muestra al hacer click/tap) → mejora la navegacion con teclado sin afectar el uso tactil. */
+        button:focus-visible,a:focus-visible,[tabindex]:focus-visible,[role=button]:focus-visible{outline:2px solid ${C.accent};outline-offset:2px;border-radius:6px}
         ::-webkit-scrollbar{width:0;height:0}
         @keyframes spin{to{transform:rotate(360deg)}}
         @media(min-width:680px) and (max-width:1023.98px){
