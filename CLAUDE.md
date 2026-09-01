@@ -23,6 +23,17 @@ Construimos para **muchos estudios, no para el nuestro**. Cada decisión —dato
 - **Lo "Chile" es un módulo país:** SII, UF, RUT, IVA, factura electrónica y formatos son de Chile; trátalos como algo que se enchufa, no como el core. Idea a futuro: moneda/impuestos/idioma (es/pt/en) parametrizables.
 - **Pragmatismo:** esto NO frena el avance ni obliga a construir el multi-tenant hoy. Es una **mirada**: entre dos soluciones equivalentes, elige la que escala a más estudios; y no agregues deuda nueva de cableado. Esta regla convive con "menos es más" y con la autonomía autorizada.
 
+## REGLA DE ORO: doble formato — todo nace en móvil Y escritorio
+
+La app tiene **dos presentaciones** (móvil full-screen y escritorio a todo el ancho), elegidas por el hook `useIsDesktop()` (breakpoint único 1024px). **Todo desarrollo nuevo —vista, feature, cambio visible— debe ser útil y funcional en AMBOS formatos**, nunca en uno solo. Ver [[arquitectura-desktop-movil]] (playbook completo, moldes, extracción a `useXModel`).
+
+- **Una sola fuente, dos vistas:** datos/lógica/estado compartidos (un helper único, o un hook `useXModel` en las vistas pesadas); la presentación se ramifica `isDesktop ? <Desktop/> : <Movil/>`. NUNCA duplicar la lógica ni la cifra entre formatos.
+- **El móvil es el piso, nunca se rompe:** el escritorio es una **rama nueva** del render; el móvil (<1024px) debe quedar **idéntico** salvo que el cambio sea explícitamente para móvil. Todo lo desktop va detrás de `isDesktop`, de `:hover`, o de `@media(min-width:1024px)` — el móvil no debe "enterarse".
+- **El escritorio aprovecha el ancho:** elige el molde por tipo de vista (maestro-detalle→2-panel; dashboard→multicolumna CSS; lista→tabla ordenable; feed/form→columna centrada). No dejar una columna de teléfono estirada ni centrada angosta en el monitor.
+- **Legibilidad por formato:** el escritorio se lee de más lejos que el teléfono — respeta mínimos legibles en cada uno (no reusar a ciegas tamaños de fuente pensados para la mano).
+- **Checklist para dar por terminado CUALQUIER cambio visible:** (1) `npm run build` verde; (2) runtime sin errores en la vista Y sus sub-vistas; (3) verificado a **1280px** (desktop) y **375px** (móvil), con el móvil idéntico o mejor. Sin los 3, no está listo.
+- **La pregunta de diseño (hazla siempre):** "¿esto se ve y funciona bien en móvil Y en escritorio?". Si solo pensaste en uno, está a medias.
+
 ## Arquitectura
 
 - Archivo único: `src/App.jsx` (~16.250 líneas). React + Vite. Supabase (proyecto `kibuwhtpoxrnfowfdolu`, **RLS ON** desde 2026-06-19: política `team_all` permite solo a usuarios autenticados con email `@leabogados.cl`; las edge functions usan `service_role` y saltan RLS). Deploy en Vercel.

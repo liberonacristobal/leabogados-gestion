@@ -14143,7 +14143,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const rsLine = ents.length>1 ? `${ents.length} razones sociales` : (ents[0] ? rsDisplay(ents[0].name) : '')
               const on = selectedClient&&String(selectedClient.id)===String(c.id)
               return (
-                <div key={c.id} onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:9,borderLeft:`3px solid ${salCol}`,cursor:'pointer',background:on?C.azulBg:'transparent',marginBottom:2}}>
+                <div key={c.id} className='lf-row' onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:9,borderLeft:`3px solid ${salCol}`,cursor:'pointer',background:on?C.azulBg:'transparent',marginBottom:2}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12.5,fontWeight:on?700:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                     {rsLine&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsLine}</div>}
@@ -28392,7 +28392,18 @@ export default function App() {
           .shell{margin-left:212px;max-width:none}
           .apphead{padding-top:18px!important}
           #main-scroll{padding-bottom:28px!important}
+          /* Legibilidad en escritorio: los tamaños inline estan pensados para el telefono (mano); en monitor se leen de mas lejos.
+             Zoom a nivel body (como el zoom del navegador: usa el viewport de referencia -> sin desborde horizontal ni romper alturas vh).
+             Sube TODO ~8% de forma consistente (sidebar, contenido, modales) SIN tocar el movil (<1024) ni retocar px inline. */
+          body{zoom:1.08}
           .bottomnav{display:none!important}
+          /* Parte B: afordancia de hover (no existe en tactil). Wash translucido en filas + lift en tarjetas clickeables.
+             box-shadow inset no pelea con el background inline (que a veces marca seleccion) -> seguro y universal. */
+          .lf-row{transition:box-shadow .12s ease}
+          .lf-row:hover{box-shadow:inset 0 0 0 999px rgba(0,60,80,.045)}
+          .lf-kpi{transition:box-shadow .14s ease,transform .14s ease}
+          .lf-kpi:hover{box-shadow:0 4px 16px rgba(0,60,80,.12)}
+          .sidenav button:hover{background:rgba(255,255,255,.07)!important}
           .dash-cols{column-count:2;column-gap:18px;max-width:1280px;margin:0 auto}
           .dash-cols>*{break-inside:avoid;margin-bottom:2px}
           .dash-cols>:first-child{column-span:all}
