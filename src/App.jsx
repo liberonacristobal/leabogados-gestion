@@ -772,7 +772,7 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
   const flex = fs || !!footer   // layout en columna: header / cuerpo scroll / footer anclado
   const node = (
   <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:fs?600:200,display:'flex',alignItems:fs?'stretch':'center',justifyContent:'center',padding:fs?0:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
-    <div style={{background:C.surface,borderRadius:fs?0:16,width:'100%',maxWidth:fs?'none':maxWidth,maxHeight:fs?'100%':'90vh',height:fs?'100%':'auto',display:flex?'flex':'block',flexDirection:flex?'column':undefined,overflowY:flex?'hidden':'auto',boxShadow:fs?'none':'0 20px 60px rgba(0,0,0,.18)',border:fs?'none':`1px solid ${C.border}`,paddingBottom:(fs||flex)?0:(hideHeader?0:24)}}>
+    <div className={fs?'modal-fs':undefined} style={{background:C.surface,borderRadius:fs?0:16,width:'100%',maxWidth:fs?'none':maxWidth,maxHeight:fs?'100%':'90vh',height:fs?'100%':'auto',display:flex?'flex':'block',flexDirection:flex?'column':undefined,overflowY:flex?'hidden':'auto',boxShadow:fs?'none':'0 20px 60px rgba(0,0,0,.18)',border:fs?'none':`1px solid ${C.border}`,paddingBottom:(fs||flex)?0:(hideHeader?0:24)}}>
       {!hideHeader&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:fs?'calc(env(safe-area-inset-top,0px) + 16px) 18px 14px':'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:flex?'static':'sticky',top:0,background:C.surface,zIndex:1,flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
           {fs&&<button onClick={onClose} aria-label='Volver' style={{display:'inline-flex',alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'6px 8px 6px 0',marginLeft:-2,flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>}
@@ -783,7 +783,7 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
           {!fs&&<button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:22,cursor:'pointer',lineHeight:1,width:44,height:44,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-10}}>×</button>}
         </div>
       </div>}
-      <div style={{flex:flex?1:undefined,minHeight:flex?0:undefined,overflowY:flex?'auto':'visible',padding:hideHeader?'0':(fs?(footer?'14px 16px':'14px 16px calc(env(safe-area-inset-bottom,0px) + 32px)'):'18px 20px'),maxWidth:fs?720:'none',margin:fs?'0 auto':'0',width:fs?'auto':undefined,boxSizing:'border-box'}}>{children}</div>
+      <div style={{flex:flex?1:undefined,minHeight:flex?0:undefined,overflowY:flex?'auto':'visible',overflowX:fs?'hidden':undefined,padding:hideHeader?'0':(fs?(footer?'14px 16px':'14px 16px calc(env(safe-area-inset-bottom,0px) + 32px)'):'18px 20px'),maxWidth:(fs&&!hideHeader)?720:'none',margin:(fs&&!hideHeader)?'0 auto':'0',width:(fs&&!hideHeader)?'auto':undefined,boxSizing:'border-box'}}>{children}</div>
       {footer&&<div style={{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:fs?'10px 16px calc(env(safe-area-inset-bottom,0px) + 14px)':'12px 16px',maxWidth:fs?720:'none',margin:fs?'0 auto':'0',width:'100%',boxSizing:'border-box'}}>{footer}</div>}
     </div>
   </div>
@@ -1566,10 +1566,10 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           </div>
         </div>
       )}
-      {/* ── Asistente IA de liquidación (bottom-sheet; no cierra al tocar fuera) ── */}
+      {/* ── Asistente IA de liquidación (modal centrado; no cierra al tocar fuera) ── */}
       {asistOpen&&(
-        <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,.4)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
-          <div style={{background:'#fff',borderTopLeftRadius:16,borderTopRightRadius:16,maxHeight:'88vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(20,30,35,.45)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:16,maxWidth:520,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 20px 60px rgba(0,0,0,.18)'}}>
             <div style={{background:C.accent,color:'#fff',padding:'13px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.6 4.6L18 9.2l-4.4 1.6L12 15l-1.6-4.2L6 9.2l4.4-1.6z'/><path d='M19 14l.7 2 2 .7-2 .7L19 19.4 18.3 17.4l-2-.7 2-.7z'/></svg>
@@ -9760,12 +9760,15 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
   const estados=(()=>{ const base=['Pendiente','Anulado']; return (f.status&&!base.includes(f.status))?[f.status,...base]:base })()
   return (
     <>
-      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
-        <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-          {bill?.id?'Editar cobro':'Nuevo cobro'}
-          {f.client_id&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span></>}
-        </span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
+          <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
+          <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            {bill?.id?'Editar cobro':'Nuevo cobro'}
+            {f.client_id&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span></>}
+          </span>
+        </div>
+        <button className='qt-close' onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
@@ -13917,8 +13920,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         const toggleGrp=g=>setClasifOpen(p=>{const n=new Set(p);n.has(g.cid)?n.delete(g.cid):n.add(g.cid);return n})
         return (
         <div style={{position:'fixed',inset:0,zIndex:1000,background:C.bg,display:'flex',flexDirection:'column'}}>
-          <div style={{padding:'16px 20px 10px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-            <button onClick={()=>{setShowClasificar(false);setSelClasif(new Set())}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+          <div style={{padding:'calc(env(safe-area-inset-top,0px) + 16px) 20px 10px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+            <button onClick={()=>{setShowClasificar(false);setSelClasif(new Set())}} aria-label='Volver' style={{display:'inline-flex',alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:14,fontWeight:600,lineHeight:1,padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
             <div>
               <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clasificar pagos</div>
               <div style={{fontSize:11,color:C.muted,marginTop:1}}>{gastosClasificar.length} gasto{gastosClasificar.length!==1?'s':''} antiguo{gastosClasificar.length!==1?'s':''} de carga masiva por clasificar</div>
@@ -14514,12 +14517,15 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
   return (
     <>
-      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:2}}>
-        <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-          {task?'Editar tarea':'Nueva tarea'}
-          {selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>{setSelectedClient(null);setQ('')}} title='Cambiar cliente' style={{color:C.muted,fontWeight:600,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{selectedClient.name}</span></>}
-        </span>
-        <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-8}}>x</button>
+      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:2}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
+          <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
+          <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            {task?'Editar tarea':'Nueva tarea'}
+            {selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>{setSelectedClient(null);setQ('')}} title='Cambiar cliente' style={{color:C.muted,fontWeight:600,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{selectedClient.name}</span></>}
+          </span>
+        </div>
+        <button className='qt-close' onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-8}}>x</button>
       </div>
 
       <div className='qt-body'>
@@ -15232,9 +15238,12 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
 
   return (
     <>
-      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
-        <span style={{fontSize:15,fontWeight:500,color:C.text}}>Duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
+          <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
+          <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
+        </div>
+        <button className='qt-close' onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
@@ -28117,6 +28126,11 @@ export default function App() {
         .fecha-short{display:none}
         .qt-head{padding:18px 20px 14px}
         .qt-body{padding:16px 20px}
+        .modal-fs .qt-head{padding-top:calc(env(safe-area-inset-top,0px) + 16px)}
+        .modal-fs .qt-body{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
+        .qt-volver{display:none}
+        .modal-fs .qt-volver{display:inline-flex}
+        .modal-fs .qt-close{display:none!important}
         .cc-body{display:flex;align-items:center;gap:10px}
         .cc-stats{flex:1;min-width:0;border-left:1px solid ${C.border};padding-left:11px;display:flex;flex-direction:column;gap:4px}
         @media(max-width:560px){
@@ -28284,13 +28298,13 @@ export default function App() {
           </Modal>
         })()}
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')}} onClose={()=>setModal(null)}/>}
-        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='conciliar'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
         {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else setTab('cajachica') } else if(map[vista]) setTab(map[vista]) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
-        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {emitirPreview&&(()=>{ const ep=emitirPreview
           const verPdf=async()=>{ try{ const doc=splitSetDTE(ep.prev.envioXml)[0]; if(!doc){ appAlert('La vista previa no trae el documento.'); return } const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }
           return (
@@ -28362,7 +28376,7 @@ export default function App() {
         {modal?.type==='estadoResultados'&&<Modal fullscreenOnMobile title='Estado de resultados' maxWidth={480} onClose={()=>setModal(null)}><EstadoResultadosModal billing={billing} costosOfiRows={costosOfiRows}/></Modal>}
         {modal?.type==='flujoCaja'&&<Modal fullscreenOnMobile title='Flujo de caja proyectado' maxWidth={480} onClose={()=>setModal(null)}><FlujoCajaModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros}/></Modal>}
         {modal?.type==='report'&&<Modal fullscreenOnMobile title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
+        {modal?.type==='task'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal fullscreenOnMobile title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
         {modal?.type==='cierreTarea'&&<Modal fullscreenOnMobile title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>{ const t=modal.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/></Modal>}
         {modal?.type==='client'&&<Modal fullscreenOnMobile title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
