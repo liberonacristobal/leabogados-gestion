@@ -1956,6 +1956,80 @@ class ViewErrorBoundary extends Component {
     return this.props.children
   }
 }
+// ─── Viewport: interruptor único móvil↔escritorio (Fase 0). matchMedia, SSR-safe. Breakpoint 1024px. ──
+const DESKTOP_MQ = '(min-width: 1024px)'
+function useIsDesktop(){
+  const [d,setD] = useState(()=> typeof window!=='undefined' && !!window.matchMedia && window.matchMedia(DESKTOP_MQ).matches)
+  useEffect(()=>{
+    if(typeof window==='undefined' || !window.matchMedia) return
+    const mq = window.matchMedia(DESKTOP_MQ)
+    const h = e => setD(e.matches)
+    setD(mq.matches)
+    mq.addEventListener ? mq.addEventListener('change',h) : mq.addListener(h)
+    return ()=> mq.removeEventListener ? mq.removeEventListener('change',h) : mq.removeListener(h)
+  },[])
+  return d
+}
+
+// SideNav (escritorio): barra lateral fija que reusa TABS_ADMIN/LIMITED + moduloOn. Oculta bajo 1024px por CSS (.sidenav).
+function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
+  const sp = {fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
+  const I = {
+    grid:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>,
+    trending:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>,
+    receipt:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M5 3v18l2-1.2 2 1.2 2-1.2 2 1.2 2-1.2 2 1.2V3l-2 1.2-2-1.2-2 1.2-2-1.2-2 1.2z"/><line x1="8.5" y1="8.5" x2="15.5" y2="8.5"/><line x1="8.5" y1="12.5" x2="15.5" y2="12.5"/></svg>,
+    card:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
+    idcard:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="10" r="2.5"/><path d="M8.5 17a3.5 3.5 0 0 1 7 0"/></svg>,
+    coins:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><ellipse cx="12" cy="6.5" rx="7" ry="3"/><path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/><path d="M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg>,
+    check:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M4 12l5 5L20 6"/></svg>,
+    folder:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
+    clock:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>,
+    bank:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><line x1="3" y1="21" x2="21" y2="21"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="5 6 12 3 19 6"/><line x1="4" y1="10" x2="4" y2="21"/><line x1="20" y1="10" x2="20" y2="21"/><line x1="8" y1="14" x2="8" y2="17"/><line x1="12" y1="14" x2="12" y2="17"/><line x1="16" y1="14" x2="16" y2="17"/></svg>,
+    chart:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8"/><rect x="12" y="6" width="3" height="12"/><rect x="17" y="13" width="3" height="5"/></svg>,
+    send:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
+    tag:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M20.6 13.4 12 22l-9-9V4h9z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>,
+  }
+  const secciones = userRole==='admin'
+    ? [ {cap:null, items:[
+          {id:'dashboard',label:'Inicio',ic:'grid',mod:'nucleo'},
+          {id:'sales',label:'Ventas',ic:'trending',mod:'finanzas'},
+          {id:'billing',label:'Facturación',ic:'receipt',mod:'finanzas'},
+          {id:'expenses',label:'Gastos',ic:'card',mod:'gastos'},
+          {id:'clients',label:'Clientes',ic:'idcard',mod:'nucleo'},
+          {id:'tasks',label:'Tareas',ic:'check',mod:'nucleo'},
+        ]},
+        {cap:'Finanzas', items:[
+          {id:'conciliacion',label:'Conciliación',ic:'bank',mod:'finanzas'},
+          {id:'inteligencia',label:'Inteligencia',ic:'chart',mod:'nucleo'},
+          {id:'cobranza',label:'Cobranza',ic:'send',mod:'finanzas'},
+          {id:'repricing',label:'Repricing',ic:'tag',mod:'horas'},
+          {id:'cartera',label:'Proyectos',ic:'folder',mod:'proyectos'},
+          {id:'horas',label:'Horas',ic:'clock',mod:'horas'},
+        ]} ]
+    : [ {cap:null, items:(TABS_LIMITED.map(t=>({id:t.id,label:t.label,ic:t.icon,mod:t.mod})))} ]
+  const item = t => moduloOn(t.mod) && (
+    <button key={t.id} onClick={()=>setTab(t.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 11px',borderRadius:8,border:'none',background:tab===t.id?'rgba(255,255,255,.12)':'transparent',color:tab===t.id?'#fff':'#a8c2ca',fontSize:13,fontWeight:tab===t.id?700:500,cursor:'pointer',width:'100%',textAlign:'left',fontFamily:'inherit'}}>
+      <span style={{display:'flex',flexShrink:0,opacity:tab===t.id?1:.85}}>{I[t.ic]||I.grid}</span>{t.label}
+    </button>
+  )
+  return (
+    <aside className='sidenav' style={{position:'fixed',left:0,top:0,bottom:0,width:212,background:'#04242F',padding:'16px 12px',display:'none',flexDirection:'column',gap:2,zIndex:40,overflowY:'auto'}}>
+      <div style={{display:'flex',alignItems:'center',gap:9,padding:'4px 8px 14px'}}>
+        <span style={{width:26,height:26,borderRadius:7,background:'#12A150',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13}}>{(BRAND?.nombre||'L')[0]}</span>
+        <span style={{fontSize:13.5,fontWeight:800,color:'#fff',letterSpacing:-.2,lineHeight:1.15}}>{BRAND?.nombre||'FirmDesk'}<small style={{display:'block',fontSize:8,fontWeight:600,color:'#6f9aa6',letterSpacing:.2}}>con tecnología FirmDesk</small></span>
+      </div>
+      {secciones.map((s,i)=>(<div key={i} style={{display:'flex',flexDirection:'column',gap:1}}>
+        {s.cap&&<div style={{fontSize:8.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.06em',color:'#5a808c',margin:'12px 10px 4px'}}>{s.cap}</div>}
+        {s.items.map(item)}
+      </div>))}
+      <div style={{marginTop:'auto',display:'flex',gap:6,paddingTop:10}}>
+        <button onClick={onPalette} title='Buscar (⌘K)' style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'8px',borderRadius:8,border:'1px solid rgba(255,255,255,.14)',background:'transparent',color:'#a8c2ca',fontSize:11.5,cursor:'pointer',fontFamily:'inherit'}}><svg width="14" height="14" viewBox="0 0 24 24" {...sp}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar</button>
+        <button onClick={onCopiloto} title='Copiloto' style={{width:36,padding:'8px',borderRadius:8,border:'1px solid rgba(255,255,255,.14)',background:'transparent',color:'#a8c2ca',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg></button>
+      </div>
+    </aside>
+  )
+}
+
 function BottomNav({tab,setTab,overdueN,userRole}) {
   const tabs = (userRole==='admin' ? TABS_ADMIN : TABS_LIMITED).filter(t=>moduloOn(t.mod))
   const sp = {fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
@@ -26483,6 +26557,7 @@ export default function App() {
   const [booted,setBooted]=useState(false)   // primera carga completada: las recargas posteriores NO desmontan la UI (no te sacan de donde estabas)
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
+  const isDesktop = useIsDesktop()   // Fase 1: shell de escritorio (sidebar + ancho) vs móvil actual
   const [modal,setModal]=useState(null)
   const [devEmail,setDevEmail]=useState(null)   // {client,amount,fecha,rend,rendN} → abre DevolucionEmailModal tras guardar una devolución
   const [openFichaId,setOpenFichaId]=useState(null)   // abrir la Ficha→Financiero de un cliente desde otra vista (ej. Facturación)
@@ -28160,9 +28235,16 @@ export default function App() {
         input:focus,select:focus,textarea:focus{border-color:${C.accent}!important;box-shadow:0 0 0 3px rgba(0,60,80,.10)}
         ::-webkit-scrollbar{width:0;height:0}
         @keyframes spin{to{transform:rotate(360deg)}}
-        @media(min-width:680px){
+        @media(min-width:680px) and (max-width:1023.98px){
           .shell{max-width:600px;margin:0 auto;box-shadow:0 0 0 1px ${C.border},0 12px 50px rgba(0,0,0,.08);min-height:100vh}
           .fab{right:auto!important;left:50%!important;margin-left:228px}
+        }
+        @media(min-width:1024px){
+          .sidenav{display:flex!important}
+          .shell{margin-left:212px;max-width:none}
+          .apphead{padding-top:18px!important}
+          #main-scroll{padding-bottom:28px!important}
+          .bottomnav{display:none!important}
         }
         .fecha-short{display:none}
         .qt-head{padding:18px 20px 14px}
@@ -28184,7 +28266,7 @@ export default function App() {
         }
       `}</style>
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
-        <div style={{padding:'52px 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
+        <div className='apphead' style={{padding:'52px 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <div style={{position:'relative'}}>
             <div style={{fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:'.14em',marginBottom:1}}>{fechaFull}</div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
@@ -28299,11 +28381,12 @@ export default function App() {
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin}/>}
           </ViewErrorBoundary></div>
         )}
-        {userRole==='limited'&&tab==='tasks'&&(
+        {!isDesktop&&userRole==='limited'&&tab==='tasks'&&(
           <button className='fab' onClick={()=>setModal({type:'task',data:null})} aria-label='Nueva tarea' style={{position:'fixed',bottom:'calc(70px + env(safe-area-inset-bottom,0px))',right:16,width:52,height:52,borderRadius:'50%',background:C.accent,border:'none',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,boxShadow:'0 6px 18px rgba(0,60,80,.35)',cursor:'pointer'}}>
             <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
           </button>
         )}
+        <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)}/>
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal fullscreenOnMobile title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
