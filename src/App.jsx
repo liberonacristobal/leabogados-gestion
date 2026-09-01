@@ -13046,7 +13046,12 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const chipEstado={fontSize:10,padding:'2px 9px',borderRadius:3,background:C.bgWarm,color:C.grisText,fontWeight:600,cursor:'pointer',border:'none'}
     const showEstado = !isFondo && !e.personal_de && !e.created_by && e.client_id && !esOficina(e.client_id) && isImported && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && isAdmin
     return (
-      <div key={e.id} onClick={()=>setMovExp(p=>p===e.id?null:e.id)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isDev?C.azulInfo:isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
+      <div key={e.id} onClick={()=>setMovExp(p=>p===e.id?null:e.id)}
+        draggable={isDesktop&&!isFondo&&!!e.client_id}
+        onDragStart={isDesktop?(ev=>{ try{ ev.dataTransfer.setData('text/expense-id',String(e.id)); ev.dataTransfer.effectAllowed='move' }catch(_){}; ev.currentTarget.style.opacity='.45' }):undefined}
+        onDragEnd={isDesktop?(ev=>{ ev.currentTarget.style.opacity='1' }):undefined}
+        title={isDesktop&&!isFondo&&e.client_id?'Arrastra a otro cliente de la lista para reasignar':undefined}
+        style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isDev?C.azulInfo:isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
           {bigDate(e.date)}
           <div style={{minWidth:0,flex:1}}>
@@ -14171,7 +14176,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const rsLine = ents.length>1 ? `${ents.length} razones sociales` : (ents[0] ? rsDisplay(ents[0].name) : '')
               const on = selectedClient&&String(selectedClient.id)===String(c.id)
               return (
-                <div key={c.id} data-cid={String(c.id)} className='lf-row' onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:9,borderLeft:`3px solid ${salCol}`,cursor:'pointer',background:on?C.azulBg:'transparent',marginBottom:2}}>
+                <div key={c.id} data-cid={String(c.id)} className='lf-row' onClick={()=>setSelectedClient(c)}
+                  onDragOver={ev=>{ if(ev.dataTransfer.types.includes('text/expense-id')){ ev.preventDefault(); ev.dataTransfer.dropEffect='move'; ev.currentTarget.style.boxShadow=`inset 0 0 0 2px ${C.accent}` } }}
+                  onDragLeave={ev=>{ ev.currentTarget.style.boxShadow='none' }}
+                  onDrop={ev=>{ ev.preventDefault(); ev.currentTarget.style.boxShadow='none'; const id=ev.dataTransfer.getData('text/expense-id'); if(id&&onAssignClientToExpense){ onAssignClientToExpense(id,c.id); setSelectedClient(c) } }}
+                  style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:9,borderLeft:`3px solid ${salCol}`,cursor:'pointer',background:on?C.azulBg:'transparent',marginBottom:2}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12.5,fontWeight:on?700:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                     {rsLine&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsLine}</div>}
