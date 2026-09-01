@@ -26402,6 +26402,16 @@ export default function App() {
     }catch(_){}
     return ()=>{ done=true }
   },[user])
+  // Deep-link desde correos (?ir=): lleva al lugar exacto. cobros/sinasignar → Conciliación bancaria; duplicados → módulo Duplicados. Solo admin (limited no ve Conciliación).
+  useEffect(()=>{ if(DEMO||!user) return; let done=false
+    try{ const ir=new URLSearchParams(window.location.search).get('ir'); if(!ir) return
+      try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
+      if(userRole!=='admin') return
+      if(ir==='duplicados') setModal({type:'conciliar',data:null})
+      else if(ir==='cobros'||ir==='sinasignar') setTab('conciliacion')
+    }catch(_){}
+    return ()=>{ done=true }
+  },[user,userRole])
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
