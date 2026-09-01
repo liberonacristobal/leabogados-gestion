@@ -9065,7 +9065,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
-        {xmlHub&&<Modal title='Cargar XML del SII' maxWidth={400} onClose={()=>setXmlHub(false)}>
+        {xmlHub&&<Modal title='Cargar del SII' maxWidth={400} onClose={()=>setXmlHub(false)}>
           {(()=>{ const opt=(icon,ic,titulo,sub,onClick,badge)=>(
             <button onClick={onClick} style={{display:'flex',alignItems:'center',gap:13,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderRadius:13,padding:14,cursor:'pointer',textAlign:'left',marginBottom:10}}>
               <span style={{width:42,height:42,borderRadius:11,background:ic.bg,color:ic.fg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icon}</span>
@@ -9075,7 +9075,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </button>)
             const svg=d=><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
             return <div>
-              {opt(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar archivo','Carga el XML del SII desde tus Descargas',()=>{ respaldoRef.current&&respaldoRef.current.click(); setTimeout(()=>setXmlHub(false),0) })}
+              {opt(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar XML','El respaldo .xml del SII (uno o varios)',()=>{ respaldoRef.current&&respaldoRef.current.click(); setTimeout(()=>setXmlHub(false),0) })}
+              {onImportExcel&&opt(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>),{bg:C.tealBg,fg:C.tealText},'Importar Excel','El detalle .xls / .xlsx del SII (o una planilla)',()=>{ setXmlHub(false); onImportExcel() })}
               {opt(svg(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>),{bg:C.soonBg,fg:C.soonText},'Cargadas sin registrar','Cargas pendientes de registrar — retómalas cuando quieras',()=>{ if(cargandoStage) return; cargarSinRegistrar() },sinRegN)}
               {opt(svg(<><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></>),{bg:C.azulBg,fg:C.accent},'Historial de cargas','Tus cargas anteriores',()=>{setXmlHub(false);abrirHistCargas()})}
               <div style={{fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:9,padding:'10px 12px',textAlign:'center',lineHeight:1.4}}><b style={{color:'#0B5A46'}}>Lo cargado queda guardado aunque salgas.</b> Lo registras cuando quieras.</div>
