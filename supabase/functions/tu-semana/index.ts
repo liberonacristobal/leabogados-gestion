@@ -99,14 +99,7 @@ serve(async (req) => {
 
     // Datos por persona
     const datosDe = (persona:string) => {
-      // (1) Gastos sin rendir al cliente (por persona), agrupados por cliente.
-      const sinRendir = expenses.filter((e:any)=> e.type==="gasto" && !e.no_descuenta_saldo && !e.client_rendered_at && e.created_by===persona && e.client_id && String(e.client_id)!==OFICINA_ID);
-      const porCli: Record<string, any> = {};
-      sinRendir.forEach((e:any)=>{ const k=String(e.client_id); if(!porCli[k]) porCli[k]={cli:cname(e.client_id), monto:0, n:0, oldest:e.date||""}; porCli[k].monto+=(Number(e.amount)||0); porCli[k].n++; if((e.date||"")&&(!porCli[k].oldest||e.date<porCli[k].oldest)) porCli[k].oldest=e.date; });
-      const gastos = Object.values(porCli).map((g:any)=>({ ...g, dias:diasDe(g.oldest) })).sort((a:any,b:any)=> b.monto-a.monto);
-      const gastosTot = gastos.reduce((s:number,g:any)=> s+g.monto, 0);
-
-      // (2) Caja chica (sólo Martín/Martina).
+      // (1) Caja chica (sólo Martín/Martina).
       let caja:any = null;
       if (CAJA_USERS.includes(persona)) {
         const entregado = (petty||[]).filter((p:any)=> p.user_name===persona).reduce((s:number,p:any)=> s+(Number(p.amount)||0), 0);
@@ -128,26 +121,15 @@ serve(async (req) => {
         const correosSinCerrar = (rendiciones||[]).filter((r:any)=> r.tipo==="notaria" && (r.estado_envio==="por_enviar" || !r.sent_at));
         if (otPend.length || correosSinCerrar.length) notaria = { nOt:otPend.length, montoOt:otPend.reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0), nCorreos:correosSinCerrar.length };
       }
-      return { gastos, gastosTot, caja, vencidas, semana, notaria };
+      return { caja, vencidas, semana, notaria };
     };
 
     // ── Diseño ──
-    const HAIR="#EAEEF0", INK="#1F2A30", MUT="#66787F", FAINT="#9DAEB4", NV="#003C50";
-    const GRN="#147D5C", GRNBG="#E7F5EE", TEAL="#0E7C86", TEALBG="#E2F1F2", AMB="#9A6410", AMBBG="#FAF0DA", RED="#C0403E", REDBG="#FBECEB";
+    // Colores EXACTOS de la paleta C (tokens): accent, text/GRAFITO, muted/AZUL2, done/AZUL3, AZUL4; tealText/tealBg; soonText/soonBg; overdueText/overdueBg.
+    const HAIR="#E4E8EB", INK="#3D3D3D", MUT="#537281", FAINT="#99ABB4", NV="#003C50";
+    const TEAL="#155E6B", TEALBG="#DFF1F2", AMB="#854F0B", AMBBG="#FFF8E1", RED="#A32D2D", REDBG="#FCEBEB";
     const sec = (n:string,label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${n} · ${label}</span></div>`;
     const cta = (txt:string,color:string,ir:string)=> `<div style="margin-top:12px;"><a href="https://gestion.leabogados.cl/?ir=${ir}" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${txt} &rarr;</a></div>`;
-    const row2 = (izq:string, sub:string, der:string, first:boolean, derColor:string)=> `<tr><td style="padding:11px 0;${first?"":`border-top:1px solid ${HAIR};`}"><div style="font-size:14px;font-weight:700;color:${INK};">${esc(izq)}</div>${sub?`<div style="font-size:11px;color:${MUT};margin-top:3px;line-height:1.4;">${sub}</div>`:""}</td><td align="right" valign="top" style="padding:11px 0;${first?"":`border-top:1px solid ${HAIR};`}white-space:nowrap;"><span style="font-size:14px;font-weight:800;color:${derColor};">${esc(der)}</span></td></tr>`;
-
-    const gastosHtml = (d:any) => {
-      if (!d.gastos.length) return "";
-      const rows = d.gastos.slice(0,6).map((g:any,i:number)=> row2(g.cli, `${g.n} gasto${g.n!==1?"s":""}${g.dias!=null&&g.dias>0?` · el más antiguo hace ${g.dias} días`:""}`, fmt(g.monto), i===0, GRN)).join("");
-      const mas = d.gastos.length>6 ? `<div style="font-size:11px;color:${FAINT};margin-top:9px;">y ${d.gastos.length-6} cliente(s) más.</div>` : "";
-      return `<div style="padding:16px 26px 4px;">${sec("1","Gastos sin rendir",GRN)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Estos son gastos que <b style="color:${INK};">pusiste tú por un cliente</b> y que <b style="color:${INK};">todavía no se le han rendido</b>. Mientras no se rindan, la oficina no se los cobra al cliente. Ríndelos para recuperar esa plata.</div>`+
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>${mas}`+
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRNBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${GRN};font-weight:600;">${d.gastos.length} cliente${d.gastos.length!==1?"s":""} por rendir</td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Sin rendir</span> <span style="font-size:16px;font-weight:800;color:${GRN};margin-left:6px;">${fmt(d.gastosTot)}</span></td></tr></table>`+
-        cta("Rendir a cliente",GRN,"gastos")+`</div>`;
-    };
 
     const cajaHtml = (d:any) => {
       if (!d.caja || (d.caja.nLiq===0)) return "";
@@ -212,11 +194,8 @@ serve(async (req) => {
       const nC=(d.caja&&d.caja.nLiq)||0, nT=d.vencidas.length+d.semana.length, nN=d.notaria?(d.notaria.nOt+d.notaria.nCorreos):0;
       if (!testTo && !nC && !nT && !nN) continue;
       const html = armar(nombre, d);
-      const partes:string[] = [];
-      if (d.vencidas.length) partes.push(`${d.vencidas.length} tarea${d.vencidas.length!==1?"s":""} vencida${d.vencidas.length!==1?"s":""}`);
-      if (nC) partes.push(`caja chica`);
-      if (nN) partes.push(`notaría`);
-      const subject = partes.length ? `Tu semana · ${partes.slice(0,2).join(" · ")}` : `Tu semana`;
+      // Asunto que invita a mirar, no castigador (sin recuento de "vencidas").
+      const subject = "Tu semana en 2 minutos";
       if (!dryRun) await sendMail(to, subject, html);
       sent.push({ nombre, to, caja:nC, tareas:nT, notaria:nN, ...(dryRun?{subject,html}:{}) });
     }
