@@ -1837,7 +1837,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
         const secBtn = {height:40,borderRadius:8,background:C.bgSoft,color:C.accent,border:'0.5px solid #E4E8EB',fontSize:12,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6}
         return (
-          <div onClick={()=>!saving&&setConfirmLiq(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={()=>!saving&&setConfirmLiq(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:340,maxHeight:'85vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'15px 16px'}}>
                 <span style={{fontSize:15,fontWeight:600,color:C.accent}}>Liquidar caja chica</span>
@@ -1880,7 +1880,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         const lbl = {fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:7}
         const fpill = on => ({fontSize:12,padding:'6px 12px',borderRadius:20,cursor:'pointer',border:on?'0.5px solid #003C50':'0.5px solid #E4E8EB',background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontWeight:on?600:400})
         return (
-          <div onClick={()=>!saving&&setShowNuevaCaja(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px 16px'}}>
+          <div onClick={()=>!saving&&setShowNuevaCaja(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px 16px'}}>
             <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:360,padding:'18px 20px 20px',maxHeight:'85vh',overflowY:'auto'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
                 <span style={{fontSize:16,fontWeight:600,color:C.accent}}>{editCajaId?'Editar caja chica':'Nueva caja chica'} <span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{me}</span></span>
@@ -8991,7 +8991,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       </div>
 
       {payingId&&(()=>{ const pb=billing.find(b=>String(b.id)===String(payingId))||{}; const _cl=clients.find(c=>String(c.id)===String(pb.client_id)); return (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+        <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
           <div style={{background:'#fff',borderRadius:16,width:'min(90vw, 340px)',overflow:'hidden'}}>
             <div style={{padding:'18px 20px 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <span style={{fontSize:14,fontWeight:600}}><span style={{color:C.accent}}>Registrar pago</span>{_cl&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted}}>{_cl.name}</span></>}</span>
@@ -9562,7 +9562,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         const top=Object.entries(porCli).map(([cid,v])=>({cid,v,cli:clients.find(c=>String(c.id)===cid)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,5)
         const Mini=(lbl,val,col)=><div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:9,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>{lbl}</div><div style={{fontSize:18,fontWeight:700,color:col||C.text,marginTop:2}}>{val}</div></div>
         return (
-          <div onClick={()=>setSaludCobranza(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={()=>setSaludCobranza(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
                 <div style={{fontSize:15,fontWeight:600,color:C.text}}>Salud de cobranza</div>
@@ -9633,7 +9633,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       {facturaEmail&&<FacturaEmailModal factura={facturaEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
       {facturasEmail&&facturasEmail.length>0&&<FacturaEmailModal factura={facturasEmail[0]} facturas={facturasEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturasEmail[0].client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturasEmail[0].sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturasEmail(null)}/>}
       {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
-        <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+        <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
               <div style={{fontSize:15,fontWeight:600,color:C.text}}>Facturas por enviar</div>
@@ -9660,7 +9660,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         </div>
       ) })()}
       {siiPanel&&(
-        <div onClick={()=>setSiiPanel(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+        <div onClick={()=>setSiiPanel(null)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:540,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
               <div style={{fontSize:15,fontWeight:600,color:C.text}}>{siiPanel==='set'?'Set de pruebas · SII':siiPanel==='libro'?'Libro de ventas':'Historial de emisión'}</div>
@@ -11093,7 +11093,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
 // Modal de confirmación para deshacer una carga masiva (elimina sus gastos).
 function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(16,30,38,.42)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>e.target===e.currentTarget&&onCancel()}>
+    <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>e.target===e.currentTarget&&onCancel()}>
       <div style={{background:'#fff',borderRadius:14,width:'100%',maxWidth:340,padding:20,boxShadow:'0 16px 40px rgba(0,0,0,.2)'}}>
         <div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:9,fontFamily:"'DM Sans',sans-serif"}}>Deshacer importación</div>
         <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:18}}>Se eliminan los <strong style={{color:C.text}}>{target.count} gasto{target.count!==1?'s':''}</strong> de esta carga (incluye editados). No se puede revertir.</div>
@@ -13715,7 +13715,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>}
 
           {notaConfirm&&(
-            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:18}}>
+            <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:18}}>
               <div style={{background:'#fff',borderRadius:16,width:'min(92vw,420px)',padding:20}}>
                 <div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:4}}>Liquidar a notaría</div>
                 <div style={{fontSize:12,color:C.muted,marginBottom:notaSinFondosSel.length?8:14,lineHeight:1.4}}>{selNota.size} gasto{selNota.size!==1?'s':''} · <b style={{color:C.text}}>{fmt(notaTotal)}</b>. Se <b>Guarda</b> la liquidación como <b style={{color:C.soonText}}>Por enviar</b>. El correo a la notaría lo mandas después, cuando hagas la transferencia.</div>
@@ -14013,13 +14013,16 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
   // El N° de rendición viaja dentro del concepto ("Rendición N°X") para que el padre arme el correo.
   return (
     <>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-        <span style={{fontSize:16,fontWeight:600,color:C.accent}}>{esDev?'Registrar devolución':'Registrar fondo'}{selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
+          <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
+          <span style={{fontSize:16,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{esDev?'Registrar devolución':'Registrar fondo'}{selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}</span>
+        </div>
+        <button className='qt-close' onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
-      <div style={{padding:'16px 20px 20px'}}>
+      <div className='qt-body'>
         {!selectedClient ? (
           <div style={{marginBottom:14}}>
             <label style={flabel}>Cliente</label>
@@ -14150,12 +14153,15 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 
   return (
     <>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
-        <div style={{minWidth:0}}>
-          {selectedClient&&<div style={{fontSize:11,fontWeight:500,color:C.done,textTransform:'uppercase',letterSpacing:.5,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</div>}
-          <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'flex-start',gap:9,minWidth:0}}>
+          <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
+          <div style={{minWidth:0}}>
+            {selectedClient&&<div style={{fontSize:11,fontWeight:500,color:C.done,textTransform:'uppercase',letterSpacing:.5,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</div>}
+            <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
+          </div>
         </div>
-        <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:4,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center'}}>x</button>
+        <button className='qt-close' onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:4,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center'}}>x</button>
       </div>
       {!selectedClient&&(
         <Fld label='Cliente'>
@@ -28308,7 +28314,7 @@ export default function App() {
         {emitirPreview&&(()=>{ const ep=emitirPreview
           const verPdf=async()=>{ try{ const doc=splitSetDTE(ep.prev.envioXml)[0]; if(!doc){ appAlert('La vista previa no trae el documento.'); return } const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }
           return (
-            <div onClick={()=>!emitirBusy&&setEmitirPreview(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+            <div onClick={()=>!emitirBusy&&setEmitirPreview(null)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
               <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:440,width:'100%',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
                 <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:2}}>Vista previa — Factura exenta</div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:13}}>DTE 34 · no se envía nada todavía ({ep.prev.ambiente})</div>
@@ -28336,16 +28342,10 @@ export default function App() {
           </div>
         </div></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
-        {modal?.type==='gastos'&&(
-          <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-            <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,padding:'18px 20px 24px',boxSizing:'border-box'}}>
-              <GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/>
-            </div>
-          </div>
-        )}
+        {modal?.type==='gastos'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)}><div className='qt-body' style={{paddingTop:'calc(env(safe-area-inset-top,0px) + 18px)'}}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></div></Modal>}
         {modal?.type==='cargaMasiva'&&<Modal fullscreenOnMobile title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal fullscreenOnMobile title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){appAlert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
-        {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null} preDev={!!modal?.dev}/></Modal>}
+        {modal?.type==='fondo'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null} preDev={!!modal?.dev}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
         {modal?.type==='ajuste'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal fullscreenOnMobile title={(()=>{ const cn=modal.data?.client_id?(clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||null):null; const tipo=modal.data?.type==='fondo'?'Editar fondo':'Editar gasto'; return <><span style={{color:C.accent}}>{tipo}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
