@@ -13881,23 +13881,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         const cobros=notaLiquidaciones.filter(r=>notaEstado(r)!=='pagado')
         const pagTot=pagadas.reduce((a,r)=>a+(r.total||0),0), cobrTot=cobros.reduce((a,r)=>a+(r.total||0),0)
         const cards=[
-          {t:'Pendientes de pago', s:`${notariaPend.length} gasto${notariaPend.length!==1?'s':''} · ${fmt(notaPendTotal)}`, col:C.tealText, go:()=>setNotaTab('pend')},
-          {t:'Cobros de Notaría', s:cobros.length?`${cobros.length} · ${fmt(cobrTot)}`:'Lo que el notario cobra', col:C.azulInfo, go:()=>setNotaTab('cobros')},
-          {t:'Pagados', s:pagadas.length?`${pagadas.length} · ${fmt(pagTot)}`:'Liquidaciones cerradas', col:C.muted, go:()=>setNotaTab('pagados')},
-          {t:'Carga masiva', s:'Importar notaría', col:C.done, go:()=>onBulk&&onBulk(true)},
+          {t:'Pendientes de pago', ic:'clock', s:`${notariaPend.length} gasto${notariaPend.length!==1?'s':''} · ${fmtShort(notaPendTotal)}`, col:C.tealText, bg:C.tealBg, go:()=>setNotaTab('pend')},
+          {t:'Cobros de Notaría', ic:'exchange', s:cobros.length?`${cobros.length} · ${fmtShort(cobrTot)}`:'Lo que el notario cobra', col:C.azulInfo, bg:C.azulBg, go:()=>setNotaTab('cobros')},
+          {t:'Pagados', ic:'check', s:pagadas.length?`${fmtShort(pagTot)} · ${pagadas.length} pago${pagadas.length!==1?'s':''}`:'Liquidaciones cerradas', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
+          {t:'Carga masiva', ic:'file', s:'importar · correo', col:C.muted, bg:C.bgSoft, go:()=>onBulk&&onBulk(true)},
         ]
         return (
-          <div style={{padding:D?'8px 20px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
-            <div style={{background:C.tealBg,border:`1px solid ${C.border}`,borderLeft:`4px solid ${C.tealText}`,borderRadius:12,padding:'12px 14px',marginBottom:14}}>
-              <div style={{fontSize:10.5,fontWeight:700,letterSpacing:.6,color:C.tealText,textTransform:'uppercase'}}>Pendiente a notaría</div>
-              <div style={{fontSize:D?24:21,fontWeight:800,color:C.tealText}}>{fmt(notaPendTotal)}</div>
-              <div style={{fontSize:11.5,color:C.muted,marginTop:3}}>{notariaPend.length} gasto{notariaPend.length!==1?'s':''} incurridos · aún no liquidados</div>
-            </div>
+          <div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
+            <div style={{textAlign:'right',fontSize:12,color:C.muted,marginBottom:12,marginTop:-2}}>{fmtShort(notaPendTotal)} pendiente</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8}}>
               {cards.map(c=>(
-                <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderLeft:`3px solid ${c.col}`,borderRadius:12,padding:'14px 14px',minHeight:78,display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
-                  <div style={{fontSize:14,fontWeight:700,color:C.text}}>{c.t}</div>
-                  <div style={{fontSize:11.5,color:C.muted,marginTop:6}}>{c.s}</div>
+                <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
+                  <span style={{width:32,height:32,borderRadius:9,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={c.ic} s={17} c={c.col}/></span>
+                  <div>
+                    <div style={{fontSize:14.5,fontWeight:600,color:C.text}}>{c.t}</div>
+                    <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{c.s}</div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -14345,44 +14344,49 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     const cards = [
       {t:'Clientes', ic:'users', s:`Saldos y detalle · ${activos.length}`, col:C.accent, bg:C.azulBg, go:()=>goDir('todos')},
       {t:'Cargar', ic:'wallet', s:'Gasto · fondo · masiva', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setNotaMenuOpen(true)}},
-      {t:'Rendiciones', ic:'receipt', s:'Rendir a cliente', col:C.greenText, bg:C.greenBg, go:()=>{setHubOpen(false);setTimeout(()=>{try{document.getElementById('conviene-rendir')?.scrollIntoView({behavior:'smooth',block:'start'})}catch(_){}},80)}},
+      {t:'Rendiciones', ic:'receipt', s:'Rendir a cliente', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setTimeout(()=>{try{document.getElementById('conviene-rendir')?.scrollIntoView({behavior:'smooth',block:'start'})}catch(_){}},80)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} pendiente`:'Sin pendientes', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
       {t:'Sin asignar', ic:'alert', s:nSin?`${nSin} gasto${nSin!==1?'s':''}`:'Todo asignado', col:C.soonText, bg:C.soonBg, go:()=>setShowRevision(true)},
-      {t:'Historial', ic:'clock', s:'Rendiciones y pagos', col:C.muted, bg:C.bgSoft, go:()=>setShowHistorial(true)},
+      {t:'Historial', ic:'clock', s:'Rendiciones y pagos', col:C.accent, bg:C.azulBg, go:()=>setShowHistorial(true)},
     ]
-    const hero = (label,amount,sub,barCol,txtCol,bgCol,onClick)=>(
-      <div onClick={onClick} style={{cursor:'pointer',background:bgCol,border:`1px solid ${C.border}`,borderLeft:`4px solid ${barCol}`,borderRadius:14,padding:D?'16px 18px':'13px 15px'}}>
-        <div style={{fontSize:10.5,fontWeight:700,letterSpacing:.6,color:txtCol,textTransform:'uppercase',marginBottom:5}}>{label}</div>
-        <div style={{fontSize:D?27:23,fontWeight:800,color:txtCol,fontVariantNumeric:'tabular-nums',lineHeight:1.05,letterSpacing:-.5}}>{fmt(amount)}</div>
-        <div style={{fontSize:11.5,color:C.muted,marginTop:5}}>{sub}</div>
+    // Tarjeta de navegación: blanca, plana, con ícono en cuadro (sin barra de color) — como el render autorizado.
+    const navCard = c => (
+      <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
+        <span style={{width:32,height:32,borderRadius:9,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={c.ic} s={17} c={c.col}/></span>
+        <div>
+          <div style={{fontSize:14.5,fontWeight:600,color:C.text}}>{c.t}</div>
+          <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{c.s}</div>
+        </div>
       </div>
     )
     const hubInner = (
       <div style={{maxWidth:D?860:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
         <div style={{padding:D?'14px 2px 12px':'16px 8px 10px'}}>
-          <div style={{fontSize:D?22:20,fontWeight:700,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Gastos y Fondos</div>
-          <div style={{fontSize:12,color:C.muted,marginTop:2}}>Fondos de clientes y gastos del estudio</div>
+          <div style={{fontSize:D?22:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Gastos y Fondos</div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr':'1fr',gap:D?14:9,marginBottom:D?18:12,padding:D?0:'0 2px'}}>
-          {hero('Por cobrar',porCobrar,`${negL.length} cliente${negL.length!==1?'s':''} te deben`,C.overdue,C.overdueText,C.overdueBg,()=>goDir('neg'))}
-          {hero('A favor de clientes',aFavor,`${posL.length} en custodia`,C.accent,C.accent,C.azulBg,()=>goDir('pos'))}
+        {/* Hero: UNA tarjeta blanca con dos columnas separadas por línea (Por cobrar | A favor), montos abreviados. */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:D?16:11}}>
+          <div onClick={()=>goDir('neg')} style={{cursor:'pointer',padding:D?'15px 18px':'12px 13px'}}>
+            <div style={{fontSize:11.5,color:C.muted,marginBottom:4}}>Por cobrar</div>
+            <div style={{fontSize:D?26:20,fontWeight:800,color:C.overdueText,letterSpacing:-.5,lineHeight:1.05}}>{fmtShort(porCobrar)}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4}}>{negL.length} cliente{negL.length!==1?'s':''} te deben</div>
+          </div>
+          <div onClick={()=>goDir('pos')} style={{cursor:'pointer',padding:D?'15px 18px':'12px 13px',borderLeft:`1px solid ${C.border}`}}>
+            <div style={{fontSize:11.5,color:C.muted,marginBottom:4}}>A favor de clientes</div>
+            <div style={{fontSize:D?26:20,fontWeight:800,color:C.accent,letterSpacing:-.5,lineHeight:1.05}}>{fmtShort(aFavor)}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4}}>{posL.length} en custodia</div>
+          </div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr':'1fr 1fr',gap:D?12:8,padding:D?0:'0 2px'}}>
-          {cards.map(c=>(
-            <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderLeft:`3px solid ${c.col}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?96:84}}>
-              <span style={{width:32,height:32,borderRadius:9,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={c.ic} s={17} c={c.col}/></span>
-              <div>
-                <div style={{fontSize:14.5,fontWeight:700,color:C.text}}>{c.t}</div>
-                <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{c.s}</div>
-              </div>
-            </div>
-          ))}
+        <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr':'1fr 1fr',gap:D?12:8}}>
+          {cards.map(navCard)}
         </div>
       </div>
     )
     if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}</div>
     return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}</div>
   }
+  // Notaría / Historial / Sin cliente: son SECCIONES sin lista maestra → van a todo el ancho (sin el 2-panel de clientes).
+  if(isDesktop && (showNotaria||showHistorial||showOrphans)) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{body}</div>
   if(isDesktop) return (
     <div style={{display:'grid',gridTemplateColumns:'320px 1fr',height:'calc(100vh - 66px)'}}>
       <aside style={{borderRight:`1px solid ${C.border}`,height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg,display:'flex',flexDirection:'column'}}>
