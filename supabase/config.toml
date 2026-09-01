@@ -43,3 +43,8 @@ entrypoint = "./functions/clientes-drive-sync/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/pendientes-semanal/index.ts"
+
+[functions.tu-semana]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/tu-semana/index.ts"
