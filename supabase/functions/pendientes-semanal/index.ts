@@ -160,8 +160,9 @@ serve(async (req) => {
     });
 
     // ── Diseño (paleta C, a prueba de Gmail con tablas) ──
-    const HAIR="#EAEEF0", INK="#1F2A30", MUT="#66787F", FAINT="#9DAEB4", NV="#003C50";
-    const GRN="#147D5C", GRNBG="#E7F5EE", AMB="#9A6410", AMBBG="#FAF0DA";
+    // Colores EXACTOS de la paleta C (Liberona Escala): accent, text/GRAFITO, muted/AZUL2, done/AZUL3, AZUL4; greenText/greenBg; soonText/soonBg.
+    const HAIR="#E4E8EB", INK="#3D3D3D", MUT="#537281", FAINT="#99ABB4", NV="#003C50";
+    const GRN="#0F6E56", GRNBG="#E1F5EE", AMB="#854F0B", AMBBG="#FFF8E1";
     const sec = (n:string,label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${n} · ${label}</span></div>`;
     const cta = (txt:string,color:string,url:string="https://gestion.leabogados.cl")=> `<div style="margin-top:12px;"><a href="${url}" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${txt} &rarr;</a></div>`;
 
@@ -197,7 +198,7 @@ serve(async (req) => {
     };
 
     // Sección 3 (solo admins): depósitos y duplicados sin cliente/abogado, para que Cristóbal y Erasmo los tomen entre los dos.
-    const AZBG = "#EAF0F3";
+    const AZBG = "#E6F1FB";   // C.azulBg
     const sinRespHtml = (cobros:any[], dups:any[]) => {
       const totCob = cobros.reduce((s:number,x:any)=> s+x.saldo, 0);
       const nItems = cobros.length + dups.reduce((s:number,x:any)=> s+(x.n||1), 0);
@@ -264,11 +265,8 @@ serve(async (req) => {
       const nSr = srCob.length + srDup.reduce((s:number,x:any)=>s+(x.n||1),0);
       if (!testTo && !nCob && !nDup && !nSr) continue;   // en cron real no mandar correos vacíos
       const html = armar(nombre, cobros, folios, ants, srCob, srDup);
-      const partes:string[] = [];
-      if (nCob) partes.push(`${nCob} cobro${nCob!==1?"s":""}`);
-      if (nDup) partes.push(`${nDup} duplicado${nDup!==1?"s":""}`);
-      if (srCob.length) partes.push(`${srCob.length} sin identificar`);
-      const subject = partes.length ? `Pendientes · ${partes.join(" · ")}` : `Pendientes de tus clientes`;
+      // Asunto que invita a mirar, no castigador (sin recuento de pendientes).
+      const subject = "Tus clientes en 2 minutos";
       if (!dryRun) await sendMail(to, subject, html);
       sent.push({ nombre, to, cobros:nCob, duplicados:nDup, sinResp:nSr, ...(dryRun?{subject,html}:{}) });
     }
