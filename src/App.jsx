@@ -2985,7 +2985,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
           vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>setTab('cobranza')},
           (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
           progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
-          cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Cuentas por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>setTab('billing')},
+          cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>setTab('billing')},
           margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>setTab('repricing')},
           (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>setTab('horas')},
           porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
@@ -3441,7 +3441,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       {/* Fila 2: Cuentas por pagar + Costos de oficina (el "Vendido" ya vive en Estado del negocio → sin duplicar). */}
       <div style={{padding:'8px 20px 0'}}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {(terceros||[]).length>0&&kTile('cxp','Cuentas por pagar',cxpTotDash>0?fmtShort(cxpTotDash):'Al día',cxpTotDash>0?C.soonText:C.greenText,'wallet',{fg:C.soonText,bg:C.ambarBg},cxpTotDash>0?'a proveedores':'sin deudas')}
+          {(terceros||[]).length>0&&kTile('cxp','Comisiones',cxpTotDash>0?fmtShort(cxpTotDash):'Al día',cxpTotDash>0?C.soonText:C.greenText,'wallet',{fg:C.soonText,bg:C.ambarBg},cxpTotDash>0?'a proveedores':'sin deudas')}
           {onOpenCostosOfi&&costosOfiMes>0&&kTile('costosofi','Costos de oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'por mes',onOpenCostosOfi)}
         </div>
       </div>
@@ -3467,7 +3467,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const estPill = est => est==='por_pagar'?{l:'Por pagar',c:C.normal,bg:C.greenBg}:{l:'Pendiente',c:C.soon,bg:'#FFF8E1'}
         return (
           <div style={{padding:'16px 20px 0'}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cuentas por pagar · proveedores</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Comisiones · colaboradores</div>
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
               {(porPagarTot+pendienteTot)===0 ? (
                 <div style={{display:'flex',alignItems:'center',gap:11}}>
@@ -9863,7 +9863,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
           <div>
             <label style={flabel}>¿A quién le pagas?</label>
             {terceroPagado?(
-              <div style={{fontSize:12,color:C.muted,background:C.bgSoft,borderRadius:8,padding:'9px 11px'}}>Ya le pagaste a <b style={{color:C.text}}>{tituloProv(provsOrd.find(p=>String(p.id)===terceroProv))}</b>. Para cambiarlo, deshaz el pago en Cuentas por pagar.</div>
+              <div style={{fontSize:12,color:C.muted,background:C.bgSoft,borderRadius:8,padding:'9px 11px'}}>Ya le pagaste a <b style={{color:C.text}}>{tituloProv(provsOrd.find(p=>String(p.id)===terceroProv))}</b>. Para cambiarlo, deshaz el pago en Comisiones.</div>
             ):provsOrd.length===0?(
               <div style={{fontSize:12,color:C.muted,background:C.bgSoft,borderRadius:8,padding:'9px 11px'}}>Crea proveedores en Facturación → Proveedores.</div>
             ):(
@@ -10404,6 +10404,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const [montos,setMontos] = useState({})        // billing_id → monto a asignar
   const [asgBusy,setAsgBusy] = useState(null)    // billing_id en curso
   const [f,setF] = useState({nombre:'',razon_social:'',rut:'',datos_pago:''})
+  const [yr,setYr] = useState(()=>String(new Date().getFullYear()))   // filtro de año del ciclo de comisiones
   const {uf:ufHoy} = useUF()
   const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const fmt0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
@@ -10415,6 +10416,24 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const flabel={fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
+  const fmtC = n => { const a=Math.abs(Number(n)||0); if(a>=1e6) return (n<0?'-':'')+'$'+(a/1e6).toFixed(1).replace('.',',')+'M'; if(a>=1e4) return (n<0?'-':'')+'$'+Math.round(a/1e3)+'k'; return fmt0(n) }
+  // ── Ciclo de comisiones (fuente única terceros_pagos): Generada (se creó) → Cobrada (el cliente pagó su factura: por_pagar+pagado) → Pagada (ya transferida). Año por created_at.
+  const yearOf = t => String(t?.created_at||'').slice(0,4)
+  const tercAnio = (terceros||[]).filter(t=>billOk(t.billing_id)&&yearOf(t)===yr)
+  const foto = {
+    gen: tercAnio.reduce((s,t)=>s+(t.monto||0),0),
+    cob: tercAnio.filter(t=>t.estado==='por_pagar'||t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0),
+    pag: tercAnio.filter(t=>t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0),
+  }
+  // "Por pagar a colaboradores" = saldo VIVO (todos los años): el cliente ya pagó, falta transferir la comisión.
+  const porPagarRows = (terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id))
+  const porPagarTot = porPagarRows.reduce((s,t)=>s+(t.monto||0),0)
+  const porPagarProvs = new Set(porPagarRows.map(t=>String(t.proveedor_id))).size
+  const bDue = bid => { const b=(billing||[]).find(x=>String(x.id)===String(bid)); return b?.due||b?.date||b?.created_at||'' }
+  const diaMax = porPagarRows.reduce((mx,t)=>{ const d=bDue(t.billing_id); if(!d) return mx; const dias=Math.floor((Date.now()-new Date(String(d).slice(0,10)+'T12:00').getTime())/864e5); return dias>mx?dias:mx },0)
+  const aniosDisp = [...new Set((terceros||[]).map(yearOf).filter(y=>/^\d{4}$/.test(y)))].sort((a,b)=>b.localeCompare(a))
+  if(!aniosDisp.includes(yr)) aniosDisp.unshift(yr)
+  const genDe = id => (terceros||[]).filter(t=>String(t.proveedor_id)===String(id)&&billOk(t.billing_id)&&yearOf(t)===yr).reduce((s,t)=>s+(t.monto||0),0)
 
   const lista = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
   const filtrados = q.trim()
@@ -10443,34 +10462,56 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   }
 
   const headerBack = (titleTxt,onBack) => (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'calc(env(safe-area-inset-top,0px) + 16px) 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
       <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
-        {onBack&&<button onClick={onBack} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-          <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>
-        </button>}
+        {onBack
+          ? <button onClick={onBack} aria-label='Atrás' style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+              <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>
+            </button>
+          : <button onClick={onClose} aria-label='Volver' style={{display:'inline-flex',alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'6px 8px 6px 0',marginLeft:-2,flexShrink:0}}>
+              <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver
+            </button>}
         <span style={{fontSize:16,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleTxt}</span>
       </div>
-      <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+      {onBack&&<button onClick={onClose} aria-label='Cerrar' style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
         <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
-      </button>
+      </button>}
     </div>
   )
 
   // ── LISTA ──
   if(view==='list') return (
     <>
-      {headerBack('Proveedores',null)}
+      {headerBack('Comisiones',null)}
       <div style={{padding:'14px 20px 20px'}}>
-        <div style={{display:'flex',gap:8,marginBottom:12}}>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, razón social, RUT...' style={{...inp,flex:1}}/>
+        {/* Foto del ciclo Generadas → Cobradas → Pagadas + filtro de año */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>Ciclo de comisiones</span>
+          <select value={yr} onChange={e=>setYr(e.target.value)} style={{fontSize:12,fontWeight:600,color:C.accent,border:`0.5px solid ${C.border}`,borderRadius:7,padding:'3px 7px',background:'#fff',outline:'none',cursor:'pointer'}}>{aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}</select>
+        </div>
+        <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          <div style={{flex:1,padding:'11px 13px'}}><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Generadas</div><div style={{fontSize:19,fontWeight:700,color:C.text,letterSpacing:-.4,marginTop:3}}>{fmtC(foto.gen)}</div></div>
+          <div style={{flex:1,padding:'11px 13px',borderLeft:`1px solid ${C.border}`,position:'relative'}}><span style={{position:'absolute',left:2,top:9,color:C.done,fontSize:14}}>›</span><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Cobradas</div><div style={{fontSize:19,fontWeight:700,color:C.tealText,letterSpacing:-.4,marginTop:3}}>{fmtC(foto.cob)}</div></div>
+          <div style={{flex:1,padding:'11px 13px',borderLeft:`1px solid ${C.border}`,position:'relative'}}><span style={{position:'absolute',left:2,top:9,color:C.done,fontSize:14}}>›</span><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Pagadas</div><div style={{fontSize:19,fontWeight:700,color:C.greenText,letterSpacing:-.4,marginTop:3}}>{fmtC(foto.pag)}</div></div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:9,padding:'10px 13px',borderRadius:10,background:porPagarTot>0?C.soonBg:C.greenBg}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:porPagarTot>0?C.soonText:C.greenText}}>{porPagarTot>0?'Por pagar a colaboradores':'Al día con los colaboradores'}</div>
+            {porPagarTot>0&&<div style={{fontSize:10,color:C.soonText,opacity:.85}}>cobraste al cliente, falta transferir{porPagarProvs?` · ${porPagarProvs} colaborador${porPagarProvs!==1?'es':''}`:''}{diaMax>0?` · el más antiguo hace ${diaMax} días`:''}</div>}
+          </div>
+          <span style={{fontSize:15,fontWeight:800,color:porPagarTot>0?C.soonText:C.greenText,flexShrink:0}}>{porPagarTot>0?fmtC(porPagarTot):'$0'}</span>
+        </div>
+
+        <div style={{display:'flex',gap:8,margin:'15px 0 12px'}}>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar colaborador, razón social, RUT...' style={{...inp,flex:1}}/>
           <button onClick={abrirNuevo} style={{height:38,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Nuevo</button>
         </div>
         {filtrados.length===0?(
-          <div style={{textAlign:'center',padding:'40px 20px',color:C.done,fontSize:13}}>{q.trim()?'Sin resultados':'Aún no hay proveedores. Agrega el primero.'}</div>
+          <div style={{textAlign:'center',padding:'40px 20px',color:C.done,fontSize:13}}>{q.trim()?'Sin resultados':'Aún no hay colaboradores. Agrega el primero.'}</div>
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:1,border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {filtrados.map(p=>{
-              const debe=debeDe(p.id)
+              const debe=debeDe(p.id), gen=genDe(p.id)
               return (
                 <div key={p.id} onClick={()=>abrirFicha(p.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',background:'#fff',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
                   <span style={{width:32,height:32,borderRadius:9,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(titulo(p))}</span>
@@ -10478,7 +10519,12 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
                     <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo(p)}</div>
                     <div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social?.trim()||p.rut||'Sin RUT'}</div>
                   </div>
-                  {debe>0&&<span style={{fontSize:13,fontWeight:600,color:C.overdue,flexShrink:0}}>{fmt0(debe)}</span>}
+                  <div style={{textAlign:'right',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+                    {gen>0&&<span style={{fontSize:12.5,fontWeight:700,color:C.text}}>{fmtC(gen)}</span>}
+                    {debe>0
+                      ? <span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:5,padding:'2px 7px',whiteSpace:'nowrap'}}>Por pagar {fmtC(debe)}</span>
+                      : <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:5,padding:'2px 7px'}}>al día</span>}
+                  </div>
                 </div>
               )
             })}
@@ -10542,7 +10588,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const honInvUF = ventasInv.reduce((a,v)=>a+(v.parteUFeq||0),0)
   return (
     <>
-      {headerBack('Ficha de proveedor',()=>setView('list'))}
+      {headerBack('Ficha del colaborador',()=>setView('list'))}
       <div style={{padding:'16px 20px 20px'}}>
         <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
           <span style={{width:46,height:46,borderRadius:12,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,flexShrink:0}}>{cIni(titulo(sel))}</span>
@@ -17138,7 +17184,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
           <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={{flex:1}}/>
-          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:32,color:C.accent}}>Mis Proveedores</button>
+          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:32,color:C.accent}}>Comisiones</button>
         </div>
         {sFilter ? (
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
@@ -28275,7 +28321,7 @@ export default function App() {
             <button onClick={()=>{setModal(null);setTab('conciliacion')}} style={{padding:'9px 16px',borderRadius:9,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Ir a Conciliación &rarr;</button>
           </div>
         </div></Modal>}
-        {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
+        {modal?.type==='proveedores'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,padding:'18px 20px 24px',boxSizing:'border-box'}}>
