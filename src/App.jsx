@@ -14922,7 +14922,9 @@ function DestinatarioFacturasCard({client, contacts=[], embedded=false}){
 // Tab "Financiero" de la ficha (solo admin): KPIs de facturación, historial por año,
 // razones sociales, datos de facturación y relación con el estudio (edición inline)
 // Asistente de conciliación: 3 pasos con compuerta humana. (1) duplicados determinista, (2) sin proyecto agrupado por serie con sugerencia, (3) programada↔real por venta+mes+tolerancia. Nada se borra/asigna solo.
-function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=[], clientId=null, respaldoMap=null, cartolaHasta=null, onResolveDup, onAssignSeries, onReplaceProgramada, onReplaceMatch, onEditBilling, onOpenClientFicha, onClose}) {
+function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=[], clientId=null, respaldoMap=null, cartolaHasta=null, anticipos=[], conciliacion=[], onResolverDupAnticipo, onResolveDup, onAssignSeries, onReplaceProgramada, onReplaceMatch, onEditBilling, onOpenClientFicha, onClose}) {
+  const [tab,setTab] = useState('facturas')   // 'facturas' | 'anticipos'
+  const [q,setQ] = useState('')               // buscador de cliente
   const [dismissedMatch,setDismissedMatch] = useState(()=>new Set())   // matches B descartados en esta sesión ("No es match")
   const mes = d => (d||'').slice(0,7)
   // Período: 'todo' (ordenar el histórico) o 'mes' (revisión del mes corriente: emitidas por issued_at, programadas por due).
@@ -15004,6 +15006,27 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
   // Fuente ÚNICA: mismo detector que el conteo de duplicados y el inline "Ya emitida" — así el card, esta lista y Facturas del mes coinciden.
   const progMatches = useMemo(()=> matchProgEmitidas(act, clients, clientEntities, {noSet:matchNo||new Set()}), [act,clients,clientEntities,matchNo])
 
+  // (4) Anticipos duplicados (espejo de antDup en RevisionDatosModal): un anticipo cargado A MANO (sin respaldo
+  // bancario, sin '·revisado') cuyo monto CALZA con los depósitos reales del banco del mismo cliente (la suma, o uno exacto).
+  const antDup = useMemo(()=>{
+    const bankIds = new Set((conciliacion||[]).filter(c=>c.tipo_destino==='anticipo' && c.anticipo_id).map(c=>String(c.anticipo_id)))
+    const banksByCli = {}
+    ;(anticipos||[]).filter(a=>bankIds.has(String(a.id))).forEach(a=>{ const k=String(a.client_id); (banksByCli[k]=banksByCli[k]||[]).push(a) })
+    const out=[]
+    ;(anticipos||[]).forEach(a=>{
+      if(bankIds.has(String(a.id))) return                                   // ya tiene respaldo del banco
+      if(/·revisado/.test(a.nota||'')) return                                // marcado "son distintos"
+      const m=Number(a.monto)||0; if(m<=0) return
+      const banks=(banksByCli[String(a.client_id)]||[])
+      if(!banks.length) return
+      const suma=banks.reduce((s,b)=>s+(Number(b.monto)||0),0)
+      const calceSuma=Math.abs(suma-m)<=1
+      const uno=banks.find(b=>Math.abs((Number(b.monto)||0)-m)<=1)
+      if(calceSuma||uno) out.push({manual:a, banks:uno?[uno]:banks, suma:uno?(Number(uno.monto)||0):suma})
+    })
+    return out
+  },[anticipos,conciliacion])
+
   // (0) Fantasmas: Pagado SIN folio que es copia de una real CON folio (absorbe el tool de conciliación viejo). Respeta "no es duplicado" (learnings conciliacion_ok).
   const [okIds,setOkIds] = useState(null)
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','conciliacion_ok').then(({data})=>setOkIds(new Set((data||[]).map(r=>String(r.key)))),()=>setOkIds(new Set())) },[])
@@ -15038,54 +15061,153 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
     setAiBusy(null)
   }
 
-  const sect = (n,color,title,sub,count) => (
-    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:7}}>
-      <span style={{width:18,height:18,borderRadius:'50%',background:color,color:'#fff',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{n}</span>
-      <span style={{fontSize:13,fontWeight:700,color}}>{title} · {count}</span>
-      <span style={{fontSize:9,color:C.muted,marginLeft:'auto'}}>{sub}</span>
+  // ── Helpers de agrupación y estilo ──
+  const toggle = (setter,k) => setter(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
+  const btnP = {fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer'}
+  const btnS = {fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 13px',cursor:'pointer'}
+  const fD = iso => iso ? String(iso).slice(0,10).split('-').reverse().join('-') : '—'
+  const tieneDTE = b => !!(b.sii_synced_at||b.sii_tipo_dte||b.dte_track_id)
+  const cargadaPor = b => b.sii_synced_at?'SII':(b.import_batch_id?'importada':'a mano')
+  const proyDe = b => { const s=(sales||[]).find(s=>String(s.id)===String(b.sale_id)); return s?s.title:'—' }
+  const respaldoDe = b => (respaldoMap&&(respaldoMap[b.id]||0)>0) ? {ok:true,txt:'con respaldo'} : {ok:false,txt:'sin respaldo'}
+  const montoB = b => montoFactura(b)||b.amount||0
+
+  // Agrupa ítems {cid,date,...} por cliente, ordenados por fecha (control orden) y filtrados por buscador.
+  const byCli = (items) => {
+    const nq=String(q||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    const g={}
+    items.forEach(it=>{ const cid=String(it.cid); const name=cName(it.cid); if(nq&&!name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(nq)) return; if(!g[cid]) g[cid]={cid,name,items:[],_d:'',monto:0}; g[cid].items.push(it); g[cid].monto+=(it.monto||0); const d=it.date||''; if(d>g[cid]._d) g[cid]._d=d })
+    const arr=Object.values(g)
+    arr.forEach(grp=> grp.items.sort((a,b)=> orden==='desc'?String(b.date||'').localeCompare(String(a.date||'')):String(a.date||'').localeCompare(String(b.date||''))))
+    return arr.sort((a,b)=> orden==='desc'?b._d.localeCompare(a._d):a._d.localeCompare(b._d))
+  }
+
+  // Grilla de "toda la información disponible" de una factura (para decidir con certeza cuál conservar/retirar).
+  const kvFactura = (b) => { const r=respaldoDe(b); const dte=tieneDTE(b); return (
+    <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,display:'grid',gap:3}}>
+      {[['Monto',fmt(montoB(b)),null],
+        ['Folio', b.invoice_no?('N° '+folioN(b.invoice_no)):'— sin folio', b.invoice_no?null:'no'],
+        ['DTE (SII)', dte?'sí':'— sin DTE', dte?'ok':'no'],
+        ['Emisión', fD(b.issued_at), null],
+        ['Vence', fD(b.due), null],
+        ['Concepto', b.concept||'—', null],
+        ['Razón social', b.receptor_name||'—', null],
+        ['RUT receptor', b.receptor_rut||'—', null],
+        ['Estado', b.status||'—', null],
+        ['Respaldo banco', r.txt, r.ok?'ok':'no'],
+        ['Proyecto', proyDe(b), null],
+        ['Cargada por', cargadaPor(b), null],
+      ].map(([k,v,tone],i)=>(
+        <div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:10.5}}>
+          <span style={{color:C.done,whiteSpace:'nowrap'}}>{k}</span>
+          <span style={{fontWeight:600,textAlign:'right',color:tone==='ok'?C.greenText:tone==='no'?C.overdueText:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}{tone==='ok'?' ✓':''}</span>
+        </div>
+      ))}
+    </div>
+  ) }
+
+  // Lado conserva/retira con la info completa. keep=true verde, drop=rojo con folio tachado.
+  const sideFactura = (b, keep) => (
+    <div onClick={()=>abrirFac(b)} style={{border:`1px solid ${keep?'#9FCFBB':'#E7B7B4'}`,borderRadius:10,padding:'9px 11px',background:keep?C.greenBg:C.overdueBg,cursor:onEditBilling?'pointer':'default',minWidth:0}}>
+      <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',padding:'1px 7px',borderRadius:5,display:'inline-block',marginBottom:6,color:keep?C.greenText:C.overdueText,background:'#fff'}}>{keep?'Se conserva':'Se retira'}</span>
+      <div style={{fontSize:13,fontWeight:700,color:keep?C.text:C.muted,textDecoration:keep?'none':'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?('N° '+folioN(b.invoice_no)):'Sin folio'}</div>
+      <div style={{fontSize:13,fontWeight:700,marginTop:3,color:keep?C.greenText:C.muted}}>{fmt(montoB(b))}</div>
+      {kvFactura(b)}
     </div>
   )
 
-  // ── Estructura colapsable: categoría → cliente → ítem (Revisar despliega el detalle) ──
-  const toggle = (setter,k) => setter(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
-  const byCli = (items, getCid, getDate) => {
-    const g={}
-    items.forEach((it,i)=>{ const cid=String(getCid(it)); if(!g[cid]) g[cid]={cid,name:cName(getCid(it)),items:[],_d:''}; g[cid].items.push({it,i}); const d=getDate(it)||''; if(d>g[cid]._d) g[cid]._d=d })
-    const arr=Object.values(g)
-    arr.forEach(grp=> grp.items.sort((a,b)=>{ const da=getDate(a.it)||'',db=getDate(b.it)||''; return orden==='desc'?db.localeCompare(da):da.localeCompare(db) }))
-    return arr.sort((a,b)=> orden==='desc'?b._d.localeCompare(a._d):a._d.localeCompare(b._d))
+  // Un par (conserva ↔ retira) de facturas con su tipo, razón y acción (compuerta reversible).
+  const pairFactura = ({keep, drops, tipo, why, k, retire, retireLabel, secLabel, secAct}) => {
+    const ex=expItem.has(k)
+    return <div key={k} style={{border:`0.5px solid ${C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
+      <div onClick={()=>toggle(setExpItem,k)} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 10px',cursor:'pointer'}}>
+        {bigDate(keep.issued_at||keep.due||(drops[0]&&(drops[0].issued_at||drops[0].due)))}
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px',color:C.soonText}}>{tipo}</div><div style={{fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{keep.concept||drops[0]?.concept||'—'}</div></div>
+        <span style={{fontSize:13,fontWeight:800,color:C.overdueText,whiteSpace:'nowrap'}}>{fmt(drops.reduce((s,d)=>s+montoB(d),0))}</span>
+        <span style={{fontSize:11,color:C.accent,fontWeight:600,flexShrink:0,marginLeft:4}}>{ex?'▾':'Ver ▸'}</span>
+      </div>
+      {ex&&<div style={{padding:'0 10px 11px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+          {sideFactura(keep,true)}
+          <div style={{display:'grid',gap:9,minWidth:0}}>{drops.map(d=><div key={d.id}>{sideFactura(d,false)}</div>)}</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginTop:9,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:120,fontSize:11,color:C.muted}}>{why}</div>
+          {secLabel&&<button onClick={secAct} style={btnS}>{secLabel}</button>}
+          <button onClick={async()=>{ const u=await retire(); marcarHecho(k,u,retireLabel+' → Papelera') }} style={btnP}>{retireLabel}</button>
+        </div>
+      </div>}
+    </div>
   }
-  const btnP = {fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer'}
-  const btnS = {fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 13px',cursor:'pointer'}
-  const estadoChip = b => { const e=fEstado(b); if(!e) return null; return <span style={{fontSize:9,fontWeight:600,borderRadius:9,padding:'1px 7px',background:e.bg,color:e.fg,whiteSpace:'nowrap',flexShrink:0}}>{e.short||e.label}</span> }
-  const detOf = b => b ? [b.concept, b.receptor_name, (b.issued_at||b.due)?String(b.issued_at||b.due).slice(0,10).split('-').reverse().join('-'):''].filter(Boolean).join(' · ') : ''
-  const rowConserva = (b,label) => <div onClick={()=>abrirFac(b)} style={{display:'flex',alignItems:'center',gap:8,background:C.greenBg,borderLeft:`3px solid ${C.greenText}`,borderRadius:'0 9px 9px 0',padding:'7px 10px',marginBottom:6,cursor:onEditBilling?'pointer':'default'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:9.5,color:C.greenText,fontWeight:600,letterSpacing:'.03em'}}>SE CONSERVA</div><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div>{detOf(b)&&<div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{detOf(b)}</div>}</div>{estadoChip(b)}{onEditBilling&&<span style={{color:C.muted,fontSize:11}}>↗</span>}</div>
-  const rowElimina = (label,b,tag) => <div onClick={()=>b&&abrirFac(b)} style={{display:'flex',alignItems:'center',gap:8,background:C.overdueBg,borderLeft:`3px solid ${C.overdueText}`,borderRadius:'0 9px 9px 0',padding:'7px 10px',marginBottom:8,cursor:onEditBilling&&b?'pointer':'default'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:9.5,color:C.overdueText,fontWeight:600,letterSpacing:'.03em'}}>{tag||'SE ELIMINA'}</div><div style={{fontSize:12,color:C.overdueText,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div>{detOf(b)&&<div style={{fontSize:10,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{detOf(b)}</div>}</div>{onEditBilling&&b&&<span style={{color:C.muted,fontSize:11}}>↗</span>}</div>
-  const itemHead = (k,fecha,titulo,sub) => <div onClick={()=>toggle(setExpItem,k)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 9px',cursor:'pointer'}}>{bigDate(fecha)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo}</div><div style={{fontSize:10,color:C.muted}}>{sub}</div></div><span style={{fontSize:11,color:C.accent,fontWeight:600,flexShrink:0}}>{expItem.has(k)?'▾':'Revisar ▸'}</span></div>
-  const itemBox = (k,inner) => <div key={k} style={{border:`0.5px solid ${C.border}`,borderRadius:9,marginBottom:5,overflow:'hidden'}}>{inner}</div>
-  const renderCopia = (x) => { const k='copia|'+x.g.id; const ex=expItem.has(k); return itemBox(k,<>{itemHead(k,x.g.issued_at||x.g.due,x.g.concept||'—',`${fmt(x.g.amount)} · copia sin folio`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(x.real,`Factura N°${folioN(x.real.invoice_no)} · ${fmt(x.real.amount)}`)}{rowElimina(`copia sin folio · ${fmt(x.g.amount)}`,x.g)}<div style={{display:'flex',gap:8}}><button onClick={async()=>{ if(!onReplaceProgramada)return; const u=await onReplaceProgramada(x.g.id,{silent:true}); marcarHecho(k,u,'Copia eliminada → Papelera') }} style={btnP}>Eliminar copia</button><button onClick={()=>marcarLegit(x.g.id)} style={btnS}>No es copia</button></div></div>}</>) }
-  const renderDup = (g) => { const keep=g.rows.find(r=>r.id===g.keepId); const drop=g.rows.filter(r=>r.id!==g.keepId); const k='dup|'+g.keepId; const ex=expItem.has(k); const lbl=b=>b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'copia sin folio'; return itemBox(k,<>{itemHead(k,keep.issued_at||keep.due,keep.concept||'—',`${fmt(keep.amount)} · ${g.rows.length} copias`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(keep,`${lbl(keep)} · ${fmt(keep.amount)}`)}{drop.map(d=><span key={d.id}>{rowElimina(`${lbl(d)} · ${fmt(d.amount)}`,d)}</span>)}<div style={{display:'flex',gap:8}}><button onClick={async()=>{ if(!onResolveDup)return; const u=await onResolveDup(g.keepId,drop.map(r=>r.id),{silent:true}); marcarHecho(k,u) }} style={btnP}>Eliminar {drop.length} copia{drop.length!==1?'s':''}</button><button onClick={()=>toggle(setExpItem,k)} style={btnS}>No tocar</button></div></div>}</>) }
-  const renderSerie = (g,i) => { const k='serie|'+i; const ex=expItem.has(k); const eff=g.sug||aiSug[i]; const ia=!g.sug&&aiSug[i]; const ids=g.rows.map(r=>r.id); const selIds=ids.filter(id=>sel.has(id)); const toAssign=selIds.length?selIds:ids; return itemBox(k,<>{itemHead(k,g.rows[0].due||g.rows[0].issued_at,g.rows[0].concept||'—',`${g.rows.length} facturas`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{eff?<div style={{fontSize:10.5,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 9px',marginBottom:8}}>✦ {ia?'(IA) ':''}Sugerida: <b style={{color:C.accent}}>{eff.title}</b></div>:<div style={{fontSize:10.5,color:C.muted,marginBottom:8}}>Elige la venta para estas facturas.</div>}{g.rows.map(r=>{ const on=sel.has(r.id); return (<div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderTop:`0.5px solid ${C.border}`}}><span onClick={()=>toggle(setSel,r.id)} style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',color:'#fff',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>{on?'✓':''}</span>{bigDate(r.due||r.issued_at)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{fmt(r.amount)}</div></div>{estadoChip(r)}{onEditBilling&&<span onClick={()=>abrirFac(r)} style={{color:C.muted,fontSize:11,cursor:'pointer'}}>↗</span>}</div>) })}<div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap',alignItems:'center'}}>{eff&&<button onClick={async()=>{ if(!onAssignSeries)return; const u=await onAssignSeries(eff.id,toAssign,{silent:true}); marcarHecho(k,u) }} style={btnP}>Asignar {selIds.length||g.rows.length} a {eff.title}</button>}{!eff&&<button onClick={()=>sugerirIA(g,i)} disabled={aiBusy===i} style={{...btnS,color:C.accent,background:C.azulBg,border:'none'}}>{aiBusy===i?'Consultando…':'✦ Sugerir con IA'}</button>}<select onChange={async e=>{ if(e.target.value&&onAssignSeries){ const u=await onAssignSeries(e.target.value,toAssign,{silent:true}); marcarHecho(k,u) } }} defaultValue='' style={{fontSize:10,padding:'5px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}><option value=''>otra venta…</option>{g.sales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}</select></div></div>}</>) }
-  const renderProg = (m) => { const k='prog|'+m.prog.id; const ex=expItem.has(k); const dif=(m.real.amount||0)-(m.prog.amount||0); return itemBox(k,<>{itemHead(k,m.prog.due||m.prog.issued_at,m.prog.concept||'—',`${fmt(m.prog.amount)} · programada`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(m.real,`${m.real.invoice_no?`Factura N°${folioN(m.real.invoice_no)}`:'emitida'} · ${fmt(m.real.amount)}`)}{rowElimina(`programada · ${fmt(m.prog.amount)}`,m.prog,'SE DA DE BAJA')}<div style={{fontSize:10,color:'#0C447C',background:C.azulBg,borderRadius:7,padding:'5px 8px',marginBottom:8}}>Diferencia {dif>=0?'+':'−'}{fmt(Math.abs(dif))} — por la UF del día.</div><div style={{display:'flex',gap:8}}><button onClick={async()=>{ if(!onReplaceMatch)return; const u=await onReplaceMatch(m.prog.id,m.real.id,{silent:true}); marcarHecho(k,u) }} style={btnP}>Reemplazar por la emitida</button><button onClick={()=>{ const kk=`${m.prog.id}|${m.real.id}`; learnPut('match_no',kk); setMatchNo(p=>new Set([...(p||[]),kk])) }} style={btnS}>No es match</button></div></div>}</>) }
-  const catBlock = (key,dot,name,items,getCid,getDate,renderRow) => { if(!items.length) return null; const open=openCat.has(key); return <div key={key} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}><div onClick={()=>toggle(setOpenCat,key)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}><span style={{color:C.muted,fontSize:12,width:10}}>{open?'▾':'▸'}</span><span style={{width:7,height:7,borderRadius:'50%',background:dot,flexShrink:0}}/><span style={{flex:1,fontSize:13,fontWeight:500,color:C.text}}>{name}</span><span style={{fontSize:11,color:C.muted}}>{items.length}</span></div>{open&&<div style={{padding:'4px 8px 8px'}}>{byCli(items,getCid,getDate).map(grp=>{ const ck=key+'|'+grp.cid; const co=openCli.has(ck); return (<div key={grp.cid} style={{marginBottom:5}}><div onClick={()=>toggle(setOpenCli,ck)} style={{display:'flex',alignItems:'center',gap:7,padding:'6px 8px',background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,cursor:'pointer'}}><span style={{color:C.muted,fontSize:11,width:9}}>{co?'▾':'▸'}</span><span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.name}</span><span style={{fontSize:10,color:C.muted}}>{grp.items.length}</span>{onOpenClientFicha&&grp.cid&&grp.cid!=='null'&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(grp.cid)}} title='Ver ficha' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer'}}>↗</span>}</div>{co&&<div style={{marginTop:4,paddingLeft:2}}>{grp.items.map(({it,i})=>renderRow(it,i))}</div>}</div>) })}</div>}</div> }
+
+  // Lado de un anticipo (banco = conserva, a mano = retira).
+  const sideAnticipo = (a, keep) => (
+    <div style={{border:`1px solid ${keep?'#9FCFBB':'#E7B7B4'}`,borderRadius:10,padding:'9px 11px',background:keep?C.greenBg:C.overdueBg,minWidth:0}}>
+      <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',padding:'1px 7px',borderRadius:5,display:'inline-block',marginBottom:6,color:keep?C.greenText:C.overdueText,background:'#fff'}}>{keep?'Del banco · con respaldo':'A mano · sin respaldo'}</span>
+      <div style={{fontSize:13,fontWeight:700,marginTop:1,color:keep?C.greenText:C.muted}}>{fmt(Number(a.monto)||0)}</div>
+      <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,display:'grid',gap:3}}>
+        {[['Fecha',fD(a.fecha)],['Nota',a.nota||'—'],['Origen',keep?'banco (conciliado)':'a mano'],['Cargado por',a.created_by||'—']].map(([k,v],i)=>(
+          <div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:10.5}}>
+            <span style={{color:C.done,whiteSpace:'nowrap'}}>{k}</span>
+            <span style={{fontWeight:600,textAlign:'right',color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  // ── Datos de las dos pestañas ──
+  const facturaItems = [
+    ...ghosts.map(x=>({cid:x.g.client_id, date:x.g.issued_at||x.g.due, k:'copia|'+x.g.id, monto:montoB(x.g), keep:x.real, drops:[x.g], tipo:'Copia sin folio', why:<>Mismo monto y glosa; la copia <b style={{color:C.soonText}}>no tiene folio ni DTE</b>.</>, retire:()=>onReplaceProgramada&&onReplaceProgramada(x.g.id,{silent:true}), retireLabel:'Retirar copia', secLabel:'No es copia', secAct:()=>marcarLegit(x.g.id)})),
+    ...dupGroups.map(g=>{ const keep=g.rows.find(r=>r.id===g.keepId); const drops=g.rows.filter(r=>r.id!==g.keepId); const rf=folioN(keep.invoice_no); const tipo=(rf&&/\d/.test(rf)&&drops.every(d=>folioN(d.invoice_no)===rf))?('Folio repetido · N° '+rf):'Copia sin folio'; return {cid:g.rows[0].client_id, date:keep.issued_at||keep.due, k:'dup|'+g.keepId, monto:drops.reduce((s,d)=>s+montoB(d),0), keep, drops, tipo, why:g.motivo, retire:()=>onResolveDup&&onResolveDup(g.keepId,drops.map(r=>r.id),{silent:true}), retireLabel:`Retirar ${drops.length} copia${drops.length!==1?'s':''}`} }),
+    ...progMatches.map(m=>({cid:m.prog.client_id, date:m.prog.due||m.prog.issued_at, k:'prog|'+m.prog.id, monto:montoB(m.prog), keep:m.real, drops:[m.prog], tipo:'Programada ya emitida', why:<>La programada <b style={{color:C.soonText}}>ya se emitió</b> como factura real → sobra la programada.</>, retire:()=>onReplaceMatch&&onReplaceMatch(m.prog.id,m.real.id,{silent:true}), retireLabel:'Retirar programada', secLabel:'No es match', secAct:()=>{ const kk=`${m.prog.id}|${m.real.id}`; learnPut('match_no',kk); setMatchNo(p=>new Set([...(p||[]),kk])) }})),
+  ]
+  const anticipoItems = antDup.map(x=>({cid:x.manual.client_id, date:x.manual.fecha, k:'ant|'+x.manual.id, monto:Number(x.manual.monto)||0, manual:x.manual, banks:x.banks}))
+
+  const nFact=facturaItems.length, nAnt=anticipoItems.length
+  const montoDespeja=facturaItems.reduce((s,x)=>s+(x.monto||0),0)+anticipoItems.reduce((s,x)=>s+(x.monto||0),0)
+  const total=nFact+nAnt
+  const items = tab==='facturas'?facturaItems:anticipoItems
+  const grupos = byCli(items)
+
+  const retirarTodasFact=async()=>{ if(!(await appConfirm(`Retirar ${nFact} duplicado${nFact!==1?'s':''} de facturas. En cada uno se CONSERVA la factura real y se retira la copia/programada (reversible). ¿Seguir?`))) return; for(const x of facturaItems){ try{ const u=await x.retire(); if(u) marcarHecho(x.k,u,x.retireLabel+' → Papelera') }catch(_){} } }
+
+  const tabPill = (v,l,n) => <span onClick={()=>setTab(v)} style={{fontSize:12.5,fontWeight:700,borderRadius:9,padding:'7px 14px',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:7,background:tab===v?C.accent:'#fff',color:tab===v?'#fff':C.muted,border:`1px solid ${tab===v?C.accent:C.border}`}}>{l}<span style={{fontSize:10.5,fontWeight:800,borderRadius:999,padding:'0 7px',background:tab===v?'rgba(255,255,255,.22)':C.overdueBg,color:tab===v?'#fff':C.overdueText}}>{n}</span></span>
 
   return (
     <>
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
-        <span style={{fontSize:15,fontWeight:500,color:C.text}}>Limpiar duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
+        <span style={{fontSize:15,fontWeight:500,color:C.text}}>Duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
         <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
-      <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:18}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-          <div style={{display:'flex',gap:6}}>
-            {[['todo','Histórico'],['mes','Mes corriente']].map(([v,l])=>(
-              <span key={v} onClick={()=>setPeriodo(v)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:periodo===v?C.accent:'#fff',color:periodo===v?'#fff':C.muted,border:`1px solid ${periodo===v?C.accent:C.border}`}}>{l}</span>
-            ))}
-          </div>
-          <span style={{fontSize:10,color:C.muted}}>Fecha{[['desc','↓ nueva'],['asc','↑ antigua']].map(([v,l])=><span key={v} onClick={()=>setOrden(v)} style={{cursor:'pointer',marginLeft:6,fontWeight:orden===v?700:400,color:orden===v?C.accent:C.muted}}>{l}</span>)}</span>
+      <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:14}}>
+        {/* Foto: cuánto hay por limpiar y cuánto se despeja */}
+        {total>0&&<div style={{display:'flex',alignItems:'center',gap:16,background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'14px 16px'}}>
+          <div style={{fontSize:32,fontWeight:800,letterSpacing:'-1px',color:C.overdueText,lineHeight:1}}>{total}</div>
+          <div style={{fontSize:12.5,color:C.muted,lineHeight:1.5,flex:1}}><b style={{color:C.text}}>{total} duplicado{total!==1?'s':''} por limpiar.</b> En cada uno se <b style={{color:C.text}}>conserva</b> el documento real y se <b style={{color:C.text}}>retira</b> la copia — reversible.</div>
+          <div style={{textAlign:'right'}}><div style={{fontSize:18,fontWeight:800,color:C.greenText}}>{fmt(montoDespeja)}</div><div style={{fontSize:9.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.4px'}}>se despeja</div></div>
+        </div>}
+
+        {/* Tabs + orden */}
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <div style={{display:'flex',gap:6}}>{tabPill('facturas','Facturas',nFact)}{tabPill('anticipos','Anticipos',nAnt)}</div>
+          <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>Fecha{[['desc','↓ recientes'],['asc','↑ antiguas']].map(([v,l])=><span key={v} onClick={()=>setOrden(v)} style={{cursor:'pointer',marginLeft:6,fontWeight:orden===v?700:400,color:orden===v?C.accent:C.muted}}>{l}</span>)}</span>
         </div>
+
+        {/* Buscador + período (solo facturas) */}
+        <div style={{display:'flex',alignItems:'center',gap:9,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:150,display:'flex',alignItems:'center',gap:7,background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'6px 11px'}}>
+            <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.4'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={{border:'none',outline:'none',fontSize:12.5,color:C.text,background:'transparent',width:'100%'}}/>
+          </div>
+          {tab==='facturas'&&<div style={{display:'flex',gap:6}}>{[['todo','Histórico'],['mes','Mes']].map(([v,l])=>(
+            <span key={v} onClick={()=>setPeriodo(v)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'6px 12px',cursor:'pointer',background:periodo===v?C.accent:'#fff',color:periodo===v?'#fff':C.muted,border:`1px solid ${periodo===v?C.accent:C.border}`}}>{l}</span>
+          ))}</div>}
+        </div>
+
+        {/* Franja "hecho · Deshacer" */}
         {Object.keys(done).length>0&&<div style={{display:'flex',flexDirection:'column',gap:6}}>
           {Object.entries(done).map(([k,u])=>(
             <div key={k} style={{display:'flex',alignItems:'center',gap:9,background:C.greenBg,border:`0.5px solid #BFE3D5`,borderRadius:9,padding:'9px 11px'}}>
@@ -15094,39 +15216,56 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
             </div>
           ))}
         </div>}
-        {ghosts.length+dupGroups.length+progMatches.length===0&&Object.keys(done).length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>{periodo==='mes'?'Sin duplicados este mes.':'Sin duplicados: ninguna copia sin folio, ningún folio repetido ni programada ya emitida por retirar.'}</div>}
 
-        {/* UNA sola lista "Limpiar duplicados" = copias + duplicadas + programadas ya emitidas (todas con conserva↔retira) */}
-        {(()=>{
-          const dupAll=[
-            ...ghosts.map(x=>({cid:x.g.client_id, date:x.g.issued_at||x.g.due, k:'copia|'+x.g.id, node:renderCopia(x), retire:()=>onReplaceProgramada&&onReplaceProgramada(x.g.id,{silent:true})})),
-            ...dupGroups.map(g=>{ const keep=g.rows.find(r=>r.id===g.keepId); return {cid:g.rows[0].client_id, date:keep?(keep.issued_at||keep.due):'', k:'dup|'+g.keepId, node:renderDup(g), retire:()=>onResolveDup&&onResolveDup(g.keepId,g.rows.filter(r=>r.id!==g.keepId).map(r=>r.id),{silent:true})} }),
-            ...progMatches.map(m=>({cid:m.prog.client_id, date:m.prog.due||m.prog.issued_at, k:'prog|'+m.prog.id, node:renderProg(m), retire:()=>onReplaceMatch&&onReplaceMatch(m.prog.id,m.real.id,{silent:true})})),
-          ]
-          if(!dupAll.length) return null
-          const grupos=byCli(dupAll,x=>x.cid,x=>x.date)
-          const retirarTodas=async()=>{ if(!(await appConfirm(`Retirar ${dupAll.length} duplicado${dupAll.length!==1?'s':''}. En cada uno se CONSERVA la factura real y se retira la copia/programada (reversible). ¿Seguir?`))) return; for(const x of dupAll){ try{ const u=await x.retire(); if(u) marcarHecho(x.k,u) }catch(_){} } }
-          return <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',background:C.bgSoft}}>
-              <span style={{width:7,height:7,borderRadius:'50%',background:C.overdue,flexShrink:0}}/>
-              <span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>Limpiar duplicados · {dupAll.length}</span>
-              <button onClick={retirarTodas} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer',flexShrink:0}}>Retirar todas</button>
+        {total===0&&Object.keys(done).length===0&&<div style={{fontSize:13,color:C.muted,padding:'14px 2px',textAlign:'center'}}>Sin duplicados: ninguna copia, folio repetido, programada ya emitida ni anticipo a mano por revisar.</div>}
+
+        {/* Barra de lote (solo facturas) */}
+        {tab==='facturas'&&nFact>0&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 14px'}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.text}}>{nFact} factura{nFact!==1?'s':''} duplicada{nFact!==1?'s':''} <span style={{color:C.muted,fontWeight:400}}>· {grupos.length} cliente{grupos.length!==1?'s':''}</span></div>
+          <button onClick={retirarTodasFact} style={{background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'8px 15px',fontSize:12,fontWeight:700,cursor:'pointer'}}>Retirar todas</button>
+        </div>}
+        {tab==='anticipos'&&nAnt>0&&<div style={{fontSize:11.5,color:C.muted,padding:'0 2px'}}>Un anticipo a mano calza con depósitos reales del banco → casi seguro es el mismo dinero cargado dos veces. Confírmalo tú; nada se borra solo.</div>}
+
+        {/* Lista agrupada por cliente */}
+        {grupos.map(grp=>{ const ck=tab+'|'+grp.cid; const co=clientId?true:openCli.has(ck); return (
+          <div key={grp.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:13,overflow:'hidden'}}>
+            <div onClick={()=>!clientId&&toggle(setOpenCli,ck)} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 14px',cursor:clientId?'default':'pointer'}}>
+              <span style={{width:34,height:34,borderRadius:'50%',background:C.accent,color:'#fff',fontSize:12,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{(grp.name||'?').split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase()}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:15,fontWeight:800,letterSpacing:'-.1px',color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.name}</div>
+                <div style={{fontSize:11,color:C.muted}}>{grp.items.length} duplicado{grp.items.length!==1?'s':''}</div>
+              </div>
+              <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:C.overdueText}}>{fmt(grp.monto)}</div><div style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:'.4px'}}>a retirar</div></div>
+              {onOpenClientFicha&&grp.cid&&grp.cid!=='null'&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(grp.cid)}} title='Ver ficha' style={{fontSize:12,color:C.accent,fontWeight:700,cursor:'pointer',flexShrink:0}}>↗</span>}
+              {!clientId&&<span style={{color:C.done,fontSize:13,flexShrink:0}}>{co?'▾':'▸'}</span>}
             </div>
-            <div style={{padding:'4px 8px 8px'}}>
-              {grupos.map(grp=>{ const ck='dupall|'+grp.cid; const co=openCli.has(ck); return (
-                <div key={grp.cid} style={{marginBottom:5}}>
-                  <div onClick={()=>toggle(setOpenCli,ck)} style={{display:'flex',alignItems:'center',gap:7,padding:'6px 8px',background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,cursor:'pointer'}}>
-                    <span style={{color:C.muted,fontSize:11,width:9}}>{co?'▾':'▸'}</span>
-                    <span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.name}</span>
-                    <span style={{fontSize:10,color:C.muted}}>{grp.items.length}</span>
-                    {onOpenClientFicha&&grp.cid&&grp.cid!=='null'&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(grp.cid)}} title='Ver ficha' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer'}}>↗</span>}
-                  </div>
-                  {co&&<div style={{marginTop:4,paddingLeft:2}}>{grp.items.map(({it})=>it.node)}</div>}
-                </div>
-              )})}
-            </div>
+            {co&&<div style={{padding:'2px 12px 12px',borderTop:`1px solid ${C.border}`}}>
+              {tab==='facturas'
+                ? grp.items.map(it=>pairFactura(it))
+                : grp.items.map(x=>{ const ex=expItem.has(x.k); return (
+                    <div key={x.k} style={{border:`0.5px solid ${C.border}`,borderRadius:10,marginBottom:6,marginTop:8,overflow:'hidden'}}>
+                      <div onClick={()=>toggle(setExpItem,x.k)} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 10px',cursor:'pointer'}}>
+                        {bigDate(x.manual.fecha)}
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px',color:C.soonText}}>Anticipo a mano · calza con banco</div><div style={{fontSize:12.5,color:C.text}}>{x.manual.nota||'sin nota'}</div></div>
+                        <span style={{fontSize:13,fontWeight:800,color:C.overdueText,whiteSpace:'nowrap'}}>{fmt(Number(x.manual.monto)||0)}</span>
+                        <span style={{fontSize:11,color:C.accent,fontWeight:600,flexShrink:0,marginLeft:4}}>{ex?'▾':'Ver ▸'}</span>
+                      </div>
+                      {ex&&<div style={{padding:'0 10px 11px'}}>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+                          <div style={{display:'grid',gap:9,minWidth:0}}>{x.banks.map((b,i)=><div key={i}>{sideAnticipo(b,true)}</div>)}</div>
+                          {sideAnticipo(x.manual,false)}
+                        </div>
+                        <div style={{fontSize:11,color:C.muted,background:C.ambarBg,borderRadius:8,padding:'8px 11px',margin:'9px 0'}}>El anticipo a mano <b style={{color:C.soonText}}>calza exacto</b> con {x.banks.length>1?'los depósitos':'el depósito'} del banco → casi seguro es el mismo dinero cargado dos veces.</div>
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                          <button onClick={async()=>{ if(!onResolverDupAnticipo)return; if(!(await appConfirm('Retirar el anticipo cargado a mano y dejar solo el del banco. ¿Seguir?')))return; await onResolverDupAnticipo(x.manual.id,true) }} style={btnP}>Es duplicado · dejar el del banco</button>
+                          <button onClick={()=>{ if(!onResolverDupAnticipo)return; onResolverDupAnticipo(x.manual.id,false) }} style={btnS}>Son distintos</button>
+                        </div>
+                      </div>}
+                    </div>
+                  )})}
+            </div>}
           </div>
-        })()}
+        )})}
       </div>
     </>
   )
@@ -27998,7 +28137,15 @@ export default function App() {
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
         {modal?.type==='primerasTareas'&&<Modal title={<><span style={{color:C.accent}}>Primeras tareas</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:400}}>{modal.data?.title||'Encargo'}</span></>} onClose={()=>setModal(null)} closeOnBackdrop={false} maxWidth={560}><PrimerasTareasModal sale={modal.data} clients={clients} clientEntities={clientEntities} user={user} onConfirm={handleCrearPrimerasTareas} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='conciliaHub'&&(()=>{ const mesA=new Date().toISOString().slice(0,7)
-          const dupN=matchProgEmitidas(billing,clients,clientEntities).length
+          // Contador de Duplicados = facturas (programadas emitidas + copias/folios repetidos) + anticipos a mano que calzan con el banco.
+          const _bankAnt=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='anticipo'&&c.anticipo_id).map(c=>String(c.anticipo_id)))
+          const _banksByCli={}; (anticipos||[]).filter(a=>_bankAnt.has(String(a.id))).forEach(a=>{const k=String(a.client_id);(_banksByCli[k]=_banksByCli[k]||[]).push(a)})
+          const _antN=(anticipos||[]).filter(a=>{ if(_bankAnt.has(String(a.id)))return false; if(/·revisado/.test(a.nota||''))return false; const m=Number(a.monto)||0; if(m<=0)return false; const bk=_banksByCli[String(a.client_id)]||[]; if(!bk.length)return false; const su=bk.reduce((s,b)=>s+(Number(b.monto)||0),0); return Math.abs(su-m)<=1||bk.some(b=>Math.abs((Number(b.monto)||0)-m)<=1) }).length
+          const _actB=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.status!=='Anulado')
+          const _realF=x=>{const f=String(x.invoice_no||'').replace(/^factura\s*/i,'').trim();return (f&&/\d/.test(f))?f:null}
+          const _folioRep=(()=>{const by={};_actB.forEach(b=>{const f=_realF(b);if(f){const k=`${b.client_id}|${f}`;(by[k]=by[k]||[]).push(b)}});return Object.values(by).filter(g=>g.length>1).reduce((s,g)=>s+(g.length-1),0)})()
+          const _fantasmas=_actB.filter(b=>b.status==='Pagado'&&!b.invoice_no&&(b.billing_type||'')!=='reembolso').length
+          const dupN=matchProgEmitidas(billing,clients,clientEntities).length+_folioRep+_fantasmas+_antN
           const siiN=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&(b.billing_type||'')!=='reembolso'&&String(b.due||'').startsWith(mesA)).length
           const cobN=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Programada'&&b.status!=='Anulada'&&/\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,''))&&!b.client_id).length
           const ic=(d,col)=><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke={col||C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
@@ -28014,13 +28161,13 @@ export default function App() {
             <div style={{display:'flex',flexDirection:'column',gap:9}}>
               {row(ic(<><line x1='3' y1='21' x2='21' y2='21'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></>,C.greenText),C.greenBg,'Bancaria','Cartola del banco ↔ facturas y fondos',0,()=>{setModal(null);setTab('conciliacion')})}
               {row(ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>,C.soonText),C.ambarBg,'Cotejar con el SII','Folios emitidos ↔ programadas del mes',siiN,()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')})}
-              {row(ic(<><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></>,C.accent),C.azulBg,'Revisar duplicados','Programadas ya emitidas y copias',dupN,()=>{setModal({type:'conciliar',data:null})})}
+              {row(ic(<><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></>,C.accent),C.azulBg,'Duplicados','Copias, folios repetidos, programadas y anticipos',dupN,()=>{setModal({type:'conciliar',data:null})})}
               {row(ic(<><path d='M9 11l3 3L22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/></>,C.soonText),C.ambarBg,'Cobertura SII','Facturas del año sin cliente asignado',cobN,()=>{setModal({type:'coberturaSII'})})}
             </div>
           </Modal>
         })()}
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')}} onClose={()=>setModal(null)}/>}
-        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
         {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else setTab('cajachica') } else if(map[vista]) setTab(map[vista]) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
