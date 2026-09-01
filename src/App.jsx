@@ -23432,10 +23432,20 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
   const fechaOf = b => String(b.paid_at||b.issued_at||'').slice(0,10)
   // TODAS las cobradas NO conciliadas: Pagado, no borrada, no reembolso, y el banco NO cubre el total (aplicado<monto).
   // Sin exigir folio (muchas se marcaron a mano/Excel sin folio) ni fecha de pago ni cutoff.
-  const noConciliada = b => !b.deleted_at && b.status==='Pagado' && (b.billing_type||'')!=='reembolso' && (aplicadoByFactura[b.id]||0) < (b.amount||0)
+  // Consolidación: los duplicados (folio repetido o fantasma sin folio) NO aparecen aquí — se manejan en el módulo
+  // Duplicados, para que cada documento viva en un solo lugar y las dos vistas no se contradigan.
+  const dupIds = useMemo(()=>{ const ids=new Set(); const act=(billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.status!=='Anulado')
+    const byF={}; act.forEach(b=>{ const f=folioN(b.invoice_no); const d=(f&&/\d/.test(f))?f:null; if(d){ const k=b.client_id+'|'+d; (byF[k]=byF[k]||[]).push(b) } })
+    Object.values(byF).forEach(g=>{ if(g.length<2) return; const keep=[...g].sort((a,b)=>((a.invoice_no?0:1)-(b.invoice_no?0:1))||((b.status==='Pagado')-(a.status==='Pagado')))[0]; g.forEach(x=>{ if(String(x.id)!==String(keep.id)) ids.add(String(x.id)) }) })
+    act.filter(b=>b.status==='Pagado' && !b.invoice_no && (b.billing_type||'')!=='reembolso').forEach(g=>{ const a=g.amount||0; const real=a&&act.find(r=>r.invoice_no&&String(r.client_id)===String(g.client_id)&&Math.abs((r.amount||0)-a)/a<=0.02); if(real) ids.add(String(g.id)) })
+    return ids },[billing])
+  const noConciliada = b => !b.deleted_at && b.status==='Pagado' && (b.billing_type||'')!=='reembolso' && (aplicadoByFactura[b.id]||0) < (b.amount||0) && !dupIds.has(String(b.id))
   const yrs = [...new Set((billing||[]).filter(noConciliada).map(b=>fechaOf(b).slice(0,4)).filter(Boolean))].sort().reverse()
-  const [yr,setYr]=useState('todos')
-  const [openMes,setOpenMes]=useState(()=>new Set())   // meses abiertos (default cerrados: primero el panorama)
+  const curYr = String(new Date().getFullYear())
+  const [yr,setYr]=useState(()=> yrs.includes(curYr)?curYr:'todos')   // arranca en el año vivo; el histórico queda detrás del filtro
+  const [openHist,setOpenHist]=useState(false)   // bloque "sin respaldo" colapsado
+  const [showEx,setShowEx]=useState(false)        // ver todos los de calce exacto
+  const [showRev,setShowRev]=useState(false)      // ver todos los por revisar
   const [pickFac,setPickFac]=useState(null)      // factura con candidatos alternativos desplegados
   const [montoFacFor,setMontoFacFor]=useState(null)   // movimiento sin identificar cuyas facturas-por-monto (último criterio) están desplegadas para elegir
   const [loteBusy,setLoteBusy]=useState(false)
@@ -23448,10 +23458,12 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
   const items = useMemo(()=>{ const cob=(billing||[]).filter(b=> noConciliada(b) && (yr==='todos' || fechaOf(b).slice(0,4)===yr) )
     return cob.map(fac=>{ const f=fechaOf(fac); const historica=!!f&&f<RESPALDO_CUTOFF; const parcial=(aplicadoByFactura[fac.id]||0)>0; const cs=candsFor(fac); const ex=cs.filter(c=>c.exacto); const best=ex.length===1?ex[0]:null; const cls=best?'exacto':(cs.length?'revisar':'sinpago'); return {fac,f,cs,ex,best,cls,historica,parcial} })
       .sort((a,b)=> String(a.f).localeCompare(String(b.f))) },[billing,movs,aplicadoByFactura,yr])   // eslint-disable-line
-  const nExacto=items.filter(i=>i.cls==='exacto').length, nRev=items.filter(i=>i.cls==='revisar').length, nSin=items.filter(i=>i.cls==='sinpago').length, nHist=items.filter(i=>i.historica).length
-  const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const byMes={}; items.forEach(it=>{ const mk=(it.f||'').slice(0,7)||'sin-fecha'; (byMes[mk]=byMes[mk]||[]).push(it) })
-  const meses=Object.keys(byMes).sort()
+  const byDateDesc=(a,b)=>String(b.f).localeCompare(String(a.f))   // más reciente primero
+  const exactos=items.filter(i=>i.cls==='exacto').sort(byDateDesc)
+  const revisarL=items.filter(i=>i.cls==='revisar').sort(byDateDesc)
+  const sinpago=items.filter(i=>i.cls==='sinpago')
+  const histor=sinpago.filter(i=>i.historica), otros=sinpago.filter(i=>!i.historica)
+  const nExacto=exactos.length, nRev=revisarL.length, nSin=sinpago.length, nAcc=nExacto+nRev
   const conciliarExactos = async()=>{ if(loteBusy||busy) return; setLoteBusy(true); setLoteProg(0); const used=new Set(); let done=0
     for(const it of items.filter(i=>i.cls==='exacto')){ if(used.has(it.best.m.id)) continue; used.add(it.best.m.id); try{ await onConciliar(it.best.m, it.fac) }catch(_){}; done++; setLoteProg(done) } setLoteBusy(false) }
   const depLine = m => `${fmtFechaDMY(m.fecha)}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}${m.n_operacion?` · N° op. ${m.n_operacion}`:''}`
@@ -23469,49 +23481,82 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
       <button disabled={!!busy||loteBusy} onClick={()=>onConciliar(c.m,fac)} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:(busy||loteBusy)?'default':'pointer',flexShrink:0}}>Conciliar</button>
     </div>
   )
+  // Tarjeta de una cobrada accionable (calce exacto o por revisar), cliente protagonista y clickeable a su ficha.
+  const FacCard = (it) => { const fac=it.fac; const rs=fac.receptor_name||cmap[fac.client_id]||'—'
+    return (
+    <div key={fac.id} style={{border:`1px solid ${it.cls==='exacto'?'#BFE3D5':C.border}`,borderRadius:11,padding:'10px 12px',marginBottom:8}}>
+      <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
+        <span onClick={()=>onOpenClientFicha&&fac.client_id&&onOpenClientFicha(fac.client_id)} style={{fontSize:13.5,fontWeight:800,color:C.accent,cursor:onOpenClientFicha?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}</span>
+        <span style={{fontSize:13.5,fontWeight:800,color:C.text,flexShrink:0}}>{fmtM(fac.amount)}</span>
+      </div>
+      <div style={{fontSize:10.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{folioN(fac.invoice_no)?`N°${folioN(fac.invoice_no)} · `:'sin folio · '}{fac.concept||'—'}{fac.paid_at?` · cobrada ${fmtFechaDMY(fac.paid_at)}`:''}{it.parcial?` · parcial (falta ${fmtM((fac.amount||0)-(aplicadoByFactura[fac.id]||0))})`:''}</div>
+      {it.cls==='exacto'&&<Deposito c={it.best} fac={fac}/>}
+      {it.cls==='revisar'&&<>
+        <div style={{fontSize:10,fontWeight:700,color:C.soonText,marginTop:5}}>{it.ex.length>1?`${it.ex.length} pagos calzan exacto — elige`:'ningún pago calza exacto — revisa los cercanos'}</div>
+        {(pickFac===fac.id?it.cs:it.cs.slice(0,3)).map(c=><Deposito key={c.m.id} c={c} fac={fac}/>)}
+        {it.cs.length>3&&<button onClick={()=>setPickFac(pickFac===fac.id?null:fac.id)} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',marginTop:3,padding:0}}>{pickFac===fac.id?'ver menos':`ver ${it.cs.length-3} más`}</button>}
+      </>}
+    </div>) }
+  const secLbl = t => <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:C.muted,margin:'16px 2px 8px'}}>{t}</div>
+  const verMas = (n,open,setOpen,txt) => n>0 && <div onClick={()=>setOpen(!open)} style={{textAlign:'center',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',padding:'4px 0 8px'}}>{open?'ver menos':`${n} ${txt} ▾`}</div>
   return (
     <Modal title='Conciliar cobradas · cartola' onClose={onClose}>
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
         <select value={yr} onChange={e=>{setYr(e.target.value);setPickFac(null)}} style={{fontSize:13,fontWeight:600,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,color:C.accent}}><option value='todos'>Todos</option>{yrs.map(y=><option key={y} value={y}>{y}</option>)}</select>
-        <span style={{fontSize:11,color:C.muted}}>cobradas sin respaldo bancario · {items.length}</span>
+        <span style={{fontSize:11,color:C.muted}}>cobradas sin respaldo · {items.length}</span>
       </div>
       {items.length===0
         ? <div style={{background:C.greenBg,border:'1px solid #BFE3D5',borderRadius:12,padding:'14px',fontSize:12,color:C.greenText,fontWeight:600}}>✓ {yr==='todos'?'Ninguna cobrada quedó sin respaldo.':`Ninguna cobrada del ${yr} quedó sin respaldo.`}</div>
         : <>
-        <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
-          <div style={{flex:'1 1 90px',background:C.greenBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.greenText}}>Calce exacto</div><div style={{fontSize:17,fontWeight:700,color:C.greenText}}>{nExacto}</div></div>
-          <div style={{flex:'1 1 90px',background:C.soonBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.soonText}}>Por revisar</div><div style={{fontSize:17,fontWeight:700,color:C.soonText}}>{nRev}</div></div>
-          <div style={{flex:'1 1 90px',background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.muted}}>Sin pago</div><div style={{fontSize:17,fontWeight:700,color:C.muted}}>{nSin}</div></div>
-        </div>
-        {nHist>0&&<div style={{fontSize:10,color:C.muted,marginTop:-4,marginBottom:9}}>De las "sin pago", <b>{nHist}</b> son históricas (pagadas antes de feb-2025, sin banco esperado).</div>}
-        {nExacto>0&&<button disabled={loteBusy||!!busy} onClick={conciliarExactos} style={{width:'100%',fontSize:12,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:9,padding:'10px',cursor:(loteBusy||busy)?'default':'pointer',marginBottom:12,opacity:(loteBusy||busy)?.7:1}}>{loteBusy?`Conciliando ${loteProg}/${nExacto}…`:`Conciliar los ${nExacto} de calce exacto`}</button>}
-        {meses.map(mk=>{ const its=byMes[mk]; const abierto = openMes.has(mk); const ex=its.filter(i=>i.cls==='exacto').length; const rv=its.filter(i=>i.cls==='revisar').length; const sp=its.filter(i=>i.cls==='sinpago').length; const lbl = mk==='sin-fecha'?'Sin fecha':`${MES[+mk.slice(5,7)-1]||mk} ${mk.slice(0,4)}`
-          return (
-          <div key={mk} style={{marginBottom:10}}>
-            <div onClick={()=>setOpenMes(s=>{ const base=new Set(s); base.has(mk)?base.delete(mk):base.add(mk); return base })} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'6px 2px',borderBottom:`1px solid ${C.border}`}}>
-              <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{lbl} <span style={{color:C.muted,fontWeight:500}}>· {its.length}</span></span>
-              <span style={{fontSize:10,color:C.muted,display:'flex',gap:6,alignItems:'center'}}>{ex>0&&<span style={{color:C.greenText,fontWeight:700}}>{ex} exacto{ex!==1?'s':''}</span>}{rv>0&&<span style={{color:C.soonText}}>{rv} rev.</span>}{sp>0&&<span>{sp} s/pago</span>}<span>{abierto?'▾':'▸'}</span></span>
-            </div>
-            {abierto&&its.map(it=>{ const fac=it.fac; const rs=fac.receptor_name||cmap[fac.client_id]||'—'
-              return (
-              <div key={fac.id} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginTop:7}}>
-                <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
-                  <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{folioN(fac.invoice_no)?`N°${folioN(fac.invoice_no)}`:'sin folio'}</span>
-                  <span style={{fontSize:12,fontWeight:700,color:C.text}}>{fmtM(fac.amount)}</span>
-                </div>
-                <div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}{fac.receptor_rut?` · ${fac.receptor_rut}`:''}</div>
-                <div style={{fontSize:10,color:C.muted,marginBottom:4}}>{fac.paid_at?`cobrada ${fmtFechaDMY(fac.paid_at)}`:`emitida ${fmtFechaDMY(fac.issued_at)} · sin fecha de pago`}{it.parcial?` · parcial (falta ${fmtM((fac.amount||0)-(aplicadoByFactura[fac.id]||0))})`:''}{fac.concept?` · ${fac.concept}`:''}</div>
-                {it.cls==='exacto'&&<Deposito c={it.best} fac={fac}/>}
-                {it.cls==='revisar'&&<>
-                  <div style={{fontSize:10,fontWeight:600,color:C.soonText,marginTop:2}}>{it.ex.length>1?`${it.ex.length} pagos calzan exacto — elige`:'sin calce exacto — revisa los cercanos'}</div>
-                  {(pickFac===fac.id?it.cs:it.cs.slice(0,3)).map(c=><Deposito key={c.m.id} c={c} fac={fac}/>)}
-                  {it.cs.length>3&&<button onClick={()=>setPickFac(pickFac===fac.id?null:fac.id)} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',marginTop:3,padding:0}}>{pickFac===fac.id?'ver menos':`ver ${it.cs.length-3} más`}</button>}
-                </>}
-                {it.cls==='sinpago'&&<div style={{fontSize:10.5,color:C.muted,marginTop:2}}>{it.historica?'Histórica (antes de feb-2025): pagada antes de la integración bancaria, sin respaldo esperado.':'No hay un pago que calce en la cartola cargada. Carga ese mes de cartola o revísalo en el Banco.'}</div>}
-              </div>
-            )})}
+        {/* FOTO: protagonista = lo accionable (tiene pago en la cartola); lo demás baja */}
+        <div style={{border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:14}}>
+          <div style={{background:C.greenBg,padding:'14px 15px',display:'flex',alignItems:'center',gap:13}}>
+            <div style={{fontSize:30,fontWeight:800,color:C.greenText,lineHeight:1,letterSpacing:'-1px'}}>{nAcc}</div>
+            <div style={{fontSize:12.5,color:C.greenText,fontWeight:600}}>por conciliar<div style={{color:C.muted,fontWeight:500,fontSize:11,marginTop:2}}>tienen el pago en la cartola cargada — falta ligarlos</div></div>
           </div>
-        )})}
+          <div style={{display:'flex',borderTop:`1px solid ${C.border}`}}>
+            <div style={{flex:1,padding:'9px 14px',fontSize:11.5}}><b style={{fontSize:15,fontWeight:800,color:C.greenText,display:'block'}}>{nExacto}</b>calce exacto</div>
+            <div style={{flex:1,padding:'9px 14px',fontSize:11.5,borderLeft:`1px solid ${C.border}`}}><b style={{fontSize:15,fontWeight:800,color:C.soonText,display:'block'}}>{nRev}</b>por revisar</div>
+          </div>
+        </div>
+
+        {nAcc===0&&<div style={{fontSize:12.5,color:C.muted,padding:'2px 2px 12px'}}>Ninguna cobrada de {yr==='todos'?'la historia':yr} tiene un pago en la cartola por ligar. Lo que queda está más abajo, sin acción.</div>}
+
+        {/* CALCE EXACTO: listado y visible + atajo de lote */}
+        {nExacto>0&&<>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',margin:'6px 2px 8px'}}>
+            <span style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:C.muted}}>Calce exacto · {nExacto}</span>
+            <button disabled={loteBusy||!!busy} onClick={conciliarExactos} style={{fontSize:10.5,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 11px',cursor:(loteBusy||busy)?'default':'pointer',opacity:(loteBusy||busy)?.7:1}}>{loteBusy?`Conciliando ${loteProg}/${nExacto}…`:`Conciliar los ${nExacto}`}</button>
+          </div>
+          {(showEx?exactos:exactos.slice(0,4)).map(it=>FacCard(it))}
+          {verMas(exactos.length-4,showEx,setShowEx,'más de calce exacto')}
+        </>}
+
+        {/* POR REVISAR */}
+        {nRev>0&&<>
+          {secLbl(`Por revisar · ${nRev}`)}
+          {(showRev?revisarL:revisarL.slice(0,6)).map(it=>FacCard(it))}
+          {verMas(revisarL.length-6,showRev,setShowRev,'más por revisar')}
+        </>}
+
+        {/* SIN RESPALDO: colapsado, honesto (nada de "cargar cartola") */}
+        {nSin>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:12,background:C.bgSoft,marginTop:16,overflow:'hidden'}}>
+          <div onClick={()=>setOpenHist(!openHist)} style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'12px 14px',cursor:'pointer',gap:10}}>
+            <div><div style={{fontSize:13,fontWeight:800,color:C.text}}>{nSin} sin respaldo en el banco</div><div style={{fontSize:10.5,color:C.muted,marginTop:2}}>No hay un pago que calce, y no se espera cartola de esos meses. No requieren conciliación.</div></div>
+            <span style={{color:C.done,flexShrink:0}}>{openHist?'▾':'▸'}</span>
+          </div>
+          {openHist&&<div style={{padding:'0 14px 12px'}}>
+            {histor.length>0&&<div style={{paddingTop:9,borderTop:`1px solid ${C.border}`}}><div style={{fontSize:11.5,color:C.text}}><b>{histor.length} históricas</b> · antes de feb-2025</div><div style={{fontSize:10.5,color:C.muted,marginTop:2}}>Pagadas antes de la integración bancaria. Sin respaldo esperado — se dejan así.</div></div>}
+            {otros.length>0&&<div style={{paddingTop:10,marginTop:9,borderTop:`1px solid ${C.border}`}}><div style={{fontSize:11.5,color:C.text}}><b>{otros.length} sin depósito que calce</b></div><div style={{fontSize:10.5,color:C.muted,marginTop:2}}>Marcadas como pagadas pero sin movimiento en la cartola: cobros en efectivo, otra cuenta, o una marca de Pagado sin depósito real. No hay nada que conciliar; revisa solo si crees que alguna quedó mal marcada como pagada.</div>
+              <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>{otros.slice(0,40).map(it=>{ const fac=it.fac; const rs=fac.receptor_name||cmap[fac.client_id]||'—'
+                return <div key={fac.id} onClick={()=>onOpenClientFicha&&fac.client_id&&onOpenClientFicha(fac.client_id)} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'6px 9px',background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,cursor:onOpenClientFicha?'pointer':'default'}}>
+                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.accent,fontWeight:600}}>{rs}{folioN(fac.invoice_no)?` · N°${folioN(fac.invoice_no)}`:''}</span>
+                  <span style={{color:C.muted,whiteSpace:'nowrap',flexShrink:0}}>{fmtM(fac.amount)}{fac.paid_at?` · ${fmtFechaDMY(fac.paid_at)}`:''}</span>
+                </div> })}
+                {otros.length>40&&<div style={{fontSize:10.5,color:C.faint||C.muted,textAlign:'center',paddingTop:3}}>y {otros.length-40} más</div>}</div>
+            </div>}
+          </div>}
+        </div>}
       </>}
     </Modal>
   )
@@ -25349,7 +25394,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           )}
         </div>
         )})()}
-        {cobradasOpen&&<CobradasSinRespaldoModal billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onClose={()=>setCobradasOpen(false)}/>}
+        {cobradasOpen&&<CobradasSinRespaldoModal billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onOpenClientFicha={onOpenClientFicha} onClose={()=>setCobradasOpen(false)}/>}
 
         {/* Por resolver — estados como TILES de color (canon aging), cada uno filtra la lista a su fuente. Conciliados y "pagadas sin respaldo" (facturas, tema aparte) van debajo. */}
         {sub==='abonos'&&(()=>{
