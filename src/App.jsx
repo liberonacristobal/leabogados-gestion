@@ -24196,10 +24196,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const saldoAFavor = async(mov)=>{
     if(busy) return
     if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ appAlert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
+    const resto = (mov.monto||0) - (mov.monto_conciliado||0)
+    // Compuerta anti-duplicado (espeja la de fondos, #4): si el cliente ya tiene un anticipo del mismo monto SIN respaldo
+    // bancario (cargado a mano), ofrecer VINCULARLO a esta transferencia en vez de crear otro. Evita el doble de Gabriela.
+    const _dup = anticipoExistente(mov, resto)
+    if(_dup && await appConfirm(`Este cliente ya tiene un anticipo de ${fmtM(_dup.monto||0)}${_dup.fecha?' del '+fmtFechaDMY(_dup.fecha):''} cargado a mano (sin respaldo bancario).\n\nAceptar = VINCULAR ese anticipo a esta transferencia (no duplica).\nCancelar = crear uno NUEVO.`)){ await vincularAnticipo(mov, _dup.id, resto); return }
     setBusy(mov.id)
     let ant=null, cr=null
     try{
-      const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       // Enlaza el adelanto a la venta del cliente (si tiene UNA sola) para que entre al flujo
       // ya construido "Anticipos y cuotas" (Aplicar a cuotas / Emitir factura). Antes quedaba
       // flotando sin sale_id y se emitia una factura aparte -> doble registro (caso Gabriela).
@@ -24266,6 +24270,26 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(me){ await supabase.from('conciliacion').delete().eq('id',ic.data.id); throw me }
       setConc(p=>[...p,ic.data]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x))
     }catch(e){ appAlert('Error al vincular el fondo: '+e.message) }
+    setBusy(null)
+  }
+  // Anti-duplicado de anticipos (espeja fondoExistente/vincularFondo): un anticipo del mismo cliente y monto SIN respaldo
+  // bancario (no conciliado y no creado por este flujo) es candidato a VINCULAR en vez de duplicar (raíz del doble de Gabriela).
+  const anticipoExistente = (mov, monto) => {
+    const cid = mov.cliente_id; if(!cid) return null
+    const conBanco = new Set(conc.filter(c=>c.tipo_destino==='anticipo'&&c.anticipo_id).map(c=>String(c.anticipo_id)))
+    return (anticipos||[]).find(a=> String(a.client_id)===String(cid) && Math.abs((a.monto||0)-monto)<=TOL && (a.monto||0)>0 && !conBanco.has(String(a.id)) && !/conciliaci[oó]n/i.test(a.nota||'')) || null
+  }
+  // Vincula un anticipo YA existente (sin respaldo) a este movimiento del banco, sin crear otro.
+  const vincularAnticipo = async(mov, anticipoId, monto) => {
+    setBusy(mov.id)
+    try{
+      const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:anticipoId, monto_aplicado:monto, origen:'manual' }).select().single()
+      if(ic.error) throw ic.error
+      const nuevoConc=(mov.monto_conciliado||0)+monto
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConc }).eq('id',mov.id)
+      if(me){ await supabase.from('conciliacion').delete().eq('id',ic.data.id); throw me }
+      setConc(p=>[...p,ic.data]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x)); setPickFor(null)
+    }catch(e){ appAlert('Error al vincular el anticipo: '+e.message) }
     setBusy(null)
   }
   // Fase 3.A — Provisión → fondo: acredita el abono al fondo del cliente (crea expenses type='fondo'), enlazado y reversible.
@@ -27062,18 +27086,11 @@ export default function App() {
     setSaving(false)
   },[clients,clientEntities,terceros,proveedores,user])
 
-  // Anticipos (PP-15): crear un anticipo disponible
-  const handleSaveAnticipo=useCallback(async(f)=>{
-    setSaving(true)
-    try{
-      const payload={client_id:f.client_id,monto:parseInt(f.monto)||0,fecha:f.fecha||new Date().toISOString().slice(0,10),nota:f.nota||null,proyecto:f.proyecto||null,sale_id:f.sale_id||null,estado:'disponible',created_by:user?.name||null}
-      const {data,error}=await supabase.from('anticipos').insert(payload).select().single()
-      if(error)throw error
-      setAnticipos(p=>[data,...p])
-      setModal(null)
-    }catch(e){appAlert('Error: '+e.message)}
-    setSaving(false)
-  },[user])
+  // Anticipos: NO se crean a mano (seria crear una cifra sin respaldo). Solo nacen de la conciliacion
+  // bancaria (saldoAFavor/splitAdelantoFondo en ConciliacionView), con su movimiento_id y respaldo del banco.
+  const handleSaveAnticipo=useCallback(async(_f)=>{
+    appAlert('Los anticipos se registran solo desde la Conciliación bancaria (deben tener respaldo del banco). No se crean a mano.')
+  },[])
 
   // Anticipos (PP-15 commit 3): aplicar anticipos a una factura → consumidos + factura Pagada
   const [anticipoPanel,setAnticipoPanel]=useState(null)
@@ -27986,7 +28003,14 @@ export default function App() {
             </div>
           )
         })()}
-        {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
+        {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)}><div style={{padding:'22px 24px',maxWidth:400}}>
+          <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:8}}>Los anticipos vienen del banco</div>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.6,marginBottom:18}}>Un anticipo es plata que <b style={{color:C.text}}>entró a la cuenta</b>. No se registra a mano — sería crear una cifra sin respaldo (fue la causa del doble de un cliente). Se crea al <b style={{color:C.text}}>conciliar el depósito</b> en Conciliación bancaria → "Pago sin factura", y así queda enlazado a su movimiento.</div>
+          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+            <button onClick={()=>setModal(null)} style={{padding:'9px 14px',borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+            <button onClick={()=>{setModal(null);setTab('conciliacion')}} style={{padding:'9px 16px',borderRadius:9,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Ir a Conciliación &rarr;</button>
+          </div>
+        </div></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
