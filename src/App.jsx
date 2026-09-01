@@ -7850,6 +7850,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   useEffect(()=>{ contarSinRegistrar() },[])   // badge del hub: cargas sin registrar // eslint-disable-line
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
+  const isDesktop = useIsDesktop()   // Fase 3: en desktop, la lista de facturas se alinea como tabla
   const [agingF,setAgingF] = useState('')   // filtro por tramo de antigüedad de vencimiento ('1-30'|'31-60'|'61-90'|'90'); '' = todos. Lo setean los chips de "Vencido por antigüedad" de la foto.
   const [groupOpen,setGroupOpen] = usePersistedState('bill_grp',{})   // colapso por grupo (Pagadas/Anuladas cerrados por defecto)
   const [rsSel,setRsSel] = useState({})   // filtro por razón social dentro de cada cliente: clientId → entityId | 'all'
@@ -9360,7 +9361,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
           const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conciliable}); const col=est.color; const ui=ufInfoDe(b); const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const rsN=(()=>{ const e=efEntity(b); if(e?.name) return rsDisplay(e.name); if(b.receptor_name) return rsDisplay(b.receptor_name); if(cli&&cli.id){ const rl=rsLabel(cli.id,clients,clientEntities); if(rl.multi) return 'Sin razón social'; if(rl.name&&rl.name!==cli.name) return rsDisplay(rl.name) } return null })(); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',marginBottom:5,overflow:'hidden'}}>
-              <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',cursor:'pointer'}}>
+              <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 180px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <SIcon n={est.icon} s={15} c={col}/>
                 <div style={{minWidth:0,flex:1}}>
@@ -9601,7 +9602,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const defC=lbl=>lbl==='Pagadas'||lbl==='Anuladas'
           const filaAll=b=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conc.has(b.id)}); const col=est.color; const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',marginBottom:5,overflow:'hidden'}}>
-              <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',cursor:'pointer'}}>
+              <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 180px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <SIcon n={est.icon} s={15} c={col}/>
                 <div style={{minWidth:0,flex:1}}>
