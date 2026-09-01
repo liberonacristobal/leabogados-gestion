@@ -8855,7 +8855,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
-              <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
+              <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{position:'absolute',width:1,height:1,opacity:0,pointerEvents:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
               {mesTandaReq&&<MesTandaModal def={mesTandaReq.def} onPick={v=>{ mesTandaReq.resolve(v); setMesTandaReq(null) }}/>}
               {respaldoRes&&(()=>{
                 const g=k=>respaldoRes.filter(r=>r.estado===k)
@@ -9075,7 +9075,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </button>)
             const svg=d=><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
             return <div>
-              {opt(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar archivo','Carga el XML del SII desde tus Descargas',()=>{setXmlHub(false);respaldoRef.current&&respaldoRef.current.click()})}
+              {opt(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar archivo','Carga el XML del SII desde tus Descargas',()=>{ respaldoRef.current&&respaldoRef.current.click(); setTimeout(()=>setXmlHub(false),0) })}
               {opt(svg(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>),{bg:C.soonBg,fg:C.soonText},'Cargadas sin registrar','Cargas pendientes de registrar — retómalas cuando quieras',()=>{ if(cargandoStage) return; cargarSinRegistrar() },sinRegN)}
               {opt(svg(<><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></>),{bg:C.azulBg,fg:C.accent},'Historial de cargas','Tus cargas anteriores',()=>{setXmlHub(false);abrirHistCargas()})}
               <div style={{fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:9,padding:'10px 12px',textAlign:'center',lineHeight:1.4}}><b style={{color:'#0B5A46'}}>Lo cargado queda guardado aunque salgas.</b> Lo registras cuando quieras.</div>
