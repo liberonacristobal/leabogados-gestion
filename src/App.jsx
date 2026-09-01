@@ -3873,6 +3873,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
 // El código calcula; el Resumen IA (claudeCall) se suma en una etapa siguiente.
 const IA_SPK = (<svg width='10' height='10' viewBox='0 0 24 24' fill='currentColor' style={{display:'inline-block',verticalAlign:'-1px',marginRight:4}}><path d='M12 2l1.5 5.5L19 9l-5.5 1.5L12 16l-1.5-5.5L5 9l5.5-1.5z'/></svg>)
 function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha, onOpenSale}){
+  const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [openOpp,setOpenOpp] = useState(null)
   const [openSeg,setOpenSeg] = useState(null)   // segmento de cartera abierto
   const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
@@ -4093,7 +4094,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   }
 
   return (
-    <div>
+    <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div><div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Inteligencia</div><div style={{fontSize:10.5,color:C.muted,fontWeight:500,marginTop:1}}>oportunidades y salud de los proyectos</div></div>
@@ -4400,6 +4401,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
 }
 
 function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha}) {
+  const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
   const [fStatus,setFStatus] = useState('Activo')
@@ -4522,7 +4524,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   }
 
   return (
-    <div>
+    <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
@@ -19432,6 +19434,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
 }
 
 function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName,setTab,isAdmin,onOpenClientFicha}) {
+  const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [vistaCalendario,setVistaCalendario] = useState(false)
   const [semanaOffset,setSemanaOffset] = useState(0)
   const hoy = new Date()
@@ -19599,7 +19602,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   // Abre la sección y hace scroll hasta ella (las pills del hero llevan a su tema).
   const goSec = (setter,id)=>{ setter&&setter(true); setVerArchivadas(false); setTimeout(()=>{ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}) },70) }
   return (
-    <div>
+    <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
       {/* Recordatorio caja chica (solo quien tiene caja activa): sin cargar gastos hace ≥10 días y/o fondo bajo */}
       {(nudgeCargar||nudgeLiquidar)&&(
         <div style={{padding:'14px 20px 0'}}>
@@ -22051,6 +22054,7 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
 // Señal: si el cliente consume en promedio más horas/mes de las que su honorario incluye (a la tarifa del estudio),
 // el honorario quedó corto. Propone subirlo a lo que valdría el consumo real. Genera carta borrador (no envía).
 function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
+  const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const [horas,setHoras] = useState([])
   const [tarifaUF,setTarifaUF] = useState(3)
   const [ufAnio,setUfAnio] = useState(0)
@@ -22114,7 +22118,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
   const visibles = recos.filter(r=>decid[r.cid]!=='descartado')
 
   return (
-    <div style={{padding:'12px 14px 40px',maxWidth:560,margin:'0 auto'}}>
+    <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?900:560,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Repricing</div>
         {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
@@ -22154,6 +22158,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
 function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFicha, onClose }){
+  const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const LIBERAR_UMBRAL = 3
   const [recMap,setRecMap] = useState({})      // factura.id → fecha ISO último recordatorio
   const [okCount,setOkCount] = useState({})    // client_id → nº de tandas confirmadas (aprendizaje)
@@ -22206,7 +22211,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const NIV = { firme:{bg:C.soonBg,tx:C.soonText,lbl:'Firme'}, final:{bg:C.overdueBg,tx:C.overdueText,lbl:'Final'} }
 
   return (
-    <div style={{padding:'12px 14px 40px',maxWidth:560,margin:'0 auto'}}>
+    <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?900:560,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Cobranza</div>
         {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
@@ -22253,6 +22258,7 @@ function extraerTextoGmail(msg){
   return t.replace(/\r?\n/g,' ').replace(/&nbsp;/g,' ').trim()
 }
 function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, onOpenClientFicha, onOpenCostosOfi }){
+  const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const me = currentUserName || ''
   const [horas,setHoras] = useState([])
   const [manual,setManual] = useState(false)
@@ -22560,7 +22566,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const lbl = {fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'2px 2px 8px'}
 
   return (
-    <div style={{padding:'12px 14px 40px',maxWidth:560,margin:'0 auto'}}>
+    <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?940:560,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Horas</div>
         <span style={{fontSize:11,color:C.done}}>Esta semana: <b style={{color:C.accent}}>{fh(totSem)}</b></span>
@@ -22944,6 +22950,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
 }
 
 function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+  const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
   // Motor de movimiento = FUENTE ÚNICA global carteraMovimiento (definida a nivel módulo; la comparte el Inicio).
@@ -23358,7 +23365,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   }
 
   return (
-    <div style={{ maxWidth:720, margin:'0 auto', padding:'0 14px 40px' }}>
+    <div style={{ maxWidth:isDesktop?1040:720, margin:'0 auto', padding:'0 14px 40px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
         <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
         <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:17, fontWeight:600, color:C.accent }}>Proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</div><div style={{ fontSize:10, color:C.muted, fontWeight:500, marginTop:1 }}>seguimiento de proyectos activos</div></div>
