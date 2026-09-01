@@ -28404,6 +28404,10 @@ export default function App() {
           .lf-kpi{transition:box-shadow .14s ease,transform .14s ease}
           .lf-kpi:hover{box-shadow:0 4px 16px rgba(0,60,80,.12)}
           .sidenav button:hover{background:rgba(255,255,255,.07)!important}
+          /* Legibilidad fina: solo las fuentes MAS chicas (labels/captions <11px) suben a un piso de 11px en escritorio.
+             Selector por el estilo inline que React serializa ("font-size: 9px") + !important (gana sobre inline). Solo >=1024 -> movil intacto.
+             El resto (11px+) ya quedaba bien con el zoom; esto NO cambia layout global, solo levanta el piso de los mas chicos. */
+          [style*="font-size: 8px"],[style*="font-size: 8.5px"],[style*="font-size: 9px"],[style*="font-size: 9.5px"],[style*="font-size: 10px"],[style*="font-size: 10.5px"]{font-size:11px!important}
           .dash-cols{column-count:2;column-gap:18px;max-width:1280px;margin:0 auto}
           .dash-cols>*{break-inside:avoid;margin-bottom:2px}
           .dash-cols>:first-child{column-span:all}
