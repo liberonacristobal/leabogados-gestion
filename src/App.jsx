@@ -24200,7 +24200,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let ant=null, cr=null
     try{
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
-      const ia = await supabase.from('anticipos').insert({ client_id:mov.cliente_id, monto:resto, fecha:mov.fecha, nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:user?.email||null }).select().single()
+      // Enlaza el adelanto a la venta del cliente (si tiene UNA sola) para que entre al flujo
+      // ya construido "Anticipos y cuotas" (Aplicar a cuotas / Emitir factura). Antes quedaba
+      // flotando sin sale_id y se emitia una factura aparte -> doble registro (caso Gabriela).
+      const _sids = [...new Set((billing||[]).filter(b=>String(b.client_id)===String(mov.cliente_id)&&b.sale_id).map(b=>String(b.sale_id)))]
+      const _saleId = _sids.length===1 ? _sids[0] : null
+      const ia = await supabase.from('anticipos').insert({ client_id:mov.cliente_id, sale_id:_saleId, monto:resto, fecha:mov.fecha, nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:user?.email||null }).select().single()
       if(ia.error) throw ia.error
       ant=ia.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:ant.id, monto_aplicado:resto, origen:'manual' }).select().single()
@@ -24223,7 +24228,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let ant=null, fondo=null; const crs=[]
     try{
       if(adel>0){
-        const ia = await supabase.from('anticipos').insert({ client_id:mov.cliente_id, monto:adel, fecha:mov.fecha, nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:user?.email||null }).select().single()
+        const _sids = [...new Set((billing||[]).filter(b=>String(b.client_id)===String(mov.cliente_id)&&b.sale_id).map(b=>String(b.sale_id)))]
+        const _saleId = _sids.length===1 ? _sids[0] : null
+        const ia = await supabase.from('anticipos').insert({ client_id:mov.cliente_id, sale_id:_saleId, monto:adel, fecha:mov.fecha, nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:user?.email||null }).select().single()
         if(ia.error) throw ia.error; ant=ia.data
         const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:ant.id, monto_aplicado:adel, origen:'manual' }).select().single()
         if(ic.error) throw ic.error; crs.push(ic.data)
