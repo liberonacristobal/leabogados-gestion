@@ -13344,12 +13344,14 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
 
 function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,onMoverAOficina,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened,costosOfiMes=0,onOpenCostosOfi}) {
   const { catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, notaBtnOpen, setNotaBtnOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, verTodos, setVerTodos, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, costosOfiMes, onOpenCostosOfi })
+  // Hub de Gastos: cara de entrada (hero Por cobrar/A favor + 6 tarjetas). Al tocar una tarjeta se navega a la vista existente. Presentación pura — no toca cifras.
+  const [hubOpen,setHubOpen] = useState(true)
   // Parte B (desktop 2-panel): ↑/↓ recorren la lista de clientes (misma que el panel izq), Esc vuelve al dashboard. No dispara si escribes o hay un modal.
   useEffect(()=>{ if(!isDesktop) return
     const h=e=>{
       if(e.key!=='ArrowDown'&&e.key!=='ArrowUp'&&e.key!=='Escape') return
       const tg=(e.target?.tagName||'').toLowerCase(); if(tg==='input'||tg==='textarea'||tg==='select'||e.target?.isContentEditable) return
-      if(rendicionClient||attachExpense||liqDetail||emailRend||devEmailRend||showNotaria||showHistorial||showOrphans||showClasificar||showRevision) return
+      if(hubOpen||rendicionClient||attachExpense||liqDetail||emailRend||devEmailRend||showNotaria||showHistorial||showOrphans||showClasificar||showRevision) return
       if(e.key==='Escape'){ if(selectedClient){ e.preventDefault(); setSelectedClient(null) } return }
       const saldoDe=c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
       let list=filteredClients
@@ -13362,20 +13364,20 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       setSelectedClient(list[ni])
     }
     document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h)
-  },[isDesktop,selectedClient,filteredClients,balances,saldoFilter,q,rendicionClient,attachExpense,liqDetail,emailRend,devEmailRend,showNotaria,showHistorial,showOrphans,showClasificar,showRevision])
+  },[isDesktop,hubOpen,selectedClient,filteredClients,balances,saldoFilter,q,rendicionClient,attachExpense,liqDetail,emailRend,devEmailRend,showNotaria,showHistorial,showOrphans,showClasificar,showRevision])
   useEffect(()=>{ if(!isDesktop||!selectedClient) return; try{ document.querySelector('aside [data-cid="'+String(selectedClient.id)+'"]')?.scrollIntoView({block:'nearest'}) }catch(_){} },[selectedClient,isDesktop])
   const body = (
     <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {(selectedClient||showOrphans||showNotaria||showHistorial)&&(
-              <button onClick={()=>{setSelectedClient(null);setShowOrphans(false);setShowNotaria(false);setShowHistorial(false)}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+            {(selectedClient||showOrphans||showNotaria||showHistorial||!hubOpen)&&(
+              <button onClick={()=>{ if(selectedClient){setSelectedClient(null);return} setShowOrphans(false);setShowNotaria(false);setShowHistorial(false);setHubOpen(true) }} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
             )}
             <div>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-                  {showHistorial?'Historial':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
+                  {showHistorial?'Historial':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ficha →</span>}
                 {selectedClient&&!esOficina(selectedClient.id)&&(()=>{
@@ -14162,6 +14164,59 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {devEmailRend&&<DevolucionEmailModal client={devEmailRend.client} rend={devEmailRend.rend} rendN={devEmailRend.rend?.correlativo} amount={devEmailRend.amount} fecha={devEmailRend.fecha} user={currentUser} setRendiciones={setRendiciones} onClose={()=>setDevEmailRend(null)}/>}
     </div>
   )
+  // ── HUB de Gastos (cara de entrada). Presentación pura: mismas cifras auditadas, sin recalcular nada.
+  const showHub = hubOpen && !selectedClient && !showOrphans && !showNotaria && !showHistorial
+  if(showHub){
+    const D = isDesktop
+    const saldoDe = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
+    const activos = clientsWithMovs.filter(c=>c.status!=='Terminado')
+    const negL = activos.filter(c=>saldoDe(c)<0)
+    const posL = activos.filter(c=>saldoDe(c)>0)
+    const porCobrar = Math.abs(negL.reduce((a,c)=>a+saldoDe(c),0))
+    const aFavor = posL.reduce((a,c)=>a+saldoDe(c),0)
+    const nSin = orphans.length + revN(revNoActivo) + revN(revOcasional)
+    const goDir = f=>{ setSaldoFilter(f); setHubOpen(false) }
+    const cards = [
+      {t:'Clientes', s:`${activos.length} con movimiento`, col:C.accent, bg:C.azulBg, badge:null, go:()=>goDir('todos')},
+      {t:'Cargar', s:'Gasto, fondo o masiva', col:C.accent, bg:C.azulBg, badge:null, go:()=>{setHubOpen(false);setNotaMenuOpen(true)}},
+      {t:'Rendiciones', s:rendirPend.length?'Gastos por rendir':'Al día', col:C.greenText, bg:C.greenBg, badge:rendirPend.length||null, go:()=>{setHubOpen(false);setTimeout(()=>{try{document.getElementById('conviene-rendir')?.scrollIntoView({behavior:'smooth',block:'start'})}catch(_){}},80)}},
+      {t:'Notaría', s:notariaPend.length?'Por liquidar':'Sin pendientes', col:C.tealText, bg:C.tealBg, badge:notariaPend.length||null, go:()=>setShowNotaria(true)},
+      {t:'Sin asignar', s:nSin?'Por revisar':'Todo asignado', col:C.soonText, bg:C.soonBg, badge:nSin||null, go:()=>setShowRevision(true)},
+      {t:'Historial', s:'Rendiciones y notaría', col:C.muted, bg:C.bgSoft, badge:null, go:()=>setShowHistorial(true)},
+    ]
+    const hero = (label,amount,n,sub,barCol,txtCol,bgCol,onClick)=>(
+      <div onClick={onClick} style={{cursor:'pointer',background:bgCol,border:`1px solid ${C.border}`,borderLeft:`4px solid ${barCol}`,borderRadius:14,padding:D?'16px 18px':'13px 15px'}}>
+        <div style={{fontSize:10.5,fontWeight:700,letterSpacing:.6,color:txtCol,textTransform:'uppercase',marginBottom:5}}>{label}</div>
+        <div style={{fontSize:D?27:23,fontWeight:800,color:txtCol,fontVariantNumeric:'tabular-nums',lineHeight:1.05,letterSpacing:-.5}}>{fmt(amount)}</div>
+        <div style={{fontSize:11.5,color:C.muted,marginTop:5}}>{n} {n===1?'cliente':'clientes'} · {sub}</div>
+      </div>
+    )
+    const hubInner = (
+      <div style={{maxWidth:D?860:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
+        <div style={{padding:D?'14px 2px 12px':'16px 8px 10px'}}>
+          <div style={{fontSize:D?22:20,fontWeight:700,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Gastos y Fondos</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:2}}>Fondos de clientes y gastos del estudio</div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr':'1fr',gap:D?14:9,marginBottom:D?18:12,padding:D?0:'0 2px'}}>
+          {hero('Por cobrar',porCobrar,negL.length,'la oficina puso fondos',C.overdue,C.overdueText,C.overdueBg,()=>goDir('neg'))}
+          {hero('A favor de clientes',aFavor,posL.length,'fondos en custodia',C.accent,C.accent,C.azulBg,()=>goDir('pos'))}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr':'1fr 1fr',gap:D?12:8,padding:D?0:'0 2px'}}>
+          {cards.map(c=>(
+            <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderLeft:`3px solid ${c.col}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',justifyContent:'space-between',minHeight:D?86:76}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
+                <span style={{fontSize:14.5,fontWeight:700,color:C.text}}>{c.t}</span>
+                {c.badge!=null&&<span style={{fontSize:11,fontWeight:800,color:c.col,background:c.bg,borderRadius:20,padding:'2px 8px',fontVariantNumeric:'tabular-nums',flexShrink:0}}>{c.badge}</span>}
+              </div>
+              <div style={{fontSize:11.5,color:C.muted,marginTop:6}}>{c.s}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+    if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}</div>
+    return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}</div>
+  }
   if(isDesktop) return (
     <div style={{display:'grid',gridTemplateColumns:'320px 1fr',height:'calc(100vh - 66px)'}}>
       <aside style={{borderRight:`1px solid ${C.border}`,height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg,display:'flex',flexDirection:'column'}}>
