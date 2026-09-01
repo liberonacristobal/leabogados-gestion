@@ -204,7 +204,8 @@ serve(async (req) => {
     if (soloNombres) nombres = nombres.filter(n=> soloNombres.includes(n));
 
     for (const nombre of nombres) {
-      const to = testTo || EMAIL[nombre];
+      // enviarA (solo por cron con secreto): redirige el DESTINO a otra bandeja para previsualizar el correo de esta persona.
+      const to = (esCron && body.enviarA) ? String(body.enviarA).toLowerCase().trim() : (testTo || EMAIL[nombre]);
       if (!to) continue;
       const d = datosDe(nombre);
       const nG=d.gastos.length, nC=(d.caja&&d.caja.nLiq)||0, nT=d.vencidas.length+d.semana.length, nN=d.notaria?(d.notaria.nOt+d.notaria.nCorreos):0;
