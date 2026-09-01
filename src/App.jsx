@@ -4776,6 +4776,11 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],p
   const [cuotaEdits,setCuotaEdits] = useState({})   // ediciones inline de cuotas programadas guardadas {id:{due,amount}} (amount en la unidad cuotaUnit)
   const [savingCuotas,setSavingCuotas] = useState(false)
   const [cuotaUnit,setCuotaUnit] = useState(sale?.moneda||'UF')   // unidad para editar las cuotas (parte por la de la venta)
+  const [moverYM,setMoverYM] = useState('')         // nuevo mes de inicio para CORRER todas las cuotas programadas juntas
+  const [pausFromId,setPausFromId] = useState('')   // cuota desde la que se PAUSA (esa y las siguientes)
+  const [reactOpen,setReactOpen] = useState(false)  // panel para reactivar cuotas pausadas
+  const [reactFromId,setReactFromId] = useState('') // cuota desde la que se REANUDA
+  const [reactMonth,setReactMonth] = useState('')   // YYYY-MM de la 1ª factura al reactivar
   const [costMode,setCostMode] = useState('fijo')
   const [costPct,setCostPct] = useState('')
   // Reparto del costo de terceros entre proveedores. Para venta existente se ancla por billing_id;
@@ -5663,7 +5668,39 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               })()}
               {(()=>{
                 const prog=(billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
-                if(prog.length===0) return null
+                const paus=(billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.status==='Pausada'&&!b.deleted_at).sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
+                if(prog.length===0 && paus.length===0) return null
+                const cuotaLbl = b => (b.concept&&b.concept.includes('—')) ? (b.concept.split('—').pop()||'').trim() : (b.due||'')
+                const mesCuota = ym => { if(!ym) return ''; const [yy,mm]=ym.split('-'); return `${MONTHS[(+mm)-1]||''} ${yy}` }
+                const primerMes = prog[0] ? (prog[0].due||'').slice(0,7) : ''
+                // Mover inicio: corre TODAS las programadas por el mismo delta de meses (preserva montos y espaciado). Las emitidas/pagadas no entran (prog ya es solo 'Programada').
+                const moverInicio = async(nuevoYM) => {
+                  if(!nuevoYM || !primerMes || !prog.length) return
+                  const [oy,om]=primerMes.split('-').map(Number); const [ny,nm]=nuevoYM.split('-').map(Number)
+                  const delta=(ny-oy)*12+(nm-om); if(delta===0){ setMoverYM(''); return }
+                  const ok=await appConfirm(`Mover ${prog.length} cuota${prog.length!==1?'s':''} ${delta>0?'+':''}${delta} mes${Math.abs(delta)!==1?'es':''}. Se corren todas juntas; montos y espaciado no cambian. Las emitidas no se tocan. ¿Continuar?`)
+                  if(!ok) return
+                  const shift=due=>{ const [yy,mm]=(due||'').slice(0,7).split('-').map(Number); let cy=yy,cm=mm+delta; while(cm>12){cm-=12;cy++} while(cm<1){cm+=12;cy--} return `${cy}-${String(cm).padStart(2,'0')}-01` }
+                  await onUpdateCuotas?.(prog.map(b=>({id:b.id,due:shift(b.due)}))); setMoverYM('')
+                }
+                // Pausar: la cuota elegida y TODAS las siguientes (por fecha) pasan a 'Pausada' → salen de proyección/checklist/export solas (esos filtran por 'Programada').
+                const pausarDesde = async() => {
+                  const from = prog.find(x=>String(x.id)===String(pausFromId)) || prog[0]
+                  if(!from) return
+                  const idx = prog.findIndex(x=>x.id===from.id); const afectadas = prog.slice(idx)
+                  const ok = await appConfirm(`Pausar ${afectadas.length} cuota${afectadas.length!==1?'s':''} desde ${cuotaLbl(from)}. Salen de la proyección, el checklist y el export hasta reactivar. ¿Continuar?`)
+                  if(!ok) return
+                  await onUpdateCuotas?.(afectadas.map(x=>({id:x.id,status:'Pausada'}))); setPausFromId('')
+                }
+                // Reactivar: reanuda desde la cuota elegida, re-anclando su devengo al mes elegido y corriendo las siguientes mes a mes. Vuelven a 'Programada'.
+                const reactivar = async() => {
+                  if(!reactMonth) return
+                  const from = paus.find(x=>String(x.id)===String(reactFromId)) || paus[0]
+                  const idx = paus.findIndex(x=>x.id===from.id); const afectadas = paus.slice(idx)
+                  const [yy,mm]=reactMonth.split('-').map(Number)
+                  const ups = afectadas.map((x,i)=>{ let cy=yy,cm=mm+i; while(cm>12){cm-=12;cy++} return {id:x.id,due:`${cy}-${String(cm).padStart(2,'0')}-01`,status:'Programada'} })
+                  await onUpdateCuotas?.(ups); setReactOpen(false); setReactFromId(''); setReactMonth('')
+                }
                 const uf = parseFloat(f.uf_value)||ufVal||0
                 const esUF = cuotaUnit==='UF' && uf>0
                 // amount de edición se guarda en la unidad cuotaUnit; a CLP para comparar/persistir.
@@ -5677,13 +5714,20 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   setSavingCuotas(true); await onUpdateCuotas?.(ups); setCuotaEdits({}); setSavingCuotas(false)
                 }
                 return (<>
-                  {row('Cuotas programadas',`${prog.length} pendiente${prog.length!==1?'s':''}`,'cuotasprog',false)}
+                  {row('Cuotas programadas',`${prog.length} pendiente${prog.length!==1?'s':''}${paus.length?` · ${paus.length} pausada${paus.length!==1?'s':''}`:''}`,'cuotasprog',false)}
                   {openCondicion==='cuotasprog'&&(
                     <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
                         <span style={{fontSize:11,color:C.muted,lineHeight:1.4,flex:1}}>Ajusta fecha o monto sin rehacer todo. Las emitidas/pagadas no aparecen.</span>
                         {uf>0&&<div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:7,overflow:'hidden',flexShrink:0}}>{['UF','CLP'].map(u=>(<button key={u} type='button' onClick={()=>{ if(u!==cuotaUnit) toggleUnit() }} style={{padding:'4px 10px',border:'none',background:cuotaUnit===u?C.accent:'#fff',color:cuotaUnit===u?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{u}</button>))}</div>}
                       </div>
+                      {prog.length>0&&(
+                        <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:10,paddingBottom:10,borderBottom:`1px solid ${C.border}`}}>
+                          <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>Mover inicio a</span>
+                          <input type='month' value={moverYM||primerMes} onChange={e=>setMoverYM(e.target.value)} style={{fontSize:13,padding:'7px 8px',border:`1px solid ${C.border}`,borderRadius:8,background:'#fff',color:C.text}}/>
+                          <button type='button' onClick={()=>moverInicio(moverYM||primerMes)} style={chipBtn('primary')}>Correr todas</button>
+                        </div>
+                      )}
                       {prog.map(b=>{ const e=cuotaEdits[b.id]||{}; const due=e.due!==undefined?e.due:(b.due||''); const amount=e.amount!==undefined?e.amount:fromCLP(b.amount||0); return (
                         <div key={b.id} style={{display:'grid',gridTemplateColumns:'1.1fr 1fr',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                           <Fld label={b.concept&&b.concept.includes('Cuota')?(b.concept.split('—').pop()||'').trim():'Vence'}><Inp type='date' value={due} onChange={ev=>setCuotaEdits(p=>({...p,[b.id]:{...p[b.id],due:ev.target.value}}))}/></Fld>
@@ -5694,6 +5738,27 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                         </div>
                       )})}
                       {cambios&&<button type='button' onClick={guardar} disabled={savingCuotas} style={{...chipBtn('soft'),marginTop:2,opacity:savingCuotas?.6:1}}>{savingCuotas?'Guardando…':'Guardar cambios'}</button>}
+                      {prog.length>0&&(
+                        <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+                          <span style={{fontSize:11,color:C.muted}}>Pausar desde</span>
+                          <select value={pausFromId||(prog[0]?.id||'')} onChange={e=>setPausFromId(e.target.value)} style={{fontSize:12,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:7,background:'#fff',color:C.text}}>{prog.map(b=><option key={b.id} value={b.id}>{cuotaLbl(b)} · {mesCuota((b.due||'').slice(0,7))}</option>)}</select>
+                          <button type='button' onClick={pausarDesde} style={chipBtn('soft')}>Pausar</button>
+                        </div>
+                      )}
+                      {paus.length>0&&(
+                        <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+                          <div style={{fontSize:11,fontWeight:700,color:C.soonText,marginBottom:6}}>Pausadas · {paus.length}</div>
+                          {paus.map(b=>(<div key={b.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:C.muted,padding:'2px 0'}}><span>{cuotaLbl(b)} · {mesCuota((b.due||'').slice(0,7))}</span><span>{fmt(b.amount||0)}</span></div>))}
+                          {!reactOpen
+                            ? <button type='button' onClick={()=>{setReactOpen(true);setReactFromId(paus[0]?.id||'');setReactMonth('')}} style={{...chipBtn('soft'),marginTop:8}}>Reactivar…</button>
+                            : (<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:8}}>
+                                <Fld label='Reanudar desde'><select value={reactFromId||(paus[0]?.id||'')} onChange={e=>setReactFromId(e.target.value)} style={{width:'100%',fontSize:13,padding:'8px',border:`1px solid ${C.border}`,borderRadius:8,background:'#fff',color:C.text}}>{paus.map(b=><option key={b.id} value={b.id}>{cuotaLbl(b)}</option>)}</select></Fld>
+                                <Fld label='1ª factura en'><Inp type='month' value={reactMonth} onChange={e=>setReactMonth(e.target.value)}/></Fld>
+                                <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}><button type='button' onClick={()=>setReactOpen(false)} style={chipBtn('soft')}>Cancelar</button><button type='button' disabled={!reactMonth} onClick={reactivar} style={{...chipBtn('primary'),opacity:reactMonth?1:.5}}>Reactivar</button></div>
+                              </div>)
+                          }
+                        </div>
+                      )}
                     </div>
                   )}
                 </>)
@@ -28443,7 +28508,11 @@ export default function App() {
   const handleUpdateCuotas=useCallback(async(updates)=>{
     try{
       for(const u of updates){
-        const patch={due:u.due,amount:u.amount,updated_at:new Date().toISOString()}
+        // Parche solo con los campos presentes (due/amount para editar; status para pausar/reactivar). Así un update de solo-status no borra due/amount.
+        const patch={updated_at:new Date().toISOString()}
+        if(u.due!==undefined) patch.due=u.due
+        if(u.amount!==undefined) patch.amount=u.amount
+        if(u.status!==undefined) patch.status=u.status
         const {error}=await supabase.from('billing').update(patch).eq('id',u.id)
         if(error) throw error
         setBilling(p=>p.map(x=>x.id===u.id?{...x,...patch}:x))
