@@ -3027,7 +3027,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   }
 
   return (
-    <div>
+    <div className='dash-cols'>
 
       {/* Accesos directos + Mis proyectos */}
       {onAcceso&&(()=>{
@@ -28295,6 +28295,9 @@ export default function App() {
           .apphead{padding-top:18px!important}
           #main-scroll{padding-bottom:28px!important}
           .bottomnav{display:none!important}
+          .dash-cols{column-count:2;column-gap:18px;max-width:1280px;margin:0 auto}
+          .dash-cols>*{break-inside:avoid;margin-bottom:2px}
+          .dash-cols>:first-child{column-span:all}
         }
         .fecha-short{display:none}
         .qt-head{padding:18px 20px 14px}
