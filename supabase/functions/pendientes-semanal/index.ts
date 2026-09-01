@@ -163,7 +163,7 @@ serve(async (req) => {
     const HAIR="#EAEEF0", INK="#1F2A30", MUT="#66787F", FAINT="#9DAEB4", NV="#003C50";
     const GRN="#147D5C", GRNBG="#E7F5EE", AMB="#9A6410", AMBBG="#FAF0DA";
     const sec = (n:string,label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${n} · ${label}</span></div>`;
-    const cta = (txt:string,color:string)=> `<div style="margin-top:12px;"><a href="https://gestion.leabogados.cl" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${txt} &rarr;</a></div>`;
+    const cta = (txt:string,color:string,url:string="https://gestion.leabogados.cl")=> `<div style="margin-top:12px;"><a href="${url}" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${txt} &rarr;</a></div>`;
 
     const cobrosHtml = (arr:any[]) => {
       if (!arr.length) return "";
@@ -180,7 +180,7 @@ serve(async (req) => {
         `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Estos clientes <b style="color:${INK};">ya te pagaron</b> —hay un depósito en la cuenta corriente de la oficina— pero el pago <b style="color:${INK};">no está vinculado a su factura</b>, así que la factura sigue apareciendo como vencida. Revisa que el depósito corresponda y <b style="color:${INK};">concílialo</b>: la factura pasa a pagada y el vencido de tu cartera baja.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRNBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${GRN};font-weight:600;">${arr.length} cliente${arr.length!==1?"s":""} con pagos esperando</td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Por conciliar</span> <span style="font-size:16px;font-weight:800;color:${GRN};margin-left:6px;">${fmt(total)}</span></td></tr></table>`+
-        cta("Conciliar estos cobros",GRN)+`</div>`;
+        cta("Conciliar estos cobros",GRN,"https://gestion.leabogados.cl/?ir=cobros")+`</div>`;
     };
 
     const dupHtml = (folios:any[], ants:any[]) => {
@@ -193,7 +193,7 @@ serve(async (req) => {
         `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Algunos de tus clientes tienen la <b style="color:${INK};">misma factura o anticipo cargado dos veces</b> (un folio repetido, o un pago a mano que también entró por el banco). Eso <b style="color:${INK};">infla su saldo y descuadra las cifras</b>. La app ya detectó cuál es el documento real y cuál la copia — tú solo <b style="color:${INK};">confirmas y retiras la copia</b> (reversible).</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rowsF}${rowsA}</table>`+
         `<div style="font-size:11.5px;color:${FAINT};margin-top:10px;">${total} documento${total!==1?"s":""} duplicado${total!==1?"s":""} en ${nCli} de tus clientes.</div>`+
-        cta("Limpiar estos duplicados",AMB)+`</div>`;
+        cta("Limpiar estos duplicados",AMB,"https://gestion.leabogados.cl/?ir=duplicados")+`</div>`;
     };
 
     // Sección 3 (solo admins): depósitos y duplicados sin cliente/abogado, para que Cristóbal y Erasmo los tomen entre los dos.
@@ -211,7 +211,7 @@ serve(async (req) => {
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
         masCob + dupLine +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${AZBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${NV};font-weight:600;">${cobros.length} depósito${cobros.length!==1?"s":""} sin identificar <span style="color:${MUT};font-weight:400;">· entre los dos</span></td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Por asignar</span> <span style="font-size:16px;font-weight:800;color:${NV};margin-left:6px;">${fmt(totCob)}</span></td></tr></table>`+
-        cta("Identificar y asignar",NV)+`</div>`;
+        cta("Identificar y asignar",NV,"https://gestion.leabogados.cl/?ir=sinasignar")+`</div>`;
     };
 
     const armar = (nombre:string, cobros:any[], folios:any[], ants:any[], srCobros:any[]=[], srDup:any[]=[]) => {
