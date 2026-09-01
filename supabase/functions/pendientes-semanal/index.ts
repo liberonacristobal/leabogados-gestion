@@ -66,7 +66,7 @@ serve(async (req) => {
         const res = await Promise.all([
           sb.from("clients").select("id,name,abogado_responsable"),
           sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,due,issued_at,paid_at,deleted_at,billing_type,receptor_name,sii_synced_at,sii_tipo_dte,dte_track_id"),
-          sb.from("cartola_movimientos").select("id,fecha,monto,monto_conciliado,n_operacion,cliente_id,tipo,estado,es_interno").eq("tipo","abono").in("estado",["pendiente","parcial"]),
+          sb.from("cartola_movimientos").select("id,fecha,monto,monto_conciliado,n_operacion,nombre_contraparte,cliente_id,tipo,estado,es_interno").eq("tipo","abono").in("estado",["pendiente","parcial"]),
           sb.from("anticipos").select("id,client_id,monto,fecha,nota"),
           sb.from("conciliacion").select("anticipo_id,tipo_destino"),
         ]);
@@ -82,6 +82,7 @@ serve(async (req) => {
     const cli = (id:any)=> (clients||[]).find((c:any)=>String(c.id)===String(id));
     const cname = (id:any)=> cli(id)?.name || "Cliente";
     const respDeCliente = (cid:any)=> cli(cid)?.abogado_responsable || null;
+    const ADMINS = ["Cristóbal","Erasmo"];   // lo sin responsable se informa a ambos admins
 
     const hoyCL = new Date().toLocaleDateString("en-CA",{ timeZone:"America/Santiago" });
     const t0 = Date.parse(hoyCL);
@@ -103,12 +104,13 @@ serve(async (req) => {
     // Abono con cliente asignado, sin conciliar (saldo>0). Contexto: facturas del cliente por cobrar (emitidas, no pagadas).
     const emitidasVivas = (billing||[]).filter((b:any)=> !b.deleted_at && b.invoice_no && /\d/.test(String(b.invoice_no)) && b.status!=="Anulada" && b.status!=="Pagado" && (b.billing_type||"")!=="reembolso");
     const cobrosDe: Record<string, any[]> = {};
+    const sinRespCobros: any[] = [];   // abonos sin cliente, o con cliente sin abogado_responsable → van a ambos admins
     (movs||[]).forEach((m:any)=>{
       if (m.es_interno) return;
-      if (!m.cliente_id) return;
       const saldo = (Number(m.monto)||0) - (Number(m.monto_conciliado)||0);
       if (saldo <= 0) return;
-      const resp = respDeCliente(m.cliente_id); if (!resp) return;
+      const resp = m.cliente_id ? respDeCliente(m.cliente_id) : null;
+      if (!resp) { sinRespCobros.push({ fecha:m.fecha, saldo, op:m.n_operacion, quien: m.cliente_id?cname(m.cliente_id):(m.nombre_contraparte||""), conNombre: !!(m.cliente_id||m.nombre_contraparte) }); return; }
       // Contexto: facturas por cobrar del cliente + la que mejor calza por monto.
       const abiertas = emitidasVivas.filter((b:any)=> String(b.client_id)===String(m.cliente_id));
       const porCobrar = abiertas.reduce((s:number,b:any)=> s+(Number(b.amount)||0), 0);
@@ -118,6 +120,7 @@ serve(async (req) => {
       (cobrosDe[resp]=cobrosDe[resp]||[]).push({ mov:m, saldo, cli:cname(m.cliente_id), porCobrar, nVenc:vencidas.length, calza, dvCalza: calza?diasVenc(calza.due):null });
     });
     Object.values(cobrosDe).forEach(arr=> arr.sort((a,b)=> b.saldo-a.saldo));
+    sinRespCobros.sort((a,b)=> b.saldo-a.saldo);
 
     // ── (2) Documentos duplicados (subconjunto SEGURO: folios repetidos + anticipos a mano que calzan con el banco) ──
     const actB = (billing||[]).filter((b:any)=> !b.deleted_at && b.status!=="Anulada" && (b.billing_type||"")!=="reembolso");
@@ -125,13 +128,16 @@ serve(async (req) => {
     const folioGroups: Record<string, any[]> = {};
     actB.forEach((b:any)=>{ const f=folioDig(b.invoice_no); if(!f) return; const k=`${b.client_id}|${f}`; (folioGroups[k]=folioGroups[k]||[]).push(b); });
     const dupFolioDe: Record<string, any[]> = {};
+    const sinRespDup: any[] = [];
     Object.values(folioGroups).forEach((g:any[])=>{
       if (g.length<2) return;
       const cid = g[0].client_id;
-      const resp = respDeCliente(cid); if (!resp) return;
       const keep = [...g].sort((a,b)=> ((a.sii_synced_at?0:1)-(b.sii_synced_at?0:1)) || ((b.status==="Pagado"?1:0)-(a.status==="Pagado"?1:0)))[0];
       const drops = g.filter((x:any)=> x.id!==keep.id);
-      (dupFolioDe[resp]=dupFolioDe[resp]||[]).push({ cli:cname(cid), folio:folioDig(keep.invoice_no), n:drops.length, monto:drops.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0) });
+      const rec = { cli:cname(cid), folio:folioDig(keep.invoice_no), n:drops.length, monto:drops.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0), tipo:"folio" };
+      const resp = respDeCliente(cid);
+      if (!resp) { sinRespDup.push(rec); return; }
+      (dupFolioDe[resp]=dupFolioDe[resp]||[]).push(rec);
     });
 
     // Anticipos a mano que calzan con el banco (antDup, espejo del módulo).
@@ -146,7 +152,9 @@ serve(async (req) => {
       const bk = banksByCli[String(a.client_id)]||[]; if (!bk.length) return;
       const suma = bk.reduce((s:number,b:any)=> s+(Number(b.monto)||0), 0);
       if (Math.abs(suma-m)<=1 || bk.some((b:any)=> Math.abs((Number(b.monto)||0)-m)<=1)) {
-        const resp = respDeCliente(a.client_id); if (!resp) return;
+        const rec = { cli:cname(a.client_id), monto:m, tipo:"anticipo", n:1 };
+        const resp = respDeCliente(a.client_id);
+        if (!resp) { sinRespDup.push(rec); return; }
         (dupAntDe[resp]=dupAntDe[resp]||[]).push({ cli:cname(a.client_id), monto:m });
       }
     });
@@ -188,12 +196,31 @@ serve(async (req) => {
         cta("Limpiar estos duplicados",AMB)+`</div>`;
     };
 
-    const armar = (nombre:string, cobros:any[], folios:any[], ants:any[]) => {
+    // Sección 3 (solo admins): depósitos y duplicados sin cliente/abogado, para que Cristóbal y Erasmo los tomen entre los dos.
+    const AZBG = "#EAF0F3";
+    const sinRespHtml = (cobros:any[], dups:any[]) => {
+      const totCob = cobros.reduce((s:number,x:any)=> s+x.saldo, 0);
+      const nItems = cobros.length + dups.reduce((s:number,x:any)=> s+(x.n||1), 0);
+      if (!nItems) return "";
+      const top = cobros.slice(0, 8);
+      const rows = top.map((x:any,i:number)=> `<tr><td style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}"><div style="font-size:13.5px;font-weight:700;color:${INK};">${esc(x.quien || "Sin nombre en la cartola")}</div><div style="font-size:11px;color:${MUT};margin-top:3px;line-height:1.4;">Depósito del <b>${esc(fDia(x.fecha))}</b>${x.op?` · Op. ${esc(String(x.op))}`:""}${x.conNombre?"<br>Trae nombre — vincúlalo a su ficha":"<br>Identifícalo y asígnalo a un cliente"}</div></td><td align="right" valign="top" style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}white-space:nowrap;"><span style="font-size:15px;font-weight:800;color:${NV};">${fmt(x.saldo)}</span></td></tr>`).join("");
+      const dupLine = dups.length ? `<div style="font-size:11.5px;color:${MUT};margin-top:10px;">Además, ${dups.reduce((s:number,x:any)=>s+(x.n||1),0)} documento(s) duplicado(s) de clientes sin abogado asignado.</div>` : "";
+      const masCob = cobros.length>top.length ? `<div style="font-size:11.5px;color:${FAINT};margin-top:9px;">y ${cobros.length-top.length} depósito(s) más sin identificar.</div>` : "";
+      return `<div style="padding:24px 26px 4px;">${sec("3","Sin responsable asignado",NV)}`+
+        `<div style="background:${AZBG};border-radius:10px;padding:10px 13px;margin:0 0 13px;font-size:11.5px;color:${NV};line-height:1.5;">Estos depósitos <b>no tienen cliente ni abogado</b> asociado, así que no caen en la cartera de nadie. Aparecen en el correo de <b>Cristóbal y Erasmo</b> — <b>revísenlos entre los dos</b>: identifiquen de quién es cada uno y asígnenlo a su cliente para que deje de quedar suelto.</div>`+
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
+        masCob + dupLine +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${AZBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${NV};font-weight:600;">${cobros.length} depósito${cobros.length!==1?"s":""} sin identificar <span style="color:${MUT};font-weight:400;">· entre los dos</span></td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Por asignar</span> <span style="font-size:16px;font-weight:800;color:${NV};margin-left:6px;">${fmt(totCob)}</span></td></tr></table>`+
+        cta("Identificar y asignar",NV)+`</div>`;
+    };
+
+    const armar = (nombre:string, cobros:any[], folios:any[], ants:any[], srCobros:any[]=[], srDup:any[]=[]) => {
       const nCob = cobros.length, nDup = folios.reduce((s:number,x:any)=>s+x.n,0)+ants.length;
-      const resumen = (nCob||nDup)
-        ? `${nCob?`<b style="color:${GRN};font-weight:700;">${nCob} cobro${nCob!==1?"s":""} por registrar</b>`:""}${nCob&&nDup?" · ":""}${nDup?`<b style="color:${AMB};font-weight:700;">${nDup} duplicado${nDup!==1?"s":""} por limpiar</b>`:""}. Cada uno tiene su propia acción abajo.`
+      const nSr = srCobros.length + srDup.reduce((s:number,x:any)=>s+(x.n||1),0);
+      const resumen = (nCob||nDup||nSr)
+        ? `${nCob?`<b style="color:${GRN};font-weight:700;">${nCob} cobro${nCob!==1?"s":""} por registrar</b>`:""}${nCob&&(nDup||nSr)?" · ":""}${nDup?`<b style="color:${AMB};font-weight:700;">${nDup} duplicado${nDup!==1?"s":""} por limpiar</b>`:""}${nDup&&nSr?" · ":""}${nSr?`<b style="color:${NV};font-weight:700;">${srCobros.length} depósito${srCobros.length!==1?"s":""} sin identificar</b>`:""}. Cada tema tiene su propia acción abajo.`
         : `Nada pendiente de tus clientes esta semana.`;
-      const cH = cobrosHtml(cobros), dH = dupHtml(folios, ants);
+      const cH = cobrosHtml(cobros), dH = dupHtml(folios, ants), sH = sinRespHtml(srCobros, srDup);
       return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;background:#ECEFF1;padding:22px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
@@ -204,31 +231,37 @@ serve(async (req) => {
   </div>
   ${cH}
   ${dH}
-  ${(!cH&&!dH)?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin cobros por registrar ni duplicados por limpiar. Todo en orden.</div>`:`<div style="height:8px;"></div>`}
+  ${sH}
+  ${(!cH&&!dH&&!sH)?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin cobros por registrar ni duplicados por limpiar. Todo en orden.</div>`:`<div style="height:8px;"></div>`}
   <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
 </div></body></html>`;
     };
 
     const dryRun = !!body.dryRun;
     const sent:any[] = [];
-    // Destinatarios: quien tenga algo pendiente (o todos los que tienen clientes, si testTo).
+    const haySinResp = sinRespCobros.length + sinRespDup.length > 0;
+    // Destinatarios: quien tenga algo pendiente propio; y los admins también si hay algo sin responsable.
     let nombres = testTo ? [ NAME_OF_EMAIL[testTo] || "Cristóbal" ]
-                         : Object.keys(EMAIL).filter(n=> (cobrosDe[n]||[]).length || (dupFolioDe[n]||[]).length || (dupAntDe[n]||[]).length);
+                         : Object.keys(EMAIL).filter(n=> (cobrosDe[n]||[]).length || (dupFolioDe[n]||[]).length || (dupAntDe[n]||[]).length || (haySinResp && ADMINS.includes(n)));
     if (soloNombres) nombres = nombres.filter(n=> soloNombres.includes(n));
 
     for (const nombre of nombres) {
       const to = testTo || EMAIL[nombre];
       if (!to) continue;
+      const esAdmin = ADMINS.includes(nombre);
       const cobros = cobrosDe[nombre]||[], folios = dupFolioDe[nombre]||[], ants = dupAntDe[nombre]||[];
+      const srCob = esAdmin ? sinRespCobros : [], srDup = esAdmin ? sinRespDup : [];
       const nCob = cobros.length, nDup = folios.reduce((s:number,x:any)=>s+x.n,0)+ants.length;
-      if (!testTo && !nCob && !nDup) continue;   // en cron real no mandar correos vacíos
-      const html = armar(nombre, cobros, folios, ants);
-      const subject = nCob && nDup ? `Pendientes · ${nCob} cobro${nCob!==1?"s":""} y ${nDup} duplicado${nDup!==1?"s":""}`
-        : nCob ? `Pendientes · ${nCob} cobro${nCob!==1?"s":""} por registrar`
-        : nDup ? `Pendientes · ${nDup} duplicado${nDup!==1?"s":""} por limpiar`
-        : `Pendientes de tus clientes`;
+      const nSr = srCob.length + srDup.reduce((s:number,x:any)=>s+(x.n||1),0);
+      if (!testTo && !nCob && !nDup && !nSr) continue;   // en cron real no mandar correos vacíos
+      const html = armar(nombre, cobros, folios, ants, srCob, srDup);
+      const partes:string[] = [];
+      if (nCob) partes.push(`${nCob} cobro${nCob!==1?"s":""}`);
+      if (nDup) partes.push(`${nDup} duplicado${nDup!==1?"s":""}`);
+      if (srCob.length) partes.push(`${srCob.length} sin identificar`);
+      const subject = partes.length ? `Pendientes · ${partes.join(" · ")}` : `Pendientes de tus clientes`;
       if (!dryRun) await sendMail(to, subject, html);
-      sent.push({ nombre, to, cobros:nCob, duplicados:nDup, ...(dryRun?{subject,html}:{}) });
+      sent.push({ nombre, to, cobros:nCob, duplicados:nDup, sinResp:nSr, ...(dryRun?{subject,html}:{}) });
     }
 
     return new Response(JSON.stringify({ ok:true, modo: testTo?"prueba":"cron", dryRun, sent, count:sent.length }), { headers:{ "Content-Type":"application/json", "Access-Control-Allow-Origin":"*" } });
