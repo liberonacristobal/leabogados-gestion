@@ -152,7 +152,7 @@ serve(async (req) => {
     const cajaHtml = (d:any) => {
       if (!d.caja || (d.caja.nLiq===0)) return "";
       const c = d.caja;
-      return `<div style="padding:24px 26px 4px;">${sec("2","Caja chica por liquidar",TEAL)}`+
+      return `<div style="padding:16px 26px 4px;">${sec("1","Caja chica por liquidar",TEAL)}`+
         `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Tienes gastos de caja chica <b style="color:${INK};">sin liquidar</b>. Liquídalos para <b style="color:${INK};">reponer el fondo</b> y que la caja no se descuadre.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${TEALBG};border-radius:12px;"><tr><td style="padding:14px 16px;"><div style="font-size:12.5px;color:${TEAL};font-weight:700;">${c.nLiq} gasto${c.nLiq!==1?"s":""} sin liquidar</div><div style="font-size:11px;color:${MUT};margin-top:3px;">Saldo en tu caja chica: <b style="color:${INK};">${fmt(c.saldo)}</b></div></td><td align="right" style="padding:14px 16px;white-space:nowrap;"><span style="font-size:16px;font-weight:800;color:${TEAL};">${fmt(c.montoLiq)}</span></td></tr></table>`+
         cta("Liquidar caja chica",TEAL,"cajachica")+`</div>`;
@@ -164,7 +164,7 @@ serve(async (req) => {
       const tr = (x:any, venc:boolean)=> `<tr><td style="padding:10px 0;border-top:1px solid ${HAIR};"><div style="font-size:13.5px;font-weight:600;color:${INK};line-height:1.4;">${esc(x.t.title||"Tarea")}</div><div style="font-size:11px;color:${MUT};margin-top:2px;">${x.t.client_id?esc(cname(x.t.client_id))+" · ":""}${x.t.due?(venc?"venció":"vence")+" "+fDia(x.t.due):"sin fecha"}</div></td><td align="right" valign="top" style="padding:10px 0 10px 10px;border-top:1px solid ${HAIR};white-space:nowrap;">${venc?pill(x.d===-1?"ayer":`hace ${-x.d} d`,REDBG,RED):pill(x.d===0?"hoy":x.d===1?"mañana":`en ${x.d} d`,AMBBG,AMB)}</td></tr>`;
       const rows = [...d.vencidas.map((x:any)=>tr(x,true)), ...d.semana.map((x:any)=>tr(x,false))].join("");
       const nV=d.vencidas.length, nS=d.semana.length;
-      return `<div style="padding:24px 26px 4px;">${sec("3","Tus tareas de la semana",AMB)}`+
+      return `<div style="padding:24px 26px 4px;">${sec("2","Tus tareas de la semana",AMB)}`+
         `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">${nV?`<b style="color:${RED};">${nV} vencida${nV!==1?"s":""}</b>`:""}${nV&&nS?" · ":""}${nS?`${nS} esta semana`:""}.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
         cta("Ver mis tareas",AMB,"tareas")+`</div>`;
@@ -176,14 +176,15 @@ serve(async (req) => {
       const partes:string[] = [];
       if (n.nOt) partes.push(`<b style="color:${INK};">${n.nOt} OT sin liquidar</b> (${fmt(n.montoOt)})`);
       if (n.nCorreos) partes.push(`<b style="color:${INK};">${n.nCorreos} correo${n.nCorreos!==1?"s":""} a notaría sin cerrar</b>`);
-      return `<div style="padding:24px 26px 4px;">${sec("4","Notaría",NV)}`+
+      return `<div style="padding:24px 26px 4px;">${sec("3","Notaría",NV)}`+
         `<div style="font-size:12.5px;color:${MUT};margin:0 0 12px;line-height:1.6;">${partes.join(" · ")}. Liquida las OT a la notaría y cierra los correos pendientes para dejar el ciclo al día.</div>`+
         cta("Ver notaría",NV,"gastos")+`</div>`;
     };
 
     const armar = (nombre:string, d:any) => {
-      const gH=gastosHtml(d), cH=cajaHtml(d), tH=tareasHtml(d), nH=notariaHtml(d);
-      const algo = gH||cH||tH||nH;
+      // La rendición al cliente no es tarea del equipo limitado (ellos aportan la información); no se muestra esa sección.
+      const cH=cajaHtml(d), tH=tareasHtml(d), nH=notariaHtml(d);
+      const algo = cH||tH||nH;
       return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;background:#ECEFF1;padding:22px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
@@ -192,7 +193,7 @@ serve(async (req) => {
     <div style="font-size:19px;color:${INK};font-weight:800;letter-spacing:-.3px;">Hola, ${esc(nombre)}</div>
     <div style="font-size:12.5px;color:${MUT};margin-top:6px;line-height:1.55;"><span style="text-transform:uppercase;letter-spacing:.7px;font-size:10px;color:${FAINT};font-weight:700;">Tu semana · ${esc(rango)}</span><br>Esto es lo tuyo por cerrar esta semana. Cada tema tiene su acción abajo.</div>
   </div>
-  ${gH}${cH}${tH}${nH}
+  ${cH}${tH}${nH}
   ${!algo?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Nada pendiente esta semana. Todo al día.</div>`:`<div style="height:8px;"></div>`}
   <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
 </div></body></html>`;
@@ -208,16 +209,16 @@ serve(async (req) => {
       const to = (esCron && body.enviarA) ? String(body.enviarA).toLowerCase().trim() : (testTo || EMAIL[nombre]);
       if (!to) continue;
       const d = datosDe(nombre);
-      const nG=d.gastos.length, nC=(d.caja&&d.caja.nLiq)||0, nT=d.vencidas.length+d.semana.length, nN=d.notaria?(d.notaria.nOt+d.notaria.nCorreos):0;
-      if (!testTo && !nG && !nC && !nT && !nN) continue;
+      const nC=(d.caja&&d.caja.nLiq)||0, nT=d.vencidas.length+d.semana.length, nN=d.notaria?(d.notaria.nOt+d.notaria.nCorreos):0;
+      if (!testTo && !nC && !nT && !nN) continue;
       const html = armar(nombre, d);
       const partes:string[] = [];
-      if (nG) partes.push(`${nG} por rendir`);
-      if (nC) partes.push(`caja chica`);
       if (d.vencidas.length) partes.push(`${d.vencidas.length} tarea${d.vencidas.length!==1?"s":""} vencida${d.vencidas.length!==1?"s":""}`);
+      if (nC) partes.push(`caja chica`);
+      if (nN) partes.push(`notaría`);
       const subject = partes.length ? `Tu semana · ${partes.slice(0,2).join(" · ")}` : `Tu semana`;
       if (!dryRun) await sendMail(to, subject, html);
-      sent.push({ nombre, to, gastos:nG, caja:nC, tareas:nT, notaria:nN, ...(dryRun?{subject,html}:{}) });
+      sent.push({ nombre, to, caja:nC, tareas:nT, notaria:nN, ...(dryRun?{subject,html}:{}) });
     }
 
     return new Response(JSON.stringify({ ok:true, modo: testTo?"prueba":"cron", dryRun, sent, count:sent.length }), { headers:{ "Content-Type":"application/json", "Access-Control-Allow-Origin":"*" } });
