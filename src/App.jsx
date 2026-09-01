@@ -28395,7 +28395,7 @@ export default function App() {
           /* Legibilidad en escritorio: los tamaños inline estan pensados para el telefono (mano); en monitor se leen de mas lejos.
              Zoom a nivel body (como el zoom del navegador: usa el viewport de referencia -> sin desborde horizontal ni romper alturas vh).
              Sube TODO ~8% de forma consistente (sidebar, contenido, modales) SIN tocar el movil (<1024) ni retocar px inline. */
-          body{zoom:1.08}
+          body{zoom:1.18}
           .bottomnav{display:none!important}
           /* Parte B: afordancia de hover (no existe en tactil). Wash translucido en filas + lift en tarjetas clickeables.
              box-shadow inset no pelea con el background inline (que a veces marca seleccion) -> seguro y universal. */
