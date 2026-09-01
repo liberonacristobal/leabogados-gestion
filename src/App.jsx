@@ -590,7 +590,7 @@ function rsBalances(clientId, expenses, entities){
     if(e.entity_id&&byId[e.entity_id]) b=byId[e.entity_id]
     else if(single&&buckets.length) b=buckets[0]
     else { b=sinRS; sinRS.n++ }
-    if(e.type==='fondo') b.fondos+=(e.amount||0); else if(!e.no_descuenta_saldo && !e.paid_by_client) b.gastos+=(e.amount||0)   // REGLA DE ORO: excluye no_descuenta_saldo Y paid_by_client (lo pagó el cliente directo)
+    if(e.type==='fondo') b.fondos+=(e.amount||0); else if(!e.no_descuenta_saldo) b.gastos+=(e.amount||0)   // TODOS los gastos cuentan (notaría incluida); solo excluye no_descuenta_saldo (histórico). Ver auditoría fondos.
   })
   const ws = b=>({...b,saldo:b.fondos-b.gastos})
   const porRS = buckets.map(ws)
@@ -12608,7 +12608,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     expenses.forEach(e=>{
       if(!m[e.client_id]) m[e.client_id]={fondos:0,gastos:0,sinAsignar:0}
       if(e.type==='fondo') m[e.client_id].fondos+=(e.amount||0)
-      else if(!e.no_descuenta_saldo && !e.paid_by_client) m[e.client_id].gastos+=(e.amount||0)   // REGLA DE ORO: el saldo excluye no_descuenta_saldo (histórico) Y paid_by_client (lo pagó el cliente directo — casi todo Notaría). Sin esto el saldo descuenta plata que NO salió del fondo → infla "por reembolsar" y subestima "a favor".
+      else if(!e.no_descuenta_saldo) m[e.client_id].gastos+=(e.amount||0)   // saldo = fondos transferidos − gastos realizados. TODOS los gastos cuentan (notaría incluida, la pague quien la pague); solo se excluye no_descuenta_saldo (histórico ya saldado fuera de la app). NO excluir paid_by_client: la notaría es un gasto realizado que consume el fondo o genera deuda del cliente.
       if(!e.entity_id) m[e.client_id].sinAsignar+=1
     })
     return m
