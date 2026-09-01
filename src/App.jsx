@@ -17246,13 +17246,13 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
     const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+saldoDelta(e) }); return m
   },[expenses])
 
+  const isDesktop = useIsDesktop()   // Fase 2: en desktop, lista + ficha lado a lado (2-paneles)
   // Proveedores inline (mismo formato que clientes: lista → ficha, pantalla completa)
   if(verProv) return (
     <ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={onSaveProveedor} onRevertirPago={onRevertirPagoProveedor} onAsignarFacturas={onAsignarFacturas} onOpenSale={onOpenSale} onClose={()=>setVerProv(false)} saving={provSaving}/>
   )
 
-  if(selected) return (
-    <>
+  const fichaEl = selected ? (
       <ClientFicha
         client={selected}
         respaldoMap={respaldoMap}
@@ -17291,9 +17291,58 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         user={user}
         onRendicionSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))}
       />
-      {rendicionClient&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>}
-    </>
+  ) : null
+  const rendModal = rendicionClient?(<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>):null
+
+  // DESKTOP: 2-paneles maestro-detalle — lista (izq) + ficha (der). Reusa cl/balances/ClientFicha; el móvil no cambia.
+  if(isDesktop) return (
+    <div style={{display:'grid',gridTemplateColumns:'336px 1fr',height:'calc(100vh - 66px)',borderTop:`1px solid ${C.border}`}}>
+      <div style={{borderRight:`1px solid ${C.border}`,overflowY:'auto',background:C.bg}}>
+        <div style={{padding:'14px 14px 10px',position:'sticky',top:0,background:C.bg,zIndex:5}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
+            <div style={{fontSize:16,fontWeight:700,color:C.text}}>Clientes <span style={{fontSize:12,color:C.done,fontWeight:500}}>· {cl.length}</span></div>
+            <div style={{display:'flex',gap:6}}><button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),color:C.accent}}>Comisiones</button><button onClick={onAdd} style={chipBtn('primary')}>+ Cliente</button></div>
+          </div>
+          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…'/>
+          <div style={{display:'flex',gap:5,marginTop:8}}>
+            {[['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>{ const on=(v==='Activo'&&!sFilter)||sFilter===v; return (
+              <button key={v} onClick={()=>{setSFilter(v==='Activo'?null:v);setRespSel(new Set())}} style={{flex:1,padding:'5px 0',borderRadius:7,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.muted,fontSize:10.5,fontWeight:600,cursor:'pointer'}}>{l}</button>
+            )})}
+          </div>
+        </div>
+        <div style={{padding:'2px 8px 24px'}}>
+          {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13}}>Sin clientes</div>}
+          {cl.map(c=>{
+            const rs=rsLabel(c.id,clients,clientEntities); const sub=rs.multi?`${rs.multi} razones sociales`:(rs.name&&rs.name!==c.name?rsDisplay(rs.name):(c.type||'Sin razón social'))
+            const bal=balances[c.id]||0, tareasC=tareasDe[c.id]||0
+            const on=selected&&String(selected.id)===String(c.id)
+            const ini=(c.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+            const ended=c.status==='Terminado'
+            return (
+              <div key={c.id} onClick={()=>{setForceFtab(null);setExtOpen(false);setSelected(c)}} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:9,cursor:'pointer',marginBottom:1,background:on?C.azulBg:'transparent',opacity:ended?.55:1}} onMouseEnter={e=>{if(!on)e.currentTarget.style.background=C.bgSoft}} onMouseLeave={e=>{if(!on)e.currentTarget.style.background='transparent'}}>
+                <span style={{width:30,height:30,borderRadius:8,background:C.accent,color:'#fff',fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:on?700:600,color:on?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div><div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div></div>
+                {tareasC>0&&<span style={{fontSize:9,fontWeight:800,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 6px',flexShrink:0}}>{tareasC}</span>}
+                {bal<0&&<span style={{fontSize:11,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmt(bal)}</span>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <div style={{overflowY:'auto',background:C.bg}}>
+        {selected ? fichaEl : (
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',color:C.done,gap:11,padding:40,textAlign:'center'}}>
+            <svg width='44' height='44' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.3'><rect x='4' y='3' width='16' height='18' rx='2'/><circle cx='12' cy='10' r='2.5'/><path d='M8.5 17a3.5 3.5 0 0 1 7 0'/></svg>
+            <div style={{fontSize:15,fontWeight:700,color:C.muted}}>Elige un cliente</div>
+            <div style={{fontSize:12.5,maxWidth:240}}>Su ficha aparece aquí, a la derecha, sin perder la lista.</div>
+          </div>
+        )}
+      </div>
+      {rendModal}
+    </div>
   )
+
+  if(selected) return (<>{fichaEl}{rendModal}</>)
 
   return (
     <div>
