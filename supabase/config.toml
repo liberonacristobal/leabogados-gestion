@@ -38,3 +38,8 @@ entrypoint = "./functions/procesar-cartola/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/clientes-drive-sync/index.ts"
+
+[functions.pendientes-semanal]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/pendientes-semanal/index.ts"
