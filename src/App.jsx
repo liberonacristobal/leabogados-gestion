@@ -26452,6 +26452,11 @@ export default function App() {
   useEffect(()=>{ if(DEMO||!user||!userRole) return
     try{ const ir=new URLSearchParams(window.location.search).get('ir'); if(!ir) return
       try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
+      // Vistas del equipo limitado (correo "Tu semana"): disponibles para todos.
+      if(ir==='gastos'||ir==='notaria') return setTab('expenses')
+      if(ir==='cajachica') return setTab('cajachica')
+      if(ir==='tareas') return setTab('tasks')
+      // Vistas de conciliación: solo admin.
       if(userRole!=='admin') return
       if(ir==='duplicados') setModal({type:'conciliar',data:null})
       else if(ir==='cobros'||ir==='sinasignar') setTab('conciliacion')
