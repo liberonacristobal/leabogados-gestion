@@ -239,6 +239,15 @@ serve(async (req) => {
 
     const dryRun = !!body.dryRun;
     const sent:any[] = [];
+    // Si el alcance limita destinatarios (p.ej. solo admins), los cobros/duplicados de un responsable que NO
+    // recibe correo se reencaminan a "sin responsable" (los admins) para que no se pierda ningún cliente.
+    if (soloNombres && !testTo) {
+      const recibe = (n:string)=> soloNombres.includes(n);
+      for (const [resp, arr] of Object.entries(cobrosDe)) if (!recibe(resp)) { (arr as any[]).forEach((x:any)=> sinRespCobros.push({ fecha:x.mov.fecha, saldo:x.saldo, op:x.mov.n_operacion, quien:x.cli, conNombre:true })); delete cobrosDe[resp]; }
+      for (const [resp, arr] of Object.entries(dupFolioDe)) if (!recibe(resp)) { (arr as any[]).forEach((r:any)=> sinRespDup.push(r)); delete dupFolioDe[resp]; }
+      for (const [resp, arr] of Object.entries(dupAntDe)) if (!recibe(resp)) { (arr as any[]).forEach((r:any)=> sinRespDup.push({ cli:r.cli, monto:r.monto, tipo:"anticipo", n:1 })); delete dupAntDe[resp]; }
+      sinRespCobros.sort((a,b)=> b.saldo-a.saldo);
+    }
     const haySinResp = sinRespCobros.length + sinRespDup.length > 0;
     // Destinatarios: quien tenga algo pendiente propio; y los admins también si hay algo sin responsable.
     let nombres = testTo ? [ NAME_OF_EMAIL[testTo] || "Cristóbal" ]
