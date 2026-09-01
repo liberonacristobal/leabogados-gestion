@@ -3032,6 +3032,35 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
     setIaHoyBusy(false)
   }
 
+  // Prioridades financieras (alertas del dueño) — se computa aquí para usar el conteo en la tarjeta de Accesos directos y reusar en la lista. De datos que ya existen.
+  const prioridades = (()=>{
+    const hoy=new Date().toISOString().slice(0,10)
+    const vencMonto=agingData?.buckets?.overdue?.monto||0
+    const vencN=agingData?.buckets?.overdue?.items?.length||0
+    const progVenc=(billing||[]).filter(b=> b && !b.deleted_at && b.status==='Programada' && b.due && b.due<hoy)
+    const progMonto=progVenc.reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
+    const porIdent=ingresosPorAnioVenta.porIdentificar||0
+    const ingYTD_a=ingresosPorAnioVenta.total||0
+    const cxpN=new Set((terceros||[]).filter(t=>t&&(t.estado==='por_pagar'||t.estado==='pendiente')).map(t=>t.proveedor_id)).size
+    const _pd=new Date(); _pd.setDate(1); _pd.setMonth(_pd.getMonth()-1); const prevYm=_pd.toISOString().slice(0,7)
+    const _pdLbl=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+prevYm.slice(5,7)-1]
+    const entraPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm)).reduce((s,a)=>s+(Number(a.monto)||0),0)
+    const cuestaPrev=costosOficinaMes(costosOfiRows, prevYm)
+    const cnA=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'cliente'
+    const _wk=(()=>{ const d=new Date(); const m=new Date(d); m.setDate(d.getDate()-((d.getDay()+6)%7)); return m.toLocaleDateString('en-CA') })()
+    const raw=[
+      vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>setTab('cobranza')},
+      (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
+      progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
+      cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>setTab('billing')},
+      margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>setTab('repricing')},
+      (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>setTab('horas')},
+      porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
+      (costosOfiYTD>0 && ingYTD_a>0 && ingYTD_a<costosOfiYTD) && {key:'estructura',sev:'a',icon:'wallet',monto:costosOfiYTD-ingYTD_a,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(ingYTD_a)} < costos ${fmtMon(costosOfiYTD)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
+    ].filter(Boolean)
+    const off=(alertOff&&typeof alertOff==='object')?alertOff:{}
+    return raw.filter(a=> off[a.key]==null || (a.monto||0) > off[a.key]*1.2 )
+  })()
   return (
     <div className='dash-cols'>
 
@@ -3055,7 +3084,12 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
         return (
           <div style={{padding:'0 20px 0'}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Accesos directos</div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Accesos directos</span>
+              <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:2}}>
+                {['UF','CLP'].map(u=>{ const on=dashMoneda===u; return <span key={u} onClick={()=>setDashMoneda(u)} style={{fontSize:11.5,fontWeight:700,color:on?'#fff':C.done,background:on?C.accent:'transparent',borderRadius:18,padding:'4px 14px',cursor:'pointer',lineHeight:1}}>{u}</span> })}
+              </div>
+            </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:14}}>
               {[...accesos].sort((a,b)=>((accUso.c[b[0]]||0)-(accUso.c[a[0]]||0))).map(([id,label,icon,bg])=>(
                 <button key={id} onClick={()=>{bumpAcceso(id);onAcceso(id)}} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
@@ -3064,6 +3098,13 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                   <span style={{fontSize:9.5,color:C.text}}>{label}</span>
                 </button>
               ))}
+              {prioridades.length>0&&(
+                <button onClick={()=>setAlertExp(v=>!v)} style={{position:'relative',background:'#fff',border:`1px solid ${alertExp?C.accent:C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
+                  <span style={{position:'absolute',top:6,right:8,fontSize:9,fontWeight:800,color:'#fff',background:prioridades.some(a=>a.sev==='r')?C.overdue:C.soon,borderRadius:20,padding:'1px 6px'}}>{prioridades.length}</span>
+                  <span style={{width:34,height:34,borderRadius:'50%',background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n='wallet' s={19} c={C.accent}/></span>
+                  <span style={{fontSize:9.5,color:C.text}}>Prioridades</span>
+                </button>
+              )}
             </div>
           </div>
         )
@@ -3071,45 +3112,18 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
 
       {/* REQUIERE ATENCIÓN — alertas del dueño, replegado por defecto. Iconos SIcon, paleta C, sin emojis. De datos que ya existen. */}
       {(()=>{
-        const hoy=new Date().toISOString().slice(0,10)
-        const vencMonto=agingData?.buckets?.overdue?.monto||0
-        const vencN=agingData?.buckets?.overdue?.items?.length||0
-        const progVenc=(billing||[]).filter(b=> b && !b.deleted_at && b.status==='Programada' && b.due && b.due<hoy)
-        const progMonto=progVenc.reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
-        const porIdent=ingresosPorAnioVenta.porIdentificar||0
-        const ingYTD_a=ingresosPorAnioVenta.total||0
-        const cxpN=new Set((terceros||[]).filter(t=>t&&(t.estado==='por_pagar'||t.estado==='pendiente')).map(t=>t.proveedor_id)).size
-        const _pd=new Date(); _pd.setDate(1); _pd.setMonth(_pd.getMonth()-1); const prevYm=_pd.toISOString().slice(0,7)
-        const _pdLbl=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+prevYm.slice(5,7)-1]
-        const entraPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm)).reduce((s,a)=>s+(Number(a.monto)||0),0)
-        const cuestaPrev=costosOficinaMes(costosOfiRows, prevYm)
-        const cnA=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'cliente'
-        const _wk=(()=>{ const d=new Date(); const m=new Date(d); m.setDate(d.getDate()-((d.getDay()+6)%7)); return m.toLocaleDateString('en-CA') })()   // lunes de la semana → el nudge de horas se puede descartar por semana y reaparece el lunes
-        const raw=[
-          vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>setTab('cobranza')},
-          (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
-          progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
-          cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>setTab('billing')},
-          margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>setTab('repricing')},
-          (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>setTab('horas')},
-          porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
-          (costosOfiYTD>0 && ingYTD_a>0 && ingYTD_a<costosOfiYTD) && {key:'estructura',sev:'a',icon:'wallet',monto:costosOfiYTD-ingYTD_a,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(ingYTD_a)} < costos ${fmtMon(costosOfiYTD)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
-        ].filter(Boolean)
-        const off=(alertOff&&typeof alertOff==='object')?alertOff:{}
-        const alertas=raw.filter(a=> off[a.key]==null || (a.monto||0) > off[a.key]*1.2 )
-        if(!alertas.length) return null
+        const alertas=prioridades
+        if(!alertas.length || !alertExp) return null   // se abre/cierra desde la tarjeta "Prioridades" de Accesos directos
         const SEV={r:{bg:C.overdueBg,fg:C.overdueText},a:{bg:C.soonBg,fg:C.soonText},b:{bg:C.azulBg,fg:C.azulInfo}}
-        const hayR=alertas.some(a=>a.sev==='r')
         return (
-        <div style={{padding:'6px 20px 0'}}>
+        <div style={{padding:'0 20px 0'}}>
           <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-            <div onClick={()=>setAlertExp(v=>!v)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',cursor:'pointer',background:alertExp?C.bgSoft:'transparent'}}>
-              <span style={{width:26,height:26,borderRadius:8,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={15} c={C.accent}/></span>
+            <div style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
+              <span style={{width:24,height:24,borderRadius:7,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={14} c={C.accent}/></span>
               <span style={{flex:1,fontSize:12,fontWeight:700,color:C.accent}}>Prioridades financieras</span>
-              <span style={{fontSize:10,fontWeight:800,color:'#fff',background:hayR?C.overdue:C.soon,borderRadius:20,padding:'1px 8px'}}>{alertas.length}</span>
-              <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:alertExp?'rotate(180deg)':'none'}}><path d='M6 9l6 6 6-6'/></svg>
+              <span onClick={()=>setAlertExp(false)} title='Cerrar' style={{color:C.done,cursor:'pointer',display:'flex'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></span>
             </div>
-            {alertExp && <div style={{borderTop:`1px solid ${C.border}`}}>
+            <div>
               {alertas.map((a,i)=>{ const sv=SEV[a.sev]||SEV.b; return (
                 <div key={a.key} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
                   <span style={{width:28,height:28,borderRadius:8,background:sv.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={a.icon} s={15} c={sv.fg}/></span>
@@ -3121,7 +3135,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                   <span onClick={e=>{e.stopPropagation();descartarAlerta(a)}} title='Descartar' style={{color:C.done,cursor:'pointer',flexShrink:0,display:'flex'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></span>
                 </div>
               )})}
-            </div>}
+            </div>
           </div>
         </div>
         )
@@ -19944,7 +19958,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
 
   const totalMias = mias.length
   const primerNombre = (me||'').trim().split(' ')[0]
-  const saludo = `¡Hola${primerNombre?`, ${primerNombre}`:''}!`
+  const saludo = `¡Hola${primerNombre?` ${primerNombre}`:''}!`
   const fechaHoy = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())
 
   const heroChip = (label,val,bg,col,onClick)=>(<span onClick={onClick} style={{fontSize:11,background:bg,color:col,borderRadius:20,padding:'4px 11px',fontWeight:600,cursor:onClick?'pointer':'default'}}>{label} {val}</span>)
@@ -28783,7 +28797,7 @@ export default function App() {
           <div style={{position:'relative'}}>
             <div style={{fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:'.14em',marginBottom:1}}>{fechaFull}</div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
-              <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
+              <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
               <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
                 {userRole==='admin'&&tab==='dashboard'&&(()=>{
                   const act=(tasks||[]).filter(t=>t.status!=='Terminado')
