@@ -13664,14 +13664,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const _ofiCli = (clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
               const gastosOfiFuera = (isAdmin&&_ofiCli) ? (expenses||[]).filter(e=> !e.deleted_at && e.type==='gasto' && _CATS_OFI_MOVER.includes(String(e.category||'').trim()) && String(e.client_id||'')!==String(_ofiCli.id)) : []
               const ofiFueraTot = gastosOfiFuera.reduce((a,e)=>a+(e.amount||0),0)
+              // Bandeja "Por resolver" (rediseño, lenguaje híbrido): pendientes en VERBO — dice qué hacer. Consolida los avisos dispersos en un solo lugar titulado.
               const acciones=[
-                nRev>0&&{ic:'alert',icC:C.soonText,bg:C.ambarBg,t:'Revisar gastos sin asignar',sub:`${nRev} gasto${nRev!==1?'s':''} · sin cliente, archivado u ocasional`,go:()=>setShowRevision(true)},
-                (gastosOfiFuera.length>0&&onMoverAOficina)&&{ic:'building',icC:C.greenText,bg:C.greenBg,t:'Costos de oficina en otro cliente',sub:`${gastosOfiFuera.length} gasto${gastosOfiFuera.length!==1?'s':''} · ${fmtShort(ofiFueraTot)} · mover a Oficina`,go:()=>onMoverAOficina(gastosOfiFuera)},
-                notariaPend.length>0&&{ic:'file',icC:C.tealText,bg:C.tealBg,t:'Liquidar a notaría',sub:`${fmtShort(notaTot)} pendiente · ${notariaPend.length} gasto${notariaPend.length!==1?'s':''}`,go:()=>setShowNotaria(true)},
-                orphans.length>0&&{ic:'alert',icC:C.muted,bg:C.bgWarm,t:'Sin cliente · por asignar',sub:`${orphans.length} gasto${orphans.length!==1?'s':''}`,go:()=>setShowOrphans(true)},
+                nRev>0&&{ic:'alert',icC:C.soonText,bg:C.ambarBg,t:`Asignar ${nRev} gasto${nRev!==1?'s':''}`,sub:'sin cliente, archivado u ocasional',go:()=>setShowRevision(true)},
+                (gastosOfiFuera.length>0&&onMoverAOficina)&&{ic:'building',icC:C.greenText,bg:C.greenBg,t:`Mover ${gastosOfiFuera.length} gasto${gastosOfiFuera.length!==1?'s':''} a Oficina`,sub:`costos de oficina en otro cliente · ${fmtShort(ofiFueraTot)}`,go:()=>onMoverAOficina(gastosOfiFuera)},
+                notariaPend.length>0&&{ic:'file',icC:C.tealText,bg:C.tealBg,t:'Liquidar notaría',sub:`${fmtShort(notaTot)} pendiente · ${notariaPend.length} gasto${notariaPend.length!==1?'s':''}`,go:()=>setShowNotaria(true)},
+                (rendirPend&&rendirPend.length>0)&&{ic:'receipt',icC:C.soonText,bg:C.ambarBg,t:`Rendir a ${rendirPend.length} cliente${rendirPend.length!==1?'s':''}`,sub:'con gastos sin rendir hace +30 días',go:()=>{ try{ document.getElementById('conviene-rendir')?.scrollIntoView({behavior:'smooth',block:'start'}) }catch(_){} }},
               ].filter(Boolean)
               if(!acciones.length) return null
               return (<div style={{marginBottom:10}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.4px',margin:'2px 2px 6px'}}>Por resolver · {acciones.length}</div>
                 <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   {acciones.map((a,i)=>(
                     <div key={i} onClick={a.go} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 12px',borderBottom:i<acciones.length-1?`0.5px solid ${C.bgWarm}`:'none',cursor:'pointer'}}>
@@ -13684,7 +13686,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               </div>)
             })()}
             {rendirPend.length>0&&(
-              <div style={{background:C.ambarBg,border:`0.5px solid ${C.soon}40`,borderRadius:12,padding:'12px 13px',marginBottom:10}}>
+              <div id='conviene-rendir' style={{background:C.ambarBg,border:`0.5px solid ${C.soon}40`,borderRadius:12,padding:'12px 13px',marginBottom:10,scrollMarginTop:80}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}><SIcon n='receipt' s={18} c={C.soonText}/><span style={{fontSize:13,fontWeight:700,color:C.soonText}}>Conviene rendir</span></div>
                 <div style={{fontSize:10,color:C.coralText,marginBottom:10}}>{rendirPend.length} cliente{rendirPend.length!==1?'s':''} con gastos sin rendir hace +30 días</div>
                 {rendirPend.slice(0,4).map((r,i)=>(
