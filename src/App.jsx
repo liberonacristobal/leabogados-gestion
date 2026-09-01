@@ -13569,7 +13569,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               })}
             </div>
             <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:10}}>
-              <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…'/></div>
+              {/* En desktop el buscador vive en el panel izquierdo (2-panel) → aquí solo quedan los filtros, alineados a la derecha. */}
+              {!isDesktop&&<div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…'/></div>}
+              {isDesktop&&<div style={{flex:1}}/>}
               <button onClick={()=>{setVerTodos(v=>!v);setSaldoFilter('todos');setQ('');setVerArchivadosG(false);setRespFilter(null)}} style={{fontSize:12,fontWeight:600,color:verTodos?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Todos</button>
               {archivadosG>0&&<><span style={{color:C.border,fontSize:12}}>·</span><button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,color:verArchivadosG?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Archivados · {archivadosG}</button></>}
             </div>
