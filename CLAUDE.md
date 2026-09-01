@@ -2,6 +2,15 @@
 
 App de gestión legal para Liberona Escala Abogados. Estas reglas son permanentes y guían toda decisión.
 
+## REGLA DE ORO: nunca de memoria — estudiar el código ANTES de proponer
+
+Antes de afirmar cómo funciona algo, de proponer una solución, o de construir cualquier cosa, **revisa el código real y los datos** — NUNCA respondas de memoria ni supongas. La memoria y los resúmenes son pistas, no la verdad; el código y la base de datos son la única fuente.
+
+- **Verifica primero que no exista ya.** Antes de crear una tabla, categoría, helper, vista, panel o flujo, **busca en la app si ya está contemplado** (grep en `src/App.jsx`, esquema en Supabase, edge functions). Reusar SIEMPRE; **nunca duplicar** ni generar cosas similares a lo que ya existe. El usuario no quiere más features paralelas que hagan lo mismo.
+- **Estudia antes de opinar.** Ante cualquier planteamiento, primero recorre el código/datos relevantes; recién entonces propón. Si no lo estudiaste, dilo y estúdialo — no improvises una respuesta.
+- **Propón doble mejora.** Frente a lo que plantea el usuario, entrega (a) mejoras a su planteamiento y (b) mejoras al código existente, apoyadas en lo que efectivamente encontraste en el código. Cita `archivo:línea` / tabla real.
+- **Cifras y flujos, siempre desde la fuente** (refuerza "Rigor matemático" y "cuestionar el propio análisis"): un número o un comportamiento se afirma tras verlo en el código/consulta, no de memoria.
+
 ## REGLA DE ORO: vendible por diseño (mirada de producto)
 
 Construimos para **muchos estudios, no para el nuestro**. Cada decisión —dato, texto, color, integración, tabla, flujo— se toma como si mañana la usara **otro estudio, en otro país**. La herramienta interna de hoy no es el producto: es su **primer cliente**; se sirve impecable, pero se construye para el segundo. El norte es transformarla en un SaaS vendible en Chile y LatAm (ver artifacts "De estudio a producto" y "FirmDesk", y [[roadmap-vision-estrategica]]).
