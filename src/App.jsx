@@ -2732,6 +2732,30 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
     const allYears = Object.keys(byYear).map(Number).sort((a,b)=>b-a)
     return {total,byYear,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar}
   },[ingConc,ingAbonos,billing,anticipos,sales,selYear])
+  // Comisiones PAGADAS del año (base caja, por pagado_at) atribuidas al AÑO DE LA VENTA — espejo de ingresosPorAnioVenta.
+  // Año de venta = terceros.sale_id → sales.year; si no, vía la factura (billing.sale_id → sales.year); si no, el año del documento. Así "sin año" no aparece cuando la factura tiene venta.
+  const comisPagadasAnioVenta = useMemo(()=>{
+    const saleYrById={}; sales.forEach(s=>{ if(s.year!=null) saleYrById[String(s.id)]=s.year })
+    const billById={}; (billing||[]).forEach(b=>{ billById[String(b.id)]=b })
+    const yrDe = iso => { const y=String(iso||'').slice(0,4); return /^\d{4}$/.test(y)?+y:null }
+    const anioVentaDe = t => {
+      if(t.sale_id!=null && saleYrById[String(t.sale_id)]!=null) return saleYrById[String(t.sale_id)]
+      const b=billById[String(t.billing_id)]
+      if(b){ if(b.sale_id!=null && saleYrById[String(b.sale_id)]!=null) return saleYrById[String(b.sale_id)]; return yrDe(b.issued_at||b.due) }
+      return null
+    }
+    let total=0, sinAnio=0; const byYear={}
+    ;(terceros||[]).forEach(t=>{
+      if(t.estado!=='pagado') return
+      if(!String(t.pagado_at||'').startsWith(String(selYear))) return   // AÑO DE SALIDA = fecha del pago
+      const monto=Number(t.monto)||0; if(monto<=0) return
+      total+=monto
+      const ay=anioVentaDe(t)
+      if(ay==null){ sinAnio+=monto; return }
+      byYear[ay]=(byYear[ay]||0)+monto
+    })
+    return {total,byYear,sinAnio}
+  },[terceros,billing,sales,selYear])
   // Meta de cobranza del año (annual_targets.collection_target). % y faltante para la foto de ingresos.
   const metaCobranza = Number(targets.find(t=>t.year===selYear)?.collection_target) || 0
   // Facturado del año = emitidas (con folio) del año, monto del DTE (fuente única montoFactura). Por sale.year, cae al año del vencimiento.
@@ -3206,11 +3230,15 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         return (
         <div style={{padding:'12px 20px 0'}}>
           {/* dos tiles de pesos SIEMPRE visibles (sin el header "Ingresos del año") */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,alignItems:'start'}}>
             <div style={{borderRadius:13,padding:'12px 13px',background:C.greenText,color:'#fff'}}>
               <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',opacity:.85}}>Ingresado a caja</div>
               <div style={{fontSize:23,fontWeight:700,lineHeight:1,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.total)}</div>
-              <div style={{fontSize:9.5,opacity:.9,marginTop:4}}>en {selYear}</div>
+              <div style={{fontSize:9.5,opacity:.9,marginTop:4}}>{comisPagadasAnioVenta.total>0?'bruto · ':''}en {selYear}</div>
+              {comisPagadasAnioVenta.total>0&&<div style={{marginTop:9,paddingTop:8,borderTop:'1px solid rgba(255,255,255,.22)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:10,opacity:.92}}><span>&minus; Comisiones pagadas</span><span style={{fontVariantNumeric:'tabular-nums'}}>&minus;{fmtMon(comisPagadasAnioVenta.total)}</span></div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginTop:6,paddingTop:6,borderTop:'1px solid rgba(255,255,255,.22)'}}><span style={{fontSize:10.5,fontWeight:700}}>= Neto a caja</span><span style={{fontSize:16,fontWeight:800,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.total-comisPagadasAnioVenta.total)}</span></div>
+              </div>}
             </div>
             <div style={{borderRadius:13,padding:'12px 13px',background:C.greenBg,border:'1px solid #CFE9DD'}}>
               <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',color:C.greenText}}>Meta de cobranza</div>
