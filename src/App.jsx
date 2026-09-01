@@ -9563,7 +9563,43 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
+          <>
+          {(()=>{
+            // Adelantos por facturar: sugiere emitir la factura del anticipo (mismo monto). Reusa la lógica de los botones de la ficha (SaleForm): 'listo para emitir' = consumido, cubre cuotas y sin billing_id; 'disponible' = aplicar y facturar. Abre los MISMOS modales (setFacturarAnt / setCubrirAnt).
+            const saleClient = a => { const s=(sales||[]).find(x=>String(x.id)===String(a.sale_id)); return (clients||[]).find(c=>String(c.id)===String(a.client_id))||(clients||[]).find(c=>String(c.id)===String(s?.client_id)) }
+            const list=(anticipos||[]).map(a=>{
+              const disp=a.estado==='disponible'
+              const cubre=(billing||[]).some(b=>String(b.prepaid_anticipo_id)===String(a.id))
+              const tipo = (!disp&&cubre&&!a.billing_id) ? 'emitir' : (disp&&(a.monto||0)>0) ? 'aplicar' : null
+              if(!tipo) return null
+              const nCuotas=(billing||[]).filter(b=>String(b.prepaid_anticipo_id)===String(a.id)).length
+              return {a,tipo,nCuotas}
+            }).filter(Boolean)
+            if(!list.length) return null
+            return (
+              <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 13px',background:C.azulBg}}>
+                  <span style={{fontSize:13,fontWeight:700,color:C.azulInfo}}>Adelantos por facturar</span>
+                  <span style={{marginLeft:'auto',fontSize:11,fontWeight:800,color:C.azulInfo,background:'#fff',borderRadius:20,padding:'2px 9px'}}>{list.length}</span>
+                </div>
+                <div style={{padding:'2px 13px 8px'}}>
+                  {list.map(({a,tipo,nCuotas})=>{ const c=saleClient(a); return (
+                    <div key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${C.bgSoft}`}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div onClick={c&&onOpenClientFicha?()=>onOpenClientFicha(c.id):undefined} style={{fontSize:13,fontWeight:600,color:c&&onOpenClientFicha?C.accent:C.text,cursor:c&&onOpenClientFicha?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'}</div>
+                        <div style={{fontSize:11,color:C.muted}}>Anticipo {fmt(a.monto||0)} · {tipo==='emitir'?`aplicado a ${nCuotas} cuota${nCuotas!==1?'s':''} · listo para emitir`:'disponible · sin aplicar'}</div>
+                      </div>
+                      {tipo==='emitir'
+                        ? <button onClick={()=>setFacturarAnt(a)} style={{fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',flexShrink:0}}>Emitir factura</button>
+                        : <button onClick={()=>setCubrirAnt(a)} style={{fontSize:12,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer',flexShrink:0}}>Aplicar y facturar</button>}
+                    </div>
+                  )})}
+                </div>
+              </div>
+            )
+          })()}
           <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onEnviarVarias={arr=>setFacturasEmail(arr)} onUnsend={onUnsendFactura} onAssignSeries={onAssignSeries} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>{contarSinRegistrar();setXmlHub(true)}} onReplaceProgramada={onReplaceProgramada}/>
+          </>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
