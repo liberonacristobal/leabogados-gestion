@@ -26737,14 +26737,19 @@ export default function App() {
   const [billingIntent,setBillingIntent] = useState(null)   // deep-link a Facturación desde accesos directos: 'cotejo' | 'checklist'
 
   const loadUserRole = async(email) => {
-    const {data} = await supabase.from('user_roles').select('*').eq('email',email).maybeSingle()
+    // Robusto: si la query falla (red/RLS) devolvemos null SIN asignar rol → el render muestra spinner y un efecto reintenta
+    // (nunca dejamos userRole en null-permanente, que dejaba el área de contenido en blanco / "pantalla negra").
+    let data=null, ok=false
+    try{ const r=await supabase.from('user_roles').select('*').eq('email',email).maybeSingle(); if(!r.error){ data=r.data; ok=true } }catch(_){}
+    if(!ok) return null
     if(data) {
       setActualRole(data.role)
       setUserRole(data.role)
       if(data.role==='limited') setTab('tasks')
       return data
     }
-    await supabase.from('user_roles').insert({email,role:'limited',name:email.split('@')[0]})
+    // Sin fila: nuevo miembro → lo damos de alta como limited (mínimo privilegio). Si el insert falla, igual asignamos el rol en memoria.
+    try{ await supabase.from('user_roles').insert({email,role:'limited',name:email.split('@')[0]}) }catch(_){}
     setActualRole('limited')
     setUserRole('limited')
     setTab('tasks')
@@ -26753,22 +26758,34 @@ export default function App() {
 
   useEffect(()=>{
     if(DEMO){ setSession({user:{email:'demo@demo.cl'}}); setUser({email:'demo@demo.cl',name:'Demo'}); setActualRole('admin'); setUserRole('admin'); setLoadingAuth(false); return }
+    // Nunca dejar el spinner de ingreso pegado: getSession() puede colgar en la 1ª carga (lock de supabase-js) o rechazar.
+    // Timeout de seguridad + catch/finally garantizan que loadingAuth SIEMPRE se libere; onAuthChange completa la sesión cuando resuelva.
+    let authDone=false
+    const finishAuth=()=>{ if(!authDone){ authDone=true; setLoadingAuth(false) } }
+    const authSafety=setTimeout(finishAuth,6000)
     getSession().then(({data:{session}})=>{
       setSession(session)
-      if(session){ loadUserRole(session.user.email).then(u=>setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})) }
-      setLoadingAuth(false)
-    })
+      if(session){ loadUserRole(session.user.email).then(u=>{ if(u) setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]}) }).catch(()=>{}) }
+    }).catch(()=>{}).finally(()=>{ clearTimeout(authSafety); finishAuth() })
     const {data:{subscription}}=onAuthChange(async(_,session)=>{
+      finishAuth()   // llegó un evento de auth → ya no bloquees el spinner
       setSession(session)
       if(session){
-        const u = await loadUserRole(session.user.email)
-        setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})
+        let u=null; try{ u = await loadUserRole(session.user.email) }catch(_){}
+        if(u) setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})   // si el rol no resolvió, un efecto reintenta (no dejamos user con rol null)
         if(session.provider_token)saveDriveToken(session.provider_token)
         if(session.provider_refresh_token)saveDriveRefresh(session.provider_refresh_token, session.user.email)   // conexión permanente de Drive (plan B)
       } else { setUser(null); setUserRole(null); setActualRole(null) }
     })
-    return ()=>subscription.unsubscribe()
+    return ()=>{ clearTimeout(authSafety); subscription.unsubscribe() }
   },[])
+
+  // Reintento de rol: si hay sesión pero el rol no resolvió (falla de red/RLS en loadUserRole), reintenta hasta lograrlo.
+  // Evita que el usuario quede con userRole=null (área de contenido en blanco / "pantalla negra") esperando un refresh manual.
+  useEffect(()=>{ if(DEMO||!session||userRole) return; let alive=true
+    const t=setTimeout(()=>{ if(!alive) return; loadUserRole(session.user.email).then(u=>{ if(alive&&u) setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]}) }).catch(()=>{}) },1200)
+    return ()=>{ alive=false; clearTimeout(t) }
+  },[session,userRole])
 
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
@@ -28301,6 +28318,8 @@ export default function App() {
 
   if(loadingAuth) return <div style={{minHeight:'100vh',background:C.bg,display:'flex',alignItems:'center',justifyContent:'center'}}><Spin/></div>
   if(!session) return <LoginScreen loading={loadingAuth}/>
+  // Sesión OK pero el rol aún no resuelve (o falló y está reintentando): spinner, NUNCA el área de contenido en blanco.
+  if(!userRole) return <div style={{minHeight:'100vh',background:C.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}><Spin/><div style={{fontSize:13,color:C.muted}}>Preparando tu cuenta…</div></div>
 
   return (
     <>
