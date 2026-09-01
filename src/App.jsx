@@ -2490,7 +2490,7 @@ function computeAgingCartera(billingRows, clientesMap){
   const sumB = k => pend.filter(b=>bucketDe(b)===k).reduce((a,b)=>a+saldoBill(b),0)
   const cur=sumB('current'), war=sumB('warning'), over=sumB('overdue')
   // Facturas que componen cada tramo (para el detalle al hacer click), ordenadas por monto desc.
-  const itemsB = k => pend.filter(b=>bucketDe(b)===k).map(b=>{ const cid=b.client_id||'__none__'; const nombre=(clientesMap&&clientesMap[cid])||b.receptor_name||'Sin cliente'; return {id:b.id, nombre, monto:saldoBill(b), concept:b.concept||'', due:b.due, dias:diasVenc(b)} }).sort((a,b)=>b.monto-a.monto)
+  const itemsB = k => pend.filter(b=>bucketDe(b)===k).map(b=>{ const cid=b.client_id||'__none__'; const nombre=(clientesMap&&clientesMap[cid])||b.receptor_name||'Sin cliente'; return {id:b.id, client_id:b.client_id||null, invoice_no:b.invoice_no, nombre, monto:saldoBill(b), concept:b.concept||'', due:b.due, dias:diasVenc(b)} }).sort((a,b)=>(b.dias||0)-(a.dias||0)||b.monto-a.monto)
   const buckets = { current:{monto:cur,pct:pct(cur),items:itemsB('current')}, warning:{monto:war,pct:pct(war),items:itemsB('warning')}, overdue:{monto:over,pct:pct(over),items:itemsB('overdue')} }
 
   // Delta: pendiente actual vs total facturado el mes anterior (por created_at)
@@ -3388,12 +3388,13 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
             return (
               <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',margin:'10px 0 2px'}}>
                 {items.map((it,i)=>(
-                  <div key={it.id} onClick={()=>it.id&&it.id!=='__none__'&&onOpenClientFicha&&onOpenClientFicha(it.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:(it.id&&it.id!=='__none__')?'pointer':'default'}}>
+                  <div key={it.id} onClick={()=>it.client_id&&onOpenClientFicha&&onOpenClientFicha(it.client_id)} title={it.client_id?'Ver ficha del cliente':undefined} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:it.client_id?'pointer':'default'}}>
                     <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.nombre}</div>
-                      <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.concept||'—'}{it.dias>0?` · ${it.dias} días vencida`:it.due?` · vence ${fmtDate(it.due)}`:''}</div>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.nombre}</div>
+                      <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.invoice_no?`N°${folioN(it.invoice_no)||it.invoice_no} · `:''}{it.concept||'—'}{it.dias>0?` · ${it.dias} días vencida`:it.due?` · vence ${fmtDate(it.due)}`:''}</div>
                     </div>
-                    <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',flexShrink:0}}>{fmtMon(it.monto)}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:col,whiteSpace:'nowrap',flexShrink:0}}>{fmtMon(it.monto)}</div>
+                    <span style={{color:C.az3||C.muted,flexShrink:0,fontSize:14}}>›</span>
                   </div>
                 ))}
               </div>
