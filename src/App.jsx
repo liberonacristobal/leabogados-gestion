@@ -23866,6 +23866,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
   const [conc,setConc] = useState([])           // filas de conciliacion (factura/anticipo aplicados)
   const [concView,setConcView] = useState('todos') // abonos: 'todos' | 'porconciliar' | 'conciliados'
+  const isDesktop = useIsDesktop()   // Fase 3: en desktop, columna de conciliación enfocada (ancho legible, no estirada)
   const [autoRun,setAutoRun] = useState(false)   // corriendo conciliación automática
   const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
   const [revSugOpen,setRevSugOpen] = useState(false)   // modal "Revisar sugerencias" (identificar en lote)
@@ -25395,7 +25396,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     return 'Movimiento bancario' }
 
   return (
-    <div style={{paddingBottom:80}}>
+    <div style={{paddingBottom:80,...(isDesktop?{maxWidth:980,margin:'0 auto'}:{})}}>
       {loteConfirm&&<Modal title='Conciliar varias' onClose={()=>!loteBusy&&setLoteConfirm(null)} closeOnBackdrop={false}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></Modal>}
       <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
