@@ -6856,7 +6856,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], onOpenClientFicha, onOpenFactura}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura}){
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const rutMulti=useMemo(()=>{ const m={}; (clientEntities||[]).forEach(e=>{ const r=crNormRut(e.rut); if(!r) return; if(!m[r]) m[r]={ids:new Set(),rs:e.name}; m[r].ids.add(String(e.client_id)) }); return Object.entries(m).filter(([r,v])=>v.ids.size>1).map(([r,v])=>({rut:r, rs:v.rs, clientIds:[...v.ids]})) },[clientEntities])
   const folioDup=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||!b.invoice_no) return; const f=folioN(b.invoice_no); if(!/^\d+$/.test(f)) return; (m[f]=m[f]||[]).push(b) }); return Object.entries(m).filter(([f,a])=>a.length>1).map(([f,a])=>({folio:f, rows:a})) },[billing])
@@ -6864,7 +6864,24 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const ventasDup=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s.deleted_at||!['Activo','Terminado'].includes(s.status)) return; const k=`${s.client_id}|${s.amount_uf||s.amount_clp||0}|${s.year}|${s.month}`; (m[k]=m[k]||[]).push(s) }); return Object.values(m).filter(a=>a.length>1) },[sales])
   // Facturas huérfanas: emitidas (con folio, no anuladas/borradas, no reembolso/NC) SIN cliente asignado → hay que vincularlas para que cuenten en el por-cobrar del cliente.
   const huerfanas=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&String(b.invoice_no||'').trim()&&!b.client_id&&!['reembolso','nota_credito'].includes(b.billing_type||'')),[billing])
-  const total=rutMulti.length+folioDup.length+montoNeDte.length+ventasDup.length+huerfanas.length
+  // Anticipos posibles duplicados: uno cargado a MANO (sin respaldo bancario, no marcado 'revisado') cuyo monto
+  // CALZA con los depósitos del banco del mismo cliente (la suma, o uno exacto). Caso Gabriela/Eugenia.
+  const antDup=useMemo(()=>{
+    const bankIds=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='anticipo'&&c.anticipo_id).map(c=>String(c.anticipo_id)))
+    const bankByCli={}; (anticipos||[]).forEach(a=>{ if(bankIds.has(String(a.id))) (bankByCli[String(a.client_id)]=bankByCli[String(a.client_id)]||[]).push(a) })
+    const out=[]
+    ;(anticipos||[]).forEach(a=>{
+      if(bankIds.has(String(a.id))||/·revisado/.test(a.nota||'')||(a.monto||0)<=0) return
+      const banks=bankByCli[String(a.client_id)]||[]; if(!banks.length) return
+      const suma=banks.reduce((s,b)=>s+(b.monto||0),0)
+      const uno=banks.find(b=>Math.abs((b.monto||0)-(a.monto||0))<=1)
+      const calceSuma=Math.abs(suma-(a.monto||0))<=1
+      if(calceSuma) out.push({manual:a, banks, suma})
+      else if(uno) out.push({manual:a, banks:[uno], suma:uno.monto||0})
+    })
+    return out
+  },[anticipos,conciliacion])
+  const total=rutMulti.length+folioDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{fontSize:26,color:C.greenText}}>✓</div><div style={{fontSize:13,fontWeight:600,color:C.greenText,marginTop:6}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -6894,6 +6911,19 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     {huerfanas.length>0&&<div style={{marginTop:14}}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
       {huerfanas.slice(0,30).map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:10.5,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(b.invoice_no)} · {b.receptor_name||b.concept||'—'} · {fmt(b.amount||0)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
       {huerfanas.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {huerfanas.length-30} más…</div>}
+    </div>}
+    {antDup.length>0&&<div style={{marginTop:14}}>{sh('Anticipos posibles duplicados',C.soonText,antDup.length)}
+      {antDup.map(({manual,banks,suma})=><div key={manual.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
+        <div style={{fontSize:12.5,fontWeight:700,color:C.text}}><span onClick={()=>onOpenClientFicha&&onOpenClientFicha(manual.client_id)} style={{cursor:'pointer'}}>{cName(manual.client_id)}</span><span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.soonText,borderRadius:20,padding:'1px 7px',marginLeft:7}}>calce exacto</span></div>
+        <div style={{display:'flex',gap:8,marginTop:6}}>
+          <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px'}}><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Del banco</div>{banks.map(b=><div key={b.id} style={{fontSize:11,color:C.muted,marginTop:2}}>{fmt(b.monto||0)}</div>)}<div style={{fontSize:11.5,fontWeight:700,color:C.greenText,marginTop:3}}>Total {fmt(suma)}</div></div>
+          <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px'}}><div style={{fontSize:9,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3}}>A mano · sin respaldo</div><div style={{fontSize:11.5,fontWeight:700,color:C.overdueText,marginTop:2}}>{fmt(manual.monto||0)}</div><div style={{fontSize:10,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{manual.nota||'—'}</div></div>
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:8}}>
+          <button onClick={()=>onResolverDupAnticipo&&onResolverDupAnticipo(manual.id,true)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Es duplicado · dejar el del banco</button>
+          <button onClick={()=>onResolverDupAnticipo&&onResolverDupAnticipo(manual.id,false)} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11.5,fontWeight:600,cursor:'pointer'}}>Son distintos</button>
+        </div>
+      </div>)}
     </div>}
   </div>
 }
@@ -27092,6 +27122,21 @@ export default function App() {
   const handleSaveAnticipo=useCallback(async(_f)=>{
     appAlert('Los anticipos se registran solo desde la Conciliación bancaria (deben tener respaldo del banco). No se crean a mano.')
   },[])
+  // Panel de posibles anticipos duplicados: resolver un caso. esDup=true -> borra el anticipo manual
+  // (deja solo los del banco); esDup=false -> lo marca 'revisado, no duplicado' para no re-alertar.
+  const handleResolverDupAnticipo=useCallback(async(anticipoId,esDup)=>{
+    try{
+      if(esDup){
+        const {error}=await supabase.from('anticipos').delete().eq('id',anticipoId); if(error)throw error
+        setAnticipos(p=>p.filter(a=>String(a.id)!==String(anticipoId)))
+      }else{
+        const a=(anticipos||[]).find(x=>String(x.id)===String(anticipoId))
+        const nota=((a?.nota||'')+' ·revisado').trim()
+        const {error}=await supabase.from('anticipos').update({nota}).eq('id',anticipoId); if(error)throw error
+        setAnticipos(p=>p.map(x=>String(x.id)===String(anticipoId)?{...x,nota}:x))
+      }
+    }catch(e){appAlert('Error al resolver el duplicado: '+e.message)}
+  },[anticipos])
 
   // Anticipos (PP-15 commit 3): aplicar anticipos a una factura → consumidos + factura Pagada
   const [anticipoPanel,setAnticipoPanel]=useState(null)
@@ -28045,7 +28090,7 @@ export default function App() {
             supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
-        {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
+        {modal?.type==='revisionDatos'&&<Modal title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})}/></Modal>}
         {modal?.type==='fusionarClientes'&&<Modal title={modal.pending?'Confirmar fusión':'Fusionar clientes'} maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={modal.pending||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
