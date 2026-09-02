@@ -2641,7 +2641,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
     </div>
   ) }
   // Rótulo de nivel de la pirámide del Inicio (Dinero por resolver / Referencia)
-  const lvlLabel = t => <div style={{padding:'14px 22px 0',fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.5px'}}>{t}</div>
+  const lvlLabel = t => <div style={{padding:'14px 22px 0',fontSize:8.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.5px'}}>{t}</div>
   const [plazos,setPlazos] = useState([])   // plazos vencidos/próximos para "qué atender hoy"
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
   // "Ingresado a caja" ANCLADO A LA CARTOLA (regla 2026-08-27: debe cuadrar con el banco). Honorarios cobrados =
@@ -3171,7 +3171,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         return (<>
           <div style={{padding:'14px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,position:'relative'}}>
-              <span style={{fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.5px'}}>El negocio</span>
+              <span style={{fontSize:8.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.5px'}}>Resultado del año</span>
               <button onClick={()=>setYearMenu(o=>!o)} style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:8.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.5px'}}>{selYear}<span style={{fontSize:8,color:C.done}}>▾</span></button>
               {yearMenu&&(
                 <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
@@ -3314,12 +3314,14 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       })()}
 
 
-      {lvlLabel('Indicadores')}
-      {/* Grid 2-col: Cobranza (antigüedad) + Proyección de ingresos (separadas). Cada tile abre su detalle debajo. */}
-      <div style={{padding:'6px 20px 0'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'del año')}
-          {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'ingresos · al 31 dic')}
+      {/* El rótulo 'Indicadores' viaja pegado a su primera fila de tiles (un solo hijo de .dash-cols) → no se orfana en otra columna del masonry. */}
+      <div>
+        {lvlLabel('Indicadores')}
+        <div style={{padding:'6px 20px 0'}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'del año')}
+            {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'ingresos · al 31 dic')}
+          </div>
         </div>
       </div>
       {kOpen('cobranza')&&(
