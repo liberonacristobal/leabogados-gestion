@@ -13628,21 +13628,21 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                       <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cliente archivado</div><div style={{fontSize:10,color:C.muted}}>Revisar si corresponde</div></div>
                       <span style={{fontSize:15,fontWeight:700,color:C.soonText}}>{revN(revNoActivo)}</span><span style={{fontSize:13,color:C.done}}>{revOpen==='na'?'⌃':'›'}</span>
                     </div>
-                    {revOpen==='na'&&<div style={{background:C.bgSoft}}>
+                    {revOpen==='na'&&<div style={{background:'#fff'}}>
                       {revNoActivo.map(({c,gastos})=>(
                         <div key={c.id} style={{borderTop:`0.5px solid ${C.border}`}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',flexWrap:'wrap'}}>
                             <input type='checkbox' checked={gastos.length>0&&gastos.every(e=>revSel.has(e.id))} onChange={()=>{ const all=gastos.every(e=>revSel.has(e.id)); setRevSel(s=>{ const n=new Set(s); gastos.forEach(e=>all?n.delete(e.id):n.add(e.id)); return n }) }} style={{flexShrink:0,cursor:'pointer'}}/>
                             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
                             <span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{c.status==='Terminado'?'Archivado':c.status}</span>
-                            <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
+                            <span style={{fontSize:10.5,fontWeight:600,color:C.text,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
                             {c.status==='Terminado'&&onToggleClientStatus&&<button onClick={()=>onToggleClientStatus(c)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.normal}`,background:'#fff',color:C.greenText,borderRadius:7,padding:'3px 9px',cursor:'pointer',flexShrink:0}}>Reactivar</button>}
                           </div>
                           {gastos.map(e=>{ const rendido=!!(e.render_id||e.client_render_id); const sel=revSel.has(e.id); return (
-                            <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 13px 7px 22px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:sel?C.azulBg:'transparent'}}>
+                            <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px 8px 22px',borderTop:`0.5px solid #EEF1F3`,cursor:'pointer',background:sel?C.azulBg:'transparent'}}>
                               <input type='checkbox' checked={sel} onChange={()=>toggleSel(e.id)} style={{flexShrink:0,cursor:'pointer'}}/>
-                              <span style={{flex:1,fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rendido&&<span style={{fontSize:8,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>Rendido</span>}{e.concept||'—'}</span>
-                              <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmt(e.amount)}</span>
+                              <span style={{flex:1,fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rendido&&<span style={{fontSize:8,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>Rendido</span>}{e.concept||'—'}</span>
+                              <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
                             </label>
                           )})}
                         </div>
@@ -13655,20 +13655,20 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                       <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cliente ocasional</div><div style={{fontSize:10,color:C.muted}}>Confirma si corresponde</div></div>
                       <span style={{fontSize:15,fontWeight:700,color:C.grisText}}>{revN(revOcasional)}</span><span style={{fontSize:13,color:C.done}}>{revOpen==='oc'?'⌃':'›'}</span>
                     </div>
-                    {revOpen==='oc'&&<div style={{background:C.bgSoft}}>
+                    {revOpen==='oc'&&<div style={{background:'#fff'}}>
                       {revOcasional.map(({c,gastos})=>(
                         <div key={c.id} style={{borderTop:`0.5px solid ${C.border}`}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',flexWrap:'wrap'}}>
                             <input type='checkbox' checked={gastos.length>0&&gastos.every(e=>revSel.has(e.id))} onChange={()=>{ const all=gastos.every(e=>revSel.has(e.id)); setRevSel(s=>{ const n=new Set(s); gastos.forEach(e=>all?n.delete(e.id):n.add(e.id)); return n }) }} style={{flexShrink:0,cursor:'pointer'}}/>
                             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
                             <span style={{fontSize:9,fontWeight:600,color:C.grisText,background:C.bgWarm,borderRadius:3,padding:'1px 6px',flexShrink:0}}>Ocasional</span>
-                            <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
+                            <span style={{fontSize:10.5,fontWeight:600,color:C.text,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
                           </div>
                           {gastos.map(e=>{ const sel=revSel.has(e.id); return (
-                            <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 13px 7px 22px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:sel?C.azulBg:'transparent'}}>
+                            <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px 8px 22px',borderTop:`0.5px solid #EEF1F3`,cursor:'pointer',background:sel?C.azulBg:'transparent'}}>
                               <input type='checkbox' checked={sel} onChange={()=>toggleSel(e.id)} style={{flexShrink:0,cursor:'pointer'}}/>
-                              <span style={{flex:1,fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
-                              <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmt(e.amount)}</span>
+                              <span style={{flex:1,fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
+                              <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
                             </label>
                           )})}
                         </div>
@@ -13693,25 +13693,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
-                {expenseAudit.length>0&&(
-                  <div style={{marginTop:10,borderTop:`0.5px solid ${C.border}`,paddingTop:9}}>
-                    <button onClick={()=>setShowHist(s=>!s)} style={{background:'none',border:'none',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',padding:0}}>Historial de reasignaciones ({expenseAudit.length}) {showHist?'▴':'▾'}</button>
-                    {showHist&&<div style={{marginTop:7,maxHeight:220,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:10}}>
-                      {expenseAudit.slice(0,60).map((a,i)=>{ const fromN=clients.find(c=>String(c.id)===String(a.from_client_id))?.name; const toN=clients.find(c=>String(c.id)===String(a.to_client_id))?.name; return (
-                        <div key={a.id||i} style={{padding:'7px 11px',borderTop:i?`0.5px solid ${C.border}`:'none',fontSize:11}}>
-                          <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}>
-                            <span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.concept||'—'}</span>
-                            <div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}>
-                              <span style={{color:C.muted}}>{fmt(a.amount)}</span>
-                              {a.from_client_id&&onAssignClientToExpense&&<button onClick={()=>onAssignClientToExpense(a.expense_id,a.from_client_id)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.azulInfo,borderRadius:7,padding:'2px 8px',cursor:'pointer'}}>Deshacer</button>}
-                            </div>
-                          </div>
-                          <div style={{color:C.done,marginTop:1}}>{fromN||'sin cliente'} → <b style={{color:C.muted}}>{toN||'sin cliente'}</b> · {String(a.created_at||'').slice(0,10)}{a.moved_by?` · ${a.moved_by}`:''}</div>
-                        </div>
-                      )})}
-                    </div>}
                   </div>
                 )}
               </div>
@@ -13745,8 +13726,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     <button onClick={()=>setShowHist(s=>!s)} style={{background:'none',border:'none',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',padding:0}}>Historial de reasignaciones ({expenseAudit.length}) {showHist?'▴':'▾'}</button>
                     {showHist&&<div style={{marginTop:7,maxHeight:220,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:10}}>{expenseAudit.slice(0,60).map((a,i)=>{ const fromN=clients.find(c=>String(c.id)===String(a.from_client_id))?.name; const toN=clients.find(c=>String(c.id)===String(a.to_client_id))?.name; return (
                       <div key={a.id||i} style={{padding:'7px 11px',borderTop:i?`0.5px solid ${C.border}`:'none',fontSize:11}}>
-                        <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.concept||'—'}</span><div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}><span style={{color:C.muted}}>{fmt(a.amount)}</span>{a.from_client_id&&onAssignClientToExpense&&<button onClick={()=>onAssignClientToExpense(a.expense_id,a.from_client_id)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.azulInfo,borderRadius:7,padding:'2px 8px',cursor:'pointer'}}>Deshacer</button>}</div></div>
-                        <div style={{color:C.done,marginTop:1}}>{fromN||'sin cliente'} → <b style={{color:C.muted}}>{toN||'sin cliente'}</b> · {String(a.created_at||'').slice(0,10)}{a.moved_by?` · ${a.moved_by}`:''}</div>
+                        <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{color:C.text,fontWeight:600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.concept||'—'}</span><div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}><span style={{color:C.text,fontWeight:600}}>{fmt(a.amount)}</span>{a.from_client_id&&onAssignClientToExpense&&<button onClick={()=>onAssignClientToExpense(a.expense_id,a.from_client_id)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.azulInfo,borderRadius:7,padding:'2px 8px',cursor:'pointer'}}>Deshacer</button>}</div></div>
+                        <div style={{color:C.muted,marginTop:1}}>{fromN||'sin cliente'} → <b style={{color:C.text}}>{toN||'sin cliente'}</b> · {String(a.created_at||'').slice(0,10)}{a.moved_by?` · ${a.moved_by}`:''}</div>
                       </div>
                     )})}</div>}
                   </div>
