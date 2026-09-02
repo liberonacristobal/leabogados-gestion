@@ -3311,7 +3311,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       })()}
 
 
-      {lvlLabel('Cobros y pagos')}
+      {lvlLabel('Indicadores')}
       {/* Grid 2-col: Cobranza (antigüedad) + Proyección de ingresos (separadas). Cada tile abre su detalle debajo. */}
       <div style={{padding:'6px 20px 0'}}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -3626,7 +3626,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         )
       })()}
 
-      {lvlLabel('Otros indicadores')}
+      {/* Rótulo unificado en "Indicadores" (arriba) */}
 
       {/* Costos de oficina + Mis proyectos — tiles de media columna; Mis proyectos abre su lista debajo. */}
       <div style={{padding:'6px 20px 0'}}>
