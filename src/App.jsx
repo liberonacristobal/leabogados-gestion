@@ -12659,6 +12659,66 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   }
   // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
   const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id&&!e.personal_de).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
+  // ── Asistente IA de "Sin asignar": resuelve solo el cliente de cada gasto huérfano ──────────
+  // Cascada (reusa la infra existente): 1) RUT exacto (resolverClienteSII) · 2) glosa aprendida
+  // (learnings gasto_cliente/cargo_cliente, misma llave glosaKey que Caja Chica) · 3) IA para el
+  // resto. Auto-asigna lo de ALTA confianza (RUT/glosa aprendida); lo dudoso queda para confirmar.
+  // Aprende al aplicar (learnPut gasto_cliente) → compounde con Caja Chica y no vuelve a preguntar.
+  const [orfSug,setOrfSug] = useState({})        // {expId:{client_id,name,conf,via}}
+  const [orfBusy,setOrfBusy] = useState(false)
+  const [orfRan,setOrfRan] = useState(false)
+  const [orfAuto,setOrfAuto] = useState({})      // {expId:{name,client_id,concept,amount,via}} asignados esta sesión
+  const [orfAutoOpen,setOrfAutoOpen] = useState(false)
+  const [orfQ,setOrfQ] = useState('')            // buscador
+  const [orfPickFor,setOrfPickFor] = useState(null)  // id con picker manual abierto ("otro")
+  const aplicarOrf = async(e,client_id)=>{
+    if(!client_id) return
+    try{ await onAssignClientToExpense(e.id,client_id) }catch(_){}
+    const gk=glosaKey(e.concept||''); if(gk){ try{ learnPut('gasto_cliente',gk,client_id) }catch(_){} }
+    setOrfSug(p=>{ const n={...p}; delete n[e.id]; return n }); setOrfPickFor(null)
+  }
+  const deshacerOrf = async(e)=>{
+    try{ await onAssignClientToExpense(e.id,null) }catch(_){}
+    setOrfAuto(p=>{ const n={...p}; delete n[e.id]; return n })
+  }
+  const runOrfAsistente = async()=>{
+    setOrfBusy(true); setOrfRan(false)
+    try{
+      const learned={}
+      try{
+        const [{data:lg},{data:lc}] = await Promise.all([
+          supabase.from('learnings').select('key,value').eq('kind','gasto_cliente'),
+          supabase.from('learnings').select('key,value').eq('kind','cargo_cliente'),
+        ])
+        ;(lg||[]).forEach(r=>{ if(r.key&&r.value) learned[r.key]=r.value })
+        ;(lc||[]).forEach(r=>{ if(r.key&&r.value&&!learned[r.key]) learned[r.key]=r.value })
+      }catch(_){}
+      const sug={}, needIA=[]
+      orphans.forEach(e=>{
+        const rut=e.rut||e.receptor_rut||''
+        if(rut){ const c=resolverClienteSII(rut,'',clients,clientEntities); if(c&&c.status!=='Terminado'){ sug[e.id]={client_id:c.id,name:c.name,conf:97,via:`RUT ${rut}`}; return } }
+        const gk=glosaKey(e.concept||'')
+        if(gk&&learned[gk]){ const c=clients.find(x=>String(x.id)===String(learned[gk])); if(c&&c.status!=='Terminado'){ sug[e.id]={client_id:c.id,name:c.name,conf:90,via:'glosa aprendida'}; return } }
+        needIA.push(e)
+      })
+      if(needIA.length){
+        const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
+        const prompt=`Eres asistente contable del estudio ${BRAND.nombre}. Te paso GASTOS sin cliente y la lista de CLIENTES. Para cada gasto sugiere el cliente (id de la lista) más probable según la glosa y el monto. Si no es claro, usa null. Devuelve SOLO un JSON array: [{"id":"<id del gasto>","client_id":"<id o null>"}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES: ${JSON.stringify(clientList)}\nGASTOS: ${JSON.stringify(needIA.map(e=>({id:e.id,glosa:e.concept||'',monto:e.amount||0,fecha:e.date||''})))}`
+        try{
+          const j=await claudeCall({model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})
+          const txt=j?.content?.[0]?.text||''; const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
+          arr.forEach(o=>{ const e=needIA.find(x=>String(x.id)===String(o.id)); if(!e||!o.client_id) return; const c=clients.find(x=>String(x.id)===String(o.client_id)); if(!c||c.status==='Terminado') return; sug[e.id]={client_id:c.id,name:c.name,conf:70,via:'IA'} })
+        }catch(_){}
+      }
+      setOrfSug(sug)
+      // Auto-asigna lo de ALTA confianza (RUT exacto o glosa ya aprendida) — reversible.
+      const altos=orphans.filter(e=>sug[e.id]&&sug[e.id].conf>=90)
+      const auto={}
+      for(const e of altos){ auto[e.id]={name:sug[e.id].name,client_id:sug[e.id].client_id,concept:e.concept,amount:e.amount,via:sug[e.id].via}; await aplicarOrf(e,sug[e.id].client_id) }
+      setOrfAuto(auto)
+    }catch(_){}
+    setOrfBusy(false); setOrfRan(true)
+  }
   // Revisión de carga: gastos pegados a un cliente NO activo (Terminado/Prospecto) o a un ocasional → para revisar/corregir.
   const clientById = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{m[String(c.id)]=c}); return m },[clients])
   const revGroup = items => { const g={}; items.forEach(e=>{ const k=String(e.client_id); (g[k]=g[k]||{c:clientById[k],gastos:[]}).gastos.push(e) }); return Object.values(g).filter(x=>x.c).sort((a,b)=>b.gastos.length-a.gastos.length) }
@@ -13311,11 +13371,11 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     </div>) }
   const gastosClasificar = (expenses||[]).filter(e=> e.type==='gasto' && e.bulk_import_id && e.client_id && !e.personal_de && !e.created_by && !esOficina(e.client_id) && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && !e.deleted_at)
   const isDesktop = useIsDesktop()   // Fase 3: desktop = 2-panel (lista de clientes izq + detalle/paneles der); movil = columna
-  return { catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, notaBtnOpen, setNotaBtnOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, verTodos, setVerTodos, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop }
+  return { catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, notaBtnOpen, setNotaBtnOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, verTodos, setVerTodos, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop }
 }
 
 function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,onMoverAOficina,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened,costosOfiMes=0,onOpenCostosOfi}) {
-  const { catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, notaBtnOpen, setNotaBtnOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, verTodos, setVerTodos, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, costosOfiMes, onOpenCostosOfi })
+  const { catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, notaBtnOpen, setNotaBtnOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, verTodos, setVerTodos, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, costosOfiMes, onOpenCostosOfi })
   // Hub de Gastos: cara de entrada (hero Por cobrar/A favor + 6 tarjetas). Al tocar una tarjeta se navega a la vista existente. Presentación pura — no toca cifras.
   const [hubOpen,setHubOpen] = useState(true)
   const [notaTab,setNotaTab] = useState('hub')   // sub-hub de Notaría: hub | pend (liquidar) | cobros | pagados
@@ -13966,27 +14026,80 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         </div>
       )}
 
-      {/* Vista "Sin cliente · por asignar": gastos huérfanos de la carga masiva */}
-      {showOrphans&&(
-        <div style={{padding:'4px 20px 100px'}}>
-          {orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>No quedan gastos sin cliente.</div>}
-          {orphans.map(e=>(
-            <div key={e.id} style={{background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
+      {/* Vista "Sin cliente · por asignar": la app resuelve sola el cliente (aprendido + IA), tú confirmas lo dudoso */}
+      {showOrphans&&(()=>{
+        const total=orphans.reduce((a,e)=>a+(e.amount||0),0)
+        const ql=orfQ.trim().toLowerCase()
+        const lista = ql ? orphans.filter(e=>`${e.concept||''} ${Math.round(e.amount||0)} ${e.rut||e.receptor_rut||''}`.toLowerCase().includes(ql)) : orphans
+        const autoArr=Object.entries(orfAuto)
+        const card = e=>{
+          const s=orfSug[e.id]
+          const alta=s&&s.conf>=90
+          return (
+            <div key={e.id} style={{background:C.card,borderRadius:11,padding:'11px 13px',marginBottom:8,border:`1px solid ${C.border}`}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:s||orfPickFor===e.id?8:9}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
                   <div style={{fontSize:11,color:C.muted,marginTop:1}}>{e.date?fmtFechaDMY(e.date):'sin fecha'} · {e.category||'Otro'}{e.type==='fondo'?' · Fondo':''}</div>
                 </div>
                 <span style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(e.amount)}</span>
               </div>
-              <div style={{display:'flex',justifyContent:'flex-end',gap:6,alignItems:'center'}}>
-                {onCreateOccasional&&<button onClick={async()=>{ const nm=await appPrompt('Nombre del cliente ocasional:', e.concept||''); if(nm&&nm.trim()){ const c=await onCreateOccasional(nm.trim()); if(c) onAssignClientToExpense(e.id,c.id) } }} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional</button>}
-                <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>onAssignClientToExpense(e.id,cid)} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/>
-              </div>
+              {s&&orfPickFor!==e.id?(
+                <div style={{display:'flex',alignItems:'center',gap:8,background:alta?C.greenBg:C.bgSoft,borderRadius:8,padding:'6px 8px 6px 10px'}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:alta?C.greenText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                    <div style={{fontSize:9.5,color:alta?'#3E7A66':C.muted,marginTop:1}}>{s.via} · {s.conf}%</div>
+                  </div>
+                  <button onClick={()=>aplicarOrf(e,s.client_id)} title='Asignar' style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:30,height:28,background:alta?C.greenText:C.accent,border:'none',borderRadius:8,cursor:'pointer',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg></button>
+                  <button onClick={()=>setOrfPickFor(e.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'0 4px',flexShrink:0}}>otro</button>
+                </div>
+              ):(
+                <div style={{display:'flex',justifyContent:'flex-end',gap:6,alignItems:'center'}}>
+                  {onCreateOccasional&&<button onClick={async()=>{ const nm=await appPrompt('Nombre del cliente ocasional:', e.concept||''); if(nm&&nm.trim()){ const c=await onCreateOccasional(nm.trim()); if(c) aplicarOrf(e,c.id) } }} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional</button>}
+                  <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>aplicarOrf(e,cid)} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/>
+                </div>
+              )}
             </div>
-          ))}
+          )
+        }
+        return (
+        <div style={{padding:'4px 20px 100px',...(isDesktop?{maxWidth:760,margin:'0 auto'}:{})}}>
+          {orphans.length===0&&autoArr.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>No quedan gastos sin cliente.</div>}
+          {orphans.length>0&&(
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginBottom:11,display:'flex',alignItems:'center',gap:12}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:15,fontWeight:700,color:C.text}}>{orphans.length} gasto{orphans.length===1?'':'s'} sin cliente</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:1}}>{fmt(total)} · la app puede resolver la mayoría</div>
+              </div>
+              <button disabled={orfBusy} onClick={runOrfAsistente} style={{fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'9px 15px',cursor:orfBusy?'default':'pointer',opacity:orfBusy?.6:1,display:'inline-flex',alignItems:'center',gap:7,whiteSpace:'nowrap',flexShrink:0}}>{orfBusy&&<Spin/>}{orfBusy?'Resolviendo…':orfRan?'Resolver de nuevo':'Resolver con IA'}</button>
+            </div>
+          )}
+          {autoArr.length>0&&(
+            <div style={{background:C.greenBg,border:`1px solid #B9E3D2`,borderRadius:10,marginBottom:11,overflow:'hidden'}}>
+              <div onClick={()=>setOrfAutoOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',cursor:'pointer'}}>
+                <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>
+                <span style={{fontSize:12,fontWeight:500,color:C.greenText,flex:1}}>{autoArr.length} asignada{autoArr.length===1?'':'s'} por la app · reversibles</span>
+                <span style={{fontSize:11,fontWeight:600,color:C.greenText}}>{orfAutoOpen?'Ocultar':'Ver'}</span>
+              </div>
+              {orfAutoOpen&&<div style={{padding:'0 13px 8px'}}>{autoArr.map(([id,a])=>(
+                <div key={id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:'1px solid #C7E7D8'}}>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:C.greenText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</div><div style={{fontSize:9.5,color:'#3E7A66',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.concept||'—'} · {fmt(a.amount)} · {a.via}</div></div>
+                  <button onClick={()=>deshacerOrf({id})} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'3px 9px',cursor:'pointer',flexShrink:0}}>Deshacer</button>
+                </div>
+              ))}</div>}
+            </div>
+          )}
+          {orphans.length>3&&(
+            <div style={{display:'flex',alignItems:'center',gap:7,background:C.card,border:`1px solid ${C.border}`,borderRadius:9,padding:'7px 11px',marginBottom:11}}>
+              <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg>
+              <input value={orfQ} onChange={e=>setOrfQ(e.target.value)} placeholder='Buscar por glosa, monto o RUT' style={{border:'none',background:'none',outline:'none',fontSize:12,color:C.text,width:'100%'}}/>
+            </div>
+          )}
+          {lista.map(card)}
+          {ql&&lista.length===0&&<div style={{color:C.muted,textAlign:'center',padding:24,fontSize:12}}>Sin resultados para “{orfQ}”.</div>}
         </div>
-      )}
+        )
+      })()}
 
       {/* Vista general: lista de clientes con saldo */}
       {!selectedClient&&!showOrphans&&!showNotaria&&(
@@ -14212,7 +14325,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {t:'Cargar', ic:'wallet', s:'Gasto · fondo · masiva', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setNotaMenuOpen(true)}},
       {t:'Rendiciones', ic:'receipt', s:'Rendir a cliente', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setTimeout(()=>{try{document.getElementById('conviene-rendir')?.scrollIntoView({behavior:'smooth',block:'start'})}catch(_){}},80)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} pendiente`:'Sin pendientes', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
-      {t:'Sin asignar', ic:'alert', s:nSin?`${nSin} gasto${nSin!==1?'s':''}`:'Todo asignado', col:C.soonText, bg:C.soonBg, go:()=>setShowRevision(true)},
+      {t:'Sin asignar', ic:'alert', s:nSin?`${nSin} gasto${nSin!==1?'s':''}`:'Todo asignado', col:C.soonText, bg:C.soonBg, go:()=>{setHubOpen(false);setShowRevision(true)}},
       {t:'Historial', ic:'clock', s:'Rendiciones y pagos', col:C.accent, bg:C.azulBg, go:()=>setShowHistorial(true)},
     ]
     // Tarjeta de navegación: blanca, plana, con ícono en cuadro (sin barra de color) — como el render autorizado.
