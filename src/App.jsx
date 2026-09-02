@@ -11731,6 +11731,19 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     return g
   }
 
+  // La herramienta aprende el RUT: al asignar un compareciente a un cliente, guarda su razón social + RUT como client_entity
+  // (si trae RUT y no existe ya) → la próxima carga de notaría matchea ese RUT solo, sin trabajo manual.
+  const learnRutNota = async (row, clientId) => {
+    if(!notaria || DEMO || !clientId || !row) return
+    const parties = parseComparecientes(row.requirente).filter(p=>p.rut && !esFirmaOLawyer(p.nombre))
+    if(!parties.length) return
+    const pick = parties.find(p=>catNorm(p.nombre)===catNorm(row.nombre)) || (parties.length===1 ? parties[0] : null)
+    if(!pick) return
+    const nr = normRut(pick.rut); if(!nr) return
+    if((clientEntities||[]).some(e=>normRut(e.rut)===nr)) return   // ese RUT ya está cargado → no duplicar (regla anti-duplicados)
+    try{ await supabase.from('client_entities').insert({client_id:clientId, name:pick.nombre, rut:pick.rut}); onClientsUpdate&&onClientsUpdate() }catch(_){}
+  }
+
   const onFile = async(e) => {
     const file = e.target.files?.[0]; if(!file) return
     setFileName(file.name)
@@ -11850,11 +11863,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     })
     // Aprende: este nombre crudo → este cliente, para que las próximas cargas caigan solas.
     if(onLearnAlias && srcNombre && String(srcNombre).trim()) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
-    if(srcRow && String(srcRow.requirente||'').trim()) learnNota(srcRow, clientId)   // notaría: aprende requirente → cliente
+    if(srcRow && String(srcRow.requirente||'').trim()){ learnNota(srcRow, clientId); learnRutNota(srcRow, clientId) }   // notaría: aprende requirente→cliente y el RUT→client_entity
   }
   // Confirma de una vez todas las sugerencias (fuzzy 70-89 / IA 65-84) como cliente asignado.
   const confirmarSugeridos = () => {
-    (rows||[]).forEach(r=>{ if(r.suggestion && String(r.requirente||'').trim()) learnNota(r, r.suggestion.id) })   // notaría: aprende cada requirente confirmado
+    (rows||[]).forEach(r=>{ if(r.suggestion && String(r.requirente||'').trim()){ learnNota(r, r.suggestion.id); learnRutNota(r, r.suggestion.id) } })   // notaría: aprende cada requirente confirmado (+ su RUT)
     setRows(p=>p.map(r=>{
       if(!r.suggestion) return r
       const c=clients.find(x=>x.id===r.suggestion.id); const ents=entsOf(r.suggestion.id)
