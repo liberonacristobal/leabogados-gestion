@@ -11505,6 +11505,8 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
 
   // Memoria aprendida: nombre-crudo normalizado → cliente (de asignaciones manuales previas).
   const aliasMap = useMemo(()=>{ const m=new Map(); (importAliases||[]).forEach(a=>m.set(a.alias_norm,a.client_id)); return m },[importAliases])
+  // Fuente extra de RUT→cliente: las facturas ya emitidas (billing.receptor_rut) — recupera clientes cuyo RUT no está en client_entities pero sí facturaste.
+  const rutBillingMap = useMemo(()=>{ const m=new Map(); (billing||[]).forEach(b=>{ if(b.client_id&&b.receptor_rut){ const k=normRut(b.receptor_rut); if(k&&!m.has(k)) m.set(k,b.client_id) } }); return m },[billing])
   const aliasClient = nombre => { const k=String(nombre||'').toLowerCase().trim(); if(!k) return null; const cid=aliasMap.get(k); return cid?clients.find(c=>String(c.id)===String(cid)):null }
 
   // Nivel 3: fuzzy por distancia de Levenshtein normalizada contra nombre, razón social y razones sociales (client_entities).
@@ -11786,7 +11788,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           // El cliente NO viene dado (col 'Cliente' = la firma). Se deduce del Compareciente: RUT primero, luego nombre, luego alias aprendido.
           conceptoEff = glosaNotaria(materia, notas)
           const parties = parseComparecientes(requirente)
-          for(const pt of parties){ if(!pt.rut||esFirmaOLawyer(pt.nombre)) continue; const ex=exactMatch(pt.rut,''); if(ex.client){ cli=ex.client; method='rut_exact'; entId=ex.entity_id; nombreEff=pt.nombre||nombreEff; break } }
+          for(const pt of parties){ if(!pt.rut||esFirmaOLawyer(pt.nombre)) continue; const ex=exactMatch(pt.rut,''); if(ex.client){ cli=ex.client; method='rut_exact'; entId=ex.entity_id; nombreEff=pt.nombre||nombreEff; break }
+            const bcid=rutBillingMap.get(normRut(pt.rut)); if(bcid){ const c=clients.find(x=>String(x.id)===String(bcid)); if(c){ cli=c; method='rut_factura'; entId=null; nombreEff=pt.nombre||nombreEff; break } } }
           if(!cli) for(const pt of parties){ if(esFirmaOLawyer(pt.nombre)) continue; const ex=exactMatch('',pt.nombre); if(ex.client){ cli=ex.client; method='name_exact'; entId=ex.entity_id; nombreEff=pt.nombre; break } const al=aliasClient(pt.nombre); if(al){ cli=al; method='aprendido'; entId=null; nombreEff=pt.nombre; break } }
           if(!nombreEff||/^liberona escala|^n\/a$/i.test(nombreEff.trim())) nombreEff = (parties.find(p=>!esFirmaOLawyer(p.nombre))?.nombre) || parties[0]?.nombre || ''
         } else {
