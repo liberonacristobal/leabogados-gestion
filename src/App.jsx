@@ -13472,6 +13472,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [cobrosQ,setCobrosQ] = useState('')                // buscador en Cobros (vista por OT)
   const [notaCliOpen,setNotaCliOpen] = useState(()=>new Set())   // Deuda: acordeones de cliente/persona expandidos (default todos plegados)
   const [pagosOrd,setPagosOrd] = useState('nuevo')               // Pagos realizados: orden por fecha 'nuevo' | 'antiguo'
+  const [showCargaPag,setShowCargaPag] = useState(false)         // Carga masiva como PÁGINA (no modal): landing con Subir + cargas recientes
+  const [cargaOpen,setCargaOpen] = useState(null)                // lote expandido en la página de Carga masiva
   // Ledger de cobros de la notaría (fuente única): cada gasto de notaría con su estado (pagada/en liquidación/por pagar) y error (sin cliente/duplicado), agrupado por carga masiva.
   const notaLedger = useMemo(()=>{
     const liqById={}; (notaLiquidaciones||[]).forEach(r=>{ liqById[String(r.id)]=r })
@@ -13528,6 +13530,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 if(showReasignar){setShowReasignar(false);setReasignFrom(null);setRevSel(new Set());return}   // → Clientes
                 if(showBuscarClientes){setShowBuscarClientes(false);setQ('');return}                          // → Clientes
                 if(showRendiciones){ if(rendSub){setRendSub(null);setQ('');return} setShowRendiciones(false);setHubOpen(true);return }   // sub → Rendiciones ; Rendiciones → hub
+                if(showCargaPag){setShowCargaPag(false);setHubOpen(true);return}                              // Carga masiva → hub
                 if(notaMenuOpen){setNotaMenuOpen(false);setHubOpen(true);return}                              // Cargar → hub
                 if(showGastosOficina){setShowGastosOficina(false);setHubOpen(true);return}                    // Gastos oficina → hub
                 if(showHistorial){setShowHistorial(false);setHubOpen(true);return}                            // Historial → hub
@@ -13538,7 +13541,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <div>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-                  {showHistorial?'Historial':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Pagos realizados':notaTab==='pend'?'Deuda':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
+                  {showCargaPag?'Carga masiva':showHistorial?'Historial':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Pagos realizados':notaTab==='pend'?'Deuda':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ficha →</span>}
                 {selectedClient&&!esOficina(selectedClient.id)&&(()=>{
@@ -13563,7 +13566,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const opts=[
             {t:'Registrar gasto', s:'ingresar uno a mano', ic:'file', col:C.accent, bg:C.azulBg, go:()=>{setNotaMenuOpen(false);onAdd()}},
             {t:'Fondos', s:'desde conciliación bancaria', ic:'wallet', col:C.greenText, bg:C.greenBg, go:()=>{setNotaMenuOpen(false);onIrConciliacion?onIrConciliacion():onAddFondo()}},
-            {t:'Carga masiva', s:'varios con IA', ic:'grid', col:C.tealText, bg:C.tealBg, go:()=>{setNotaMenuOpen(false);onBulk(false)}},
+            {t:'Carga masiva', s:'varios con IA', ic:'grid', col:C.tealText, bg:C.tealBg, go:()=>{setNotaMenuOpen(false);setCargaOpen(null);setShowCargaPag(true)}},
             ...(gastosClasificar.length>0?[{t:'Clasificar pagos', s:`histórico o descuenta · ${gastosClasificar.length}`, ic:'exchange', col:C.soonText, bg:C.soonBg, go:()=>{setNotaMenuOpen(false);setShowClasificar(true);setSelClasif(new Set());setClasifSearch('');setClasifOpen(new Set())}}]:[]),
           ]
           return (
@@ -13602,7 +13605,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         })()}
 
         {/* Vista general: tarjetas-filtro + búsqueda */}
-        {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&!showGastosOficina&&!showRendiciones&&!notaMenuOpen&&(()=>{
+        {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&!showGastosOficina&&!showRendiciones&&!notaMenuOpen&&!showCargaPag&&(()=>{
           const baseAll = verArchivadosG ? clientsWithMovs.filter(c=>c.status==='Terminado') : clientsWithMovs.filter(c=>c.status!=='Terminado')
           const saldoDe = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
           const baseList = respFilter ? baseAll.filter(c=> respFilter==='__sin__' ? !c.abogado_responsable : c.abogado_responsable===respFilter) : baseAll
@@ -13814,6 +13817,52 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         })()}
       </div>
 
+      {/* Vista "Carga masiva" (página, no modal): Subir + cargas recientes como acordeones con fecha canon. La subida/revisión con IA se abre desde aquí (onBulk) */}
+      {showCargaPag&&(()=>{
+        const D=isDesktop
+        const liveBulk = id => (expenses||[]).filter(e=>String(e.bulk_import_id)===String(id)&&!e.deleted_at)
+        const estOf = e => (e.notaria_liquidado_at||e.notaria_render_id) ? ['Pagada',C.greenText,C.greenBg] : (e.client_rendered_at||e.client_render_id||e.rendered_at||e.render_id) ? ['Rendida',C.azulInfo,C.azulBg] : ['Cargada',C.muted,C.bgSoft]
+        const cnOf = e => clients.find(c=>String(c.id)===String(e.client_id))?.name || (e.personal_de?`Personal · ${e.personal_de}`:'Sin cliente')
+        const cargas = (bulkImports||[]).map(b=>{ const gs=liveBulk(b.id); return {...b, gs, total:gs.reduce((a,e)=>a+(e.amount||0),0)} })
+        return (
+          <div style={{padding:D?'8px 20px 60px':'6px 12px 40px',maxWidth:D?820:undefined,margin:'0 auto'}}>
+            <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+              <button onClick={()=>onBulk&&onBulk(true)} style={{flex:1,minWidth:180,display:'flex',alignItems:'center',gap:10,background:C.accent,color:'#fff',border:'none',borderRadius:12,padding:'13px 15px',cursor:'pointer',textAlign:'left'}}>
+                <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
+                <div><div style={{fontSize:14,fontWeight:700}}>Subir Excel de notaría</div><div style={{fontSize:11,color:'#9FE1CB'}}>lee las OT y propone cliente con IA</div></div>
+              </button>
+              <button onClick={()=>onBulk&&onBulk(false)} style={{flex:1,minWidth:180,display:'flex',alignItems:'center',gap:10,background:'#fff',color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',cursor:'pointer',textAlign:'left'}}>
+                <span style={{width:34,height:34,borderRadius:10,background:C.tealBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='grid' s={18} c={C.tealText}/></span>
+                <div><div style={{fontSize:14,fontWeight:700,color:C.text}}>Otros gastos</div><div style={{fontSize:11,color:C.muted}}>carga masiva general</div></div>
+              </button>
+            </div>
+            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:9}}>Cargas recientes</div>
+            {cargas.length===0&&<div style={{color:C.muted,textAlign:'center',padding:28,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Aún no hay cargas. Sube un Excel para empezar.</div>}
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>{cargas.map(c=>{ const open=cargaOpen===c.id; const dd=c.created_at?new Date(c.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; const undone=c.status==='undone'; return (
+              <div key={c.id} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',opacity:undone?.6:1}}>
+                <div onClick={()=>setCargaOpen(open?null:c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
+                  <div style={{textAlign:'center',width:38,flexShrink:0}}><div style={{fontSize:19,fontWeight:700,color:C.text,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{dnum}</div><div style={{fontSize:10,color:C.muted,textTransform:'uppercase'}}>{dmon}</div></div>
+                  <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}><div style={{fontSize:13.5,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.filename||'Carga sin nombre'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{c.created_by?`${c.created_by} · `:''}{c.gs.length} OT{undone?' · deshecha':''}</div></div>
+                  <div style={{fontSize:13.5,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(c.total)}</div>
+                  <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
+                </div>
+                {open&&<div style={{borderTop:`1px solid ${C.border}`}}>
+                  {c.gs.length===0&&<div style={{padding:'12px 13px',fontSize:12,color:C.muted}}>Sin gastos vivos en esta carga.</div>}
+                  {c.gs.slice(0,60).map((e,i)=>{ const [lbl,col,bg]=estOf(e); return (
+                    <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:i?`0.5px solid #EEF1F3`:'none'}}>
+                      <span style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,width:60,flexShrink:0}}>{fmtOt(e.ot_number)||'s/OT'}</span>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{e.client_id&&onOpenClientFicha?<span onClick={()=>onOpenClientFicha(e.client_id)} style={{cursor:'pointer'}}>{cnOf(e)}</span>:cnOf(e)}</div></div>
+                      <span style={{fontSize:9,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{lbl}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,minWidth:60,textAlign:'right'}}>{fmt(e.amount)}</span>
+                    </div>
+                  )})}
+                </div>}
+              </div>
+            )})}</div>
+          </div>
+        )
+      })()}
+
       {/* Vista "Rendiciones": 3 tarjetas — Rendir a cliente · Pendientes (+90 días) · Historial */}
       {showRendiciones&&(()=>{
         const pend90=(rendirPend||[]).filter(r=>(r.dias||0)>=90).sort((a,b)=>(b.dias||0)-(a.dias||0))
@@ -13931,7 +13980,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           {t:'Deuda', ic:'clock', s:notariaPend.length?`${notariaPend.length} OT · ${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.soonText, bg:C.ambarBg, go:()=>setNotaTab('pend')},
           {t:'Cobros', ic:'exchange', s:notaLedger.n?`${notaLedger.n} OT · ${fmtShort(notaLedger.total)}`:'lo que nos cobran', col:C.azulInfo, bg:C.azulBg, go:()=>{setCobrosVista('carga');setCobrosOpen(null);setCobrosQ('');setNotaTab('cobros')}},
           {t:'Pagos realizados', ic:'check', s:notaLiquidaciones.length?`${notaLiquidaciones.length} liquidación${notaLiquidaciones.length!==1?'es':''} · ${fmtShort(pagTot||0)} pagado`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
-          {t:'Carga masiva', ic:'file', s:'importar · correo', col:C.muted, bg:C.bgSoft, go:()=>onBulk&&onBulk(true)},
+          {t:'Carga masiva', ic:'file', s:'importar · correo', col:C.muted, bg:C.bgSoft, go:()=>{setShowNotaria(false);setHubOpen(false);setCargaOpen(null);setShowCargaPag(true)}},
         ]
         return (
           <div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
