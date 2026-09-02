@@ -2020,9 +2020,12 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
   )
   return (
     <aside className='sidenav' style={{position:'fixed',left:0,top:0,bottom:0,width:212,background:'#04242F',padding:'16px 12px',display:'none',flexDirection:'column',gap:2,zIndex:40,overflowY:'auto'}}>
-      <div style={{display:'flex',alignItems:'center',gap:9,padding:'4px 8px 14px'}}>
-        <span style={{width:26,height:26,borderRadius:7,background:'#12A150',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13}}>{(BRAND?.nombre||'L')[0]}</span>
-        <span style={{fontSize:13.5,fontWeight:800,color:'#fff',letterSpacing:-.2,lineHeight:1.15}}>{BRAND?.nombre||'FirmDesk'}<small style={{display:'block',fontSize:8,fontWeight:600,color:'#6f9aa6',letterSpacing:.2}}>con tecnología FirmDesk</small></span>
+      <div style={{display:'flex',flexDirection:'column',gap:6,padding:'4px 8px 14px'}}>
+        {/* Logo real del estudio (blanco sobre el sidebar oscuro); si el estudio no tiene logo cargado, cae al monograma. */}
+        {BRAND?.logo?.blanco
+          ? <img src={BRAND.logo.blanco} alt={BRAND?.nombre||'FirmDesk'} style={{height:22,width:'auto',maxWidth:'100%',objectFit:'contain',objectPosition:'left center',display:'block'}}/>
+          : <div style={{display:'flex',alignItems:'center',gap:9}}><span style={{width:26,height:26,borderRadius:7,background:'#12A150',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13}}>{(BRAND?.nombre||'L')[0]}</span><span style={{fontSize:13.5,fontWeight:800,color:'#fff',letterSpacing:-.2,lineHeight:1.15}}>{BRAND?.nombre||'FirmDesk'}</span></div>}
+        <small style={{fontSize:8,fontWeight:600,color:'#6f9aa6',letterSpacing:.2,paddingLeft:2}}>con tecnología FirmDesk</small>
       </div>
       {secciones.map((s,i)=>(<div key={i} style={{display:'flex',flexDirection:'column',gap:1}}>
         {s.cap&&<div style={{fontSize:8.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.06em',color:'#5a808c',margin:'12px 10px 4px'}}>{s.cap}</div>}
