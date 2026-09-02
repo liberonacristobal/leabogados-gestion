@@ -3166,7 +3166,18 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         )
         const connEl=(txt,col,bg)=><div style={{textAlign:'center',margin:'-1px 0 4px'}}><span style={{fontSize:8.5,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'2px 9px'}}>↓ {txt}</span></div>
         return (<>
-          {lvlLabel('El negocio')}
+          <div style={{padding:'14px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,position:'relative'}}>
+              <span style={{fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.5px'}}>El negocio</span>
+              <button onClick={()=>setYearMenu(o=>!o)} style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:8.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.5px'}}>{selYear}<span style={{fontSize:8,color:C.done}}>▾</span></button>
+              {yearMenu&&(
+                <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
+                  {aniosDisponibles.map(y=>(<button key={y} onClick={()=>{setSelYear(y);setYearMenu(false)}} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 14px',border:'none',background:y===selYear?C.azulBg:'#fff',color:y===selYear?C.accent:C.text,fontSize:12,fontWeight:y===selYear?600:500,cursor:'pointer'}}>{y}</button>))}
+                </div>
+              )}
+            </div>
+            <span onClick={()=>setTab('sales')} style={{fontSize:9,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver detalle ›</span>
+          </div>
           <div style={{padding:'6px 20px 0'}}>
             {/* Embudo: Vendido → Facturado → Cobrado → Utilidad. Tono suave por etapa; bruto/neto en la misma tarjeta; meta como % chip. Cada cifra de su helper (sin recalcular). Todo clickeable. */}
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8}}>
@@ -3199,210 +3210,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         </>)
       })()}
 
-      {/* Meta anual */}
-      <div style={{padding:'0 20px 0'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-          <div style={{display:'flex',alignItems:'center',position:'relative'}}>
-            <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Cómo va el año</span>
-            <button onClick={()=>setYearMenu(o=>!o)} style={{marginLeft:5,display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'0.04em'}}>{selYear}<span style={{fontSize:9,color:C.done}}>{'▾'}</span></button>
-            {yearMenu&&(
-              <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
-                {aniosDisponibles.map(y=>(
-                  <button key={y} onClick={()=>{setSelYear(y);setYearMenu(false)}} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 14px',border:'none',background:y===selYear?C.azulBg:'#fff',color:y===selYear?C.accent:C.text,fontSize:12,fontWeight:y===selYear?600:500,cursor:'pointer'}}>{y}</button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:10}}>
-            <button onClick={descargarMetas} title='Descargar imagen de Metas del año' aria-label='Descargar' style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:'2px',cursor:'pointer',color:C.accent}}>
-              <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>
-            </button>
-            <span style={{width:1,height:12,background:C.border}}/>
-            <div style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11.5,fontWeight:700}}>
-              <span onClick={()=>setDashMoneda('UF')} style={{cursor:'pointer',color:dashMoneda==='UF'?C.accent:C.done}}>UF</span>
-              <span style={{color:C.border,fontWeight:400}}>·</span>
-              <span onClick={()=>setDashMoneda('CLP')} style={{cursor:'pointer',color:dashMoneda==='CLP'?C.accent:C.done}}>$</span>
-            </div>
-          </div>
-        </div>
-        <div style={{background:C.accent,borderRadius:12,border:`1px solid ${C.accent}`,overflow:'hidden'}}>
-          {/* Velocímetro de meta (navy) + desglose. Paneles de detalle (revOpen/histOpen) van en blanco. */}
-          <div style={{padding:'14px 15px'}}>
-            {(()=>{
-              const denom = dashMoneda==='UF' ? metaUF : m.meta
-              const neto = gaugeMode==='neto'
-              const heroUF = neto?m.netoUF:m.brutoUF, heroVal = neto?m.neto:m.bruto
-              const heroMon = dashMoneda==='UF'?heroUF:heroVal
-              const pctMeta = denom>0?Math.round(heroMon/denom*100):0
-              const faltanUF = Math.max(0,metaUF-heroUF), faltanVal = Math.max(0,m.meta-heroVal)
-              const otherUF = neto?m.brutoUF:m.netoUF, otherVal = neto?m.bruto:m.neto
-              const heroCol = neto?C.onNavyGreen:'#fff'
-              const lblBig = {fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}
-              const lblSm = {fontSize:9,color:'#7C9AA8',textTransform:'uppercase',letterSpacing:.3}
-              const segBtn = on => ({padding:'3px 9px',borderRadius:6,border:`1px solid ${on?'transparent':C.onNavyLine}`,background:on?C.onNavyBtn:'transparent',color:on?'#fff':C.onNavyLabel,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:.3,cursor:'pointer',lineHeight:1})
-              return (<>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:9,fontWeight:700,color:C.onNavyLabel,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>{neto?'Neto':'Ventas'} · {selYear}</div>
-                    <div style={{fontSize:25,fontWeight:700,color:heroCol,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{vMon(heroUF,heroVal)}</div>
-                    <div style={{fontSize:9.5,fontWeight:600,color:'#B7CCD6',marginTop:3}}>{pctMeta}% de la meta</div>
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                    <div style={{display:'flex',gap:4}}>
-                      {[['venta','Bruto'],['neto','Neto']].map(([k,l])=>{ const on=gaugeMode===k; return (
-                        <button key={k} onClick={()=>setGaugeMode(k)} style={segBtn(on)}>{l}</button>
-                      )})}
-                    </div>
-                    <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?'#fff':C.onNavyLabel,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
-                  </div>
-                </div>
-                {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.onNavyGreen:C.onNavyRed,marginTop:4}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
-                <div style={{height:8.5,borderRadius:5,background:'rgba(255,255,255,.16)',overflow:'hidden',margin:'10px 0 4px'}}><div style={{height:'100%',width:`${Math.min(100,pctMeta)}%`,background:heroCol,borderRadius:5,transition:'width .3s'}}/></div>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:10}}>
-                  <span style={{color:C.onNavyRed}}>Faltan {vMon(faltanUF,faltanVal)}</span>
-                  <span style={{color:'#B7CCD6',fontWeight:600}}>Meta {vMon(metaUF,m.meta)}</span>
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between',gap:6,borderTop:`0.5px solid ${C.onNavyLine}`,marginTop:11,paddingTop:10}}>
-                  <div onClick={()=>setGaugeMode(neto?'venta':'neto')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:neto?'#fff':C.onNavyGreen}}>{vMon(otherUF,otherVal)}</div><div style={lblSm}>{neto?'Ventas':'Neto'}</div></div>
-                  <div style={{minWidth:0}}><div style={{...lblBig,color:'#B7CCD6'}}>{vMon(m.costoUF,m.costo)}</div><div style={lblSm}>Terceros</div></div>
-                  <div onClick={()=>setRevOpen(o=>!o)} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.onNavyLabel}}>{ventasDelAnio.length}</div><div style={lblSm}>Ventas ›</div></div>
-                </div>
-              </>)
-            })()}
-          </div>
-          {/* Trigger detalle de ventas del año (componen el Vendido) */}
-          {revOpen&&(
-              <div style={{background:'#fff',borderTop:`1px solid ${C.onNavyLine}`,padding:'10px 16px 12px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                  <span style={{color:C.done,fontSize:10,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ventas {selYear} · {ventasDelAnio.length}</span>
-                  <button onClick={()=>setRevOpen(false)} style={{background:'none',border:'none',color:C.done,fontSize:10,cursor:'pointer',textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ocultar</button>
-                </div>
-                {ventasDelAnio.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0 8px'}}>Sin ventas registradas este año.</div>}
-                {ventasDelAnio.map(({s,bruto,brutoUF})=>{
-                  const cl=clients.find(c=>String(c.id)===String(s.client_id)); const cn=cl?.name||'—'
-                  return (
-                    <div key={s.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
-                      <div style={{minWidth:0}}>
-                        <div onClick={cl?(ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(cl.id)}):undefined} style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:cl?'pointer':'default'}}>{cn}</div>
-                        <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'—'}{esRec(s)?' · recurrente':''}</div>
-                      </div>
-                      <span style={{fontSize:12,fontWeight:600,color:C.accent,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{vMon(brutoUF,bruto)}</span>
-                    </div>
-                  )
-                })}
-                {ventasDelAnio.length>0&&(
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,paddingTop:8,fontWeight:700}}>
-                    <span style={{fontSize:11,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Ventas {selYear}</span>
-                    <span style={{fontSize:13,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          {/* Años anteriores: se abre con el icono junto a "Desglose financiero" */}
-          {histOpen&&(
-            <div style={{background:'#fff',borderTop:`1px solid ${C.onNavyLine}`,padding:'10px 16px 14px'}}>
-              <div style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,paddingBottom:4}}>
-                <span>Año</span><span>Avance</span><span style={{textAlign:'right'}}>Neto · % meta</span>
-              </div>
-              {aniosDisponibles.map(y=>{ const my=metricasAnio(y); const esActual=y===currentYear; const col=esActual?C.accent:C.muted; const pctMetaNeto=my.meta>0?Math.round(my.neto/my.meta*100):0
-                return (
-                <div key={y} style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,alignItems:'center',padding:'7px 0',borderTop:'1px solid #E4E8EB'}}>
-                  <span style={{fontSize:12,fontWeight:500,color:col}}>{y}</span>
-                  <div style={{height:5,background:C.border,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',background:col,width:`${Math.min(100,pctMetaNeto)}%`,borderRadius:3}}/></div>
-                  <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:C.text}}>{vMon(my.netoUF,my.neto)}</div>
-                    <div style={{fontSize:10,color:C.muted}}>{esActual?`${pctMetaNeto}% · en curso`:`${pctMetaNeto}% meta`}</div>
-                  </div>
-                </div>
-              )})}
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* INGRESOS DEL AÑO — a continuación de "Cómo va el año". Ingresado + Meta siempre visibles; el detalle (Vendido/Conversión/por año) se despliega. */}
-      {(ingresosPorAnioVenta.total>0||metaCobranza>0)&&(()=>{
-        const iv=ingresosPorAnioVenta
-        const vendidoCLP=m.bruto
-        const metaPct=metaCobranza>0?Math.round(iv.total/metaCobranza*100):0
-        const falta=Math.max(0,metaCobranza-iv.total)
-        const convPura=vendidoCLP>0?Math.round(iv.delAnio/vendidoCLP*100):0
-        const convGlob=vendidoCLP>0?Math.round(iv.total/vendidoCLP*100):0
-        const abierto=kOpen('cobrado')
-        const yc=(y,i)=> y===selYear?C.accent:([C.muted,C.done][i%2])
-        const nombreCli=b=>(clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'Sin cliente'
-        const abreFac=b=>{ if(b.client_id&&onOpenClientFicha) onOpenClientFicha(b.client_id); else setTab('billing') }
-        const drillList = ingDrill==null?null : (ingDrill==='sin'?iv.sinList:(iv.listByYear[ingDrill]||[])).slice().sort((a,b)=>String(b.paid_at||'').localeCompare(String(a.paid_at||'')))
-        const st={border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',position:'relative',background:C.bgPanel}
-        const arrow=<span style={{position:'absolute',right:9,top:9,color:C.done,fontSize:12}}>›</span>
-        return (
-        <div style={{padding:'12px 20px 0'}}>
-          {/* dos tiles de pesos SIEMPRE visibles (sin el header "Ingresos del año") */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,alignItems:'start'}}>
-            <div style={{borderRadius:13,padding:'12px 13px',background:C.greenText,color:'#fff'}}>
-              <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',opacity:.85}}>Ingresado a caja</div>
-              <div style={{fontSize:23,fontWeight:700,lineHeight:1,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.total)}</div>
-              <div style={{fontSize:9.5,opacity:.9,marginTop:4}}>{comisPagadasAnioVenta.total>0?'bruto · ':''}en {selYear}</div>
-              {comisPagadasAnioVenta.total>0&&<div style={{marginTop:9,paddingTop:8,borderTop:'1px solid rgba(255,255,255,.22)'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:10,opacity:.92}}><span>&minus; Comisiones pagadas</span><span style={{fontVariantNumeric:'tabular-nums'}}>&minus;{fmtMon(comisPagadasAnioVenta.total)}</span></div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginTop:6,paddingTop:6,borderTop:'1px solid rgba(255,255,255,.22)'}}><span style={{fontSize:10.5,fontWeight:700}}>= Neto a caja</span><span style={{fontSize:16,fontWeight:800,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.total-comisPagadasAnioVenta.total)}</span></div>
-              </div>}
-            </div>
-            <div style={{borderRadius:13,padding:'12px 13px',background:C.greenBg,border:'1px solid #CFE9DD'}}>
-              <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',color:C.greenText}}>Meta de cobranza</div>
-              <div style={{fontSize:23,fontWeight:700,lineHeight:1,marginTop:3,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{metaCobranza>0?fmtMon(metaCobranza):'—'}</div>
-              <div style={{fontSize:9.5,color:'#2E7D5B',marginTop:4}}>{metaCobranza>0?`${metaPct}% · faltan ${fmtMon(falta)}`:'sin meta'}</div>
-            </div>
-          </div>
-          {iv.porIdentificar>0&&<div onClick={()=>onAcceso&&onAcceso('conciliacion')} style={{display:'flex',alignItems:'center',gap:8,marginTop:9,padding:'8px 12px',background:C.ambarBg,borderRadius:10,cursor:'pointer'}}><span style={{width:6,height:6,borderRadius:'50%',background:C.soonText,flexShrink:0}}/><span style={{flex:1,fontSize:11.5,color:C.soonText,fontWeight:600}}>{fmtMon(iv.porIdentificar)} por identificar en el banco</span><span style={{fontSize:11,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Conciliar &rarr;</span></div>}
-          <div onClick={()=>kToggle('cobrado')} style={{display:'flex',justifyContent:'center',alignItems:'center',gap:5,marginTop:9,cursor:'pointer',fontSize:10.5,fontWeight:600,color:C.muted}}>{abierto?'Ocultar detalle':'Ver detalle del año'}<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:abierto?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg></div>
-          {abierto&&<>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:10}}>
-              <div onClick={()=>setRevOpen(o=>!o)} style={st}>{arrow}
-                <div style={{fontSize:8.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',color:C.done}}>Vendido {selYear}</div>
-                <div style={{fontSize:17,fontWeight:700,color:C.accent,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</div>
-                <div style={{fontSize:9,color:C.muted,marginTop:1}}>meta de venta</div>
-              </div>
-              <div onClick={()=>setConvOpen(o=>!o)} style={{...st,borderColor:convOpen?C.greenText:C.border}}><span style={{position:'absolute',right:9,top:9,color:C.greenText,fontSize:12,transform:convOpen?'rotate(180deg)':'none',transition:'transform .15s'}}>▾</span>
-                <div style={{fontSize:8.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.3px',color:C.done}}>Conversión ventas {selYear}</div>
-                <div style={{fontSize:20,fontWeight:700,color:C.greenText,marginTop:3,lineHeight:1}}>{convPura}%</div>
-                <div style={{fontSize:9,color:C.muted,marginTop:2}}>toca para el cálculo</div>
-              </div>
-            </div>
-            {convOpen&&<div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-              <div style={{display:'flex',alignItems:'baseline',gap:11,padding:'11px 14px'}}><span style={{fontSize:19,fontWeight:700,color:C.greenText,minWidth:46}}>{convPura}%</span><span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent}}>De ventas {selYear}</span><span style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.delAnio)} / {vMon(m.brutoUF,m.bruto)}</span></div>
-              <div style={{display:'flex',alignItems:'baseline',gap:11,padding:'11px 14px',borderTop:`1px solid ${C.bgSoft}`}}><span style={{fontSize:15,fontWeight:700,color:C.done,minWidth:46}}>{convGlob}%</span><span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent}}>Con años previos</span><span style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.total)} / {vMon(m.brutoUF,m.bruto)}</span></div>
-            </div>}
-            <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',margin:'14px 2px 8px'}}>Cuánto viene de cada año de venta · suma {fmtMon(iv.total)}</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              {iv.allYears.map((y,i)=>{ const on=ingDrill===y; return (
-                <div key={y} onClick={()=>setIngDrill(on?null:y)} style={{...st,borderColor:on?yc(y,i):C.border}}>{arrow}
-                  <div style={{fontSize:12.5,fontWeight:600,color:C.accent,display:'flex',alignItems:'center',gap:7}}><span style={{width:9,height:9,borderRadius:'50%',background:yc(y,i),flexShrink:0}}/>{y}</div>
-                  <div style={{fontSize:18,fontWeight:700,color:C.text,marginTop:4,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.byYear[y])}</div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:2}}>{(iv.listByYear[y]||[]).length} ingreso{(iv.listByYear[y]||[]).length!==1?'s':''} ›</div>
-                </div> )})}
-              {iv.sinMonto>0&&(()=>{ const on=ingDrill==='sin'; return (
-                <div onClick={()=>setIngDrill(on?null:'sin')} style={{...st,borderColor:on?C.soonText:C.border}}>{arrow}
-                  <div style={{fontSize:12.5,fontWeight:600,color:C.soonText,display:'flex',alignItems:'center',gap:7}}><span style={{width:9,height:9,borderRadius:'50%',background:C.soon,flexShrink:0}}/>Sin año</div>
-                  <div style={{fontSize:18,fontWeight:700,color:C.text,marginTop:4,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.sinMonto)}</div>
-                  <div style={{fontSize:10,color:C.soonText,marginTop:2}}>{iv.sinN} · asignar venta ›</div>
-                </div> )})()}
-            </div>
-            {drillList&&<div style={{marginTop:11,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.3px',padding:'9px 13px 3px',background:C.bgPanel}}>{ingDrill==='sin'?'Sin año asignado':`De ventas ${ingDrill}`} · {drillList.length} ingreso{drillList.length!==1?'s':''} · toca para ir al cliente</div>
-              {drillList.map(b=>{ const vt=sales.find(s=>String(s.id)===String(b.sale_id))?.title; return (
-                <div key={b.id} onClick={()=>abreFac(b)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(b)}</div>
-                    <div style={{fontSize:9.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b._esAnticipo?`Anticipo${b.concept?` · ${b.concept}`:''}`:`N°${folioN(b.invoice_no)||b.folio||'—'}`}{vt?` · ${vt}`:''}{b.paid_at?` · ${b._esAnticipo?'ingresó':'pagada'} ${fmtFechaDMY(b.paid_at)}`:''}{b._parcial?' · abono parcial':''}</div>
-                  </div>
-                  <span style={{fontSize:12,fontWeight:700,color:C.greenText,whiteSpace:'nowrap'}}>{fmtMon(b._cobrado!=null?b._cobrado:b.amount)}</span>
-                </div> )})}
-            </div>}
-          </>}
-        </div>
-        )
-      })()}
 
       {tareasOpen&&(()=>{
         const activas=(tasks||[]).filter(t=>t.status!=='Terminado')
@@ -3507,7 +3315,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       {/* Grid 2-col: Cobranza (antigüedad) + Proyección de ingresos (separadas). Cada tile abre su detalle debajo. */}
       <div style={{padding:'6px 20px 0'}}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {kTile('cobranza','Cobranza',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'por cobrar')}
+          {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'del año')}
           {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'ingresos · al 31 dic')}
         </div>
       </div>
@@ -3577,7 +3385,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       {/* Fila 2: Cuentas por pagar + Costos de oficina (el "Vendido" ya vive en Estado del negocio → sin duplicar). */}
       <div style={{padding:'8px 20px 0'}}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {(terceros||[]).length>0&&kTile('cxp','Comisiones',cxpTotDash>0?fmtShort(cxpTotDash):'Al día',cxpTotDash>0?C.soonText:C.greenText,'wallet',{fg:C.soonText,bg:C.ambarBg},cxpTotDash>0?'a proveedores':'sin deudas')}
+          {(terceros||[]).length>0&&kTile('cxp','Comisiones',cxpTotDash>0?fmtShort(cxpTotDash):'Al día',cxpTotDash>0?C.soonText:C.greenText,'wallet',{fg:C.soonText,bg:C.ambarBg},cxpTotDash>0?('por pagar'+(comisPagadasAnioVenta.total>0?' · '+fmtShort(comisPagadasAnioVenta.total)+' pagado':'')):'sin deudas')}
           {onOpenCostosOfi&&costosOfiMes>0&&kTile('costosofi','Presupuesto Oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'por mes',onOpenCostosOfi)}
         </div>
       </div>
@@ -3852,7 +3660,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       })()}
 
       {/* Equipo (admin) — trazabilidad del equipo limited: caja chica + actividad reciente (Eje 4, 2026-06-28) */}
-      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&<div style={{padding:'8px 20px 0'}}>{kTile('equipo','Equipo · trazabilidad',String([...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!['Cristóbal','Erasmo'].includes(u)).length),C.accent,'users',{fg:C.accent,bg:C.azulBg},'caja chica del equipo')}</div>}
+      {/* Tile "Equipo · trazabilidad" quitado del landing (queda en su vista) */}
       {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kOpen('equipo')&&(()=>{
         const ADMIN_NAMES=['Cristóbal','Erasmo']
         const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!ADMIN_NAMES.includes(u)).sort((a,b)=>a.localeCompare(b,'es'))
