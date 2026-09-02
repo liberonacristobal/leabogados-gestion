@@ -3191,7 +3191,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               <div onClick={()=>onAcceso&&onAcceso('facturasMes')} style={{background:'#FDF4E2',border:'1px solid #F5E6C6',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase'}}>Facturado</span>{m.bruto>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:'#BA7517',borderRadius:20,padding:'1px 7px'}}>{factPct}%</span>}</div>
                 <div style={{fontSize:22,fontWeight:800,color:C.text,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(facturadoYr)}</div>
-                <div style={{fontSize:9.5,color:C.done,marginTop:1}}>de lo vendido</div>
+                <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>de lo vendido</div>
               </div>
               <div onClick={()=>setTab('cobranza')} style={{background:'#E6F6EF',border:'1px solid #CDEBDD',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase'}}>Cobrado</span>{metaCobranza>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.normal,borderRadius:20,padding:'1px 7px'}}>{cobroPct}%</span>}</div>
@@ -3202,7 +3202,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                 <div onClick={onOpenEstadoResultados||onOpenCostosOfi} style={{background:'#EDF1F4',border:'1px solid #DCE4EA',borderRadius:12,padding:'12px 13px',cursor:(onOpenEstadoResultados||onOpenCostosOfi)?'pointer':'default'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase'}}>{pos?'Utilidad':'Pérdida'}</span>{ingYTD>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.accent,borderRadius:20,padding:'1px 7px'}}>{margenPct}%</span>}</div>
                   <div style={{fontSize:22,fontWeight:800,color:pos?C.accent:C.overdue,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmtMon(Math.abs(resultado))}</div>
-                  <div style={{fontSize:9.5,color:C.done,marginTop:1}}>margen</div>
+                  <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>margen</div>
                 </div>
               )}
             </div>
