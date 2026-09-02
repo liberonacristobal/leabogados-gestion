@@ -763,7 +763,7 @@ const TrashIcon = ({color}) => (
 const BanIcon = ({size=15,color}) => (
   <svg width={size} height={size} viewBox='0 0 24 24' fill='none' stroke={color||C.overdue} strokeWidth='2' strokeLinecap='round'><circle cx='12' cy='12' r='9'/><line x1='5.6' y1='5.6' x2='18.4' y2='18.4'/></svg>
 )
-const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeader=false,fullscreen=false,fullscreenOnMobile=false,footer=null,maxWidth=520}) => {
+const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeader=false,fullscreen=false,fullscreenOnMobile=false,footer=null,maxWidth=520,fsMaxWidth=720}) => {
   // iPhone-first: `fullscreenOnMobile` hace pantalla completa bajo 600px (header fijo, cuerpo con scroll propio, footer anclado con safe-area).
   // `footer` (opcional) es una barra inferior anclada FUERA del scroll — para inputs/acciones que no deben quedar tapados por el teclado.
   const [mob,setMob] = useState(()=> typeof window!=='undefined' && window.innerWidth < 600)
@@ -783,8 +783,8 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
           {!fs&&<button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:22,cursor:'pointer',lineHeight:1,width:44,height:44,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-10}}>×</button>}
         </div>
       </div>}
-      <div style={{flex:flex?1:undefined,minHeight:flex?0:undefined,overflowY:flex?'auto':'visible',overflowX:fs?'hidden':undefined,padding:hideHeader?'0':(fs?(footer?'14px 16px':'14px 16px calc(env(safe-area-inset-bottom,0px) + 32px)'):'18px 20px'),maxWidth:(fs&&!hideHeader)?720:'none',margin:(fs&&!hideHeader)?'0 auto':'0',width:(fs&&!hideHeader)?'auto':undefined,boxSizing:'border-box'}}>{children}</div>
-      {footer&&<div style={{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:fs?'10px 16px calc(env(safe-area-inset-bottom,0px) + 14px)':'12px 16px',maxWidth:fs?720:'none',margin:fs?'0 auto':'0',width:'100%',boxSizing:'border-box'}}>{footer}</div>}
+      <div style={{flex:flex?1:undefined,minHeight:flex?0:undefined,overflowY:flex?'auto':'visible',overflowX:fs?'hidden':undefined,padding:hideHeader?'0':(fs?(footer?'14px 16px':'14px 16px calc(env(safe-area-inset-bottom,0px) + 32px)'):'18px 20px'),maxWidth:(fs&&!hideHeader)?fsMaxWidth:'none',margin:(fs&&!hideHeader)?'0 auto':'0',width:(fs&&!hideHeader)?'auto':undefined,boxSizing:'border-box'}}>{children}</div>
+      {footer&&<div style={{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:fs?'10px 16px calc(env(safe-area-inset-bottom,0px) + 14px)':'12px 16px',maxWidth:fs?fsMaxWidth:'none',margin:fs?'0 auto':'0',width:'100%',boxSizing:'border-box'}}>{footer}</div>}
     </div>
   </div>
   )
@@ -7651,6 +7651,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   const [expand,setExpand] = useState(null)   // factura.id con detalle abierto
   const [busyId,setBusyId] = useState(null)
   const [sinIdOpen,setSinIdOpen] = useState(false)   // banner "pagos sin identificar" desplegado
+  const isDesktop = useIsDesktop()   // escritorio: 2 columnas (resumen + tendencia) y la lista como tabla ancha
 
   const respBySale = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
   const respByClient = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id),c.abogado_responsable||null])),[clients])
@@ -7719,7 +7720,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
 
   const dfmt = d => { const s=fmtDate(d); return s||'—' }
 
-  return (<div style={{maxWidth:660,margin:'0 auto'}}>
+  return (<div style={{maxWidth:isDesktop?1100:660,margin:'0 auto'}}>
     {/* Navegador de mes + modo */}
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
       <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
@@ -7793,24 +7794,13 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
 
     {/* Lista de facturas del período */}
     {estFiltro&&<div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:CIERRE_EST[estFiltro].color}}>Mostrando: {CIERRE_EST[estFiltro].label}</span><button onClick={()=>setEstFiltro(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Ver todas</button></div>}
-    <div style={{display:'flex',flexDirection:'column',gap:5}}>
-      {visibles.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:12.5,padding:'22px 0'}}>No hay facturas emitidas {modo==='mes'?`en ${mesLabel.toLowerCase()}`:`en ${mesYear}`}{resp?` de ${resp}`:''}.</div>}
-      {visibles.map(f=>{ const e=CIERRE_EST[f.est]; const abierto=expand===f.b.id; const rd=diasDesde?diasDesde(recordadoMap[String(f.b.id)]):null; const rec=rd!=null&&rd<=2
+    {(()=>{
+      const emptyEl = <div style={{textAlign:'center',color:C.muted,fontSize:12.5,padding:'22px 0'}}>No hay facturas emitidas {modo==='mes'?`en ${mesLabel.toLowerCase()}`:`en ${mesYear}`}{resp?` de ${resp}`:''}.</div>
+      const filaEl = (f)=>{ const e=CIERRE_EST[f.est]; const abierto=expand===f.b.id; const rd=diasDesde?diasDesde(recordadoMap[String(f.b.id)]):null; const rec=rd!=null&&rd<=2
         const dep=f.est==='detectado'&&f.pagos[0]?f.pagos[0].m:null; const depMonto=dep?((dep.monto||0)-(dep.monto_conciliado||0)):0
         const rn=r=>String(r||'').replace(/[.\s-]/g,'').toUpperCase(); const rutMatch=!!(dep&&f.b.receptor_rut&&dep.rut_contraparte&&rn(dep.rut_contraparte)===rn(f.b.receptor_rut)); const montoExacto=!!(dep&&depMonto===f.monto)
-        return <div key={f.b.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderLeft:`2px solid ${e.dot}`,borderRadius:10,overflow:'hidden'}}>
-          <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',cursor:'pointer'}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}}>{clientNom(f.b.client_id)}</div>
-              <div style={{fontSize:10,color:C.done,marginTop:1}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}{f.resp?` · ${f.resp}`:''}</div>
-            </div>
-            <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{fmt(f.monto)}</div>
-              <div style={{fontSize:9.5,color:e.color,marginTop:1}}><span style={{width:5,height:5,borderRadius:'50%',background:e.dot,display:'inline-block',marginRight:4,verticalAlign:1}}/>{e.label}{f.est==='cobrada'&&!tieneRespaldo(f.b)?' · sin respaldo':''}</div>
-            </div>
-            <span style={{fontSize:12,color:C.done}}>{abierto?'▾':'▸'}</span>
-          </div>
-          {abierto&&<div style={{padding:'0 11px 10px',borderTop:`1px solid ${C.bgSoft}`}}>
+        // Detalle expandible — idéntico en móvil y escritorio (fechas + calce del depósito + acciones).
+        const detalleInner = (<>
             <div style={{display:'flex',flexWrap:'wrap',gap:'2px 14px',fontSize:10.5,color:C.muted,margin:'8px 0 9px'}}>
               <span>Emitida <span style={{color:C.text,fontWeight:600}}>{dfmt(f.b.issued_at)}</span></span>
               <span>Enviada {f.b.email_sent_at?<span style={{color:C.text,fontWeight:600}}>{dfmt(f.b.email_sent_at)}</span>:'—'}</span>
@@ -7829,9 +7819,49 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
               {f.est==='sinpago'&&onRecordar&&<button onClick={()=>onRecordar(f.b)} style={{fontSize:11,fontWeight:600,color:rec?C.done:C.accent,background:'#fff',border:`1px solid ${rec?C.border:C.done}`,borderRadius:7,padding:'6px 12px',cursor:'pointer'}}>{rec?'Recordado ✓':'Recordar cobro ›'}</button>}
               <button onClick={()=>onOpenFactura&&onOpenFactura(f.b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 12px',cursor:'pointer'}}>Abrir factura ›</button>
             </div>
-          </div>}
-        </div> })}
-    </div>
+        </>)
+        if(isDesktop) return (
+          <div key={f.b.id} style={{borderLeft:`3px solid ${e.dot}`,borderBottom:`1px solid ${C.bgSoft}`}}>
+            <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'grid',gridTemplateColumns:'1fr 58px 96px 104px 104px 104px 92px',gap:10,alignItems:'center',padding:'10px 14px',cursor:'pointer'}}>
+              <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer',minWidth:0}}>{clientNom(f.b.client_id)}</div>
+              <span style={{fontSize:11,color:C.muted}}>{folioN(f.b.invoice_no)||folioN(f.b.folio)}</span>
+              <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.resp||'—'}</span>
+              <span style={{fontSize:12,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(f.monto)}</span>
+              <span style={{fontSize:12,fontWeight:600,color:f.cobrado>0?C.greenText:C.done,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{f.cobrado>0?fmt(f.cobrado):'—'}</span>
+              <span style={{fontSize:12.5,fontWeight:700,color:f.saldo>0?C.text:C.greenText,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{f.saldo>0?fmt(f.saldo):'$0'}</span>
+              <span style={{textAlign:'right'}}><span style={{fontSize:9,fontWeight:600,color:e.color,background:e.bg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{e.label}</span></span>
+            </div>
+            {abierto&&<div style={{padding:'0 14px 12px 17px'}}>{detalleInner}</div>}
+          </div>
+        )
+        return (
+          <div key={f.b.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderLeft:`2px solid ${e.dot}`,borderRadius:10,overflow:'hidden'}}>
+            <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',cursor:'pointer'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}}>{clientNom(f.b.client_id)}</div>
+                <div style={{fontSize:10,color:C.done,marginTop:1}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}{f.resp?` · ${f.resp}`:''}</div>
+              </div>
+              <div style={{textAlign:'right',flexShrink:0}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{fmt(f.monto)}</div>
+                <div style={{fontSize:9.5,color:e.color,marginTop:1}}><span style={{width:5,height:5,borderRadius:'50%',background:e.dot,display:'inline-block',marginRight:4,verticalAlign:1}}/>{e.label}{f.est==='cobrada'&&!tieneRespaldo(f.b)?' · sin respaldo':''}</div>
+              </div>
+              <span style={{fontSize:12,color:C.done}}>{abierto?'▾':'▸'}</span>
+            </div>
+            {abierto&&<div style={{padding:'0 11px 10px',borderTop:`1px solid ${C.bgSoft}`}}>{detalleInner}</div>}
+          </div>
+        )
+      }
+      if(visibles.length===0) return emptyEl
+      if(isDesktop) return (
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 58px 96px 104px 104px 104px 92px',gap:10,padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>
+            <span>Cliente</span><span>N°</span><span>Resp.</span><span style={{textAlign:'right'}}>Emitido</span><span style={{textAlign:'right'}}>Cobrado</span><span style={{textAlign:'right'}}>Saldo</span><span style={{textAlign:'right'}}>Estado</span>
+          </div>
+          {visibles.map(filaEl)}
+        </div>
+      )
+      return <div style={{display:'flex',flexDirection:'column',gap:5}}>{visibles.map(filaEl)}</div>
+    })()}
 
     {/* Historial y comparación */}
     <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginTop:10}}>
@@ -8942,7 +8972,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               : cargasHist.map(b=><CargaHistRow key={b.id} b={b}/>)}
         </Modal>}
         {depurarRows&&<Modal title='Marcar como pagadas' onClose={()=>setDepurarRows(null)} closeOnBackdrop={false}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></Modal>}
-        {cierreOpen&&<Modal title='Cierre de mes' fullscreen onClose={()=>setCierreOpen(false)}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>{setCierreOpen(false);onEdit&&onEdit(b)}} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></Modal>}
+        {cierreOpen&&<Modal title='Cierre de mes' fullscreen fsMaxWidth={1160} onClose={()=>setCierreOpen(false)}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>{setCierreOpen(false);onEdit&&onEdit(b)}} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></Modal>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='rechazadas'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
