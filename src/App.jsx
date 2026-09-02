@@ -12908,7 +12908,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       <span style={{width:18,height:18,borderRadius:5,flexShrink:0,border:`1.5px solid ${bloqueado?C.done:(on?C.accent:C.done)}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:(bloqueado?<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><rect x='5' y='11' width='14' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>:null)}</span>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div>
-        <div style={{fontSize:10,color:C.done,marginTop:1}}>{e.date?fmtFechaDMY(e.date):'sin fecha'}{bloqueado?<span style={{color:C.overdueText,fontWeight:600}}> · excede el fondo</span>:adelanto?<span style={{color:C.overdueText,fontWeight:600}}> · adelanto</span>:''}</div>
+        <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{e.date?fmtFechaDMY(e.date):'sin fecha'}{bloqueado?<span style={{color:C.overdueText,fontWeight:600}}> · excede el fondo</span>:adelanto?<span style={{color:C.overdueText,fontWeight:600}}> · adelanto</span>:''}</div>
       </div>
       <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
     </div>
@@ -13470,6 +13470,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [cobrosVista,setCobrosVista] = useState('carga')   // Cobros: 'carga' (por carga masiva) | 'ot' (lista de OT)
   const [cobrosOpen,setCobrosOpen] = useState(null)        // lote de carga masiva expandido en Cobros
   const [cobrosQ,setCobrosQ] = useState('')                // buscador en Cobros (vista por OT)
+  const [notaCliOpen,setNotaCliOpen] = useState(()=>new Set())   // Deuda: acordeones de cliente/persona expandidos (default todos plegados)
+  const [pagosOrd,setPagosOrd] = useState('nuevo')               // Pagos realizados: orden por fecha 'nuevo' | 'antiguo'
   // Ledger de cobros de la notaría (fuente única): cada gasto de notaría con su estado (pagada/en liquidación/por pagar) y error (sin cliente/duplicado), agrupado por carga masiva.
   const notaLedger = useMemo(()=>{
     const liqById={}; (notaLiquidaciones||[]).forEach(r=>{ liqById[String(r.id)]=r })
@@ -14006,56 +14008,69 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {/* Vista "Pagos realizados": liquidaciones a la notaría con detalle clickeable + CSV */}
       {showNotaria&&notaTab==='pagados'&&(()=>{
         const D=isDesktop
-        const list=[...notaLiquidaciones].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))
+        const dirMul = pagosOrd==='nuevo'?1:-1
+        const list=[...notaLiquidaciones].sort((a,b)=>dirMul*String(b.created_at||'').localeCompare(String(a.created_at||'')))
         const tot=list.reduce((a,r)=>a+(r.total||0),0)
+        const groups=[]; const gi={}
+        list.forEach(r=>{ const mk=String(r.created_at||'').slice(0,7)||'sin'; if(gi[mk]==null){ gi[mk]=groups.length; groups.push({mk,rows:[],tot:0}) } const g=groups[gi[mk]]; g.rows.push(r); g.tot+=(r.total||0) })
+        const mesLbl = mk => { if(mk==='sin'||!/^\d{4}-\d{2}/.test(mk)) return 'Sin fecha'; const [y,m]=mk.split('-'); return new Date(Number(y),Number(m)-1,1).toLocaleDateString('es-CL',{month:'long',year:'numeric'}) }
         const csvRows=()=>{ const head=['Fecha','Periodo','Total','Estado','N gastos','OT','Quién']; const body=list.map(r=>{ const est=notaEstado(r); return [fmtFechaDMY(r.created_at)||'', r.periodo||'', r.total||0, est==='pagado'?'Pagada':est==='enviada'?'Enviada':'Por enviar', r.n_gastos||0, r.ot_numbers||'', r.user_name||''] }); return [head,...body] }
+        const liqCard = r => { const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; const est=notaEstado(r); const dd=r.created_at?new Date(r.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; const eb=est==='por_enviar'?['Por enviar',C.soonText,C.soonBg]:est==='enviada'?['Enviada',C.azulInfo,C.azulBg]:['Pagada',C.greenText,C.greenBg]; return (
+          <div key={r.id} style={{border:`1px solid ${est==='por_enviar'?'#FAC775':C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+            <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 13px',cursor:'pointer'}}>
+              <div style={{textAlign:'center',flexShrink:0,width:38}}><div style={{fontSize:19,fontWeight:700,color:C.text,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{dnum}</div><div style={{fontSize:10,color:C.muted,textTransform:'uppercase'}}>{dmon}</div></div>
+              <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}><div style={{fontSize:13.5,fontWeight:700,color:C.text}}>Notaría Lascar</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{r.user_name?`${r.user_name} · `:''}{r.n_gastos} OT{r.ot_numbers?` · ${String(r.ot_numbers).length>28?String(r.ot_numbers).slice(0,28)+'…':r.ot_numbers}`:''}</div></div>
+              <span style={{fontSize:10,fontWeight:700,color:eb[1],background:eb[2],borderRadius:20,padding:'2px 9px',flexShrink:0,whiteSpace:'nowrap'}}>{eb[0]}</span>
+              <div style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(r.total)}</div>
+              <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
+            </div>
+            {est==='por_enviar'&&!open&&<div style={{display:'flex',justifyContent:'flex-end',padding:'0 13px 10px'}}><button onClick={ev=>{ev.stopPropagation();setCompFile(null);setNotaSend(r)}} style={{background:C.accent,color:'#fff',fontSize:12,fontWeight:700,borderRadius:8,padding:'6px 14px',border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>Enviar</button></div>}
+            {open&&<div style={{padding:'10px 13px',borderTop:`1px solid ${C.border}`}}>
+              {gs.map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
+                <div key={e.id} style={{display:'flex',alignItems:'baseline',gap:8,padding:'4px 0',fontSize:11.5}}>
+                  <span style={{fontSize:10,color:C.azulInfo,fontWeight:700,width:62,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
+                  <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{e.concept||'—'} <span style={{color:C.muted}}>· {e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}} style={{cursor:'pointer'}}>{cn}</span>:cn}</span></span>
+                  <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:C.text}}>{fmt(e.amount)}</span>
+                </div>) })}
+              <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>
+                <button onClick={()=>descargarExcelNota(r)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer'}}>↓ Excel</button>
+                {est==='por_enviar'&&<button onClick={()=>{setCompFile(null);setNotaSend(r)}} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer'}}>Enviar</button>}
+                {est==='enviada'&&<button onClick={()=>reenviarNotaria(r)} disabled={reenviando===r.id} style={{fontSize:10,fontWeight:700,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:6,padding:'4px 10px',cursor:reenviando===r.id?'default':'pointer',opacity:reenviando===r.id?.6:1}}>{reenviando===r.id?'Reenviando…':'Reenviar'}</button>}
+                {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' style={{fontSize:10,fontWeight:600,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px'}}>Ver comprobante</a>}
+                {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set());setAddSearch('');setAddOpenCli(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir OT'}</button>}
+                <button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer'}}>Deshacer</button>
+              </div>
+              {adding&&addPicker(r)}
+            </div>}
+          </div>
+        )}
         return (
           <div style={{padding:D?'8px 20px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-              <span style={{fontSize:12,color:C.muted}}>{list.length} liquidación{list.length!==1?'es':''} · {fmt(tot)}</span>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+              <span style={{fontSize:12,color:C.muted}}>{list.length} liquidación{list.length!==1?'es':''} · <b style={{color:C.text}}>{fmt(tot)}</b></span>
               {list.length>0&&<button onClick={()=>csvDownload('pagos_notaria.csv',csvRows())} style={{marginLeft:'auto',fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Exportar CSV ↓</button>}
+              {list.length>0&&<button onClick={()=>setPagosOrd(o=>o==='nuevo'?'antiguo':'nuevo')} title='Ordenar por fecha' style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>{pagosOrd==='nuevo'?'Nuevo ↓':'Antiguo ↑'}</button>}
             </div>
             {list.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Sin liquidaciones registradas.</div>}
-            {list.map(r=>{ const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; const est=notaEstado(r); return (
-              <div key={r.id} style={{border:`1px solid ${est==='por_enviar'?'#FAC775':C.border}`,borderLeft:est==='por_enviar'?'3px solid #EF9F27':`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:6}}>
-                <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,cursor:'pointer'}}>
-                  <div style={{minWidth:0,display:'flex',alignItems:'baseline',gap:6}}><span style={{fontSize:13,color:C.done,transform:open?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block'}}>›</span><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Notaría Lascar · {fmtFechaDMY(r.created_at)||'—'}</div><div style={{fontSize:10,color:C.done}}>{r.user_name?`${r.user_name} · `:''}{r.n_gastos} gasto{r.n_gastos!==1?'s':''}{r.periodo?` · ${r.periodo}`:''}</div></div></div>
-                  <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(r.total)}</div>{est==='por_enviar'?<span style={{fontSize:9,fontWeight:700,color:C.soonText,display:'inline-flex',alignItems:'center',gap:4,marginTop:2}}><span style={{width:6,height:6,borderRadius:'50%',background:'#EF9F27'}}/>Por enviar</span>:est==='enviada'?<span style={{fontSize:9,fontWeight:700,color:C.greenText,marginTop:2,display:'inline-block'}}>✓ Enviada</span>:<span style={{fontSize:9,fontWeight:600,color:C.greenText,marginTop:2,display:'inline-block'}}>✓ Pagada</span>}</div>
-                </div>
-                {r.ot_numbers&&!open&&<div style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginTop:4}}>OT: {r.ot_numbers}</div>}
-                {est==='por_enviar'&&<div style={{display:'flex',justifyContent:'flex-end',marginTop:9}}><button onClick={ev=>{ev.stopPropagation();setCompFile(null);setNotaSend(r)}} style={{background:C.accent,color:'#fff',fontSize:12,fontWeight:700,borderRadius:8,padding:'7px 15px',border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>Enviar</button></div>}
-                {open&&<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
-                  {gs.map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
-                    <div key={e.id} style={{display:'flex',alignItems:'baseline',gap:8,padding:'4px 0',fontSize:11}}>
-                      <span style={{fontSize:9,color:C.azulInfo,fontWeight:700,width:62,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
-                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'} <span style={{color:C.done}}>· {e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}} style={{cursor:'pointer'}}>{cn}</span>:cn}</span></span>
-                      <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
-                    </div>) })}
-                  <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
-                    <button onClick={()=>descargarExcelNota(r)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>↓ Excel</button>
-                    {est==='por_enviar'&&<button onClick={()=>{setCompFile(null);setNotaSend(r)}} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Enviar</button>}
-                    {est==='enviada'&&<button onClick={()=>reenviarNotaria(r)} disabled={reenviando===r.id} style={{fontSize:10,fontWeight:700,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:6,padding:'3px 9px',cursor:reenviando===r.id?'default':'pointer',opacity:reenviando===r.id?.6:1}}>{reenviando===r.id?'Reenviando…':'Reenviar'}</button>}
-                    {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' style={{fontSize:10,fontWeight:600,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px'}}>Ver comprobante</a>}
-                    {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set());setAddSearch('');setAddOpenCli(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir OT'}</button>}
-                    <button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Deshacer</button>
-                  </div>
-                  {adding&&addPicker(r)}
-                </div>}
+            {groups.map(g=>(
+              <div key={g.mk} style={{marginBottom:14}}>
+                <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>{mesLbl(g.mk)}</span><span style={{fontSize:12,color:C.muted}}>{fmt(g.tot)}</span></div>
+                {g.rows.map(liqCard)}
               </div>
-            )})}
+            ))}
           </div>
         )
       })()}
       {showNotaria&&notaTab==='pend'&&(
         <div style={{padding:'4px 20px 130px'}}>
-          <div style={{display:'flex',gap:8,marginBottom:10}}>
-            <div style={{flex:1,background:C.overdueBg,borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:C.overdueText,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Pendiente a notaría</div><div style={{fontSize:17,fontWeight:600,color:C.overdueText}}>{fmt(notaPendTotal)}</div><div style={{fontSize:9,color:C.overdueText,fontWeight:600}}>{notariaPend.length} gasto{notariaPend.length!==1?'s':''}</div></div>
-            <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Notaría</div><div style={{fontSize:13,fontWeight:600,color:C.accent,marginTop:2}}>Notaría Lascar</div></div>
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
+            <div style={{flex:1,background:C.overdueBg,borderRadius:12,padding:'12px 14px'}}><div style={{fontSize:11,color:C.overdueText,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>Pendiente a notaría</div><div style={{fontSize:22,fontWeight:700,color:C.overdueText,letterSpacing:-.5,marginTop:2}}>{fmt(notaPendTotal)}</div><div style={{fontSize:11.5,color:C.overdueText,fontWeight:600}}>{notariaPend.length} OT por pagar</div></div>
+            <div style={{flex:1,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}><div style={{fontSize:11,color:C.muted,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>Notaría</div><div style={{fontSize:15,fontWeight:600,color:C.accent,marginTop:4}}>Notaría Lascar</div></div>
           </div>
           {/* Filtro por abogado responsable del cliente — "ver solo mis clientes" */}
           {(()=>{ const m={}; Object.keys(notaGroups.byClient).forEach(cid=>{ const k=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'; m[k]=(m[k]||0)+1 }); const ents=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(ents.length<2) return null; return (
             <div style={{display:'flex',alignItems:'center',gap:6,overflowX:'auto',marginBottom:9,paddingBottom:2}}>
-              <span style={{fontSize:10,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,flexShrink:0}}>Responsable</span>
+              <span style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,flexShrink:0}}>Responsable</span>
               <button onClick={()=>setNotaResp(null)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 11px',border:`1px solid ${!notaResp?C.accent:C.border}`,background:!notaResp?C.accent:'#fff',color:!notaResp?'#fff':C.muted,cursor:'pointer'}}>Todos</button>
               {ents.map(([k,n])=>{ const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); const on=notaResp===k; return (
                 <button key={k} onClick={()=>setNotaResp(on?null:k)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 11px',border:`1px solid ${on?pc.color:'transparent'}`,background:on?pc.color:pc.bg,color:on?'#fff':pc.color,cursor:'pointer',whiteSpace:'nowrap'}}>{sin?'Sin responsable':k} · {n}</button>
@@ -14098,42 +14113,50 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             const est = exc?{l:'Con adelanto',bg:C.overdueBg,c:C.overdueText}:sinF?{l:'Sin fondos',bg:C.overdueBg,c:C.overdueText}:cubre?{l:'Cubre',bg:C.greenBg,c:C.greenText}:{l:'Cubre parcial',bg:C.ambarBg,c:C.soonText}
             const rojo = exc||sinF
             return (
-            <div key={cid} style={{border:`1px solid ${rojo?'#F0997B':C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,padding:'8px 13px',background:rojo?C.overdueBg:C.bgSoft,borderBottom:`1px solid ${rojo?'#F0997B':C.border}`}}>
-                <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:rojo?C.overdueText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha?<span onClick={()=>onOpenClientFicha(cid)} style={{cursor:'pointer'}}>{cn}</span>:cn}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>{esOf?<>Oficina · <b>Se cubre sola</b></>:<>Disponible <b>{fmt(disp)}</b> de {fmt(fondosC)}</>}</div></div>
-                <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
+            <div key={cid} style={{border:`1px solid ${rojo?'#F0997B':C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+              <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:rojo?C.overdueBg:'#fff',cursor:'pointer'}}>
+                <span style={{fontSize:14,color:C.muted,transform:notaCliOpen.has(cid)?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:rojo?C.overdueText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn}</div><div style={{fontSize:10.5,color:rojo?C.overdueText:C.muted,marginTop:1}}>{esOf?<>Oficina · <b>se cubre sola</b></>:<>Disponible <b style={{color:rojo?C.overdueText:C.text}}>{fmt(disp)}</b> de {fmt(fondosC)}</>}</div></div>
+                <span style={{fontSize:10,borderRadius:20,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(aPagar)}</div><div style={{fontSize:10,color:C.muted}}>{gs.length} OT</div></div>
               </div>
-              {reservadoC>0&&<div style={{fontSize:10,color:C.azulInfo,background:C.azulBg,padding:'4px 13px',borderBottom:`1px solid ${C.border}`}}>Otros gastos por pagar: {fmt(reservadoC)}</div>}
-              {/* "Permitir adelanto" solo cuando el cliente NO cubre con su saldo (o ya está activado, para poder apagarlo). Si cubre, no aplica. */}
-              {(!cubre||exc)&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'5px 13px',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:11,color:exc?C.overdueText:C.muted,fontWeight:exc?600:400}}>Oficina cubre la diferencia{exc?' · activado':''}</span><Switch on={exc} onToggle={()=>setExcepNota(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})}/></div>}
-              {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gs.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const excede=(usadoOtros+(e.amount||0)) > disp; return notaRow(e, !on&&!exc&&excede, exc&&excede) })}
+              {notaCliOpen.has(cid)&&<div>
+                {reservadoC>0&&<div style={{fontSize:10.5,color:C.azulInfo,background:C.azulBg,padding:'5px 13px',borderTop:`1px solid ${C.border}`}}>Otros gastos por pagar: {fmt(reservadoC)}</div>}
+                {(!cubre||exc)&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'6px 13px',borderTop:`1px solid ${C.border}`}}><span style={{fontSize:11.5,color:exc?C.overdueText:C.muted,fontWeight:exc?600:400}}>Oficina cubre la diferencia{exc?' · activado':''}</span><Switch on={exc} onToggle={()=>setExcepNota(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})}/></div>}
+                {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gs.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const excede=(usadoOtros+(e.amount||0)) > disp; return notaRow(e, !on&&!exc&&excede, exc&&excede) })}
+              </div>}
             </div>
           )})}
           {/* Personales (se ocultan al filtrar por responsable: no son clientes) */}
-          {!notaResp&&Object.entries(notaGroups.personal).map(([persona,gs])=>{ const pc=personChip(persona); return (
-            <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 13px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
-                <span style={{fontSize:12,fontWeight:700,color:C.accent}}>Personal · <span style={{fontSize:11,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px'}}>{persona}</span></span>
-                <span style={{fontSize:10,color:C.done,fontWeight:600}}>Sin fondo de cliente</span>
+          {!notaResp&&Object.entries(notaGroups.personal).map(([persona,gs])=>{ const pc=personChip(persona); const k='p:'+persona; const tot=gs.reduce((a,e)=>a+(e.amount||0),0); return (
+            <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+              <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:'#fff',cursor:'pointer'}}>
+                <span style={{fontSize:14,color:C.muted,transform:notaCliOpen.has(k)?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent}}>Personal · <span style={{fontSize:11,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px'}}>{persona}</span></div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Sin fondo de cliente · {gs.length} OT</div></div>
+                <div style={{fontSize:13.5,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(tot)}</div>
               </div>
-              {gs.map(notaRow)}
+              {notaCliOpen.has(k)&&<div>{gs.map(notaRow)}</div>}
             </div>
           )})}
           {/* Sin asignar: marcar como personal de una persona (oculto al filtrar por responsable) */}
-          {!notaResp&&notaGroups.sin.length>0&&(
-            <div style={{border:`1px dashed ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
-              <div style={{padding:'8px 13px',background:C.bgSoft,borderBottom:`0.5px solid ${C.border}`,fontSize:11,color:C.muted}}>Sin cliente ni persona — márcalos como personal o asígnales cliente en Gastos</div>
-              {notaGroups.sin.map(e=>(
+          {!notaResp&&notaGroups.sin.length>0&&(()=>{ const k='__sinasignar__'; const open=notaCliOpen.has(k); const tot=notaGroups.sin.reduce((a,e)=>a+(e.amount||0),0); return (
+            <div style={{border:`1px dashed ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+              <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:'#fff',cursor:'pointer'}}>
+                <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Sin cliente ni persona</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Márcalos como personal o asígnales cliente · {notaGroups.sin.length} OT</div></div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(tot)}</div>
+              </div>
+              {open&&<div>{notaGroups.sin.map(e=>(
                 <div key={e.id} style={{padding:'9px 12px',borderTop:`0.5px solid ${C.border}`}}>
-                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><div style={{minWidth:0}}><div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div><div style={{fontSize:10,color:C.done}}>{e.date?fmtFechaDMY(e.date):'sin fecha'}</div></div><span style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(e.amount)}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><div style={{minWidth:0}}><div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div><div style={{fontSize:10.5,color:C.muted}}>{e.date?fmtFechaDMY(e.date):'sin fecha'}</div></div><span style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(e.amount)}</span></div>
                   <div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                    <span style={{fontSize:10,color:C.done,fontWeight:600,textTransform:'uppercase'}}>Personal</span>
+                    <span style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase'}}>Personal</span>
                     {PERSONAS_NOTA.map(p=>{ const pc=personChip(p); return <button key={p} onClick={()=>marcarPersonal(e,p)} style={{fontSize:10,background:pc.bg,color:pc.color,border:'none',borderRadius:10,padding:'3px 9px',fontWeight:600,cursor:'pointer'}}>{p}</button> })}
                   </div>
                 </div>
-              ))}
+              ))}</div>}
             </div>
-          )}
+          )})()}
           {/* Anulados de $1: escrituras/trabajos anulados, solo orden — no se liquidan, se pueden eliminar */}
           {notariaAnulados.length>0&&(
             <div style={{border:`1px dashed ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
