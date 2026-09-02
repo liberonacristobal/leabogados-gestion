@@ -6600,7 +6600,8 @@ function RolesModal({ onOpenUsers }){
 // Soporta aumentos a mitad de año (monto + monto_prev + desde). El total del mes usa el valor vigente de ESE mes.
 function CostosOficinaModal({ expenses=[], clients=[] }){
   const [rows,setRows] = useState(null)
-  const [open,setOpen] = useState(()=>new Set())      // categorías desplegadas
+  const [open,setOpen] = useState(()=>new Set())      // categorías desplegadas (legacy)
+  const [sel,setSel] = useState(null)                  // categoría seleccionada en el hub de tarjetas
   const [edId,setEdId] = useState(null)                // fila en edición
   const [ef,setEf] = useState({monto:'',desde:'',prev:''})
   const [addCat,setAddCat] = useState(null)            // categoría en la que se agrega ítem
@@ -6682,17 +6683,32 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
       {hayReal && <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:11}}>
         {[[false,'Presupuesto'],[true,'vs Real · '+MESES[+ym0.slice(5,7)-1]]].map(([v,l])=><span key={l} onClick={()=>setVerReal(v)} style={{fontSize:11,fontWeight:700,padding:'6px 12px',cursor:'pointer',background:verReal===v?C.accent:'#fff',color:verReal===v?'#fff':C.muted}}>{l}</span>)}
       </div>}
-      {cats.map(cat=>{ const op=open.has(cat); const items=(rows||[]).filter(r=>r.categoria===cat); const subs=SUBCATS_OFICINA[cat]||[]; return (
-        <div key={cat} style={{border:`1px solid ${C.border}`,borderRadius:11,marginBottom:7,overflow:'hidden'}}>
-          <div onClick={()=>tog(cat)} style={{display:'flex',alignItems:'center',gap:9,padding:'11px 12px',cursor:'pointer',background:op?C.bgSoft:'transparent'}}>
-            <div style={{flex:1,minWidth:0}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{cat}</span>
-              {verReal && items.length>0 && (()=>{ const pres=totalCat(cat); const real=realPorCat[cat]; const tiene=real!=null; const dif=tiene?real-pres:0; const col=dif>pres*0.05?C.overdueText:(dif<-pres*0.05?C.greenText:C.muted); return <div style={{fontSize:9.5,marginTop:1}}>{tiene?<span style={{color:C.done}}>real {fmt(real)} · <b style={{color:col}}>{dif>=0?'+':''}{fmt(dif)}</b></span>:<span style={{color:C.done}}>sin registro este mes</span>}</div> })()}
-            </div>
-            <span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{items.length?fmt(totalCat(cat)):'—'}</span>
-            <span style={{fontSize:9,color:C.done,fontWeight:700}}>{items.length||''}</span>
-            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:op?'rotate(180deg)':'none'}}><path d='M6 9l6 6 6-6'/></svg>
+      {(()=>{
+        // Hub de tarjetas: una por categoría, ordenadas de MAYOR a menor peso. Tocar una abre su detalle abajo.
+        const ICONO={'Remuneraciones':'users','Leyes sociales':'check','Impuestos y patentes':'receipt','Arriendo y espacio':'building','Servicios y tecnología':'grid','Insumos de oficina':'briefcase','Movilización y operación':'exchange','Desarrollo de negocio':'chart','Seguros y contingencias':'alert'}
+        const catData=cats.map(c=>({cat:c,items:(rows||[]).filter(r=>r.categoria===c),sub:totalCat(c)})).sort((a,b)=>b.sub-a.sub)
+        return (<>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:8,marginBottom:sel!=null?12:2}}>
+            {catData.map(({cat,items,sub})=>{ const on=sel===cat; const pct=totalMes>0&&sub>0?Math.round(sub/totalMes*100):0; const real=realPorCat[cat]; return (
+              <div key={cat} onClick={()=>setSel(on?null:cat)} style={{background:'#fff',border:`1px solid ${on?C.accent:C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer'}}>
+                <span style={{width:30,height:30,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><SIcon n={ICONO[cat]||'wallet'} s={16} c={C.accent}/></span>
+                <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cat}</div>
+                <div style={{fontSize:15,fontWeight:700,color:items.length?C.accent:C.done,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{items.length?fmt(sub):'—'}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{items.length} ítem{items.length!==1?'s':''}{items.length&&pct?` · ${pct}%`:''}{verReal&&real!=null?` · real ${fmtShort(real)}`:''}</div>
+              </div>
+            )})}
           </div>
-          {op && <div style={{borderTop:`1px solid ${C.border}`}}>
+          {sel!=null && (()=>{ const cat=sel; const items=(rows||[]).filter(r=>r.categoria===cat); const subs=SUBCATS_OFICINA[cat]||[]; return (
+            <div style={{border:`1px solid ${C.border}`,borderRadius:12,marginBottom:8,overflow:'hidden'}}>
+              <div style={{display:'flex',alignItems:'center',gap:9,padding:'11px 13px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
+                <span style={{width:26,height:26,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ICONO[cat]||'wallet'} s={14} c={C.accent}/></span>
+                <div style={{flex:1,minWidth:0}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{cat}</span>
+                  {verReal && items.length>0 && (()=>{ const pres=totalCat(cat); const real=realPorCat[cat]; const tiene=real!=null; const dif=tiene?real-pres:0; const col=dif>pres*0.05?C.overdueText:(dif<-pres*0.05?C.greenText:C.muted); return <div style={{fontSize:9.5,marginTop:1}}>{tiene?<span style={{color:C.done}}>real {fmt(real)} · <b style={{color:col}}>{dif>=0?'+':''}{fmt(dif)}</b></span>:<span style={{color:C.done}}>sin registro este mes</span>}</div> })()}
+                </div>
+                <span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{items.length?fmt(totalCat(cat)):'—'}</span>
+                <span onClick={()=>setSel(null)} title='Cerrar' style={{color:C.done,fontSize:17,cursor:'pointer',lineHeight:1,marginLeft:2}}>×</span>
+              </div>
+              <div>
             {items.map((r,i)=>(
               <div key={r.id} style={{borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
                 {edId===r.id ? (
@@ -6732,9 +6748,11 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
             ) : (
               <button onClick={()=>{setEdId(null);setAddCat(cat);setAf({item:'',monto:''})}} style={{width:'100%',textAlign:'left',padding:'8px 12px',border:'none',borderTop:`0.5px dashed ${C.border}`,background:'none',color:C.azulInfo,fontSize:11.5,fontWeight:600,cursor:'pointer'}}>+ Agregar ítem</button>
             )}
-          </div>}
-        </div>
-      )})}
+              </div>
+            </div>
+          )})()}
+        </>)
+      })()}
       <button onClick={nuevaCat} style={{width:'100%',padding:'10px',border:`1px dashed ${C.border}`,background:'transparent',borderRadius:10,color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',marginTop:3}}>+ Nueva categoría</button>
     </div>
   )
