@@ -13373,15 +13373,24 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         </div>
 
         {/* Menú Cargar (sin notaría — la notaría tiene su propio botón) */}
-        {!selectedClient&&!showOrphans&&!showNotaria&&notaMenuOpen&&(
-          <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',marginBottom:8}}>
-            <button onClick={()=>{setNotaMenuOpen(false);onAdd()}} style={chipBtn('primary')}>+ Gastos</button>
-            <button onClick={()=>{setNotaMenuOpen(false);onAddFondo()}} style={chipBtn('green')}>+ Fondo</button>
-            <button onClick={()=>{setNotaMenuOpen(false);onBulk(false)}} style={chipBtn('soft')}>Carga masiva</button>
-            {gastosClasificar.length>0&&<button onClick={()=>{setNotaMenuOpen(false);setShowClasificar(true);setSelClasif(new Set());setClasifSearch('');setClasifOpen(new Set())}} style={chipBtn('soft')}>Clasificar pagos · {gastosClasificar.length}</button>}
-            {((orphans.length+revN(revNoActivo)+revN(revOcasional))>0||expenseAudit.length>0)&&<button onClick={()=>{setNotaMenuOpen(false);setShowRevision(true)}} style={chipBtn('soft')}>Gastos por revisar{(orphans.length+revN(revNoActivo)+revN(revOcasional))>0?` · ${orphans.length+revN(revNoActivo)+revN(revOcasional)}`:''}</button>}
-          </div>
-        )}
+        {!selectedClient&&!showOrphans&&!showNotaria&&notaMenuOpen&&(()=>{
+          const opts=[
+            {t:'Gasto', s:'a un cliente', ic:'file', col:C.accent, bg:C.azulBg, go:()=>{setNotaMenuOpen(false);onAdd()}},
+            {t:'Fondo', s:'el cliente transfiere', ic:'wallet', col:C.greenText, bg:C.greenBg, go:()=>{setNotaMenuOpen(false);onAddFondo()}},
+            {t:'Carga masiva', s:'varios con IA', ic:'grid', col:C.tealText, bg:C.tealBg, go:()=>{setNotaMenuOpen(false);onBulk(false)}},
+            ...(gastosClasificar.length>0?[{t:'Clasificar pagos', s:`histórico o descuenta · ${gastosClasificar.length}`, ic:'exchange', col:C.soonText, bg:C.soonBg, go:()=>{setNotaMenuOpen(false);setShowClasificar(true);setSelClasif(new Set());setClasifSearch('');setClasifOpen(new Set())}}]:[]),
+          ]
+          return (
+            <div style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${opts.length},1fr)`:'1fr 1fr',gap:8,marginBottom:10}}>
+              {opts.map(o=>(
+                <div key={o.t} onClick={o.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 13px',display:'flex',flexDirection:'column',gap:9}}>
+                  <span style={{width:32,height:32,borderRadius:9,background:o.bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={o.ic} s={17} c={o.col}/></span>
+                  <div><div style={{fontSize:14,fontWeight:600,color:C.text}}>{o.t}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>{o.s}</div></div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
         {/* Botón Notaría (visible) — liquidar y carga de notaría */}
         {!selectedClient&&!showOrphans&&!showNotaria&&notaBtnOpen&&(
           <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',marginBottom:8}}>
