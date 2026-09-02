@@ -2020,20 +2020,21 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
   )
   return (
     <aside className='sidenav' style={{position:'fixed',left:0,top:0,bottom:0,width:212,background:'#04242F',padding:'16px 12px',display:'none',flexDirection:'column',gap:2,zIndex:40,overflowY:'auto'}}>
-      <div style={{display:'flex',flexDirection:'column',gap:6,padding:'4px 8px 14px'}}>
-        {/* Logo real del estudio (blanco sobre el sidebar oscuro); si el estudio no tiene logo cargado, cae al monograma. */}
+      <div style={{padding:'4px 8px 16px'}}>
+        {/* Logo real del estudio (blanco sobre el sidebar oscuro); si el estudio no tiene logo cargado, cae al monograma. La atribución 'con tecnología FirmDesk' se movió al pie. */}
         {BRAND?.logo?.blanco
           ? <img src={BRAND.logo.blanco} alt={BRAND?.nombre||'FirmDesk'} style={{height:22,width:'auto',maxWidth:'100%',objectFit:'contain',objectPosition:'left center',display:'block'}}/>
           : <div style={{display:'flex',alignItems:'center',gap:9}}><span style={{width:26,height:26,borderRadius:7,background:'#12A150',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13}}>{(BRAND?.nombre||'L')[0]}</span><span style={{fontSize:13.5,fontWeight:800,color:'#fff',letterSpacing:-.2,lineHeight:1.15}}>{BRAND?.nombre||'FirmDesk'}</span></div>}
-        <small style={{fontSize:8,fontWeight:600,color:'#6f9aa6',letterSpacing:.2,paddingLeft:2}}>con tecnología FirmDesk</small>
       </div>
       {secciones.map((s,i)=>(<div key={i} style={{display:'flex',flexDirection:'column',gap:1}}>
         {s.cap&&<div style={{fontSize:8.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.06em',color:'#5a808c',margin:'12px 10px 4px'}}>{s.cap}</div>}
         {s.items.map(item)}
       </div>))}
-      <div style={{marginTop:'auto',display:'flex',gap:6,paddingTop:10}}>
-        <button onClick={onPalette} title='Buscar (⌘K)' style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'8px',borderRadius:8,border:'1px solid rgba(255,255,255,.14)',background:'transparent',color:'#a8c2ca',fontSize:11.5,cursor:'pointer',fontFamily:'inherit'}}><svg width="14" height="14" viewBox="0 0 24 24" {...sp}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar</button>
-        <button onClick={onCopiloto} title='Copiloto' style={{width:36,padding:'8px',borderRadius:8,border:'1px solid rgba(255,255,255,.14)',background:'transparent',color:'#a8c2ca',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg></button>
+      <div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:7,paddingTop:10}}>
+        {/* Copiloto: la IA del estudio → protagonista al pie (full-width, destacado). Buscar queda secundario. */}
+        <button onClick={onCopiloto} title='Copiloto' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:7,padding:'10px',borderRadius:9,border:'1px solid rgba(159,225,203,.35)',background:'rgba(159,225,203,.12)',color:'#fff',fontSize:12.5,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}><svg width="16" height="16" viewBox="0 0 24 24" fill="#9FE1CB"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Copiloto</button>
+        <button onClick={onPalette} title='Buscar (⌘K)' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'7px',borderRadius:8,border:'1px solid rgba(255,255,255,.14)',background:'transparent',color:'#a8c2ca',fontSize:11.5,cursor:'pointer',fontFamily:'inherit'}}><svg width="13" height="13" viewBox="0 0 24 24" {...sp}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar</button>
+        <div style={{textAlign:'center',fontSize:8,fontWeight:600,color:'#6f9aa6',letterSpacing:.3,paddingTop:5}}>con tecnología FirmDesk</div>
       </div>
     </aside>
   )
