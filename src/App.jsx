@@ -3166,20 +3166,34 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         )
         const connEl=(txt,col,bg)=><div style={{textAlign:'center',margin:'-1px 0 4px'}}><span style={{fontSize:8.5,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'2px 9px'}}>↓ {txt}</span></div>
         return (<>
-          {lvlLabel('Estado del negocio')}
+          {lvlLabel('El negocio')}
           <div style={{padding:'6px 20px 0'}}>
-            {m.bruto>0&&stepEl({stage:'1 · Vendido',val:vMon(m.brutoUF,m.bruto),pill:m.meta>0?ventaPct+'% meta':null,pc:C.accent,pb:C.azulBg,pct:m.meta>0?ventaPct:null,bar:C.accent,sub:m.meta>0?`Meta ${vMon(metaUF,m.meta)}`:'sin meta de venta',go:()=>setTab('sales')})}
-            {m.bruto>0&&facturadoYr>0&&connEl(`facturado ${factPct}% de lo vendido`,C.azulInfo,C.azulBg)}
-            {stepEl({stage:'2 · Cobrado',val:fmtMon(ingYTD),pill:metaCobranza>0?cobroPct+'% meta':null,pc:C.greenText,pb:C.greenBg,pct:metaCobranza>0?cobroPct:null,bar:C.greenText,sub:metaCobranza>0?`Meta ${fmtMon(metaCobranza)} · por cobrar ${fmtMon(totalPorCobrar)}`:`por cobrar ${fmtMon(totalPorCobrar)}`,go:()=>setTab('cobranza')})}
-            {vencido>0?connEl(`vencido ${fmtMon(vencido)}`,C.overdueText,C.overdueBg):(costosOfiYTD>0&&connEl(`− costos ${fmtMon(costosOfiYTD)}`,C.muted,C.bgSoft))}
-            {costosOfiAnual>0&&<div onClick={onOpenEstadoResultados||onOpenCostosOfi} style={{background:pos?C.greenText:C.overdue,color:'#fff',borderRadius:13,padding:'12px 14px',marginBottom:6,cursor:'pointer'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.05em',opacity:.85}}>3 · Resultado {selYear} · {pos?'utilidad':'pérdida'}</span>{ingYTD>0&&<span style={{fontSize:10,fontWeight:800,opacity:.9}}>margen {margenPct}%</span>}</div>
-              <div style={{fontSize:24,fontWeight:800,margin:'2px 0',fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmtMon(Math.abs(resultado))}</div>
-              <div style={{fontSize:9,opacity:.9}}>Ingresos {fmtMon(ingYTD)} − costos {fmtMon(costosOfiYTD)} · estructura {bePct}% cubierta</div>
-            </div>}
-            <div onClick={onOpenFlujoCaja} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px',cursor:onOpenFlujoCaja?'pointer':'default'}}>
-              <div><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Proyección a diciembre{onOpenFlujoCaja?<span style={{color:C.azulInfo,marginLeft:5}}>· flujo semanal ›</span>:''}</div><div style={{fontSize:8.5,color:C.done}}>si cobras lo pendiente</div></div>
-              <div style={{fontSize:15,fontWeight:800,color:proyR>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{proyR>=0?'':'−'}{fmtMon(Math.abs(proyR))}</div>
+            {/* Embudo: Vendido → Facturado → Cobrado → Utilidad. Tono suave por etapa; bruto/neto en la misma tarjeta; meta como % chip. Cada cifra de su helper (sin recalcular). Todo clickeable. */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8}}>
+              {m.bruto>0&&(
+                <div onClick={()=>setTab('sales')} style={{background:'#EAF2FB',border:'1px solid #D5E6F6',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,color:C.muted}}>Vendido</span>{m.meta>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.azulInfo,borderRadius:20,padding:'1px 7px'}}>{ventaPct}%</span>}</div>
+                  <div style={{fontSize:22,fontWeight:800,color:C.text,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</div>
+                  <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>neto {vMon(m.netoUF,m.neto)}</div>
+                </div>
+              )}
+              <div onClick={()=>onAcceso&&onAcceso('facturasMes')} style={{background:'#FDF4E2',border:'1px solid #F5E6C6',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,color:C.muted}}>Facturado</span>{m.bruto>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:'#BA7517',borderRadius:20,padding:'1px 7px'}}>{factPct}%</span>}</div>
+                <div style={{fontSize:22,fontWeight:800,color:C.text,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(facturadoYr)}</div>
+                <div style={{fontSize:9.5,color:C.done,marginTop:1}}>de lo vendido</div>
+              </div>
+              <div onClick={()=>setTab('cobranza')} style={{background:'#E6F6EF',border:'1px solid #CDEBDD',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,color:C.muted}}>Cobrado</span>{metaCobranza>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.normal,borderRadius:20,padding:'1px 7px'}}>{cobroPct}%</span>}</div>
+                <div style={{fontSize:22,fontWeight:800,color:C.greenText,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(ingYTD)}</div>
+                <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>{comisPagadasAnioVenta.total>0?`a caja ${fmtMon(ingYTD-comisPagadasAnioVenta.total)}`:`por cobrar ${fmtMon(totalPorCobrar)}`}</div>
+              </div>
+              {costosOfiAnual>0&&(
+                <div onClick={onOpenEstadoResultados||onOpenCostosOfi} style={{background:'#EDF1F4',border:'1px solid #DCE4EA',borderRadius:12,padding:'12px 13px',cursor:(onOpenEstadoResultados||onOpenCostosOfi)?'pointer':'default'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,color:C.muted}}>{pos?'Utilidad':'Pérdida'}</span>{ingYTD>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.accent,borderRadius:20,padding:'1px 7px'}}>{margenPct}%</span>}</div>
+                  <div style={{fontSize:22,fontWeight:800,color:pos?C.accent:C.overdue,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmtMon(Math.abs(resultado))}</div>
+                  <div style={{fontSize:9.5,color:C.done,marginTop:1}}>margen</div>
+                </div>
+              )}
             </div>
           </div>
         </>)
