@@ -2032,7 +2032,7 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
       </div>))}
       <div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:7,paddingTop:10}}>
         {/* Copiloto: la IA del estudio → protagonista al pie (full-width, destacado). Buscar queda secundario. */}
-        <button onClick={onCopiloto} title='Copiloto' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:7,padding:'10px',borderRadius:9,border:'1px solid rgba(159,225,203,.35)',background:'rgba(159,225,203,.12)',color:'#fff',fontSize:12.5,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}><svg width="16" height="16" viewBox="0 0 24 24" fill="#9FE1CB"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Copiloto</button>
+        <button onClick={onCopiloto} title='Counsel AI' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:7,padding:'10px',borderRadius:9,border:'1px solid rgba(159,225,203,.35)',background:'rgba(159,225,203,.12)',color:'#fff',fontSize:12.5,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}><svg width="16" height="16" viewBox="0 0 24 24" fill="#9FE1CB"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Counsel AI</button>
         <button onClick={onPalette} title='Buscar (⌘K)' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'7px',borderRadius:8,border:'1px solid rgba(255,255,255,.14)',background:'transparent',color:'#a8c2ca',fontSize:11.5,cursor:'pointer',fontFamily:'inherit'}}><svg width="13" height="13" viewBox="0 0 24 24" {...sp}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar</button>
         <div style={{textAlign:'center',fontSize:8,fontWeight:600,color:'#6f9aa6',letterSpacing:.3,paddingTop:5}}>con tecnología FirmDesk</div>
       </div>
@@ -26799,7 +26799,7 @@ ${brief()}`
     ? ['¿Cómo voy este mes?','¿Quién me debe plata?','¿Cuánto cobré y cuánto cuesta la oficina?','¿Qué está detenido?']
     : ['¿Qué está detenido?','¿Qué tengo pendiente?','Crea una tarea para llamar a…']
   return (
-    <Modal title={<span style={{display:'inline-flex',alignItems:'center',gap:7}}><svg width="16" height="16" viewBox="0 0 24 24" fill={C.accent}><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Copiloto</span>} onClose={onClose} maxWidth={480} fullscreenOnMobile footer={
+    <Modal title={<span style={{display:'inline-flex',alignItems:'center',gap:7}}><svg width="16" height="16" viewBox="0 0 24 24" fill={C.accent}><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Counsel AI</span>} onClose={onClose} maxWidth={480} fullscreenOnMobile footer={
       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
         <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') ask() }} autoFocus placeholder='Escribe tu pregunta o pídeme algo…' style={{ flex:1, fontSize:13, padding:'10px 12px', borderRadius:10, border:`1px solid ${C.border}`, background:'#fff', color:C.text, outline:'none', boxSizing:'border-box' }}/>
         <button onClick={()=>ask()} disabled={busy||!q.trim()} style={{ fontSize:13, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:10, padding:'10px 15px', cursor:(busy||!q.trim())?'default':'pointer', opacity:(busy||!q.trim())?.6:1 }}>Enviar</button>
@@ -28854,7 +28854,7 @@ export default function App() {
                   </button>
                   )
                 })()}
-                <button onClick={e=>{e.stopPropagation();setCopilotoOpen(true)}} title='Copiloto' aria-label='Copiloto' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <button onClick={e=>{e.stopPropagation();setCopilotoOpen(true)}} title='Counsel AI' aria-label='Counsel AI' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='currentColor'><path d='M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z'/></svg>
                 </button>
                 <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
