@@ -11691,10 +11691,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     subconcepto:['subconcepto','sub concepto','sub-concepto','subconc','detalle adicional','sub detalle','subglosa','sub glosa'],
     ot:        ['ot','o.t.','orden','orden de trabajo','n° ot','nro ot','ot n°','numero ot','número ot','n ot'],
     categoria: ['categoría','categoria','tipo','proveedor','category'],
-    monto:     ['monto','importe','valor','amount','total'],
+    monto:     ['monto','importe','valor','amount','total','derecho','derechos'],
     notas:     ['notas','nota','observaciones','observación','observacion','comments'],
     proyecto:  ['proyecto','propuesta','propuesta - proyecto','project'],
-    requirente:['requirente','solicitante','requerido por','requiere','requirente/interesado','interesado','rogante','peticionario'],
+    requirente:['requirente','solicitante','requerido por','requiere','requirente/interesado','interesado','rogante','peticionario','compareciente','comparecientes','partes'],
     materia:   ['materia','asunto','acto','tipo de acto','naturaleza','naturaleza del acto','tramite','trámite'],
     caja_chica:['caja chica','pagado caja chica','pagado con caja chica','con cargo a caja chica','cargo caja chica','pagado con cargo a caja chica','pagada caja chica','caja chica (si/no)','caja chica si/no','¿caja chica?'],
   }
@@ -11710,6 +11710,25 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     if(!k) return 'Otro'
     if(CAT_SINONIMOS[k]) return CAT_SINONIMOS[k]
     return CAT_OPCIONES.find(c=>catNorm(c)===k) || 'Otro'
+  }
+
+  // ── Notaría: el export real trae Compareciente (partes con RUT), Materia y Observación; el cliente NO viene dado ──
+  // Parsea el Compareciente en partes {nombre, rut} (separadas por saltos de línea / _x000D_).
+  const parseComparecientes = (txt) => String(txt||'').replace(/_x000D_/g,'\n').replace(/\r/g,'\n').split('\n').map(s=>s.trim()).filter(Boolean).map(p=>{
+    const m = p.match(/(\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dkK]|0\s*-\s*0)/)
+    const rut = m ? m[1].replace(/\s/g,'') : ''
+    const nombre = (m ? p.slice(0,m.index) : p).trim()
+    return { nombre, rut: rut==='0-0'?'':rut }
+  }).filter(x=>x.nombre||x.rut)
+  // ¿Es la propia firma o uno de nuestros abogados/apoderados? (no es el cliente del trámite)
+  const esFirmaOLawyer = n => { const s=catNorm(n).replace(/\s/g,''); if(!s) return true; return /liberonaescala|escalamarcet|camperomantelli|liberonapena|erasmoignacioescala|martincampero/.test(s) }
+  // Glosa a rendir al cliente, armada desde Materia (+ detalle de Observación cuando aporta). La IA la pule y es editable.
+  const glosaNotaria = (materia, obs) => {
+    let m = String(materia||'').trim().toLowerCase(); if(!m) m='trámite notarial'
+    let g = 'Gastos notariales — ' + m
+    const o = String(obs||'').trim()
+    if(o && !/sin efecto/i.test(o) && o.length<=60 && !/\bspa\b|s\.a\.|limitada|ltda/i.test(o)) g += ' ('+o.toLowerCase()+')'
+    return g
   }
 
   const onFile = async(e) => {
@@ -11749,15 +11768,27 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const _pm = nombre.match(/^\s*personal\s*[·:.\-]\s*(.+)$/i)
         let personalDe = null
         if(_pm){ const cand=catNorm(_pm[1]); personalDe = MIEMBROS_NOTA.find(p=>catNorm(p)===cand) || _pm[1].trim() }
-        const ex = personalDe ? {client:null,method:'personal',entity_id:null} : exactMatch(rut,nombre)
-        let cli=ex.client, method=ex.method, entId=ex.entity_id
-        if(!cli&&!personalDe){ const al=aliasClient(nombre); if(al){ cli=al; method='aprendido'; entId=null } }   // memoria aprendida
+        let nombreEff=nombre, conceptoEff=concepto, cli=null, method, entId
+        if(notaria){
+          // El cliente NO viene dado (col 'Cliente' = la firma). Se deduce del Compareciente: RUT primero, luego nombre, luego alias aprendido.
+          conceptoEff = glosaNotaria(materia, notas)
+          const parties = parseComparecientes(requirente)
+          for(const pt of parties){ if(!pt.rut||esFirmaOLawyer(pt.nombre)) continue; const ex=exactMatch(pt.rut,''); if(ex.client){ cli=ex.client; method='rut_exact'; entId=ex.entity_id; nombreEff=pt.nombre||nombreEff; break } }
+          if(!cli) for(const pt of parties){ if(esFirmaOLawyer(pt.nombre)) continue; const ex=exactMatch('',pt.nombre); if(ex.client){ cli=ex.client; method='name_exact'; entId=ex.entity_id; nombreEff=pt.nombre; break } const al=aliasClient(pt.nombre); if(al){ cli=al; method='aprendido'; entId=null; nombreEff=pt.nombre; break } }
+          if(!nombreEff||/^liberona escala|^n\/a$/i.test(nombreEff.trim())) nombreEff = (parties.find(p=>!esFirmaOLawyer(p.nombre))?.nombre) || parties[0]?.nombre || ''
+        } else {
+          const ex = personalDe ? {client:null,method:'personal',entity_id:null} : exactMatch(rut,nombre)
+          cli=ex.client; method=ex.method; entId=ex.entity_id
+          if(!cli&&!personalDe){ const al=aliasClient(nombre); if(al){ cli=al; method='aprendido'; entId=null } }   // memoria aprendida
+        }
         const ents=cli?entsOf(cli.id):[]
         let error=null
+        if(notaria && (!ot || !/\d/.test(ot))) return null   // fila sin OT válida (ej. fila "Total" del export) → se ignora
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        return {id:idx, rut, nombre, fecha, monto, concepto, subconcepto, ot, notas, proyecto, requirente, materia, categoria, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='name_exact'?95:100):undefined), error, dup:false}
+        else if(notaria && /sin efecto/i.test(notas)) error='Sin efecto (anulada)'
+        return {id:idx, rut, nombre:nombreEff, fecha, monto, concepto:conceptoEff, subconcepto, ot, notas, proyecto, requirente, materia, categoria, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='rut_exact'?100:method==='name_exact'?95:90):undefined), error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
       let parsed = []
