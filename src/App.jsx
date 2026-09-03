@@ -14029,7 +14029,12 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   const porCobrar=Math.max(0,pagados-fondos); if(porCobrar<=0) return null
                   return <span title='La oficina ya pagó esto por sobre el fondo del cliente — deuda efectiva por cobrar' style={{fontSize:10,fontWeight:700,color:C.soonText,background:'#FFF3DC',border:'1px solid #FAC775',borderRadius:10,padding:'2px 9px',whiteSpace:'nowrap'}}>Adelanto {fmt(porCobrar)} por cobrar</span>
                 })()}
+                {/* Abogado responsable: chip clickeable para cambiar, o "Asignar abogado" si no tiene (deriva de la venta como la ficha). */}
+                {selectedClient&&!esOficina(selectedClient.id)&&(()=>{ const abg=respByClienteFull[String(selectedClient.id)]; const pc=abg?personChip(abg):null; return abg
+                  ? <span onClick={()=>setRespPickG(v=>!v)} title='Cambiar abogado responsable' style={{fontSize:10,fontWeight:700,color:pc.color,background:pc.bg,borderRadius:10,padding:'2px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>{abg} ▾</span>
+                  : <button onClick={()=>setRespPickG(v=>!v)} style={{fontSize:10,fontWeight:700,color:C.overdueText,background:C.overdueBg,border:'none',borderRadius:10,padding:'2px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Asignar abogado</button> })()}
               </div>
+              {selectedClient&&respPickG&&!esOficina(selectedClient.id)&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const pc=personChip(m);const on=respByClienteFull[String(selectedClient.id)]===m;return <button key={m} onClick={()=>asignarRespG(m)} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:`1px solid ${on?pc.color:pc.color+'33'}`}}>{m}</button>})}{selectedClient.abogado_responsable&&<button onClick={()=>asignarRespG(null)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button>}</div>}
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{rsDisplay(selEnts[0].name)}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
             </div>
           </div>
