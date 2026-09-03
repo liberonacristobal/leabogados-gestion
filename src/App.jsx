@@ -11954,7 +11954,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const [similarPrompt,setSimilarPrompt] = useState(null)   // {clientId,clientName,ids,srcName}: al asignar, ofrece asignar las OT de compareciente parecido
   const [grpOpen,setGrpOpen] = useState(()=>new Set())   // notaría: grupos de cliente expandidos (por defecto colapsados)
   const [enAppOpen,setEnAppOpen] = useState(false)       // notaría: grupo "ya en la app" expandido
-  const [catOpen,setCatOpen] = useState(()=>new Set(['falta']))   // notaría: categorías (tarjetas) abiertas; "Falta el cliente" abierta por defecto
+  const [catOpen,setCatOpen] = useState(()=>new Set())   // notaría: categorías (tarjetas) abiertas; TODO replegado por defecto (se abre al tocar)
   const [catQ,setCatQ] = useState({})                    // notaría: buscador por categoría (key→texto)
   const [rcOpen,setRcOpen] = useState(false)             // notaría: detalle "A clientes" del recibo desplegado
   const [aprendido,setAprendido] = useState({})          // notaría: aviso transitorio "lo aprendí" por fila
