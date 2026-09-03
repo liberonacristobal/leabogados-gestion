@@ -11729,9 +11729,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // ¿Es la propia firma o uno de nuestros abogados/apoderados? (no es el cliente del trámite)
   const esFirmaOLawyer = n => { const s=catNorm(n).replace(/\s/g,''); if(!s) return true; return /liberonaescala|escalamarcet|camperomantelli|liberonapena|erasmoignacioescala|martincampero/.test(s) }
   // Glosa a rendir al cliente, armada desde Materia (+ detalle de Observación cuando aporta). La IA la pule y es editable.
+  const _ACENTOS_NOTA = {modificacion:'modificación',constitucion:'constitución',reduccion:'reducción',autorizacion:'autorización',protocolizacion:'protocolización',fusion:'fusión',division:'división',cesion:'cesión',delegacion:'delegación',declaracion:'declaración',cancelacion:'cancelación',transformacion:'transformación',prorroga:'prórroga',credito:'crédito',creditos:'créditos',publica:'pública',juridica:'jurídica',compania:'compañía',deposito:'depósito',inscripcion:'inscripción',complementacion:'complementación',manifestacion:'manifestación',accionistas:'accionistas',devolucion:'devolución',prestacion:'prestación',captacion:'captación',subordinacion:'subordinación'}
   const glosaNotaria = (materia, obs) => {
     const mk = catNorm(materia); if(mk && glosaLearnedRef.current[mk]) return glosaLearnedRef.current[mk]   // glosa aprendida para este trámite
-    let m = String(materia||'').trim().toLowerCase(); if(!m) m='trámite notarial'
+    let m = String(materia||'').trim().toLowerCase(); if(!m) return 'Gastos notariales'
+    m = m.replace(/[a-záéíóúñ]+/g, w=>_ACENTOS_NOTA[w]||w)   // tildes en los términos frecuentes (el archivo viene en MAYÚSCULAS sin acentos)
+    m = m.charAt(0).toUpperCase()+m.slice(1)
     let g = 'Gastos notariales — ' + m
     const o = String(obs||'').trim()
     if(o && !/sin efecto/i.test(o) && o.length<=60 && !/\bspa\b|s\.a\.|limitada|ltda/i.test(o)) g += ' ('+o.toLowerCase()+')'
@@ -11764,7 +11767,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const driveFindClient = async (nombre) => {
     const nm = String(nombre||'').replace(/['\\]/g,' ').trim(); if(nm.length<4) return null
     let files=[]
-    try{ const d=await driveCall({action:'search', q:`fullText contains '${nm}' and trashed=false`, pageSize:12}); files=d.files||[] }
+    // Busca por CONTENIDO y por NOMBRE de archivo (la carpeta del cliente suele tener la razón social en el título del doc).
+    try{ const d=await driveCall({action:'search', q:`(fullText contains '${nm}' or title contains '${nm}') and trashed=false`, pageSize:15}); files=d.files||[] }
     catch(e){ return {error:e.message} }
     if(!files.length) return null
     const cnorm = s => normName(s)
@@ -11776,6 +11780,18 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       while(parents.length && depth<6){ const pid=parents[0]; if(seen.has(pid)) break; seen.add(pid); const m=await metaOf(pid); if(!m) break; const hit=byFolder.get(cnorm(m.name)); if(hit) return {client:hit, folder:m.name}; parents=m.parents||[]; depth++ }
     }
     return null
+  }
+  // Busca en Drive el cliente de TODAS las OT sin cliente, en secuencia (con contador).
+  const buscarTodasDrive = async () => {
+    const pend = (rows||[]).filter(r=> !r.client_id && !r.personal_de && !r.isInternal && !r.error && !r.suggestion && String(r.nombre||r.requirente||'').trim().length>=4)
+    if(!pend.length) return
+    setDriveAll({done:0,total:pend.length})
+    for(let i=0;i<pend.length;i++){
+      const r=pend[i]
+      try{ const res=await driveFindClient(r.nombre||r.requirente); if(res&&res.client){ asignar(r.id,res.client.id); setDriveMsg(m=>({...m,[r.id]:`✓ ${res.client.name} · carpeta "${res.folder}"`})) } else setDriveMsg(m=>({...m,[r.id]: res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }catch(_){}
+      setDriveAll({done:i+1,total:pend.length})
+    }
+    setDriveAll(null)
   }
 
   const onFile = async(e) => {
@@ -11924,6 +11940,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const [ocasPick,setOcasPick] = useState(null)   // id de la fila con el selector de responsable del ocasional abierto
   const [driveBusy,setDriveBusy] = useState(null)   // fila con búsqueda en Drive en curso
   const [driveMsg,setDriveMsg] = useState({})       // resultado de la búsqueda en Drive por fila
+  const [driveAll,setDriveAll] = useState(null)     // {done,total} de "Buscar todas en Drive"
   // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
   const _normOt = s => String(s||'').replace(/\D/g,'')
   const _STOPDUP = new Set(['para','por','con','los','las','del','sociedad','servicios','contrato','publica','especial','acciones','copia','legalizada','prestacion','mandato','reduccion','protocolizacion','autorizacion','pacto','junta','escritura'])
@@ -12330,6 +12347,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             </div>
             )})()}
           {modo!=='conciliar'&&<div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
+            {notaria&&(()=>{ const nSin=(rows||[]).filter(r=>!r.client_id&&!r.personal_de&&!r.isInternal&&!r.error&&!r.suggestion).length; return (
+              <button disabled={!!driveAll||(!nSin&&!driveAll)} onClick={buscarTodasDrive} title='Busca en tus carpetas de Drive el cliente de cada OT sin cliente' style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:driveAll||!nSin?'default':'pointer',border:`1px solid ${C.accent}`,background:driveAll?C.azulBg:'#fff',color:C.accent,opacity:driveAll||!nSin?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>
+                {driveAll?`Buscando en Drive ${driveAll.done}/${driveAll.total}…`:`Buscar todas en Drive${nSin?` (${nSin})`:''}`}
+              </button>
+            )})()}
             <button disabled={sugeridos.length===0} onClick={confirmarSugeridos} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:sugeridos.length?'pointer':'default',border:'1px solid #F0D88A',background:sugeridos.length?'#FFF8E1':C.bgSoft,color:C.soon,opacity:sugeridos.length?1:.5}}>Confirmar sugeridos ({sugeridos.length})</button>
             <button disabled={guardando||listas.length===0} onClick={()=>guardar(false)} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:listas.length?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:listas.length?1:.5}}>Importar listos ({listas.length})</button>
             <button disabled={guardando||rows.length===0} onClick={async()=>{ if(await appConfirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>
