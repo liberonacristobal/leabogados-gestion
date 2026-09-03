@@ -11950,6 +11950,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Crea un cliente ocasional con el nombre de la fila (columna Cliente), opcionalmente con responsable, y le asigna el gasto.
   const crearOcasional = async(r,responsable)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm,responsable); if(c){ setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)); if(onLearnAlias) onLearnAlias(nm.toLowerCase(), c.id) }  /* aprende nombre→ocasional para que no reaparezca al re-subir */ setOcasPick(null) }
   const [ocasPick,setOcasPick] = useState(null)   // id de la fila con el selector de responsable del ocasional abierto
+  const [persPick,setPersPick] = useState(null)   // id de la fila con el selector "es personal de quién" abierto
+  // Marca una OT como gasto PERSONAL de un miembro (reusa el campo personal_de del motor): sale de "sin cliente" y va a la categoría Personal.
+  const marcarPersonalRow = (rowId, persona) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, personal_de:persona, client_id:null, clientName:null, entity_id:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:'personal'} : r)); setPersPick(null) }
+  const quitarPersonalRow = (rowId) => setRows(p=>p.map(r=> r.id===rowId ? {...r, personal_de:null, matchMethod:undefined} : r))
   const [driveBusy,setDriveBusy] = useState(null)   // fila con búsqueda en Drive en curso
   const [driveMsg,setDriveMsg] = useState({})       // resultado de la búsqueda en Drive por fila
   const [driveAll,setDriveAll] = useState(null)     // {done,total} de "Buscar todas en Drive"
@@ -12086,11 +12090,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Reparte las filas en 6 categorías accionables. Cada una es una tarjeta plegable; adentro, filas
   // que muestran compareciente + trámite + fecha (lo que identifica de quién es).
   const notaCats = (flt) => {
-    const c={falta:[],confirma:[],listas:[],oficina:[],yacargadas:[],sinefecto:[]}
+    const c={falta:[],confirma:[],listas:[],personal:[],oficina:[],yacargadas:[],sinefecto:[]}
     flt.forEach(r=>{
       if(r.error){ c.sinefecto.push(r); return }
       if(dupInfo[r.id]?.otState){ c.yacargadas.push(r); return }
-      if(r.personal_de || r.isInternal || (r.client_id && esOficinaCli(r.client_id))){ c.oficina.push(r); return }
+      if(r.personal_de){ c.personal.push(r); return }   // gasto personal de un miembro (Cristóbal/Erasmo/…)
+      if(r.isInternal || (r.client_id && esOficinaCli(r.client_id))){ c.oficina.push(r); return }
       if(r.client_id){ c.listas.push(r); return }
       if(r.suggestion){ c.confirma.push(r); return }
       c.falta.push(r)
@@ -12101,12 +12106,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     falta:{t:'Falta el cliente', s:'búscalo, míralo en Drive o créalo', col:C.overdueText, bg:C.overdueBg},
     confirma:{t:'Confirma el cliente', s:'la IA ya propuso uno · un toque', col:C.soonText, bg:C.soonBg},
     listas:{t:'Listas para cargar', s:'con cliente · agrupadas por cliente', col:C.greenText, bg:C.greenBg},
+    personal:{t:'Personal · de un miembro', s:'de un abogado/miembro, no de un cliente', col:C.grisText, bg:C.bgWarm},
     oficina:{t:'De la oficina', s:'no van a un cliente', col:C.tealText, bg:C.tealBg},
     yacargadas:{t:'Ya cargadas', s:'están en la app · se omiten', col:C.muted, bg:C.bgSoft},
     sinefecto:{t:'Sin efecto', s:'anuladas · excluidas del total', col:C.grisText, bg:C.bgWarm},
   }
-  const catSvg = (k,col) => { const p={falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],sinefecto:['M6 6l12 12']}[k]||[]
-    const base = k==='falta'?<circle cx='9' cy='8' r='3'/>:k==='confirma'?<circle cx='12' cy='12' r='3.5'/>:k==='oficina'?<rect x='4' y='3' width='12' height='18' rx='1'/>:k==='yacargadas'?<path d='M3 12a9 9 0 1 0 3-6.7L3 8'/>:k==='sinefecto'?<circle cx='12' cy='12' r='9'/>:null
+  const catSvg = (k,col) => { const p={falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],personal:['M5 20c0-4 3.5-6 7-6s7 2 7 6'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],sinefecto:['M6 6l12 12']}[k]||[]
+    const base = k==='falta'?<circle cx='9' cy='8' r='3'/>:k==='confirma'?<circle cx='12' cy='12' r='3.5'/>:k==='personal'?<circle cx='12' cy='8' r='3.5'/>:k==='oficina'?<rect x='4' y='3' width='12' height='18' rx='1'/>:k==='yacargadas'?<path d='M3 12a9 9 0 1 0 3-6.7L3 8'/>:k==='sinefecto'?<circle cx='12' cy='12' r='9'/>:null
     return <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth={k==='listas'?2.4:2} strokeLinecap='round' strokeLinejoin='round'>{base}{p.map((d,i)=><path key={i} d={d}/>)}</svg> }
   const tramDe = r => ((r.materia||'').trim().toLowerCase().replace(/^./,ch=>ch.toUpperCase()))||'Trámite notarial'
   const nomDe = r => r.nombre||r.requirente||'—'
@@ -12122,8 +12128,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const info = kind==='yacargadas'||kind==='sinefecto'   // solo lectura
     const st = dupInfo[r.id]?.otState
     const stNote = kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
-    const prot = kind==='listas' ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
-    const sub  = kind==='listas' ? (cn||'') : (tramDe(r) + (cn?` · ${cn}`:''))
+    const prot = (kind==='listas'||kind==='personal') ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
+    const sub  = kind==='listas' ? (cn||'') : kind==='personal' ? (noName?'':nomDe(r)) : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
     return (
       <div key={r.id} style={{padding:'10px 0',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10,opacity:info?.8:1}}>
@@ -12146,8 +12152,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           {!noName&&<button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ driveSuggest(r.id,res) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.azulInfo,border:'none',borderRadius:8,padding:'7px 13px',cursor:driveBusy===r.id?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>{driveBusy===r.id?'Buscando en Drive…':'Buscar en Drive'}</button>}
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{open?'Cerrar':'Asignar a mano'}</button>
           {onCreateOccasional&&!noName&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Nuevo</button>}
+          <button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.grisText,background:C.bgWarm,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Es personal ▾</button>
           {driveMsg[r.id]&&<span style={{fontSize:10.5,fontWeight:600,color:driveMsg[r.id].startsWith('✓')?C.greenText:C.muted}}>{driveMsg[r.id]}</span>}
         </div>}
+        {kind==='personal'&&<div style={{display:'flex',gap:10,marginTop:6}}><button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Cambiar persona</button><button onClick={()=>quitarPersonalRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.overdueText,background:'none',border:'none',cursor:'pointer',padding:0}}>Ya no es personal</button></div>}
         {kind==='confirma'&&r.suggestion&&<div style={{display:'flex',gap:7,marginTop:8,alignItems:'center',flexWrap:'wrap'}}>
           <span style={{fontSize:11.5,color:C.text}}>{r.suggestFrom==='drive'?<>Encontrado en Drive: <b>{r.suggestion.name}</b>{r.driveFolder?<span style={{color:C.muted}}> · carpeta "{r.driveFolder}"</span>:''}</>:<>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}% de certeza</span>:''}</>}</span>
           <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Confirmar sola</button>
@@ -12173,13 +12181,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           </>}
         </div>}
         {ocasPick===r.id&&<div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>Ocasional «{r.nombre}» · resp:</span>{MIEMBROS_NOTA.map(m=>{const pc=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:'none'}}>{m}</button>})}<button onClick={()=>crearOcasional(r,null)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:C.bgWarm,color:C.grisText,border:'none'}}>Sin resp.</button></div>}
+        {persPick===r.id&&<div style={{marginTop:7,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:6}}>¿De quién es este gasto?</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{MIEMBROS_NOTA.map(m=>{const pc=personChip(m);const on=r.personal_de===m;return <button key={m} onClick={()=>marcarPersonalRow(r.id,m)} style={{fontSize:11,borderRadius:20,padding:'4px 11px',fontWeight:700,cursor:'pointer',background:pc.bg,color:pc.color,border:on?`1px solid ${pc.color}`:'1px solid transparent'}}>{m}</button>})}</div></div>}
         </div>
       </div>
     )
   }
   // Recibo del resultado (clickeable): la acción "Cargar" cuelga del dato; A clientes se despliega.
   const notaReceipt = (cats) => {
-    const cargarRows=[...cats.falta,...cats.confirma,...cats.listas,...cats.oficina]
+    const cargarRows=[...cats.falta,...cats.confirma,...cats.listas,...cats.personal,...cats.oficina]
     const nCarga=cargarRows.length, totCarga=cargarRows.reduce((a,r)=>a+(r.monto||0),0)
     const byCli={}; cats.listas.forEach(r=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); const k=r.client_id; (byCli[k]=byCli[k]||{name:c?.name||'Cliente',n:0,tot:0}); byCli[k].n++; byCli[k].tot+=(r.monto||0) })
     const cliList=Object.values(byCli).sort((a,b)=>b.tot-a.tot)
@@ -12244,6 +12253,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                 </div>
               )})}
             </>)})()}
+            {k==='personal'&&(()=>{ const fr=filtRows(rws,k); const by={}; fr.forEach(r=>{ (by[r.personal_de||'—']=by[r.personal_de||'—']||[]).push(r) }); return Object.entries(by).sort((a,b)=>b[1].reduce((s,r)=>s+(r.monto||0),0)-a[1].reduce((s,r)=>s+(r.monto||0),0)).map(([pers,rs])=>{ const pc=personChip(pers); const tt=rs.reduce((a,r)=>a+(r.monto||0),0); return (
+              <div key={pers}>
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0 4px'}}><span style={{width:18,height:18,borderRadius:20,background:pc.bg,color:pc.color,fontSize:9,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{(INICIALES_RESP&&INICIALES_RESP[pers])||String(pers)[0]}</span><span style={{flex:1,fontSize:12,fontWeight:700,color:pc.color}}>{pers}</span><span style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{rs.length} OT · {fmt(tt)}</span></div>
+                {rs.map(r=>notaCatRow(r,'personal'))}
+              </div>
+            )}) })()}
             {k==='oficina'&&filtRows(rws,k).map(r=>notaCatRow(r,'oficina'))}
             {(k==='yacargadas'||k==='sinefecto')&&rws.map(r=>notaCatRow(r,k))}
           </div>}
@@ -12252,7 +12267,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     }
     return (<div>
       {aprendido&&aprendido.name&&<div style={{display:'flex',alignItems:'center',gap:7,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.greenText}}>Aprendí que <b>{aprendido.name}</b> es <b>{aprendido.cli}</b> — no te lo vuelvo a preguntar.</span></div>}
-      {['falta','confirma','listas','oficina','yacargadas','sinefecto'].map(card)}
+      {['falta','confirma','listas','personal','oficina','yacargadas','sinefecto'].map(card)}
       {notaReceipt(cats)}
     </div>)
   }
