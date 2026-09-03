@@ -2721,6 +2721,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   const [openOficina,setOpenOficina] = useState(false)
   const [openPagar,setOpenPagar] = useState(true)
   const [cpProvOpen,setCpProvOpen] = useState({})   // drill: facturas del proveedor desplegadas
+  const [cpPagOpen,setCpPagOpen] = useState(false)  // sección "Pagadas este año" (colaboradores ya pagados) desplegada
   const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
   const [payGroup,setPayGroup] = useState(null)        // varias cuentas del mismo proveedor pagadas juntas
   const [payFecha,setPayFecha] = useState('')
@@ -3421,6 +3422,10 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
           .sort((a,b)=> (b.urgente-a.urgente) || (b.total-a.total))
         const ordCuentas = cs => [...cs].sort((a,b)=> (a.estado==='por_pagar'?0:1)-(b.estado==='por_pagar'?0:1))
         const estPill = est => est==='por_pagar'?{l:'Por pagar',c:C.normal,bg:C.greenBg}:{l:'Pendiente',c:C.soon,bg:'#FFF8E1'}
+        // Pagadas este año, agrupadas por colaborador — para verlos a TODOS (incl. los ya saldados, ej. Andrés Mery).
+        const byProvPag = {}
+        ;(terceros||[]).filter(t=>t.estado==='pagado'&&String(t.pagado_at||'').startsWith(String(yr))).forEach(t=>{ const k=t.proveedor_id||'__'; if(!byProvPag[k]) byProvPag[k]={prov:provById(t.proveedor_id),cuentas:[]}; byProvPag[k].cuentas.push(t) })
+        const gruposPag = Object.values(byProvPag).map(g=>({...g,total:g.cuentas.reduce((a,t)=>a+(t.monto||0),0)})).sort((a,b)=>b.total-a.total)
         return (
           <div style={{padding:'16px 20px 0'}}>
             <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Comisiones · colaboradores</div>
@@ -3498,6 +3503,37 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                     })}
                   </div>
                 )})}
+                {gruposPag.length>0&&(
+                  <div style={{marginTop:(porPagarTot+pendienteTot)===0?4:2}}>
+                    <div onClick={()=>setCpPagOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 2px',cursor:'pointer'}}>
+                      <span style={{fontSize:11.5,fontWeight:600,color:C.done}}>Pagadas este año</span>
+                      <span style={{flex:1,height:1,background:C.border}}></span>
+                      <span style={{fontSize:12.5,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(pagadoYr)}</span>
+                      <span style={{fontSize:11,color:C.done}}>{gruposPag.length} colab.</span>
+                      <span style={{fontSize:11,color:C.done}}>{cpPagOpen?'▴':'▾'}</span>
+                    </div>
+                    {cpPagOpen&&gruposPag.map((g,gi)=>{ const pkey='pag_'+(g.prov?.id||gi); const provOpen=!!cpProvOpen[pkey]; const provNom=titleCase(tituloProv(g.prov)); return (
+                      <div key={pkey} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+                        <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.bgSoft,cursor:'pointer'}}>
+                          <span style={{width:24,height:24,borderRadius:6,background:C.greenText,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
+                          <span style={{flex:1,fontSize:13,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}</span>
+                          <span style={{fontSize:12.5,fontWeight:600,color:C.greenText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtShort(g.total)}</span>
+                          <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:C.greenBg,color:C.greenText,flexShrink:0}}>Pagado</span>
+                          <span style={{fontSize:11,color:C.done,flexShrink:0}}>{provOpen?'▴':'▾'}</span>
+                        </div>
+                        {provOpen&&[...g.cuentas].sort((a,b)=>String(b.pagado_at||'').localeCompare(String(a.pagado_at||''))).map(t=>{ const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id)); const cli=clients.find(c=>String(c.id)===String(fac?.client_id)); return (
+                          <div key={t.id} style={{borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8,padding:'9px 12px'}}>
+                            <div style={{minWidth:0,flex:1}}>
+                              <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}{fac?.invoice_no?` · Factura N°${folioN(fac.invoice_no)}`:''}</div>
+                              <div style={{fontSize:11,color:C.done,marginTop:1}}>Pagado {fmtDMY(t.pagado_at)}</div>
+                            </div>
+                            <span style={{fontSize:12.5,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(t.monto)}</span>
+                          </div>
+                        )})}
+                      </div>
+                    )})}
+                  </div>
+                )}
               </div>
           </div>
         )
