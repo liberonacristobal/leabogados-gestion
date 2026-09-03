@@ -11782,14 +11782,17 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     }
     return null
   }
-  // Busca en Drive el cliente de TODAS las OT sin cliente, en secuencia (con contador).
+  // Drive PROPONE (compuerta): guarda el cliente encontrado como SUGERENCIA (no asigna solo) → la fila pasa a
+  // "Confirma el cliente" para que el humano confirme. Coherente con "gate → aprende → se libera".
+  const driveSuggest = (rowId, res) => setRows(p=>p.map(r=> r.id===rowId ? {...r, suggestion:{id:res.client.id, name:res.client.name}, confidence:100, driveFolder:res.folder, suggestFrom:'drive'} : r))
+  // Busca en Drive el cliente de TODAS las OT sin cliente, en secuencia (con contador). Propone, no asigna.
   const buscarTodasDrive = async () => {
     const pend = (rows||[]).filter(r=> !r.client_id && !r.personal_de && !r.isInternal && !r.error && !r.suggestion && String(r.nombre||r.requirente||'').trim().length>=4)
     if(!pend.length) return
     setDriveAll({done:0,total:pend.length})
     for(let i=0;i<pend.length;i++){
       const r=pend[i]
-      try{ const res=await driveFindClient(r.nombre||r.requirente); if(res&&res.client){ asignar(r.id,res.client.id); setDriveMsg(m=>({...m,[r.id]:`✓ ${res.client.name} · carpeta "${res.folder}"`})) } else setDriveMsg(m=>({...m,[r.id]: res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }catch(_){}
+      try{ const res=await driveFindClient(r.nombre||r.requirente); if(res&&res.client){ driveSuggest(r.id,res); setDriveMsg(m=>({...m,[r.id]:`✓ Drive: ${res.client.name}`})) } else setDriveMsg(m=>({...m,[r.id]: res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }catch(_){}
       setDriveAll({done:i+1,total:pend.length})
     }
     setDriveAll(null)
@@ -11899,7 +11902,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const rawKey = r => normRut(r.rut) || String(r.nombre||'').toLowerCase().trim()
   // Asignar cliente a una fila Y a todas las filas iguales (mismo RUT/nombre) que aún no haya
   // resuelto el usuario manualmente — así no se repite el trabajo.
-  const asignar = (rowId,clientId) => {
+  const asignar = (rowId,clientId,method) => {
     const c = clients.find(x=>x.id===clientId)
     const ents = entsOf(clientId)
     let srcNombre=null, srcRow=null
@@ -11907,7 +11910,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const src = p.find(r=>r.id===rowId)
       srcNombre = src?.nombre || null; srcRow = src || null
       const key = src ? rawKey(src) : null
-      const apply = r => ({...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,personal_de:null,matchMethod:'manual'})
+      // método: 'drive' si venía de una sugerencia de Drive (cuenta como reconocida sola), si no 'manual'
+      const apply = r => ({...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,personal_de:null,matchMethod: method || (r.suggestFrom==='drive'?'drive':'manual'), suggestFrom:null, driveFolder:null})
       return p.map(r=>{
         if(r.id===rowId) return apply(r)
         if(key && rawKey(r)===key && r.matchMethod!=='manual') return apply(r)  // iguales aún no fijados a mano
@@ -12139,13 +12143,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         {stNote&&<div style={{fontSize:10.5,fontWeight:600,color:kind==='sinefecto'?C.grisText:st==='pagada'?C.overdueText:st==='rendida'?C.coralText:C.muted,marginTop:3}}>{stNote}</div>}
         {/* acciones por categoría (no en las informativas) */}
         {kind==='falta'&&<div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
-          {!noName&&<button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ asignar(r.id,res.client.id) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.azulInfo,border:'none',borderRadius:8,padding:'7px 13px',cursor:driveBusy===r.id?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>{driveBusy===r.id?'Buscando en Drive…':'Buscar en Drive'}</button>}
+          {!noName&&<button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ driveSuggest(r.id,res) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.azulInfo,border:'none',borderRadius:8,padding:'7px 13px',cursor:driveBusy===r.id?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>{driveBusy===r.id?'Buscando en Drive…':'Buscar en Drive'}</button>}
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{open?'Cerrar':'Asignar a mano'}</button>
           {onCreateOccasional&&!noName&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Nuevo</button>}
           {driveMsg[r.id]&&<span style={{fontSize:10.5,fontWeight:600,color:driveMsg[r.id].startsWith('✓')?C.greenText:C.muted}}>{driveMsg[r.id]}</span>}
         </div>}
         {kind==='confirma'&&r.suggestion&&<div style={{display:'flex',gap:7,marginTop:8,alignItems:'center',flexWrap:'wrap'}}>
-          <span style={{fontSize:11.5,color:C.text}}>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}% de certeza</span>:''}</span>
+          <span style={{fontSize:11.5,color:C.text}}>{r.suggestFrom==='drive'?<>Encontrado en Drive: <b>{r.suggestion.name}</b>{r.driveFolder?<span style={{color:C.muted}}> · carpeta "{r.driveFolder}"</span>:''}</>:<>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}% de certeza</span>:''}</>}</span>
           <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Confirmar sola</button>
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Otro</button>
         </div>}
@@ -12456,9 +12460,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{fontSize:10.5,color:C.overdueText,marginTop:2}}>{nP>0?`${nP} ya pagada${nP!==1?'s':''} a la notaría`:''}{nP>0&&nR>0?' · ':''}{nR>0?`${nR} ya rendida${nR!==1?'s':''} al cliente`:''}. Aparecen marcadas abajo; no las cargues sin verlas.</div>
             </div>
           )})()}
-          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend; const anul=(rows||[]).filter(r=>/sin efecto/i.test(r.notas||'')).length
+          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const interno=val.filter(r=>r.personal_de||(r.client_id&&esOficinaCli(r.client_id))).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend-interno; const anul=(rows||[]).filter(r=>/sin efecto/i.test(r.notas||'')).length
             const reconSolas=val.filter(r=>(r.client_id&&r.matchMethod!=='manual')||dupInfo[r.id]?.otState).length; const aprHoy=aprendidasSet.size; return (
-            // Hero blanco (canon de la foto): protagonista = Total, con sus partes anidadas (a clientes / sin asignar). Sin azul pleno.
+            // Hero blanco (canon de la foto): protagonista = Total, con sus partes anidadas (a clientes / sin asignar / interno). Sin azul pleno.
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'13px 15px',marginBottom:12}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:10.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Carga de notaría</span><span style={{fontSize:10.5,color:C.done}}>{val.length} OT{anul?` · ${anul} anulada${anul!==1?'s':''}`:''}</span></div>
               <div style={{fontSize:27,fontWeight:800,color:C.accent,letterSpacing:-.6,margin:'3px 0 8px',fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>
@@ -12466,6 +12470,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{display:'flex',gap:10,borderTop:`1px solid #EEF1F3`,paddingTop:9}}>
                 <div style={{flex:1}}><div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>A clientes</div><div style={{fontSize:15,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(rend)}</div></div>
                 <div style={{flex:1,borderLeft:`1px solid #EEF1F3`,paddingLeft:10}}><div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Sin asignar aún</div><div style={{fontSize:15,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(sinAsig)}</div></div>
+                {interno>0&&<div style={{flex:1,borderLeft:`1px solid #EEF1F3`,paddingLeft:10}}><div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Interno</div><div style={{fontSize:15,fontWeight:800,color:C.tealText,fontVariantNumeric:'tabular-nums'}}>{fmt(interno)}</div></div>}
               </div>
             </div>
           )})()}
