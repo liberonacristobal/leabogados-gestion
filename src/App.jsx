@@ -11941,6 +11941,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const [driveBusy,setDriveBusy] = useState(null)   // fila con búsqueda en Drive en curso
   const [driveMsg,setDriveMsg] = useState({})       // resultado de la búsqueda en Drive por fila
   const [driveAll,setDriveAll] = useState(null)     // {done,total} de "Buscar todas en Drive"
+  const [deselNota,setDeselNota] = useState(()=>new Set())   // notaría: OT DESmarcadas (por defecto van marcadas las que tienen cliente)
+  const [rowOpenNota,setRowOpenNota] = useState(()=>new Set())   // notaría: filas expandidas (detalle clickeable)
+  const notaSelOn = r => !!r.client_id && !r.error && !deselNota.has(r.id)   // seleccionada para importar
+  const toggleSelNota = id => setDeselNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
+  const toggleRowNota = id => setRowOpenNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
   const _normOt = s => String(s||'').replace(/\D/g,'')
   const _STOPDUP = new Set(['para','por','con','los','las','del','sociedad','servicios','contrato','publica','especial','acciones','copia','legalizada','prestacion','mandato','reduccion','protocolizacion','autorizacion','pacto','junta','escritura'])
@@ -11994,9 +11999,56 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     groups.forEach(g=>{ out.push({type:'header',kind:'cli',g}); g.rs.forEach(r=>out.push({type:'row',r})) })
     return out
   }
+  // Fila COMPACTA de notaría: checkbox (si tiene cliente) + OT · trámite · cliente · monto, clickeable para expandir el detalle completo.
+  const notaRowCard = (r) => {
+    const open=rowOpenNota.has(r.id), sel=notaSelOn(r)
+    const cn=r.client_id?(clients.find(c=>String(c.id)===String(r.client_id))?.name||r.clientName||''):null
+    const tramite=((r.materia||'').trim().toLowerCase().replace(/^./,c=>c.toUpperCase()))||'Trámite notarial'
+    const otL=r.ot?(String(r.ot).toUpperCase().startsWith('OT')?r.ot:'OT-'+r.ot):'s/OT'
+    const st=dupInfo[r.id]?.otState
+    const chk=on=> on
+      ? <svg width='17' height='17' viewBox='0 0 24 24' fill={C.accent} stroke={C.accent}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>
+      : <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>
+    return (
+      <div key={r.id} style={{borderTop:`0.5px solid ${C.border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:sel?'#fff':C.bgSoft}}>
+          {r.client_id&&!r.error ? <span onClick={()=>toggleSelNota(r.id)} title={sel?'Seleccionada — se importa':'Marca para importar'} style={{cursor:'pointer',flexShrink:0,display:'inline-flex'}}>{chk(sel)}</span> : <span style={{width:17,flexShrink:0}}/>}
+          <span onClick={()=>toggleRowNota(r.id)} style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+            <span style={{fontSize:11,fontWeight:700,color:r.error?C.overdueText:C.azulInfo,flexShrink:0}}>{otL}</span>
+            <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tramite}{cn?<span style={{color:C.muted}}> · {cn}</span>:r.suggestion?<span style={{color:C.soonText}}> · sugerido: {r.suggestion.name}</span>:(!r.personal_de?<span style={{color:C.overdueText}}> · sin cliente</span>:'')}</span>
+            <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(r.monto)}</span>
+            <span style={{fontSize:13,color:C.done,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
+          </span>
+        </div>
+        {st&&<div style={{fontSize:10.5,fontWeight:600,color:st==='pagada'?C.overdueText:st==='rendida'?C.coralText:C.muted,padding:'0 12px 6px 38px'}}>{st==='pagada'?'⚠ Ya pagada a la notaría — no la cargues de nuevo':st==='rendida'?'⚠ Ya rendida al cliente':'Ya cargada — se omite al importar'}</div>}
+        {open&&<div style={{padding:'2px 12px 12px 38px',background:sel?'#fff':C.bgSoft}}>
+          <table style={{width:'100%',fontSize:11.5,borderCollapse:'collapse'}}><tbody>
+            <tr><td style={{color:C.muted,padding:'2px 0',width:96,verticalAlign:'top'}}>Trámite</td><td style={{padding:'2px 0',color:C.text}}>{r.materia||'—'}</td></tr>
+            <tr><td style={{color:C.muted,padding:'2px 0',verticalAlign:'top'}}>Compareciente</td><td style={{padding:'2px 0',color:C.text}}>{r.nombre||'—'}</td></tr>
+            <tr><td style={{color:C.muted,padding:'2px 0'}}>Fecha</td><td style={{padding:'2px 0',color:C.text}}>{r.fecha?fmtFDMY(r.fecha):'sin fecha'}</td></tr>
+          </tbody></table>
+          <div style={{marginTop:7}}>
+            <div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:3}}>Glosa a rendir · editable</div>
+            <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} style={{width:'100%',padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box'}}/>
+          </div>
+          <div style={{marginTop:8,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            {cn&&<span style={{fontSize:11.5,color:C.muted}}>Cliente: <b style={{color:C.accent}}>{cn}</b></span>}
+            <span style={{marginLeft:cn?'auto':0,flex:cn?'0 0 auto':'1 1 180px',minWidth:170}}><AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label={cn?'Cambiar cliente…':'Buscar cliente por nombre o RUT…'}/></span>
+          </div>
+          {r.suggestion&&!r.client_id&&<div style={{marginTop:7,display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:11.5,color:C.text}}>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}%</span>:''}</span><button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:7,padding:'4px 11px',cursor:'pointer'}}>Confirmar</button></div>}
+          {!r.client_id&&!r.personal_de&&<div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+            <button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ asignar(r.id,res.client.id); setDriveMsg(m=>({...m,[r.id]:`✓ ${res.client.name} · carpeta "${res.folder}"`})) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 10px',cursor:driveBusy===r.id?'default':'pointer'}}>{driveBusy===r.id?'Buscando en Drive…':'Buscar en Drive'}</button>
+            {r.nombre&&onCreateOccasional&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer'}}>Cliente nuevo</button>}
+            {driveMsg[r.id]&&<span style={{fontSize:10.5,fontWeight:600,color:driveMsg[r.id].startsWith('✓')?C.greenText:C.muted}}>{driveMsg[r.id]}</span>}
+          </div>}
+          {ocasPick===r.id&&<div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>Ocasional «{r.nombre}» · resp:</span>{MIEMBROS_NOTA.map(m=>{const pc=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:'none'}}>{m}</button>})}<button onClick={()=>crearOcasional(r,null)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:C.bgWarm,color:C.grisText,border:'none'}}>Sin resp.</button></div>}
+        </div>}
+      </div>
+    )
+  }
 
-  const guardar = async(incluirTodo=false) => {
-    const target = incluirTodo ? (rows||[]) : listas
+  const guardar = async(incluirTodo=false, explicit=null) => {
+    const target = explicit || (incluirTodo ? (rows||[]) : listas)
     if(target.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
     setGuardando(true)
     try{
@@ -12353,9 +12405,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                 {driveAll?`Buscando en Drive ${driveAll.done}/${driveAll.total}…`:`Buscar todas en Drive${nSin?` (${nSin})`:''}`}
               </button>
             )})()}
-            <button disabled={sugeridos.length===0} onClick={confirmarSugeridos} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:sugeridos.length?'pointer':'default',border:'1px solid #F0D88A',background:sugeridos.length?'#FFF8E1':C.bgSoft,color:C.soon,opacity:sugeridos.length?1:.5}}>Confirmar sugeridos ({sugeridos.length})</button>
-            <button disabled={guardando||listas.length===0} onClick={()=>guardar(false)} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:listas.length?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:listas.length?1:.5}}>Importar listos ({listas.length})</button>
-            <button disabled={guardando||rows.length===0} onClick={async()=>{ if(await appConfirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>
+            {!notaria&&<button disabled={sugeridos.length===0} onClick={confirmarSugeridos} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:sugeridos.length?'pointer':'default',border:'1px solid #F0D88A',background:sugeridos.length?'#FFF8E1':C.bgSoft,color:C.soon,opacity:sugeridos.length?1:.5}}>Confirmar sugeridos ({sugeridos.length})</button>}
+            {notaria
+              ? (()=>{ const nSel=(rows||[]).filter(notaSelOn).length; return <button disabled={guardando||!nSel} onClick={()=>{ const sel=(rows||[]).filter(notaSelOn); if(!sel.length){appAlert('Marca al menos una OT para importar.');return} guardar(false, sel) }} style={{flex:'1 1 200px',padding:'10px 8px',borderRadius:8,fontSize:13,fontWeight:700,cursor:nSel?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:nSel?1:.5}}>Importar seleccionadas ({nSel})</button> })()
+              : <button disabled={guardando||listas.length===0} onClick={()=>guardar(false)} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:listas.length?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:listas.length?1:.5}}>Importar listos ({listas.length})</button>}
+            {!notaria&&<button disabled={guardando||rows.length===0} onClick={async()=>{ if(await appConfirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>}
           </div>}
           {dups.length>0&&modo!=='conciliar'&&<div style={{fontSize:11,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>
             <div onClick={()=>setShowDup(s=>!s)} style={{cursor:'pointer'}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo cliente, fecha, monto y concepto) dentro del archivo. <b style={{textDecoration:'underline'}}>{showDup?'ocultar':'ver cuáles'}</b></div>
@@ -12384,13 +12438,15 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               if(item.type==='header'){
                 if(item.kind==='sin') return (<div key={'hs'+ii} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.overdueBg,borderBottom:`1px solid ${C.overdue}`}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2'><circle cx='12' cy='12' r='10'/><path d='M12 16v-4M12 8h.01'/></svg><span style={{flex:1,fontSize:12.5,fontWeight:700,color:C.overdueText}}>Sin cliente · por revisar</span><span style={{fontSize:11,fontWeight:600,color:C.overdueText}}>{item.n} OT · {fmt(item.tot)}</span></div>)
                 const g=item.g; const cubre=g.saldo!=null&&g.saldo>=g.tot; const adel=g.saldo!=null?Math.max(0,g.tot-g.saldo):0
+                const selG=g.rs.filter(notaSelOn).length, allG=g.rs.filter(r=>r.client_id&&!r.error).length
                 return (<div key={'hc'+g.cid} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
-                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2'><circle cx='12' cy='8' r='4'/><path d='M5 20a7 7 0 0 1 14 0'/></svg>
+                  <span onClick={()=>setDeselNota(p=>{ const n=new Set(p); const marcarTodo=selG<allG; g.rs.forEach(r=>{ if(r.client_id&&!r.error){ marcarTodo?n.delete(r.id):n.add(r.id) } }); return n })} title={selG<allG?'Marcar todo el grupo':'Desmarcar el grupo'} style={{cursor:'pointer',flexShrink:0,display:'inline-flex'}}>{selG===allG&&allG>0?<svg width='16' height='16' viewBox='0 0 24 24' fill={C.accent} stroke={C.accent}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/>{selG>0&&<line x1='7' y1='12' x2='17' y2='12' stroke={C.accent} strokeWidth='2.4'/>}</svg>}</span>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9.5,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 6px',marginLeft:6}}>{g.nEnt} razones sociales</span>}</div>{g.saldo!=null&&<div style={{fontSize:10,fontWeight:600,color:cubre?C.greenText:C.overdueText}}>{cubre?`Disponible ${fmt(g.saldo)} · cubre`:`Sin fondo · adelanto ${fmt(adel)}`}</div>}</div>
-                  <span style={{fontSize:11,color:C.muted}}>{g.rs.length} OT · {fmt(g.tot)}</span>
+                  <span style={{fontSize:11,color:C.muted}}>{selG} de {g.rs.length} · {fmt(g.tot)}</span>
                 </div>)
               }
               const r=item.r
+              if(notaria) return notaRowCard(r)
               const bucket = bucketOf(r)
               const bad = montoBad(r)
               const ents = r.client_id ? entsOf(r.client_id) : []
@@ -29323,7 +29379,7 @@ export default function App() {
         </div></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)}><div className='qt-body' style={{paddingTop:'calc(env(safe-area-inset-top,0px) + 18px)'}}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></div></Modal>}
-        {modal?.type==='cargaMasiva'&&<Modal fullscreenOnMobile title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal fullscreenOnMobile fullscreen fsMaxWidth={980} title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal fullscreenOnMobile title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){appAlert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null} preDev={!!modal?.dev}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
