@@ -26545,12 +26545,60 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
 
 function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],pettyCash=[],setPettyCash,user,focusMovId,onFocusConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII}){
   const { EQUIPO_RUT, SOCIO_RUT, CONTADORA_RUT, movs, setMovs, loading, setLoading, importing, setImporting, prog, setProg, reportes, setReportes, cargaPreview, setCargaPreview, verifRes, setVerifRes, verificando, setVerificando, aliases, setAliases, sub, setSub, cobradasOpen, setCobradasOpen, cuentaF, setCuentaF, anioF, setAnioF, mesF, setMesF, concYCol, setConcYCol, concMOpen, setConcMOpen, respF, setRespF, facChip, setFacChip, facMyc, setFacMyc, devolFor, setDevolFor, devolSel, setDevolSel, respByCid, respDisp, q, setQ, orden, setOrden, verCartolas, setVerCartolas, verCarga, setVerCarga, verFiltros, setVerFiltros, editMov, setEditMov, tagFor, setTagFor, tipoAprendido, setTipoAprendido, splitMov, setSplitMov, splitAdel, setSplitAdel, fondoFor, setFondoFor, otroFor, setOtroFor, otraFacFor, setOtraFacFor, editForm, setEditForm, conc, setConc, concView, setConcView, isDesktop, autoRun, setAutoRun, pickFor, setPickFor, revSugOpen, setRevSugOpen, revSugSel, setRevSugSel, revSugBusy, setRevSugBusy, comboFor, setComboFor, reembFor, setReembFor, detFor, setDetFor, facBuscaQ, setFacBuscaQ, rsConcOpen, setRsConcOpen, modalMov, setModalMov, otrasSet, setOtrasSet, toggleOtras, verGlosa, setVerGlosa, busy, setBusy, costosOfi, setCostosOfi, costosClaudia, setCostosClaudia, valoresBusy, setValoresBusy, valoresInfo, setValoresInfo, leerValores, poolCostos, gcFor, setGcFor, gcCli, setGcCli, gcEnt, setGcEnt, ofiFor, setOfiFor, ofiCat, setOfiCat, ofiSub, setOfiSub, cargoCliLearn, setCargoCliLearn, costoOfiLearn, setCostoOfiLearn, ccFam, setCcFam, ccCat, setCcCat, ccQ, setCcQ, TOL, fmtM, mesAbbr, cargar, cmap, nameByRut, provByRut, _stripNom, _toksNom, tipoSugerido, costoOfiSugerido, _NOM_COMUN, nombreIdx, sugerencias, tipoContraparte, TAG_STY, CATS_CARGO, CATS_ABONO, RESUELTAS_ABO, ESTRUCT_ABO, setCategoria, desmarcarInterno, resolver, resolverNombre, onFiles, confirmarCarga, onVerificar, identificar, guardarRut, origenInterno, espejoInterno, aplicadoByFactura, cartolaHasta, concByMov, saldoFactura, facturasConSaldo, facturasPorCliente, esConciliable, facturasCliente, _rutsCliente, _rutsFactura, facturasParaMov, mesDiff, candidatos, folioGlosa, mejorCandidato, candidatosMostrar, tieneCand, clientePorMonto, facturaPorMontoManual, sugeridosId, identificarLote, esDescalce, persistPagoFactura, marcaPago, marcaQuien, reconciliar, combos, comboExacto, comboExacto3, cidByMov, reembGastoByCliente, gastoPend, gastosReembolsables, facturaMasGastos, reconciliarCombo, loteOpen, setLoteOpen, loteBusy, setLoteBusy, loteProg, setLoteProg, loteConfirm, setLoteConfirm, siiBuscando, setSiiBuscando, siiResumen, setSiiResumen, siiMovBusy, setSiiMovBusy, siiMovHit, setSiiMovHit, siiMovIng, setSiiMovIng, buscarMovSII, ingresarYConciliar, buscarTodoSII, conciliarLote, grupoPago, reconciliarGrupo, reconciliarFacturaGastos, reconciliarReembolso, marcarGastosReembolsados, devolucionGastos, saldoAFavor, splitAdelantoFondo, fondoExistente, vincularFondo, anticipoExistente, vincularAnticipo, crearFondoProvision, gastoPorCuentaCliente, ofiCli, catsOficinaConc, costoOficina, costoOficinaSplit, deshacer, CARGO_OFI_GRUPOS, CARGO_SUB_LABEL, cargoPersonas, cargoSugerencia, _glosaHas, matchPresupuesto, matchGrupoPresupuesto, cargoRachaHint, marcarCargoCliente, quitarCargoCliente, cajaChicaMatch, _cierraCaja, abonoCajaChica, deshacerCajaChica, marcarControlCargo, registrarCargoOficina, terc, setTerc, pagoSel, setPagoSel, provDeCargo, bDue, comisPorPagar, preselFifo, fFifoDate, conciliarComisiones, deshacerComisiones, renderPagoProveedor, renderCargoClasificar, conciliarAuto, resumenConc, G, cartolas, aniosDisp, lista, chipCounts, rolChip, estadoChip, tipoMov } = useConciliacionModel({ clients, clientEntities, billing, setBilling, anticipos, setAnticipos, expenses, setExpenses, proveedores, pettyCash, setPettyCash, user, focusMovId, onFocusConsumed, openProp, onPropOpened, onClose, onOpenClientFicha, onCotejarSII, onBuscarSII, onIngresarSII })
+  // Hub de entrada (patrón del hub de Gastos): landing de tarjetas que rutea a las secciones ya existentes.
+  // Pura presentación — no toca cifras (reusa resumenConc/G/cartolas y los predicados del modelo).
+  const [hubOpen,setHubOpen] = useState(!focusMovId&&!openProp)
+  useEffect(()=>{ if(focusMovId||openProp) setHubOpen(false) },[focusMovId,openProp])
+  const concHub = hubOpen ? (()=>{
+    const D=isDesktop
+    const cDesc=movs.filter(esDescalce).length
+    const goHub=fn=>{ fn(); setHubOpen(false) }
+    const cards=[
+      {t:'Sin identificar',ic:'id',s:`${G.sinId} sin cliente`,col:C.overdueText,bg:C.overdueBg,go:()=>goHub(()=>{setSub('abonos');setConcView('sinid')})},
+      {t:'Descalces',ic:'alert',s:cDesc?`${cDesc} por revisar`:'Sin descalces',col:C.soonText,bg:C.soonBg,go:()=>goHub(()=>{setSub('abonos');setConcView('descalces')})},
+      {t:'Cargos',ic:'wallet',s:`${G.nCar} · ${fmtShort(G.sumCar)}`,col:C.accent,bg:C.azulBg,go:()=>goHub(()=>setSub('cargos'))},
+      {t:'Cargar cartola',ic:'file',s:cartolas.length?`${cartolas.length} cargada${cartolas.length!==1?'s':''}`:'Subir · verificar',col:C.tealText,bg:C.tealBg,go:()=>goHub(()=>setVerCarga(true))},
+      {t:'Sin respaldo',ic:'receipt',s:'Cobradas sin movimiento',col:C.accent,bg:C.azulBg,go:()=>goHub(()=>setCobradasOpen(true))},
+      {t:'Todos los movimientos',ic:'grid',s:`${G.nMov} en total`,col:C.accent,bg:C.azulBg,go:()=>goHub(()=>{setSub('abonos');setConcView('todos')})},
+    ]
+    const navCard=c=>(
+      <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
+        <span style={{width:32,height:32,borderRadius:9,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={c.ic} s={17} c={c.col}/></span>
+        <div><div style={{fontSize:14.5,fontWeight:600,color:C.text}}>{c.t}</div><div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{c.s}</div></div>
+      </div>
+    )
+    const hubInner=(
+      <div style={{maxWidth:D?860:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:D?'14px 2px 12px':'16px 8px 10px'}}>
+          <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+          <div style={{fontSize:D?22:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Conciliación bancaria</div>
+          {loading&&<span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>Cargando…</span>}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:D?16:11}}>
+          <div onClick={()=>goHub(()=>{setSub('abonos');setConcView('porconciliar')})} style={{cursor:'pointer',padding:D?'15px 18px':'12px 13px'}}>
+            <div style={{fontSize:11.5,color:C.muted,marginBottom:4}}>Por conciliar</div>
+            <div style={{fontSize:D?26:20,fontWeight:800,color:C.overdueText,letterSpacing:-.5,lineHeight:1.05}}>{fmtShort(resumenConc.montoPend)}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4}}>{resumenConc.pend} movimiento{resumenConc.pend!==1?'s':''}</div>
+          </div>
+          <div onClick={()=>goHub(()=>{setSub('abonos');setConcView('conciliados')})} style={{cursor:'pointer',padding:D?'15px 18px':'12px 13px',borderLeft:`1px solid ${C.border}`}}>
+            <div style={{fontSize:11.5,color:C.muted,marginBottom:4}}>Conciliado</div>
+            <div style={{fontSize:D?26:20,fontWeight:800,color:C.greenText,letterSpacing:-.5,lineHeight:1.05}}>{resumenConc.done}<span style={{fontSize:D?15:12,color:C.muted,fontWeight:600}}>/{resumenConc.total}</span></div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4}}>abonos del período</div>
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr':'1fr 1fr',gap:D?12:8}}>{cards.map(navCard)}</div>
+      </div>
+    )
+    if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}</div>
+    return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}</div>
+  })() : null
+  if(hubOpen) return concHub
   return (
     <div style={{paddingBottom:80,...(isDesktop?{maxWidth:980,margin:'0 auto'}:{})}}>
       {loteConfirm&&<Modal title='Conciliar varias' onClose={()=>!loteBusy&&setLoteConfirm(null)} closeOnBackdrop={false}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></Modal>}
       <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+          <button onClick={()=>setHubOpen(true)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
           <div style={{fontSize:20,fontWeight:600,color:C.text,letterSpacing:-.4}}>Conciliación bancaria</div>
           {loading&&<span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>Cargando…</span>}
         </div>
