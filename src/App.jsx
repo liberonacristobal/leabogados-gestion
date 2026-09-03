@@ -13943,6 +13943,44 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [cliOrd,setCliOrd] = useState('nombre')                  // orden de la lista de clientes: nombre | saldo | actividad
   // Abogado del cliente — MISMA fuente que la ficha de Clientes: abogado_responsable, y si no, el responsable de su venta más reciente.
   const respByClienteFull = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
+  // Pedir fondos: clientes que la oficina financia (saldo<0), agrupados por su abogado a cargo, para pedirle provisión.
+  const [pedirOpen,setPedirOpen] = useState(false)   // modal "pedir fondos a los abogados"
+  const [pedirSent,setPedirSent] = useState({})      // estado de envío por correo de abogado
+  const PEDIR_EMAILS={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const pedirFondosGrupos = useMemo(()=>{
+    const saldoDe=c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
+    const neg=(clientsWithMovs||[]).filter(c=>c.status!=='Terminado' && !esOficina(c.id) && saldoDe(c)<0)
+    const g={}
+    neg.forEach(c=>{ const abg=respByClienteFull[String(c.id)]||null; const email=abg?PEDIR_EMAILS[abg]:null; const key=email||'__sin__'
+      const gs=(expenses||[]).filter(e=>String(e.client_id)===String(c.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.deleted_at).sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0))
+      const o=g[key]||(g[key]={abg,email,clientes:[]}); o.clientes.push({id:c.id,name:c.name,deuda:-saldoDe(c),gastos:gs}) })
+    Object.values(g).forEach(o=>{ o.clientes.sort((a,b)=>b.deuda-a.deuda); o.total=o.clientes.reduce((a,c)=>a+c.deuda,0) })
+    return g
+  },[clientsWithMovs,balances,respByClienteFull,expenses])
+  const emailPedirFondos=(nombre,clientes)=>{
+    const tot=clientes.reduce((a,c)=>a+c.deuda,0)
+    const glosa=g=>(g.concept||g.description||g.glosa||g.category||'Gasto'), fecha=g=>String(g.date||g.created_at||'').slice(0,10), monto=g=>Number(g.amount||g.monto||0)
+    const filas=clientes.map(c=>{
+      const top=c.gastos.slice(0,5).map(g=>`<tr><td style="padding:2px 8px 2px 0;font-size:12px;color:#537281;white-space:nowrap">${fecha(g)}</td><td style="padding:2px 0;font-size:12px;color:#3D3D3D">${glosa(g)}</td><td style="padding:2px 0 2px 8px;font-size:12px;color:#3D3D3D;text-align:right;white-space:nowrap">${fmt(monto(g))}</td></tr>`).join('')
+      const resto=c.gastos.length>5?`<div style="font-size:11px;color:#537281;margin-top:3px">+ ${c.gastos.length-5} gasto(s) más</div>`:''
+      return `<div style="border:1px solid #E4E8EB;border-radius:9px;padding:12px 14px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="color:#003C50;font-size:14px">${c.name}</b><b style="color:#A32D2D;font-size:14px">${fmt(c.deuda)}</b></div><div style="font-size:11px;color:#537281;margin:3px 0 7px">${c.gastos.length} gasto(s) que la oficina adelantó</div><table style="width:100%;border-collapse:collapse">${top}</table>${resto}</div>`
+    }).join('')
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#F5F7F9;font-family:Arial,Helvetica,sans-serif;color:#3D3D3D"><div style="max-width:560px;margin:0 auto;padding:22px 16px"><div style="background:#fff;border:1px solid #E4E8EB;border-radius:14px;overflow:hidden"><div style="background:#003C50;color:#fff;padding:16px 20px"><div style="font-size:15px;font-weight:700">Liberona Escala Abogados</div><div style="font-size:11px;opacity:.85">Clientes por provisionar</div></div><div style="padding:20px"><div style="font-size:14px;font-weight:600;color:#003C50;margin-bottom:6px">Hola ${nombre},</div><div style="font-size:13px;line-height:1.55;margin-bottom:16px">La oficina adelantó gastos de estos clientes tuyos que <b>no tienen fondos suficientes</b>. Conviene <b>pedirles provisión</b>:</div>${filas}<div style="background:#003C50;color:#fff;border-radius:9px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center;margin:4px 0 16px"><span style="font-size:12px;color:#85B7EB">Total por pedir</span><span style="font-size:18px;font-weight:800">${fmt(tot)}</span></div><a href="https://gestion.leabogados.cl" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 20px;border-radius:9px">Ver en la app</a></div></div><div style="text-align:center;font-size:10px;color:#99ABB4;margin-top:14px">Liberona Escala Abogados</div></div></body></html>`
+  }
+  const enviarPedir1=async(email,grupo)=>{
+    const nombre=(grupo.abg||'').split(' ')[0]||grupo.abg||''
+    setPedirSent(s=>({...s,[email]:'sending'}))
+    try{ const via=await enviarComoUsuario({to:email,subject:`Pedir fondos — ${grupo.clientes.length} cliente${grupo.clientes.length!==1?'s':''} (${fmt(grupo.total)})`,html:emailPedirFondos(nombre,grupo.clientes),text:`Tienes ${grupo.clientes.length} cliente(s) sin fondos por ${fmt(grupo.total)}. Pídeles provisión.`})
+      setPedirSent(s=>({...s,[email]:via?'ok':'skip'})); return !!via }
+    catch(e){ setPedirSent(s=>({...s,[email]:'err'})); return false }
+  }
+  const enviarPedirTodos=async()=>{
+    const entries=Object.entries(pedirFondosGrupos).filter(([k])=>k!=='__sin__')
+    if(!entries.length) return
+    if(!await appConfirm(`¿Enviar el aviso de "pedir fondos" a ${entries.length} abogado(s)? Cada uno recibe solo sus clientes.`)) return
+    for(const [email,grupo] of entries){ await enviarPedir1(email,grupo) }
+    appAlert('Avisos enviados.')
+  }
   // Puentes tras cargar notaría: navegar directo a la sub-vista pedida desde la pantalla de resultado (orphans / deuda / rendir).
   useEffect(()=>{ if(!navTo) return
     setShowCargaPag(false); setNotaMenuOpen(false); setSelectedClient(null); setShowHistorial(false); setShowGastosOficina(false); setShowBuscarClientes(false); setShowReasignar(false); setShowRevision(false)
@@ -13993,6 +14031,36 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h)
   },[isDesktop,hubOpen,selectedClient,filteredClients,balances,saldoFilter,q,rendicionClient,attachExpense,liqDetail,emailRend,devEmailRend,showNotaria,showHistorial,showOrphans,showClasificar,showRevision])
   useEffect(()=>{ if(!isDesktop||!selectedClient) return; try{ document.querySelector('aside [data-cid="'+String(selectedClient.id)+'"]')?.scrollIntoView({block:'nearest'}) }catch(_){} },[selectedClient,isDesktop])
+  const pedirModal = pedirOpen&&(()=>{ const groups=Object.entries(pedirFondosGrupos); const conAbg=groups.filter(([k])=>k!=='__sin__').sort((a,b)=>b[1].total-a[1].total); const sin=pedirFondosGrupos['__sin__']; const totalGral=conAbg.reduce((a,[,g])=>a+g.total,0)
+    return <Modal fullscreenOnMobile title='Pedir fondos a los abogados' onClose={()=>setPedirOpen(false)}>
+      <div style={{padding:'4px 2px 0'}}>
+        <div style={{fontSize:12.5,color:C.muted,lineHeight:1.5,marginBottom:14}}>Cada abogado recibe un correo con SUS clientes sin fondos y el detalle de los gastos que la oficina adelantó. Se envía desde tu correo.</div>
+        {conAbg.map(([email,g])=>{ const pc=personChip(g.abg); const st=pedirSent[email]; return (
+          <div key={email} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',marginBottom:10,background:'#fff'}}>
+            <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:9}}>
+              <span style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'3px 11px',background:pc.bg,color:pc.color,border:`1px solid ${pc.color}33`}}>{g.abg}</span>
+              <div style={{flex:1,fontSize:11.5,color:C.muted}}>{g.clientes.length} cliente{g.clientes.length!==1?'s':''}</div>
+              <b style={{fontSize:14,color:C.overdueText}}>{fmt(g.total)}</b>
+            </div>
+            <div style={{border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden',marginBottom:10}}>
+              {g.clientes.map((c,i)=>(<div key={c.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'7px 11px',borderTop:i?`0.5px solid ${C.border}`:'none'}}><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</div><div style={{fontSize:10.5,color:C.muted}}>{c.gastos.length} gasto{c.gastos.length!==1?'s':''}</div></div><b style={{fontSize:12.5,color:C.overdueText,whiteSpace:'nowrap'}}>{fmt(c.deuda)}</b></div>))}
+            </div>
+            <button disabled={st==='sending'||st==='ok'} onClick={()=>enviarPedir1(email,g)} style={{width:'100%',border:'none',borderRadius:9,padding:'9px 12px',fontSize:12.5,fontWeight:700,cursor:st==='ok'?'default':'pointer',background:st==='ok'?C.greenBg:(st==='err'||st==='skip')?C.overdueBg:C.accent,color:st==='ok'?C.greenText:(st==='err'||st==='skip')?C.overdueText:'#fff'}}>{st==='sending'?'Enviando…':st==='ok'?'Enviado ✓':st==='err'?'Falló — reintentar':st==='skip'?'No se envió — reintentar':`Enviar a ${(g.abg||'').split(' ')[0]}`}</button>
+          </div>
+        )})}
+        {sin&&sin.clientes.length>0&&(
+          <div style={{border:`1px dashed ${C.border}`,borderRadius:12,padding:'11px 13px',marginBottom:10,background:C.bgWarm}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.grisText,marginBottom:3}}>{sin.clientes.length} cliente{sin.clientes.length!==1?'s':''} sin abogado — {fmt(sin.total)}</div>
+            <div style={{fontSize:11,color:C.muted,lineHeight:1.45}}>Asígnales un abogado a cargo (en la ficha del cliente) para poder avisarle.</div>
+          </div>
+        )}
+        {conAbg.length===0&&(!sin||!sin.clientes.length)&&<div style={{textAlign:'center',fontSize:12.5,color:C.greenText,padding:'18px 0'}}>Sin clientes por provisionar · todo cuadra.</div>}
+        {conAbg.length>1&&(
+          <button onClick={enviarPedirTodos} style={{width:'100%',border:`1px solid ${C.accent}`,borderRadius:11,padding:'11px',fontSize:13,fontWeight:700,cursor:'pointer',background:'#fff',color:C.accent,marginTop:2}}>Enviar a todos ({conAbg.length}) · {fmt(totalGral)}</button>
+        )}
+      </div>
+    </Modal>
+  })()
   const body = (
     <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -15098,6 +15166,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {rendicionClient&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
       {devEmailRend&&<DevolucionEmailModal client={devEmailRend.client} rend={devEmailRend.rend} rendN={devEmailRend.rend?.correlativo} amount={devEmailRend.amount} fecha={devEmailRend.fecha} user={currentUser} setRendiciones={setRendiciones} onClose={()=>setDevEmailRend(null)}/>}
+      {pedirModal}
     </div>
   )
   // ── HUB de Gastos (cara de entrada). Presentación pura: mismas cifras auditadas, sin recalcular nada.
@@ -15148,13 +15217,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <div style={{fontSize:11,color:C.muted,marginTop:4}}>{posL.length} en custodia</div>
           </div>
         </div>
+        {Object.keys(pedirFondosGrupos).some(k=>k!=='__sin__')&&(
+          <button onClick={()=>{setPedirSent({});setPedirOpen(true)}} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:7,background:C.accent,color:'#fff',border:'none',borderRadius:12,padding:'11px 14px',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:D?16:11}}><SIcon n='mail' s={15} c='#fff'/>Pedir fondos a los abogados</button>
+        )}
         <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr':'1fr 1fr',gap:D?12:8}}>
           {cards.map(navCard)}
         </div>
       </div>
     )
-    if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}</div>
-    return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}</div>
+    if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}{pedirModal}</div>
+    return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}{pedirModal}</div>
   }
   // Notaría / Historial / Sin cliente: son SECCIONES sin lista maestra → van a todo el ancho (sin el 2-panel de clientes).
   if(isDesktop && (showNotaria||showHistorial||showOrphans||showGastosOficina)) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{body}</div>
