@@ -12122,7 +12122,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const sub  = kind==='listas' ? (cn||'') : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
     return (
-      <div key={r.id} style={{padding:'10px 14px',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10,opacity:info?.8:1}}>
+      <div key={r.id} style={{padding:'10px 0',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10,opacity:info?.8:1}}>
         {chk&&<span onClick={()=>setConfDesel(p=>{ const n=new Set(p); n.has(r.id)?n.delete(r.id):n.add(r.id); return n })} title={on?'Marcada — se confirma':'Marca para confirmar'} style={{cursor:'pointer',flexShrink:0,marginTop:2}}>{on?<svg width='17' height='17' viewBox='0 0 24 24' fill={C.normal} stroke={C.normal}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>}</span>}
         <div style={{flex:1,minWidth:0}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
@@ -12213,14 +12213,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:15,fontWeight:800,color:meta.col,fontVariantNumeric:'tabular-nums',lineHeight:1}}>{rws.length}</div>{!info&&<div style={{fontSize:10,color:meta.col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>}</div>
             <span style={{color:C.done,fontSize:13,marginLeft:2,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           </div>
-          {open&&<div style={{borderTop:`1px solid #EEF1F3`,padding:'8px 12px 4px'}}>
+          {open&&<div style={{borderTop:`1px solid #EEF1F3`,padding:'8px 14px 4px'}}>
             {k==='falta'&&(()=>{ const fr=filtRows(rws,k); return (<>
               {nSin>1&&<button disabled={!!driveAll} onClick={buscarTodasDrive} style={{width:'100%',fontSize:11.5,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'7px',cursor:driveAll?'default':'pointer',marginBottom:4}}>{driveAll?`Buscando en Drive ${driveAll.done}/${driveAll.total}…`:`Buscar las ${nSin} en Drive`}</button>}
               {rws.length>10&&buscador(k)}
               {(()=>{ const noNm=r=>!String(r.nombre||r.requirente||'').replace(/^\s*n\/?a\.?\s*$/i,'').trim(); const by={}; fr.forEach(r=>{ const kk=noNm(r)?'__sindatos__':(((r.nombre||r.requirente||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim())||('id'+r.id)); (by[kk]=by[kk]||[]).push(r) }); const ents=Object.entries(by).sort((a,b)=> (a[0]==='__sindatos__'?1:0)-(b[0]==='__sindatos__'?1:0) || b[1].length-a[1].length); return ents.map(([kk,g],gi)=> kk==='__sindatos__'
-                ? <div key={gi}><div style={{fontSize:11,fontWeight:700,color:C.grisText,padding:'6px 2px 2px'}}>Sin datos para identificar <span style={{fontWeight:400,color:C.muted}}>· {g.length} OT · sin compareciente</span></div>{g.map(r=>notaCatRow(r,'falta'))}</div>
+                ? <div key={gi}><div style={{fontSize:11,fontWeight:700,color:C.grisText,padding:'6px 0 2px'}}>Sin datos para identificar <span style={{fontWeight:400,color:C.muted}}>· {g.length} OT · sin compareciente</span></div>{g.map(r=>notaCatRow(r,'falta'))}</div>
                 : g.length>1
-                ? <div key={gi}><div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'6px 2px 2px'}}>{nomDe(g[0])} <span style={{fontWeight:400,color:C.muted}}>· {g.length} OT · {fmt(g.reduce((a,r)=>a+(r.monto||0),0))}</span></div>{g.map(r=>notaCatRow(r,'falta'))}</div>
+                ? <div key={gi}><div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'6px 0 2px'}}>{nomDe(g[0])} <span style={{fontWeight:400,color:C.muted}}>· {g.length} OT · {fmt(g.reduce((a,r)=>a+(r.monto||0),0))}</span></div>{g.map(r=>notaCatRow(r,'falta'))}</div>
                 : notaCatRow(g[0],'falta')) })()}
             </>)})()}
             {k==='confirma'&&(()=>{ const fr=filtRows(rws,k); const sel=fr.filter(r=>!confDesel.has(r.id)&&r.suggestion); return (<>
@@ -12232,7 +12232,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               {groups.map(g=>{ const cubre=g.saldo!=null&&g.saldo>=g.tt; const adel=g.saldo!=null?Math.max(0,g.tt-g.saldo):0; return (
                 <div key={g.cid}>
                   {/* subencabezado de cliente (etiqueta, no colapsable) + sus filas — igual que los subgrupos de "Falta" */}
-                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px 4px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0 4px'}}>
                     <span style={{flex:1,minWidth:0,fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 5px',marginLeft:5}}>{g.nEnt} RS</span>}{g.saldo!=null&&<span style={{fontSize:9.5,fontWeight:600,color:cubre?C.greenText:C.overdueText,marginLeft:5}}>· {cubre?'cubre':`adelanto ${fmt(adel)}`}</span>}</span>
                     <span style={{fontSize:10.5,color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{g.rs.length} OT · {fmt(g.tt)}</span>
                   </div>
