@@ -11916,6 +11916,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     // Aprende: este nombre crudo → este cliente, para que las próximas cargas caigan solas.
     if(onLearnAlias && srcNombre && String(srcNombre).trim()) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
     if(srcRow && String(srcRow.requirente||'').trim()){ learnNota(srcRow, clientId); learnRutNota(srcRow, clientId); setRespNota(srcRow, clientId) }   // notaría: aprende requirente→cliente, RUT→client_entity y fija responsable
+    // Notaría: ¿hay OTRAS OT sin cliente con compareciente PARECIDO (no idéntico, esos ya se propagaron)? Ofrece asignarlas juntas.
+    if(notaria && srcRow && String(srcNombre||'').trim()){
+      const kSrc=rawKey(srcRow)
+      const sim=(rows||[]).filter(r=> r.id!==rowId && !r.client_id && !r.personal_de && !r.error && String(r.nombre||'').trim() && rawKey(r)!==kSrc && (()=>{ const s=simil(srcNombre,r.nombre); return s>=80 && s<100 })())
+      setSimilarPrompt(sim.length ? {clientId, clientName:c?.name||'', ids:sim.map(r=>r.id), srcName:srcNombre} : null)
+    }
   }
   // Confirma de una vez todas las sugerencias (fuzzy 70-89 / IA 65-84) como cliente asignado.
   const confirmarSugeridos = () => {
@@ -11943,6 +11949,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const [driveAll,setDriveAll] = useState(null)     // {done,total} de "Buscar todas en Drive"
   const [deselNota,setDeselNota] = useState(()=>new Set())   // notaría: OT DESmarcadas (por defecto van marcadas las que tienen cliente)
   const [rowOpenNota,setRowOpenNota] = useState(()=>new Set())   // notaría: filas expandidas (detalle clickeable)
+  const [similarPrompt,setSimilarPrompt] = useState(null)   // {clientId,clientName,ids,srcName}: al asignar, ofrece asignar las OT de compareciente parecido
   const notaSelOn = r => !!r.client_id && !r.error && !deselNota.has(r.id)   // seleccionada para importar
   const toggleSelNota = id => setDeselNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   const toggleRowNota = id => setRowOpenNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
@@ -12433,7 +12440,15 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               {respFilter&&<button onClick={()=>setRespFilter(null)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Ver todos</button>}
             </div>
           )})()}
-          <div style={{maxHeight:360,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
+          {notaria&&similarPrompt&&(
+            <div style={{border:`1px solid ${C.accent}`,background:C.azulBg,borderRadius:10,padding:'10px 12px',marginBottom:10,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+              <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z'/></svg>
+              <div style={{flex:1,minWidth:120}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Asignaste a {similarPrompt.clientName}</div><div style={{fontSize:11,color:C.accent}}>Hay {similarPrompt.ids.length} OT más de compareciente parecido a «{similarPrompt.srcName}»</div></div>
+              <button onClick={()=>{ const {clientId,ids}=similarPrompt; setSimilarPrompt(null); ids.forEach(id=>asignar(id,clientId)) }} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer'}}>Asignar las {similarPrompt.ids.length} a {similarPrompt.clientName}</button>
+              <button onClick={()=>setSimilarPrompt(null)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>No</button>
+            </div>
+          )}
+          <div style={{maxHeight:notaria?'none':360,overflowY:notaria?'visible':'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
             {(()=>{ const flt=rows.filter(r=>!respFilter||(respDeRow(r)||'__sin__')===respFilter); const items = notaria ? notaItems(flt) : flt.map(r=>({type:'row',r})); return items.map((item,ii)=>{
               if(item.type==='header'){
                 if(item.kind==='sin') return (<div key={'hs'+ii} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.overdueBg,borderBottom:`1px solid ${C.overdue}`}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2'><circle cx='12' cy='12' r='10'/><path d='M12 16v-4M12 8h.01'/></svg><span style={{flex:1,fontSize:12.5,fontWeight:700,color:C.overdueText}}>Sin cliente · por revisar</span><span style={{fontSize:11,fontWeight:600,color:C.overdueText}}>{item.n} OT · {fmt(item.tot)}</span></div>)
