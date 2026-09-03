@@ -6053,6 +6053,9 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
   const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
     .sort((a,b)=>String(b.issued_at||b.due||'').localeCompare(String(a.issued_at||a.due||'')))
   const porEnviarTotal = porEnviar.reduce((a,b)=>a+montoFactura(b),0)
+  // Emitidas del mes SIN XML: no se pueden enviar (falta el archivo) pero NO deben quedar invisibles → se avisan con su folio.
+  const emitidasSinXml = billing.filter(b=> !b.deleted_at && esEmitida(b) && !b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
+    .sort((a,b)=>String(b.issued_at||'').localeCompare(String(a.issued_at||'')))
   // Ya enviadas de las cargadas por XML este mes (con correo despachado) → explica por qué "Por enviar" < "Cargadas": las ya despachadas salen.
   const enviadasXmlMes = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
     .sort((a,b)=>String(b.email_sent_at||'').localeCompare(String(a.email_sent_at||'')))
@@ -6359,6 +6362,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
       {checklistTab==='enviar'&&(
         <div style={{marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Por enviar al cliente · {porEnviar.length}{porEnviar.length?` · ${fmt(porEnviarTotal)}`:''}</div>
+          {emitidasSinXml.length>0&&<div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:9,padding:'8px 11px',marginBottom:8,fontSize:11,color:C.soonText,lineHeight:1.45}}><b>{emitidasSinXml.length} emitida{emitidasSinXml.length!==1?'s':''} sin XML</b> — no se {emitidasSinXml.length!==1?'pueden':'puede'} enviar hasta cargar su XML (botón "Cargar XML"): {emitidasSinXml.slice(0,8).map(b=>'N°'+folioN(b.invoice_no)).join(' · ')}{emitidasSinXml.length>8?'…':''}</div>}
           <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {porEnviar.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todas enviadas ✓</div>}
             {porEnviarGrupos.map((g,gi)=>{ const top=gi>0?{borderTop:`1px solid ${C.border}`}:{}
@@ -8026,7 +8030,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
               doc:d})
             continue
           }
-          const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioM)
+          const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioN(folioM))
           const cli = b ? ((clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||'—') : null
           if(!b){
             const tipoDte=P.tipo, fecha=P.fecha, rut=P.rut, receptor=P.receptor, monto=P.total, nmb=P.nmb, dsc=P.dsc
@@ -8102,7 +8106,12 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       const usadas=new Set(); const rows=[]
       for(const s of (data||[])){
         const ya=(billing||[]).find(x=>!x.deleted_at&&x.invoice_no&&folioN(x.invoice_no)===folioN(s.folio))
-        if(ya){ marcarStaged(s.folio,'registrada',ya.id); continue }   // se registró desde entonces → limpia y salta
+        if(ya){
+          // La factura YA tiene folio (ej. viene de un adelanto): enlaza y, si le falta el XML, ADJÚNTASELO
+          // (antes solo enlazaba y el XML quedaba huérfano → la factura no aparecía en "Por enviar").
+          if(!ya.dte_xml && s.doc_json?.doc){ try{ await supabase.from('billing').update({dte_xml:s.doc_json.doc, updated_at:new Date().toISOString()}).eq('id',ya.id); if(setBilling) setBilling(p=>p.map(b=>b.id===ya.id?{...b,dte_xml:s.doc_json.doc}:b)) }catch(_){} }
+          marcarStaged(s.folio,'registrada',ya.id); continue
+        }
         const row=s.doc_json?.row || {folio:s.folio, rut:s.receptor_rut, receptor:s.receptor_name, monto:s.monto, fechaEmision:s.fecha_emision, tipoDte:s.tipo_dte, concepto:s.glosa}
         const cliId=s.client_id || resolverClienteSII(row.rut,row.receptor,clients,clientEntities)?.id || null
         const {progId,progCand}=matchProgramada(cliId, s.monto, s.fecha_emision, s.glosa, usadas)
