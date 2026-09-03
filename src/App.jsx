@@ -12108,17 +12108,21 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const nomDe = r => r.nombre||r.requirente||'—'
   const otDe = r => r.ot?(String(r.ot).toUpperCase().startsWith('OT')?r.ot:'OT-'+r.ot):'s/OT'
   // Fila identificadora: nombre (protagonista) + monto · trámite · OT+fecha · acciones según categoría.
+  const tdL={color:C.muted,padding:'2px 0',width:92,verticalAlign:'top',fontSize:11}, tdV={padding:'2px 0',color:C.text,fontSize:11.5}
   const notaCatRow = (r,kind) => {
     const open=rowOpenNota.has(r.id)
     const cn=r.client_id?(clients.find(c=>String(c.id)===String(r.client_id))?.name||r.clientName||''):null
     const noName = !String(r.nombre||r.requirente||'').replace(/^\s*n\/?a\.?\s*$/i,'').trim()   // sin compareciente utilizable
     const fy = r.fecha ? new Date(r.fecha).getFullYear() : null
     const oldY = fy && !isNaN(fy) && fy < new Date().getFullYear()   // OT de un año anterior
+    const info = kind==='yacargadas'||kind==='sinefecto'   // solo lectura
+    const st = dupInfo[r.id]?.otState
+    const stNote = kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
     const prot = kind==='listas' ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
     const sub  = kind==='listas' ? (cn||'') : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
     return (
-      <div key={r.id} style={{padding:'10px 14px',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10}}>
+      <div key={r.id} style={{padding:'10px 14px',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10,opacity:info?.8:1}}>
         {chk&&<span onClick={()=>setConfDesel(p=>{ const n=new Set(p); n.has(r.id)?n.delete(r.id):n.add(r.id); return n })} title={on?'Marcada — se confirma':'Marca para confirmar'} style={{cursor:'pointer',flexShrink:0,marginTop:2}}>{on?<svg width='17' height='17' viewBox='0 0 24 24' fill={C.normal} stroke={C.normal}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>}</span>}
         <div style={{flex:1,minWidth:0}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
@@ -12126,8 +12130,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
         </div>
         {sub&&<div style={{fontSize:11.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
-        <div style={{fontSize:10,color:C.done,marginTop:2,display:'flex',alignItems:'center',gap:6,fontVariantNumeric:'tabular-nums'}}>{otDe(r)} · {r.fecha?fmtFDMY(r.fecha):'sin fecha'}{oldY&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 7px'}}>OT de {fy}</span>}</div>
-        {/* acciones por categoría */}
+        {/* meta clickeable: OT · fecha · RUT · abogado · ver detalle (mismo comportamiento en TODAS las categorías) */}
+        <div onClick={()=>toggleRowNota(r.id)} style={{fontSize:10,color:C.done,marginTop:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',cursor:'pointer',fontVariantNumeric:'tabular-nums'}}>
+          <span>{otDe(r)} · {r.fecha?fmtFDMY(r.fecha):'sin fecha'}{r.rut?` · RUT ${r.rut}`:''}{r.abogadoResp?` · ${r.abogadoResp}`:''}</span>
+          {oldY&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 7px'}}>OT de {fy}</span>}
+          <span style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600}}>{open?'Ocultar detalle ▴':'Ver detalle ▾'}</span>
+        </div>
+        {stNote&&<div style={{fontSize:10.5,fontWeight:600,color:kind==='sinefecto'?C.grisText:st==='pagada'?C.overdueText:st==='rendida'?C.coralText:C.muted,marginTop:3}}>{stNote}</div>}
+        {/* acciones por categoría (no en las informativas) */}
         {kind==='falta'&&<div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
           {!noName&&<button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ asignar(r.id,res.client.id) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.azulInfo,border:'none',borderRadius:8,padding:'7px 13px',cursor:driveBusy===r.id?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>{driveBusy===r.id?'Buscando en Drive…':'Buscar en Drive'}</button>}
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{open?'Cerrar':'Asignar a mano'}</button>
@@ -12135,16 +12145,28 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           {driveMsg[r.id]&&<span style={{fontSize:10.5,fontWeight:600,color:driveMsg[r.id].startsWith('✓')?C.greenText:C.muted}}>{driveMsg[r.id]}</span>}
         </div>}
         {kind==='confirma'&&r.suggestion&&<div style={{display:'flex',gap:7,marginTop:8,alignItems:'center',flexWrap:'wrap'}}>
-          <span style={{fontSize:11.5,color:C.text}}>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}%</span>:''}</span>
+          <span style={{fontSize:11.5,color:C.text}}>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}% de certeza</span>:''}</span>
           <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Confirmar sola</button>
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Otro</button>
         </div>}
         {kind==='listas'&&<div style={{marginTop:6}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button></div>}
         {kind==='oficina'&&<div style={{marginTop:6}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Asignar a un cliente'}</button></div>}
-        {open&&(kind==='falta'||kind==='confirma'||kind==='listas'||kind==='oficina')&&<div style={{marginTop:8,paddingTop:8,borderTop:`.5px solid #EEF1F3`}}>
-          <div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:3}}>Glosa a rendir · editable</div>
-          <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} style={{width:'100%',padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',marginBottom:8}}/>
-          <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label={cn?'Cambiar cliente…':'Buscar cliente por nombre o RUT…'}/>
+        {open&&<div style={{marginTop:8,paddingTop:8,borderTop:`.5px solid #EEF1F3`}}>
+          {/* Descripción completa para confirmar bien (misma en toda categoría) */}
+          <table style={{width:'100%',borderCollapse:'collapse',marginBottom:info?0:9}}><tbody>
+            <tr><td style={tdL}>Trámite</td><td style={tdV}>{r.materia||'—'}</td></tr>
+            {r.subconcepto&&<tr><td style={tdL}>Detalle</td><td style={tdV}>{r.subconcepto}</td></tr>}
+            <tr><td style={tdL}>Compareciente</td><td style={tdV}>{r.nombre||r.requirente||'—'}{r.rut?<span style={{color:C.muted}}> · {r.rut}</span>:''}</td></tr>
+            <tr><td style={tdL}>Fecha</td><td style={tdV}>{r.fecha?fmtFDMY(r.fecha):'sin fecha'}</td></tr>
+            {r.abogadoResp&&<tr><td style={tdL}>Abogado</td><td style={tdV}>{r.abogadoResp}</td></tr>}
+            {cn&&<tr><td style={tdL}>Cliente</td><td style={tdV}><b style={{color:C.accent}}>{cn}</b></td></tr>}
+            {r.notas&&<tr><td style={tdL}>Observación</td><td style={tdV}>{r.notas}</td></tr>}
+          </tbody></table>
+          {!info&&<>
+            <div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:3}}>Glosa a rendir · editable</div>
+            <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} style={{width:'100%',padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',marginBottom:8}}/>
+            <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label={cn?'Cambiar cliente…':'Buscar cliente por nombre o RUT…'}/>
+          </>}
         </div>}
         {ocasPick===r.id&&<div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>Ocasional «{r.nombre}» · resp:</span>{MIEMBROS_NOTA.map(m=>{const pc=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:'none'}}>{m}</button>})}<button onClick={()=>crearOcasional(r,null)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:C.bgWarm,color:C.grisText,border:'none'}}>Sin resp.</button></div>}
         </div>
@@ -12207,25 +12229,19 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             </>)})()}
             {k==='listas'&&(()=>{ const fr=filtRows(rws,k); const by={}; fr.forEach(r=>{ (by[r.client_id]=by[r.client_id]||[]).push(r) }); const groups=Object.entries(by).map(([cid,rs])=>{ const c=clients.find(x=>String(x.id)===String(cid)); let saldo=null; try{ saldo=saldoCliente(expenses,cid) }catch(_){}; const tt=rs.reduce((a,r)=>a+(r.monto||0),0); return {cid,name:c?.name||'Cliente',nEnt:entsOf(cid).length,rs,tt,saldo} }).sort((a,b)=>b.tt-a.tt); return (<>
               {rws.length>10&&buscador(k)}
-              {groups.map(g=>{ const cubre=g.saldo!=null&&g.saldo>=g.tt; const adel=g.saldo!=null?Math.max(0,g.tt-g.saldo):0; const go=grpOpen.has(g.cid); return (
+              {groups.map(g=>{ const cubre=g.saldo!=null&&g.saldo>=g.tt; const adel=g.saldo!=null?Math.max(0,g.tt-g.saldo):0; return (
                 <div key={g.cid}>
-                  <div onClick={()=>toggleGrpNota(g.cid)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px',cursor:'pointer',borderTop:`.5px solid #EEF1F3`}}>
-                    <span style={{color:C.done,fontSize:12,transform:go?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
-                    <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 5px',marginLeft:5}}>{g.nEnt} RS</span>}{g.saldo!=null&&<span style={{fontSize:9.5,fontWeight:600,color:cubre?C.greenText:C.overdueText,marginLeft:5}}>· {cubre?'cubre':`adelanto ${fmt(adel)}`}</span>}</span>
-                    <span style={{fontSize:11,color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{g.rs.length} · {fmt(g.tt)}</span>
+                  {/* subencabezado de cliente (etiqueta, no colapsable) + sus filas — igual que los subgrupos de "Falta" */}
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px 4px'}}>
+                    <span style={{flex:1,minWidth:0,fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 5px',marginLeft:5}}>{g.nEnt} RS</span>}{g.saldo!=null&&<span style={{fontSize:9.5,fontWeight:600,color:cubre?C.greenText:C.overdueText,marginLeft:5}}>· {cubre?'cubre':`adelanto ${fmt(adel)}`}</span>}</span>
+                    <span style={{fontSize:10.5,color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{g.rs.length} OT · {fmt(g.tt)}</span>
                   </div>
-                  {go&&g.rs.map(r=>notaCatRow(r,'listas'))}
+                  {g.rs.map(r=>notaCatRow(r,'listas'))}
                 </div>
               )})}
             </>)})()}
             {k==='oficina'&&filtRows(rws,k).map(r=>notaCatRow(r,'oficina'))}
-            {(k==='yacargadas'||k==='sinefecto')&&rws.map(r=>(
-              <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px',borderTop:`.5px solid #EEF1F3`}}>
-                <span style={{fontSize:10.5,fontWeight:700,color:C.done,width:64,flexShrink:0}}>{otDe(r)}</span>
-                <span style={{flex:1,minWidth:0,fontSize:11.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tramDe(r)}</span>
-                <span style={{fontSize:11.5,color:C.done,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
-              </div>
-            ))}
+            {(k==='yacargadas'||k==='sinefecto')&&rws.map(r=>notaCatRow(r,k))}
           </div>}
         </div>
       )
