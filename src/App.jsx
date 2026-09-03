@@ -11329,6 +11329,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   const [genPlantilla,setGenPlantilla] = useState(false)
   const [matching,setMatching] = useState(false)        // análisis de matching/IA en curso
   const [respFilter,setRespFilter] = useState(null)      // filtro del preview por abogado responsable ('__sin__' = sin responsable)
+  const [bucketFilter,setBucketFilter] = useState(null)  // filtro del preview por bucket (auto/sug/rev/man); clic en el chip filtra la lista
   const respDeRow = r => (r.client_id ? (clients.find(c=>String(c.id)===String(r.client_id))?.abogado_responsable||null) : null)
   const [matchProg,setMatchProg] = useState(null)       // {done,total} de lotes IA
 
@@ -11915,7 +11916,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     })
     // Aprende: este nombre crudo → este cliente, para que las próximas cargas caigan solas.
     if(onLearnAlias && srcNombre && String(srcNombre).trim()) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
-    if(srcRow && String(srcRow.requirente||'').trim()){ learnNota(srcRow, clientId); learnRutNota(srcRow, clientId); setRespNota(srcRow, clientId) }   // notaría: aprende requirente→cliente, RUT→client_entity y fija responsable
+    if(srcRow && String(srcRow.requirente||'').trim()){ learnNota(srcRow, clientId); learnRutNota(srcRow, clientId); setRespNota(srcRow, clientId)   // notaría: aprende requirente→cliente, RUT→client_entity y fija responsable
+      const nm=srcRow.nombre||srcRow.requirente; setAprendido({name:nm,cli:c?.name||''}); setTimeout(()=>setAprendido(a=>(a&&a.name===nm)?{}:a),4500) }   // micro-aviso: "lo aprendí, no te lo vuelvo a preguntar"
     // Notaría: ¿hay OTRAS OT sin cliente con compareciente PARECIDO (no idéntico, esos ya se propagaron)? Ofrece asignarlas juntas.
     if(notaria && srcRow && String(srcNombre||'').trim()){
       const kSrc=rawKey(srcRow)
@@ -11952,6 +11954,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const [similarPrompt,setSimilarPrompt] = useState(null)   // {clientId,clientName,ids,srcName}: al asignar, ofrece asignar las OT de compareciente parecido
   const [grpOpen,setGrpOpen] = useState(()=>new Set())   // notaría: grupos de cliente expandidos (por defecto colapsados)
   const [enAppOpen,setEnAppOpen] = useState(false)       // notaría: grupo "ya en la app" expandido
+  const [catOpen,setCatOpen] = useState(()=>new Set(['falta']))   // notaría: categorías (tarjetas) abiertas; "Falta el cliente" abierta por defecto
+  const [catQ,setCatQ] = useState({})                    // notaría: buscador por categoría (key→texto)
+  const [rcOpen,setRcOpen] = useState(false)             // notaría: detalle "A clientes" del recibo desplegado
+  const [aprendido,setAprendido] = useState({})          // notaría: aviso transitorio "lo aprendí" por fila
+  const toggleCat = k => setCatOpen(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
   const toggleGrpNota = cid => setGrpOpen(p=>{ const n=new Set(p); n.has(cid)?n.delete(cid):n.add(cid); return n })
   const notaSelOn = r => !!r.client_id && !r.error && !deselNota.has(r.id)   // seleccionada para importar
   const toggleSelNota = id => setDeselNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
@@ -12064,6 +12071,153 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         </div>}
       </div>
     )
+  }
+
+  // ── Revisión notaría por CATEGORÍAS (tarjetas, patrón de la app) ────────────────────────────
+  // Reparte las filas en 6 categorías accionables. Cada una es una tarjeta plegable; adentro, filas
+  // que muestran compareciente + trámite + fecha (lo que identifica de quién es).
+  const notaCats = (flt) => {
+    const c={falta:[],confirma:[],listas:[],oficina:[],yacargadas:[],sinefecto:[]}
+    flt.forEach(r=>{
+      if(r.error){ c.sinefecto.push(r); return }
+      if(dupInfo[r.id]?.otState){ c.yacargadas.push(r); return }
+      if(r.personal_de || r.isInternal || (r.client_id && esOficinaCli(r.client_id))){ c.oficina.push(r); return }
+      if(r.client_id){ c.listas.push(r); return }
+      if(r.suggestion){ c.confirma.push(r); return }
+      c.falta.push(r)
+    })
+    return c
+  }
+  const CAT_META = {
+    falta:{t:'Falta el cliente', s:'búscalo, míralo en Drive o créalo', col:C.overdueText, bg:C.overdueBg},
+    confirma:{t:'Confirma el cliente', s:'la IA ya propuso uno · un toque', col:C.soonText, bg:C.soonBg},
+    listas:{t:'Listas para cargar', s:'con cliente · agrupadas por cliente', col:C.greenText, bg:C.greenBg},
+    oficina:{t:'De la oficina', s:'no van a un cliente', col:C.tealText, bg:C.tealBg},
+    yacargadas:{t:'Ya cargadas', s:'están en la app · se omiten', col:C.muted, bg:C.bgSoft},
+    sinefecto:{t:'Sin efecto', s:'anuladas · excluidas del total', col:C.grisText, bg:C.bgWarm},
+  }
+  const catSvg = (k,col) => { const p={falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],sinefecto:['M6 6l12 12']}[k]||[]
+    const base = k==='falta'?<circle cx='9' cy='8' r='3'/>:k==='confirma'?<circle cx='12' cy='12' r='3.5'/>:k==='oficina'?<rect x='4' y='3' width='12' height='18' rx='1'/>:k==='yacargadas'?<path d='M3 12a9 9 0 1 0 3-6.7L3 8'/>:k==='sinefecto'?<circle cx='12' cy='12' r='9'/>:null
+    return <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth={k==='listas'?2.4:2} strokeLinecap='round' strokeLinejoin='round'>{base}{p.map((d,i)=><path key={i} d={d}/>)}</svg> }
+  const tramDe = r => ((r.materia||'').trim().toLowerCase().replace(/^./,ch=>ch.toUpperCase()))||'Trámite notarial'
+  const nomDe = r => r.nombre||r.requirente||'—'
+  const otDe = r => r.ot?(String(r.ot).toUpperCase().startsWith('OT')?r.ot:'OT-'+r.ot):'s/OT'
+  // Fila identificadora: nombre (protagonista) + monto · trámite · OT+fecha · acciones según categoría.
+  const notaCatRow = (r,kind) => {
+    const open=rowOpenNota.has(r.id)
+    const cn=r.client_id?(clients.find(c=>String(c.id)===String(r.client_id))?.name||r.clientName||''):null
+    const prot = kind==='listas' ? tramDe(r) : nomDe(r)
+    const sub  = kind==='listas' ? (cn||'') : (tramDe(r) + (cn?` · ${cn}`:''))
+    return (
+      <div key={r.id} style={{padding:'10px 14px',borderTop:`.5px solid #EEF1F3`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+          <span style={{fontSize:13,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{prot}</span>
+          <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
+        </div>
+        {sub&&<div style={{fontSize:11.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
+        <div style={{fontSize:10,color:C.done,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{otDe(r)} · {r.fecha?fmtFDMY(r.fecha):'sin fecha'}</div>
+        {/* acciones por categoría */}
+        {kind==='falta'&&<div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
+          <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{open?'Cerrar':'Asignar cliente'}</button>
+          <button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ asignar(r.id,res.client.id) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.azulInfo}`,borderRadius:8,padding:'6px 12px',cursor:driveBusy===r.id?'default':'pointer'}}>{driveBusy===r.id?'Buscando…':'Buscar en Drive'}</button>
+          {onCreateOccasional&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Nuevo</button>}
+          {driveMsg[r.id]&&<span style={{fontSize:10.5,color:C.muted}}>{driveMsg[r.id]}</span>}
+        </div>}
+        {kind==='confirma'&&r.suggestion&&<div style={{display:'flex',gap:7,marginTop:8,alignItems:'center',flexWrap:'wrap'}}>
+          <span style={{fontSize:11.5,color:C.text}}>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}%</span>:''}</span>
+          <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Confirmar</button>
+          <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Otro</button>
+        </div>}
+        {kind==='listas'&&<div style={{marginTop:6}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button></div>}
+        {kind==='oficina'&&<div style={{marginTop:6}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Asignar a un cliente'}</button></div>}
+        {open&&(kind==='falta'||kind==='confirma'||kind==='listas'||kind==='oficina')&&<div style={{marginTop:8,paddingTop:8,borderTop:`.5px solid #EEF1F3`}}>
+          <div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:3}}>Glosa a rendir · editable</div>
+          <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} style={{width:'100%',padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',marginBottom:8}}/>
+          <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label={cn?'Cambiar cliente…':'Buscar cliente por nombre o RUT…'}/>
+        </div>}
+        {ocasPick===r.id&&<div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>Ocasional «{r.nombre}» · resp:</span>{MIEMBROS_NOTA.map(m=>{const pc=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:'none'}}>{m}</button>})}<button onClick={()=>crearOcasional(r,null)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:C.bgWarm,color:C.grisText,border:'none'}}>Sin resp.</button></div>}
+      </div>
+    )
+  }
+  // Recibo del resultado (clickeable): la acción "Cargar" cuelga del dato; A clientes se despliega.
+  const notaReceipt = (cats) => {
+    const cargarRows=[...cats.falta,...cats.confirma,...cats.listas,...cats.oficina]
+    const nCarga=cargarRows.length, totCarga=cargarRows.reduce((a,r)=>a+(r.monto||0),0)
+    const byCli={}; cats.listas.forEach(r=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); const k=r.client_id; (byCli[k]=byCli[k]||{name:c?.name||'Cliente',n:0,tot:0}); byCli[k].n++; byCli[k].tot+=(r.monto||0) })
+    const cliList=Object.values(byCli).sort((a,b)=>b.tot-a.tot)
+    const quedan=cats.falta.length+cats.confirma.length
+    return (
+      <div style={{border:`1px solid ${C.border}`,borderRadius:13,overflow:'hidden',background:'#fff',marginTop:14}}>
+        <div style={{padding:'8px 13px',fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,background:C.bgPanel,borderBottom:`.5px solid #EEF1F3`}}>Resultado de la carga</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 13px',background:C.greenBg,borderBottom:`.5px solid #EEF1F3`}}>
+          <div><div style={{fontSize:12,color:C.muted}}>Gastos que se cargan</div><div style={{fontSize:17,fontWeight:800,color:C.greenText,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{nCarga} · {fmt(totCarga)}</div></div>
+          <button disabled={guardando||!nCarga} onClick={()=>guardar(false,cargarRows)} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:9,background:C.normal,color:'#fff',padding:'11px 20px',cursor:nCarga&&!guardando?'pointer':'default',opacity:nCarga&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
+        </div>
+        <div onClick={()=>setRcOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 13px',fontSize:12.5,cursor:'pointer'}}><span style={{color:C.muted}}>A clientes</span><span style={{display:'flex',alignItems:'center',gap:7}}><b>{cliList.length}</b><span style={{color:C.done,transform:rcOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span></span></div>
+        {rcOpen&&<div style={{background:C.bgPanel,padding:'0 13px 8px'}}>
+          {cliList.slice(0,8).map((c,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:11.5,padding:'4px 0',borderTop:`.5px dashed ${C.border}`}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span><span style={{color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{c.n} · {fmt(c.tot)}</span></div>)}
+          {cliList.length>8&&<div style={{fontSize:11,color:C.azulInfo,fontWeight:600,paddingTop:4}}>y {cliList.length-8} clientes más</div>}
+        </div>}
+        <div onClick={()=>setCatOpen(new Set(['falta','confirma']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 13px',fontSize:12.5,borderTop:`.5px solid #EEF1F3`,cursor:'pointer'}}><span style={{color:C.muted}}>Quedan por revisar</span><span style={{display:'flex',alignItems:'center',gap:7}}><b style={{color:C.soonText}}>{quedan}</b><span style={{fontSize:10,color:C.done}}>{cats.falta.length} sin cliente{cats.confirma.length?` · ${cats.confirma.length} por confirmar`:''}</span><span style={{color:C.done}}>›</span></span></div>
+      </div>
+    )
+  }
+  // Ventana de revisión notaría: hero (aparte) + 6 tarjetas-categoría + recibo.
+  const notaCatsUI = (flt) => {
+    const cats=notaCats(flt)
+    const iconSq=(k,col,bg)=><span style={{width:36,height:36,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{catSvg(k,col)}</span>
+    const filtRows=(rows,k)=>{ const q=(catQ[k]||'').trim().toLowerCase(); if(!q) return rows; const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); return rows.filter(r=>nrm(nomDe(r)).includes(nrm(q))||nrm(tramDe(r)).includes(nrm(q))||nrm(otDe(r)).includes(nrm(q))) }
+    const buscador=k=><input value={catQ[k]||''} onChange={e=>setCatQ(m=>({...m,[k]:e.target.value}))} placeholder='Buscar por nombre, trámite u OT…' style={{width:'100%',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',margin:'2px 0 4px'}}/>
+    const card = k => { const meta=CAT_META[k]; const rws=cats[k]; if(!rws.length && (k==='oficina'||k==='yacargadas'||k==='sinefecto')) return null
+      const open=catOpen.has(k); const tot=rws.reduce((a,r)=>a+(r.monto||0),0); const info=(k==='yacargadas'||k==='sinefecto'||k==='oficina')
+      const nSin=cats.falta.filter(r=>!r.client_id&&!r.personal_de&&!r.isInternal&&!r.error&&!r.suggestion).length
+      return (
+        <div key={k} style={{background:'#fff',border:`1px solid ${k==='falta'&&rws.length?C.overdue:C.border}`,borderRadius:13,overflow:'hidden',marginBottom:9}}>
+          <div onClick={()=>toggleCat(k)} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 14px',cursor:'pointer'}}>
+            {iconSq(k,meta.col,meta.bg)}
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14.5,fontWeight:700,color:C.text,letterSpacing:-.1}}>{meta.t}</div><div style={{fontSize:11.5,color:C.muted,marginTop:1}}>{meta.s}</div></div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:15,fontWeight:800,color:meta.col,fontVariantNumeric:'tabular-nums',lineHeight:1}}>{rws.length}</div>{!info&&<div style={{fontSize:10,color:meta.col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>}</div>
+            <span style={{color:C.done,fontSize:13,marginLeft:2,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
+          </div>
+          {open&&<div style={{borderTop:`1px solid #EEF1F3`,padding:'8px 12px 4px'}}>
+            {k==='falta'&&(()=>{ const fr=filtRows(rws,k); return (<>
+              {nSin>1&&<button disabled={!!driveAll} onClick={buscarTodasDrive} style={{width:'100%',fontSize:11.5,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'7px',cursor:driveAll?'default':'pointer',marginBottom:4}}>{driveAll?`Buscando en Drive ${driveAll.done}/${driveAll.total}…`:`Buscar las ${nSin} en Drive`}</button>}
+              {rws.length>10&&buscador(k)}
+              {(()=>{ const by={}; fr.forEach(r=>{ const kk=((r.nombre||r.requirente||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim())||('id'+r.id); (by[kk]=by[kk]||[]).push(r) }); return Object.values(by).sort((a,b)=>b.length-a.length).map((g,gi)=> g.length>1
+                ? <div key={gi}><div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'6px 2px 2px'}}>{nomDe(g[0])} <span style={{fontWeight:400,color:C.muted}}>· {g.length} OT · {fmt(g.reduce((a,r)=>a+(r.monto||0),0))}</span></div>{g.map(r=>notaCatRow(r,'falta'))}</div>
+                : notaCatRow(g[0],'falta')) })()}
+            </>)})()}
+            {k==='confirma'&&filtRows(rws,k).map(r=>notaCatRow(r,'confirma'))}
+            {k==='listas'&&(()=>{ const fr=filtRows(rws,k); const by={}; fr.forEach(r=>{ (by[r.client_id]=by[r.client_id]||[]).push(r) }); const groups=Object.entries(by).map(([cid,rs])=>{ const c=clients.find(x=>String(x.id)===String(cid)); let saldo=null; try{ saldo=saldoCliente(expenses,cid) }catch(_){}; const tt=rs.reduce((a,r)=>a+(r.monto||0),0); return {cid,name:c?.name||'Cliente',nEnt:entsOf(cid).length,rs,tt,saldo} }).sort((a,b)=>b.tt-a.tt); return (<>
+              {rws.length>10&&buscador(k)}
+              {groups.map(g=>{ const cubre=g.saldo!=null&&g.saldo>=g.tt; const adel=g.saldo!=null?Math.max(0,g.tt-g.saldo):0; const go=grpOpen.has(g.cid); return (
+                <div key={g.cid}>
+                  <div onClick={()=>toggleGrpNota(g.cid)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px',cursor:'pointer',borderTop:`.5px solid #EEF1F3`}}>
+                    <span style={{color:C.done,fontSize:12,transform:go?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
+                    <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 5px',marginLeft:5}}>{g.nEnt} RS</span>}{g.saldo!=null&&<span style={{fontSize:9.5,fontWeight:600,color:cubre?C.greenText:C.overdueText,marginLeft:5}}>· {cubre?'cubre':`adelanto ${fmt(adel)}`}</span>}</span>
+                    <span style={{fontSize:11,color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{g.rs.length} · {fmt(g.tt)}</span>
+                  </div>
+                  {go&&g.rs.map(r=>notaCatRow(r,'listas'))}
+                </div>
+              )})}
+            </>)})()}
+            {k==='oficina'&&filtRows(rws,k).map(r=>notaCatRow(r,'oficina'))}
+            {(k==='yacargadas'||k==='sinefecto')&&rws.map(r=>(
+              <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px',borderTop:`.5px solid #EEF1F3`}}>
+                <span style={{fontSize:10.5,fontWeight:700,color:C.done,width:64,flexShrink:0}}>{otDe(r)}</span>
+                <span style={{flex:1,minWidth:0,fontSize:11.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tramDe(r)}</span>
+                <span style={{fontSize:11.5,color:C.done,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
+              </div>
+            ))}
+          </div>}
+        </div>
+      )
+    }
+    return (<div>
+      {aprendido&&aprendido.name&&<div style={{display:'flex',alignItems:'center',gap:7,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.greenText}}>Aprendí que <b>{aprendido.name}</b> es <b>{aprendido.cli}</b> — no te lo vuelvo a preguntar.</span></div>}
+      {['falta','confirma','listas','oficina','yacargadas','sinefecto'].map(card)}
+      {notaReceipt(cats)}
+    </div>)
   }
 
   const guardar = async(incluirTodo=false, explicit=null) => {
@@ -12191,7 +12345,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       <div style={{width:54,height:54,borderRadius:'50%',background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',margin:'4px auto 12px'}}>
         <svg width='27' height='27' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>
       </div>
-      <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:resultado.omitidos>0?6:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.concil?`${resultado.actualizados} corregido(s) · ${resultado.imported} nuevo(s)`:`${resultado.imported} ${tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)`}</div>
+      <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:resultado.omitidos>0?6:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.concil?`${resultado.actualizados} corregido(s) · ${resultado.imported} nuevo(s)`:notaria?`${resultado.imported} OT cargada${resultado.imported!==1?'s':''}${resultado.sinCliente>0?` · ${resultado.imported-resultado.sinCliente} a clientes`:''}`:`${resultado.imported} ${tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)`}</div>
       {resultado.omitidos>0&&<div style={{fontSize:12,color:C.soonText,marginBottom:12,lineHeight:1.4}}><b>{resultado.omitidos} omitido(s)</b> porque ya existían idénticos (mismo cliente, monto, fecha y glosa) — duplicados evitados.</div>}
       <div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center',marginBottom:18}}>
         {resultado.sinCliente>0&&<span style={{fontSize:11,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinCliente}</b> sin cliente</span>}
@@ -12199,7 +12353,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         {resultado.dupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FFF8E1',borderRadius:20,padding:'4px 11px'}}><b>{resultado.dupOmit}</b> duplicados omitidos</span>}
         {resultado.otDupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FFF8E1',borderRadius:20,padding:'4px 11px'}}><b>{resultado.otDupOmit}</b> con OT ya cargada</span>}
       </div>
-      {resultado.sinCliente>0&&<div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.45}}>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</div>}
+      {resultado.sinCliente>0&&<div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.45}}>{notaria?<>Las <strong style={{color:C.text}}>{resultado.sinCliente} sin cliente</strong> quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong>. Resuélvelas ahí con el Asistente IA — la app aprende y no te las vuelve a preguntar.</>:<>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</>}</div>}
+      {notaria&&resultado.imported>0&&<div style={{textAlign:'left',fontSize:11.5,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:14,lineHeight:1.5}}><div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.done,marginBottom:4}}>Próximos pasos</div>Págalas a la notaría en <strong style={{color:C.text}}>Notaría → Deuda</strong> cuando hagas la transferencia, y <strong style={{color:C.text}}>ríndelas a cada cliente</strong> cuando corresponda.</div>}
       {/* Parte por parte: tras Corregir queda el paso de Importar (y viceversa), sin perder el otro */}
       {resultado.corregirDone&&!resultado.importarDone&&resultado.nuevosPend>0&&<button disabled={guardando} onClick={aplicarImportar} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.greenText,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora importa las ${resultado.nuevosPend} nuevas →`}</button>}
       {resultado.importarDone&&!resultado.corregirDone&&resultado.actualizarPend>0&&<button disabled={guardando} onClick={aplicarCorregir} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.azulInfo,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora corrige las ${resultado.actualizarPend} →`}</button>}
@@ -12244,26 +12399,25 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{fontSize:10.5,color:C.overdueText,marginTop:2}}>{nP>0?`${nP} ya pagada${nP!==1?'s':''} a la notaría`:''}{nP>0&&nR>0?' · ':''}{nR>0?`${nR} ya rendida${nR!==1?'s':''} al cliente`:''}. Aparecen marcadas abajo; no las cargues sin verlas.</div>
             </div>
           )})()}
-          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const ofi=tot-rend; const anul=(rows||[]).filter(r=>/sin efecto/i.test(r.notas||'')).length; return (
-            <div style={{display:'flex',gap:8,marginBottom:10}}>
-              <div style={{flex:1,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>Total de la carga</div><div style={{fontSize:17,fontWeight:700,color:C.text,letterSpacing:-.3}}>{fmt(tot)}</div><div style={{fontSize:9.5,color:C.muted}}>{val.length} OT{anul?` · ${anul} anulada${anul!==1?'s':''}`:''}</div></div>
-              <div style={{flex:1,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:10,color:C.accent,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>Por rendir a clientes</div><div style={{fontSize:17,fontWeight:700,color:C.accent,letterSpacing:-.3}}>{fmt(rend)}</div><div style={{fontSize:9.5,color:C.accent}}>oficina y personal {fmt(ofi)}</div></div>
-            </div>
-          )})()}
-          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const conf=val.filter(r=>r.client_id||r.personal_de).length; const pend=val.filter(r=>!r.client_id&&!r.personal_de&&r.suggestion).length; const sin=val.filter(r=>!r.client_id&&!r.personal_de&&!r.suggestion).length; const pct=val.length?Math.round(conf/val.length*100):0; return (
-            <div style={{background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:10}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>{conf} de {val.length} confirmadas</span><span style={{fontSize:10,color:C.muted}}>{pend>0?`${pend} sugerida${pend!==1?'s':''} por confirmar`:''}{pend>0&&sin>0?' · ':''}{sin>0?`${sin} sin cliente`:''}</span></div>
-              <div style={{height:6,background:C.border,borderRadius:4,overflow:'hidden'}}><div style={{height:'100%',width:pct+'%',background:C.normal,borderRadius:4,transition:'width .2s'}}/></div>
-              <div style={{fontSize:9.5,color:C.done,marginTop:5}}>Confirma cada OT antes de importar — nada se guarda sin tu confirmación.</div>
-            </div>
-          )})()}
-          {modo!=='conciliar'&&<div style={{display:'flex',gap:6,marginBottom:10}}>
-            {[['Auto',nAuto,C.normal,'#BFE6D7'],['Sugeridos',sugeridos.length,'#C77F18','#F0D88A'],['Revisar',nRev,C.overdue,'#F3C0C0'],['Manual',nMan,C.muted,C.border]].map(([l,n,col,bd])=>(
-              <div key={l} style={{flex:1,border:`1px solid ${bd}`,borderRadius:10,padding:'8px 4px',textAlign:'center'}}>
-                <div style={{fontSize:18,fontWeight:700,letterSpacing:-.4,color:col}}>{n}</div>
-                <div style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,color:col,marginTop:1}}>{l}</div>
+          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend; const anul=(rows||[]).filter(r=>/sin efecto/i.test(r.notas||'')).length; return (
+            // Hero blanco (canon de la foto): protagonista = Total, con sus partes anidadas (a clientes / sin asignar). Sin azul pleno.
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'13px 15px',marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:10.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Carga de notaría</span><span style={{fontSize:10.5,color:C.done}}>{val.length} OT{anul?` · ${anul} anulada${anul!==1?'s':''}`:''}</span></div>
+              <div style={{fontSize:27,fontWeight:800,color:C.accent,letterSpacing:-.6,margin:'3px 0 9px',fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>
+              <div style={{display:'flex',gap:10,borderTop:`1px solid #EEF1F3`,paddingTop:9}}>
+                <div style={{flex:1}}><div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>A clientes</div><div style={{fontSize:15,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(rend)}</div></div>
+                <div style={{flex:1,borderLeft:`1px solid #EEF1F3`,paddingLeft:10}}><div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Sin asignar aún</div><div style={{fontSize:15,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(sinAsig)}</div></div>
               </div>
-            ))}
+            </div>
+          )})()}
+          {modo!=='conciliar'&&!notaria&&<div style={{display:'flex',gap:6,marginBottom:10}}>
+            {[['Auto','auto',nAuto,C.normal,'#BFE6D7'],['Sugeridos','sug',sugeridos.length,'#C77F18','#F0D88A'],['Revisar','rev',nRev,C.overdue,'#F3C0C0'],['Manual','man',nMan,C.muted,C.border]].map(([l,k,n,col,bd])=>{ const on=bucketFilter===k; return (
+              // Bucket = filtro clickeable (no KPI de plata): toca para ver solo ese grupo, toca de nuevo para todo.
+              <div key={l} onClick={()=>setBucketFilter(f=>f===k?null:k)} style={{flex:1,border:`1px solid ${on?col:bd}`,background:on?col:'transparent',borderRadius:10,padding:'8px 4px',textAlign:'center',cursor:'pointer'}}>
+                <div style={{fontSize:18,fontWeight:700,letterSpacing:-.4,color:on?'#fff':col}}>{n}</div>
+                <div style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,color:on?'#fff':col,marginTop:1}}>{l}</div>
+              </div>
+            )})}
           </div>}
           {matching&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:C.azulBg,borderRadius:8,padding:'8px 10px',marginBottom:8}}><Spin/>Analizando {rows.length} filas con IA{matchProg?` · lote ${matchProg.done}/${matchProg.total}`:''}…</div>}
           {modo==='conciliar'&&concil&&(()=>{
@@ -12417,7 +12571,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>
             </div>
             )})()}
-          {modo!=='conciliar'&&<div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
+          {modo!=='conciliar'&&!notaria&&<div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
             {notaria&&(()=>{ const nSin=(rows||[]).filter(r=>!r.client_id&&!r.personal_de&&!r.isInternal&&!r.error&&!r.suggestion).length; return (
               <button disabled={!!driveAll||(!nSin&&!driveAll)} onClick={buscarTodasDrive} title='Busca en tus carpetas de Drive el cliente de cada OT sin cliente' style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:driveAll||!nSin?'default':'pointer',border:`1px solid ${C.accent}`,background:driveAll?C.azulBg:'#fff',color:C.accent,opacity:driveAll||!nSin?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6}}>
                 <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>
@@ -12443,7 +12597,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           </div>}
           {modo!=='conciliar'&&(<>
           {/* Resumen de abogados involucrados: tocar un nombre filtra las filas de ese responsable */}
-          {(()=>{ const m={}; rows.forEach(r=>{ const k=respDeRow(r)||'__sin__'; m[k]=(m[k]||0)+1 }); const ents=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(!ents.length) return null; return (
+          {!notaria&&(()=>{ const m={}; rows.forEach(r=>{ const k=respDeRow(r)||'__sin__'; m[k]=(m[k]||0)+1 }); const ents=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(!ents.length) return null; return (
             <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
               <span style={{fontSize:10,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Abogados</span>
               {ents.map(([k,n])=>{ const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); const on=respFilter===k; return (
@@ -12460,8 +12614,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <button onClick={()=>setSimilarPrompt(null)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>No</button>
             </div>
           )}
-          <div style={{maxHeight:notaria?'none':360,overflowY:notaria?'visible':'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
-            {(()=>{ const flt=rows.filter(r=>!respFilter||(respDeRow(r)||'__sin__')===respFilter); const items = notaria ? notaItems(flt) : flt.map(r=>({type:'row',r})); return items.map((item,ii)=>{
+          <div style={{maxHeight:notaria?'none':360,overflowY:notaria?'visible':'auto',border:(notaria&&modo!=='conciliar')?'none':`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
+            {notaria && modo!=='conciliar' ? notaCatsUI(rows) : (()=>{ const flt=rows.filter(r=>(!respFilter||(respDeRow(r)||'__sin__')===respFilter)&&(!bucketFilter||bucketOf(r)===bucketFilter)); const items = notaria ? notaItems(flt) : flt.map(r=>({type:'row',r})); return items.map((item,ii)=>{
               if(item.type==='header'){
                 if(item.kind==='sin') return (<div key={'hs'+ii} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.overdueBg,borderBottom:`1px solid ${C.overdue}`}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2'><circle cx='12' cy='12' r='10'/><path d='M12 16v-4M12 8h.01'/></svg><span style={{flex:1,fontSize:12.5,fontWeight:700,color:C.overdueText}}>Sin cliente · por revisar</span><span style={{fontSize:11,fontWeight:600,color:C.overdueText}}>{item.n} OT · {fmt(item.tot)}</span></div>)
                 if(item.kind==='sub') return (<div key={'hsub'+ii} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px 6px 24px',background:'#fff',borderTop:`0.5px solid ${C.border}`}}><span style={{fontSize:11.5,fontWeight:700,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span><span style={{fontSize:9.5,fontWeight:600,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'0 6px'}}>{item.n} OT</span><span style={{marginLeft:'auto',fontSize:10.5,color:C.muted}}>{fmt(item.tot)}</span></div>)
