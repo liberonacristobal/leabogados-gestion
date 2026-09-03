@@ -14389,8 +14389,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {showGastosOficina&&(()=>{
         const ofi = clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
         const ym = new Date().toISOString().slice(0,7)
+        // Limited: solo ve los gastos de oficina que ÉL cargó (su lote de carga masiva) o registró (created_by). Admin ve todos.
+        const misLotes = isAdmin ? null : new Set((bulkImports||[]).filter(b=>b.created_by===currentUserName).map(b=>String(b.id)))
+        const mioOfi = e => isAdmin || (e.bulk_import_id && misLotes.has(String(e.bulk_import_id))) || e.created_by===currentUserName
         // Gastos varios de oficina: gastos del cliente interno (no fondo, no estructural histórico, no personal).
-        const varios = ofi ? (expenses||[]).filter(e=>String(e.client_id)===String(ofi.id)&&e.type==='gasto'&&!e.deleted_at&&!e.personal_de&&!e.no_descuenta_saldo).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)) : []
+        const varios = ofi ? (expenses||[]).filter(e=>String(e.client_id)===String(ofi.id)&&e.type==='gasto'&&!e.deleted_at&&!e.personal_de&&!e.no_descuenta_saldo&&mioOfi(e)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)) : []
         const variosMesTot = varios.filter(e=>(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
         // Personales del equipo (gastos con personal_de, sin cliente) — lo que el equipo le debe a la oficina.
         const persAll = (expenses||[]).filter(e=>e.type!=='fondo'&&e.personal_de&&!e.deleted_at&&!e.client_id)
@@ -14404,7 +14407,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           {varios.length>0&&(<>
             <div style={{display:'flex',alignItems:'center',gap:8,margin:'2px 2px 7px'}}>
               <span style={{width:24,height:24,borderRadius:7,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n='building' s={14} c={C.accent}/></span>
-              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.4px'}}>Gastos varios oficina</span>
+              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.4px'}}>Gastos varios oficina{!isAdmin&&<span style={{fontWeight:600,textTransform:'none',letterSpacing:0,color:C.done}}> · los que cargaste tú</span>}</span>
               <span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>Este mes · <b style={{color:C.text}}>{fmt(variosMesTot)}</b></span>
             </div>
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:16}}>
