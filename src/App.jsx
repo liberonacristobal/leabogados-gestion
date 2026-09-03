@@ -15570,6 +15570,8 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const _hoyISO = (()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro',date:expense.date||_hoyISO})
   const [showPersonal,setShowPersonal] = useState(!!expense.personal_de)
+  const [internoOpen,setInternoOpen] = useState(false)   // popover "Gasto interno · ¿oficina o miembro?"
+  const esOficinaCli = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const client=clients.find(c=>c.id===f.client_id)
   const isFondo=f.type==='fondo'
@@ -15607,6 +15609,19 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
             <div style={{minWidth:0}}><div style={{fontSize:9,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>Cliente</div><div style={{fontSize:13,color:client?.name?C.accent:C.overdue,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name||'Sin cliente'}</div></div>
             <span style={{fontSize:11,color:C.azulInfo,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>Cambiar ▾</span>
           </div>
+      )}
+      {/* Gasto interno: marcar el gasto como de la oficina o personal de un miembro (mismo patrón que la carga masiva). */}
+      {!isFondo&&!personalOn&&!esOficinaCli(f.client_id)&&!(f.client_render_id||f.render_id||f.notaria_render_id)&&(
+        internoOpen
+          ? <div style={{marginBottom:8,background:C.bgWarm,borderRadius:8,padding:'9px 11px'}}>
+              <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:6}}>Gasto interno · ¿de la oficina o de un miembro?</div>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
+                <button type='button' onClick={()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi){ setF(p=>({...p,client_id:ofi.id,entity_id:null,personal_de:null})) } setInternoOpen(false);setShowPersonal(false) }} style={{fontSize:11,borderRadius:20,padding:'3px 12px',fontWeight:600,cursor:'pointer',background:C.accent,color:'#fff',border:'none'}}>Oficina</button>
+                {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const pc=personChip(m);return <button key={m} type='button' onClick={()=>{ up('personal_de',m);setShowPersonal(true);setInternoOpen(false) }} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:'none'}}>{m}</button>})}
+                <button type='button' onClick={()=>setInternoOpen(false)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Cancelar</button>
+              </div>
+            </div>
+          : <button type='button' onClick={()=>setInternoOpen(true)} style={{marginBottom:8,fontSize:11,color:C.azulInfo,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>Gasto interno ▾</button>
       )}
       {/* Fila 1: Categoría · Monto · Fecha (categoría no aplica a fondos). Fecha = botón-calendario breve. */}
       <div style={{display:'grid',gridTemplateColumns:isFondo?'1fr 1fr':'1.05fr 1fr 0.92fr',gap:7,marginBottom:8}}>
