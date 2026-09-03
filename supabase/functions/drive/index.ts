@@ -89,12 +89,23 @@ serve(async (req) => {
       if (!q) return json({ error: "Falta q" }, 400);
       const pageSize = Math.min(Number(body.pageSize) || 50, 100);
       const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}` +
-        `&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=${pageSize}` +
+        `&fields=files(id,name,mimeType,modifiedTime,parents)&orderBy=modifiedTime+desc&pageSize=${pageSize}` +
         `&supportsAllDrives=true&includeItemsFromAllDrives=true`;
       const r = await fetch(url, { headers: H });
       const d = await r.json();
       if (!r.ok) return json({ error: d?.error?.message || `Drive ${r.status}` }, r.status);
       return json({ files: d.files || [] });
+    }
+
+    // Metadata de una carpeta/archivo (para subir por el árbol hasta la carpeta del cliente).
+    if (body.action === "meta") {
+      const fileId = String(body.fileId || "");
+      if (!fileId) return json({ error: "Falta fileId" }, 400);
+      const url = `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,parents&supportsAllDrives=true`;
+      const r = await fetch(url, { headers: H });
+      const d = await r.json();
+      if (!r.ok) return json({ error: d?.error?.message || `Drive ${r.status}` }, r.status);
+      return json({ id: d.id, name: d.name, mimeType: d.mimeType, parents: d.parents || [] });
     }
 
     if (body.action === "download") {

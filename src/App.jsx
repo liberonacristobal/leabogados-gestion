@@ -11759,6 +11759,25 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     try{ await supabase.from('clients').update({abogado_responsable:row.abogadoResp}).eq('id',clientId); onClientsUpdate&&onClientsUpdate() }catch(_){}
   }
 
+  // Buscar en Drive: busca el compareciente en los documentos y SUBE por las carpetas hasta una cuyo nombre sea un cliente.
+  // Devuelve {client, folder} o null. Reusa la mecánica validada: carpeta del cliente = nombre del cliente en la app.
+  const driveFindClient = async (nombre) => {
+    const nm = String(nombre||'').replace(/['\\]/g,' ').trim(); if(nm.length<4) return null
+    let files=[]
+    try{ const d=await driveCall({action:'search', q:`fullText contains '${nm}' and trashed=false`, pageSize:12}); files=d.files||[] }
+    catch(e){ return {error:e.message} }
+    if(!files.length) return null
+    const cnorm = s => normName(s)
+    const byFolder = new Map()
+    clients.forEach(c=>{ [c.name, c.razon_social, ...entsOf(c.id).map(e=>e.name)].filter(Boolean).forEach(v=>{ const k=cnorm(v); if(k&&!byFolder.has(k)) byFolder.set(k,c) }) })
+    const cache={}; const metaOf = async id => { if(id in cache) return cache[id]; try{ cache[id]=await driveCall({action:'meta', fileId:id}) }catch(_){ cache[id]=null } return cache[id] }
+    for(const f of files){
+      let parents=f.parents||[]; let depth=0; const seen=new Set()
+      while(parents.length && depth<6){ const pid=parents[0]; if(seen.has(pid)) break; seen.add(pid); const m=await metaOf(pid); if(!m) break; const hit=byFolder.get(cnorm(m.name)); if(hit) return {client:hit, folder:m.name}; parents=m.parents||[]; depth++ }
+    }
+    return null
+  }
+
   const onFile = async(e) => {
     const file = e.target.files?.[0]; if(!file) return
     setFileName(file.name)
@@ -11903,6 +11922,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Crea un cliente ocasional con el nombre de la fila (columna Cliente), opcionalmente con responsable, y le asigna el gasto.
   const crearOcasional = async(r,responsable)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm,responsable); if(c){ setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)); if(onLearnAlias) onLearnAlias(nm.toLowerCase(), c.id) }  /* aprende nombre→ocasional para que no reaparezca al re-subir */ setOcasPick(null) }
   const [ocasPick,setOcasPick] = useState(null)   // id de la fila con el selector de responsable del ocasional abierto
+  const [driveBusy,setDriveBusy] = useState(null)   // fila con búsqueda en Drive en curso
+  const [driveMsg,setDriveMsg] = useState({})       // resultado de la búsqueda en Drive por fila
   // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
   const _normOt = s => String(s||'').replace(/\D/g,'')
   const _STOPDUP = new Set(['para','por','con','los','las','del','sociedad','servicios','contrato','publica','especial','acciones','copia','legalizada','prestacion','mandato','reduccion','protocolizacion','autorizacion','pacto','junta','escritura'])
@@ -12395,6 +12416,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                         {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const pc=personChip(m);return <button key={m} type='button' onClick={()=>asignarPersonal(r.id,m)} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`0.5px solid ${pc.color}33`}}>{m}</button>})}
                       </div>
+                    </div>
+                  )}
+                  {/* Buscar en Drive: para OT sin cliente, busca el compareciente en las carpetas y propone el cliente por la carpeta */}
+                  {notaria&&!r.client_id&&!r.personal_de&&(bucket==='man'||bucket==='rev')&&(
+                    <div style={{marginTop:6,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      <button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res?.client){ asignar(r.id,res.client.id); setDriveMsg(m=>({...m,[r.id]:`✓ ${res.client.name} · carpeta "${res.folder}"`})) } else setDriveMsg(m=>({...m,[r.id]: res?.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 11px',cursor:driveBusy===r.id?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6,opacity:driveBusy===r.id?.6:1}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>{driveBusy===r.id?'Buscando en Drive…':'Buscar en Drive'}</button>
+                      {driveMsg[r.id]&&<span style={{fontSize:10.5,fontWeight:600,color:driveMsg[r.id].startsWith('✓')?C.greenText:C.muted}}>{driveMsg[r.id]}</span>}
                     </div>
                   )}
                   {/* resolución de cliente según estado */}
