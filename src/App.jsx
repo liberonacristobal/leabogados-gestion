@@ -11687,6 +11687,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const COLALIAS = {
     cliente:   ['cliente','nombre','nombre cliente','razón social','razon social','client'],
     rut:       ['rut','rut cliente'],
+    abogado:   ['abogado','responsable','abogado responsable'],
     fecha:     ['fecha','fecha gasto','date'],
     concepto:  ['concepto','actividad','descripción','descripcion','detalle','glosa','detail'],
     detalle:   ['detalle proveedor','detalle prov','proveedor detalle'],
@@ -11745,6 +11746,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     if((clientEntities||[]).some(e=>normRut(e.rut)===nr)) return   // ese RUT ya está cargado → no duplicar (regla anti-duplicados)
     try{ await supabase.from('client_entities').insert({client_id:clientId, name:pick.nombre, rut:pick.rut}); onClientsUpdate&&onClientsUpdate() }catch(_){}
   }
+  // Abogado de la notaría → miembro del estudio (para el responsable del cliente).
+  const abogadoNotaMap = raw => { const s=catNorm(raw).replace(/\s/g,''); if(!s||s==='ninguno'||s==='total') return null; if(s.includes('escalamarcet')||s.includes('erasmo')) return 'Erasmo'; if(s.includes('campero')||s.includes('martin')) return 'Martín'; if(s.includes('liberonapena')||s.includes('cristobal')) return 'Cristóbal'; return null }
+  // Si el cliente aún no tiene abogado responsable, lo fija con el Abogado que trae el archivo de notaría (no pisa uno existente).
+  const setRespNota = async (row, clientId) => {
+    if(!notaria || DEMO || !clientId || !row?.abogadoResp) return
+    const c = clients.find(x=>String(x.id)===String(clientId)); if(!c || (c.abogado_responsable||'').trim()) return
+    try{ await supabase.from('clients').update({abogado_responsable:row.abogadoResp}).eq('id',clientId); onClientsUpdate&&onClientsUpdate() }catch(_){}
+  }
 
   const onFile = async(e) => {
     const file = e.target.files?.[0]; if(!file) return
@@ -11784,6 +11793,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         let personalDe = null
         if(_pm){ const cand=catNorm(_pm[1]); personalDe = MIEMBROS_NOTA.find(p=>catNorm(p)===cand) || _pm[1].trim() }
         let nombreEff=nombre, conceptoEff=concepto, cli=null, method, entId
+        const abogadoResp = notaria ? abogadoNotaMap(getField('abogado')) : null   // responsable que trae el archivo
         if(notaria){
           // El cliente NO viene dado (col 'Cliente' = la firma). Se deduce del Compareciente: RUT primero, luego nombre, luego alias aprendido.
           conceptoEff = glosaNotaria(materia, notas)
@@ -11804,7 +11814,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
         else if(notaria && /sin efecto/i.test(notas)) error='Sin efecto (anulada)'
-        return {id:idx, rut, nombre:nombreEff, fecha, monto, concepto:conceptoEff, subconcepto, ot, notas, proyecto, requirente, materia, categoria, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='rut_exact'?100:method==='name_exact'?95:90):undefined), error, dup:false}
+        return {id:idx, rut, nombre:nombreEff, fecha, monto, concepto:conceptoEff, subconcepto, ot, notas, proyecto, requirente, materia, categoria, abogadoResp, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='rut_exact'?100:method==='name_exact'?95:90):undefined), error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
       let parsed = []
@@ -11866,11 +11876,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     })
     // Aprende: este nombre crudo → este cliente, para que las próximas cargas caigan solas.
     if(onLearnAlias && srcNombre && String(srcNombre).trim()) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
-    if(srcRow && String(srcRow.requirente||'').trim()){ learnNota(srcRow, clientId); learnRutNota(srcRow, clientId) }   // notaría: aprende requirente→cliente y el RUT→client_entity
+    if(srcRow && String(srcRow.requirente||'').trim()){ learnNota(srcRow, clientId); learnRutNota(srcRow, clientId); setRespNota(srcRow, clientId) }   // notaría: aprende requirente→cliente, RUT→client_entity y fija responsable
   }
   // Confirma de una vez todas las sugerencias (fuzzy 70-89 / IA 65-84) como cliente asignado.
   const confirmarSugeridos = () => {
-    (rows||[]).forEach(r=>{ if(r.suggestion && String(r.requirente||'').trim()){ learnNota(r, r.suggestion.id); learnRutNota(r, r.suggestion.id) } })   // notaría: aprende cada requirente confirmado (+ su RUT)
+    (rows||[]).forEach(r=>{ if(r.suggestion && String(r.requirente||'').trim()){ learnNota(r, r.suggestion.id); learnRutNota(r, r.suggestion.id); setRespNota(r, r.suggestion.id) } })   // notaría: aprende cada requirente confirmado (+ su RUT + responsable)
     setRows(p=>p.map(r=>{
       if(!r.suggestion) return r
       const c=clients.find(x=>x.id===r.suggestion.id); const ents=entsOf(r.suggestion.id)
