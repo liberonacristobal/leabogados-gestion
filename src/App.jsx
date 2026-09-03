@@ -11944,6 +11944,19 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     return p.map(r=>r.id===rowId?{...r,[campo]:valor}:r)
   })
 
+  // Notaría: ordena las filas del preview en GRUPOS por cliente (por revisar arriba). Devuelve una secuencia de {type:'header'|'row'}.
+  // El cuerpo de cada fila se renderiza igual que en la lista plana (no se duplica); solo se intercalan encabezados de grupo.
+  const notaItems = (flt) => {
+    const byClient={}, sinCli=[]
+    flt.forEach(r=>{ if(r.client_id && !esOficinaCli(r.client_id)) (byClient[r.client_id]=byClient[r.client_id]||[]).push(r); else sinCli.push(r) })
+    const groups = Object.entries(byClient).map(([cid,rs])=>{ const c=clients.find(x=>String(x.id)===String(cid)); const tot=rs.reduce((a,r)=>a+(r.monto||0),0); let saldo=null; try{ saldo=saldoCliente(expenses,cid) }catch(_){}; const nRev=rs.filter(r=>bucketOf(r)!=='auto').length; return {cid,name:c?.name||'Cliente',nEnt:entsOf(cid).length,tot,saldo,nRev,rs} })
+    groups.sort((a,b)=>(b.nRev>0?1:0)-(a.nRev>0?1:0) || b.tot-a.tot)
+    const out=[]
+    if(sinCli.length){ out.push({type:'header',kind:'sin',n:sinCli.length,tot:sinCli.reduce((a,r)=>a+(r.monto||0),0)}); sinCli.forEach(r=>out.push({type:'row',r})) }
+    groups.forEach(g=>{ out.push({type:'header',kind:'cli',g}); g.rs.forEach(r=>out.push({type:'row',r})) })
+    return out
+  }
+
   const guardar = async(incluirTodo=false) => {
     const target = incluirTodo ? (rows||[]) : listas
     if(target.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
@@ -12323,7 +12336,17 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             </div>
           )})()}
           <div style={{maxHeight:360,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
-            {rows.filter(r=>!respFilter||(respDeRow(r)||'__sin__')===respFilter).map(r=>{
+            {(()=>{ const flt=rows.filter(r=>!respFilter||(respDeRow(r)||'__sin__')===respFilter); const items = notaria ? notaItems(flt) : flt.map(r=>({type:'row',r})); return items.map((item,ii)=>{
+              if(item.type==='header'){
+                if(item.kind==='sin') return (<div key={'hs'+ii} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.overdueBg,borderBottom:`1px solid ${C.overdue}`}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2'><circle cx='12' cy='12' r='10'/><path d='M12 16v-4M12 8h.01'/></svg><span style={{flex:1,fontSize:12.5,fontWeight:700,color:C.overdueText}}>Sin cliente · por revisar</span><span style={{fontSize:11,fontWeight:600,color:C.overdueText}}>{item.n} OT · {fmt(item.tot)}</span></div>)
+                const g=item.g; const cubre=g.saldo!=null&&g.saldo>=g.tot; const adel=g.saldo!=null?Math.max(0,g.tot-g.saldo):0
+                return (<div key={'hc'+g.cid} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2'><circle cx='12' cy='8' r='4'/><path d='M5 20a7 7 0 0 1 14 0'/></svg>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9.5,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 6px',marginLeft:6}}>{g.nEnt} razones sociales</span>}</div>{g.saldo!=null&&<div style={{fontSize:10,fontWeight:600,color:cubre?C.greenText:C.overdueText}}>{cubre?`Disponible ${fmt(g.saldo)} · cubre`:`Sin fondo · adelanto ${fmt(adel)}`}</div>}</div>
+                  <span style={{fontSize:11,color:C.muted}}>{g.rs.length} OT · {fmt(g.tot)}</span>
+                </div>)
+              }
+              const r=item.r
               const bucket = bucketOf(r)
               const bad = montoBad(r)
               const ents = r.client_id ? entsOf(r.client_id) : []
@@ -12434,7 +12457,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>
                 </div>
               )
-            })}
+            }) })()}
           </div>
           </>)}
           <button onClick={()=>setRows(null)} style={{width:'100%',padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver a subir otro archivo</button>
