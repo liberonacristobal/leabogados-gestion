@@ -15185,7 +15185,19 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
       {/* Barras inferiores de rendir eliminadas — se usa el botón "↓ Rendir" del encabezado */}
 
-      {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
+      {attachExpense&&<Modal title='Respaldos' onClose={()=>setAttachExpense(null)}>
+        {(()=>{ const ae=attachExpense; const cli=clients.find(c=>String(c.id)===String(ae.client_id)); const nav=cli&&onOpenClientFicha&&!esOficina(ae.client_id); return (
+          <div onClick={nav?()=>{setAttachExpense(null);onOpenClientFicha(ae.client_id)}:undefined} title={nav?'Ver ficha del cliente':undefined} style={{background:C.azulBg,borderRadius:9,padding:'9px 11px',marginBottom:12,cursor:nav?'pointer':'default'}}>
+            <div style={{fontSize:9,fontWeight:700,color:C.azulInfo,textTransform:'uppercase',letterSpacing:'.3px'}}>Respaldo de</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:2}}>
+              <span style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ae.concept||'Gasto'}</span>
+              <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(ae.amount||0)}</span>
+            </div>
+            <div style={{fontSize:11,color:C.muted,marginTop:1}}>{cli?.name||(ae.personal_de?`Personal · ${ae.personal_de}`:'Sin cliente')}{ae.date?` · ${fechaConAnio(ae.date)}`:''}{nav&&<span style={{color:C.accent,fontWeight:600,marginLeft:6}}>Ver ficha →</span>}</div>
+          </div>
+        )})()}
+        <Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/>
+      </Modal>}
       {liqDetail&&(()=>{ const gs=(expenses||[]).filter(e=>String(e.render_id)===String(liqDetail.id)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const tot=gs.reduce((a,e)=>a+(e.amount||0),0); return (
         <Modal title='Liquidación de caja chica' onClose={()=>setLiqDetail(null)}>
           <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{liqDetail.user_name||''} · {liqDetail.periodo||''} · {liqDetail.created_at?fmtFechaTS(liqDetail.created_at):''}</div>
