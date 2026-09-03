@@ -12122,6 +12122,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{fontSize:10.5,color:C.overdueText,marginTop:2}}>{nP>0?`${nP} ya pagada${nP!==1?'s':''} a la notaría`:''}{nP>0&&nR>0?' · ':''}{nR>0?`${nR} ya rendida${nR!==1?'s':''} al cliente`:''}. Aparecen marcadas abajo; no las cargues sin verlas.</div>
             </div>
           )})()}
+          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const ofi=tot-rend; const anul=(rows||[]).filter(r=>/sin efecto/i.test(r.notas||'')).length; return (
+            <div style={{display:'flex',gap:8,marginBottom:10}}>
+              <div style={{flex:1,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>Total de la carga</div><div style={{fontSize:17,fontWeight:700,color:C.text,letterSpacing:-.3}}>{fmt(tot)}</div><div style={{fontSize:9.5,color:C.muted}}>{val.length} OT{anul?` · ${anul} anulada${anul!==1?'s':''}`:''}</div></div>
+              <div style={{flex:1,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:10,color:C.accent,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>Por rendir a clientes</div><div style={{fontSize:17,fontWeight:700,color:C.accent,letterSpacing:-.3}}>{fmt(rend)}</div><div style={{fontSize:9.5,color:C.accent}}>oficina y personal {fmt(ofi)}</div></div>
+            </div>
+          )})()}
           {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const conf=val.filter(r=>r.client_id||r.personal_de).length; const pend=val.filter(r=>!r.client_id&&!r.personal_de&&r.suggestion).length; const sin=val.filter(r=>!r.client_id&&!r.personal_de&&!r.suggestion).length; const pct=val.length?Math.round(conf/val.length*100):0; return (
             <div style={{background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:10}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>{conf} de {val.length} confirmadas</span><span style={{fontSize:10,color:C.muted}}>{pend>0?`${pend} sugerida${pend!==1?'s':''} por confirmar`:''}{pend>0&&sin>0?' · ':''}{sin>0?`${sin} sin cliente`:''}</span></div>
