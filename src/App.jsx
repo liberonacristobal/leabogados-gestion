@@ -13940,6 +13940,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [pagosOrd,setPagosOrd] = useState('nuevo')               // Pagos realizados: orden por fecha 'nuevo' | 'antiguo'
   const [showCargaPag,setShowCargaPag] = useState(false)         // Carga masiva como PÁGINA (no modal): landing con Subir + cargas recientes
   const [cargaOpen,setCargaOpen] = useState(null)                // lote expandido en la página de Carga masiva
+  const [cliOrd,setCliOrd] = useState('nombre')                  // orden de la lista de clientes: nombre | saldo | actividad
   // Puentes tras cargar notaría: navegar directo a la sub-vista pedida desde la pantalla de resultado (orphans / deuda / rendir).
   useEffect(()=>{ if(!navTo) return
     setShowCargaPag(false); setNotaMenuOpen(false); setSelectedClient(null); setShowHistorial(false); setShowGastosOficina(false); setShowBuscarClientes(false); setShowReasignar(false); setShowRevision(false)
@@ -14233,9 +14234,20 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const matchC = c => !q2 || nrm(c.name).includes(nrm(q2)) || (clientEntities||[]).some(e=>String(e.client_id)===String(c.id)&&(nrm(e.name).includes(nrm(q2))||String(e.rut||'').replace(/[.\s-]/g,'').includes(q2.replace(/[.\s-]/g,''))))
               const list = baseAll.filter(matchC)
               const nRev = orphans.length+revN(revNoActivo)+revN(revOcasional)
-              const row = c => { const sal=saldoDe(c); const col=sal<0?C.overdue:(sal>0?C.normal:C.done); const ents=(clientEntities||[]).filter(x=>String(x.client_id)===String(c.id)); const rs=ents.length>1?`${ents.length} razones sociales`:(ents[0]?rsDisplay(ents[0].name):''); return (
+              // Última actividad por cliente (máx fecha de gasto/fondo no borrado) → recencia + señal de inactividad.
+              const lastAct={}; (expenses||[]).forEach(e=>{ if(e.deleted_at)return; const k=String(e.client_id); const d=(e.date||e.created_at||'').slice(0,10); if(d&&(!lastAct[k]||d>lastAct[k])) lastAct[k]=d })
+              const diasDe = c=>{ const d=lastAct[String(c.id)]; if(!d) return null; return Math.floor((Date.now()-new Date(d))/86400000) }
+              const sortCli = arr => [...arr].sort((a,b)=> cliOrd==='saldo' ? (Math.abs(saldoDe(b))-Math.abs(saldoDe(a))) : cliOrd==='actividad' ? ((lastAct[String(a.id)]||'')<(lastAct[String(b.id)]||'')?-1:1) : (a.name||'').localeCompare(b.name||'','es'))
+              const row = c => { const sal=saldoDe(c); const col=sal<0?C.overdue:(sal>0?C.normal:C.done); const ents=(clientEntities||[]).filter(x=>String(x.client_id)===String(c.id)); const rs=ents.length>1?`${ents.length} razones sociales`:(ents[0]?rsDisplay(ents[0].name):''); const nPR=gastosPorRendir(c.id).length; const dias=diasDe(c); const inact=dias!=null&&dias>=45; return (
                 <div key={c.id} data-cid={String(c.id)} onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',borderLeft:`3px solid ${col}`,borderTop:`1px solid #EEF1F3`,cursor:'pointer'}}>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>{rs&&<div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}</div>}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:7,marginTop:1}}>
+                      {rs&&<span style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1,minWidth:0}}>{rs}</span>}
+                      <span style={{fontSize:10,color:inact?C.overdueText:C.done,flexShrink:0}}>{dias==null?'sin movimientos':inact?`· sin mov. ${dias} d`:`· hace ${dias} d`}</span>
+                    </div>
+                  </div>
+                  {nPR>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{nPR} por rendir</span>}
                   <span style={{fontSize:13,fontWeight:700,color:col,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(sal)}</span>
                 </div>
               )}
@@ -14244,12 +14256,15 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, RUT o razón social…' autoFocus/></div>
                   {archivadosG>0&&<button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,color:verArchivadosG?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>{verArchivadosG?'Ver activos':`Archivados · ${archivadosG}`}</button>}
                 </div>
-                <div style={{fontSize:10.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.4px',margin:'0 2px 7px'}}>{verArchivadosG?'Clientes archivados':'Clientes'} · {list.length}{q2?'':' · por abogado'}</div>
+                <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px 7px'}}>
+                  <span style={{fontSize:10.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.4px'}}>{verArchivadosG?'Clientes archivados':'Clientes'} · {list.length}{q2||cliOrd!=='nombre'?'':' · por abogado'}</span>
+                  <span style={{marginLeft:'auto',display:'flex',gap:4}}>{[['nombre','Nombre'],['saldo','Saldo'],['actividad','Actividad']].map(([k,l])=>{ const on=cliOrd===k; return <button key={k} onClick={()=>setCliOrd(k)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.muted}}>{l}</button> })}</span>
+                </div>
                 {list.length===0
                   ? <div style={{color:C.muted,textAlign:'center',padding:22,fontSize:12.5}}>Sin clientes.</div>
-                  : q2
-                    ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{[...list].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).map(row)}</div>
-                    : (()=>{ const grupos={}; list.forEach(c=>{ const k=c.abogado_responsable||'__sin__'; (grupos[k]=grupos[k]||[]).push(c) }); const order=Object.keys(grupos).sort((a,b)=> a==='__sin__'?1:b==='__sin__'?-1:a.localeCompare(b,'es')); return order.map(k=>{ const cs=[...grupos[k]].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')); const suma=cs.reduce((s,c)=>s+saldoDe(c),0); const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); return (
+                  : (q2||cliOrd!=='nombre')
+                    ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{sortCli(list).map(row)}</div>
+                    : (()=>{ const grupos={}; list.forEach(c=>{ const k=c.abogado_responsable||'__sin__'; (grupos[k]=grupos[k]||[]).push(c) }); const order=Object.keys(grupos).sort((a,b)=> a==='__sin__'?1:b==='__sin__'?-1:a.localeCompare(b,'es')); return order.map(k=>{ const cs=sortCli(grupos[k]); const suma=cs.reduce((s,c)=>s+saldoDe(c),0); const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); return (
                         <details key={k} style={{marginBottom:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                           <summary style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer',listStyle:'none'}}>
                             <span style={{width:28,height:28,borderRadius:8,background:pc.bg,color:pc.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{sin?<SIcon n='user' s={15} c={C.grisText}/>:(INICIALES_RESP[k]||String(k)[0])}</span>
