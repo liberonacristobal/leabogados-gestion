@@ -408,7 +408,7 @@ const folioDigits = no => String(no||'').replace(/\D/g,'')
 // Razón social del SII en MAYÚSCULAS SOLO para mostrar (el dato crudo NUNCA se toca; PDF/export legal usan la RS tal cual).
 const rsDisplay = s => s ? String(s).trim().toUpperCase() : s
 // Razón social del SII (suele venir en MAYÚSCULAS) → Title Case para mostrar, sin tocar el dato (canon nombres).
-const titleCase = s => { if(!s) return s; return String(s).trim().toLowerCase().replace(/\b[a-záéíóúñ]/g, m=>m.toUpperCase()).replace(/\b(Y|De|Del|La|Las|Los|E|En)\b/g, m=>m.toLowerCase()) }
+const titleCase = s => { if(!s) return s; return String(s).trim().toLowerCase().replace(/(^|[\s.\-'/(])([a-záéíóúñü])/g, (_,p,c)=>p+c.toUpperCase()).replace(/\b(Y|De|Del|La|Las|Los|E|En)\b/g, m=>m.toLowerCase()) }
 // Clave de glosa para aprender gasto→proyecto: palabras significativas (≥4) ordenadas, así "Certificado dominio CBR" matchea independiente del orden.
 const glosaKey = s => _normTxt(s).split(' ').filter(w=>w.length>=4).slice(0,5).sort().join(' ')
 // Clave de SERIE de facturas: glosa base sin "cuota N/M", "N/M", meses, años → para agrupar hermanas (1/3, 2/3, 3/3; o las mensuales) y no dejarlas huérfanas.
