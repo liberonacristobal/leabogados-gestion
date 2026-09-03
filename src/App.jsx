@@ -12200,9 +12200,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const notaCatsUI = (flt) => {
     const cats=notaCats(flt)
     const iconSq=(k,col,bg)=><span style={{width:36,height:36,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{catSvg(k,col)}</span>
-    const filtRows=(rows,k)=>{ const q=(catQ[k]||'').trim().toLowerCase(); if(!q) return rows; const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); return rows.filter(r=>nrm(nomDe(r)).includes(nrm(q))||nrm(tramDe(r)).includes(nrm(q))||nrm(otDe(r)).includes(nrm(q))) }
+    const filtRows=(rows,k)=>{ const q=(catQ[k]||'').trim().toLowerCase(); if(!q) return rows; const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); const qr=q.replace(/[.\-\s]/g,''); return rows.filter(r=>nrm(nomDe(r)).includes(nrm(q))||nrm(tramDe(r)).includes(nrm(q))||nrm(otDe(r)).includes(nrm(q))||(qr&&String(r.rut||'').replace(/[.\-\s]/g,'').includes(qr))) }
     const buscador=k=><input value={catQ[k]||''} onChange={e=>setCatQ(m=>({...m,[k]:e.target.value}))} placeholder='Buscar por nombre, trámite u OT…' style={{width:'100%',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',margin:'2px 0 4px'}}/>
-    const card = k => { const meta=CAT_META[k]; const rws=cats[k]; if(!rws.length && (k==='oficina'||k==='yacargadas'||k==='sinefecto')) return null
+    const card = k => { const meta=CAT_META[k]; const rws=cats[k]; if(!rws.length) return null   // ocultar TODA categoría vacía (antes solo las informativas → "Falta 0"/"Confirma 0" molestaban)
       const open=catOpen.has(k); const tot=rws.reduce((a,r)=>a+(r.monto||0),0); const info=(k==='yacargadas'||k==='sinefecto'||k==='oficina')
       const nSin=cats.falta.filter(r=>!r.client_id&&!r.personal_de&&!r.isInternal&&!r.error&&!r.suggestion).length
       return (
