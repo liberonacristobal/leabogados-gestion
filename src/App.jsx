@@ -11950,6 +11950,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const [deselNota,setDeselNota] = useState(()=>new Set())   // notaría: OT DESmarcadas (por defecto van marcadas las que tienen cliente)
   const [rowOpenNota,setRowOpenNota] = useState(()=>new Set())   // notaría: filas expandidas (detalle clickeable)
   const [similarPrompt,setSimilarPrompt] = useState(null)   // {clientId,clientName,ids,srcName}: al asignar, ofrece asignar las OT de compareciente parecido
+  const [grpOpen,setGrpOpen] = useState(()=>new Set())   // notaría: grupos de cliente expandidos (por defecto colapsados)
+  const [enAppOpen,setEnAppOpen] = useState(false)       // notaría: grupo "ya en la app" expandido
+  const toggleGrpNota = cid => setGrpOpen(p=>{ const n=new Set(p); n.has(cid)?n.delete(cid):n.add(cid); return n })
   const notaSelOn = r => !!r.client_id && !r.error && !deselNota.has(r.id)   // seleccionada para importar
   const toggleSelNota = id => setDeselNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   const toggleRowNota = id => setRowOpenNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
@@ -11997,13 +12000,22 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Notaría: ordena las filas del preview en GRUPOS por cliente (por revisar arriba). Devuelve una secuencia de {type:'header'|'row'}.
   // El cuerpo de cada fila se renderiza igual que en la lista plana (no se duplica); solo se intercalan encabezados de grupo.
   const notaItems = (flt) => {
-    const byClient={}, sinCli=[]
-    flt.forEach(r=>{ if(r.client_id && !esOficinaCli(r.client_id)) (byClient[r.client_id]=byClient[r.client_id]||[]).push(r); else sinCli.push(r) })
+    const byClient={}, sinCli=[], enApp=[]
+    flt.forEach(r=>{ if(dupInfo[r.id]?.otState){ enApp.push(r); return }   // ya en la app (pagada/rendida/cargada) → grupo aparte
+      if(r.client_id && !esOficinaCli(r.client_id)) (byClient[r.client_id]=byClient[r.client_id]||[]).push(r); else sinCli.push(r) })
     const groups = Object.entries(byClient).map(([cid,rs])=>{ const c=clients.find(x=>String(x.id)===String(cid)); const tot=rs.reduce((a,r)=>a+(r.monto||0),0); let saldo=null; try{ saldo=saldoCliente(expenses,cid) }catch(_){}; const nRev=rs.filter(r=>bucketOf(r)!=='auto').length; return {cid,name:c?.name||'Cliente',nEnt:entsOf(cid).length,tot,saldo,nRev,rs} })
     groups.sort((a,b)=>(b.nRev>0?1:0)-(a.nRev>0?1:0) || b.tot-a.tot)
     const out=[]
-    if(sinCli.length){ out.push({type:'header',kind:'sin',n:sinCli.length,tot:sinCli.reduce((a,r)=>a+(r.monto||0),0)}); sinCli.forEach(r=>out.push({type:'row',r})) }
-    groups.forEach(g=>{ out.push({type:'header',kind:'cli',g}); g.rs.forEach(r=>out.push({type:'row',r})) })
+    // Por revisar (subagrupado por compareciente: los repetidos van juntos)
+    if(sinCli.length){
+      out.push({type:'header',kind:'sin',n:sinCli.length,tot:sinCli.reduce((a,r)=>a+(r.monto||0),0)})
+      const by={}; sinCli.forEach(r=>{ const k=(normName(r.nombre||r.requirente||'')||('id'+r.id)); (by[k]=by[k]||[]).push(r) })
+      Object.values(by).sort((a,b)=>b.length-a.length||b[0].monto-a[0].monto).forEach(rs=>{ if(rs.length>1) out.push({type:'sub',name:rs[0].nombre||'—',n:rs.length,tot:rs.reduce((a,r)=>a+(r.monto||0),0)}); rs.forEach(r=>out.push({type:'row',r})) })
+    }
+    // Clientes (colapsables; por defecto cerrados)
+    groups.forEach(g=>{ out.push({type:'header',kind:'cli',g}); if(grpOpen.has(g.cid)) g.rs.forEach(r=>out.push({type:'row',r})) })
+    // Ya en la app (colapsado; se omiten al importar)
+    if(enApp.length){ out.push({type:'header',kind:'app',n:enApp.length,tot:enApp.reduce((a,r)=>a+(r.monto||0),0)}); if(enAppOpen) enApp.forEach(r=>out.push({type:'row',r})) }
     return out
   }
   // Fila COMPACTA de notaría: checkbox (si tiene cliente) + OT · trámite · cliente · monto, clickeable para expandir el detalle completo.
@@ -12452,12 +12464,17 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             {(()=>{ const flt=rows.filter(r=>!respFilter||(respDeRow(r)||'__sin__')===respFilter); const items = notaria ? notaItems(flt) : flt.map(r=>({type:'row',r})); return items.map((item,ii)=>{
               if(item.type==='header'){
                 if(item.kind==='sin') return (<div key={'hs'+ii} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.overdueBg,borderBottom:`1px solid ${C.overdue}`}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2'><circle cx='12' cy='12' r='10'/><path d='M12 16v-4M12 8h.01'/></svg><span style={{flex:1,fontSize:12.5,fontWeight:700,color:C.overdueText}}>Sin cliente · por revisar</span><span style={{fontSize:11,fontWeight:600,color:C.overdueText}}>{item.n} OT · {fmt(item.tot)}</span></div>)
+                if(item.kind==='sub') return (<div key={'hsub'+ii} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px 6px 24px',background:'#fff',borderTop:`0.5px solid ${C.border}`}}><span style={{fontSize:11.5,fontWeight:700,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span><span style={{fontSize:9.5,fontWeight:600,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'0 6px'}}>{item.n} OT</span><span style={{marginLeft:'auto',fontSize:10.5,color:C.muted}}>{fmt(item.tot)}</span></div>)
+                if(item.kind==='app') return (<div key={'happ'+ii} onClick={()=>setEnAppOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgSoft,borderBottom:enAppOpen?`1px solid ${C.border}`:'none',cursor:'pointer'}}><span style={{fontSize:13,color:C.done,transform:enAppOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span><span style={{flex:1,fontSize:12,fontWeight:600,color:C.muted}}>Ya en la app · se omiten al importar</span><span style={{fontSize:11,color:C.muted}}>{item.n} OT</span></div>)
                 const g=item.g; const cubre=g.saldo!=null&&g.saldo>=g.tot; const adel=g.saldo!=null?Math.max(0,g.tot-g.saldo):0
-                const selG=g.rs.filter(notaSelOn).length, allG=g.rs.filter(r=>r.client_id&&!r.error).length
+                const selG=g.rs.filter(notaSelOn).length, allG=g.rs.filter(r=>r.client_id&&!r.error).length, gOpen=grpOpen.has(g.cid)
                 return (<div key={'hc'+g.cid} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
                   <span onClick={()=>setDeselNota(p=>{ const n=new Set(p); const marcarTodo=selG<allG; g.rs.forEach(r=>{ if(r.client_id&&!r.error){ marcarTodo?n.delete(r.id):n.add(r.id) } }); return n })} title={selG<allG?'Marcar todo el grupo':'Desmarcar el grupo'} style={{cursor:'pointer',flexShrink:0,display:'inline-flex'}}>{selG===allG&&allG>0?<svg width='16' height='16' viewBox='0 0 24 24' fill={C.accent} stroke={C.accent}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/>{selG>0&&<line x1='7' y1='12' x2='17' y2='12' stroke={C.accent} strokeWidth='2.4'/>}</svg>}</span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9.5,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 6px',marginLeft:6}}>{g.nEnt} razones sociales</span>}</div>{g.saldo!=null&&<div style={{fontSize:10,fontWeight:600,color:cubre?C.greenText:C.overdueText}}>{cubre?`Disponible ${fmt(g.saldo)} · cubre`:`Sin fondo · adelanto ${fmt(adel)}`}</div>}</div>
-                  <span style={{fontSize:11,color:C.muted}}>{selG} de {g.rs.length} · {fmt(g.tot)}</span>
+                  <span onClick={()=>toggleGrpNota(g.cid)} style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                    <span style={{fontSize:13,color:C.done,transform:gOpen?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
+                    <span style={{flex:1,minWidth:0}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9.5,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 6px',marginLeft:6}}>{g.nEnt} RS</span>}</span>{g.saldo!=null&&<span style={{fontSize:10,fontWeight:600,color:cubre?C.greenText:C.overdueText,marginLeft:6}}>· {cubre?'cubre':`adelanto ${fmt(adel)}`}</span>}</span>
+                    <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{selG} de {g.rs.length} · {fmt(g.tot)}</span>
+                  </span>
                 </div>)
               }
               const r=item.r
