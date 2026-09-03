@@ -11288,7 +11288,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[],onSave,onBulkImport,onConciliar,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional,onNavigate}) {
+function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[],onSave,onBulkImport,onConciliar,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional,onNavigate,dirtyRef}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   // Notaría: modo SIMPLE = cola de confirmación 1×1 (sugerencia + Confirmar por fila, solo importa lo confirmado, muestra todo el documento).
   // Resto: modo conciliar (actualiza lo existente + importa lo nuevo). El anti-duplicados por OT (handleBulkImport) igual protege en simple.
@@ -11784,7 +11784,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   }
   // Drive PROPONE (compuerta): guarda el cliente encontrado como SUGERENCIA (no asigna solo) → la fila pasa a
   // "Confirma el cliente" para que el humano confirme. Coherente con "gate → aprende → se libera".
-  const driveSuggest = (rowId, res) => setRows(p=>p.map(r=> r.id===rowId ? {...r, suggestion:{id:res.client.id, name:res.client.name}, confidence:100, driveFolder:res.folder, suggestFrom:'drive'} : r))
+  const driveSuggest = (rowId, res) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, suggestion:{id:res.client.id, name:res.client.name}, confidence:100, driveFolder:res.folder, suggestFrom:'drive'} : r)); setTouched(true) }
   // Busca en Drive el cliente de TODAS las OT sin cliente, en secuencia (con contador). Propone, no asigna.
   const buscarTodasDrive = async () => {
     const pend = (rows||[]).filter(r=> !r.client_id && !r.personal_de && !r.isInternal && !r.error && !r.suggestion && String(r.nombre||r.requirente||'').trim().length>=4)
@@ -11928,6 +11928,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const sim=(rows||[]).filter(r=> r.id!==rowId && !r.client_id && !r.personal_de && !r.error && String(r.nombre||'').trim() && rawKey(r)!==kSrc && (()=>{ const s=simil(srcNombre,r.nombre); return s>=80 && s<100 })())
       setSimilarPrompt(sim.length ? {clientId, clientName:c?.name||'', ids:sim.map(r=>r.id), srcName:srcNombre} : null)
     }
+    flash(`Asignado a ${c?.name||'cliente'} · se guarda al Cargar`)
   }
   // Confirma de una vez todas las sugerencias (fuzzy 70-89 / IA 65-84) como cliente asignado.
   const confirmarSugeridos = () => {
@@ -11948,14 +11949,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const esOficinaCli = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')) }
   const asignarPersonal = (rowId,persona)=>setRows(p=>p.map(r=>r.id===rowId?{...r,personal_de:persona||null,client_id:null,clientName:null,entity_id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:persona?'personal':'none',confidence:persona?100:0}:r))
   // Crea un cliente ocasional con el nombre de la fila (columna Cliente), opcionalmente con responsable, y le asigna el gasto.
-  const crearOcasional = async(r,responsable)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm,responsable); if(c){ setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)); if(onLearnAlias) onLearnAlias(nm.toLowerCase(), c.id) }  /* aprende nombre→ocasional para que no reaparezca al re-subir */ setOcasPick(null) }
+  const crearOcasional = async(r,responsable)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm,responsable); if(c){ setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)); if(onLearnAlias) onLearnAlias(nm.toLowerCase(), c.id); flash(`Cliente nuevo «${c.name}» · se guarda al Cargar`) }  /* aprende nombre→ocasional para que no reaparezca al re-subir */ setOcasPick(null) }
   const [ocasPick,setOcasPick] = useState(null)   // id de la fila con el selector de responsable del ocasional abierto
   const [persPick,setPersPick] = useState(null)   // id de la fila con el selector "es personal de quién" abierto
   // Marca una OT como gasto PERSONAL de un miembro (reusa el campo personal_de del motor): sale de "sin cliente" y va a la categoría Personal.
-  const marcarPersonalRow = (rowId, persona) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, personal_de:persona, client_id:null, clientName:null, entity_id:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:'personal'} : r)); setPersPick(null) }
+  const marcarPersonalRow = (rowId, persona) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, personal_de:persona, client_id:null, clientName:null, entity_id:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:'personal'} : r)); setPersPick(null); flash(`Marcado como personal de ${persona} · se guarda al Cargar`) }
   // Gasto INTERNO de la oficina (lo asume la firma): lo asigna al cliente interno.
-  const marcarOficinaRow = (rowId) => { const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi){ appAlert('No encuentro el cliente interno de la oficina.'); return } setRows(p=>p.map(r=> r.id===rowId ? {...r, client_id:ofi.id, clientName:ofi.name, personal_de:null, entity_id:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:'oficina'} : r)); setPersPick(null) }
-  const quitarInternoRow = (rowId) => setRows(p=>p.map(r=> r.id===rowId ? {...r, personal_de:null, client_id:(r.client_id&&esOficinaCli(r.client_id))?null:r.client_id, clientName:(r.client_id&&esOficinaCli(r.client_id))?null:r.clientName, matchMethod:undefined} : r))
+  const marcarOficinaRow = (rowId) => { const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi){ appAlert('No encuentro el cliente interno de la oficina.'); return } setRows(p=>p.map(r=> r.id===rowId ? {...r, client_id:ofi.id, clientName:ofi.name, personal_de:null, entity_id:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:'oficina'} : r)); setPersPick(null); flash('Marcado como gasto de la oficina · se guarda al Cargar') }
+  const quitarInternoRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, personal_de:null, client_id:(r.client_id&&esOficinaCli(r.client_id))?null:r.client_id, clientName:(r.client_id&&esOficinaCli(r.client_id))?null:r.clientName, matchMethod:undefined} : r)); flash('Devuelto a «Falta el cliente»') }
   const [driveBusy,setDriveBusy] = useState(null)   // fila con búsqueda en Drive en curso
   const [driveMsg,setDriveMsg] = useState({})       // resultado de la búsqueda en Drive por fila
   const [driveAll,setDriveAll] = useState(null)     // {done,total} de "Buscar todas en Drive"
@@ -11970,6 +11971,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const [aprendido,setAprendido] = useState({})          // notaría: aviso transitorio "lo aprendí" por fila
   const [aprendidasSet,setAprendidasSet] = useState(()=>new Set())   // notaría: filas que aprendiste a mano esta carga (para el chip del hero)
   const [confDesel,setConfDesel] = useState(()=>new Set())   // notaría: sugeridas DESmarcadas (por defecto todas marcadas para confirmar)
+  const [touched,setTouched] = useState(false)   // hubo cambios en la revisión sin cargar aún
+  const [accionMsg,setAccionMsg] = useState('')  // toast breve de confirmación por acción
+  const flash = (msg) => { setTouched(true); setAccionMsg(msg); setTimeout(()=>setAccionMsg(m=>m===msg?'':m),3000) }
+  const hayPendiente = !!rows && !resultado && touched   // cambios sin cargar
+  useEffect(()=>{ if(dirtyRef) dirtyRef.current = hayPendiente },[hayPendiente,dirtyRef])
+  useEffect(()=>{ if(!hayPendiente) return; const h=e=>{ e.preventDefault(); e.returnValue='' }; window.addEventListener('beforeunload',h); return ()=>window.removeEventListener('beforeunload',h) },[hayPendiente])
   const toggleCat = k => setCatOpen(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
   const driveAutoRef = useRef(false)   // Drive corre solo UNA vez al abrir "Falta el cliente" (busca cliente por carpeta y asigna lo seguro)
   useEffect(()=>{ if(!notaria || !rows || driveAutoRef.current || driveAll) return
@@ -12008,7 +12015,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const nMan = (rows||[]).filter(r=>bucketOf(r)==='man').length
   const dups = (rows||[]).filter(r=>r.dup)
   const totalMonto = (rows||[]).filter(r=>!r.error).reduce((a,r)=>a+(r.monto||0),0)
-  const editarCampo = (rowId,campo,valor) => setRows(p=>{
+  const editarCampo = (rowId,campo,valor) => { setTouched(true); return setRows(p=>{
     const src=p.find(r=>r.id===rowId)
     // Notaría: al editar la glosa, aprende materia→glosa y la aplica en lote a las OT del mismo trámite no editadas a mano.
     if(notaria && campo==='concepto' && src){
@@ -12017,7 +12024,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       return p.map(r=> r.id===rowId ? {...r,concepto:valor,glosaEdited:true} : (mk && !r.glosaEdited && catNorm(r.materia)===mk) ? {...r,concepto:valor} : r)
     }
     return p.map(r=>r.id===rowId?{...r,[campo]:valor}:r)
-  })
+  }) }
 
   // Notaría: ordena las filas del preview en GRUPOS por cliente (por revisar arriba). Devuelve una secuencia de {type:'header'|'row'}.
   // El cuerpo de cada fila se renderiza igual que en la lista plana (no se duplica); solo se intercalan encabezados de grupo.
@@ -12200,8 +12207,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         <div style={{padding:'8px 13px',fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,background:C.bgPanel,borderBottom:`.5px solid #EEF1F3`}}>Resultado de la carga</div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 13px',background:C.greenBg,borderBottom:`.5px solid #EEF1F3`}}>
           <div><div style={{fontSize:12,color:C.muted}}>Gastos que se cargan</div><div style={{fontSize:17,fontWeight:800,color:C.greenText,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{nCarga} · {fmt(totCarga)}</div></div>
-          <button disabled={guardando||!nCarga} onClick={()=>guardar(false,cargarRows)} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:9,background:C.normal,color:'#fff',padding:'11px 20px',cursor:nCarga&&!guardando?'pointer':'default',opacity:nCarga&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
+          <button disabled={guardando||!nCarga} onClick={async()=>{ if(!nCarga) return; const aCli=cliList.length; const msg=`Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` — ${aCli} cliente${aCli!==1?'s':''}`:''}${quedan?`, ${quedan} quedan por revisar`:''}. ¿Confirmas?`; if(await appConfirm(msg)) guardar(false,cargarRows) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:9,background:C.normal,color:'#fff',padding:'11px 20px',cursor:nCarga&&!guardando?'pointer':'default',opacity:nCarga&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
         </div>
+        <div style={{fontSize:10.5,color:C.muted,padding:'8px 13px 0',lineHeight:1.5}}>Tus asignaciones se guardan al Cargar; lo que la app aprende (RUT y clientes) queda para siempre.</div>
+        <div style={{fontSize:10.5,color:C.done,padding:'2px 13px 8px',lineHeight:1.5,borderBottom:`.5px solid #EEF1F3`}}>Si algo sale mal, puedes deshacer toda la carga con un clic.</div>
         <div onClick={()=>setRcOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 13px',fontSize:12.5,cursor:'pointer'}}><span style={{color:C.muted}}>A clientes</span><span style={{display:'flex',alignItems:'center',gap:7}}><b>{cliList.length} cliente{cliList.length!==1?'s':''}</b><span style={{color:C.done,transform:rcOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span></span></div>
         {rcOpen&&<div style={{background:C.bgPanel,padding:'0 13px 8px'}}>
           {cliList.slice(0,8).map((c,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:11.5,padding:'4px 0',borderTop:`.5px dashed ${C.border}`}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span><span style={{color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{c.n} · {fmt(c.tot)}</span></div>)}
@@ -12268,7 +12277,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       )
     }
     return (<div>
-      {aprendido&&aprendido.name&&<div style={{display:'flex',alignItems:'center',gap:7,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.greenText}}>Aprendí que <b>{aprendido.name}</b> es <b>{aprendido.cli}</b> — no te lo vuelvo a preguntar.</span></div>}
+      {/* Guía de una línea (qué hacer) — baja la curva de la primera vez */}
+      <div style={{fontSize:11,color:C.muted,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 11px',marginBottom:9,lineHeight:1.5}}>Revisa por categoría → asigna lo que falte (cliente · Drive · gasto interno) → <b style={{color:C.accent}}>Cargar</b>. Nada se guarda hasta que confirmas.</div>
+      {aprendido&&aprendido.name
+        ? <div style={{display:'flex',alignItems:'center',gap:7,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.greenText}}>Aprendí que <b>{aprendido.name}</b> es <b>{aprendido.cli}</b> — no te lo vuelvo a preguntar.</span></div>
+        : accionMsg&&<div style={{display:'flex',alignItems:'center',gap:7,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.text}}>{accionMsg}</span></div>}
       {['falta','confirma','listas','personal','oficina','yacargadas','sinefecto'].map(card)}
       {notaReceipt(cats)}
     </div>)
@@ -27710,6 +27723,7 @@ export default function App() {
   const [openConcProp,setOpenConcProp]=useState(false) // gatillo: abrir el panel de propuesta al entrar a Conciliación
   const [ofiOpen,setOfiOpen]=useState(false)           // gatillo: abrir el cliente-oficina (Costos de oficina) al entrar a Gastos desde el Dashboard
   const [expNav,setExpNav]=useState(null)              // gatillo: navegar a una sub-vista de Gastos (orphans/deuda/rendir) tras cargar notaría
+  const cargaDirtyRef = useRef(false)                  // carga masiva: hay asignaciones sin cargar → avisar antes de cerrar
   const [costosOfiRows,setCostosOfiRows]=useState([])  // presupuesto de oficina (para el total del mes en Gastos e Inicio)
   const loadCostosOfi=useCallback(()=>{ if(DEMO){ setCostosOfiRows([
       {categoria:'Remuneraciones',item:'Cristóbal',monto:2330000},{categoria:'Remuneraciones',item:'Erasmo',monto:2284500},{categoria:'Remuneraciones',item:'Martín',monto:1679268},{categoria:'Remuneraciones',item:'Contadora',monto:65000},{categoria:'Remuneraciones',item:'Procurador',monto:450000},
@@ -29655,7 +29669,9 @@ export default function App() {
         </div></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)}><div className='qt-body' style={{paddingTop:'calc(env(safe-area-inset-top,0px) + 18px)'}}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></div></Modal>}
-        {modal?.type==='cargaMasiva'&&<Modal fullscreenOnMobile fullscreen fsMaxWidth={980} title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onNavigate={(t)=>{ setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
+        <Modal fullscreenOnMobile fullscreen fsMaxWidth={980} title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={cerrar} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>
+        )})()}
         {modal?.type==='clientLimited'&&<Modal fullscreenOnMobile title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){appAlert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null} preDev={!!modal?.dev}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
