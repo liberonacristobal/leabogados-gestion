@@ -11917,7 +11917,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     // Aprende: este nombre crudo → este cliente, para que las próximas cargas caigan solas.
     if(onLearnAlias && srcNombre && String(srcNombre).trim()) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
     if(srcRow && String(srcRow.requirente||'').trim()){ learnNota(srcRow, clientId); learnRutNota(srcRow, clientId); setRespNota(srcRow, clientId)   // notaría: aprende requirente→cliente, RUT→client_entity y fija responsable
-      const nm=srcRow.nombre||srcRow.requirente; setAprendido({name:nm,cli:c?.name||''}); setTimeout(()=>setAprendido(a=>(a&&a.name===nm)?{}:a),4500) }   // micro-aviso: "lo aprendí, no te lo vuelvo a preguntar"
+      const nm=srcRow.nombre||srcRow.requirente; setAprendido({name:nm,cli:c?.name||''}); setTimeout(()=>setAprendido(a=>(a&&a.name===nm)?{}:a),4500); setAprendidasSet(s=>new Set(s).add(rowId)) }   // micro-aviso: "lo aprendí" + cuenta para el chip del hero
     // Notaría: ¿hay OTRAS OT sin cliente con compareciente PARECIDO (no idéntico, esos ya se propagaron)? Ofrece asignarlas juntas.
     if(notaria && srcRow && String(srcNombre||'').trim()){
       const kSrc=rawKey(srcRow)
@@ -11958,6 +11958,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const [catQ,setCatQ] = useState({})                    // notaría: buscador por categoría (key→texto)
   const [rcOpen,setRcOpen] = useState(false)             // notaría: detalle "A clientes" del recibo desplegado
   const [aprendido,setAprendido] = useState({})          // notaría: aviso transitorio "lo aprendí" por fila
+  const [aprendidasSet,setAprendidasSet] = useState(()=>new Set())   // notaría: filas que aprendiste a mano esta carga (para el chip del hero)
+  const [confDesel,setConfDesel] = useState(()=>new Set())   // notaría: sugeridas DESmarcadas (por defecto todas marcadas para confirmar)
   const toggleCat = k => setCatOpen(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
   const driveAutoRef = useRef(false)   // Drive corre solo UNA vez al abrir "Falta el cliente" (busca cliente por carpeta y asigna lo seguro)
   useEffect(()=>{ if(!notaria || !rows || driveAutoRef.current || driveAll) return
@@ -12109,26 +12111,32 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const notaCatRow = (r,kind) => {
     const open=rowOpenNota.has(r.id)
     const cn=r.client_id?(clients.find(c=>String(c.id)===String(r.client_id))?.name||r.clientName||''):null
-    const prot = kind==='listas' ? tramDe(r) : nomDe(r)
+    const noName = !String(r.nombre||r.requirente||'').replace(/^\s*n\/?a\.?\s*$/i,'').trim()   // sin compareciente utilizable
+    const fy = r.fecha ? new Date(r.fecha).getFullYear() : null
+    const oldY = fy && !isNaN(fy) && fy < new Date().getFullYear()   // OT de un año anterior
+    const prot = kind==='listas' ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
     const sub  = kind==='listas' ? (cn||'') : (tramDe(r) + (cn?` · ${cn}`:''))
+    const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
     return (
-      <div key={r.id} style={{padding:'10px 14px',borderTop:`.5px solid #EEF1F3`}}>
+      <div key={r.id} style={{padding:'10px 14px',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10}}>
+        {chk&&<span onClick={()=>setConfDesel(p=>{ const n=new Set(p); n.has(r.id)?n.delete(r.id):n.add(r.id); return n })} title={on?'Marcada — se confirma':'Marca para confirmar'} style={{cursor:'pointer',flexShrink:0,marginTop:2}}>{on?<svg width='17' height='17' viewBox='0 0 24 24' fill={C.normal} stroke={C.normal}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>}</span>}
+        <div style={{flex:1,minWidth:0}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-          <span style={{fontSize:13,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{prot}</span>
+          <span style={{fontSize:13,fontWeight:700,color:noName&&kind!=='listas'?C.grisText:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{prot}</span>
           <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
         </div>
         {sub&&<div style={{fontSize:11.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
-        <div style={{fontSize:10,color:C.done,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{otDe(r)} · {r.fecha?fmtFDMY(r.fecha):'sin fecha'}</div>
+        <div style={{fontSize:10,color:C.done,marginTop:2,display:'flex',alignItems:'center',gap:6,fontVariantNumeric:'tabular-nums'}}>{otDe(r)} · {r.fecha?fmtFDMY(r.fecha):'sin fecha'}{oldY&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 7px'}}>OT de {fy}</span>}</div>
         {/* acciones por categoría */}
         {kind==='falta'&&<div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{open?'Cerrar':'Asignar cliente'}</button>
-          <button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ asignar(r.id,res.client.id) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.azulInfo}`,borderRadius:8,padding:'6px 12px',cursor:driveBusy===r.id?'default':'pointer'}}>{driveBusy===r.id?'Buscando…':'Buscar en Drive'}</button>
-          {onCreateOccasional&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Nuevo</button>}
+          {!noName&&<button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ asignar(r.id,res.client.id) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.azulInfo}`,borderRadius:8,padding:'6px 12px',cursor:driveBusy===r.id?'default':'pointer'}}>{driveBusy===r.id?'Buscando…':'Buscar en Drive'}</button>}
+          {onCreateOccasional&&!noName&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Nuevo</button>}
           {driveMsg[r.id]&&<span style={{fontSize:10.5,color:C.muted}}>{driveMsg[r.id]}</span>}
         </div>}
         {kind==='confirma'&&r.suggestion&&<div style={{display:'flex',gap:7,marginTop:8,alignItems:'center',flexWrap:'wrap'}}>
           <span style={{fontSize:11.5,color:C.text}}>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}%</span>:''}</span>
-          <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Confirmar</button>
+          <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Confirmar sola</button>
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Otro</button>
         </div>}
         {kind==='listas'&&<div style={{marginTop:6}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button></div>}
@@ -12139,6 +12147,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label={cn?'Cambiar cliente…':'Buscar cliente por nombre o RUT…'}/>
         </div>}
         {ocasPick===r.id&&<div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>Ocasional «{r.nombre}» · resp:</span>{MIEMBROS_NOTA.map(m=>{const pc=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:'none'}}>{m}</button>})}<button onClick={()=>crearOcasional(r,null)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:C.bgWarm,color:C.grisText,border:'none'}}>Sin resp.</button></div>}
+        </div>
       </div>
     )
   }
@@ -12186,11 +12195,16 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             {k==='falta'&&(()=>{ const fr=filtRows(rws,k); return (<>
               {nSin>1&&<button disabled={!!driveAll} onClick={buscarTodasDrive} style={{width:'100%',fontSize:11.5,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'7px',cursor:driveAll?'default':'pointer',marginBottom:4}}>{driveAll?`Buscando en Drive ${driveAll.done}/${driveAll.total}…`:`Buscar las ${nSin} en Drive`}</button>}
               {rws.length>10&&buscador(k)}
-              {(()=>{ const by={}; fr.forEach(r=>{ const kk=((r.nombre||r.requirente||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim())||('id'+r.id); (by[kk]=by[kk]||[]).push(r) }); return Object.values(by).sort((a,b)=>b.length-a.length).map((g,gi)=> g.length>1
+              {(()=>{ const noNm=r=>!String(r.nombre||r.requirente||'').replace(/^\s*n\/?a\.?\s*$/i,'').trim(); const by={}; fr.forEach(r=>{ const kk=noNm(r)?'__sindatos__':(((r.nombre||r.requirente||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim())||('id'+r.id)); (by[kk]=by[kk]||[]).push(r) }); const ents=Object.entries(by).sort((a,b)=> (a[0]==='__sindatos__'?1:0)-(b[0]==='__sindatos__'?1:0) || b[1].length-a[1].length); return ents.map(([kk,g],gi)=> kk==='__sindatos__'
+                ? <div key={gi}><div style={{fontSize:11,fontWeight:700,color:C.grisText,padding:'6px 2px 2px'}}>Sin datos para identificar <span style={{fontWeight:400,color:C.muted}}>· {g.length} OT · sin compareciente</span></div>{g.map(r=>notaCatRow(r,'falta'))}</div>
+                : g.length>1
                 ? <div key={gi}><div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'6px 2px 2px'}}>{nomDe(g[0])} <span style={{fontWeight:400,color:C.muted}}>· {g.length} OT · {fmt(g.reduce((a,r)=>a+(r.monto||0),0))}</span></div>{g.map(r=>notaCatRow(r,'falta'))}</div>
                 : notaCatRow(g[0],'falta')) })()}
             </>)})()}
-            {k==='confirma'&&filtRows(rws,k).map(r=>notaCatRow(r,'confirma'))}
+            {k==='confirma'&&(()=>{ const fr=filtRows(rws,k); const sel=fr.filter(r=>!confDesel.has(r.id)&&r.suggestion); return (<>
+              <button disabled={!sel.length} onClick={()=>sel.forEach(r=>asignar(r.id,r.suggestion.id))} style={{width:'100%',fontSize:12,fontWeight:700,color:'#fff',background:sel.length?C.normal:C.done,border:'none',borderRadius:8,padding:'8px',cursor:sel.length?'pointer':'default',marginBottom:2}}>Confirmar seleccionadas ({sel.length})</button>
+              {fr.map(r=>notaCatRow(r,'confirma'))}
+            </>)})()}
             {k==='listas'&&(()=>{ const fr=filtRows(rws,k); const by={}; fr.forEach(r=>{ (by[r.client_id]=by[r.client_id]||[]).push(r) }); const groups=Object.entries(by).map(([cid,rs])=>{ const c=clients.find(x=>String(x.id)===String(cid)); let saldo=null; try{ saldo=saldoCliente(expenses,cid) }catch(_){}; const tt=rs.reduce((a,r)=>a+(r.monto||0),0); return {cid,name:c?.name||'Cliente',nEnt:entsOf(cid).length,rs,tt,saldo} }).sort((a,b)=>b.tt-a.tt); return (<>
               {rws.length>10&&buscador(k)}
               {groups.map(g=>{ const cubre=g.saldo!=null&&g.saldo>=g.tt; const adel=g.saldo!=null?Math.max(0,g.tt-g.saldo):0; const go=grpOpen.has(g.cid); return (
@@ -12229,9 +12243,21 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     setGuardando(true)
     try{
       const res = await onBulkImport(target, {tipo, filename:fileName})
-      setResultado(res)
+      // Notaría: resumen para cerrar el ciclo (lo que queda por pagar a la notaría y a cuántos clientes rendir).
+      if(notaria){ const conCli=target.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size; setResultado({...res, nota:{porPagar,clientes}}) }
+      else setResultado(res)
     }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
+  }
+  // Exporta la carga a CSV (para la notaría / Martina / contador): OT, fecha, compareciente, trámite, cliente, monto, estado.
+  const exportarCargaCSV = () => {
+    const cn=r=>r.client_id?(clients.find(c=>String(c.id)===String(r.client_id))?.name||r.clientName||''):(r.personal_de?`Personal · ${r.personal_de}`:'')
+    const estadoRow=r=> r.error?'Anulada' : dupInfo[r.id]?.otState?'Ya en la app' : (r.client_id?'A cliente':(r.suggestion?'Sugerida':'Sin cliente'))
+    const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`
+    const head=['OT','Fecha','Compareciente','Tramite','Cliente','Monto','Estado']
+    const body=(rows||[]).map(r=>[otDe(r), r.fecha||'', r.nombre||r.requirente||'', r.materia||'', cn(r), r.monto||0, estadoRow(r)])
+    const csv=[head,...body].map(row=>row.map(esc).join(',')).join('\n')
+    const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`carga_notaria_${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
   }
 
   // Conciliación: calza cada fila con un gasto existente (por OT, si no por fecha+monto+glosa). Lo que calza se ACTUALIZA; el resto se IMPORTA.
@@ -12356,6 +12382,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         {resultado.dupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FFF8E1',borderRadius:20,padding:'4px 11px'}}><b>{resultado.dupOmit}</b> duplicados omitidos</span>}
         {resultado.otDupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FFF8E1',borderRadius:20,padding:'4px 11px'}}><b>{resultado.otDupOmit}</b> con OT ya cargada</span>}
       </div>
+      {notaria&&resultado.nota&&<div style={{display:'flex',gap:8,marginBottom:14}}>
+        <div style={{flex:1,background:C.ambarBg,borderRadius:9,padding:'9px 10px',textAlign:'left'}}><div style={{fontSize:9,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Por pagar a notaría</div><div style={{fontSize:15,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(resultado.nota.porPagar)}</div></div>
+        <div style={{flex:1,background:C.azulBg,borderRadius:9,padding:'9px 10px',textAlign:'left'}}><div style={{fontSize:9,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Por rendir</div><div style={{fontSize:15,fontWeight:800,color:C.azulInfo}}>{resultado.nota.clientes} cliente{resultado.nota.clientes!==1?'s':''}</div></div>
+      </div>}
       {resultado.sinCliente>0&&<div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.45}}>{notaria?<>Las <strong style={{color:C.text}}>{resultado.sinCliente} sin cliente</strong> quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong>. Resuélvelas ahí con el Asistente IA — la app aprende y no te las vuelve a preguntar.</>:<>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</>}</div>}
       {notaria&&resultado.imported>0&&onNavigate&&<div style={{textAlign:'left',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
         <div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,padding:'8px 12px',background:C.bgPanel,borderBottom:`.5px solid ${C.border}`}}>Próximos pasos</div>
@@ -12366,7 +12396,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Parte por parte: tras Corregir queda el paso de Importar (y viceversa), sin perder el otro */}
       {resultado.corregirDone&&!resultado.importarDone&&resultado.nuevosPend>0&&<button disabled={guardando} onClick={aplicarImportar} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.greenText,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora importa las ${resultado.nuevosPend} nuevas →`}</button>}
       {resultado.importarDone&&!resultado.corregirDone&&resultado.actualizarPend>0&&<button disabled={guardando} onClick={aplicarCorregir} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.azulInfo,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora corrige las ${resultado.actualizarPend} →`}</button>}
-      {notaria&&<button onClick={avisarSocios} disabled={avisadoSocios} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:avisadoSocios?C.done:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:avisadoSocios?'default':'pointer',marginBottom:9}}>{avisadoSocios?'Socios avisados':'Avisar a los socios'}</button>}
+      {notaria&&<div style={{display:'flex',gap:8,marginBottom:9}}>
+        <button onClick={avisarSocios} disabled={avisadoSocios} style={{flex:1,padding:12,borderRadius:10,border:'none',background:avisadoSocios?C.done:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:avisadoSocios?'default':'pointer'}}>{avisadoSocios?'Socios avisados':'Avisar a los socios'}</button>
+        <button onClick={exportarCargaCSV} title='Exporta la carga a CSV' style={{flexShrink:0,padding:'12px 16px',borderRadius:10,border:`1px solid ${C.azulInfo}`,background:'#fff',color:C.azulInfo,fontSize:13,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>CSV</button>
+      </div>}
       <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
       {resultado.concil&&concilBefore&&concilBefore.length>0&&<button onClick={async()=>{ if(await appConfirm('¿Revertir las correcciones de cliente/categoría a como estaban antes?')){ const ok=await onUndoConciliar(concilBefore); if(ok){ setConcilBefore(null); onClose() } } }} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Revertir correcciones ({concilBefore.length})</button>}
       {resultado.batchId&&resultado.imported>0&&<button onClick={()=>setUndoTarget({batchId:resultado.batchId,count:resultado.imported})} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Deshacer importación</button>}
@@ -12407,11 +12440,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{fontSize:10.5,color:C.overdueText,marginTop:2}}>{nP>0?`${nP} ya pagada${nP!==1?'s':''} a la notaría`:''}{nP>0&&nR>0?' · ':''}{nR>0?`${nR} ya rendida${nR!==1?'s':''} al cliente`:''}. Aparecen marcadas abajo; no las cargues sin verlas.</div>
             </div>
           )})()}
-          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend; const anul=(rows||[]).filter(r=>/sin efecto/i.test(r.notas||'')).length; return (
+          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend; const anul=(rows||[]).filter(r=>/sin efecto/i.test(r.notas||'')).length
+            const reconSolas=val.filter(r=>(r.client_id&&r.matchMethod!=='manual')||dupInfo[r.id]?.otState).length; const aprHoy=aprendidasSet.size; return (
             // Hero blanco (canon de la foto): protagonista = Total, con sus partes anidadas (a clientes / sin asignar). Sin azul pleno.
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'13px 15px',marginBottom:12}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:10.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Carga de notaría</span><span style={{fontSize:10.5,color:C.done}}>{val.length} OT{anul?` · ${anul} anulada${anul!==1?'s':''}`:''}</span></div>
-              <div style={{fontSize:27,fontWeight:800,color:C.accent,letterSpacing:-.6,margin:'3px 0 9px',fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>
+              <div style={{fontSize:27,fontWeight:800,color:C.accent,letterSpacing:-.6,margin:'3px 0 8px',fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>
+              {reconSolas>0&&<div style={{display:'inline-flex',alignItems:'center',gap:6,background:C.greenBg,borderRadius:20,padding:'4px 11px',marginBottom:9}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>{reconSolas} de {val.length} reconocidas solas</span>{aprHoy>0&&<span style={{fontSize:10.5,color:C.greenText}}>· {aprHoy} aprendida{aprHoy!==1?'s':''} hoy</span>}</div>}
               <div style={{display:'flex',gap:10,borderTop:`1px solid #EEF1F3`,paddingTop:9}}>
                 <div style={{flex:1}}><div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>A clientes</div><div style={{fontSize:15,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(rend)}</div></div>
                 <div style={{flex:1,borderLeft:`1px solid #EEF1F3`,paddingLeft:10}}><div style={{fontSize:9.5,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Sin asignar aún</div><div style={{fontSize:15,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(sinAsig)}</div></div>
