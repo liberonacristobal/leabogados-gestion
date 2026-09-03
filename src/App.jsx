@@ -11547,6 +11547,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   const _toksNota = s => [...new Set(String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=4 && !_NOTA_STOP.has(w)))]
   const [notaAlias,setNotaAlias] = useState([])   // learnings kind 'notaria_alias': key (requirente/frase) → value (client_id)
   useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_alias').then(({data})=>setNotaAlias(data||[]),()=>{}) },[notaria])
+  // Glosas aprendidas por tipo de trámite (materia normalizada → glosa a rendir). Se aprende al editar una glosa en el preview.
+  const glosaLearnedRef = useRef({})
+  useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_glosa').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); glosaLearnedRef.current=m },()=>{}) },[notaria])
   const notaIdx = useMemo(()=>{ const idx=[]
     clients.forEach(c=>{ if(c.status==='Terminado') return; const t=_toksNota(c.name); if(t.length) idx.push({cid:c.id,t}) })
     ;(clientEntities||[]).forEach(e=>{ if(e.name&&e.client_id){ const t=_toksNota(e.name); if(t.length) idx.push({cid:e.client_id,t}) } })
@@ -11727,6 +11730,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const esFirmaOLawyer = n => { const s=catNorm(n).replace(/\s/g,''); if(!s) return true; return /liberonaescala|escalamarcet|camperomantelli|liberonapena|erasmoignacioescala|martincampero/.test(s) }
   // Glosa a rendir al cliente, armada desde Materia (+ detalle de Observación cuando aporta). La IA la pule y es editable.
   const glosaNotaria = (materia, obs) => {
+    const mk = catNorm(materia); if(mk && glosaLearnedRef.current[mk]) return glosaLearnedRef.current[mk]   // glosa aprendida para este trámite
     let m = String(materia||'').trim().toLowerCase(); if(!m) m='trámite notarial'
     let g = 'Gastos notariales — ' + m
     const o = String(obs||'').trim()
@@ -11929,7 +11933,16 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const nMan = (rows||[]).filter(r=>bucketOf(r)==='man').length
   const dups = (rows||[]).filter(r=>r.dup)
   const totalMonto = (rows||[]).filter(r=>!r.error).reduce((a,r)=>a+(r.monto||0),0)
-  const editarCampo = (rowId,campo,valor) => setRows(p=>p.map(r=>r.id===rowId?{...r,[campo]:valor}:r))
+  const editarCampo = (rowId,campo,valor) => setRows(p=>{
+    const src=p.find(r=>r.id===rowId)
+    // Notaría: al editar la glosa, aprende materia→glosa y la aplica en lote a las OT del mismo trámite no editadas a mano.
+    if(notaria && campo==='concepto' && src){
+      const mk=catNorm(src.materia)
+      if(mk){ glosaLearnedRef.current={...glosaLearnedRef.current,[mk]:valor}; if(!DEMO) setLearningKV('notaria_glosa',mk,valor).catch(()=>{}) }
+      return p.map(r=> r.id===rowId ? {...r,concepto:valor,glosaEdited:true} : (mk && !r.glosaEdited && catNorm(r.materia)===mk) ? {...r,concepto:valor} : r)
+    }
+    return p.map(r=>r.id===rowId?{...r,[campo]:valor}:r)
+  })
 
   const guardar = async(incluirTodo=false) => {
     const target = incluirTodo ? (rows||[]) : listas
