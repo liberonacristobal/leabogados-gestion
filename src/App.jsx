@@ -11769,7 +11769,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const nm = String(nombre||'').replace(/['\\]/g,' ').trim(); if(nm.length<4) return null
     let files=[]
     // Busca por CONTENIDO y por NOMBRE de archivo (la carpeta del cliente suele tener la razón social en el título del doc).
-    try{ const d=await driveCall({action:'search', q:`(fullText contains '${nm}' or title contains '${nm}') and trashed=false`, pageSize:15}); files=d.files||[] }
+    try{ const d=await driveCall({action:'search', q:`(fullText contains '${nm}' or name contains '${nm}') and trashed=false`, pageSize:15}); files=d.files||[] }
     catch(e){ return {error:e.message} }
     if(!files.length) return null
     const cnorm = s => normName(s)
@@ -12129,10 +12129,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         <div style={{fontSize:10,color:C.done,marginTop:2,display:'flex',alignItems:'center',gap:6,fontVariantNumeric:'tabular-nums'}}>{otDe(r)} · {r.fecha?fmtFDMY(r.fecha):'sin fecha'}{oldY&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 7px'}}>OT de {fy}</span>}</div>
         {/* acciones por categoría */}
         {kind==='falta'&&<div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
-          <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{open?'Cerrar':'Asignar cliente'}</button>
-          {!noName&&<button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ asignar(r.id,res.client.id) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.azulInfo}`,borderRadius:8,padding:'6px 12px',cursor:driveBusy===r.id?'default':'pointer'}}>{driveBusy===r.id?'Buscando…':'Buscar en Drive'}</button>}
+          {!noName&&<button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ asignar(r.id,res.client.id) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.azulInfo,border:'none',borderRadius:8,padding:'7px 13px',cursor:driveBusy===r.id?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>{driveBusy===r.id?'Buscando en Drive…':'Buscar en Drive'}</button>}
+          <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{open?'Cerrar':'Asignar a mano'}</button>
           {onCreateOccasional&&!noName&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Nuevo</button>}
-          {driveMsg[r.id]&&<span style={{fontSize:10.5,color:C.muted}}>{driveMsg[r.id]}</span>}
+          {driveMsg[r.id]&&<span style={{fontSize:10.5,fontWeight:600,color:driveMsg[r.id].startsWith('✓')?C.greenText:C.muted}}>{driveMsg[r.id]}</span>}
         </div>}
         {kind==='confirma'&&r.suggestion&&<div style={{display:'flex',gap:7,marginTop:8,alignItems:'center',flexWrap:'wrap'}}>
           <span style={{fontSize:11.5,color:C.text}}>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}%</span>:''}</span>
