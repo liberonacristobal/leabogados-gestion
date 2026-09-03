@@ -13584,7 +13584,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
         <div style={{minWidth:0}}><div style={{fontSize:9,color:C.onNavyLabel,textTransform:'uppercase',letterSpacing:'.04em'}}>Saldo del cliente</div><div style={{fontSize:23,fontWeight:700,color:bal.saldo<0?C.onNavyRed:'#fff',lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmt(bal.saldo)}</div></div>
         <div style={{display:'flex',gap:6,flexShrink:0}}>
-          <button onClick={()=>onAddFondo(selectedClient)} style={{background:C.onNavyBtn,color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Fondo</button>
+          {/* Los fondos NO se agregan a mano: entran solo por conciliación bancaria. Solo queda "+ Gasto". */}
           <button onClick={()=>onAdd(selectedClient)} style={{background:C.onNavyBtn,color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Gasto</button>
         </div>
       </div>
@@ -13941,6 +13941,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [showCargaPag,setShowCargaPag] = useState(false)         // Carga masiva como PÁGINA (no modal): landing con Subir + cargas recientes
   const [cargaOpen,setCargaOpen] = useState(null)                // lote expandido en la página de Carga masiva
   const [cliOrd,setCliOrd] = useState('nombre')                  // orden de la lista de clientes: nombre | saldo | actividad
+  // Abogado del cliente — MISMA fuente que la ficha de Clientes: abogado_responsable, y si no, el responsable de su venta más reciente.
+  const respByClienteFull = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
   // Puentes tras cargar notaría: navegar directo a la sub-vista pedida desde la pantalla de resultado (orphans / deuda / rendir).
   useEffect(()=>{ if(!navTo) return
     setShowCargaPag(false); setNotaMenuOpen(false); setSelectedClient(null); setShowHistorial(false); setShowGastosOficina(false); setShowBuscarClientes(false); setShowReasignar(false); setShowRevision(false)
@@ -14123,7 +14125,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                           ))}
                           {gs.length>12&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'5px'}}>+{gs.length-12} gastos más</div>}
                           <div style={{display:'flex',gap:7,padding:'8px 13px 9px 24px'}}>
-                            <button onClick={()=>onAddFondo&&onAddFondo(c)} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.normal}`,background:'#fff',color:C.greenText,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>+ Registrar fondo</button>
                             <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Ficha</button>
                           </div>
                         </div>}
@@ -14264,7 +14265,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   ? <div style={{color:C.muted,textAlign:'center',padding:22,fontSize:12.5}}>Sin clientes.</div>
                   : (q2||cliOrd!=='nombre')
                     ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{sortCli(list).map(row)}</div>
-                    : (()=>{ const grupos={}; list.forEach(c=>{ const k=c.abogado_responsable||'__sin__'; (grupos[k]=grupos[k]||[]).push(c) }); const order=Object.keys(grupos).sort((a,b)=> a==='__sin__'?1:b==='__sin__'?-1:a.localeCompare(b,'es')); return order.map(k=>{ const cs=sortCli(grupos[k]); const suma=cs.reduce((s,c)=>s+saldoDe(c),0); const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); return (
+                    : (()=>{ const grupos={}; list.forEach(c=>{ const k=respByClienteFull[String(c.id)]||'__sin__'; (grupos[k]=grupos[k]||[]).push(c) }); const order=Object.keys(grupos).sort((a,b)=> a==='__sin__'?1:b==='__sin__'?-1:a.localeCompare(b,'es')); return order.map(k=>{ const cs=sortCli(grupos[k]); const suma=cs.reduce((s,c)=>s+saldoDe(c),0); const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); return (
                         <details key={k} style={{marginBottom:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                           <summary style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer',listStyle:'none'}}>
                             <span style={{width:28,height:28,borderRadius:8,background:pc.bg,color:pc.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{sin?<SIcon n='user' s={15} c={C.grisText}/>:(INICIALES_RESP[k]||String(k)[0])}</span>
