@@ -26787,6 +26787,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const focoSum = lista.reduce((s,m)=>s+(m.monto||0),0)
   // Fuente ÚNICA de la sugerencia de cliente para un abono (misma que usa la fila del detalle): por nombre → por monto (factura calzada) → por monto (única emitida sin pago).
   const sugMov = (m)=>{ const nomDe=cid=>cmap[cid]||clients.find(c=>String(c.id)===String(cid))?.name||'cliente'
+    // Señal más fuerte: el banco nombra el folio en la glosa ("PAGO FACTURA 328") → esa factura (única) y su cliente.
+    const fg=folioGlosa(m); if(fg){ const b=(billing||[]).find(x=>!x.deleted_at&&x.client_id&&String(folioN(x.invoice_no))===String(fg)&&saldoFactura(x)>TOL); if(b) return {cid:b.client_id, nombre:nomDe(b.client_id), via:'glosa', f:b} }
     if(sugerencias[m.id]&&cmap[sugerencias[m.id]]) return {cid:sugerencias[m.id], nombre:cmap[sugerencias[m.id]], via:'nombre', f:null}
     const cm=clientePorMonto(m); if(cm) return {cid:cm.cid, nombre:nomDe(cm.cid), via:'monto', f:cm.factura}
     const fm=facturaPorMontoManual(m); if(fm.length===1){ const f=fm[0]; return {cid:f.client_id, nombre:nomDe(f.client_id), via:'monto', f} }
@@ -27249,8 +27251,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {m.descripcion&&<div style={{fontSize:10,color:C.muted,marginTop:8,lineHeight:1.4}}><b>Glosa:</b> {(m.descripcion||'').slice(0,90)}{(m.descripcion||'').length>90?'…':''}</div>}
                 {sc
                   ? <div style={{background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:11,padding:'11px 12px',marginTop:12}}>
-                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}><span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span><span style={{fontSize:9,fontWeight:700,color:sc.via==='nombre'?C.greenText:C.accent,background:sc.via==='nombre'?C.greenBg:C.azulBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{sc.via==='nombre'?'por el nombre':`calza N°${folioN(sc.f?.invoice_no)||'—'}`}</span></div>
-                      {sc.via==='monto'&&sc.f&&<div style={{fontSize:10.5,color:C.greenText,marginTop:3}}>Factura N°{folioN(sc.f.invoice_no)||'—'}{sc.f.issued_at?` · emitida ${fmtFechaDMY(sc.f.issued_at)}`:''} · monto exacto</div>}
+                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}><span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span><span style={{fontSize:9,fontWeight:700,color:sc.via==='nombre'?C.greenText:C.accent,background:sc.via==='nombre'?C.greenBg:C.azulBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{sc.via==='nombre'?'por el nombre':sc.via==='glosa'?`la glosa: N°${folioN(sc.f?.invoice_no)||'—'}`:`calza N°${folioN(sc.f?.invoice_no)||'—'}`}</span></div>
+                      {(sc.via==='monto'||sc.via==='glosa')&&sc.f&&<div style={{fontSize:10.5,color:C.greenText,marginTop:3}}>Factura N°{folioN(sc.f.invoice_no)||'—'}{sc.f.issued_at?` · emitida ${fmtFechaDMY(sc.f.issued_at)}`:''} · {sc.via==='glosa'?'la glosa del banco nombra el folio':'monto exacto'}</div>}
                       {sc.via==='nombre'&&<div style={{fontSize:10.5,color:C.greenText,marginTop:3}}>Coincide por el nombre de la transferencia</div>}
                       <button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={{marginTop:10,width:'100%',fontSize:12.5,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:9,padding:'10px',cursor:busy===m.id?'default':'pointer'}}>Es {sc.nombre} ✓</button>
                     </div>
@@ -27381,7 +27383,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         <div style={{border:'1px solid #CFE9DD',background:'#F1FAF6',borderRadius:11,padding:'11px 12px'}}>
                           <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}>
                             <span style={{fontSize:13.5,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span>
-                            <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{sc.via==='nombre'?'Por el nombre':'Monto exacto'}</span>
+                            <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{sc.via==='nombre'?'Por el nombre':sc.via==='glosa'?'La glosa nombra el folio':'Monto exacto'}</span>
                           </div>
                           {sc.via==='nombre'
                             ? <div style={{fontSize:10.5,color:C.greenText,marginTop:2}}>Coincide por el nombre de la transferencia</div>
