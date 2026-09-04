@@ -26731,7 +26731,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             <div onClick={go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',display:'flex',alignItems:'center',gap:9}}>
               <SIcon n={icon} s={15} c={ic}/><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{t}</div><div style={{fontSize:10,color:C.muted}}>{s}</div></div>
             </div>)
-          const brk=(n,l,cv)=> n>0 ? <span onClick={(e)=>{e.stopPropagation();goHub(()=>{setSub('abonos');setConcView(cv)})}} style={{fontSize:10,color:C.overdueText,border:`1px solid rgba(163,45,45,.25)`,borderRadius:7,padding:'3px 8px',cursor:'pointer'}}><b style={{fontWeight:800}}>{n}</b> {l}</span> : null
+          const brk=(n,l,cv)=> n>0 ? <span onClick={(e)=>{e.stopPropagation();goHub(()=>{setSub('abonos');setConcView(cv)})}} style={{fontSize:10.5,fontWeight:600,color:C.overdueText,background:C.surface,border:`1px solid rgba(163,45,45,.22)`,borderRadius:8,padding:'5px 10px',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,boxShadow:'0 1px 2px rgba(163,45,45,.06)'}}><b style={{fontWeight:800,fontSize:12}}>{n}</b>{l}<span style={{color:'rgba(163,45,45,.5)',marginLeft:1}}>›</span></span> : null
           return <>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?14:10}}>
               {ioc('exchange',C.greenBg,C.greenText,'Abonos',`${G.nAbo} movimiento${G.nAbo!==1?'s':''}`,()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
