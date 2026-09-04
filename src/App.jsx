@@ -26791,6 +26791,32 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const cm=clientePorMonto(m); if(cm) return {cid:cm.cid, nombre:nomDe(cm.cid), via:'monto', f:cm.factura}
     const fm=facturaPorMontoManual(m); if(fm.length===1){ const f=fm[0]; return {cid:f.client_id, nombre:nomDe(f.client_id), via:'monto', f} }
     return null }
+  // 8b — sugerencia del CARGO en la fila cerrada (antes solo dentro de renderCargoClasificar, al abrir). Reusa cargoSugerencia/matchGrupoPresupuesto y los confirm que ya aprenden por RUT.
+  const cargoInlineSug = (m) => {
+    const stop=e=>e.stopPropagation()
+    const grupo=matchGrupoPresupuesto(m), sug=cargoSugerencia(m)
+    if(grupo&&(!sug||sug.fam!=='oficina')) return (
+      <div onClick={stop} style={{marginTop:8,background:C.greenBg,border:'1px solid #CFE9DD',borderRadius:9,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.greenText}}>Pago agrupado · {grupo.items.length} costos de oficina</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1}}>calza con tu presupuesto · suma exacta</div></div>
+        <button disabled={busy===m.id} onClick={()=>costoOficinaSplit(m,grupo.items)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:busy===m.id?'default':'pointer',flexShrink:0}}>Repartir en {grupo.items.length}</button>
+      </div>)
+    if(!sug) return null
+    if(sug.fam==='oficina'){
+      const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`, canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
+      const viaTxt=sug.via==='RUT'?'por el RUT · siempre lo clasificas así':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'
+      return (
+        <div onClick={stop} style={{marginTop:8,background:C.greenBg,border:'1px solid #CFE9DD',borderRadius:9,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.greenText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Gasto Oficina › {path}</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>✦ {viaTxt}</div></div>
+          <button disabled={busy===m.id} onClick={canConfirm?()=>registrarCargoOficina(m,sug.category,sug.sub||null):()=>setModalMov(m.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>{canConfirm?'Confirmar':'Elegir'}</button>
+        </div>)
+    }
+    const cnm=cmap[sug.clientId]||'cliente'
+    return (
+      <div onClick={stop} style={{marginTop:8,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:9,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cnm}</div><div style={{fontSize:9.5,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
+        <button disabled={busy===m.id} onClick={()=>marcarCargoCliente(m,sug.clientId)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.coralText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Confirmar</button>
+      </div>)
+  }
   // Cola de "Resolver de a uno": abonos sin cliente ni conciliar dentro del foco (respeta filtros/búsqueda de `lista`); los saltados van al final.
   const unoBase = focoKey==='sinid' ? lista.filter(m=>!m.es_interno && !m.cliente_id && !(concByMov[m.id]?.length) && !RESUELTAS_ABO.includes(m.categoria)) : []
   const unoPend = [...unoBase.filter(m=>!unoSkip.has(m.id)), ...unoBase.filter(m=>unoSkip.has(m.id))]
@@ -27318,6 +27344,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   )})()}
                   </div>
                 </div>
+                {!abierto&&m.tipo==='cargo'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria&&cargoInlineSug(m)}
                 {abierto&&(<div style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:5,lineHeight:1.45}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:C.azulInfo,cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
                 {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
