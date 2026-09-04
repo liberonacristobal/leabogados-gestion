@@ -5674,7 +5674,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                       <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderBottom:`1px solid ${C.border}`}}>
                         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:C.done}}>{fmtDA(a.fecha)}{a.nota?` · ${a.nota}`:''}</div></div>
                         <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:disp?C.greenBg:cubre?C.azulBg:C.bgSoft,color:disp?C.normal:cubre?C.accent:C.done}}>{disp?'Disponible':cubre?'En cuotas':'Consumido'}</span>
-                        {disp&&onCubrirCuotas&&<button type='button' onClick={()=>setCubrirAnt(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Aplicar a cuotas</button>}
+                        {disp&&onCubrirCuotas&&<button type='button' onClick={()=>setCubrirAnt(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Imputar a cuotas</button>}
                         {!disp&&cubre&&!a.billing_id&&onFacturarBloque&&<button type='button' onClick={()=>setFacturarAntS(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Emitir factura</button>}
                         {!disp&&cubre&&onDescubrirCuotas&&<button type='button' onClick={()=>onDescubrirCuotas(a.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Deshacer</button>}
                       </div>
@@ -8468,11 +8468,11 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const saldo=saldoBill(b)
     const resto=(m.monto||0)-(m.monto_conciliado||0)
     const aplicado=Math.min(resto,saldo)
-    if(aplicado<=0){ appAlert('Ese movimiento ya no tiene saldo por aplicar.'); return }
+    if(aplicado<=0){ appAlert('Ese movimiento ya no tiene saldo por imputar.'); return }
     const cubre=aplicado>=saldo   // el abono cubre TODO el saldo de la factura → queda pagada; si no, es pago parcial
     const msg = cubre
       ? `¿Conciliar el pago de ${fmt(m.monto)} (${fmtDate(m.fecha)}) con la Factura N° ${folioN(b.invoice_no)}? Quedará pagada y enlazada al movimiento del banco.`
-      : `El pago (${fmt(resto)}) es MENOR que el saldo de la Factura N° ${folioN(b.invoice_no)} (${fmt(saldo)}).\n¿Aplicar ${fmt(aplicado)} como pago PARCIAL? La factura seguirá pendiente con saldo ${fmt(saldo-aplicado)}.`
+      : `El pago (${fmt(resto)}) es MENOR que el saldo de la Factura N° ${folioN(b.invoice_no)} (${fmt(saldo)}).\n¿Imputar ${fmt(aplicado)} como pago PARCIAL? La factura seguirá pendiente con saldo ${fmt(saldo-aplicado)}.`
     if(!await appConfirm(msg)) return
     setPagoBusy(true)
     try{
@@ -10046,8 +10046,8 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
                   </div>
                 )})}
                 <div style={{background:C.bgSoft,padding:'9px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                  <span style={{fontSize:11,color:C.muted}}>Aplicar: <b style={{color:C.text}}>{fmt(totalSel)}</b>{totalSel>0&&!cubre&&montoFac>0&&<span style={{color:C.soon}}> · abono, queda {fmt(montoFac-totalSel)}</span>}</span>
-                  <button onClick={aplicar} disabled={totalSel<=0} style={{height:26,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:11,fontWeight:500,padding:'0 12px',cursor:totalSel>0?'pointer':'not-allowed',opacity:totalSel>0?1:.6}}>{cubre?'Marcar como pagado':'Aplicar abono'}</button>
+                  <span style={{fontSize:11,color:C.muted}}>Imputar: <b style={{color:C.text}}>{fmt(totalSel)}</b>{totalSel>0&&!cubre&&montoFac>0&&<span style={{color:C.soon}}> · abono, queda {fmt(montoFac-totalSel)}</span>}</span>
+                  <button onClick={aplicar} disabled={totalSel<=0} style={{height:26,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:11,fontWeight:500,padding:'0 12px',cursor:totalSel>0?'pointer':'not-allowed',opacity:totalSel>0?1:.6}}>{cubre?'Marcar como pagado':'Imputar abono'}</button>
                 </div>
               </div>
             </div>
