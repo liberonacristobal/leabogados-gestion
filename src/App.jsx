@@ -27463,7 +27463,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   // solo, ofrecemos las facturas con saldo MENOR al pago: conciliar esa factura deja el resto para colocarlo abajo
                   // (Fondo/Saldo a favor/Devolución). Ordenadas por resto más chico = la que más explica el pago. Reversible.
                   // Solo facturas NO pagadas / no conciliadas (facturasParaMov = pool con saldo real; excluye Pagadas y saldo 0). Antes usaba facsAll (todas, incl. pagadas) y colaba facturas ya saldadas.
-                  const factResto=(myConc.length===0&&cands.length===0&&!combo&&!fmg)?(()=>{ const t=Math.abs(m.monto||0); return facturasParaMov(m).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0&&x.saldo<t).map(x=>({...x,resto:t-x.saldo})).sort((a,b)=>a.resto-b.resto).slice(0,4) })():[]
+                  const factResto=(myConc.length===0&&cands.length===0&&!combo&&!fmg)?(()=>{ const t=Math.abs(m.monto||0); return facturasParaMov(m).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0&&x.saldo<t).map(x=>({...x,resto:t-x.saldo})).sort((a,b)=>((a.f.issued_at||'').localeCompare(b.f.issued_at||''))||(a.resto-b.resto)).slice(0,4) })():[]   // FIFO: la más antigua primero; dif como desempate
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
                   // candidato ordenado (RS·mes·cercanía) aunque no sea único → surfacea recurrentes que antes no se sugerían.
                   const showPick=myConc.length===0||resto>TOL; const sug=showPick?(mejorCandidato(m)||cands[0]||null):null
