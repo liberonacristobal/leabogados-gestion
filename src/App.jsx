@@ -27287,9 +27287,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
                   // candidato ordenado (RS·mes·cercanía) aunque no sea único → surfacea recurrentes que antes no se sugerían.
                   const showPick=myConc.length===0||resto>TOL; const sug=showPick?(mejorCandidato(m)||cands[0]||null):null
-                  // La lista uniforme "¿A qué corresponde?" es SIEMPRE visible (ya no se colapsa tras "Otras opciones"): todas las formas de aplicar el pago a la vista.
                   const calceFuerte=!!sug && saldoFactura(sug)===resto
-                  const showOtras=true
+                  // Si HAY una factura sugerida arriba, "¿A qué corresponde?" se repliega tras "No, es otro pago" (lo secundario no compite). Si no hay calce, se muestra abierto.
+                  const hayCalce = showPick && !!sug
+                  const showOtras = !hayCalce || otrasSet.has(m.id)
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>Conciliar</div>
@@ -27311,33 +27312,27 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       {showPick&&<>
                         {sug&&(()=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const sld=saldoFactura(sug); const exacto=sld===resto; const est=estadoFacturaLabel(sug,aplicadoByFactura[sug.id]||0,cartolaHasta); const esReemb=(sug.billing_type||'')==='reembolso'; const rutMatch=[...rutsFac(sug)].some(r=>rutsMov.has(r)); const rsF=sug.receptor_name||cmap[sug.client_id]||cmap[m.cliente_id]||'—'; const cta=m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'; return (
                           <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 10px',marginBottom:6}}>
-                            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                              <div style={{flex:'1 1 150px',minWidth:130}}>
-                                <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>El depósito</div>
-                                <div style={{fontSize:14,fontWeight:700,color:C.greenText}}>+{fmtM(m.monto)}</div>
-                                <div style={{fontSize:10,color:C.muted}}>{fmtFechaDMY(m.fecha)} · {cta}</div>
-                                <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha&&m.cliente_id?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(m.cliente_id)}} style={{color:C.accent,cursor:'pointer'}}>{nomBanco}</span>:nomBanco}{m.rut_contraparte?<> · <Copyable text={m.rut_contraparte} title='Copiar RUT' style={{color:C.text}}>{m.rut_contraparte}</Copyable></>:''}</div>
-                                {m.n_operacion&&<div style={{fontSize:10,color:C.muted}}>N° op. <Copyable text={String(m.n_operacion)} title='Copiar N° operación' style={{color:C.muted}}>{m.n_operacion}</Copyable></div>}
-                                {m.descripcion&&<div style={{fontSize:9.5,color:C.done,marginTop:2,lineHeight:1.35}}>{(m.descripcion||'').slice(0,80)}{(m.descripcion||'').length>80?'…':''}</div>}
-                                {(()=>{ const otros=(movs||[]).filter(x=> String(x.id)!==String(m.id) && x.tipo==='abono' && !x.es_interno && !(concByMov[x.id]?.length) && ((m.cliente_id&&String(x.cliente_id||'')===String(m.cliente_id)) || (m.rut_contraparte&&x.rut_contraparte&&crNormRut(x.rut_contraparte)===crNormRut(m.rut_contraparte)))); if(!otros.length) return null; const tot=otros.reduce((a,x)=>a+((x.monto||0)-(x.monto_conciliado||0)),0); return <div style={{fontSize:9.5,fontWeight:600,color:C.soonText,marginTop:3}}>+ {otros.length} pago{otros.length!==1?'s':''} más de este cliente sin conciliar · {fmtM(tot)}</div> })()}
-                              </div>
-                              <div style={{flex:'1 1 150px',minWidth:130}}>
-                                <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>La factura</div>
-                                <div style={{fontSize:13,fontWeight:700,color:C.accent}}>N°{folioN(sug.invoice_no)||'—'} · {fmtM(sld)}</div>
-                                <div style={{fontSize:10,color:C.muted}}>Emitida {fmtFechaDMY(sug.issued_at)}{sug.due?` · vence ${fmtFechaDMY(sug.due)}`:''}</div>
-                                <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsF}{sug.receptor_rut?<> · <Copyable text={sug.receptor_rut} title='Copiar RUT' style={{color:C.text}}>{sug.receptor_rut}</Copyable></>:''}</div>
-                                <div style={{marginTop:3,display:'flex',gap:4,flexWrap:'wrap'}}>
-                                  {est&&<span style={{fontSize:9,fontWeight:700,borderRadius:6,padding:'1px 6px',background:est.bg,color:est.fg}}>{est.label}</span>}
-                                  {esReemb&&<span style={{fontSize:9,fontWeight:700,borderRadius:6,padding:'1px 6px',background:'#FAECE7',color:C.coralText}}>Reembolso de gastos</span>}
-                                </div>
-                                {sug.concept&&<div style={{fontSize:9.5,color:C.done,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sug.concept}</div>}
-                                {(()=>{ const prev=(conc||[]).filter(c=>String(c.factura_id)===String(sug.id)&&c.tipo_destino==='factura'); if(!prev.length) return null; return <div style={{fontSize:9.5,color:C.greenText,marginTop:2,lineHeight:1.35}}>Abonos previos: {prev.map(c=>{ const mm=(movs||[]).find(x=>String(x.id)===String(c.movimiento_id)); return `${mm?fmtFechaDMY(mm.fecha):'—'} ${fmtM(c.monto_aplicado)}` }).join(' · ')}</div> })()}
-                              </div>
+                            {(()=>{ const bt=`1px solid ${C.bgSoft}`; const lC={fontSize:9,color:C.done,borderTop:bt,padding:'5px 0'}; const vC={fontSize:10.5,color:C.text,borderTop:bt,padding:'5px 0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}; const mC={textAlign:'center',borderTop:bt,padding:'5px 0'}; const ok=<span style={{color:C.greenText,fontWeight:700,fontSize:12}}>✓</span>; return (
+                            <div style={{display:'grid',gridTemplateColumns:'44px 1fr 18px 1fr',gap:'0 6px',alignItems:'center'}}>
+                              <div></div><div style={{fontSize:9,fontWeight:700,color:C.accent,paddingBottom:5}}>Transferencia</div><div style={{fontSize:11,color:C.muted,textAlign:'center',paddingBottom:5}}>→</div><div style={{fontSize:9,fontWeight:700,color:C.accent,paddingBottom:5}}>Factura</div>
+                              <div style={lC}>Monto</div><div style={{...vC,fontSize:13,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>+{fmtM(m.monto)}</div><div style={mC}>{exacto?ok:<span style={{fontSize:8,fontWeight:700,color:C.soonText}}>dif</span>}</div><div style={{...vC,fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>N°{folioN(sug.invoice_no)||'—'} · {fmtM(sld)}</div>
+                              <div style={lC}>Fecha</div><div style={vC}>{fmtFechaDMY(m.fecha)} · {cta}</div><div style={{...mC,color:C.muted}}>·</div><div style={vC}>Emitida {fmtFechaDMY(sug.issued_at)}{sug.due?` · vence ${fmtFechaDMY(sug.due)}`:''}</div>
+                              <div style={lC}>Nombre</div><div style={vC}>{onOpenClientFicha&&m.cliente_id?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(m.cliente_id)}} style={{color:C.accent,cursor:'pointer'}}>{nomBanco}</span>:nomBanco}</div><div style={mC}></div><div style={vC}>{rsF}</div>
+                              <div style={lC}>RUT</div><div style={vC}>{m.rut_contraparte?<Copyable text={m.rut_contraparte} title='Copiar RUT' style={{color:C.text}}>{m.rut_contraparte}</Copyable>:<span style={{color:C.muted}}>—</span>}</div><div style={mC}>{rutMatch?ok:''}</div><div style={vC}>{sug.receptor_rut?<Copyable text={sug.receptor_rut} title='Copiar RUT' style={{color:C.text}}>{sug.receptor_rut}</Copyable>:<span style={{color:C.muted}}>—</span>}</div>
+                            </div>) })()}
+                            {/* Detalle secundario (no se pierde): N° op · estado · reembolso · concepto · descripción · abonos previos · +N pagos */}
+                            <div style={{marginTop:6,display:'flex',flexWrap:'wrap',alignItems:'center',gap:'4px 9px',fontSize:9.5,color:C.done}}>
+                              {!exacto&&<span style={{fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:6,padding:'1px 7px'}}>Dif {fmtM(Math.abs(sld-resto))}</span>}
+                              {m.n_operacion&&<span>N° op. <Copyable text={String(m.n_operacion)} title='Copiar N° operación' style={{color:C.done}}>{m.n_operacion}</Copyable></span>}
+                              {est&&<span style={{fontWeight:700,borderRadius:6,padding:'1px 6px',background:est.bg,color:est.fg}}>{est.label}</span>}
+                              {esReemb&&<span style={{fontWeight:700,borderRadius:6,padding:'1px 6px',background:'#FAECE7',color:C.coralText}}>Reembolso de gastos</span>}
+                              {sug.concept&&<span style={{maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sug.concept}</span>}
                             </div>
+                            {m.descripcion&&<div style={{fontSize:9.5,color:C.done,marginTop:3,lineHeight:1.35}}>{(m.descripcion||'').slice(0,80)}{(m.descripcion||'').length>80?'…':''}</div>}
+                            {(()=>{ const prev=(conc||[]).filter(c=>String(c.factura_id)===String(sug.id)&&c.tipo_destino==='factura'); if(!prev.length) return null; return <div style={{fontSize:9.5,color:C.greenText,marginTop:2,lineHeight:1.35}}>Abonos previos: {prev.map(c=>{ const mm=(movs||[]).find(x=>String(x.id)===String(c.movimiento_id)); return `${mm?fmtFechaDMY(mm.fecha):'—'} ${fmtM(c.monto_aplicado)}` }).join(' · ')}</div> })()}
+                            {(()=>{ const otros=(movs||[]).filter(x=> String(x.id)!==String(m.id) && x.tipo==='abono' && !x.es_interno && !(concByMov[x.id]?.length) && ((m.cliente_id&&String(x.cliente_id||'')===String(m.cliente_id)) || (m.rut_contraparte&&x.rut_contraparte&&crNormRut(x.rut_contraparte)===crNormRut(m.rut_contraparte)))); if(!otros.length) return null; const tot=otros.reduce((a,x)=>a+((x.monto||0)-(x.monto_conciliado||0)),0); return <div style={{fontSize:9.5,fontWeight:600,color:C.soonText,marginTop:3}}>+ {otros.length} pago{otros.length!==1?'s':''} más de este cliente sin conciliar · {fmtM(tot)}</div> })()}
                             <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginTop:7,paddingTop:6,borderTop:`1px solid ${C.bgSoft}`}}>
-                              {rutMatch&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px'}}>✓ Mismo RUT</span>}
-                              <span style={{fontSize:9.5,fontWeight:700,color:exacto?C.greenText:C.soonText,background:exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'2px 8px'}}>{exacto?'✓ Monto exacto':`Dif ${fmtM(Math.abs(sld-resto))}`}</span>
-                              {/* "Es reembolso" SOLO cuando la factura es de gastos/reembolso (para las de honorarios no aplica; lo demás va en "¿A qué corresponde?") */}
+                              {/* El ✓ Mismo RUT / Monto exacto y la Dif ahora van en la grilla y en la línea de detalle. */}
                               {esReemb&&<button disabled={busy===m.id} onClick={()=>setReembFor(reembFor===m.id?null:m.id)} title='La factura es de gastos/reembolso: se marca pagada pero no cuenta como ingreso' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'4px 10px',border:'none',cursor:busy===m.id?'default':'pointer',background:reembFor===m.id?'#FAECE7':C.bgSoft,color:reembFor===m.id?C.coralText:C.muted}}>Es reembolso{reembFor===m.id?' ▴':' ▾'}</button>}
                               <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{marginLeft:'auto',background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 16px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar ahora</button>
                             </div>
@@ -27393,10 +27388,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{fontSize:9.5,color:C.muted,marginTop:5}}>Concilias la factura y el resto lo colocas con los botones de abajo (Fondo por Rendir · Saldo a Favor · Devolución). O usa "Buscar en SII" si la factura del resto no está.</div>
                           </div>
                         )}
-                        <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0 2px',marginTop:1,borderTop:`1px solid ${C.bgSoft}`}}>
-                          <span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>¿A qué corresponde?</span>
-                          {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon}}>Resta {fmtM(resto)}</span>}
-                        </div>
+                        {hayCalce&&!showOtras
+                          ? <button onClick={()=>toggleOtras(m.id)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',marginTop:1,padding:'9px 0 3px',border:'none',borderTop:`1px solid ${C.bgSoft}`,background:'none',color:C.accent,fontSize:11.5,fontWeight:700,cursor:'pointer'}}>No, es otro pago <span style={{color:C.done,fontWeight:400}}>▾</span>{myConc.length>0&&<span style={{marginLeft:'auto',color:C.soon,fontWeight:700}}>Resta {fmtM(resto)}</span>}</button>
+                          : <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0 2px',marginTop:1,borderTop:`1px solid ${C.bgSoft}`}}>
+                              <span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>¿A qué corresponde?</span>
+                              {hayCalce&&<button onClick={()=>toggleOtras(m.id)} style={{fontSize:9.5,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>▴ ocultar</button>}
+                              {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon,marginLeft:'auto'}}>Resta {fmtM(resto)}</span>}
+                            </div>}
                         {showOtras&&<>
                         {(()=>{ const gs=gastosReembolsables(m.cliente_id)
                           const optRow=(icon,ic,ibg,name,hint,onClick,open,extra)=>(<div key={name}><div onClick={busy===m.id?undefined:onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer'}}><span style={{width:26,height:26,borderRadius:7,background:ibg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={15} c={ic}/></span><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{name}</div>{hint&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hint}</div>}</div><span style={{color:C.done,fontSize:13,flexShrink:0}}>{open?'▾':'›'}</span></div>{open&&extra}</div>)
