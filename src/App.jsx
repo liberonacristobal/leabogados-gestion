@@ -26731,19 +26731,31 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             <div onClick={go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',display:'flex',alignItems:'center',gap:9}}>
               <SIcon n={icon} s={15} c={ic}/><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{t}</div><div style={{fontSize:10,color:C.muted}}>{s}</div></div>
             </div>)
-          const brk=(n,l,cv)=> n>0 ? <span onClick={(e)=>{e.stopPropagation();goHub(()=>{setSub('abonos');setConcView(cv)})}} style={{fontSize:10.5,fontWeight:600,color:C.overdueText,background:C.surface,border:`1px solid rgba(163,45,45,.22)`,borderRadius:8,padding:'5px 10px',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,boxShadow:'0 1px 2px rgba(163,45,45,.06)'}}><b style={{fontWeight:800,fontSize:12}}>{n}</b>{l}<span style={{color:'rgba(163,45,45,.5)',marginLeft:1}}>›</span></span> : null
+          // Subsección "Por resolver" (C1): una línea por estado, frase contable completa + su verbo de acción; cada una filtra a su sub-tipo.
+          const prSub=[
+            {n:prSinId,cv:'sinid',t:'Abonos sin cliente asignado',s:'no sabemos de quién es el ingreso',act:'Asignar'},
+            {n:prConf,cv:'porconciliar',t:'Cobros identificados',s:'calzan con una factura emitida · por registrar',act:'Conciliar'},
+            {n:prDesc,cv:'descalces',t:'Abonos sin factura asociada',s:'anticipo, fondo o pago parcial',act:'Clasificar'},
+          ].filter(r=>r.n>0)
           return <>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?14:10}}>
               {ioc('exchange',C.greenBg,C.greenText,'Abonos',`${G.nAbo} movimiento${G.nAbo!==1?'s':''}`,()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
               {ioc('wallet',C.bgSoft,C.accent,'Cargos',`${G.nCar} movimiento${G.nCar!==1?'s':''}`,()=>goHub(()=>setSub('cargos')))}
             </div>
-            <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 7px'}}>Trabajo</div>
             <div onClick={()=>goHub(()=>{setSub('abonos');setConcView(prN>0?'porresolver':'todos')})} style={{cursor:'pointer',border:`1px solid ${prN>0?C.overdueText:C.border}`,background:prN>0?C.overdueBg:C.surface,borderRadius:13,padding:D?'14px 16px':'12px 14px'}}>
               <div style={{fontSize:11.5,fontWeight:700,color:prN>0?C.overdueText:C.greenText}}>{prN>0?'Por resolver':'Todo conciliado'}</div>
               {prN>0?<>
                 <div style={{fontSize:D?22:19,fontWeight:800,color:C.overdueText,letterSpacing:-.4,lineHeight:1,marginTop:3}}>{prN} · {fmtShort(prMonto)}</div>
                 <div style={{fontSize:10.5,color:C.overdueText,opacity:.85,marginTop:3}}>abonos sin cruzar{pr90>0?` · ${fmtShort(pr90)} lleva +90 días`:''}</div>
-                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{brk(prSinId,'sin cliente','sinid')}{brk(prConf,'por confirmar','porconciliar')}{brk(prDesc,'sin factura','descalces')}</div>
+                <div style={{background:C.surface,borderRadius:9,marginTop:10,overflow:'hidden'}}>
+                  {prSub.map((r,i)=>(
+                    <div key={r.cv} onClick={(e)=>{e.stopPropagation();goHub(()=>{setSub('abonos');setConcView(r.cv)})}} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:'pointer'}}>
+                      <span style={{fontSize:16,fontWeight:800,color:C.overdueText,width:22,textAlign:'center',fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{r.t}</div><div style={{fontSize:9.5,color:C.muted}}>{r.s}</div></div>
+                      <span style={{fontSize:9.5,fontWeight:700,color:C.accent,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',whiteSpace:'nowrap',flexShrink:0}}>{r.act} ›</span>
+                    </div>
+                  ))}
+                </div>
               </>:<div style={{fontSize:11,color:C.muted,marginTop:3}}>No hay abonos pendientes de cruzar.</div>}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginTop:D?12:9}}>
