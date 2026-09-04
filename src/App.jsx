@@ -26625,6 +26625,8 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
       else if(concView==='porconciliar') l=l.filter(m=>keepOpen(m)||(tieneCand(m)&&!(concByMov[m.id]?.length)))
       else if(concView==='conciliados') l=l.filter(m=>keepOpen(m)||concByMov[m.id]?.length)
       else if(concView==='descalces') l=l.filter(m=>keepOpen(m)||esDescalce(m))
+      // porresolver = unión: sin identificar + por conciliar + descalces (todos los abonos que faltan cruzar), sin duplicar como categorías separadas.
+      else if(concView==='porresolver') l=l.filter(m=>keepOpen(m)||(!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m))))
     }
     // Búsqueda por RUT / nombre del banco / cliente resuelto.
     if(q.trim()){ const qq=q.trim().toLowerCase(), qd=q.replace(/[^0-9kK]/g,'').toLowerCase()
@@ -26695,14 +26697,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const D=isDesktop
     const cDesc=movs.filter(esDescalce).length
     const goHub=fn=>{ fn(); setHubOpen(false) }
-    // La foto (opción 5A) — todo derivado de fuente única, cero cifra nueva:
-    // antigüedad de lo por conciliar (m.fecha vs hoy), cobertura (done/total), resueltos por la app (conc origen auto), RUT vinculados (aliases), conciliado total ($).
     const _hoyT=Date.now()
-    const aging={a:0,b:0,c:0}
-    movs.forEach(m=>{ if(!(esConciliable(m)&&!(concByMov[m.id]?.length))) return; const t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; const dd=isNaN(t)?9999:(_hoyT-t)/86400000; const v=m.monto||0; if(dd<=30)aging.a+=v; else if(dd<=90)aging.b+=v; else aging.c+=v })
-    const cobertura = resumenConc.total? Math.round(resumenConc.done/resumenConc.total*100):100
-    const autoN = new Set((conc||[]).filter(c=>c.origen==='auto').map(c=>String(c.movimiento_id))).size
-    const montoDone = movs.filter(m=>esConciliable(m)&&(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0)
+    // Por resolver = TODOS los abonos que faltan cruzar (sin identificar + por conciliar + descalces) en UNA sola cosa (no 3 tarjetas paralelas).
+    const porResolverMovs = movs.filter(m=> m.tipo==='abono' && !m.es_interno && !(concByMov[m.id]?.length) && !RESUELTAS_ABO.includes(m.categoria) && (!m.cliente_id || esConciliable(m)))
+    const prN = porResolverMovs.length, prMonto = porResolverMovs.reduce((s,m)=>s+(m.monto||0),0)
+    const prSinId = porResolverMovs.filter(m=>!m.cliente_id).length
+    const prConf = porResolverMovs.filter(m=>m.cliente_id&&tieneCand(m)).length
+    const prDesc = porResolverMovs.filter(m=>m.cliente_id&&!tieneCand(m)).length
+    const pr90 = porResolverMovs.filter(m=>{ const t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; return isNaN(t)?false:((_hoyT-t)/86400000)>90 }).reduce((s,m)=>s+(m.monto||0),0)
     const exportConc = ()=>{ try{
       const rows=[['Fecha','Cuenta','Nombre banco','RUT','Cliente','Monto','Estado','Factura']]
       movs.filter(m=>m.tipo==='abono'&&!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).forEach(m=>{ const cc=concByMov[m.id]||[]; const fac=cc.find(c=>c.tipo_destino==='factura'); const fb=fac&&billing.find(b=>String(b.id)===String(fac.factura_id))
@@ -26711,20 +26713,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const csv=rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\n')
       const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`conciliacion_${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
     }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
-    const cards=[
-      {t:'Abonos',ic:'exchange',s:`${G.nAbo} · ${fmtShort(G.sumAbo)}`,col:C.greenText,bg:C.greenBg,go:()=>goHub(()=>{setSub('abonos');setConcView('todos')})},
-      {t:'Cargos',ic:'wallet',s:`${G.nCar} · ${fmtShort(G.sumCar)}`,col:C.accent,bg:C.azulBg,go:()=>goHub(()=>setSub('cargos'))},
-      {t:'Sin identificar',ic:'id',s:`${G.sinId} sin cliente`,col:C.overdueText,bg:C.overdueBg,go:()=>goHub(()=>{setSub('abonos');setConcView('sinid')})},
-      {t:'Descalces',ic:'alert',s:cDesc?`${cDesc} por revisar`:'Sin descalces',col:C.soonText,bg:C.soonBg,go:()=>goHub(()=>{setSub('abonos');setConcView('descalces')})},
-      {t:'Cargar cartola',ic:'file',s:cartolas.length?`${cartolas.length} cargada${cartolas.length!==1?'s':''}`:'Subir · verificar',col:C.tealText,bg:C.tealBg,go:()=>goHub(()=>setVerCarga(true))},
-      {t:'Sin respaldo',ic:'receipt',s:'Cobradas sin movimiento',col:C.accent,bg:C.azulBg,go:()=>goHub(()=>setCobradasOpen(true))},
-    ]
-    const navCard=c=>(
-      <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
-        <span style={{width:32,height:32,borderRadius:9,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={c.ic} s={17} c={c.col}/></span>
-        <div><div style={{fontSize:14.5,fontWeight:600,color:C.text}}>{c.t}</div><div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{c.s}</div></div>
-      </div>
-    )
     const hubInner=(
       <div style={{maxWidth:D?860:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
         <div style={{display:'flex',alignItems:'center',gap:8,padding:D?'14px 2px 12px':'16px 8px 10px'}}>
@@ -26732,40 +26720,41 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           <div style={{fontSize:D?22:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Conciliación bancaria</div>
           {loading&&<span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>Cargando…</span>}
         </div>
-        {/* La foto (5A): protagonista "Por conciliar" con antigüedad anidada + fila de referencia (cobertura/auto/RUT/conciliado) + exportar. */}
-        <div style={{marginBottom:D?16:11}}>
-          <div onClick={()=>goHub(()=>{setSub('abonos');setConcView('porconciliar')})} style={{cursor:'pointer',background:C.overdueBg,borderRadius:14,padding:D?'16px 18px':'13px 14px'}}>
-            <div style={{fontSize:11.5,fontWeight:600,color:C.overdueText}}>Por conciliar</div>
-            <div style={{fontSize:D?32:26,fontWeight:800,color:C.overdueText,letterSpacing:-.6,lineHeight:1,marginTop:2}}>{fmtShort(resumenConc.montoPend)}</div>
-            <div style={{fontSize:11,color:C.overdueText,opacity:.85,marginTop:3}}>{resumenConc.pend} movimiento{resumenConc.pend!==1?'s':''} · abonos sin cruzar</div>
-            {resumenConc.montoPend>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginTop:11}}>
-              {[{k:'a',l:'0–30 días',v:aging.a,col:C.greenText,bg:'rgba(29,158,117,.16)'},{k:'b',l:'30–90',v:aging.b,col:C.soonText,bg:'rgba(133,79,11,.16)'},{k:'c',l:'+90 días',v:aging.c,col:C.overdueText,bg:'rgba(163,45,45,.18)'}].map(t=>(
-                <div key={t.k} style={{background:t.bg,borderRadius:9,padding:'7px 9px'}}>
-                  <div style={{fontSize:D?15:13,fontWeight:800,color:t.col,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(t.v)}</div>
-                  <div style={{fontSize:8.5,fontWeight:600,color:t.col,marginTop:2}}>{t.l}</div>
-                </div>
-              ))}
-            </div>}
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr 1fr':'1fr 1fr',gap:D?12:8,marginTop:D?12:9}}>
-            {[
-              {l:'Cobertura',v:`${cobertura}%`,sub:`${resumenConc.done}/${resumenConc.total} abonos`,col:C.greenText,go:()=>goHub(()=>{setSub('abonos');setConcView('conciliados')})},
-              {l:'Resueltos por la app',v:autoN,sub:'automáticos',col:C.accent,go:()=>goHub(()=>{setSub('abonos');setConcView('conciliados')})},
-              {l:'RUT vinculados',v:aliases.length,sub:'aprendidos',col:C.accent,go:null},
-              {l:'Conciliado',v:fmtShort(montoDone),sub:'total cruzado',col:C.greenText,go:()=>goHub(()=>{setSub('abonos');setConcView('conciliados')})},
-            ].map((r,i)=>(
-              <div key={i} onClick={r.go||undefined} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'11px 13px':'10px 11px',cursor:r.go?'pointer':'default'}}>
-                <div style={{fontSize:D?18:16,fontWeight:800,color:r.col,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{r.v}</div>
-                <div style={{fontSize:10.5,color:C.text,fontWeight:600,marginTop:4}}>{r.l}</div>
-                <div style={{fontSize:9,color:C.muted,marginTop:1}}>{r.sub}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{display:'flex',justifyContent:'flex-end',marginTop:9}}>
-            <button onClick={exportConc} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Exportar estado (CSV) ↓</button>
-          </div>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr':'1fr 1fr',gap:D?12:8}}>{cards.map(navCard)}</div>
+        {/* Estructura A: Abonos/Cargos (mirar, lo que entró/salió) + UNA "Por resolver" (trabajar) + Sin respaldo/Cargar cartola (utilidades). Sin métricas de vanidad; sin duplicar sin identificar/descalces como tarjetas. */}
+        {(()=>{
+          const ioc=(icon,ibg,ic,t,s,go)=>(
+            <div onClick={go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'12px 13px':'11px 12px',display:'flex',alignItems:'center',gap:10}}>
+              <span style={{width:32,height:32,borderRadius:9,background:ibg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={17} c={ic}/></span>
+              <div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>{t}</div><div style={{fontSize:11,color:C.muted}}>{s}</div></div>
+            </div>)
+          const mini=(icon,ic,t,s,go)=>(
+            <div onClick={go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',display:'flex',alignItems:'center',gap:9}}>
+              <SIcon n={icon} s={15} c={ic}/><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{t}</div><div style={{fontSize:10,color:C.muted}}>{s}</div></div>
+            </div>)
+          const brk=(n,l,cv)=> n>0 ? <span onClick={(e)=>{e.stopPropagation();goHub(()=>{setSub('abonos');setConcView(cv)})}} style={{fontSize:10,color:C.overdueText,border:`1px solid rgba(163,45,45,.25)`,borderRadius:7,padding:'3px 8px',cursor:'pointer'}}><b style={{fontWeight:800}}>{n}</b> {l}</span> : null
+          return <>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?14:10}}>
+              {ioc('exchange',C.greenBg,C.greenText,'Abonos',`${G.nAbo} · lo que entró`,()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
+              {ioc('wallet',C.bgSoft,C.accent,'Cargos',`${G.nCar} · lo que salió`,()=>goHub(()=>setSub('cargos')))}
+            </div>
+            <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 7px'}}>Trabajo</div>
+            <div onClick={()=>goHub(()=>{setSub('abonos');setConcView(prN>0?'porresolver':'todos')})} style={{cursor:'pointer',border:`1px solid ${prN>0?C.overdueText:C.border}`,background:prN>0?C.overdueBg:C.surface,borderRadius:13,padding:D?'14px 16px':'12px 14px'}}>
+              <div style={{fontSize:11.5,fontWeight:700,color:prN>0?C.overdueText:C.greenText}}>{prN>0?'Por resolver':'Todo conciliado'}</div>
+              {prN>0?<>
+                <div style={{fontSize:D?22:19,fontWeight:800,color:C.overdueText,letterSpacing:-.4,lineHeight:1,marginTop:3}}>{prN} · {fmtShort(prMonto)}</div>
+                <div style={{fontSize:10.5,color:C.overdueText,opacity:.85,marginTop:3}}>abonos sin cruzar{pr90>0?` · ${fmtShort(pr90)} lleva +90 días`:''}</div>
+                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{brk(prSinId,'falta cliente','sinid')}{brk(prConf,'confirmar','porconciliar')}{brk(prDesc,'sin factura','descalces')}</div>
+              </>:<div style={{fontSize:11,color:C.muted,marginTop:3}}>No hay abonos pendientes de cruzar.</div>}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginTop:D?12:9}}>
+              {mini('receipt',C.accent,'Sin respaldo','Facturas sin banco',()=>goHub(()=>setCobradasOpen(true)))}
+              {mini('file',C.tealText,'Cargar cartola',cartolas.length?`${cartolas.length} cargada${cartolas.length!==1?'s':''}`:'Subir · verificar',()=>goHub(()=>setVerCarga(true)))}
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',marginTop:10}}>
+              <button onClick={exportConc} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Exportar estado (CSV) ↓</button>
+            </div>
+          </>
+        })()}
       </div>
     )
     if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}</div>
@@ -26776,6 +26765,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // y NO se repiten los tiles "Por resolver" (eso ya lo dijo la tarjeta). Cambiar de foco = una línea de texto.
   // El overview (tarjeta "Abonos", concView==='todos') queda idéntico → el móvil no se rompe.
   const FOCOS={
+    porresolver:{ic:'alert',l:'Por resolver',col:C.overdueText,bg:C.overdueBg},
     porconciliar:{ic:'exchange',l:'Por conciliar',col:C.soonText,bg:C.soonBg},
     sinid:{ic:'id',l:'Sin identificar',col:C.overdueText,bg:C.overdueBg},
     descalces:{ic:'alert',l:'Descalces',col:C.soonText,bg:C.soonBg},
@@ -27065,10 +27055,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
         {/* Dentro de un foco (opción A): cambiar de foco es una línea de texto — no se repiten los tiles que ya dijo la tarjeta. */}
         {sub==='abonos'&&focused&&(()=>{
+          const prTot=chipCounts.sinid+chipCounts.porconciliar+chipCounts.descalces
           const opts=[
-            {v:'porconciliar',l:'Por conciliar',n:chipCounts.porconciliar},
-            {v:'sinid',l:'Sin identificar',n:chipCounts.sinid},
-            {v:'descalces',l:'Descalces',n:chipCounts.descalces},
+            {v:'porresolver',l:'Por resolver',n:prTot},
+            {v:'sinid',l:'Falta cliente',n:chipCounts.sinid},
+            {v:'porconciliar',l:'Confirmar',n:chipCounts.porconciliar},
+            {v:'descalces',l:'Sin factura',n:chipCounts.descalces},
             {v:'conciliados',l:'Conciliados',n:chipCounts.conciliados},
           ]
           return (
