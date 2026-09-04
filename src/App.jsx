@@ -26692,12 +26692,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const cDesc=movs.filter(esDescalce).length
     const goHub=fn=>{ fn(); setHubOpen(false) }
     const cards=[
+      {t:'Abonos',ic:'exchange',s:`${G.nAbo} · ${fmtShort(G.sumAbo)}`,col:C.greenText,bg:C.greenBg,go:()=>goHub(()=>{setSub('abonos');setConcView('todos')})},
+      {t:'Cargos',ic:'wallet',s:`${G.nCar} · ${fmtShort(G.sumCar)}`,col:C.accent,bg:C.azulBg,go:()=>goHub(()=>setSub('cargos'))},
       {t:'Sin identificar',ic:'id',s:`${G.sinId} sin cliente`,col:C.overdueText,bg:C.overdueBg,go:()=>goHub(()=>{setSub('abonos');setConcView('sinid')})},
       {t:'Descalces',ic:'alert',s:cDesc?`${cDesc} por revisar`:'Sin descalces',col:C.soonText,bg:C.soonBg,go:()=>goHub(()=>{setSub('abonos');setConcView('descalces')})},
-      {t:'Cargos',ic:'wallet',s:`${G.nCar} · ${fmtShort(G.sumCar)}`,col:C.accent,bg:C.azulBg,go:()=>goHub(()=>setSub('cargos'))},
       {t:'Cargar cartola',ic:'file',s:cartolas.length?`${cartolas.length} cargada${cartolas.length!==1?'s':''}`:'Subir · verificar',col:C.tealText,bg:C.tealBg,go:()=>goHub(()=>setVerCarga(true))},
       {t:'Sin respaldo',ic:'receipt',s:'Cobradas sin movimiento',col:C.accent,bg:C.azulBg,go:()=>goHub(()=>setCobradasOpen(true))},
-      {t:'Todos los movimientos',ic:'grid',s:`${G.nMov} en total`,col:C.accent,bg:C.azulBg,go:()=>goHub(()=>{setSub('abonos');setConcView('todos')})},
     ]
     const navCard=c=>(
       <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
