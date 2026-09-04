@@ -26734,8 +26734,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const brk=(n,l,cv)=> n>0 ? <span onClick={(e)=>{e.stopPropagation();goHub(()=>{setSub('abonos');setConcView(cv)})}} style={{fontSize:10,color:C.overdueText,border:`1px solid rgba(163,45,45,.25)`,borderRadius:7,padding:'3px 8px',cursor:'pointer'}}><b style={{fontWeight:800}}>{n}</b> {l}</span> : null
           return <>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?14:10}}>
-              {ioc('exchange',C.greenBg,C.greenText,'Abonos',`${G.nAbo} · lo que entró`,()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
-              {ioc('wallet',C.bgSoft,C.accent,'Cargos',`${G.nCar} · lo que salió`,()=>goHub(()=>setSub('cargos')))}
+              {ioc('exchange',C.greenBg,C.greenText,'Abonos',`${G.nAbo} movimiento${G.nAbo!==1?'s':''}`,()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
+              {ioc('wallet',C.bgSoft,C.accent,'Cargos',`${G.nCar} movimiento${G.nCar!==1?'s':''}`,()=>goHub(()=>setSub('cargos')))}
             </div>
             <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 7px'}}>Trabajo</div>
             <div onClick={()=>goHub(()=>{setSub('abonos');setConcView(prN>0?'porresolver':'todos')})} style={{cursor:'pointer',border:`1px solid ${prN>0?C.overdueText:C.border}`,background:prN>0?C.overdueBg:C.surface,borderRadius:13,padding:D?'14px 16px':'12px 14px'}}>
