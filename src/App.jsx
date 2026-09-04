@@ -26743,7 +26743,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               {prN>0?<>
                 <div style={{fontSize:D?22:19,fontWeight:800,color:C.overdueText,letterSpacing:-.4,lineHeight:1,marginTop:3}}>{prN} · {fmtShort(prMonto)}</div>
                 <div style={{fontSize:10.5,color:C.overdueText,opacity:.85,marginTop:3}}>abonos sin cruzar{pr90>0?` · ${fmtShort(pr90)} lleva +90 días`:''}</div>
-                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{brk(prSinId,'falta cliente','sinid')}{brk(prConf,'confirmar','porconciliar')}{brk(prDesc,'sin factura','descalces')}</div>
+                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{brk(prSinId,'sin cliente','sinid')}{brk(prConf,'por confirmar','porconciliar')}{brk(prDesc,'sin factura','descalces')}</div>
               </>:<div style={{fontSize:11,color:C.muted,marginTop:3}}>No hay abonos pendientes de cruzar.</div>}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginTop:D?12:9}}>
@@ -26808,6 +26808,23 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cnm}</div><div style={{fontSize:9.5,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
         <button disabled={busy===m.id} onClick={()=>marcarCargoCliente(m,sug.clientId)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.coralText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Confirmar</button>
       </div>)
+  }
+  // "Por resolver" accionable: acción por fila en el abono CERRADO según su etapa (sin cliente → Es X ✓ / Asignar; por confirmar → Conciliar N°X; sin factura → Imputar). Reusa sugMov/identificar/crearFondoPersonal/reconciliar/mejorCandidato. El buscador vive detrás de "Asignar"/"Otro" (abre la fila).
+  const abonoInlineAcc = (m) => {
+    const stop=e=>e.stopPropagation()
+    const bG={fontSize:10.5,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:7,padding:'5px 11px',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}
+    const bO={fontSize:10.5,fontWeight:700,color:C.accent,background:'transparent',border:`1px solid ${C.accent}`,borderRadius:7,padding:'5px 11px',cursor:'pointer',whiteSpace:'nowrap'}
+    const bGh={fontSize:10,fontWeight:600,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer',whiteSpace:'nowrap'}
+    const wrap=kids=><div onClick={stop} style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:7}}>{kids}</div>
+    if(!m.cliente_id){
+      const sc=sugMov(m)
+      if(sc) return wrap(<><button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={bG}>Es {(sc.nombre||'').length>16?(sc.nombre.slice(0,16)+'…'):sc.nombre} ✓</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Otro ›</button></>)
+      return wrap(<><button onClick={()=>setModalMov(m.id)} style={bO}>Asignar cliente</button><span onClick={stop} style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{fontSize:9,color:C.done}}>o fondo:</span><select disabled={busy===m.id} value='' onChange={e=>{ const p=e.target.value; e.target.value=''; if(p) crearFondoPersonal(m,p) }} style={{fontSize:9.5,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',background:'#fff',color:C.accent,cursor:'pointer'}}><option value=''>equipo…</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(p=><option key={p} value={p}>{p}</option>)}</select></span></>)
+    }
+    if(tieneCand(m)){ const f=mejorCandidato(m)||candidatosMostrar(m)[0]; if(f) return wrap(<><button disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={bG}>Conciliar N°{folioN(f.invoice_no)||'—'}</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Ver ›</button></>) }
+    const t=Math.abs(m.monto||0); const parc=facturasParaMov(m).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>t).sort((a,b)=>(a.f.issued_at||'').localeCompare(b.f.issued_at||''))[0]
+    if(parc) return wrap(<><button disabled={busy===m.id} onClick={()=>reconciliar(m,parc.f,'manual')} style={bO}>Imputar a N°{folioN(parc.f.invoice_no)||'—'}</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Otra opción ›</button></>)
+    return wrap(<button onClick={()=>setModalMov(m.id)} style={bO}>Resolver ›</button>)
   }
   // Cola de "Resolver de a uno": abonos sin cliente ni conciliar dentro del foco (respeta filtros/búsqueda de `lista`); los saltados van al final.
   const unoBase = focoKey==='sinid' ? lista.filter(m=>!m.es_interno && !m.cliente_id && !(concByMov[m.id]?.length) && !RESUELTAS_ABO.includes(m.categoria)) : []
@@ -27058,8 +27075,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const prTot=chipCounts.sinid+chipCounts.porconciliar+chipCounts.descalces
           const opts=[
             {v:'porresolver',l:'Por resolver',n:prTot},
-            {v:'sinid',l:'Falta cliente',n:chipCounts.sinid},
-            {v:'porconciliar',l:'Confirmar',n:chipCounts.porconciliar},
+            {v:'sinid',l:'Sin cliente',n:chipCounts.sinid},
+            {v:'porconciliar',l:'Por confirmar',n:chipCounts.porconciliar},
             {v:'descalces',l:'Sin factura',n:chipCounts.descalces},
             {v:'conciliados',l:'Conciliados',n:chipCounts.conciliados},
           ]
@@ -27339,6 +27356,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   </div>
                 </div>
                 {!abierto&&m.tipo==='cargo'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria&&cargoInlineSug(m)}
+                {!abierto&&m.tipo==='abono'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m))&&abonoInlineAcc(m)}
                 {abierto&&(<div style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:5,lineHeight:1.45}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:C.azulInfo,cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
                 {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
