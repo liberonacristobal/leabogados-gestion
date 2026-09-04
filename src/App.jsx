@@ -27389,7 +27389,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   </div>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
                     <span title={m.descripcion||''} style={{fontSize:11,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliName?(rsId?`${rsId.name}${rsId.rut?` · ${rsId.rut}`:''}`:`${nomBanco}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}`):(m.rut_contraparte||tipoMov(m.descripcion))}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</span>
+                    <span style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+                    {(()=>{ const _pr=m.tipo==='abono'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m)); if(!_pr) return null; const _t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; if(isNaN(_t)) return null; const _d=Math.floor((Date.now()-_t)/86400000); if(_d<30) return null; const _c=_d>90?C.overdueText:C.soonText,_b=_d>90?C.overdueBg:C.soonBg; return <span title={`Sin cruzar hace ${_d} días`} style={{fontSize:9,fontWeight:700,color:_c,background:_b,borderRadius:20,padding:'1px 7px',whiteSpace:'nowrap'}}>{_d>90?'+90 días':`${_d} días`}</span> })()}
                     <span onClick={facObj?(e)=>{e.stopPropagation();setFacChip(facChip===m.id?null:m.id)}:undefined} style={{fontSize:10,fontWeight:600,padding:'1px 8px',borderRadius:20,background:ec.bg,color:ec.c,cursor:facObj?'pointer':'default',flexShrink:0}}>{ec.t}{facObj?(facChip===m.id?' ▴':' ▾'):''}</span>
+                    </span>
                   </div>
                   {facObj&&facChip===m.id&&(()=>{ const paid=facObj.status==='Pagado'; return (
                     <div onClick={e=>e.stopPropagation()} style={{marginTop:6,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 11px'}}>
@@ -27656,7 +27659,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{fontSize:10.5,fontWeight:700,color:C.accent,marginBottom:5}}>Ninguna factura calza sola con {fmtM(m.monto)}. Opciones:</div>
                             {factResto.map(({f,saldo,resto})=>(
                               <div key={f.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`}}>
-                                <span style={{minWidth:0,fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(f.invoice_no)||'—'}</b> · {fmtM(saldo)}{f.issued_at?<span style={{color:C.done}}> · {mesAbbr(f.issued_at)}</span>:''}<br/><span style={{fontSize:10,color:C.tealText}}>+ {fmtM(resto)} queda para gastos / anticipo</span></span>
+                                <span style={{minWidth:0,fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(f.invoice_no)||'—'}</b> · {fmtM(saldo)}{f.receptor_name?<span style={{color:C.muted}}> · {f.receptor_name}</span>:''}<br/><span style={{fontSize:9.5,color:C.done}}>{f.issued_at?`emitida ${fmtFechaDMY(f.issued_at)}`:''}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</span> <span style={{fontSize:10,color:C.tealText}}>· + {fmtM(resto)} para gastos/anticipo</span></span>
                                 <button disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 11px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar esta</button>
                               </div>
                             ))}
