@@ -26687,6 +26687,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Pura presentación — no toca cifras (reusa resumenConc/G/cartolas y los predicados del modelo).
   const [hubOpen,setHubOpen] = useState(!focusMovId&&!openProp)
   useEffect(()=>{ if(focusMovId||openProp) setHubOpen(false) },[focusMovId,openProp])
+  // "Resolver de a uno" (opción 6): bandeja foco para "Sin identificar" — una tarjeta a la vez con la mejor sugerencia adelante.
+  const [unoMode,setUnoMode] = useState(false)
+  const [unoSkip,setUnoSkip] = useState(()=>new Set())
+  const [unoTotal,setUnoTotal] = useState(0)
   const concHub = hubOpen ? (()=>{
     const D=isDesktop
     const cDesc=movs.filter(esDescalce).length
@@ -26744,6 +26748,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const focused = !!focoKey
   const focoMeta = focoKey==='cargos' ? {ic:'wallet',l:'Cargos',col:C.accent,bg:C.azulBg} : FOCOS[focoKey]
   const focoSum = lista.reduce((s,m)=>s+(m.monto||0),0)
+  // Fuente ÚNICA de la sugerencia de cliente para un abono (misma que usa la fila del detalle): por nombre → por monto (factura calzada) → por monto (única emitida sin pago).
+  const sugMov = (m)=>{ const nomDe=cid=>cmap[cid]||clients.find(c=>String(c.id)===String(cid))?.name||'cliente'
+    if(sugerencias[m.id]&&cmap[sugerencias[m.id]]) return {cid:sugerencias[m.id], nombre:cmap[sugerencias[m.id]], via:'nombre', f:null}
+    const cm=clientePorMonto(m); if(cm) return {cid:cm.cid, nombre:nomDe(cm.cid), via:'monto', f:cm.factura}
+    const fm=facturaPorMontoManual(m); if(fm.length===1){ const f=fm[0]; return {cid:f.client_id, nombre:nomDe(f.client_id), via:'monto', f} }
+    return null }
+  // Cola de "Resolver de a uno": abonos sin cliente ni conciliar dentro del foco (respeta filtros/búsqueda de `lista`); los saltados van al final.
+  const unoBase = focoKey==='sinid' ? lista.filter(m=>!m.es_interno && !m.cliente_id && !(concByMov[m.id]?.length) && !RESUELTAS_ABO.includes(m.categoria)) : []
+  const unoPend = [...unoBase.filter(m=>!unoSkip.has(m.id)), ...unoBase.filter(m=>unoSkip.has(m.id))]
+  const unoCur = unoMode ? unoPend[0] : null
   return (
     <div style={{paddingBottom:80,...(isDesktop?{maxWidth:980,margin:'0 auto'}:{})}}>
       {loteConfirm&&<Modal title='Conciliar varias' onClose={()=>!loteBusy&&setLoteConfirm(null)} closeOnBackdrop={false}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></Modal>}
@@ -27135,7 +27149,68 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           )
         })()}
         {/* El "pago en grupo" ya NO se sugiere en la vista principal: vive dentro del detalle de cada transferencia, y solo cuando es un grupo real (no descomponible en 1:1). */}
-        {/* Título de la lista: separa el resumen (arriba) de los movimientos (abajo). */}
+        {/* Resolver de a uno (opción 6): CTA para entrar a la bandeja foco (solo en "Sin identificar"). */}
+        {focoKey==='sinid'&&!unoMode&&unoBase.length>0&&(
+          <button onClick={()=>{setUnoTotal(unoBase.length);setUnoSkip(new Set());setUnoMode(true)}} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:7,width:'100%',marginBottom:11,padding:'11px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+            <SIcon n='id' s={15} c='#fff'/>Resolver de a uno · {unoBase.length}
+          </button>
+        )}
+        {/* Bandeja foco: una tarjeta a la vez, con la mejor sugerencia adelante (sugMov, único). Reusa identificar / crearFondoPersonal / onCotejarSII / AsignarClienteInline. */}
+        {unoMode&&focoKey==='sinid'&&(()=>{
+          if(!unoCur) return (
+            <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'26px 16px',textAlign:'center',marginBottom:12}}>
+              <span style={{width:34,height:34,borderRadius:'50%',background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n='check' s={18} c={C.greenText}/></span>
+              <div style={{fontSize:15,fontWeight:700,color:C.greenText,marginTop:8}}>Todo resuelto</div>
+              <div style={{fontSize:11.5,color:C.muted,marginTop:3}}>No quedan movimientos sin identificar en la cola.</div>
+              <button onClick={()=>{setUnoMode(false);setUnoSkip(new Set())}} style={{marginTop:12,fontSize:12,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 16px',cursor:'pointer'}}>Volver a la lista</button>
+            </div>
+          )
+          const m=unoCur, sc=sugMov(m), mesPago=String(m.fecha||'').slice(0,7)
+          const done=Math.max(0,unoTotal-unoBase.length)
+          const dp=String(m.fecha||'').slice(0,10).split('-'); const MM=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+          const salta=()=>setUnoSkip(s=>new Set(s).add(m.id))
+          return (
+            <div style={{marginBottom:12}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7,padding:'0 2px'}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Resolviendo</span>
+                <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{done} de {unoTotal}</span>
+                <button onClick={()=>setUnoMode(false)} style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Salir a la lista</button>
+              </div>
+              <div style={{height:5,background:C.border,borderRadius:3,overflow:'hidden',marginBottom:12}}><div style={{height:'100%',width:`${unoTotal?Math.round(done/unoTotal*100):0}%`,background:C.greenText,transition:'width .3s'}}/></div>
+              <div style={{border:`1px solid ${C.border}`,borderRadius:13,padding:14}}>
+                <div style={{display:'flex',alignItems:'center',gap:12}}>
+                  <div style={{width:46,textAlign:'center',flexShrink:0,lineHeight:1.05}}><div style={{fontSize:24,fontWeight:800,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:C.muted,fontWeight:600}}>{dp.length>=3?`${MM[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||tipoMov(m.descripcion)}</div><div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.rut_contraparte||'sin RUT'} · {m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</div></div>
+                  <div style={{fontSize:16,fontWeight:800,color:C.greenText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>+{fmtM(m.monto)}</div>
+                </div>
+                {m.descripcion&&<div style={{fontSize:10,color:C.muted,marginTop:8,lineHeight:1.4}}><b>Glosa:</b> {(m.descripcion||'').slice(0,90)}{(m.descripcion||'').length>90?'…':''}</div>}
+                {sc
+                  ? <div style={{background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:11,padding:'11px 12px',marginTop:12}}>
+                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}><span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span><span style={{fontSize:9,fontWeight:700,color:sc.via==='nombre'?C.greenText:C.accent,background:sc.via==='nombre'?C.greenBg:C.azulBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{sc.via==='nombre'?'por el nombre':`calza N°${folioN(sc.f?.invoice_no)||'—'}`}</span></div>
+                      {sc.via==='monto'&&sc.f&&<div style={{fontSize:10.5,color:C.greenText,marginTop:3}}>Factura N°{folioN(sc.f.invoice_no)||'—'}{sc.f.issued_at?` · emitida ${fmtFechaDMY(sc.f.issued_at)}`:''} · monto exacto</div>}
+                      {sc.via==='nombre'&&<div style={{fontSize:10.5,color:C.greenText,marginTop:3}}>Coincide por el nombre de la transferencia</div>}
+                      <button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={{marginTop:10,width:'100%',fontSize:12.5,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:9,padding:'10px',cursor:busy===m.id?'default':'pointer'}}>Es {sc.nombre} ✓</button>
+                    </div>
+                  : <div style={{background:C.soonBg,borderRadius:11,padding:'11px 12px',marginTop:12}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:C.soonText}}>Sin factura que calce</div>
+                      <div style={{fontSize:10.5,color:C.soonText,marginTop:2}}>No está en la app — puede ser una factura antigua.</div>
+                      {onCotejarSII&&<button onClick={()=>onCotejarSII(mesPago)} style={{marginTop:10,width:'100%',fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'10px',cursor:'pointer'}}>Buscar en el SII</button>}
+                    </div>}
+                <div style={{display:'flex',gap:8,alignItems:'center',marginTop:10,flexWrap:'wrap'}}>
+                  <div style={{flex:'1 1 150px',minWidth:0}}><AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>identificar(m,cid)} label='Buscar otro cliente' placeholder='Buscar cliente o RUT…'/></div>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{fontSize:9.5,color:C.done}}>o fondo del equipo:</span><select disabled={busy===m.id} value='' onChange={e=>{ const p=e.target.value; e.target.value=''; if(p) crearFondoPersonal(m,p) }} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',background:'#fff',color:C.accent,cursor:'pointer'}}><option value=''>elegir…</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(p=><option key={p} value={p}>{p}</option>)}</select></span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+                  <span style={{fontSize:10.5,color:C.muted}}>Quedan {unoPend.length}</span>
+                  <button onClick={salta} style={{marginLeft:'auto',fontSize:12,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Saltar →</button>
+                </div>
+              </div>
+              <div style={{fontSize:10,color:C.muted,textAlign:'center',marginTop:9}}>Al confirmar aprende el RUT → los demás con ese RUT se identifican solos.</div>
+            </div>
+          )
+        })()}
+        {/* Título de la lista: separa el resumen (arriba) de los movimientos (abajo). Se oculta en modo bandeja. */}
+        {!unoMode&&<>
         <div style={{display:'flex',alignItems:'center',gap:8,margin:'2px 3px 6px'}}>
           <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Movimientos</span>
           <span style={{fontSize:10,color:C.muted,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{lista.length}</span>
@@ -27234,11 +27309,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         // Sugerencia de cliente como TARJETA clara (protagonista + motivo), NUNCA un chip que asigna a ciegas. Cubre las dos vías:
                         // por NOMBRE de la transferencia, o por MONTO (una factura emitida sin pago que calza exacto). Al confirmar se asigna el
                         // cliente y aparece el card de conciliación "El depósito | La factura · Conciliar ahora" (la fila queda abierta).
-                        const nomDe=cid=>cmap[cid]||clients.find(c=>String(c.id)===String(cid))?.name||'cliente'
-                        let sc=null
-                        if(sugerencias[m.id]&&cmap[sugerencias[m.id]]) sc={cid:sugerencias[m.id], nombre:cmap[sugerencias[m.id]], via:'nombre', f:null}
-                        else { const cm=clientePorMonto(m); if(cm) sc={cid:cm.cid, nombre:nomDe(cm.cid), via:'monto', f:cm.factura}
-                          else { const fm=facturaPorMontoManual(m); if(fm.length===1){ const f=fm[0]; sc={cid:f.client_id, nombre:nomDe(f.client_id), via:'monto', f} } } }
+                        const sc = sugMov(m)
                         if(!sc) return null
                         const fMon = sc.f ? montoFactura(sc.f) : 0
                         return (
@@ -27567,6 +27638,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             )
           })}
         </div>
+        </>}
       </div>
       {revSugOpen&&(
         <div onClick={()=>setRevSugOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
