@@ -24912,7 +24912,7 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
 // cargada (abono del mismo cliente/RUT, monto exacto, fecha cercana al pago). Separa calce exacto (conciliar en lote) /
 // por revisar / sin pago, mes a mes. Concilia reusando onConciliar=reconciliar (fuente única; una Pagado sin respaldo
 // tiene saldoFactura=monto, así que se liga sin cambiar estado ni mandar correo). No re-usa un mismo abono dos veces.
-function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=[],aplicadoByFactura={},onConciliar,busy,onClose}){
+function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=[],aplicadoByFactura={},onConciliar,busy,onOpenClientFicha,onClose}){
   const fmtM = fmt
   const nrm = crNormRut   // normalizador único de RUT
   const cmap = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>m[c.id]=c.name); return m },[clients])
@@ -26731,20 +26731,41 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}</div>
   })() : null
   if(hubOpen) return concHub
+  // Opción A — el interior se enfoca en la tarjeta que abriste: el header ES el contexto (icono + nombre + conteo),
+  // y NO se repiten los tiles "Por resolver" (eso ya lo dijo la tarjeta). Cambiar de foco = una línea de texto.
+  // El overview (tarjeta "Abonos", concView==='todos') queda idéntico → el móvil no se rompe.
+  const FOCOS={
+    porconciliar:{ic:'exchange',l:'Por conciliar',col:C.soonText,bg:C.soonBg},
+    sinid:{ic:'id',l:'Sin identificar',col:C.overdueText,bg:C.overdueBg},
+    descalces:{ic:'alert',l:'Descalces',col:C.soonText,bg:C.soonBg},
+    conciliados:{ic:'check',l:'Conciliados',col:C.greenText,bg:C.greenBg},
+  }
+  const focoKey = sub==='cargos' ? 'cargos' : (concView!=='todos'?concView:null)
+  const focused = !!focoKey
+  const focoMeta = focoKey==='cargos' ? {ic:'wallet',l:'Cargos',col:C.accent,bg:C.azulBg} : FOCOS[focoKey]
+  const focoSum = lista.reduce((s,m)=>s+(m.monto||0),0)
   return (
     <div style={{paddingBottom:80,...(isDesktop?{maxWidth:980,margin:'0 auto'}:{})}}>
       {loteConfirm&&<Modal title='Conciliar varias' onClose={()=>!loteBusy&&setLoteConfirm(null)} closeOnBackdrop={false}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></Modal>}
       <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button onClick={()=>setHubOpen(true)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,letterSpacing:-.4}}>Conciliación bancaria</div>
+          {focused&&focoMeta
+            ? <div style={{display:'flex',alignItems:'center',gap:9,flex:1,minWidth:0}}>
+                <span style={{width:30,height:30,borderRadius:8,background:focoMeta.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={focoMeta.ic} s={16} c={focoMeta.col}/></span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:16,fontWeight:600,color:C.text,lineHeight:1.1}}>{focoMeta.l}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{lista.length} movimiento{lista.length!==1?'s':''} · {fmtShort(focoSum)}</div>
+                </div>
+              </div>
+            : <div style={{fontSize:20,fontWeight:600,color:C.text,letterSpacing:-.4}}>Conciliación bancaria</div>}
           {loading&&<span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>Cargando…</span>}
         </div>
       </div>
 
       <div style={{padding:'14px 20px 0'}}>
-        {/* Cartolas: una sola línea (detalle a la izquierda · cargar a la derecha) */}
-        {cartolas.length>0
+        {/* Cartolas: una sola línea (detalle a la izquierda · cargar a la derecha) — oculta dentro de un foco (Cargar cartola es su propia tarjeta) */}
+        {!focused && (cartolas.length>0
           ? <div style={{marginBottom:12,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgSoft}}>
                 <span onClick={()=>setVerCartolas(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer'}}>
@@ -26770,7 +26791,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 <input type='file' accept='.xlsx,.xls' multiple onChange={e=>{onVerificar(e.target.files); e.target.value=''}} style={{display:'none'}}/>
               </label>
               <button onClick={()=>setVerCarga(true)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>+ Cargar cartolas</button>
-            </div>}
+            </div>)}
 
         {/* Caja de importación — se despliega con "+ Cargar" */}
         {(verCarga||importing)&&(
@@ -26963,8 +26984,29 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         )})()}
         {cobradasOpen&&<CobradasSinRespaldoModal billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onOpenClientFicha={onOpenClientFicha} onClose={()=>setCobradasOpen(false)}/>}
 
-        {/* Por resolver — estados como TILES de color (canon aging), cada uno filtra la lista a su fuente. Conciliados y "pagadas sin respaldo" (facturas, tema aparte) van debajo. */}
-        {sub==='abonos'&&(()=>{
+        {/* Dentro de un foco (opción A): cambiar de foco es una línea de texto — no se repiten los tiles que ya dijo la tarjeta. */}
+        {sub==='abonos'&&focused&&(()=>{
+          const opts=[
+            {v:'porconciliar',l:'Por conciliar',n:chipCounts.porconciliar},
+            {v:'sinid',l:'Sin identificar',n:chipCounts.sinid},
+            {v:'descalces',l:'Descalces',n:chipCounts.descalces},
+            {v:'conciliados',l:'Conciliados',n:chipCounts.conciliados},
+          ]
+          return (
+            <div style={{display:'flex',flexWrap:'wrap',alignItems:'center',fontSize:11,marginBottom:11,padding:'0 2px'}}>
+              <span style={{fontWeight:600,color:C.muted,marginRight:4}}>Ver:</span>
+              {opts.map((o,i)=>{ const on=concView===o.v; return (
+                <span key={o.v} onClick={()=>setConcView(on?'todos':o.v)} style={{cursor:'pointer',color:on?C.accent:C.muted,padding:'2px 4px'}}>
+                  <span style={{fontWeight:on?700:600}}>{o.l}</span> <span style={{fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{o.n}</span>
+                  {i<opts.length-1?<span style={{color:C.border,marginLeft:5}}>·</span>:null}
+                </span>
+              )})}
+            </div>
+          )
+        })()}
+
+        {/* Por resolver — estados como TILES de color (canon aging), cada uno filtra la lista a su fuente. Conciliados y "pagadas sin respaldo" (facturas, tema aparte) van debajo. Solo en el overview (concView==='todos'); dentro de un foco lo reemplaza el cambiador de arriba. */}
+        {sub==='abonos'&&!focused&&(()=>{
           const porc=chipCounts.porconciliar, desc=chipCounts.descalces, sinid=chipCounts.sinid, conc=chipCounts.conciliados
           const pend=porc+desc+sinid, nSug=sugeridosId.length
           const nCobradas=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Pagado'&&(b.billing_type||'')!=='reembolso'&&(aplicadoByFactura[b.id]||0)<(b.amount||0)).length
@@ -27027,8 +27069,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             : <div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:7}}>{valoresInfo.items.map((it,ix)=>(<div key={ix} style={{display:'flex',justifyContent:'space-between',fontSize:10.5,padding:'2px 0'}}><span style={{color:C.text}}>{it.item} <span style={{color:C.done}}>· {it.categoria}</span>{it.vence?<span style={{color:C.soonText}}> · vence {it.vence}</span>:''}</span><span style={{fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtM(it.monto)}</span></div>))}<div style={{fontSize:9,color:C.done,marginTop:5}}>Ya cruzan con los cargos del banco (montos exactos + pagos agrupados).</div></div>)}
         </div>}
 
-        {/* Conciliar en lote: calces exactos y únicos de una; el resto (varios candidatos / sin factura) se cuenta y se resuelve abajo. */}
-        {sub==='abonos'&&(()=>{
+        {/* Conciliar en lote: calces exactos y únicos de una; el resto (varios candidatos / sin factura) se cuenta y se resuelve abajo. Solo en overview o en el foco "Por conciliar" (donde tiene sentido). */}
+        {sub==='abonos'&&(concView==='todos'||concView==='porconciliar')&&(()=>{
           const pend=(movs||[]).filter(m=>esConciliable(m)&&((m.monto||0)-(m.monto_conciliado||0))>TOL)
           if(!pend.length) return null
           const cand=[], revisar=[], sinFac=[]
