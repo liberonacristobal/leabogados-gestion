@@ -17475,17 +17475,25 @@ function facturaCorreoBody(factura, sale, lang, sinCierre=false){
   const rel = relacion ? (esProyecto ? ` en relación al proyecto ${relacion}` : ` en relación a ${relacion}`) : ''
   return `Junto con saludar, adjuntamos la factura N° ${folio}, correspondiente ${desc}${rel}, por ${fmtN(factura.amount)}.${cierre}`
 }
-// Cuerpo para VARIAS facturas del mismo cliente en un solo correo (lista + total). saleOf(f) resuelve la venta de cada factura.
+// Cuerpo para VARIAS facturas del mismo cliente en UN correo: una sola frase que engloba (folios + cuotas + proyecto + total),
+// ordenada de la más antigua a la más nueva, calzando con la cuota de cada DTE. saleOf(f) resuelve la venta de cada factura.
 function facturaCorreoBodyMulti(list, saleOf, lang, amountOf, sinCierre=false){
-  const rows = list.map(f=>({ folio: folioN(f.invoice_no||'')||f.invoice_no||'', glosa: facturaGlosa(f, saleOf?saleOf(f):null), amount: amountOf?amountOf(f):(f.amount||0) }))
+  const arr = [...list].sort((a,b)=> String(a.issued_at||a.due||'').localeCompare(String(b.issued_at||b.due||'')) || String(folioN(a.invoice_no||'')).localeCompare(String(folioN(b.invoice_no||'')),undefined,{numeric:true}))
+  const rows = arr.map(f=>{ const p=facturaGlosaPartes(f, saleOf?saleOf(f):null); const m=String(p.detalle||'').match(/(\d+)\s*(?:de|\/)\s*\d+/i)||String(p.detalle||'').match(/(?:pago|cuota)\s+(\d+)/i); return { folio: folioN(f.invoice_no||'')||f.invoice_no||'', relacion:p.relacion, esProyecto:p.esProyecto, cuotaN:m?m[1]:null, amount: amountOf?amountOf(f):(f.amount||0) } })
   const total = rows.reduce((a,r)=>a+r.amount,0)
+  const listJoin = (a, y) => a.length<=1 ? (a[0]||'') : a.slice(0,-1).join(', ')+` ${y} `+a[a.length-1]
+  const foliosStr = 'N° '+listJoin(rows.map(r=>r.folio), lang==='en'?'and':'y')
+  const nums = rows.map(r=>r.cuotaN)
+  const rels = [...new Set(rows.filter(r=>r.esProyecto&&r.relacion).map(r=>r.relacion))]
   const cierre = sinCierre?'':`\n\n${CORREO_DESPEDIDA(lang)}`
   if(lang==='en'){
-    const items = rows.map(r=>`- Invoice No. ${r.folio} — ${r.glosa||'services rendered'}, ${fmtN(r.amount)}`).join('\n')
-    return `We are pleased to attach the invoices for our legal services:\n${items}\nTotal: ${fmtN(total)}.${cierre}`
+    const pagos = nums.every(Boolean) ? `, corresponding to payments ${listJoin(nums,'and')}` : ''
+    const rel = rels.length===1 ? ` of our professional services in connection with ${rels[0]}` : ' of our professional services'
+    return `We are pleased to attach invoices ${foliosStr}${pagos}${rel}, for a total of ${fmtN(total)}.${cierre}`
   }
-  const items = rows.map(r=>`- Factura N° ${r.folio} — ${r.glosa||'los servicios prestados'}, por ${fmtN(r.amount)}`).join('\n')
-  return `Junto con saludar, adjuntamos las facturas correspondientes a nuestros servicios legales:\n${items}\nTotal: ${fmtN(total)}.${cierre}`
+  const pagos = nums.every(Boolean) ? `, correspondientes a los pagos ${listJoin(nums,'y')}` : ''
+  const rel = rels.length===1 ? ` de nuestros servicios profesionales en relación a ${rels[0]}` : ' de nuestros servicios profesionales'
+  return `Junto con saludar, adjuntamos las facturas ${foliosStr}${pagos}${rel}, por un total de ${fmtN(total)}.${cierre}`
 }
 // Convierte texto (con \n) en párrafos <p> escapados. Fuente única para armar cuerpos de correo.
 const _correoToP = txt => String(txt).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')
@@ -17527,6 +17535,15 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [atts,setAtts]=useState([])   // adjuntos cuando es multi (un PDF por factura)
   const [dteTotals,setDteTotals]=useState(()=>{ const m={}; listF.forEach(f=>{ if(f.dte_xml){ const t=dteMontoTotal(f.dte_xml); if(t!=null) m[f.id]=t } }); return m })   // id factura → MntTotal REAL del DTE (autoridad = el DTE); prima sobre amount del sistema (programado)
   const amountOf=f=>{ const t=dteTotals[f?.id]; return (t!=null)?t:(f?.amount||0) }
+  // Aprender la frase editada: se guarda como PLANTILLA con tokens {folios}/{total} (lo que cambia entre envíos), por cliente + (una|varias) + idioma.
+  // Al reabrir para ese cliente, se reexpande con los folios/total actuales → tu redacción se reusa siempre con las cifras correctas.
+  const learnedTpl=useRef({})
+  const _listJoin=(a,y)=>a.length<=1?(a[0]||''):a.slice(0,-1).join(', ')+` ${y} `+a[a.length-1]
+  const _dynFolios=lg=> multi ? 'N° '+_listJoin([...listF].sort((a,b)=> String(a.issued_at||a.due||'').localeCompare(String(b.issued_at||b.due||'')) || String(folioN(a.invoice_no||'')).localeCompare(String(folioN(b.invoice_no||'')),undefined,{numeric:true})).map(f=>folioN(f.invoice_no||'')||f.invoice_no||''), lg==='en'?'and':'y') : ('N° '+folio)
+  const _dynTotal=()=> fmtN(listF.reduce((a,f)=>a+amountOf(f),0))
+  const _tok=(t,lg)=>String(t).split(_dynFolios(lg)).join('{folios}').split(_dynTotal()).join('{total}')
+  const _untok=(t,lg)=>String(t).split('{folios}').join(_dynFolios(lg)).split('{total}').join(_dynTotal())
+  const applyDefaultBody=lg=>{ const tpl=learnedTpl.current[lg]; setBody(tpl?_untok(tpl,lg):genBody(lg)) }
   // Abre el PDF (base64) en una pestaña para previsualizarlo antes de enviar.
   const verPdf=(base64,nombre)=>{ try{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(_){ appAlert('No se pudo abrir el PDF.') } }
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
@@ -17548,7 +17565,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const destNombre = useMemo(()=>{ const c=(contacts||[]).find(x=>(x.email||'').toLowerCase()===(para||'').toLowerCase()); return (c&&c.nombre)||client?.name||'' },[contacts,para,client])
   useEffect(()=>{ if(!saludoAuto) return; const multi=cc.length>0; setSaludo(lang==='en' ? (multi?'Dear Sir or Madam,':saludoEnDe(destNombre)+',') : (multi?'Estimados,':saludoCli(destNombre)+',')) },[saludoAuto,cc.length,destNombre,lang])
   // Al cambiar de idioma, regenera el cuerpo con la plantilla del idioma (salvo que lo hayas editado a mano).
-  useEffect(()=>{ if(!bodyTocado.current) setBody(genBody(lang)) },[lang])
+  useEffect(()=>{ if(!bodyTocado.current) applyDefaultBody(lang) },[lang])
   useEffect(()=>{ if(!client?.id) return; let alive=true
     supabase.from('contacts').select('nombre,email,principal').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(p=>[...new Set([...p,...ems])]) } },()=>{})
@@ -17564,7 +17581,11 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   // Multi: genera el PDF con timbre de CADA factura, los adjunta todos y guarda su total real.
   useEffect(()=>{ if(!multi) return; let alive=true; (async()=>{ const out=[]; const tot={}; for(const f of listF){ if(!f.dte_xml) continue; try{ const doc=splitSetDTE(f.dte_xml)[0]; if(!doc) continue; const r=await facturaDtePdfBase64(doc); out.push({id:f.id,base64:r.base64,name:`Factura ${folioN(f.invoice_no)||r.folio}.pdf`,mime:'application/pdf'}); if(r.total!=null) tot[f.id]=r.total }catch(_){} } if(alive){ setAtts(out); setDteTotals(m=>({...m,...tot})) } })(); return ()=>{alive=false} },[])
   // Cuando llega el monto real del DTE, regenera el cuerpo (salvo que lo hayas editado a mano) para que el correo coincida con el PDF.
-  useEffect(()=>{ if(!bodyTocado.current) setBody(genBody(lang)) },[dteTotals])
+  useEffect(()=>{ if(!bodyTocado.current) applyDefaultBody(lang) },[dteTotals])
+  // Carga la plantilla aprendida del cliente (una|varias · idioma) y, si no la editaste, la aplica con los folios/total actuales.
+  useEffect(()=>{ if(!client?.id) return; let alive=true; const k=`${client.id}:${multi?'n':'1'}`
+    ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','factura_msg').eq('key',`${k}:${lg}`).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTpl.current[lg]=data.value; if(lg===lang&&!bodyTocado.current) setBody(_untok(data.value,lg)) },()=>{}) })
+    return ()=>{alive=false} },[client?.id])
   const [iaBusy,setIaBusy]=useState(false)
   // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
   const redactarIA=async()=>{ setIaBusy(true)
@@ -17627,6 +17648,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       const viaServer = via==='oficina'
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
+      if(bodyTocado.current&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_msg',key:`${client.id}:${multi?'n':'1'}:${lang}`,value:_tok(body,lang)},{onConflict:'kind,key'}) }catch(_){}   // aprende tu redacción (plantilla con tokens {folios}/{total}) para la próxima (una|varias · idioma)
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
       // (no repetir: la app aprende quién recibe facturas). No pisa contactos existentes.
       if(client?.id){ try{
@@ -17644,7 +17666,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   }
   const fInp={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}
   const lbl={fontSize:10,color:C.muted,fontWeight:600,marginBottom:3}
-  return (<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Enviar {multi?'facturas':'factura'}</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}{multi?` · ${listF.length}`:''}</span></>}</>} onClose={onClose}>
+  return (<Modal fullscreen fsMaxWidth={880} title={<><span style={{color:C.accent}}>Enviar {multi?'facturas':'factura'}</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}{multi?` · ${listF.length}`:''}</span></>}</>} onClose={onClose}>
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div><div style={lbl}>PARA</div><input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp}/>
         {contacts.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:5}}>{[...contacts].sort((a,b)=>{ const ta=(a.email||'').toLowerCase()===(para||'').toLowerCase(), tb=(b.email||'').toLowerCase()===(para||'').toLowerCase(); return (tb-ta)||((b.principal?1:0)-(a.principal?1:0)) }).map(c=>{ const isTo=(c.email||'').toLowerCase()===(para||'').toLowerCase(); return <button key={c.email} type='button' title={c.email} onClick={()=>{ if(isTo) return; if(!para.trim()) setPara(c.email); else addCc(c.email) }} style={{fontSize:10,border:isTo?`0.5px solid ${C.accent}`:`0.5px solid ${C.border}`,background:isTo?C.accent:'#fff',color:isTo?'#fff':C.accent,borderRadius:20,padding:'2px 9px',cursor:isTo?'default':'pointer'}}>{isTo?'✓ ':''}{c.nombre||c.email}</button> })}</div>}
@@ -17668,9 +17690,12 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       <div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
           <span style={{fontSize:10,color:C.muted,fontWeight:600}}>MENSAJE</span>
-          {!multi&&<button type='button' disabled={iaBusy} onClick={redactarIA} style={{fontSize:10,color:C.coralText,background:C.ambarBg,border:'none',borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:iaBusy?'default':'pointer'}}>{iaBusy?'Redactando…':'✦ Redactar con IA'}</button>}
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button type='button' onClick={()=>{ bodyTocado.current=false; setBody(genBody(lang)) }} style={{fontSize:9.5,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>↺ texto sugerido</button>
+            {!multi&&<button type='button' disabled={iaBusy} onClick={redactarIA} style={{fontSize:10,color:C.coralText,background:C.ambarBg,border:'none',borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:iaBusy?'default':'pointer'}}>{iaBusy?'Redactando…':'✦ Redactar con IA'}</button>}
+          </div>
         </div>
-        <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/>
+        <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={11} style={{...fInp,minHeight:210,lineHeight:1.6,resize:'vertical',fontFamily:'inherit'}}/>
       </div>
       <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Include payment (bank transfer) details':'Incluir datos de pago (transferencia)'}</span></label>
       {otroSaldo>0&&<div>
@@ -17711,13 +17736,13 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
               : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>)}
         {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente. Toca uno para verlo.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:(!pdf&&pdfErr)?<div style={{fontSize:9,color:C.overdueText,marginTop:3}}>No pude generar el PDF con timbre: {pdfErr} Puedes adjuntarlo a mano.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
       </div>
-      {/* Vista previa del correo — SIEMPRE visible, se actualiza en vivo con cada opción (idioma, saludo, pago, saldo, fondo). */}
-      <div>
-        <div style={{...lbl,display:'flex',alignItems:'center',gap:6}}>VISTA PREVIA DEL CORREO {(incPago||recordarSaldo||pedirFondo)&&<span style={{fontWeight:600,color:C.greenText}}>· en vivo</span>}</div>
-        <div style={{border:`1px solid ${C.border}`,borderRadius:10,maxHeight:280,overflowY:'auto',background:C.bgSoft,padding:8}}>
+      {/* Vista previa del correo — REPLEGADA por defecto (se abre a demanda); en vivo con cada opción. */}
+      <details>
+        <summary style={{...lbl,display:'flex',alignItems:'center',gap:6,cursor:'pointer',listStyle:'none'}}>VISTA PREVIA DEL CORREO <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:C.muted}}>▾ tocar para ver</span>{(incPago||recordarSaldo||pedirFondo)&&<span style={{fontWeight:600,color:C.greenText}}>· en vivo</span>}</summary>
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,maxHeight:320,overflowY:'auto',background:C.bgSoft,padding:8,marginTop:6}}>
           <div style={{background:'#fff',borderRadius:6}} dangerouslySetInnerHTML={{__html:buildHtml()}}/>
         </div>
-      </div>
+      </details>
       <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?(lang==='en'?'Sending…':'Enviando…'):(lang==='en'?(multi?`Send ${listF.length} invoices`:'Send invoice'):(multi?`Enviar las ${listF.length} facturas`:'Enviar factura'))}</button>
     </div>
   </Modal>)
