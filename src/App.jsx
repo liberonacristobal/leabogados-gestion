@@ -1635,7 +1635,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               })()}
             </div>
             <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-              <button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:40,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:500,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Aplicar y seleccionar listos</button>
+              <button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:40,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:500,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button>
             </div>
           </div>
         </div>
@@ -19594,7 +19594,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
       const partes=[]
       if(addN) partes.push(`Incorporar ${addN} cliente${addN!==1?'s':''} nuevo${addN!==1?'s':''}: ${lista(prev.wouldAdd,addN)}`)
       if(termN) partes.push(`Archivar ${termN} cliente${termN!==1?'s':''} movido${termN!==1?'s':''} a Terminados: ${lista(prev.wouldTerminate,termN)}`)
-      if(!await appConfirm(`Drive propone:\n\n${partes.join('\n\n')}\n\n¿Aplicar? Es reversible.`)){ setSyncMsg('Cancelado — no se aplicó nada.'); setSyncing(false); return }
+      if(!await appConfirm(`Drive propone:\n\n${partes.join('\n\n')}\n\n¿Confirmar los cambios? Es reversible.`)){ setSyncMsg('Cancelado — no se aplicó nada.'); setSyncing(false); return }
       // 2) Aplicar de verdad.
       const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
       if(error) throw error
@@ -24898,7 +24898,7 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
               <div style={{ fontSize:11, color:C.grisText, marginBottom:14 }}>Los marcados se agendan como plazos del proyecto.</div>
             </>}
             <div style={{ display:'flex', gap:8 }}>
-              <button onClick={aplicar} disabled={saving} style={{ flex:1, fontSize:13, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:10, cursor:saving?'default':'pointer' }}>{saving?'Aplicando…':'Aplicar al proyecto'}</button>
+              <button onClick={aplicar} disabled={saving} style={{ flex:1, fontSize:13, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:10, cursor:saving?'default':'pointer' }}>{saving?'Agendando…':'Agendar al proyecto'}</button>
               <button onClick={onClose} style={{ fontSize:13, fontWeight:600, color:C.muted, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 14px', cursor:'pointer' }}>Descartar</button>
             </div>
           </>
