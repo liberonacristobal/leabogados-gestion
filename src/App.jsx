@@ -17632,8 +17632,9 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
     s.push({t:CORREO_DESPEDIDA(lang)})
     return s
   }
-  const cuerpoFull=()=>`${saludo}\n\n${segmentos().map(x=>x.t).join('\n\n')}`   // versión texto plano (los recuadros van como texto)
-  const buildHtml=()=>facturaCorreoShell(`${_correoToP(saludo)}${segmentos().map(x=>x.h?x.h:_correoToP(x.t)).join('')}`, firma, lang)   // HTML: recuadros como cajas
+  const _saludosCierre = lang==='en'?'Best regards,':'Saludos,'
+  const cuerpoFull=()=>`${saludo}\n\n${segmentos().map(x=>x.t).join('\n\n')}\n\n${_saludosCierre}\n${firma?.nombre||user?.name||''}`   // texto plano: cierra con Saludos, + nombre
+  const buildHtml=()=>facturaCorreoShell(`${_correoToP(saludo)}${segmentos().map(x=>x.h?x.h:_correoToP(x.t)).join('')}${_correoToP(_saludosCierre)}`, firma, lang)   // HTML: 'Saludos,' y debajo la firma (que trae el nombre)
   const enviar=async()=>{
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
     setSending(true)
