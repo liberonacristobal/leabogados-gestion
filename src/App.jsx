@@ -27469,6 +27469,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   // Si HAY una factura sugerida arriba, "¿A qué corresponde?" se repliega tras "No, es otro pago" (lo secundario no compite). Si no hay calce, se muestra abierto.
                   const hayCalce = showPick && !!sug
                   const showOtras = !hayCalce || otrasSet.has(m.id)
+                  // Descalce (sin calce exacto): protagonista (la glosa nombra la factura, o el parcial FIFO más antiguo) + contexto cruzado (deuda en facturas, gastos por reembolsar, SII). Solo cuando no hay sug ni conciliación.
+                  const esDesc = !sug && myConc.length===0 && resto>TOL
+                  const deudaFacs = esDesc ? facturasParaMov(m).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0) : []
+                  const deudaSum = deudaFacs.reduce((s,x)=>s+x.saldo,0)
+                  const reembList = esDesc ? gastosReembolsables(m.cliente_id) : []
+                  const reembSum = reembList.reduce((s,g)=>s+(g.amount||0),0)
+                  const gFolio = esDesc ? folioGlosa(m) : null
+                  const folioFac = gFolio ? deudaFacs.find(x=>String(folioN(x.f.invoice_no))===String(gFolio)) : null
+                  // Parcial FIFO: la MÁS ANTIGUA con saldo mayor al pago (pagó de menos) — no la de dif más chica.
+                  const parcialFac = esDesc ? deudaFacs.filter(x=>x.saldo>resto).sort((a,b)=>(a.f.issued_at||'').localeCompare(b.f.issued_at||''))[0] : null
+                  const descProta = folioFac || parcialFac
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>Conciliar</div>
@@ -27554,6 +27565,33 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{fontSize:10,fontWeight:700,color:depSum===facSum?C.greenText:C.soonText,background:depSum===facSum?C.greenBg:C.soonBg,borderRadius:6,padding:'3px 9px',marginTop:6,display:'inline-block'}}>{depSum===facSum?`✓ cuadra exacto · ${fmtM(grp.total)}`:`dif ${fmtM(Math.abs(depSum-facSum))}`}</div>
                           </div>
                         ) })()}
+                        {esDesc&&descProta&&(()=>{ const f=descProta.f; const dif=descProta.saldo-resto; const viaGlosa=!!folioFac; return (
+                          <div onClick={e=>e.stopPropagation()} style={{background:C.ambarBg,border:`1px solid ${C.soon}`,borderRadius:9,padding:'9px 10px',marginBottom:6,display:'flex',alignItems:'center',gap:9}}>
+                            <SIcon n='file' s={14} c={C.soonText}/>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:11.5,fontWeight:700,color:C.soonText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{viaGlosa?`La glosa apunta a la N°${folioN(f.invoice_no)||'—'}`:`Pago parcial de N°${folioN(f.invoice_no)||'—'}`}</div>
+                              <div style={{fontSize:9.5,color:C.soonText,opacity:.9}}>saldo {fmtM(descProta.saldo)}{dif>0?` · pagó ${fmtM(dif)} menos`:dif<0?` · sobran ${fmtM(-dif)}`:''}</div>
+                            </div>
+                            <button disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,color:C.soonText,background:'transparent',border:`1px solid ${C.soonText}`,borderRadius:7,padding:'5px 11px',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Imputar a N°{folioN(f.invoice_no)||'—'}</button>
+                          </div>) })()}
+                        {esDesc&&(deudaFacs.length>0||reembSum>0||onBuscarSII)&&(()=>{
+                          const searchSvg=<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='2.2' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>
+                          const rows=[]
+                          if(deudaFacs.length>0) rows.push({icon:<SIcon n='wallet' s={13} c={C.overdueText}/>,c:C.overdueText,lab:`Deuda del cliente · ${deudaFacs.length} factura${deudaFacs.length!==1?'s':''}`,val:fmtM(deudaSum),on:()=>{ if(otraFacFor!==m.id) setOtraFacFor(m.id) }})
+                          if(reembSum>0) rows.push({icon:<SIcon n='receipt' s={13} c={C.tealText}/>,c:C.tealText,lab:'Gastos por reembolsar',val:fmtM(reembSum),on:()=>{ let acc=0; const sel=new Set(); for(const g of reembList){ if(acc>=resto) break; sel.add(g.id); acc+=(g.amount||0) } setDevolSel(sel); setDevolFor(m.id) }})
+                          if(onBuscarSII) rows.push({icon:searchSvg,c:C.azulInfo,lab:'Buscar en el SII',val:String(m.fecha||'').slice(0,7),on:()=>buscarMovSII(m)})
+                          return (
+                          <div onClick={e=>e.stopPropagation()} style={{marginBottom:6}}>
+                            <div style={{fontSize:8.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4,margin:'2px 1px 2px'}}>Contexto</div>
+                            {rows.map((r,i)=>(
+                              <div key={i} onClick={busy===m.id?undefined:r.on} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 6px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',borderRadius:7,cursor:busy===m.id?'default':'pointer'}}>
+                                {r.icon}
+                                <span style={{flex:1,minWidth:0,fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.lab}</span>
+                                <span style={{fontSize:11,fontWeight:700,color:r.c,fontVariantNumeric:'tabular-nums'}}>{r.val}</span>
+                                <span style={{color:C.done,fontSize:12,flexShrink:0}}>›</span>
+                              </div>
+                            ))}
+                          </div>) })()}
                         {factResto.length>0&&(
                           <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',marginBottom:6}} onClick={e=>e.stopPropagation()}>
                             <div style={{fontSize:10.5,fontWeight:700,color:C.accent,marginBottom:5}}>Ninguna factura calza sola con {fmtM(m.monto)}. Opciones:</div>
