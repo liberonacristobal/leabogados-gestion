@@ -24693,13 +24693,13 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
 
       {grupos.length===0
         ? <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>{proyectos.length?'Nada con este filtro.':'Aún no hay proyectos. Toca “+ Nuevo” o se irán creando desde tus ventas activas.'}</div>
-        : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+        : <div style={isDesktop?{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, alignItems:'start' }:{ display:'flex', flexDirection:'column', gap:10 }}>
             {grupos.map(g=>{
               const terminadoG = fase==='terminados'
-              if(g.proyectos.length===1) return <div key={g.cliente_id} style={{ background:'#fff', border:`1px solid ${g.fijado&&!terminadoG?C.accent:C.border}`, borderRadius:12, overflow:'hidden' }}>{renderProyecto(g.proyectos[0],false)}</div>
+              if(g.proyectos.length===1) return <div key={g.cliente_id} style={{ background:'#fff', border:`1px solid ${g.fijado&&!terminadoG?C.accent:C.border}`, borderRadius:12, overflow:'hidden', gridColumn:(isDesktop&&openId===g.proyectos[0].id)?'1 / -1':undefined }}>{renderProyecto(g.proyectos[0],false)}</div>
               const abiertoG = grpOpen[g.cliente_id]!==false
               return (
-                <div key={g.cliente_id} style={{ background:'#fff', border:`1px solid ${g.fijado&&!terminadoG?C.accent:C.border}`, borderRadius:12, overflow:'hidden' }}>
+                <div key={g.cliente_id} style={{ background:'#fff', border:`1px solid ${g.fijado&&!terminadoG?C.accent:C.border}`, borderRadius:12, overflow:'hidden', gridColumn:(isDesktop&&g.proyectos.some(p=>String(p.id)===String(openId)))?'1 / -1':undefined }}>
                   <div onClick={()=>setGrpOpen(o=>({...o,[g.cliente_id]:!abiertoG}))} style={{ display:'flex', alignItems:'center', gap:8, padding:'11px 13px', cursor:'pointer' }}>
                     {g.fijado&&!terminadoG&&CHINCHETA}
                     <span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(g.cliente_id) }} style={{ fontSize:14.5, fontWeight:700, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:190 }}>{g.cliente}</span>
