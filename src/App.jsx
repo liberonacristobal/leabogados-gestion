@@ -1052,13 +1052,13 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
   }
 
   if(selected) return (
-    <>
+    <div style={{maxWidth:900,margin:'0 auto'}}>{/* escritorio: ficha centrada, no estirada al ancho del monitor */}
       <Ficha cl={selected}/>
-    </>
+    </div>
   )
 
   return (
-    <div>
+    <div style={{maxWidth:900,margin:'0 auto'}}>{/* escritorio: lista centrada (móvil sin efecto, ancho < 900) */}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bgSoft,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
@@ -1517,7 +1517,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   }
 
   return (
-    <div>
+    <div style={{maxWidth:820,margin:'0 auto'}}>{/* escritorio: columna centrada (feed/form) — no estirar el ancho del teléfono. Móvil: sin efecto (ancho < 820). */}
       {/* Confirmación post-liquidación (PASO 3) */}
       {toast&&(
         <div style={{position:'fixed',top:12,left:0,right:0,zIndex:400,display:'flex',justifyContent:'center',padding:'0 16px',pointerEvents:'none'}}>
