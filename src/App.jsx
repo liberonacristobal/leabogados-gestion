@@ -4146,9 +4146,10 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
                 <div style={{fontSize:10.5,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct}% recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
               </div>
               {open&&s.clientes.slice(0,8).map(c=>(
-                <div key={c.cid} onClick={()=>c.cid&&onOpenClientFicha&&onOpenClientFicha(c.cid)} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 0 6px 14px',borderTop:'0.5px solid #EEF1F3',cursor:'pointer'}}>
-                  <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
-                  <span style={{fontSize:11,color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(c.uf)}</span>
+                <div key={c.cid} onClick={()=>c.cid&&onOpenClientFicha&&onOpenClientFicha(c.cid)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0 6px 14px',borderTop:'0.5px solid #EEF1F3',cursor:'pointer'}}>
+                  <span style={{flex:1,minWidth:0,fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                  <span style={{fontSize:11.5,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(c.uf)}</span>
+                  <span style={{color:C.done,fontSize:12,flexShrink:0}}>›</span>
                 </div>
               ))}
             </div>
@@ -14137,11 +14138,12 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     {ord.map((c,i)=>{ const b=balances[c.id]||{}; const op=descOpen===c.id; const gs=(expenses||[]).filter(e=>String(e.client_id)===String(c.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo); return (
                       <div key={c.id} style={{borderTop:i?`0.5px solid ${C.border}`:'none'}}>
                         <div onClick={()=>setDescOpen(op?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',cursor:'pointer',background:op?C.bgSoft:'#fff'}}>
+                          <SIcon n='alert' s={16} c={C.overdueText}/>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>Gastos {fmtShort(b.gastos||0)} · fondos {fmtShort(b.fondos||0)}</div>
+                            <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                            <div style={{fontSize:10,color:C.done,marginTop:1}}>Gastos {fmtShort(b.gastos||0)} · fondos {fmtShort(b.fondos||0)}</div>
                           </div>
-                          <span style={{fontSize:14,fontWeight:700,color:C.overdueText,flexShrink:0}}>{fmtShort(saldoDe(c))}</span>
+                          <span style={{fontSize:14,fontWeight:700,color:C.overdueText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtShort(saldoDe(c))}</span>
                           <span style={{fontSize:13,color:C.done,flexShrink:0}}>{op?'⌃':'›'}</span>
                         </div>
                         {op&&<div style={{background:'#FBFCFD'}}>
