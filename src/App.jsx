@@ -23237,7 +23237,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
   const visibles = recos.filter(r=>decid[r.cid]!=='descartado')
 
   return (
-    <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?900:560,margin:'0 auto'}}>
+    <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?1000:560,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Repricing</div>
         {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
@@ -23245,29 +23245,42 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
       {visibles.length>0 && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:14,color:'#fff'}}>
         <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Reajuste potencial · {anio}</div>
         <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>+{ufFmt(totalUpliftUF)}/mes</div>
-        <div style={{fontSize:10.5,opacity:.85}}>{visibles.length} asesoría{visibles.length!==1?'s':''} que hoy rinde{visibles.length!==1?'n':''} bajo su consumo. Tú apruebas cada carta.</div>
+        <div style={{fontSize:10.5,opacity:.85}}>{visibles.length} asesoría{visibles.length!==1?'s':''} permanente{visibles.length!==1?'s':''} cobra{visibles.length!==1?'n':''} menos de lo que consume{visibles.length!==1?'n':''}. Tú apruebas cada carta.</div>
       </div>}
       {visibles.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Ninguna asesoría permanente está bajo su consumo. Las tarifas están en línea.</div>}
-      {visibles.map(r=>{ const hoyStr = r.moneda==='CLP' ? f0(parseFloat(r.s.amount_clp)||0) : ufFmt(r.feeUF); const nuevoStr = r.moneda==='CLP' ? f0(Math.round(r.recUF*ufHoy)) : ufFmt(r.recUF); return (
-        <div key={r.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-            <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(r.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(r.cid)}</span>
-            <span style={{fontSize:10.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'3px 9px'}}>+{r.deltaPct}%</span>
+      <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,alignItems:'start'}:undefined}>
+      {visibles.map(r=>{ const hoyStr = r.moneda==='CLP' ? f0(parseFloat(r.s.amount_clp)||0) : ufFmt(r.feeUF); const nuevoStr = r.moneda==='CLP' ? f0(Math.round(r.recUF*ufHoy)) : ufFmt(r.recUF); const deltaStr = r.moneda==='CLP' ? f0(Math.round(r.deltaUF*ufHoy)) : ufFmt(r.deltaUF); return (
+        <div key={r.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px 0',marginBottom:isDesktop?0:10}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+            <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(r.cid)} style={{display:'inline-flex',alignItems:'center',gap:4,minWidth:0,fontSize:14,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(r.cid)}</span>{onOpenClientFicha&&<span style={{color:C.done,fontSize:13,flexShrink:0}}>›</span>}</span>
+            <span style={{flexShrink:0,fontSize:10.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'3px 9px',fontVariantNumeric:'tabular-nums'}}>+{r.deltaPct}% · +{deltaStr}</span>
           </div>
-          <div style={{display:'flex',alignItems:'baseline',gap:8,margin:'8px 0 2px'}}>
-            <span style={{fontSize:13,color:C.done,textDecoration:'line-through'}}>{hoyStr}</span>
-            <span style={{fontSize:16,fontWeight:800,color:C.accent}}>→ {nuevoStr}</span>
-            <span style={{fontSize:11,color:C.muted}}>/mes</span>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',margin:'11px 0 0'}}>
+            <div style={{padding:'9px 12px'}}>
+              <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,marginBottom:3}}>Honorario hoy</div>
+              <div style={{fontSize:16,fontWeight:700,color:C.done,fontVariantNumeric:'tabular-nums',lineHeight:1.1}}>{hoyStr}</div>
+              <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>/mes</div>
+            </div>
+            <div style={{padding:'9px 12px',borderLeft:`1px solid ${C.border}`,background:C.azulBg}}>
+              <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,marginBottom:3}}>Propuesto</div>
+              <div style={{fontSize:16,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',lineHeight:1.1}}>{nuevoStr}</div>
+              <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>/mes</div>
+            </div>
           </div>
-          <div style={{fontSize:11,color:C.muted,lineHeight:1.45}}>Consume ~<b style={{color:C.text}}>{fh(r.avg)}</b>/mes; su plan incluye {fh(r.incl)}. A {tarifaUF} UF/h, el consumo real vale {ufFmt(r.recUF)}.</div>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,marginTop:10}}>
-            {decid[r.cid]==='enviado' && <span style={{marginRight:'auto',fontSize:10.5,fontWeight:700,color:C.greenText}}>Propuesta enviada</span>}
-            <button onClick={()=>descartar(r)} style={{background:'none',border:'none',color:C.done,fontSize:11.5,cursor:'pointer'}}>Descartar</button>
-            <button onClick={()=>verCarta(r)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Preparar carta</button>
-            <button onClick={()=>enviarCarta(r)} disabled={sendingCid===r.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:sendingCid===r.cid?'default':'pointer'}}>{sendingCid===r.cid?'Enviando…':'Enviar al cliente'}</button>
+          <div style={{display:'flex',gap:16,margin:'10px 0 0',flexWrap:'wrap'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:1}}><span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Consumo real</span><span style={{fontSize:11,color:C.text}}><b>{fh(r.avg)}</b>/mes</span></div>
+            <div style={{display:'flex',flexDirection:'column',gap:1}}><span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Plan incluye</span><span style={{fontSize:11,color:C.text,fontWeight:700}}>{fh(r.incl)}</span></div>
+            <div style={{display:'flex',flexDirection:'column',gap:1}}><span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Tarifa</span><span style={{fontSize:11,color:C.text}}><b>{tarifaUF}</b> UF/h</span></div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginTop:12,padding:'11px 0 13px',borderTop:`1px solid ${C.border}`}}>
+            {decid[r.cid]==='enviado' && <span style={{fontSize:10.5,fontWeight:700,color:C.greenText,display:'inline-flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.greenText}}/>Propuesta enviada</span>}
+            <button onClick={()=>descartar(r)} style={{marginRight:'auto',background:'none',border:'none',color:C.muted,fontSize:12,fontWeight:500,cursor:'pointer',padding:0}}>Descartar</button>
+            <button onClick={()=>verCarta(r)} style={{height:34,padding:'0 15px',display:'inline-flex',alignItems:'center',justifyContent:'center',background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:9,fontSize:12.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Ver carta</button>
+            <button onClick={()=>enviarCarta(r)} disabled={sendingCid===r.cid} style={{height:34,padding:'0 15px',display:'inline-flex',alignItems:'center',justifyContent:'center',background:C.accent,color:'#fff',border:`1px solid ${C.accent}`,borderRadius:9,fontSize:12.5,fontWeight:600,cursor:sendingCid===r.cid?'default':'pointer',whiteSpace:'nowrap'}}>{sendingCid===r.cid?'Enviando…':'Enviar'}</button>
           </div>
         </div>
       )})}
+      </div>
       <div style={{fontSize:10,color:C.done,marginTop:12,lineHeight:1.5}}>La carta es un borrador para que la revises y la envíes tú. El copiloto aprende de lo que apruebas y descartas.</div>
     </div>
   )
