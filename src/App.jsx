@@ -7600,7 +7600,7 @@ function DepurarCobradasModal({rows=[], clients=[], respaldoMap={}, onOpenFactur
   const cn = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || '—'
   const fdmy = d => d ? new Date(String(d).slice(0,10)+'T00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'2-digit'}) : '—'
   const fpago = b => b.paid_at||b.payment_date||b.reconciled_at||null
-  const evidencia = b => { const resp=respaldoMap[b.id]||0, ab=b.paid_amount||0; if(resp>=(b.amount||0)&&resp>0) return `Conciliada con el banco · ${fmt(resp)}`; if(ab>0) return `Abonos aplicados · ${fmt(ab)}`; return 'Saldo $0 (sin movimiento)' }
+  const evidencia = b => { const resp=respaldoMap[b.id]||0, ab=b.paid_amount||0; if(resp>=(b.amount||0)&&resp>0) return `Conciliada con el banco · ${fmt(resp)}`; if(ab>0) return `Abonos imputados · ${fmt(ab)}`; return 'Saldo $0 (sin movimiento)' }
   const selRows = rows.filter(r=>sel.has(r.id))
   const totalSel = selRows.reduce((a,r)=>a+(r.amount||0),0)
   return (<>
@@ -8449,7 +8449,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplicado}:x))
       if(cubre) await onStatusChange(b.id,'Pagado',m.fecha,{paid:true,paid_amount:(b.amount||0),payment_method:'Transferencia',payment_ref:m.n_operacion||null,payment_date:m.fecha,reconciled_at:new Date().toISOString()},{skipRespaldoWarn:true})   // marca pagada + metadata (paid/paid_amount/payment_method/ref/reconciled_at) igual que la Conciliación (persistPagoFactura). SOLO si el abono cubre el saldo; en parcial la factura sigue pendiente (respaldo refleja el saldo). skip: ya estamos conciliando
       setPagosFor(null); setOtraFor(null)
-      appAlert(cubre?'Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.':'Pago parcial aplicado. La factura mantiene su saldo restante.')
+      appAlert(cubre?'Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.':'Pago parcial imputado. La factura mantiene su saldo restante.')
     }catch(e){ appAlert('No se pudo conciliar: '+(e.message||e)) }
     setPagoBusy(false)
   }
