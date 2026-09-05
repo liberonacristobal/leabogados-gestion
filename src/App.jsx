@@ -8644,7 +8644,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   // Render de un grupo cliente→razón social (reutilizado por el Bloque 1 y por las otras tabs)
   const renderClientGroup = ({client,byEntity}) => {
     const allBills = Object.values(byEntity).flat()
-    const clientTotal = allBills.reduce((a,b)=>a+(b.amount||0),0)
+    const clientTotal = allBills.reduce((a,b)=>a+montoFactura(b),0)   // DTE, no amount (fuente única; subtotal = Σ filas)
     const nDocs = allBills.length
     const vencidoMonto = allBills.filter(b=>b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
     const isOpen = openClients.has(client.id)
@@ -8668,7 +8668,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
                 <span style={{width:4,height:4,borderRadius:'50%',background:C.muted,display:'inline-block'}}/>
                 {ename}
               </div>
-              <span style={{fontSize:11,fontWeight:700,color:C.muted}}>{fmt(bills.reduce((a,b)=>a+(b.amount||0),0))}</span>
+              <span style={{fontSize:11,fontWeight:700,color:C.muted}}>{fmt(bills.reduce((a,b)=>a+montoFactura(b),0))}</span>
             </div>}
             {bills.map(b=>{
               const prog=b.status==='Programada', anulada=b.status==='Anulada', pagado=b.status==='Pagado', anticipada=b.status==='Anticipada'
@@ -8687,7 +8687,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
                     <div style={{fontSize:11,color:C.done,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{prog?'Programada':`Factura N° ${folioN(b.invoice_no)||'—'}`}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado&&!anticipada)?C.overdue:C.text,whiteSpace:'nowrap'}}>{fmt(b.amount)}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado&&!anticipada)?C.overdue:C.text,whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</div>
                     {diasMini&&<div style={{fontSize:10,fontWeight:600,color:semCol,marginTop:1}}>{diasMini}</div>}
                   </div>
                 </div>
@@ -8696,7 +8696,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
                   <div>Concepto: <b style={{color:C.text}}>{b.concept||'—'}</b></div>
                   {b.receptor_name&&<div>Razón social: <b style={{color:C.text}}>{b.receptor_name}</b>{b.receptor_rut?` · ${b.receptor_rut}`:''}</div>}
                   <div>Emisión: {b.issued_at?fmtFechaDMY(b.issued_at):'—'}{b.due?` · vence ${fmtFechaDMY(b.due)}`:''}{pagado&&b.paid_at?` · pagada ${fmtFechaDMY(b.paid_at)}`:''}</div>
-                  <div>Monto: {fmt(b.amount)}{!pagado&&!anulada&&!prog?` · saldo ${fmt(saldoBill(b))}`:''}</div>
+                  <div>Monto: {fmt(montoFactura(b))}{!pagado&&!anulada&&!prog?` · saldo ${fmt(saldoBill(b))}`:''}</div>
                   {pagado&&(()=>{ const ap=respaldoMap[b.id]||0; const col=ap>=(b.amount||0)&&ap>0?C.greenText:ap>0?C.soonText:C.overdueText; return <div>Respaldo banco: <b style={{color:col}}>{ap>0?`${fmt(ap)}${ap<(b.amount||0)?` de ${fmt(b.amount)}`:''}`:'sin movimiento (marcada a mano)'}</b></div> })()}
                 </div>
                 <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',padding:'0 12px 9px'}}>
@@ -16675,7 +16675,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
         ))}
       </div>
       {Object.keys(grupos).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin facturas.</div>}
-      {Object.entries(grupos).map(([rs,fs])=>{ const abierta=!!openRS[rs]; const rut=(fs.find(b=>b.receptor_rut)||{}).receptor_rut||(clientEntities.find(en=>en.name===rs)||{}).rut||''; const pend=fs.reduce((s,b)=>s+(b.status==='Pagado'?0:((b.amount||0)-(b.paid_amount||0))),0); return (<div key={rs} style={{marginBottom:8}}>
+      {Object.entries(grupos).map(([rs,fs])=>{ const abierta=!!openRS[rs]; const rut=(fs.find(b=>b.receptor_rut)||{}).receptor_rut||(clientEntities.find(en=>en.name===rs)||{}).rut||''; const pend=fs.reduce((s,b)=>s+saldoBill(b),0); return (<div key={rs} style={{marginBottom:8}}>
         <div onClick={()=>setOpenRS(p=>({...p,[rs]:!p[rs]}))} style={{display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${C.border}`,paddingBottom:4,marginBottom:1,cursor:'pointer'}}>
           <span style={{fontSize:14,color:C.done,lineHeight:1,transform:abierta?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}{rut?<span style={{color:C.done,fontWeight:600}}> · {rut}</span>:''}</div></div>
@@ -16692,7 +16692,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
             </div>
             {open&&<div style={{padding:'7px 9px',background:C.bgSoft,borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
               <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{b.billing_type||'honorarios'}</b></span><span>Emisión: <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b></span>{b.due&&<span>Vence: <b style={{color:C.text}}>{fmtFechaDMY(b.due)}</b></span>}</div>
-              <div>Monto: <b style={{color:C.text}}>{fmt(b.amount)}</b> · {pagada?((estB&&estB.label)||'Pagada'):`Saldo ${fmt((b.amount||0)-(b.paid_amount||0))}`}</div>
+              <div>Monto: <b style={{color:C.text}}>{fmt(montoFactura(b))}</b> · {pagada?((estB&&estB.label)||'Pagada'):`Saldo ${fmt(saldoBill(b))}`}</div>
               {v&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Venta / proyecto</span>{onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}</div><div onClick={onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:onOpenSale?'pointer':'default'}}><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</div></div>}
               {pagada&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Pago</span>{c&&onOpenConciliacion&&<span onClick={(ev)=>{ev.stopPropagation();onOpenConciliacion(c.movimiento_id)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver movimiento ↗</span>}</div>
                 {c?<div onClick={onOpenConciliacion?(ev)=>{ev.stopPropagation();onOpenConciliacion(c.movimiento_id)}:undefined} style={{color:C.text,cursor:onOpenConciliacion?'pointer':'default'}}>Transferencia <b>{fmt(c.monto_aplicado)}</b>{mv?` · ${fmtFechaDMY(mv.fecha)} · ${mv.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}${mv.n_operacion?` · N° op. ${mv.n_operacion}`:''}`:''} <span style={{color:C.greenText,fontWeight:600}}>✓ verificado en banco</span></div>
@@ -18082,7 +18082,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
                       <span style={{fontSize:9,color:C.muted,fontWeight:600}}>{g.items.length}</span>
-                      <div style={{fontSize:11,fontWeight:700,color:col}}>{fmt(g.items.reduce((a,b)=>a+(b.amount||0),0))}</div>
+                      <div style={{fontSize:11,fontWeight:700,color:col}}>{fmt(g.items.reduce((a,b)=>a+saldoBill(b),0))}</div>
                     </div>
                   </div>
                   {open&&g.items.map(b=>(
@@ -18095,7 +18095,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                           <DaysBadge due={b.due} status={b.status}/>
                         </div>
                       </div>
-                      <div style={{fontSize:13,fontWeight:600,color:b.status==='Vencido'?C.overdue:C.text,flexShrink:0,marginLeft:12}}>{fmt(b.amount)}</div>
+                      <div style={{fontSize:13,fontWeight:600,color:b.status==='Vencido'?C.overdue:C.text,flexShrink:0,marginLeft:12}}>{fmt(saldoBill(b))}</div>
                       {onEditBilling&&<Chev/>}
                     </div>
                   ))}
@@ -24804,7 +24804,7 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:11}}><b style={{color:C.greenText}}>+{fmtM(c.m.monto)}</b> <span style={{color:C.done}}>· {depLine(c.m)}</span></div>
         <div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap'}}>
-          <span style={{fontSize:9,fontWeight:700,color:c.exacto?C.greenText:C.soonText,background:c.exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'1px 7px'}}>{c.exacto?'✓ monto exacto':`dif ${fmtM(Math.abs(c.resto-(fac.amount||0)))}`}</span>
+          <span style={{fontSize:9,fontWeight:700,color:c.exacto?C.greenText:C.soonText,background:c.exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'1px 7px'}}>{c.exacto?'✓ monto exacto':`dif ${fmtM(Math.abs(c.resto-montoFactura(fac)))}`}</span>
           {c.dias!=null&&<span style={{fontSize:9,fontWeight:600,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'1px 7px'}}>{diasTxt(c.dias)}</span>}
           {c.m.descripcion&&<span style={{fontSize:9,color:C.muted,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.m.descripcion.slice(0,40)}</span>}
         </div>
@@ -27771,7 +27771,7 @@ function CopilotoModal({ role='admin', clients=[], sales=[], billing=[], tasks=[
     let s = `Clientes activos (${cl.length}): ${nombres}.\nTareas abiertas${esAdmin?'':' tuyas'}: ${tksAb.length} (${vencTk} vencidas).`
     if(esAdmin){
       const emit = (billing||[]).filter(b=>!b.deleted_at && b.invoice_no && b.status!=='Programada' && b.status!=='Anulada' && b.billing_type!=='reembolso')
-      const porCobrar = emit.filter(b=>!b.paid_at).reduce((a,b)=>a+(b.amount||0),0)
+      const porCobrar = porCobrarBills(billing||[])   // fuente única (DTE − abonos, excluye NC); antes sumaba b.amount ignorando parciales
       const vencidas = emit.filter(b=>!b.paid_at && b.due && String(b.due).slice(0,10)<hoy).length
       const proy = (proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado)
       s += `\nPor cobrar (facturas emitidas impagas): ${fmt(porCobrar)} · ${vencidas} vencidas.\nProyectos activos en cartera: ${proy.length}.`
