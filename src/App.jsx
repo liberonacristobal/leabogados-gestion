@@ -8441,12 +8441,13 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     try{
       const ins=await supabase.from('conciliacion').insert({movimiento_id:m.id,tipo_destino:'factura',factura_id:b.id,monto_aplicado:aplicado,origen:'manual',marco_pago:cubre}).select().single()
       if(ins.error) throw ins.error
+      if(ins.data?.id && user?.email){ try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',ins.data.id).then(()=>{},()=>{}) }catch(_){} }   // auditoría: quién concilió (resiliente si la columna no existe) — alinea con persistPagoFactura/marcaQuien
       setConcFac(p=>[...p,{factura_id:b.id,movimiento_id:m.id,monto_aplicado:aplicado}])   // refleja el saldo nuevo en vivo
       const movAplicado=(m.monto_conciliado||0)+aplicado
       const estado=((m.monto||0)-movAplicado)<=0?'conciliado':'parcial'
       await supabase.from('cartola_movimientos').update({estado,monto_conciliado:movAplicado}).eq('id',m.id)
       setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplicado}:x))
-      if(cubre) await onStatusChange(b.id,'Pagado',m.fecha,null,{skipRespaldoWarn:true})   // SOLO marca pagada si el abono cubre el saldo; en parcial la factura sigue pendiente. skip: ya estamos conciliando (creando el respaldo)
+      if(cubre) await onStatusChange(b.id,'Pagado',m.fecha,{paid:true,paid_amount:(b.amount||0),payment_method:'Transferencia',payment_ref:m.n_operacion||null,payment_date:m.fecha,reconciled_at:new Date().toISOString()},{skipRespaldoWarn:true})   // marca pagada + metadata (paid/paid_amount/payment_method/ref/reconciled_at) igual que la Conciliación (persistPagoFactura). SOLO si el abono cubre el saldo; en parcial la factura sigue pendiente (respaldo refleja el saldo). skip: ya estamos conciliando
       setPagosFor(null); setOtraFor(null)
       appAlert(cubre?'Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.':'Pago parcial aplicado. La factura mantiene su saldo restante.')
     }catch(e){ appAlert('No se pudo conciliar: '+(e.message||e)) }
