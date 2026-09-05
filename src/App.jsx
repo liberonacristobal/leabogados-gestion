@@ -3836,11 +3836,11 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   },[siiNov,sales,clients,ufRef])
 
   const OPPS = [
-    {k:'dormidos', col:C.soonText, t:'Clientes dormidos', sub:'Activos 9+ meses sin actividad', rows:opp.dormidos, metric:x=>`${fmtUFk(x.uf)} · ${x.meses}m`},
-    {k:'cobranza', col:C.overdue, t:'Cobranza vencida', sub:'Saldo vencido por cliente', rows:opp.cobranza, metric:x=>fmt(x.monto)},
-    {k:'cross', col:C.accent, t:'Cross-sell', sub:'Una sola área de servicio', rows:opp.crossSell, metric:x=>`${fmtUFk(x.uf)} · ${x.area}`},
-    {k:'sinrec', col:C.azulInfo, t:'Top sin recurrencia', sub:'Valiosos sin plan mensual', rows:opp.sinRec, metric:x=>fmtUFk(x.uf)},
-    {k:'winback', col:C.normal, t:'Win-back', sub:'Terminados recuperables (≤18m)', rows:opp.winback, metric:x=>`${fmtUFk(x.uf)} · ${x.meses}m`},
+    {k:'dormidos', col:C.soonText, t:'Clientes dormidos', sub:'Activos 9+ meses sin actividad', rows:opp.dormidos, metric:x=>`${fmtUFk(x.uf)} · ${x.meses}m`, val:x=>fmtUFk(x.uf), ctx:x=>`sin actividad hace ${x.meses}m`},
+    {k:'cobranza', col:C.overdue, t:'Cobranza vencida', sub:'Saldo vencido por cliente', rows:opp.cobranza, metric:x=>fmt(x.monto), val:x=>fmt(x.monto), ctx:x=>'saldo vencido'},
+    {k:'cross', col:C.accent, t:'Cross-sell', sub:'Una sola área de servicio', rows:opp.crossSell, metric:x=>`${fmtUFk(x.uf)} · ${x.area}`, val:x=>fmtUFk(x.uf), ctx:x=>`solo ${x.area}`},
+    {k:'sinrec', col:C.azulInfo, t:'Top sin recurrencia', sub:'Valiosos sin plan mensual', rows:opp.sinRec, metric:x=>fmtUFk(x.uf), val:x=>fmtUFk(x.uf), ctx:x=>'sin plan mensual'},
+    {k:'winback', col:C.normal, t:'Win-back', sub:'Terminados recuperables (≤18m)', rows:opp.winback, metric:x=>`${fmtUFk(x.uf)} · ${x.meses}m`, val:x=>fmtUFk(x.uf), ctx:x=>`terminado hace ${x.meses}m`},
   ]
   const kpiCard = (label,val,col,onClick) => (<div onClick={onClick} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'8px 10px',cursor:onClick?'pointer':'default',position:'relative'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div><div style={{fontSize:16,fontWeight:600,color:col}}>{val}</div>{onClick&&<span aria-hidden="true" style={{position:'absolute',top:7,right:8,fontSize:12,color:C.done}}>›</span>}</div>)
 
@@ -4042,9 +4042,14 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               </div>
               {open&&<div>
                 {o.rows.slice(0,12).map(x=>(
-                  <div key={x.c.id} onClick={()=>x.c.id&&onOpenClientFicha&&onOpenClientFicha(x.c.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 11px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
-                    <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.c.name}</span>
-                    <span style={{fontSize:11,fontWeight:600,color:o.col,flexShrink:0}}>{o.metric(x)}</span>
+                  <div key={x.c.id} onClick={()=>x.c.id&&onOpenClientFicha&&onOpenClientFicha(x.c.id)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 11px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+                    <span style={{width:7,height:7,borderRadius:'50%',background:o.col,flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.c.name}</div>
+                      <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o.ctx(x)}</div>
+                    </div>
+                    <span style={{fontSize:12.5,fontWeight:700,color:o.col,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{o.val(x)}</span>
+                    <span style={{color:C.done,fontSize:13,flexShrink:0}}>›</span>
                   </div>
                 ))}
                 {o.rows.length>12&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'6px'}}>+{o.rows.length-12} más</div>}
@@ -14411,9 +14416,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {pend90.length===0
               ? <div style={{color:C.greenText,textAlign:'center',padding:24,fontSize:12.5,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Nada pendiente hace +90 días.</div>
               : <div style={{display:'flex',flexDirection:'column',gap:8}}>{pend90.map(r=>(
-                  <div key={r.client.id} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 13px'}}>
-                    <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(r.client.id)} style={{flex:1,minWidth:0,cursor:onOpenClientFicha?'pointer':'default'}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.client.name}</div><div style={{fontSize:10.5,fontWeight:500,color:C.soonText}}>{fmt(r.monto)} · {r.dias} días · {r.n} gasto{r.n!==1?'s':''}</div></div>
-                    <button onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(r.client)}} style={{...chipBtn('greenSolid'),flexShrink:0}}>Rendir</button>
+                  <div key={r.client.id} onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(r.client)}} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 13px',cursor:'pointer'}}>
+                    <SIcon n='alert' s={17} c={C.soonText}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(r.client.id)}} style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha?'pointer':'default'}}>{r.client.name}</div>
+                      <div style={{fontSize:10.5,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.n} gasto{r.n!==1?'s':''} sin rendir · más antiguo {r.dias} d</div>
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</div>
+                      <div style={{fontSize:10,fontWeight:700,color:C.accent}}>Rendir ›</div>
+                    </div>
                   </div>
                 ))}</div>}
           </>)
