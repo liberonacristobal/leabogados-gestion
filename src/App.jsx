@@ -23257,14 +23257,17 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const [okCount,setOkCount] = useState({})    // client_id → nº de tandas confirmadas (aprendizaje)
   const [autoCli,setAutoCli] = useState({})    // client_id → true si liberado a automático
   const [sending,setSending] = useState(null)  // client_id en envío
+  const [autoGlobal,setAutoGlobal] = useState(false)   // interruptor GLOBAL: la app envía sola los recordatorios de los clientes liberados (config cobranza_auto; lo lee el edge fn cobranza-auto). Sin esto, "En automático" queda inerte.
+  const [sortBy,setSortBy] = useState({col:'monto',dir:'desc'})   // escritorio: orden de la tabla
+  const [expCli,setExpCli] = useState(null)   // escritorio: cliente con sus facturas desplegadas
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
   useEffect(()=>{
-    if(DEMO){ setRecMap({}); setOkCount({c4:3}); setAutoCli({}); return }
-    supabase.from('learnings').select('kind,key,value').in('kind',['factura_recordado','cobranza_ok','fd_auto']).then(({data})=>{
-      const rm={},ok={},au={}; (data||[]).forEach(r=>{ if(r.kind==='factura_recordado') rm[r.key]=r.value; else if(r.kind==='cobranza_ok') ok[r.key]=Number(r.value)||0; else if(r.kind==='fd_auto'&&String(r.key).startsWith('cobranza:')) au[String(r.key).slice(9)]=true })
-      setRecMap(rm); setOkCount(ok); setAutoCli(au)
+    if(DEMO){ setRecMap({}); setOkCount({c4:3}); setAutoCli({}); setAutoGlobal(false); return }
+    supabase.from('learnings').select('kind,key,value').in('kind',['factura_recordado','cobranza_ok','fd_auto','config']).then(({data})=>{
+      const rm={},ok={},au={}; let ag=false; (data||[]).forEach(r=>{ if(r.kind==='factura_recordado') rm[r.key]=r.value; else if(r.kind==='cobranza_ok') ok[r.key]=Number(r.value)||0; else if(r.kind==='fd_auto'&&String(r.key).startsWith('cobranza:')) au[String(r.key).slice(9)]=true; else if(r.kind==='config'&&r.key==='cobranza_auto') ag=(String(r.value||'').trim()==='on') })
+      setRecMap(rm); setOkCount(ok); setAutoCli(au); setAutoGlobal(ag)
     },()=>{})
   },[])
   // Agrupa las facturas VENCIDAS con acción pendiente hoy por cliente.
@@ -23278,9 +23281,10 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const totalDue = grupos.reduce((a,g)=>a+g.total,0)
   const nFacturas = grupos.reduce((a,g)=>a+g.items.length,0)
 
-  async function enviarCliente(g){
+  async function enviarCliente(g, skipConfirm){
     const cl=clients.find(c=>String(c.id)===String(g.cid)); const to=(cl?.email||'').trim()
     if(!to||!/@/.test(to)){ appAlert('Ese cliente no tiene correo. Agrégalo en su ficha.'); return }
+    if(!skipConfirm && !DEMO && !(await appConfirm(`¿Enviar el recordatorio a ${cn(g.cid)} — ${g.items.length} factura${g.items.length!==1?'s':''}, ${f0(g.total)} — a ${to}? Se envía como tú.`))) return   // compuerta: correo en tu nombre
     setSending(g.cid)
     if(DEMO){ await new Promise(r=>setTimeout(r,400)); const now=new Date().toISOString(); setRecMap(m=>{ const n={...m}; g.items.forEach(({b})=>n[String(b.id)]=now); return n }); setOkCount(o=>({...o,[g.cid]:(o[g.cid]||0)+1})); setSending(null); appAlert('En demo no se envía; se registró la cadencia.'); return }
     let ok=0
@@ -23290,7 +23294,11 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   }
   async function enviarTodos(){
     if(!(await appConfirm(`¿Enviar el recordatorio que corresponde a ${grupos.length} cliente${grupos.length!==1?'s':''} (${nFacturas} factura${nFacturas!==1?'s':''}, ${f0(totalDue)})?`))) return
-    for(const g of grupos){ if(!autoCli[g.cid]) await enviarCliente(g) }
+    for(const g of grupos){ if(!autoCli[g.cid]) await enviarCliente(g, true) }
+  }
+  async function setAutoGlob(v){   // interruptor global (config cobranza_auto) que habilita el envío automático del edge fn
+    const prev=autoGlobal; setAutoGlobal(v); if(DEMO) return
+    try{ await supabase.from('learnings').delete().eq('kind','config').eq('key','cobranza_auto'); await supabase.from('learnings').insert({kind:'config',key:'cobranza_auto',value:v?'on':'off'}) }catch(e){ setAutoGlobal(prev); appAlert('No se pudo guardar: '+e.message) }
   }
   async function liberar(cid){
     if(!(await appConfirm(`¿Liberar la cobranza de ${cn(cid)} a automático? La app enviará sola los recordatorios que correspondan (siempre puedes pausarlo y queda en bitácora).`))) return
@@ -23304,7 +23312,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const NIV = { firme:{bg:C.soonBg,tx:C.soonText,lbl:'Firme'}, final:{bg:C.overdueBg,tx:C.overdueText,lbl:'Final'} }
 
   return (
-    <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?900:560,margin:'0 auto'}}>
+    <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?1040:560,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Cobranza</div>
         {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
@@ -23314,9 +23322,46 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
         <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(totalDue)}</div>
         <div style={{fontSize:10.5,opacity:.85}}>{grupos.length} cliente{grupos.length!==1?'s':''} · {nFacturas} factura{nFacturas!==1?'s':''} vencida{nFacturas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
       </div>
+      <div style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px',marginBottom:12}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Cobranza automática</div><div style={{fontSize:10,color:C.muted}}>{autoGlobal?'La app envía sola los recordatorios de los clientes que liberaste.':'Off — aunque liberes un cliente, no se envía solo hasta activar esto.'}</div></div>
+        <div onClick={()=>setAutoGlob(!autoGlobal)} title={autoGlobal?'Desactivar envío automático':'Activar envío automático'} style={{width:44,height:24,borderRadius:20,background:autoGlobal?C.greenText:C.border,position:'relative',cursor:'pointer',flexShrink:0,transition:'background .15s'}}><span style={{position:'absolute',top:2,left:autoGlobal?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/></div>
+      </div>
       {grupos.length>1 && <button onClick={enviarTodos} disabled={sending} style={{width:'100%',background:'#fff',border:`1px solid ${C.border}`,color:C.accent,borderRadius:10,padding:'10px',fontSize:12.5,fontWeight:700,cursor:'pointer',marginBottom:12}}>Enviar a todos los que toca · {grupos.filter(g=>!autoCli[g.cid]).length}</button>}
       {grupos.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
-      {grupos.map(g=>{ const nv=NIV[g.nivel]; const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
+      {isDesktop ? (()=>{
+        const thS={fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,background:C.bgSoft,padding:'9px 12px',textAlign:'left',whiteSpace:'nowrap'}
+        const th=(col,lbl,r)=>(<th onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{...thS,textAlign:r?'right':'left',cursor:'pointer',userSelect:'none'}}>{lbl}{sortBy.col===col?<span style={{color:C.accent}}> {sortBy.dir==='desc'?'▾':'▴'}</span>:''}</th>)
+        const gsort=[...grupos].sort((a,b)=>{ const d=sortBy.dir==='desc'?-1:1; if(sortBy.col==='mora') return d*(a.maxDias-b.maxDias); if(sortBy.col==='nivel') return d*((a.nivel==='final'?1:0)-(b.nivel==='final'?1:0)); if(sortBy.col==='cliente') return (sortBy.dir==='desc'?-1:1)*cn(a.cid).localeCompare(cn(b.cid),'es'); return d*(a.total-b.total) })
+        const gapDe=g=>{ const l=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; return l?`hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(l).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar' }
+        return (
+          <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+            <table style={{borderCollapse:'collapse',width:'100%'}}>
+              <thead><tr>{th('cliente','Cliente')}{th('nivel','Nivel')}<th style={thS}>Facturas</th>{th('mora','Mora')}<th style={thS}>Último contacto</th>{th('monto','Monto',true)}<th style={{...thS,textAlign:'right'}}>Acción</th></tr></thead>
+              <tbody>
+                {gsort.map(g=>{ const nv=NIV[g.nivel]; const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:12.5,verticalAlign:'middle'}; return (
+                  <Fragment key={g.cid}>
+                  <tr onClick={()=>setExpCli(open?null:g.cid)} style={{cursor:'pointer'}}>
+                    <td style={td}><span onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span></td>
+                    <td style={td}><span style={{fontSize:9,fontWeight:800,borderRadius:20,padding:'2px 9px',background:nv.bg,color:nv.tx,whiteSpace:'nowrap'}}>{nv.lbl}</span></td>
+                    <td style={{...td,color:C.muted}}>{g.items.length}</td>
+                    <td style={{...td,fontVariantNumeric:'tabular-nums'}}>{g.maxDias} d</td>
+                    <td style={{...td,fontSize:11,color:gap==='sin contactar'?C.overdueText:C.muted}}>{gap}{nc>0?` · ${nc}✓`:''}</td>
+                    <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:C.accent}}>{f0(g.total)}</td>
+                    <td style={{...td,textAlign:'right',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
+                      {auto ? <span style={{display:'inline-flex',gap:6,alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'5px 9px'}}>En automático</span><button onClick={()=>pausar(g.cid)} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.done,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:600,cursor:'pointer'}}>Pausar</button></span>
+                        : <span style={{display:'inline-flex',gap:6,alignItems:'center'}}>{nc>=LIBERAR_UMBRAL&&<button onClick={()=>liberar(g.cid)} style={{background:'#fff',border:`1px solid ${C.greenText}55`,color:C.greenText,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:700,cursor:'pointer'}}>Liberar →</button>}<button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:7,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></span>}
+                    </td>
+                  </tr>
+                  {open&&<tr><td colSpan={7} style={{background:C.bgSoft,borderTop:`1px dashed ${C.border}`,padding:'8px 12px 10px'}}>
+                    {g.items.map(({b,acc})=>(<div key={b.id} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:11.5,padding:'3px 0'}}><span style={{color:C.text}}><b>Factura N° {folioN(b.invoice_no)||'—'}</b> · vence {b.due?fmtFechaDMY(b.due):'—'} · vencida {acc.diasVenc} d</span><span style={{fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</span></div>))}
+                  </td></tr>}
+                  </Fragment>
+                )})}
+              </tbody>
+            </table>
+          </div>
+        )
+      })() : grupos.map(g=>{ const nv=NIV[g.nivel]; const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
         <div key={g.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(g.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span>
