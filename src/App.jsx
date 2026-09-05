@@ -23757,6 +23757,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
         {eqView==='carga' && <>
         <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:12,marginLeft:8}}>{[['semana','Semana'],['mes','Mes']].map(([k,l])=><button key={k} onClick={()=>setMView(k)} style={{fontSize:11,fontWeight:700,padding:'5px 14px',border:'none',background:mView===k?C.accent:'#fff',color:mView===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>
         <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'0 2px 8px'}}>Horas reales vs meta · {mView==='mes'?'mes':'semana'}</div>
+        <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>
         {EQUIPO.map(name=>{ const real=horasPeriodo(name); const fact=horasPeriodoFact(name); const factPct=real>0?Math.round(fact/real*100):0; const meta=metaPeriodo(name); const pct=meta>0?Math.round(real/meta*100):0; const book=bookingDe(name); const col=personChip(name).color; const util=pct>100?C.overdue:pct>=70?C.normal:'#EF9F27'; return (
           <div key={name} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginBottom:8}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
@@ -23774,7 +23775,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               <span style={{fontSize:9.5,color:C.done}}>{dia?'× 5 días':'se guarda semanal'}</span>
             </div> })()}
           </div>
-        )})}
+        )})}</div>
         {(()=>{ const libres=EQUIPO.filter(n=>{ const m=metaPeriodo(n); return m>0 && horasPeriodo(n)/m < 0.7 }); if(!libres.length) return null; return <div style={{background:C.greenBg,borderRadius:11,padding:'11px 12px',fontSize:11.5,color:C.greenText,lineHeight:1.5,marginTop:2}}><b style={{color:C.accent}}>{libres.join(', ')}</b> con holgura {mView==='mes'?'este mes':'esta semana'}. Buen momento para ofrecer más al cliente o tomar un nuevo encargo.</div> })()}
         </>}
 
@@ -23873,7 +23874,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             </div>
           </div>}
           {!hayCostos && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:13,fontSize:12,color:C.done,marginBottom:10,lineHeight:1.5}}>Define el <b style={{color:C.text}}>costo/hora por abogado</b> (toca “Costo/hora ▾”) para ver el margen real de cada cliente.</div>}
-          {hayCostos && margenData.filter(d=>!d.sinIng).map(d=>{ const neg=d.margen<0; return (
+          {hayCostos && <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>{margenData.filter(d=>!d.sinIng).map(d=>{ const neg=d.margen<0; return (
             <div key={d.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
                 <span onClick={()=>cliOpen(d.cid)} style={{fontSize:12.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</span>
@@ -23884,9 +23885,10 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               {neg && <div style={{fontSize:9.5,color:C.overdueText,fontWeight:600,marginTop:5}}>Te cuesta más de lo que paga — reajustar o conversar.</div>}
               {d.faltaCosto && <div style={{fontSize:9,color:C.soonText,marginTop:4}}>Falta costo/hora de algún abogado — el costo está subestimado.</div>}
             </div>
-          )})}
+          )})}</div>}
           {hayCostos && margenAbogado.length>0 && <>
             <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'13px 2px 7px'}}>Rentabilidad por abogado</div>
+            <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>
             {margenAbogado.map(a=>{ const neg=a.margen<0; return (
               <div key={a.name} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',marginBottom:8}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
@@ -23897,7 +23899,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:9.5,color:C.muted}}><span>genera {f0(a.genera)}</span><span>cuesta {f0(a.costo)}</span><span style={{color:neg?C.overdueText:C.greenText,fontWeight:700}}>{neg?'pierdes '+f0(-a.margen):'margen '+f0(a.margen)}</span></div>
                 <div style={{fontSize:9,color:C.done,marginTop:4}}>{fh(a.horasFact)} facturables de {fh(a.horasTot)} · valoradas a {tarifaUF} UF/h</div>
               </div>
-            )})}
+            )})}</div>
           </>}
           <div style={{height:6}}/>
         </>}
@@ -23907,6 +23909,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           <div style={{fontSize:10.5,opacity:.85,lineHeight:1.4}}>Trabajo facturable por sobre lo incluido cada mes, a tu valor hora. Cobrarlo es opcional — es tu base para reajustar tarifas.</div>
         </div>}
         {ytdData.length===0 && <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:14}}>Sin asesorías permanentes configuradas.</div>}
+        <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>
         {ytdData.map(d=>(
           <div key={d.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 12px',marginBottom:8}}>
             <div onClick={()=>cliOpen(d.cid)} style={{fontSize:13,fontWeight:700,color:C.accent,marginBottom:7,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</div>
@@ -23921,7 +23924,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
                 : 'Dentro de lo incluido — con espacio para ofrecer más.'}</div>
             </>}
           </div>
-        ))}
+        ))}</div>
       </>}
 
       {vista==='mias' && <>
@@ -24052,6 +24055,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           </div>
         })()}
         <div style={lbl}>Asesorías permanentes · {mesLabel(mesActual)}</div>
+        <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>
         {permanentes.map(({cid,sale})=>{ const cons=consumoMes(cid); const consFact=consumoMesFact(cid); const est=estDe(sale); const pct=est>0?Math.min(100,Math.round(cons/est*100)):0; const over=est>0&&cons>est; const fee=sale?.moneda==='UF'?('UF '+(parseFloat(sale.amount_uf)||0).toLocaleString('es-CL')):f0(sale?.amount_clp)
           return (
           <div key={cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
@@ -24085,7 +24089,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               )})()}
             </> : <div style={{fontSize:11,color:C.done,marginTop:5}}>Sin valor de asesoría para calcular las horas.</div>}
           </div>
-        )})}
+        )})}</div>
       </>}
 
       {/* Mis horas de la semana — con editar/borrar (E1) y exportar CSV (F4) */}
