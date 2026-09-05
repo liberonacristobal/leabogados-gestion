@@ -4369,7 +4369,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   }
 
   return (
-    <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
+    <div style={isDesktop?{maxWidth:1180,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
@@ -4419,10 +4419,10 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
         {flatView ? (
           filtered.length===0
             ? <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>
-            : filtered.map(saleRow)
+            : <div style={isDesktop?{maxWidth:720}:undefined}>{filtered.map(saleRow)}</div>
         ) : grupos.length===0 ? (
           <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>
-        ) : (<>
+        ) : (()=>{ const _tbl = (<>
           {(()=>{ const tardias=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}); if(!tardias.length) return null; return <div onClick={()=>setFStatus('Propuesta')} style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'9px 12px',marginBottom:9,cursor:'pointer'}}><SIcon n='alert' s={16} c={C.soonText}/><span style={{flex:1,fontSize:11,color:C.soonText,fontWeight:600}}>{tardias.length} propuesta{tardias.length!==1?'s':''} llevan +14 días sin respuesta</span></div> })()}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px'}}>
             <span style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Desglose · suma {fmtMonto(vendUF,vendCLP)}</span>
@@ -4452,7 +4452,8 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
               )}) }
             </div>
           )})()}
-          {selGroup&&(()=>{ const g=grupos.find(x=>x.key===selGroup); const rows=g?g.rows:[]; if(!rows.length) return null; const col=colorGrupo(selGroup); return (
+          </>);
+          const _drill = (selGroup&&(()=>{ const g=grupos.find(x=>x.key===selGroup); const rows=g?g.rows:[]; if(!rows.length) return null; const col=colorGrupo(selGroup); return (
             <div style={{marginTop:12}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
                 <span style={{width:8,height:8,borderRadius:2,background:col}}></span>
@@ -4462,9 +4463,15 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
               {(verTodasV?rows:rows.slice(0,8)).map(saleRow)}
               {rows.length>8&&<div onClick={()=>setVerTodasV(v=>!v)} style={{textAlign:'center',padding:'7px 0',fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>{verTodasV?'Ver menos':`+ ${rows.length-8} más · ver todas`}</div>}
             </div>
-          )})()}
-          {/* "Embudo de propuestas" eliminado (2026-08-04, pedido del usuario): no aportaba — la conversión/rechazado no era accionable y el pipeline vivo ya está en el tile "Propuestas". */}
-        </>)}
+          )})());
+          const _invite = <div style={{border:`1.5px dashed ${C.border}`,borderRadius:12,padding:'40px 20px',textAlign:'center',color:C.muted,fontSize:12.5,lineHeight:1.5}}>Elige un responsable o área a la izquierda<br/>para ver sus ventas.</div>;
+          return isDesktop ? (
+            <div style={{display:'grid',gridTemplateColumns:'430px 1fr',gap:16,alignItems:'start'}}>
+              <div style={{minWidth:0}}>{_tbl}</div>
+              <div style={{minWidth:0}}>{_drill||_invite}</div>
+            </div>
+          ) : (<>{_tbl}{_drill}</>);
+        })()}
       </div>
     </div>
   )
