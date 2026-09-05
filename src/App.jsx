@@ -20694,10 +20694,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const heroChip = (label,val,bg,col,onClick)=>(<span onClick={onClick} style={{fontSize:11,background:bg,color:col,borderRadius:20,padding:'4px 11px',fontWeight:600,cursor:onClick?'pointer':'default'}}>{label} {val}</span>)
   // Abre la sección y hace scroll hasta ella (las pills del hero llevan a su tema).
   const goSec = (setter,id)=>{ setter&&setter(true); setVerArchivadas(false); setTimeout(()=>{ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}) },70) }
-  return (
-    <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
-      {/* Recordatorio caja chica (solo quien tiene caja activa): sin cargar gastos hace ≥10 días y/o fondo bajo */}
-      {(nudgeCargar||nudgeLiquidar)&&(
+  /* Recordatorio caja chica (solo quien tiene caja activa): sin cargar gastos hace ≥10 días y/o fondo bajo */
+  const _nudge = ((nudgeCargar||nudgeLiquidar)&&(
         <div style={{padding:'14px 20px 0'}}>
           <div onClick={()=>setTab&&setTab('cajachica')} style={{background:'#FFF8E1',border:'1px solid #F0D88A',borderRadius:10,padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
             <span style={{width:8,height:8,borderRadius:'50%',background:C.soon,flexShrink:0}}/>
@@ -20708,13 +20706,14 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             <span style={{fontSize:11,fontWeight:700,color:C.soonText,whiteSpace:'nowrap',flexShrink:0}}>Caja chica ›</span>
           </div>
         </div>
-      )}
-      {/* Hero: foco del día (titular) + tablero de 4 KPIs (tocables → abren la sección) */}
-      <div style={{padding:'14px 20px 0'}}>
+      ));
+  /* Hero: foco del día (titular) + tablero de 4 KPIs (tocables → abren la sección) */
+  const _hero = (
+      <div style={{padding:isDesktop?0:'14px 20px 0'}}>
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:8}}>
-          <div style={{display:'flex',gap:12,alignItems:'stretch'}}>
+          <div style={{display:'flex',flexDirection:isDesktop?'column':'row',gap:12,alignItems:'stretch'}}>
             {/* Col 1: subtarjeta de foco (vencidas/esta semana/al día) + a quiénes asigné, debajo */}
-            <div style={{flex:1,minWidth:0}}>
+            <div style={{flex:isDesktop?'0 0 auto':1,minWidth:0}}>
               {(()=>{ const foco = kpiVencidas.length>0 ? {n:kpiVencidas.length,lbl:`vencida${kpiVencidas.length!==1?'s':''}`,bg:C.overdueBg,col:C.overdue}
                   : kpiSemana.length>0 ? {n:kpiSemana.length,lbl:'vencen esta semana',bg:C.ambarBg,col:'#B5710F'}
                   : {n:mias.length,lbl:'activas · al día',bg:C.greenBg,col:C.greenText}
@@ -20732,16 +20731,16 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                 </div>
               )}
             </div>
-            <div style={{width:1,background:C.border,alignSelf:'stretch'}}/>
+            <div style={{width:isDesktop?'100%':1,height:isDesktop?1:'auto',background:C.border,alignSelf:'stretch',flexShrink:0}}/>
             {/* Col 2: pills entre las dos subtarjetas */}
-            <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:7,justifyContent:'center',alignItems:'flex-start'}}>
+            <div style={{flex:isDesktop?'0 0 auto':1,minWidth:0,display:'flex',flexDirection:isDesktop?'row':'column',flexWrap:isDesktop?'wrap':'nowrap',gap:7,justifyContent:'flex-start',alignItems:'flex-start'}}>
               {heroChip('Activas',mias.length,'#E6EEF1',C.accent,()=>goSec(setOpenActivas,'sec-activas'))}
               {asignadas.length>0&&heroChip('Que asigné',asignadas.length,C.bgWarm,'#5F5E5A',()=>goSec(setOpenAsignadas,'sec-asignadas'))}
               {heroChip('Terminadas',kpiTermMes.length,'#E1F5EE',C.greenText,()=>goSec(setOpenTerm,'sec-term'))}
             </div>
             {/* Col 3: subtarjeta sugeridas desde Gmail (admin); al tocar se despliega la lista abajo */}
             {isAdmin&&(sugBusy||sugVisibles.length>0)&&(<>
-              <div style={{width:1,background:C.border,alignSelf:'stretch'}}/>
+              <div style={{width:isDesktop?'100%':1,height:isDesktop?1:'auto',background:C.border,alignSelf:'stretch',flexShrink:0}}/>
               <div onClick={()=>{ if(!sugBusy) setSugOpen(o=>!o) }} style={{flex:1,minWidth:0,background:C.greenBg,borderRadius:10,padding:'10px 12px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:sugBusy?'default':'pointer'}}>
                 {sugBusy ? <span style={{fontSize:11,color:C.greenText,fontWeight:500}}>Revisando…</span> : (<>
                   <div style={{fontSize:30,fontWeight:600,color:C.greenText,lineHeight:1}}>{sugVisibles.length}</div>
@@ -20766,7 +20765,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           )}
         </div>
       </div>
-      <div style={{padding:'14px 20px 0'}}>
+  );
+  const _list = (
+      <div style={{padding:isDesktop?0:'14px 20px 0'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:4}}>
           <BloqueTitulo>Mis tareas</BloqueTitulo>
           <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end',flex:1,minWidth:0}}>
@@ -20830,7 +20831,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           </>
         )}
       </div>
-      <div style={{padding:'24px 20px 0'}}>
+  );
+  const _cal = (
+      <div style={{padding:isDesktop?0:'24px 20px 0'}}>
         <div style={{marginBottom:10}}><BloqueTitulo>Próximas semanas</BloqueTitulo></div>
         {[0,1].map(semIdx=>{
           const lunesSem = new Date(hoy)
@@ -20879,7 +20882,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:10,color:C.muted}}><span style={{width:9,height:9,borderRadius:2,background:C.greenBg,border:'2px solid #1D9E75',display:'inline-block',flexShrink:0}}/>Que yo asigné</span>
         </div>
       </div>
-      <div style={{padding:'24px 20px 100px'}}>
+  );
+  const _fin = (
+      <div style={{padding:isDesktop?'0 0 40px':'24px 20px 100px'}}>
         <div style={{marginBottom:10}}><BloqueTitulo>Resumen financiero</BloqueTitulo></div>
         {(()=>{
           const saldo = saldoCajaChica(pettyCash, expenses, me)
@@ -20934,6 +20939,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           )
         })()}
       </div>
+  );
+  const _overlays = (<>
       {hoverTask&&(()=>{
         const cl=clients.find(c=>c.id===hoverTask.client_id)
         const left=Math.max(8,Math.min(hoverPos.x+12, (typeof window!=='undefined'?window.innerWidth:360)-238))
@@ -20958,7 +20965,19 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             onComplete={t=>{onComplete(t);setPreview(null)}}/>
         </Modal>
       )}
-    </div>
+  </>);
+  return (
+    <>
+      {isDesktop ? (
+        <div style={{maxWidth:1200,margin:'0 auto',padding:'0 16px',display:'grid',gridTemplateColumns:'1fr 330px',gap:16,alignItems:'start'}}>
+          <div style={{minWidth:0}}>{_list}</div>
+          <div style={{display:'flex',flexDirection:'column',minWidth:0}}>{_nudge}{_hero}{_cal}{_fin}</div>
+        </div>
+      ) : (
+        <div>{_nudge}{_hero}{_list}{_cal}{_fin}</div>
+      )}
+      {_overlays}
+    </>
   )
 }
 // ─── USERS VIEW (gestión de usuarios para admin) ───────────────────────────────
