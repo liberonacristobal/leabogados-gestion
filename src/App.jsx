@@ -8816,7 +8816,7 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
           <Panel s='Erasmo' acc={ytdAcc}/>
         </div>
       </div>
-      <div style={{fontSize:10,color:C.muted,marginTop:11,lineHeight:1.5}}>Facturado = emitidas por su fecha de emisión (monto del DTE). Entró a caja = abonos conciliados en el banco, por la fecha del depósito (misma base que Inicio). Neto = menos comisiones a terceros (facturado: de esas facturas; caja: pagadas en el mes). Cifras completas en CLP.</div>
+      <div style={{fontSize:10,color:C.muted,marginTop:11,lineHeight:1.5}}>Facturado = emitido (DTE) · Entró a caja = conciliado en banco · Neto = menos comisiones.</div>
     </Modal>
   )
 }
@@ -9261,14 +9261,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
           <div style={{background:'#fff',borderRadius:16,width:'min(90vw, 340px)',overflow:'hidden'}}>
             <div style={{padding:'18px 20px 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <span style={{fontSize:14,fontWeight:600}}><span style={{color:C.accent}}>Registrar pago</span>{_cl&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted}}>{_cl.name}</span></>}</span>
+              <span style={{fontSize:14,fontWeight:600}}><span style={{color:C.accent}}>Registrar pago</span>{_cl&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted}}>{_cl.name}</span></>}{(()=>{ const rs=rsLabel(pb.client_id,clients,clientEntities,pb.entity_id); return (rs.name&&rs.name!==_cl?.name)||rs.rut ? <span style={{color:C.muted,fontWeight:400,fontSize:11}}> · {rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</span> : null })()}</span>
               <button onClick={()=>setPayingId(null)} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
                 <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
               </button>
             </div>
             <div style={{padding:'12px 20px 16px',borderBottom:`0.5px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:11,color:C.done}}>Saldo</div>
+                <div style={{fontSize:11,color:C.done}}>Saldo{pb.invoice_no?<> · <Copyable text={String(folioN(pb.invoice_no)||pb.invoice_no)} title='Copiar folio' style={{color:C.done,fontWeight:600}}>Factura N°{folioN(pb.invoice_no)||pb.invoice_no}</Copyable></>:''}</div>
                 <div style={{fontSize:26,fontWeight:500,color:C.text,letterSpacing:'-.5px'}}>{fmt(Math.max(0,(pb.amount||0)-(pb.paid_amount||0)))}</div>
                 <div style={{fontSize:12,color:C.done,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pb.concept||'—'}{pb.invoice_no?` · Factura N°${folioN(pb.invoice_no)}`:''}{(pb.paid_amount||0)>0?` · ya abonado ${fmt(pb.paid_amount)}`:''}</div>
               </div>
@@ -9636,7 +9636,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
-            <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.5}}>Facturas pagadas que quedaron sin enlazar a su venta. La app ya asoció sola las que tenían un calce claro; acá quedan las que necesitan tu criterio (asigna la venta o el año). Se aprende por cliente.</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.5}}>Facturas pagadas sin enlazar a su venta — asigna la venta o el año (se aprende por cliente).</div>
             {sinAnio.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Todas las facturas pagadas tienen su año de venta.</div>}
             {sinAnio.map(b=>{
               const c=clients.find(x=>x.id===b.client_id)
@@ -16449,7 +16449,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
         <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
           <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
-          <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
+          <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span>{(()=>{ const rs=rsLabel(clientId,clients,clientEntities); return (rs.name&&rs.name!==cName(clientId))||rs.rut||rs.multi ? <span style={{color:C.muted,fontWeight:400,fontSize:11.5}}> · {rs.multi?`${rs.multi} RS`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</span> : null })()}</>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
         </div>
         <button className='qt-close' onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
@@ -16497,7 +16497,6 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
           <div style={{fontSize:13,fontWeight:700,color:C.text}}>{nFact} factura{nFact!==1?'s':''} duplicada{nFact!==1?'s':''} <span style={{color:C.muted,fontWeight:400}}>· {grupos.length} cliente{grupos.length!==1?'s':''}</span></div>
           <button onClick={retirarTodasFact} style={{background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'8px 15px',fontSize:12,fontWeight:700,cursor:'pointer'}}>Retirar todas</button>
         </div>}
-        {tab==='anticipos'&&nAnt>0&&<div style={{fontSize:11.5,color:C.muted,padding:'0 2px'}}>Un anticipo a mano calza con depósitos reales del banco → casi seguro es el mismo dinero cargado dos veces. Confírmalo tú; nada se borra solo.</div>}
 
         {/* Lista agrupada por cliente */}
         {grupos.map(grp=>{ const ck=tab+'|'+grp.cid; const co=clientId?true:openCli.has(ck); return (
