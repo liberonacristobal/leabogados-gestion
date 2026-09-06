@@ -847,7 +847,6 @@ const TABS_ADMIN = [
 ]
 const TABS_LIMITED = [
   {id:'tasks',icon:'check',label:'Tareas',mod:'nucleo'},
-  {id:'cartera',icon:'folder',label:'Proyectos',mod:'proyectos'},
   {id:'horas',icon:'clock',label:'Horas',mod:'horas'},
   {id:'expenses',icon:'card',label:'Gastos',mod:'gastos'},
   {id:'cajachica',icon:'coins',label:'Caja chica',mod:'gastos'},
@@ -1964,7 +1963,6 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
           {id:'inteligencia',label:'Inteligencia',ic:'chart',mod:'nucleo'},
           {id:'cobranza',label:'Cobranza',ic:'send',mod:'finanzas'},
           {id:'repricing',label:'Repricing',ic:'tag',mod:'horas'},
-          {id:'cartera',label:'Proyectos',ic:'folder',mod:'proyectos'},
           {id:'horas',label:'Horas',ic:'clock',mod:'horas'},
         ]} ]
     : [ {cap:null, items:(TABS_LIMITED.map(t=>({id:t.id,label:t.label,ic:t.icon,mod:t.mod})))} ]
@@ -3844,7 +3842,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,1fr)':'1fr 1fr',gap:isDesktop?12:9}}>
           {(()=>{ const oportN=OPPS.reduce((a,o)=>a+o.rows.length,0); const ico={fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round'}; const SECS=[
             {k:'oport',bg:C.azulBg,fg:C.azulInfo,t:'Oportunidades',sub:'dormidos · cobranza · cross-sell',ct:oportN,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg>},
-            {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Proyectos · salud de clientes',sub:`${cartera.riesgo.length} en riesgo · ${cartera.dormido.length} dormidos`,ct:carteraTot.activos,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
+            {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Seguimiento',sub:`${cartera.riesgo.length+cartera.dormido.length} sin avanzar · toca empujar`,ct:cartera.riesgo.length+cartera.dormido.length,ctCol:(cartera.riesgo.length+cartera.dormido.length)>0?C.soonText:C.greenText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
             {k:'servicios',bg:C.ambarBg,fg:C.soonText,t:'Servicios y precios',sub:serviciosTot.areas&&servicios[0]?`Top: ${servicios[0].area}`:'',ct:serviciosTot.areas,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3.5 3.5h7l9.5 9.5-7 7L3.5 10.5z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>},
             {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot}%`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
             {k:'ia',bg:'#EFEAF7',fg:'#5B3E8E',t:'Asesor IA · Foco y Plan',sub:'Pregúntale · Foco semana · Plan del Año',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>},
@@ -3940,6 +3938,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
                 <div key={x.c.id} onClick={()=>x.c.id&&onOpenClientFicha&&onOpenClientFicha(x.c.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0 7px 18px',borderTop:'0.5px solid #EEF1F3',cursor:'pointer'}}>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:12.5,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.c.name}</div>
+                    {(()=>{ const rs=rsLabel(x.c.id,clients,clientEntities); const bits=[rs.name&&rs.name!==x.c.name?rsDisplay(rs.name):null,rs.rut].filter(Boolean); return bits.length?<div style={{fontSize:9.5,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{bits.join(' · ')}</div>:null })()}
                     <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.area} · {fmtUFk(x.uf)}{x.meses<900?` · hace ${x.meses}m`:''}{x.saldoVenc>0?` · saldo ${fmt(x.saldoVenc)}`:(x.rec?' · recurrente':'')}</div>
                   </div>
                   <span style={{fontSize:12,color:seg.col,flexShrink:0}}>›</span>
@@ -3948,6 +3947,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               {open&&rows.length>15&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'5px 0'}}>+{rows.length-15} más</div>}
             </div>
           )})}
+          <div onClick={()=>setTab&&setTab('cartera')} style={{borderTop:`1px solid ${C.border}`,marginTop:6,paddingTop:10,fontSize:11.5,fontWeight:700,color:C.azulInfo,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>Ver seguimiento completo · novedades y rentabilidad ›</div>
         </div>
         </div>)}
         {biSec==='servicios'&&(<div style={{marginTop:12}}>
@@ -27677,7 +27677,7 @@ const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',exp
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
   admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Conciliación'],['inteligencia','Inteligencia'],['presupuestoOficina','Presupuesto Oficina']],
-  limited:[['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
+  limited:[['tasks','Tareas'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
