@@ -870,6 +870,7 @@ function ClientStatusTabs({value,onChange,activeN,endedN,prospectoN}){
 function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,sales=[],billing=[],anticipos=[],currentUserName,onEdit,onAdd,onAddTask,onQuickTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onNuevoAnticipo,onConciliar,onOpenSale,onAjuste,onAssignSeries,onStatusChange,onEditTask,onEditExpense,onSaveFields,onImportDrive}) {
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
+  const isDesktop = useIsDesktop()
   const [confirmEdit,setConfirmEdit] = useState(null)
   const [openRend,setOpenRend] = useState(null)
   const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
@@ -1051,14 +1052,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     )
   }
 
-  if(selected) return (
-    <div style={{maxWidth:900,margin:'0 auto'}}>{/* escritorio: ficha centrada, no estirada al ancho del monitor */}
-      <Ficha cl={selected}/>
-    </div>
-  )
-
-  return (
-    <div style={{maxWidth:900,margin:'0 auto'}}>{/* escritorio: lista centrada (móvil sin efecto, ancho < 900) */}
+  const listInner = (<>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bgSoft,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
@@ -1111,8 +1105,17 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
           </div>)
         })()}
       </div>
+  </>)
+  if(isDesktop) return (
+    <div style={{display:'grid',gridTemplateColumns:'360px 1fr',height:'calc(100vh - 66px)',borderTop:`1px solid ${C.border}`}}>
+      <div style={{overflowY:'auto',borderRight:`1px solid ${C.border}`,background:C.bgSoft}}>{listInner}</div>
+      <div style={{overflowY:'auto',background:C.bg}}>{selected
+        ? <div style={{maxWidth:760,margin:'0 auto'}}><Ficha cl={selected}/></div>
+        : <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',color:C.done,fontSize:13,textAlign:'center',padding:24}}>Elige un cliente para ver su ficha</div>}</div>
     </div>
   )
+  if(selected) return (<div style={{maxWidth:900,margin:'0 auto'}}><Ficha cl={selected}/></div>)
+  return (<div style={{maxWidth:900,margin:'0 auto'}}>{listInner}</div>)
 }
 
 
