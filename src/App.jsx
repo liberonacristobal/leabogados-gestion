@@ -1533,16 +1533,8 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       )}
       {/* ── Asistente IA de liquidación (modal centrado; no cierra al tocar fuera) ── */}
       {asistOpen&&(
-        <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(20,30,35,.45)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div style={{background:'#fff',borderRadius:16,maxWidth:520,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 20px 60px rgba(0,0,0,.18)'}}>
-            <div style={{background:C.accent,color:'#fff',padding:'13px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-              <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.6 4.6L18 9.2l-4.4 1.6L12 15l-1.6-4.2L6 9.2l4.4-1.6z'/><path d='M19 14l.7 2 2 .7-2 .7L19 19.4 18.3 17.4l-2-.7 2-.7z'/></svg>
-                <span style={{fontSize:14,fontWeight:500}}>Asistente de liquidación</span>
-              </div>
-              <button onClick={()=>setAsistOpen(false)} style={{background:'none',border:'none',color:'#fff',fontSize:20,lineHeight:1,cursor:'pointer',opacity:.8,padding:0}}>×</button>
-            </div>
-            <div style={{overflowY:'auto',flex:1}}>
+        <Modal title='Asistente de liquidación' fullscreenOnMobile closeOnBackdrop={false} onClose={()=>setAsistOpen(false)} footer={<button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:40,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:500,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button>}>
+            <div style={{margin:'-14px -16px'}}>
               {asistBusy&&(
                 <div style={{padding:'40px 20px',textAlign:'center',color:C.muted,fontSize:13}}>Revisando tus gastos pendientes…</div>
               )}
@@ -1599,11 +1591,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 </>)
               })()}
             </div>
-            <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-              <button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:40,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:500,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bgSoft,zIndex:10}}>
         <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja Chica</div>
@@ -9783,12 +9771,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       {facturaEmail&&<FacturaEmailModal factura={facturaEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
       {facturasEmail&&facturasEmail.length>0&&<FacturaEmailModal factura={facturasEmail[0]} facturas={facturasEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturasEmail[0].client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturasEmail[0].sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturasEmail(null)}/>}
       {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
-        <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
-              <div style={{fontSize:15,fontWeight:600,color:C.text}}>Facturas por enviar</div>
-              <button onClick={()=>setBandejaEnvio(false)} style={{background:'none',border:'none',color:C.muted,fontSize:20,lineHeight:1,cursor:'pointer'}}>×</button>
-            </div>
+        <Modal title='Facturas por enviar' fullscreenOnMobile onClose={()=>setBandejaEnvio(false)} footer={<div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:11,color:C.muted,flex:1}}>{porEnviar.length} por enviar{(()=>{ const c=porEnviar.filter(b=>factToMap[String(b.client_id)]).length; return c?` · ${c} con correo recordado`:'' })()}</span><button disabled={envioMasivoBusy} onClick={enviarTodas} style={{fontSize:12,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.accent}`,borderRadius:8,padding:'8px 13px',cursor:'pointer',opacity:envioMasivoBusy?.6:1}}>{envioMasivoBusy?'Enviando…':'Enviar todas'}</button></div>}>
             <div style={{fontSize:11,color:C.muted,marginBottom:13}}>Emitidas que aún no se mandan al cliente · adjunta el PDF</div>
             {porEnviar.length===0?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'22px 0',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><SIcon n='check' s={14} c={C.greenText}/>Todo enviado</div>:(
               <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
@@ -9802,12 +9785,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   </div>) })}
               </div>
             )}
-            <div style={{display:'flex',alignItems:'center',gap:8,marginTop:12}}>
-              <span style={{fontSize:11,color:C.muted,flex:1}}>{porEnviar.length} por enviar{(()=>{ const c=porEnviar.filter(b=>factToMap[String(b.client_id)]).length; return c?` · ${c} con correo recordado`:'' })()}</span>
-              <button disabled={envioMasivoBusy} onClick={enviarTodas} style={{fontSize:12,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.accent}`,borderRadius:8,padding:'8px 13px',cursor:'pointer',opacity:envioMasivoBusy?.6:1}}>{envioMasivoBusy?'Enviando…':'Enviar todas'}</button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       ) })()}
       {siiPanel&&(
         <div onClick={()=>setSiiPanel(null)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
