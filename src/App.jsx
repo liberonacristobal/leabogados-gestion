@@ -3834,23 +3834,22 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
           </div>
         )})()}
 
-        {/* ÍNDICE — lentes del negocio (una sección abierta a la vez) */}
-        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+        {/* ÍNDICE — lentes del negocio como grilla de tarjetas (patrón de casa: accesos/Gastos/Facturación). Una sección abierta a la vez; el detalle se abre debajo. */}
+        <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,1fr)':'1fr 1fr',gap:isDesktop?12:9}}>
           {(()=>{ const oportN=OPPS.reduce((a,o)=>a+o.rows.length,0); const ico={fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round'}; const SECS=[
             {k:'oport',bg:C.azulBg,fg:C.azulInfo,t:'Oportunidades',sub:'dormidos · cobranza · cross-sell',ct:oportN,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg>},
             {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Proyectos · salud de clientes',sub:`${cartera.riesgo.length} en riesgo · ${cartera.dormido.length} dormidos`,ct:carteraTot.activos,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
             {k:'servicios',bg:C.ambarBg,fg:C.soonText,t:'Servicios y precios',sub:serviciosTot.areas&&servicios[0]?`Top: ${servicios[0].area}`:'',ct:serviciosTot.areas,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3.5 3.5h7l9.5 9.5-7 7L3.5 10.5z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>},
             {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot}%`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
             {k:'ia',bg:'#EFEAF7',fg:'#5B3E8E',t:'Asesor IA · Foco y Plan',sub:'Pregúntale · Foco semana · Plan del Año',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>},
-          ]; return SECS.map((s,i)=>{ const open=biSec===s.k; return (
-            <div key={s.k} onClick={()=>setBiSec(open?null:s.k)} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff',borderTop:i?`0.5px solid ${C.border}`:'none'}}>
-              <span style={{width:33,height:33,borderRadius:'50%',background:s.bg,color:s.fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{s.svg}</span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text}}>{s.t}</div>
-                {s.sub&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.sub}</div>}
+          ]; return SECS.map((s)=>{ const open=biSec===s.k; return (
+            <div key={s.k} onClick={()=>setBiSec(open?null:s.k)} style={{cursor:'pointer',background:open?C.bgSoft:C.surface,border:`1px solid ${open?s.fg:C.border}`,borderRadius:13,padding:'13px 14px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <span style={{width:34,height:34,borderRadius:10,background:s.bg,color:s.fg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{s.svg}</span>
+                {s.ct!=null&&<span style={{fontSize:16,fontWeight:800,color:s.ctCol||s.fg,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{s.ct}</span>}
               </div>
-              {s.ct!=null&&<span style={{fontSize:14,fontWeight:700,color:s.ctCol||C.accent,flexShrink:0}}>{s.ct}</span>}
-              <span style={{fontSize:15,color:C.done,flexShrink:0}}>{open?'⌃':'›'}</span>
+              <div style={{fontSize:13.5,fontWeight:700,color:C.accent,marginTop:9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.t}</div>
+              {s.sub&&<div style={{fontSize:10.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.sub}</div>}
             </div>
           )}) })()}
         </div>
