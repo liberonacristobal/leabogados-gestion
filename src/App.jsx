@@ -8693,10 +8693,11 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
               const diasMini=(!pagado&&!anticipada&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''
               const exp=expandBill===b.id
               return (
-              <div key={b.id} style={{background:C.card,borderRadius:10,marginBottom:6,border:`1px solid ${C.border}`,borderLeft:`3px solid ${semCol}`,overflow:'hidden'}}>
+              <div key={b.id} style={{background:C.card,borderRadius:10,marginBottom:6,border:`1px solid ${C.border}`,overflow:'hidden'}}>
                 <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',gap:9,alignItems:'center',padding:'9px 12px',cursor:'pointer'}}>
                   {prog&&<input type='checkbox' checked={selected.has(b.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleSel(b.id)} style={{flexShrink:0,cursor:'pointer'}}/>}
                   {bigDate(kpiDate(b))}
+                  <SIcon n={estadoCobro(b).icon} s={15} c={semCol}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}{b.billing_type==='reembolso'&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:'#F2E9DE',color:C.soon,fontWeight:600,marginLeft:6}}>Reembolso</span>}{anticipada&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:C.greenBg,color:C.greenText,fontWeight:600,marginLeft:6}}>Anticipada</span>}{tercerosByBilling.has(b.id)&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:C.azulBg,color:C.accent,fontWeight:600,marginLeft:6}}>Proveedores</span>}</div>
                     <div style={{fontSize:11,color:C.done,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{prog?'Programada':`Factura N° ${folioN(b.invoice_no)||'—'}`}</div>
@@ -9541,7 +9542,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const list=Object.entries(byC).map(([cid,arr])=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
           const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conciliable}); const col=est.color; const ui=ufInfoDe(b); const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const rsN=(()=>{ const e=efEntity(b); if(e?.name) return rsDisplay(e.name); if(b.receptor_name) return rsDisplay(b.receptor_name); if(cli&&cli.id){ const rl=rsLabel(cli.id,clients,clientEntities); if(rl.multi) return 'Sin razón social'; if(rl.name&&rl.name!==cli.name) return rsDisplay(rl.name) } return null })(); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
-            <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',marginBottom:5,overflow:'hidden'}}>
+            <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:5,overflow:'hidden'}}>
               <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 180px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <SIcon n={est.icon} s={15} c={col}/>
@@ -9703,7 +9704,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const cmpT=(a,b)=>{ const va=colValT(a),vb=colValT(b); const r=(typeof va==='number')?(va-vb):String(va).localeCompare(String(vb),'es'); return tblSort.dir==='desc'?-r:r }
           const hCell=(col,label,align)=>{ const on=tblSort.col===col; return <span onClick={()=>setTblSort(s=>({col,dir:s.col===col?(s.dir==='asc'?'desc':'asc'):(col==='cliente'?'asc':'desc')}))} title='Ordenar' style={{display:'inline-flex',alignItems:'center',gap:3,cursor:'pointer',fontSize:9,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:on?C.accent:C.muted,userSelect:'none'}}>{label}{on?<span style={{fontSize:8}}>{tblSort.dir==='asc'?'▲':'▼'}</span>:''}</span> }
           const filaAll=b=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conc.has(b.id)}); const col=est.color; const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
-            <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',marginBottom:5,overflow:'hidden'}}>
+            <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:5,overflow:'hidden'}}>
               <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 96px 92px 150px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <SIcon n={est.icon} s={15} c={col}/>
