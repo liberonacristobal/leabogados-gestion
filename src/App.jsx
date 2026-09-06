@@ -26910,8 +26910,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           )
         })()}
 
-        {/* Overview de Abonos: tira DELGADA de triage (el hub/rail ya llevan el "Por resolver" rico con desglose y montos; aquí no se duplica). Cada línea navega a su lista. Dentro de un foco lo reemplaza el cambiador de arriba. */}
-        {sub==='abonos'&&!focused&&(()=>{
+        {/* Overview de Abonos: tira DELGADA de triage. En ESCRITORIO el rail (brújula) ya la muestra → aquí se omite (de-dup); en MÓVIL es la navegación principal (no hay rail) → se conserva. Cada línea navega a su lista. */}
+        {sub==='abonos'&&!focused&&!isDesktop&&(()=>{
           const pend=chipCounts.porconciliar+chipCounts.descalces+chipCounts.sinid, conc=chipCounts.conciliados, nSug=sugeridosId.length
           const nCobradas=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Pagado'&&(b.billing_type||'')!=='reembolso'&&(aplicadoByFactura[b.id]||0)<(b.amount||0)).length
           if(pend===0&&nSug===0&&nCobradas===0) return (
