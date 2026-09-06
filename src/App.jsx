@@ -23255,6 +23255,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const [manual,setManual] = useState(false)
   const [mq,setMq] = useState('')
   const [mf,setMf] = useState({client_id:'',fecha:'',horas:1,glosa:'',billable:true})
+  // Registro rápido (adopción): cliente → proyecto → horas → registrar, en 2 toques.
+  const [qC,setQC]=useState(null),[qS,setQS]=useState(null),[qH,setQH]=useState(1),[qGlo,setQGlo]=useState(''),[qGloOpen,setQGloOpen]=useState(false),[qBill,setQBill]=useState(true),[qOtro,setQOtro]=useState('')
   const [dur,setDur] = useState({})
   // Horas de asesoría permanente AUTODEFINIDAS: horas/mes = ceil(valor asesoría ÷ tarifa hora).
   // Tarifa = 3 UF/h (config del estudio, learnings); las asesorías en pesos se convierten con la UF del primer día hábil del año.
@@ -23510,6 +23512,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
   const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
+  const guardarRapido = () => { if(!qC){ appAlert('Elige el cliente.'); return } if(!(Number(qH)>0)){ appAlert('Elige las horas.'); return } addHora({ client_id:qC, sale_id:qS||null, fecha:hoy, horas:Number(qH), glosa:qGlo, billable:qBill, source:'rapido' }); setQC(null); setQS(null); setQH(1); setQGlo(''); setQGloOpen(false); setQBill(true); setQOtro('') }
   const bump = (id,delta) => setDur(p=>({...p,[id]:Math.max(0.1,Math.round(((p[id]||1)+delta)*10)/10)}))
   // Mejoras: Mi semana + recordatorio de viernes + coordinación del socio (sugerida, facturable).
   const dow = (new Date(hoy+'T00:00:00').getDay()+6)%7   // 0=lun … 6=dom
@@ -23779,6 +23782,47 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           </div>
         )})}
       </div>
+
+      {/* Registro rápido: cliente → proyecto → horas → registrar (2 toques). No pierde detalle: glosa/facturable clickeables. Los "frecuentes" salen de las horas/tareas/responsable de cada usuario. */}
+      {(()=>{
+        const _c={}; horas.forEach(h=>{ if(h.user_name===me&&h.client_id) _c[h.client_id]=(_c[h.client_id]||0)+1 })
+        const _t={}; (tasks||[]).forEach(t=>{ if(t.client_id&&(isAssignee(t,me)||t.who===me)) _t[t.client_id]=(_t[t.client_id]||0)+1 })
+        const frec=clients.filter(c=>!c.is_internal&&c.status!=='Terminado').map(c=>({c,s:(_c[c.id]||0)*3+(_t[c.id]||0)+(_normTxt(c.abogado_responsable||'')===_normTxt(me)?2:0)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,4).map(x=>x.c)
+        const projsFor=cid=>(sales||[]).filter(s=>String(s.client_id)===String(cid)&&s.title&&!['Rechazada','Borrador'].includes(s.status))
+        const projs=qC?projsFor(qC):[]
+        const selCli=qC?clients.find(c=>String(c.id)===String(qC)):null
+        const chip=(on,txt,onClick,extra)=><span onClick={onClick} style={{fontSize:12,fontWeight:600,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.accent,borderRadius:20,padding:'6px 12px',cursor:'pointer',whiteSpace:'nowrap',...extra}}>{txt}</span>
+        const pickCli=cid=>{ const nc=String(qC)===String(cid)?null:String(cid); setQC(nc); const ps=nc?projsFor(nc):[]; setQS(ps.length===1?String(ps[0].id):null); setQOtro('') }
+        return (
+        <div style={{border:`1px solid ${C.normal}`,background:C.greenBg,borderRadius:13,padding:'12px 13px',marginBottom:14}}>
+          <div style={{fontSize:10.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',color:C.greenText,marginBottom:9,display:'flex',alignItems:'center',gap:6}}><SIcon n='clock' s={14} c={C.greenText}/>Registrar tiempo · hoy</div>
+          <div style={lbl}>Cliente</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {frec.map(c=>chip(String(qC)===String(c.id),c.name,()=>pickCli(c.id)))}
+            {selCli&&!frec.some(c=>String(c.id)===String(qC))&&chip(true,selCli.name,()=>pickCli(qC))}
+            {chip(qOtro==='__open__',qOtro==='__open__'?'Cerrar':'Otro cliente…',()=>setQOtro(qOtro==='__open__'?'':'__open__'),{borderStyle:'dashed'})}
+          </div>
+          {qOtro==='__open__'&&<input value={''} onChange={e=>setQOtro(e.target.value||'__open__')} placeholder='Buscar cliente…' style={{...inp,height:34,fontSize:12,marginTop:7}}/>}
+          {qOtro&&qOtro!=='__open__'&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:5,background:'#fff',overflow:'hidden',maxHeight:130,overflowY:'auto'}}>{clients.filter(c=>!c.is_internal&&c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(qOtro))).slice(0,6).map(c=><div key={c.id} onClick={()=>pickCli(c.id)} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}
+          {qC&&<>
+            <div style={lbl}>Proyecto</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {projs.map(s=>chip(String(qS)===String(s.id),s.title,()=>setQS(String(qS)===String(s.id)?null:String(s.id))))}
+              {chip(qS===null,'Sin proyecto',()=>setQS(null),{borderStyle:'dashed'})}
+            </div>
+          </>}
+          <div style={lbl}>Horas</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {[0.5,1,1.5,2,3,4].map(h=>chip(Number(qH)===h,fh(h).replace(' h',''),()=>setQH(h),{minWidth:40,textAlign:'center'}))}
+          </div>
+          {!qGloOpen&&<div onClick={()=>setQGloOpen(true)} style={{fontSize:11.5,color:C.azulInfo,fontWeight:600,marginTop:9,cursor:'pointer'}}>+ glosa (opcional) · {qBill?'facturable':'no facturable'}</div>}
+          {qGloOpen&&<div style={{marginTop:9}}>
+            <input value={qGlo} onChange={e=>setQGlo(e.target.value)} placeholder='Detalle de la gestión (opcional)' style={{...inp,height:34,fontSize:12}}/>
+            <label style={{display:'flex',alignItems:'center',gap:6,marginTop:7,fontSize:11.5,color:C.muted,cursor:'pointer'}}><input type='checkbox' checked={qBill} onChange={e=>setQBill(e.target.checked)}/>Facturable</label>
+          </div>}
+          <button onClick={guardarRapido} disabled={!qC} style={{marginTop:11,width:'100%',background:qC?C.normal:C.done,color:'#fff',border:'none',borderRadius:10,padding:'11px',fontSize:13.5,fontWeight:700,cursor:qC?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:7}}><SIcon n='check' s={15} c='#fff'/>{qC?`Registrar ${fh(qH)} · ${selCli?selCli.name:''}`:'Elige cliente y horas'}</button>
+        </div>)
+      })()}
 
       {/* ¿Qué hiciste hoy? */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'2px 2px 8px',gap:6,flexWrap:'wrap'}}>
