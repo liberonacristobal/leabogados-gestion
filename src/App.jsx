@@ -1648,11 +1648,14 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
             const bdg=catBadge(e.category)
             const _completo=!!e.category&&(!!e.client_id||e.category==='Fondo')
             return (
-              <div key={e.id} onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',borderLeft:`3px solid ${_completo?C.normal:C.soon}`,cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
+              <div key={e.id} onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
                 <div style={{width:17,height:17,borderRadius:5,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>
                   {isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                 </div>
                 {bigDate(e.date)}
+                {_completo
+                  ? <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.3' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><polyline points='20 6 9 17 4 12'/></svg>
+                  : <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soon} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M10.3 3.2 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0z'/><path d='M12 9v4M12 17h.01'/></svg>}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
                   <div style={{fontSize:10,color:C.done,marginTop:2}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?null:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>)}{(client||e.category!=='Fondo')?' · ':''}{e.created_by||me}{!e.category?<span style={{color:C.soon,fontWeight:600}}> · sin categoría</span>:''}</div>
@@ -20725,7 +20728,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           const liqSch = sinLiqNoNotaria>10 ? RED : ORANGE
           return (
             <>
-              <div style={{background:saldoSch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${saldoSch.bd}`,borderLeft:`4px solid ${saldoSch.num}`,marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+              <div style={{background:saldoSch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${saldoSch.bd}`,marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:10,fontWeight:600,color:saldoSch.label,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Saldo en tu caja{saldo<0?' · te debemos':''}</div>
                   <div style={{fontSize:22,fontWeight:700,color:saldoSch.num,lineHeight:1.1}}>{`${saldo<0?'-':''}${fmtCLP(saldo)}`}</div>
@@ -27141,7 +27144,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 </div>
               )})()}
               {_yOpen&&_mOpen&&(
-              <div id={'mov-'+m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${ec.c}`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
+              <div id={'mov-'+m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
                 <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer',display:'flex',gap:10,alignItems:'center'}}>
                   <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}>{(()=>{const dp=String(m.fecha||'').slice(0,10).split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return <><div style={{fontSize:18,fontWeight:700,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:C.muted,fontWeight:600}}>{dp.length>=3?`${M[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></>})()}</div>
                   <div style={{flex:1,minWidth:0}}>
