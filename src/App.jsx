@@ -6291,14 +6291,14 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
         <button onClick={descargarExcel} disabled={desc} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:desc?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{desc?'…':'↓ Descargar mes'}</button>
       </div>
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
-        {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todo emitido este mes ✓</div>}
+        {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><SIcon n='check' s={15} c={C.greenText}/>Todo emitido este mes</div>}
         {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const tw=onReplaceProgramada?emitidaTwin(b):null; const exp=emitExp.has(b.id); return (
           <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
             <div onClick={tw?()=>setEmitExp(s=>{ const n=new Set(s); n.has(b.id)?n.delete(b.id):n.add(b.id); return n }):(onEdit?()=>onEdit(b):undefined)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:(tw||onEdit)?'pointer':'default'}}>
+              {bigDate(b.due||b.issued_at)}
               <div style={{flex:1,minWidth:0}}>
                 <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
-                <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'}</div>
-                <div style={{fontSize:10,color:C.grisText,marginTop:1}}>Devengo {b.due?fmtDate(b.due):'—'}</div>
+                <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'} · devengo</div>
               </div>
               {tw&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:7,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>Ya emitida · N°{folioN(tw.invoice_no)||tw.invoice_no} {exp?'▾':'▸'}</span>}
               <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,textAlign:'right'}}>{fmt(b.amount)}</div>
@@ -6332,7 +6332,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
           <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Por enviar al cliente · {porEnviar.length}{porEnviar.length?` · ${fmt(porEnviarTotal)}`:''}</div>
           {emitidasSinXml.length>0&&<div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:9,padding:'8px 11px',marginBottom:8,fontSize:11,color:C.soonText,lineHeight:1.45}}><b>{emitidasSinXml.length} emitida{emitidasSinXml.length!==1?'s':''} sin XML</b> — no se {emitidasSinXml.length!==1?'pueden':'puede'} enviar hasta cargar su XML (botón "Cargar XML"): {emitidasSinXml.slice(0,8).map(b=>'N°'+folioN(b.invoice_no)).join(' · ')}{emitidasSinXml.length>8?'…':''}</div>}
           <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-            {porEnviar.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todas enviadas ✓</div>}
+            {porEnviar.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><SIcon n='check' s={15} c={C.greenText}/>Todas enviadas</div>}
             {porEnviarGrupos.map((g,gi)=>{ const top=gi>0?{borderTop:`1px solid ${C.border}`}:{}
               // 1 pendiente y ninguna ya enviada del cliente → fila simple. Si no → tarjeta de cliente con "Enviar juntas".
               if(g.unsent.length===1 && g.sent.length===0){ return <div key={g.unsent[0].id} style={{...top}}>{filaFactura(g.unsent[0],{})}</div> }
@@ -6355,7 +6355,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
           {enviadasSueltas.length>0&&(
             <div style={{marginTop:6}}>
               <div onClick={()=>setEnviadasOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:10.5,color:C.muted,padding:'2px 2px'}}>
-                <span style={{color:C.greenText,fontWeight:600}}>{enviadasSueltas.length} ya enviada{enviadasSueltas.length>1?'s':''} este mes ✓</span>
+                <span style={{color:C.greenText,fontWeight:600,display:'inline-flex',alignItems:'center',gap:5}}><SIcon n='check' s={13} c={C.greenText}/>{enviadasSueltas.length} ya enviada{enviadasSueltas.length>1?'s':''} este mes</span>
                 <span>· cargadas por XML = por enviar + enviadas</span>
                 <span style={{marginLeft:'auto'}}>{enviadasOpen?'▾':'▸'}</span>
               </div>
@@ -6416,7 +6416,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
                           {/* Traza de la factura: emitida · correo (con fecha de envío) · estado de cobro */}
                           <div style={{background:C.bgSoft,borderRadius:8,padding:'7px 10px',marginBottom:8,fontSize:10.5,color:C.muted,display:'flex',flexDirection:'column',gap:2}}>
                             <div>Emitida <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b>{b.dte_xml?<span style={{color:C.greenText}}> · PDF con timbre</span>:''}</div>
-                            <div>Correo: {b.email_sent_at?<b style={{color:C.greenText}}>✓ enviado el {fmtFechaDMY(b.email_sent_at)}</b>:<span style={{color:C.soonText}}>Sin enviar</span>}</div>
+                            <div>Correo: {b.email_sent_at?<b style={{color:C.greenText,display:'inline-flex',alignItems:'center',gap:4,verticalAlign:'middle'}}><SIcon n='check' s={12} c={C.greenText}/>enviado el {fmtFechaDMY(b.email_sent_at)}</b>:<span style={{color:C.soonText}}>Sin enviar</span>}</div>
                             <div>Cobro: <b style={{color:(est&&est.fg)||C.muted}}>{(est&&est.label)||b.status}</b></div>
                           </div>
                           <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
@@ -7170,7 +7170,7 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
           <div style={{fontSize:10.5,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3}}>Sin cliente asignado</div>
           <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:26,fontWeight:700,color:C.overdueText}}>{sinCliente}</span><span style={{fontSize:12,color:C.overdueText}}>{fmtM(montoSin)} · facturas fantasma por asignar</span></div>
         </>:<>
-          <div style={{fontSize:13,fontWeight:600,color:C.greenText}}>✓ Todas con cliente</div>
+          <div style={{fontSize:13,fontWeight:600,color:C.greenText,display:'flex',alignItems:'center',gap:6}}><SIcon n='check' s={15} c={C.greenText}/>Todas con cliente</div>
           <div style={{fontSize:11,color:C.greenText,marginTop:2}}>Las {emitidas} facturas emitidas del {yr} tienen cliente asignado.</div>
         </>}
       </div>
@@ -7184,9 +7184,14 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
           <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{MES[+mk.slice(5,7)-1]||mk} {mk.slice(0,4)} · {byMes[mk].length}</div>
           {byMes[mk].map(b=>{ const sug=resolverClienteSII(b.receptor_rut,b.receptor_name,clients,clientEntities); return (
             <div key={b.id} style={{border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 10px',marginBottom:6}}>
-              <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>N°{folioN(b.invoice_no)||'—'}</span><span style={{fontSize:12,fontWeight:700,color:C.text}}>{fmtM(b.amount)}</span></div>
-              <div style={{fontSize:11,color:C.text,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.receptor_name||'—'}{b.receptor_rut?` · ${b.receptor_rut}`:''}</div>
-              <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.issued_at?fmtFechaDMY(b.issued_at):''}{b.concept?` · ${b.concept}`:''}</div>
+              <div style={{display:'flex',alignItems:'center',gap:9}}>
+                <SIcon n='file' s={16} c={C.soonText}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.receptor_name||sug?.name||'Sin cliente'}</div>
+                  <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(b.invoice_no)||'—'}{b.issued_at?` · ${fmtFechaDMY(b.issued_at)}`:''}{b.receptor_rut?` · ${b.receptor_rut}`:''}{b.concept?` · ${b.concept}`:''}</div>
+                </div>
+                <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtM(b.amount)}</span>
+              </div>
               <div style={{marginTop:6,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                 {sug&&<button onClick={()=>onAssign(b,sug.id)} title='Sugerido por el RUT — un toque para asignar y aprender' style={{fontSize:10,fontWeight:700,padding:'4px 10px',borderRadius:20,background:C.greenBg,color:C.greenText,border:'none',cursor:'pointer'}}>✦ ¿{sug.name}?</button>}
                 <div style={{flex:'1 1 160px',minWidth:0}}><AsignarClienteInline bill={b} clients={clients} onAssign={(_,cid)=>onAssign(b,cid)} label={sug?'Otro cliente':'Asignar cliente'} placeholder='Buscar cliente…'/></div>
@@ -7196,9 +7201,8 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
         </div>
       ))}
       {orphansAll.length>0&&!orphans.length&&<div style={{fontSize:11,color:C.muted,padding:'6px 0'}}>Nada calza con "{q}".</div>}
-      <div style={{marginTop:6,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-        <div style={{flex:1,minWidth:0,fontSize:11,color:C.muted,lineHeight:1.4}}>¿Faltan facturas del SII que no están acá? Cuadrar con el SII, mes a mes, trae del portal las que no están en el sistema.</div>
-        <button onClick={onCotejar} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',flexShrink:0}}>Cuadrar con SII</button>
+      <div style={{marginTop:6,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'flex-end'}}>
+        <button onClick={onCotejar} title='Trae del portal del SII, mes a mes, las facturas que no están en el sistema' style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',flexShrink:0}}>Cuadrar con SII</button>
       </div>
     </Modal>
   )
@@ -9652,8 +9656,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               const clientSales=b.client_id?sales.filter(s=>String(s.client_id)===String(b.client_id)):[]
               return (
                 <div key={b.id} style={{padding:'10px 0',borderBottom:`0.5px solid ${C.border}`}}>
-                  <div style={{fontSize:13,color:C.text}}>{c?.name||b.receptor_name||'Sin cliente'}</div>
-                  <div style={{fontSize:11,color:C.done,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)} · `:''}{fmt(b.amount)} · pagada {fmtDMY(b.paid_at)}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:9}}>
+                    <SIcon n='clock' s={15} c={C.done}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||b.receptor_name||'Sin cliente'}</div>
+                      <div style={{fontSize:10.5,color:C.done,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)} · `:''}pagada {fmtDMY(b.paid_at)}</div>
+                    </div>
+                    <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</span>
+                  </div>
                   <div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                     {sug!=null&&<button onClick={()=>onSetVentaAnio&&onSetVentaAnio(b,{sale_year:sug})} style={cs(true)}>{sug} ✦</button>}
                     {clientSales.length>0&&<button onClick={()=>setAnioPickFor(anioPickFor===b.id?null:b.id)} style={cs()}>Asociar venta</button>}
@@ -9780,7 +9790,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               <button onClick={()=>setBandejaEnvio(false)} style={{background:'none',border:'none',color:C.muted,fontSize:20,lineHeight:1,cursor:'pointer'}}>×</button>
             </div>
             <div style={{fontSize:11,color:C.muted,marginBottom:13}}>Emitidas que aún no se mandan al cliente · adjunta el PDF</div>
-            {porEnviar.length===0?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'22px 0'}}>Todo enviado ✓</div>:(
+            {porEnviar.length===0?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'22px 0',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><SIcon n='check' s={14} c={C.greenText}/>Todo enviado</div>:(
               <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
                 {porEnviar.map((b,i)=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); const dest=contactoDe(b); return (
                   <div key={b.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
