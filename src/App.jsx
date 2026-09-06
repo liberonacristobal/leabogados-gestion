@@ -26459,6 +26459,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const sugMonto = (sugeridosId||[]).reduce((s,x)=>s+Math.abs(x.mov?.monto||0),0)
   const cargoClasifMovs = movs.filter(m=> m.tipo==='cargo' && !m.es_interno && !(concByMov[m.id]?.length) && !m.categoria)
   const ccN = cargoClasifMovs.length, ccMonto = _sumM(cargoClasifMovs)
+  // "Listo para conciliar" (calces exactos 1:1) — fuente ÚNICA usada por hub móvil, rail escritorio e interior (antes se calculaba inline en el interior).
+  const lcData=(()=>{ const pend=(movs||[]).filter(m=>esConciliable(m)&&((m.monto||0)-(m.monto_conciliado||0))>TOL); const cand=[],revisar=[],sinFac=[]; pend.forEach(m=>{ const mej=mejorCandidato(m); if(mej){cand.push({m,f:mej})} else { const cs=candidatos(m); if(cs.length>1)revisar.push(m); else sinFac.push(m) } }); const byFac={}; cand.forEach(x=>{ (byFac[String(x.f.id)]=byFac[String(x.f.id)]||[]).push(x) }); const exactos=[]; cand.forEach(x=>{ if(byFac[String(x.f.id)].length===1) exactos.push(x); else revisar.push(x.m) }); return {exactos,revisar,sinFac} })()
+  const listosExactos=lcData.exactos, listosN=listosExactos.length
   const exportConc = ()=>{ try{
       const rows=[['Fecha','Cuenta','Nombre banco','RUT','Cliente','Monto','Estado','Factura']]
       movs.filter(m=>m.tipo==='abono'&&!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).forEach(m=>{ const cc=concByMov[m.id]||[]; const fac=cc.find(c=>c.tipo_destino==='factura'); const fb=fac&&billing.find(b=>String(b.id)===String(fac.factura_id))
@@ -26490,6 +26493,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               <SIcon n={icon} s={15} c={ic}/><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{t}</div><div style={{fontSize:10,color:C.muted}}>{s}</div></div>
             </div>)
           return <>
+            {listosN>0&&<div onClick={()=>goHub(()=>setLoteConfirm(listosExactos))} style={{cursor:'pointer',background:C.greenBg,border:`1px solid ${C.greenText}`,borderRadius:13,padding:D?'13px 15px':'12px 14px',marginBottom:D?12:10,display:'flex',alignItems:'center',gap:11}}>
+              <span style={{width:30,height:30,borderRadius:9,background:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={16} c={C.greenText}/></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Listo para conciliar</div><div style={{fontSize:10.5,color:C.greenText}}>{listosN} {listosN===1?'calza':'calzan'} exacto con su factura</div></div>
+              <span style={{background:C.greenText,color:'#fff',borderRadius:9,padding:'8px 13px',fontSize:12,fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}>Conciliar {listosN}</span>
+            </div>}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?14:10}}>
               {ioc('exchange',C.greenBg,C.greenText,'Abonos',`${G.nAbo} movimiento${G.nAbo!==1?'s':''}`,()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
               {ioc('wallet',ccN>0?C.soonBg:C.bgSoft,ccN>0?C.soonText:C.accent,'Cargos',ccN>0?`${ccN} por clasificar · ${fmtM(ccMonto)}`:`${G.nCar} movimiento${G.nCar!==1?'s':''}`,()=>goHub(()=>{setSub('cargos');setConcView(ccN>0?'clasificar':'todos')}))}
@@ -26603,6 +26611,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const deskRail = (
     <div style={{padding:'14px 12px'}}>
       <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:11,padding:'0 2px'}}>Conciliación</div>
+      {listosN>0&&<div onClick={()=>setLoteConfirm(listosExactos)} style={{cursor:'pointer',background:C.greenBg,border:`1px solid ${C.greenText}`,borderRadius:10,padding:'9px 10px',marginBottom:8,display:'flex',alignItems:'center',gap:8}}>
+        <span style={{width:24,height:24,borderRadius:6,background:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={13} c={C.greenText}/></span>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:10.5,fontWeight:700,color:C.accent}}>Listo para conciliar</div><div style={{fontSize:8.5,color:C.greenText}}>{listosN} {listosN===1?'calza':'calzan'} exacto</div></div>
+        <span style={{background:C.greenText,color:'#fff',borderRadius:6,padding:'4px 9px',fontSize:9.5,fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}>Conciliar {listosN}</span>
+      </div>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}>
         <div onClick={()=>{setSub('abonos');setConcView('todos')}} style={{cursor:'pointer',border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 9px',background:C.surface,display:'flex',alignItems:'center',gap:7}}><span style={{width:24,height:24,borderRadius:6,background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={14} c={C.greenText}/></span><div style={{minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:C.text}}>Abonos</div><div style={{fontSize:9,color:C.muted}}>{G.nAbo} mov.</div></div></div>
         <div onClick={()=>{setSub('cargos');setConcView(ccN>0?'clasificar':'todos')}} style={{cursor:'pointer',border:`1px solid ${ccN>0?C.soonText:C.border}`,borderRadius:9,padding:'8px 9px',background:C.surface,display:'flex',alignItems:'center',gap:7}}><span style={{width:24,height:24,borderRadius:6,background:ccN>0?C.soonBg:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={14} c={ccN>0?C.soonText:C.accent}/></span><div style={{minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:C.text}}>Cargos</div>{ccN>0?<><div style={{fontSize:9,color:C.soonText,fontWeight:700}}>{ccN} por clasificar</div><div style={{fontSize:9.5,color:C.soonText,fontWeight:800,fontVariantNumeric:'tabular-nums'}}>{fmtM(ccMonto)}</div></>:<div style={{fontSize:9,color:C.muted}}>{G.nCar} mov.</div>}</div></div>
@@ -26959,12 +26972,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
         {/* Conciliar en lote: calces exactos y únicos de una; el resto (varios candidatos / sin factura) se cuenta y se resuelve abajo. Solo en overview o en el foco "Por conciliar" (donde tiene sentido). */}
         {sub==='abonos'&&(concView==='todos'||concView==='porconciliar')&&(()=>{
-          const pend=(movs||[]).filter(m=>esConciliable(m)&&((m.monto||0)-(m.monto_conciliado||0))>TOL)
-          if(!pend.length) return null
-          const cand=[], revisar=[], sinFac=[]
-          pend.forEach(m=>{ const mej=mejorCandidato(m); if(mej){ cand.push({m,f:mej}) } else { const cs=candidatos(m); if(cs.length>1) revisar.push(m); else sinFac.push(m) } })
-          const byFac={}; cand.forEach(x=>{ (byFac[String(x.f.id)]=byFac[String(x.f.id)]||[]).push(x) })
-          const exactos=[]; cand.forEach(x=>{ if(byFac[String(x.f.id)].length===1) exactos.push(x); else revisar.push(x.m) })
+          const {exactos,revisar}=lcData   // fuente única (definida arriba); el interior ya no recalcula
           if(!exactos.length) return null   // solo se muestra cuando hay calces exactos para conciliar de una; el resto (por revisar / sin factura) ya vive en los tiles "Por resolver"
           return (
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:11}}>
