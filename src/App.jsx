@@ -4046,12 +4046,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
           )})}
         </div></div>)}
         {addOpen&&(
-          <div onClick={()=>!addBusy&&setAddOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-            <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:440,background:'#fff',borderRadius:14,maxHeight:'88vh',overflowY:'auto',padding:'16px 18px'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                <span style={{fontSize:15,color:C.text}}>Agregar novedad SII</span>
-                <span onClick={()=>!addBusy&&setAddOpen(false)} style={{fontSize:20,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
-              </div>
+          <Modal title='Agregar novedad SII' fullscreenOnMobile onClose={()=>!addBusy&&setAddOpen(false)} footer={<button onClick={guardarNovedad} disabled={addBusy||!addForm.titulo.trim()} style={{width:'100%',height:40,borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:(addBusy||!addForm.titulo.trim())?'default':'pointer',opacity:(addBusy||!addForm.titulo.trim())?.5:1}}>{addBusy?'Guardando…':'Guardar novedad'}</button>}>
               {(()=>{ const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',background:'#fff',fontFamily:'inherit'}; const lab={fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',display:'block',marginBottom:4}; return (<>
                 <div style={{marginBottom:10}}><label style={lab}>Título *</label><input value={addForm.titulo} onChange={e=>setAddForm(f=>({...f,titulo:e.target.value}))} style={inp} placeholder='Ej: Fiscalización IVA servicios digitales'/></div>
                 <div style={{marginBottom:10}}><label style={lab}>Resumen</label><textarea value={addForm.resumen} onChange={e=>setAddForm(f=>({...f,resumen:e.target.value}))} rows={2} style={{...inp,resize:'vertical'}} placeholder='Qué dice, en una frase'/></div>
@@ -4076,10 +4071,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
                     )})}
                   </div>
                 </div>
-                <button onClick={guardarNovedad} disabled={addBusy||!addForm.titulo.trim()} style={{width:'100%',height:40,borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:(addBusy||!addForm.titulo.trim())?'default':'pointer',opacity:(addBusy||!addForm.titulo.trim())?.5:1}}>{addBusy?'Guardando…':'Guardar novedad'}</button>
               </>)})()}
-            </div>
-          </div>
+          </Modal>
         )}
         {biSec==='cartera'&&(<div style={{marginTop:12}}>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
@@ -27756,16 +27749,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         </>}
       </div>
       {revSugOpen&&(
-        <div onClick={()=>setRevSugOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:460,background:'#fff',borderRadius:18,maxHeight:'86vh',display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 12px 40px rgba(0,0,0,.18)'}}>
-            <div style={{padding:'16px 18px 12px',borderBottom:`1px solid ${C.border}`}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <span style={{fontSize:18,fontWeight:500,color:C.accent}}>Identificar por nombre</span>
-                <span onClick={()=>setRevSugOpen(false)} style={{fontSize:21,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
-              </div>
-              <div style={{fontSize:11,color:C.muted,marginTop:3}}>Abonos con un cliente sugerido por nombre único — confirma los correctos.</div>
-            </div>
-            <div style={{flex:1,overflowY:'auto',padding:'4px 18px 10px'}}>
+        <Modal title='Identificar por nombre' fullscreenOnMobile onClose={()=>setRevSugOpen(false)} footer={<div style={{display:'flex',gap:8}}><button onClick={()=>setRevSugOpen(false)} style={{flex:1,height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button><button disabled={revSugBusy||revSugSel.size===0} onClick={identificarLote} style={{flex:2,height:38,borderRadius:9,border:'none',background:revSugSel.size===0?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:revSugSel.size===0?'default':'pointer'}}>{revSugBusy?'Identificando…':`Identificar ${revSugSel.size}`}</button></div>}>
+            <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Abonos con un cliente sugerido por nombre único — confirma los correctos.</div>
               {sugeridosId.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:24}}>Sin sugerencias pendientes.</div>}
               {sugeridosId.map(s=>{ const on=revSugSel.has(s.mov.id); return (
                 <div key={s.mov.id} onClick={()=>setRevSugSel(p=>{const n=new Set(p);n.has(s.mov.id)?n.delete(s.mov.id):n.add(s.mov.id);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
@@ -27777,13 +27762,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   <span style={{fontSize:11,color:C.greenText,fontWeight:600,flexShrink:0,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>→ {cmap[s.cid]||'Cliente'}</span>
                 </div>
               )})}
-            </div>
-            <div style={{padding:'12px 18px',borderTop:`1px solid ${C.border}`,display:'flex',gap:8}}>
-              <button onClick={()=>setRevSugOpen(false)} style={{flex:1,height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button disabled={revSugBusy||revSugSel.size===0} onClick={identificarLote} style={{flex:2,height:38,borderRadius:9,border:'none',background:revSugSel.size===0?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:revSugSel.size===0?'default':'pointer'}}>{revSugBusy?'Identificando…':`Identificar ${revSugSel.size}`}</button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   )
