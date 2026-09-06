@@ -3665,7 +3665,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     {k:'sinrec', col:C.azulInfo, t:'Top sin recurrencia', sub:'Valiosos sin plan mensual', rows:opp.sinRec, metric:x=>fmtUFk(x.uf), val:x=>fmtUFk(x.uf), ctx:x=>'sin plan mensual'},
     {k:'winback', col:C.normal, t:'Win-back', sub:'Terminados recuperables (≤18m)', rows:opp.winback, metric:x=>`${fmtUFk(x.uf)} · ${x.meses}m`, val:x=>fmtUFk(x.uf), ctx:x=>`terminado hace ${x.meses}m`},
   ]
-  const kpiCard = (label,val,col,onClick) => (<div onClick={onClick} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'8px 10px',cursor:onClick?'pointer':'default',position:'relative'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div><div style={{fontSize:16,fontWeight:600,color:col}}>{val}</div>{onClick&&<span aria-hidden="true" style={{position:'absolute',top:7,right:8,fontSize:12,color:C.done}}>›</span>}</div>)
+  const kpiCard = (label,val,col,onClick) => (<div onClick={onClick} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',cursor:onClick?'pointer':'default',position:'relative'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div><div style={{fontSize:16,fontWeight:600,color:col}}>{val}</div>{onClick&&<span aria-hidden="true" style={{position:'absolute',top:7,right:8,fontSize:12,color:C.done}}>›</span>}</div>)
 
   // Etapa IA: narra y prioriza las oportunidades ya calculadas (cifras del código, IA solo el foco). Vía claude-proxy.
   const correrIA = async () => {
@@ -3858,7 +3858,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         {biSec==='oport'&&(<div style={{marginTop:12}}>
         <div style={{display:'flex',flexDirection:'column',gap:7}}>
           {OPPS.map(o=>{ const open=openOpp===o.k; const n=o.rows.length; return (
-            <div key={o.k} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${o.col}`,borderRadius:10,overflow:'hidden'}}>
+            <div key={o.k} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
               <div onClick={()=>n&&setOpenOpp(open?null:o.k)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 11px',cursor:n?'pointer':'default'}}>
                 <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{o.t}</div><div style={{fontSize:10,color:C.muted}}>{o.sub}</div></div>
                 <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:14,fontWeight:600,color:n?o.col:C.done}}>{n}</span>{n>0&&<span style={{fontSize:12,color:C.done}}>{open?'▴':'▾'}</span>}</div>
@@ -4158,7 +4158,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
     return (
       <div key={s.id}
         onClick={()=>onEdit(s)}
-        style={{background:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?C.soon:C.border}`,borderLeft:tardio?`4px solid #C77F18`:undefined,cursor:'pointer'}}
+        style={{background:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?C.soon:C.border}`,cursor:'pointer'}}
         onMouseEnter={e=>e.currentTarget.style.borderColor=tardio?C.soon:C.accent}
         onMouseLeave={e=>e.currentTarget.style.borderColor=tardio?C.soon:C.border}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:9,marginBottom:5}}>
@@ -13872,7 +13872,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>
           </div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            {selectedClient&&!esOficina(selectedClient.id)&&(()=>{ const por=gastosPorRendir(selectedClient.id); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
+            {selectedClient&&!esOficina(selectedClient.id)&&(()=>{ const por=gastosPorRendir(selectedClient.id); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:4}}><SIcon n='check' s={12} c={C.done}/>Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
           </div>
         </div>
 
@@ -20460,7 +20460,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
     const client=clients.find(c=>c.id===t.client_id)
     const bs=bsCard(t.due)
     return (
-      <div onClick={()=>setPreview(t)} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:`3px solid ${done?C.muted:urgencyColor(t.due,t.status)}`,overflow:'hidden',opacity:done?.7:1,cursor:'pointer'}}>
+      <div onClick={()=>setPreview(t)} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:'pointer'}}>
         <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
           {bigDate(t.due,done?C.muted:urgencyColor(t.due,t.status))}
           <div style={{flex:1,minWidth:0}}>
@@ -23193,7 +23193,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
                     <td style={td}><span style={{fontSize:9,fontWeight:800,borderRadius:20,padding:'2px 9px',background:nv.bg,color:nv.tx,whiteSpace:'nowrap'}}>{nv.lbl}</span></td>
                     <td style={{...td,color:C.muted}}>{g.items.length}</td>
                     <td style={{...td,fontVariantNumeric:'tabular-nums'}}>{g.maxDias} d</td>
-                    <td style={{...td,fontSize:11,color:gap==='sin contactar'?C.overdueText:C.muted}}>{gap}{nc>0?` · ${nc}✓`:''}</td>
+                    <td style={{...td,fontSize:11,color:gap==='sin contactar'?C.overdueText:C.muted}}>{gap}{nc>0&&<span style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:3}}>· {nc}<SIcon n='check' s={11} c={C.muted}/></span>}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:C.accent}}>{f0(g.total)}</td>
                     <td style={{...td,textAlign:'right',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
                       {auto ? <span style={{display:'inline-flex',gap:6,alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'5px 9px'}}>En automático</span><button onClick={()=>pausar(g.cid)} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.done,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:600,cursor:'pointer'}}>Pausar</button></span>
@@ -23799,7 +23799,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           <span onClick={()=>descartar(ev.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.done,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}>×</span>
           {(()=>{ const tg={AGENDA:[C.tealBg,C.tealText],CORREO:[C.azulBg,C.azulInfo],DOCUMENTO:[C.greenBg,C.greenText],NOTA:[C.soonBg,C.soonText]}[ev.tag||'AGENDA']||[C.tealBg,C.tealText]; return <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:tg[0],color:tg[1],letterSpacing:'.02em'}}>{ev.tag||'AGENDA'}</span> })()}
           {ev.iaLoading&&<span style={{fontSize:9,fontWeight:700,color:C.azulInfo,marginLeft:6}}>Redactando con IA…</span>}
-          {ev.ia&&<span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.greenBg,color:C.greenText,marginLeft:6,letterSpacing:'.02em'}}>✨ IA</span>}
+          {ev.ia&&<span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,background:C.greenBg,color:C.greenText,marginLeft:6,letterSpacing:'.02em',display:'inline-flex',alignItems:'center',gap:3}}><svg width='9' height='9' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8z'/></svg>IA</span>}
           {ev.fecha&&<span style={{fontSize:9,color:C.done,marginLeft:6}}>{fFecha(ev.fecha)}</span>}
           {ev.client_id ? <div onClick={()=>cliOpen(ev.client_id)} style={{fontSize:13.5,fontWeight:700,color:C.accent,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(ev.client_id)}</div>
             : <div style={{margin:'7px 0 4px'}}><input value={agq[ev.id]||''} onChange={e=>setAgq(q=>({...q,[ev.id]:e.target.value}))} placeholder='¿De qué cliente? Buscar…' style={{...inp,height:32,fontSize:12}}/>{(agq[ev.id]||'').trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:3,overflow:'hidden',maxHeight:120,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(agq[ev.id]))).slice(0,6).map(c=><div key={c.id} onClick={()=>{setAgenda(a=>a.map(x=>x.id===ev.id?{...x,client_id:String(c.id)}:x));setAgq(q=>({...q,[ev.id]:''}))}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</div>}
