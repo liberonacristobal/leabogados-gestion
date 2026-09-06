@@ -7142,6 +7142,7 @@ function mesScoreCandidata(concept,due,gmes){
 // Chequeo de cobertura del año: facturas EMITIDAS (con folio real) que quedaron SIN CLIENTE = fantasmas por asignar.
 // Read-only salvo asignar (compuerta humana). Para las del SII que NO están en el sistema, deriva al cotejo mes a mes.
 function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onCotejar,onClose}){
+  const fmtM = fmt   // fix crash: fmtM se usaba sin definir en este scope (ReferenceError al abrir). fmtM===fmt = monto completo, sin cambio de cifra
   const realFolio = b => /\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,''))
   const emit = b => b && !b.deleted_at && b.status!=='Programada' && b.status!=='Anulada' && realFolio(b)
   const yrOf = b => String(b.issued_at||b.sii_synced_at||'').slice(0,4)
