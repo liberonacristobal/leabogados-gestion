@@ -7009,7 +7009,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     return out
   },[anticipos,conciliacion])
   const total=rutMulti.length+folioDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length
-  if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{fontSize:26,color:C.greenText}}>✓</div><div style={{fontSize:13,fontWeight:600,color:C.greenText,marginTop:6}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
+  if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
   return <div>
