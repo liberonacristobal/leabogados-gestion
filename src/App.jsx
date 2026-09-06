@@ -26451,9 +26451,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const prSinId = _prSinIdA.length, prConf = _prConfA.length, prDesc = _prDescA.length
   const pr90 = porResolverMovs.filter(m=>{ const t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; return isNaN(t)?false:((_hoyPR-t)/86400000)>90 }).reduce((s,m)=>s+(m.monto||0),0)
   const prSub=[
-    {n:prSinId,m:_sumM(_prSinIdA),cv:'sinid',t:'Abonos sin cliente asignado',s:'no sabemos de quién es el ingreso',act:'Asignar'},
-    {n:prConf,m:_sumM(_prConfA),cv:'porconciliar',t:'Cobros identificados',s:'calzan con una factura emitida · por registrar',act:'Conciliar'},
-    {n:prDesc,m:_sumM(_prDescA),cv:'descalces',t:'Abonos sin factura asociada',s:'anticipo, fondo o pago parcial',act:'Clasificar'},
+    {n:prSinId,m:_sumM(_prSinIdA),cv:'sinid',t:'Falta asignar el cliente',s:'no sabemos de quién es el ingreso',act:'Asignar'},
+    {n:prConf,m:_sumM(_prConfA),cv:'porconciliar',t:'Por confirmar',s:'la app ya propone quién es',act:'Confirmar'},
+    {n:prDesc,m:_sumM(_prDescA),cv:'descalces',t:'Falta la factura',s:'anticipo, fondo o pago parcial',act:'Vincular'},
   ].filter(r=>r.n>0)
   // Identificar por su nombre (la app YA sabe de quién es) y Cargos por clasificar: fuente ÚNICA de conteo + $monto, usada por hub móvil, rail escritorio e interior.
   const sugMonto = (sugeridosId||[]).reduce((s,x)=>s+Math.abs(x.mov?.monto||0),0)
