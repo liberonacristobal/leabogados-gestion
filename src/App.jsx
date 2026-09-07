@@ -23206,7 +23206,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
-function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFicha, onClose }){
+function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const LIBERAR_UMBRAL = 3
   const [recMap,setRecMap] = useState({})      // factura.id → fecha ISO último recordatorio
@@ -23266,6 +23266,32 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
     try{ await supabase.from('learnings').delete().eq('kind','fd_auto').eq('key','cobranza:'+cid) }catch(_){}
   }
   const NIV = { firme:{bg:C.soonBg,tx:C.soonText,lbl:'Firme'}, final:{bg:C.overdueBg,tx:C.overdueText,lbl:'Final'} }
+  const _MA = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  // Detalle de una factura vencida (compartido móvil/escritorio): fecha día-grande + folio + glosa + estado + saldo, y acciones Buscar pago (→ Conciliación) / Abrir factura (→ ficha/factura, con el Conciliar en un toque). Reusa helpers (folioN, saldoBill, fmtFechaDMY).
+  const detItem = ({b,acc})=>{ const s=String(b.issued_at||b.due||'').slice(0,10); const dd=/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-'):null; const parcial=(b.paid_amount||0)>0
+    return (
+    <div key={b.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'8px 0'}}>
+      <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,cursor:onOpenFactura?'pointer':'default'}}>
+        <div style={{width:40,textAlign:'center',flexShrink:0,lineHeight:1.1}}>{dd?<><div style={{fontSize:15,fontWeight:800,color:C.accent}}>{dd[2]}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>{_MA[+dd[1]-1]} {dd[0].slice(2)}</div></>:<span style={{fontSize:11,color:C.done}}>—</span>}</div>
+        <SIcon n='alert' s={15} c={C.overdueText}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}</div>
+          {b.concept&&<div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{b.concept}</div>}
+          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:2}}>
+            <span style={{fontSize:8.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:12,padding:'1px 7px'}}>Vencida {acc.diasVenc} d</span>
+            <span style={{fontSize:9,color:C.done}}>{b.issued_at?`emitida ${fmtFechaDMY(b.issued_at)}`:''}{b.due?` · vence ${fmtFechaDMY(b.due)}`:''}</span>
+          </div>
+        </div>
+        <div style={{textAlign:'right',flexShrink:0}}>
+          <div style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</div>
+          {parcial&&<div style={{fontSize:8.5,color:C.done}}>abonado {f0(b.paid_amount)} de {f0(b.amount)}</div>}
+        </div>
+      </div>
+      <div style={{display:'flex',gap:6,marginTop:6,marginLeft:51,flexWrap:'wrap'}}>
+        {onIrConciliacion&&<button onClick={()=>onIrConciliacion()} style={{fontSize:10.5,fontWeight:600,color:C.greenText,background:'#fff',border:`1px solid #CFE9DD`,borderRadius:7,padding:'5px 10px',cursor:'pointer'}}>Buscar pago ›</button>}
+        {onOpenFactura&&<button onClick={()=>onOpenFactura(b)} style={{fontSize:10.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer'}}>Abrir factura ›</button>}
+      </div>
+    </div>) }
 
   return (
     <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?1040:560,margin:'0 auto'}}>
@@ -23308,8 +23334,8 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
                         : <span style={{display:'inline-flex',gap:6,alignItems:'center'}}>{nc>=LIBERAR_UMBRAL&&<button onClick={()=>liberar(g.cid)} style={{background:'#fff',border:`1px solid ${C.greenText}55`,color:C.greenText,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:700,cursor:'pointer'}}>Liberar →</button>}<button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:7,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></span>}
                     </td>
                   </tr>
-                  {open&&<tr><td colSpan={7} style={{background:C.bgSoft,borderTop:`1px dashed ${C.border}`,padding:'8px 12px 10px'}}>
-                    {g.items.map(({b,acc})=>(<div key={b.id} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:11.5,padding:'3px 0'}}><span style={{color:C.text}}><b>Factura N° {folioN(b.invoice_no)||'—'}</b> · vence {b.due?fmtFechaDMY(b.due):'—'} · vencida {acc.diasVenc} d</span><span style={{fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</span></div>))}
+                  {open&&<tr><td colSpan={7} style={{background:C.bgSoft,borderTop:`1px dashed ${C.border}`,padding:'4px 14px 10px'}}>
+                    {g.items.map(detItem)}
                   </td></tr>}
                   </Fragment>
                 )})}
@@ -23323,10 +23349,12 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(g.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span>
             <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{f0(g.total)}</span>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap'}}>
+          <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap',cursor:'pointer'}}>
             <span style={{fontSize:9.5,fontWeight:700,padding:'3px 9px',borderRadius:20,background:nv.bg,color:nv.tx}}>{nv.lbl}</span>
             <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} · vencida hasta {g.maxDias} d · {gapTxt}</span>
+            <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{expCli===g.cid?'▾':'▸'}</span>
           </div>
+          {expCli===g.cid&&<div style={{marginTop:6,borderTop:`1px solid ${C.bgSoft}`}}>{g.items.map(detItem)}</div>}
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:9,marginTop:10}}>
             {auto ? <span style={{fontSize:11,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 11px'}}>En automático</span>
                   : <div style={{fontSize:10,color:C.done}}>{nc>0?`${nc} envío${nc!==1?'s':''} confirmado${nc!==1?'s':''}`:'Sugerido'}</div>}
@@ -30071,7 +30099,7 @@ export default function App() {
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>setTab('presupuestoOficina')}/>}
-            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setTab('dashboard')}/>}
+            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={()=>setTab('conciliacion')} onClose={()=>setTab('dashboard')}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setTab('dashboard')}/>}
             {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
