@@ -7627,7 +7627,7 @@ function DepurarCobradasModal({rows=[], clients=[], respaldoMap={}, onOpenFactur
 const CIERRE_EST = {
   cobrada:   { label:'Pagada',        color:C.greenText,   bg:C.greenBg,   dot:C.normal },
   detectado: { label:'Por conciliar', color:C.soonText,    bg:C.soonBg,    dot:C.soon },
-  sinpago:   { label:'Por pagar',     color:C.overdueText, bg:C.overdueBg, dot:C.overdue },
+  sinpago:   { label:'Por cobrar',    color:C.overdueText, bg:C.overdueBg, dot:C.overdue },
   porcobrar: { label:'Por cobrar',    color:C.accent,      bg:C.azulBg,    dot:C.accent },   // pseudo-filtro: detectado + sinpago (todo lo que tiene saldo)
 }
 function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abonos=[], pagosDe, onConciliarPago, onRecordar, onRecordarTanda, recordadoMap={}, diasDesde, onOpenClientFicha, onOpenFactura, onOpenConciliacion, mesInicial }) {
@@ -7729,7 +7729,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
         return <button key={v||'all'} onClick={()=>setResp(v)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?(pc?pc.color:C.accent):C.border}`,background:on?(pc?pc.bg:C.azulBg):'#fff',color:on?(pc?pc.color:C.accent):C.muted,whiteSpace:'nowrap'}}>{l}</button> })}
     </div>}
 
-    {/* Emitido (hero) + 4 tarjetas-acordeón: Pagado · Por pagar · Sin identificar · Vencidas. Al tocar una se despliega SU listado abajo (estFiltro). Wording: al emitir ya está cobrado → Pagado / Por pagar. */}
+    {/* Emitido (hero) + 4 tarjetas-acordeón: Pagado · Por cobrar · Sin identificar · Vencidas. Al tocar una se despliega SU listado abajo (estFiltro). Wording unificado: Pagado / Por cobrar (facturas del cliente = plata que entra). */}
     <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginBottom:9}}>
       <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>{modo==='mes'?`Emitido · ${mesLabel}`:`Emitido acumulado ${mesYear} (a ${MESNOM[+mes.slice(5,7)-1].toLowerCase()})`}</div>
       <div style={{display:'flex',alignItems:'baseline',gap:9,marginTop:4}}><div style={{fontSize:25,fontWeight:800,color:C.accent,letterSpacing:-.6}}>{fmt(tot.emi)}</div><div style={{fontSize:11,color:C.muted,fontWeight:600}}>{filas.length} factura{filas.length!==1?'s':''}</div></div>
@@ -7747,7 +7747,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
         </div>) }
       return (<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:9}}>
         {card('cobrada','check',C.greenText,C.greenBg,'Pagado',fmt(tot.cob),C.greenText,`${tot.nC} factura${tot.nC!==1?'s':''} · ${pct(tot.tasa)}`)}
-        {card('porcobrar','file',C.accent,C.azulBg,'Por pagar',fmt(tot.pen),C.accent,`${tot.nD+tot.nS} facturas`)}
+        {card('porcobrar','file',C.accent,C.azulBg,'Por cobrar',fmt(tot.pen),C.accent,`${tot.nD+tot.nS} facturas`)}
         {card('sinid','exchange',C.soonText,C.ambarBg,'Sin identificar',fmt(totSinId),C.soonText,`${sinIdentificar.length} pago${sinIdentificar.length!==1?'s':''} del banco`)}
         {card('vencido','alert',C.overdueText,C.overdueBg,'Vencidas',String(tot.nV),C.overdueText,`${fmtShort(tot.mV)} · recordar`)}
       </div>)
@@ -7876,7 +7876,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
     <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginTop:10}}>
       <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:10}}>Historial y comparación</div>
       {cur&&prev&&<div style={{display:'flex',gap:7,marginBottom:12}}>
-        {[['Emitido',cur.emi,prev.emi,false],['Pagado',cur.cob,prev.cob,false],['Por pagar',cur.pen,prev.pen,true]].map(([l,a,b,inv])=>
+        {[['Emitido',cur.emi,prev.emi,false],['Pagado',cur.cob,prev.cob,false],['Por cobrar',cur.pen,prev.pen,true]].map(([l,a,b,inv])=>
           <div key={l} style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 9px'}}>
             <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
             <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-.2}}>{fmtShort(a)}</div>
@@ -9348,7 +9348,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     </span>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:600,color:C.accent}}>El pago incluyó lo de proveedores</div>
-                      <div style={{fontSize:11,color:C.muted,marginTop:2,lineHeight:1.4}}>{nombres} · {fmt(tot)} → pasa{pend.length>1?'n':''} a <strong>Por pagar</strong>.</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2,lineHeight:1.4}}>{nombres} · {fmt(tot)} → pasa{pend.length>1?'n':''} a <strong>Por cobrar</strong>.</div>
                     </div>
                   </div>
                 </div>
@@ -9394,7 +9394,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <div style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:15,paddingTop:14}}>→</div>
                 <div onClick={()=>irAEstado('emitidas')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
                   <SIcon n='file' s={19} c={C.accent}/>
-                  <div style={{fontSize:9,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginTop:4,fontWeight:600}}>Por pagar</div>
+                  <div style={{fontSize:9,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginTop:4,fontWeight:600}}>Por cobrar</div>
                   <div style={{fontSize:15.5,fontWeight:800,color:C.accent,marginTop:1}}>{fmtShort(porCobrar)}</div>
                 </div>
                 <div style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:15,paddingTop:14}}>→</div>
@@ -23419,7 +23419,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const enEspera = useMemo(()=> (billing||[]).filter(b=>{ if(!facturaCobrable(b)) return false; const dl=daysLeft(b.due); if(!(dl!=null&&dl<0)) return false; const last=recMap[String(b.id)]; if(!last) return false; const gap=Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000); return gap<COBRANZA_GAP }).length, [billing,recMap,hoy])
   const totalDue = grupos.reduce((a,g)=>a+g.total,0)
   const nFacturas = grupos.reduce((a,g)=>a+g.items.length,0)
-  // Contexto: "Por pagar total" (todo lo emitido sin pagar, vencido + al día) para explicar la diferencia con Facturación. Cobranza actúa solo sobre lo vencido.
+  // Contexto: "Por cobrar total" (todo lo emitido sin pagar, vencido + al día) para explicar la diferencia con Facturación. Cobranza actúa solo sobre lo vencido.
   const _cobr=b=>!b.deleted_at && b.invoice_no && !['reembolso','nota_credito'].includes(b.billing_type) && ['Pendiente','Vencido'].includes(b.status) && saldoBill(b)>0
   const porPagarTotal=(billing||[]).filter(_cobr).reduce((s,b)=>s+saldoBill(b),0)
   const nAlDia=(billing||[]).filter(b=>_cobr(b)&&!(b.due&&b.due<hoy)).length
@@ -23490,7 +23490,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
         <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Vencido</div>
         <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(totalDue)}</div>
         <div style={{fontSize:10.5,opacity:.85}}>{grupos.length} cliente{grupos.length!==1?'s':''} · {nFacturas} factura{nFacturas!==1?'s':''} vencida{nFacturas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
-        {porPagarTotal>totalDue&&<div style={{marginTop:9,paddingTop:9,borderTop:'1px solid rgba(255,255,255,.18)',fontSize:10.5,opacity:.9,display:'flex',justifyContent:'space-between',gap:8}}><span>Por pagar total</span><span style={{fontWeight:700}}>{f0(porPagarTotal)}{nAlDia>0?` · ${nAlDia} al día`:''}</span></div>}
+        {porPagarTotal>totalDue&&<div style={{marginTop:9,paddingTop:9,borderTop:'1px solid rgba(255,255,255,.18)',fontSize:10.5,opacity:.9,display:'flex',justifyContent:'space-between',gap:8}}><span>Por cobrar total</span><span style={{fontWeight:700}}>{f0(porPagarTotal)}{nAlDia>0?` · ${nAlDia} al día`:''}</span></div>}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px',marginBottom:12}}>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Cobranza automática</div><div style={{fontSize:10,color:C.muted}}>{autoGlobal?'La app envía sola los recordatorios de los clientes que liberaste.':'Off — aunque liberes un cliente, no se envía solo hasta activar esto.'}</div></div>
