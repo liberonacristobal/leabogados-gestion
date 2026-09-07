@@ -2573,6 +2573,18 @@ function computeAgingCartera(billingRows, clientesMap){
 
 function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
+  const [verTodosProy,setVerTodosProy] = useState(false)   // "Ver todos" en Mis proyectos: carga mis terminados y muestra los 3 grupos
+  const [terminadosProy,setTerminadosProy] = useState(null) // mis proyectos terminados (activo:false), cargados bajo demanda
+  const cargarTerminadosProy = useCallback(async()=>{
+    setVerTodosProy(true)
+    if(terminadosProy!==null) return
+    if(DEMO){ setTerminadosProy([{id:'pt1',cliente_id:'c4',nombre_proyecto:'Sucesión y posesión efectiva',responsable:INICIALES_RESP[user?.name]||null,estado:'verde',activo:false,updated_at:new Date(Date.now()-38*864e5).toISOString()}]); return }
+    const miIni=INICIALES_RESP[user?.name]||null
+    let qy=supabase.from('proyectos_cartera').select('*').eq('activo',false).order('updated_at',{ascending:false}).limit(50)
+    if(miIni) qy=qy.eq('responsable',miIni)
+    const {data}=await qy
+    setTerminadosProy(data||[])
+  },[terminadosProy,user])
   // Alertas del dueño ("Requiere atención"): replegado por defecto; descartadas persisten (reaparecen si el monto empeora >20%).
   const [alertExp,setAlertExp] = usePersistedState('dash_alert_exp',false)
   const [alertOff,setAlertOff] = usePersistedState('dash_alert_off',{})
@@ -3510,22 +3522,55 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
             return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>setMisProyOpen(o=>!o)) })()}
         </div>
       </div>
-      {misProyOpen&&(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
-        // Misma fuente que el panel: movimiento real → última señal + orden (lo que se mueve, arriba).
-        const movByP={}; mine.forEach(p=>{ movByP[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) })
-        const sorted=[...mine].sort((a,b)=>(movByP[b.id].score)-(movByP[a.id].score))
+      {misProyOpen&&(()=>{
+        const miIni=INICIALES_RESP[user?.name]||null; const isMine=p=>!miIni||(p.responsable||'')===miIni
+        const enCurso=(proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado && isMine(p))
+        const enPausa=(proyectosCartera||[]).filter(p=>p.activo!==false && !!p.pausado && isMine(p))
+        const term = verTodosProy ? (terminadosProy||[]) : []
+        if(!enCurso.length && !enPausa.length && !term.length) return null
+        const movByP={}; enCurso.forEach(p=>{ movByP[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) })
+        const sorted=[...enCurso].sort((a,b)=>(movByP[b.id].score)-(movByP[a.id].score))
         const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
+        const nm=p=>clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'
+        const ico=(d,c)=><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={c} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
+        const abrir=p=>{ onOpenProyecto?onOpenProyecto(p.id):setTab('cartera') }
+        const groupHd=(icoEl,label,n,col,bg)=><div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 6px',background:C.bgSoft,borderTop:'1px solid #DDE2E6'}}><span style={{width:20,height:20,borderRadius:6,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icoEl}</span><span style={{flex:1,fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:col}}>{label}</span><span style={{fontSize:10,fontWeight:800,color:col}}>{n}</span></div>
+        const rowCurso=p=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?new Date(s.iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):`hace ${dd} d`); const col=CART_DOT[p.estado||'verde']; return (
+          <div key={p.id} onClick={()=>abrir(p)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
+            <span style={{width:30,height:30,borderRadius:8,background:col+'1A',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span style={{width:9,height:9,borderRadius:'50%',background:col}}/></span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm(p)}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>{s&&<span style={{width:6,height:6,borderRadius:'50%',background:SEÑAL_COL[s.tipo]||C.muted,flexShrink:0}}/>}{s?s.texto:(p.nota||p.nombre_proyecto||'sin señales')}</div></div>
+            <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{s?cu:''}</span><span style={{color:C.done,fontSize:15,flexShrink:0}}>›</span>
+          </div>) }
+        const rowSimple=(p,sub,badge,icoEl,bg,pill)=>(
+          <div key={p.id} onClick={()=>abrir(p)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
+            <span style={{width:30,height:30,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icoEl}</span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm(p)}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div></div>
+            <span style={{fontSize:9,fontWeight:700,borderRadius:20,padding:'2px 9px',flexShrink:0,...pill}}>{badge}</span><span style={{color:C.done,fontSize:15,flexShrink:0}}>›</span>
+          </div>)
+        const pausaIco=c=>ico(<><line x1='8' y1='5' x2='8' y2='19'/><line x1='16' y1='5' x2='16' y2='19'/></>,c)
+        const checkIco=c=>ico(<path d='M20 6L9 17l-5-5'/>,c)
+        const cnt=[[enCurso.length,'en curso'],[enPausa.length,'pausa'],...(verTodosProy?[[term.length,'fin']]:[])].filter(x=>x[0]>0)
         return (
         <div style={{padding:'8px 20px 0'}}>
-          <div style={{border:'1px solid #DDE2E6',borderRadius:10,overflow:'hidden'}}>
-            {sorted.slice(0,6).map((p,i)=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?new Date(s.iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):`hace ${dd} d`); return (
-              <div key={p.id} onClick={()=>{ onOpenProyecto?onOpenProyecto(p.id):setTab('cartera') }} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:i>0?'1px solid #DDE2E6':'none',background:'#fff',cursor:'pointer'}}>
-                <span style={{width:8,height:8,borderRadius:'50%',background:CART_DOT[p.estado||'verde'],flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>{s&&<span style={{width:5,height:5,borderRadius:'50%',background:SEÑAL_COL[s.tipo]||C.muted,flexShrink:0}}/>}{s?s.texto:(p.nota||p.nombre_proyecto||'sin señales')}</div></div>
-                <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{s?cu:''}</span>
-              </div>
-            )})}
-            <div onClick={()=>setTab('cartera')} style={{padding:'9px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',background:'#fff'}}>Ver todos →</div>
+          <div style={{border:'1px solid #DDE2E6',borderRadius:12,overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'center',gap:11,padding:'12px 13px',background:C.accent}}>
+              <span style={{width:32,height:32,borderRadius:9,background:'rgba(255,255,255,.14)',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></svg></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:'rgba(255,255,255,.75)'}}>Mis proyectos</div><div style={{fontSize:15,fontWeight:800,color:'#fff',marginTop:1}}>{enCurso.length+enPausa.length+term.length} en total</div></div>
+              <div style={{display:'flex',gap:5,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>{cnt.map(([n,l],i)=><span key={i} style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:'rgba(255,255,255,.16)',color:'#fff',whiteSpace:'nowrap'}}>{n} {l}</span>)}</div>
+            </div>
+            {enCurso.length>0 && groupHd(ico(<polygon points='6 4 20 12 6 20 6 4' fill='#0F6E56' stroke='none'/>,'#0F6E56'),'En curso',enCurso.length,C.greenText,C.greenBg)}
+            {sorted.slice(0,6).map(rowCurso)}
+            {enPausa.length>0 && <>
+              {groupHd(pausaIco('#5F5E5A'),'En pausa',enPausa.length,C.grisText,C.bgWarm)}
+              {enPausa.map(p=>rowSimple(p, p.nota||'en pausa','En pausa',pausaIco('#5F5E5A'),C.bgWarm,{color:C.grisText,background:C.bgWarm}))}
+            </>}
+            {verTodosProy && term.length>0 && <>
+              {groupHd(checkIco('#99ABB4'),'Terminados',term.length,C.done,C.bgSoft)}
+              {term.map(p=>rowSimple(p, p.nota||'terminado','Terminado',checkIco('#99ABB4'),C.bgSoft,{color:C.done,background:C.bgSoft,border:`1px solid ${C.border}`}))}
+            </>}
+            {!verTodosProy
+              ? <div onClick={cargarTerminadosProy} style={{padding:'11px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer',background:'#fff'}}>Ver todos →</div>
+              : <div onClick={()=>setTab('cartera')} style={{padding:'11px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer',background:'#fff'}}>Abrir en Cartera →</div>}
           </div>
         </div>
         )
