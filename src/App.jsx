@@ -23458,7 +23458,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const [autoCli,setAutoCli] = useState({})    // client_id → true si liberado a automático
   const [sending,setSending] = useState(null)  // client_id en envío
   const [autoGlobal,setAutoGlobal] = useState(false)   // interruptor GLOBAL: la app envía sola los recordatorios de los clientes liberados (config cobranza_auto; lo lee el edge fn cobranza-auto). Sin esto, "En automático" queda inerte.
-  const [sortBy,setSortBy] = useState({col:'monto',dir:'desc'})   // escritorio: orden de la tabla
+  const [sortBy,setSortBy] = useState({col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
   const [expCli,setExpCli] = useState(null)   // escritorio: cliente con sus facturas desplegadas
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
@@ -23470,16 +23470,31 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
       setRecMap(rm); setOkCount(ok); setAutoCli(au); setAutoGlobal(ag)
     },()=>{})
   },[])
-  // Agrupa las facturas VENCIDAS con acción pendiente hoy por cliente.
+  // Agrupa por cliente TODAS las facturas pendientes de pago (vencidas o NO): el usuario quiere ver toda la deuda
+  // (hay clientes que pagan muy rápido). Por cliente: total (toda la deuda), vencido (solo lo vencido), maxDias, y
+  // nAccion = facturas vencidas que toca recordar hoy (cobranzaAccion). Facturas ordenadas nueva→antigua.
   const grupos = useMemo(()=>{
     const by={}
-    ;(billing||[]).forEach(b=>{ const acc=cobranzaAccion(b, recMap[String(b.id)], hoy); if(!acc) return; const cid=String(b.client_id); (by[cid]=by[cid]||{cid,items:[],total:0,maxDias:0,nivel:'firme'}); by[cid].items.push({b,acc}); by[cid].total+=saldoBill(b); by[cid].maxDias=Math.max(by[cid].maxDias,acc.diasVenc); if(acc.nivel==='final') by[cid].nivel='final' })
-    return Object.values(by).sort((a,b)=>b.total-a.total)
+    ;(billing||[]).forEach(b=>{ if(!facturaCobrable(b)||!['Pendiente','Vencido'].includes(b.status)) return
+      const cid=String(b.client_id); const acc=cobranzaAccion(b, recMap[String(b.id)], hoy); const dl=daysLeft(b.due); const venc=dl!=null&&dl<0; const s=saldoBill(b)
+      const g=(by[cid]=by[cid]||{cid,items:[],total:0,vencido:0,maxDias:0,nivel:'firme',nAccion:0})
+      g.items.push({b,acc,venc,diasVenc:venc?-dl:0}); g.total+=s
+      if(venc){ g.vencido+=s; g.maxDias=Math.max(g.maxDias,-dl); if(acc&&acc.nivel==='final') g.nivel='final' }
+      if(acc) g.nAccion++ })
+    Object.values(by).forEach(g=> g.items.sort((x,y)=> String(y.b.issued_at||y.b.due||'').localeCompare(String(x.b.issued_at||x.b.due||'')) ))   // nueva → antigua
+    return Object.values(by)
   },[billing,recMap,hoy])
   // Facturas vencidas ya contactadas hace poco (dentro del piso) — contexto, sin acción.
   const enEspera = useMemo(()=> (billing||[]).filter(b=>{ if(!facturaCobrable(b)) return false; const dl=daysLeft(b.due); if(!(dl!=null&&dl<0)) return false; const last=recMap[String(b.id)]; if(!last) return false; const gap=Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000); return gap<COBRANZA_GAP }).length, [billing,recMap,hoy])
-  const totalDue = grupos.reduce((a,g)=>a+g.total,0)
-  const nFacturas = grupos.reduce((a,g)=>a+g.items.length,0)
+  const vencidoTotal = grupos.reduce((a,g)=>a+g.vencido,0)
+  const deudaTotal = grupos.reduce((a,g)=>a+g.total,0)
+  const nVencidas = grupos.reduce((a,g)=>a+g.items.filter(x=>x.venc).length,0)
+  const gruposAccion = grupos.filter(g=>g.nAccion>0)   // clientes con vencido que toca recordar hoy
+  // Orden compartido (móvil y escritorio): por nombre / N° facturas / monto (deuda total) / vencido / mora, asc o desc.
+  const gsort = useMemo(()=>{ const d=sortBy.dir==='desc'?-1:1
+    const key={facturas:g=>g.items.length,total:g=>g.total,monto:g=>g.total,vencido:g=>g.vencido,mora:g=>g.maxDias}[sortBy.col]
+    return [...grupos].sort((a,b)=> sortBy.col==='cliente' ? (sortBy.dir==='asc'?1:-1)*cn(a.cid).localeCompare(cn(b.cid),'es') : d*((key?key(a):a.total)-(key?key(b):b.total)) )
+  },[grupos,sortBy])
   // Contexto: "Por cobrar total" (todo lo emitido sin pagar, vencido + al día) para explicar la diferencia con Facturación. Cobranza actúa solo sobre lo vencido.
   const _cobr=b=>!b.deleted_at && b.invoice_no && !['reembolso','nota_credito'].includes(b.billing_type) && ['Pendiente','Vencido'].includes(b.status) && saldoBill(b)>0
   const porPagarTotal=(billing||[]).filter(_cobr).reduce((s,b)=>s+saldoBill(b),0)
@@ -23487,18 +23502,20 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
 
   async function enviarCliente(g, skipConfirm){
     const cl=clients.find(c=>String(c.id)===String(g.cid)); const to=(cl?.email||'').trim()
+    const toRem=g.items.filter(x=>x.acc)   // solo VENCIDAS que toca recordar (no las al día)
+    if(!toRem.length){ appAlert('Este cliente no tiene facturas vencidas por recordar.'); return }
     if(!to||!/@/.test(to)){ appAlert('Ese cliente no tiene correo. Agrégalo en su ficha.'); return }
-    if(!skipConfirm && !DEMO && !(await appConfirm(`¿Enviar el recordatorio a ${cn(g.cid)} — ${g.items.length} factura${g.items.length!==1?'s':''}, ${f0(g.total)} — a ${to}? Se envía como tú.`))) return   // compuerta: correo en tu nombre
+    if(!skipConfirm && !DEMO && !(await appConfirm(`¿Enviar el recordatorio a ${cn(g.cid)} — ${toRem.length} factura${toRem.length!==1?'s':''} vencida${toRem.length!==1?'s':''}, ${f0(g.vencido)} — a ${to}? Se envía como tú.`))) return   // compuerta: correo en tu nombre
     setSending(g.cid)
-    if(DEMO){ await new Promise(r=>setTimeout(r,400)); const now=new Date().toISOString(); setRecMap(m=>{ const n={...m}; g.items.forEach(({b})=>n[String(b.id)]=now); return n }); setOkCount(o=>({...o,[g.cid]:(o[g.cid]||0)+1})); setSending(null); appAlert('En demo no se envía; se registró la cadencia.'); return }
+    if(DEMO){ await new Promise(r=>setTimeout(r,400)); const now=new Date().toISOString(); setRecMap(m=>{ const n={...m}; toRem.forEach(({b})=>n[String(b.id)]=now); return n }); setOkCount(o=>({...o,[g.cid]:(o[g.cid]||0)+1})); setSending(null); appAlert('En demo no se envía; se registró la cadencia.'); return }
     let ok=0
-    for(const {b} of g.items){ try{ const r=recordatorioCobro(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}) }catch(_){}; setRecMap(m=>({...m,[String(b.id)]:at})) } }catch(_){} }
+    for(const {b} of toRem){ try{ const r=recordatorioCobro(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}) }catch(_){}; setRecMap(m=>({...m,[String(b.id)]:at})) } }catch(_){} }
     if(ok){ const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); try{ await supabase.from('learnings').upsert({kind:'cobranza_ok',key:String(g.cid),value:String(nc)},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio enviado a ${cn(g.cid)} (${ok} factura${ok!==1?'s':''}).`) }
     setSending(null)
   }
   async function enviarTodos(){
-    if(!(await appConfirm(`¿Enviar el recordatorio que corresponde a ${grupos.length} cliente${grupos.length!==1?'s':''} (${nFacturas} factura${nFacturas!==1?'s':''}, ${f0(totalDue)})?`))) return
-    for(const g of grupos){ if(!autoCli[g.cid]) await enviarCliente(g, true) }
+    if(!(await appConfirm(`¿Enviar el recordatorio que corresponde a ${gruposAccion.length} cliente${gruposAccion.length!==1?'s':''} (${nVencidas} factura${nVencidas!==1?'s':''} vencida${nVencidas!==1?'s':''}, ${f0(vencidoTotal)})?`))) return
+    for(const g of gruposAccion){ if(!autoCli[g.cid]) await enviarCliente(g, true) }
   }
   async function setAutoGlob(v){   // interruptor global (config cobranza_auto) que habilita el envío automático del edge fn
     const prev=autoGlobal; setAutoGlobal(v); if(DEMO) return
@@ -23516,17 +23533,19 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const NIV = { firme:{bg:C.soonBg,tx:C.soonText,lbl:'Firme'}, final:{bg:C.overdueBg,tx:C.overdueText,lbl:'Final'} }
   const _MA = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   // Detalle de una factura vencida (compartido móvil/escritorio): fecha día-grande + folio + glosa + estado + saldo, y acciones Buscar pago (→ Conciliación) / Abrir factura (→ ficha/factura, con el Conciliar en un toque). Reusa helpers (folioN, saldoBill, fmtFechaDMY).
-  const detItem = ({b,acc})=>{ const s=String(b.issued_at||b.due||'').slice(0,10); const dd=/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-'):null; const parcial=(b.paid_amount||0)>0
+  const detItem = ({b,acc,venc,diasVenc})=>{ const s=String(b.issued_at||b.due||'').slice(0,10); const dd=/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-'):null; const parcial=(b.paid_amount||0)>0
     return (
     <div key={b.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'8px 0'}}>
       <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,cursor:onOpenFactura?'pointer':'default'}}>
         <div style={{width:40,textAlign:'center',flexShrink:0,lineHeight:1.1}}>{dd?<><div style={{fontSize:15,fontWeight:800,color:C.accent}}>{dd[2]}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>{_MA[+dd[1]-1]} {dd[0].slice(2)}</div></>:<span style={{fontSize:11,color:C.done}}>—</span>}</div>
-        <SIcon n='alert' s={15} c={C.overdueText}/>
+        <SIcon n={venc?'alert':'clock'} s={15} c={venc?C.overdueText:C.done}/>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}</div>
           {b.concept&&<div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{b.concept}</div>}
           <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:2}}>
-            <span style={{fontSize:8.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:12,padding:'1px 7px'}}>Vencida {acc.diasVenc} d</span>
+            {venc
+              ? <span style={{fontSize:8.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:12,padding:'1px 7px'}}>Vencida {diasVenc} d</span>
+              : <span style={{fontSize:8.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:12,padding:'1px 7px'}}>Al día</span>}
             <span style={{fontSize:9,color:C.done}}>{b.issued_at?`emitida ${fmtFechaDMY(b.issued_at)}`:''}{b.due?` · vence ${fmtFechaDMY(b.due)}`:''}</span>
           </div>
         </div>
@@ -23548,38 +23567,52 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
         {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
       </div>
       <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:14,color:'#fff'}}>
-        <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Vencido</div>
-        <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(totalDue)}</div>
-        <div style={{fontSize:10.5,opacity:.85}}>{grupos.length} cliente{grupos.length!==1?'s':''} · {nFacturas} factura{nFacturas!==1?'s':''} vencida{nFacturas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
-        {porPagarTotal>totalDue&&<div style={{marginTop:9,paddingTop:9,borderTop:'1px solid rgba(255,255,255,.18)',fontSize:10.5,opacity:.9,display:'flex',justifyContent:'space-between',gap:8}}><span>Por cobrar total</span><span style={{fontWeight:700}}>{f0(porPagarTotal)}{nAlDia>0?` · ${nAlDia} al día`:''}</span></div>}
+        <div style={{display:'flex',gap:14}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Deuda vencida</div>
+            <div style={{fontSize:22,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(vencidoTotal)}</div>
+            <div style={{fontSize:10,opacity:.8}}>{gruposAccion.length} cliente{gruposAccion.length!==1?'s':''} · {nVencidas} factura{nVencidas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
+          </div>
+          <div style={{width:1,background:'rgba(255,255,255,.18)'}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Deuda total</div>
+            <div style={{fontSize:22,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(deudaTotal)}</div>
+            <div style={{fontSize:10,opacity:.8}}>{grupos.length} cliente{grupos.length!==1?'s':''}{nAlDia>0?` · ${nAlDia} al día`:''}</div>
+          </div>
+        </div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px',marginBottom:12}}>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Cobranza automática</div><div style={{fontSize:10,color:C.muted}}>{autoGlobal?'La app envía sola los recordatorios de los clientes que liberaste.':'Off — aunque liberes un cliente, no se envía solo hasta activar esto.'}</div></div>
         <div onClick={()=>setAutoGlob(!autoGlobal)} title={autoGlobal?'Desactivar envío automático':'Activar envío automático'} style={{width:44,height:24,borderRadius:20,background:autoGlobal?C.greenText:C.border,position:'relative',cursor:'pointer',flexShrink:0,transition:'background .15s'}}><span style={{position:'absolute',top:2,left:autoGlobal?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/></div>
       </div>
-      {grupos.length>1 && <button onClick={enviarTodos} disabled={sending} style={{width:'100%',background:'#fff',border:`1px solid ${C.border}`,color:C.accent,borderRadius:10,padding:'10px',fontSize:12.5,fontWeight:700,cursor:'pointer',marginBottom:12}}>Enviar a todos los que toca · {grupos.filter(g=>!autoCli[g.cid]).length}</button>}
+      {gruposAccion.length>1 && <button onClick={enviarTodos} disabled={sending} style={{width:'100%',background:'#fff',border:`1px solid ${C.border}`,color:C.accent,borderRadius:10,padding:'10px',fontSize:12.5,fontWeight:700,cursor:'pointer',marginBottom:12}}>Enviar a todos los que toca · {gruposAccion.filter(g=>!autoCli[g.cid]).length}</button>}
       {grupos.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
+      {grupos.length>0 && (()=>{ const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]; return (
+        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:10}}>
+          <span style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Ordenar</span>
+          {SORTS.map(([col,lbl])=>{ const on=sortBy.col===col; return <button key={col} onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{fontSize:10.5,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{lbl}{on?(sortBy.dir==='desc'?' ↓':' ↑'):''}</button> })}
+        </div>) })()}
       {isDesktop ? (()=>{
         const thS={fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,background:C.bgSoft,padding:'9px 12px',textAlign:'left',whiteSpace:'nowrap'}
         const th=(col,lbl,r)=>(<th onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{...thS,textAlign:r?'right':'left',cursor:'pointer',userSelect:'none'}}>{lbl}{sortBy.col===col?<span style={{color:C.accent}}> {sortBy.dir==='desc'?'▾':'▴'}</span>:''}</th>)
-        const gsort=[...grupos].sort((a,b)=>{ const d=sortBy.dir==='desc'?-1:1; if(sortBy.col==='mora') return d*(a.maxDias-b.maxDias); if(sortBy.col==='nivel') return d*((a.nivel==='final'?1:0)-(b.nivel==='final'?1:0)); if(sortBy.col==='cliente') return (sortBy.dir==='desc'?-1:1)*cn(a.cid).localeCompare(cn(b.cid),'es'); return d*(a.total-b.total) })
         const gapDe=g=>{ const l=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; return l?`hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(l).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar' }
         return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             <table style={{borderCollapse:'collapse',width:'100%'}}>
-              <thead><tr>{th('cliente','Cliente')}{th('nivel','Nivel')}<th style={thS}>Facturas</th>{th('mora','Mora')}<th style={thS}>Último contacto</th>{th('monto','Monto',true)}<th style={{...thS,textAlign:'right'}}>Acción</th></tr></thead>
+              <thead><tr>{th('cliente','Cliente')}{th('facturas','Facturas')}{th('mora','Mora')}<th style={thS}>Último contacto</th>{th('vencido','Vencido',true)}{th('total','Total deuda',true)}<th style={{...thS,textAlign:'right'}}>Acción</th></tr></thead>
               <tbody>
-                {gsort.map(g=>{ const nv=NIV[g.nivel]; const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:12.5,verticalAlign:'middle'}; return (
+                {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:12.5,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
                   <tr onClick={()=>setExpCli(open?null:g.cid)} style={{cursor:'pointer'}}>
                     <td style={td}><span onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span></td>
-                    <td style={td}><span style={{fontSize:9,fontWeight:800,borderRadius:20,padding:'2px 9px',background:nv.bg,color:nv.tx,whiteSpace:'nowrap'}}>{nv.lbl}</span></td>
                     <td style={{...td,color:C.muted}}>{g.items.length}</td>
-                    <td style={{...td,fontVariantNumeric:'tabular-nums'}}>{g.maxDias} d</td>
-                    <td style={{...td,fontSize:11,color:gap==='sin contactar'?C.overdueText:C.muted}}>{gap}{nc>0&&<span style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:3}}>· {nc}<SIcon n='check' s={11} c={C.muted}/></span>}</td>
+                    <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
+                    <td style={{...td,fontSize:11,color:!conVenc?C.done:(gap==='sin contactar'?C.overdueText:C.muted)}}>{conVenc?gap:'—'}{conVenc&&nc>0&&<span style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:3}}>· {nc}<SIcon n='check' s={11} c={C.muted}/></span>}</td>
+                    <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:g.vencido>0?C.overdueText:C.done}}>{g.vencido>0?f0(g.vencido):'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:C.accent}}>{f0(g.total)}</td>
                     <td style={{...td,textAlign:'right',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
-                      {auto ? <span style={{display:'inline-flex',gap:6,alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'5px 9px'}}>En automático</span><button onClick={()=>pausar(g.cid)} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.done,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:600,cursor:'pointer'}}>Pausar</button></span>
+                      {!conVenc ? <span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Al día</span>
+                      : auto ? <span style={{display:'inline-flex',gap:6,alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'5px 9px'}}>En automático</span><button onClick={()=>pausar(g.cid)} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.done,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:600,cursor:'pointer'}}>Pausar</button></span>
                         : <span style={{display:'inline-flex',gap:6,alignItems:'center'}}>{nc>=LIBERAR_UMBRAL&&<button onClick={()=>liberar(g.cid)} style={{background:'#fff',border:`1px solid ${C.greenText}55`,color:C.greenText,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:700,cursor:'pointer'}}>Liberar →</button>}<button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:7,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></span>}
                     </td>
                   </tr>
@@ -23592,19 +23625,23 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
             </table>
           </div>
         )
-      })() : grupos.map(g=>{ const nv=NIV[g.nivel]; const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
+      })() : gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const conVenc=g.nAccion>0||g.vencido>0; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
         <div key={g.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(g.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span>
-            <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{f0(g.total)}</span>
+            <div style={{textAlign:'right',lineHeight:1.15,flexShrink:0}}>
+              {g.vencido>0 && <><div style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Vencido</div><div style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{f0(g.vencido)}</div></>}
+              <div style={{fontSize:g.vencido>0?11:15,fontWeight:g.vencido>0?600:800,color:g.vencido>0?C.muted:C.accent,fontVariantNumeric:'tabular-nums'}}>{g.vencido>0?`Total ${f0(g.total)}`:f0(g.total)}</div>
+            </div>
           </div>
           <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap',cursor:'pointer'}}>
-            <span style={{fontSize:9.5,fontWeight:700,padding:'3px 9px',borderRadius:20,background:nv.bg,color:nv.tx}}>{nv.lbl}</span>
-            <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} · vencida hasta {g.maxDias} d · {gapTxt}</span>
-            <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{expCli===g.cid?'▾':'▸'}</span>
+            <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} pendiente{g.items.length!==1?'s':''}{g.maxDias>0?` · vencida hasta ${g.maxDias} d · ${gapTxt}`:' · al día'}</span>
+            <span style={{fontSize:11,color:C.accent,fontWeight:600,marginLeft:'auto'}}>{expCli===g.cid?'▾':'▸'}</span>
           </div>
           {expCli===g.cid&&<div style={{marginTop:6,borderTop:`1px solid ${C.bgSoft}`}}>{g.items.map(detItem)}</div>}
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:9,marginTop:10}}>
+          {!conVenc
+            ? <div style={{marginTop:9,fontSize:11,fontWeight:700,color:C.greenText}}>Al día — sin facturas vencidas</div>
+            : <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:9,marginTop:10}}>
             {auto ? <span style={{fontSize:11,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 11px'}}>En automático</span>
                   : <div style={{fontSize:10,color:C.done}}>{nc>0?`${nc} envío${nc!==1?'s':''} confirmado${nc!==1?'s':''}`:'Sugerido'}</div>}
             <div style={{display:'flex',gap:7,alignItems:'center'}}>
@@ -23612,7 +23649,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
                 : <>{nc>=LIBERAR_UMBRAL && <button onClick={()=>liberar(g.cid)} style={{background:'#fff',border:`1px solid ${C.greenText}55`,color:C.greenText,borderRadius:8,padding:'7px 11px',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Liberar automático →</button>}
                   <button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></>}
             </div>
-          </div>
+          </div>}
         </div>
       )})}
       <div style={{fontSize:10,color:C.done,marginTop:12,lineHeight:1.5}}>Escala sola: amable antes de vencer, firme hasta 30 días, final después. No reenvía antes de {COBRANZA_GAP} días. Al confirmar {LIBERAR_UMBRAL} veces un cliente, puedes liberarlo a automático.</div>
