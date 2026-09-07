@@ -121,6 +121,42 @@ export async function getVentas(periodo: string, token: string): Promise<VentaSI
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// VENTAS FULL (read-only) — igual que getVentas pero incluye TODOS los tipos de
+// venta, en particular 61 (NOTA DE CREDITO) y 56 (nota de debito), que getVentas
+// omite. Uso: espejo historico del RCV en sii_cargas_docs (fuente de la verdad),
+// SIN conciliar ni tocar billing. Devuelve tambien la fila cruda del SII en `raw`
+// (para preservar cualquier campo extra, p.ej. referencias de la NC).
+const VENTA_TIPOS_FULL = [33, 34, 61, 56]  // afecta, exenta, nota credito, nota debito
+
+export async function getVentasFull(periodo: string, token: string): Promise<Array<VentaSII & { raw: any }>> {
+  return await conReintentos('consulta RCV ventas full', async () => {
+    const porTipo = await Promise.all(VENTA_TIPOS_FULL.map((t) => detallePorTipo(t, periodo, token)))
+    const out: Array<VentaSII & { raw: any }> = []
+    // OJO (igual que compras): detTipoDoc puede llegar NULL en la fila → el tipo lo
+    // da la consulta, no el campo. Por eso se etiqueta con el tipo consultado.
+    VENTA_TIPOS_FULL.forEach((tipo, i) => {
+      for (const d of porTipo[i]) {
+        const folio = Number(d.detNroDoc ?? 0)
+        if (folio <= 0) continue
+        out.push({
+          tipoDte: tipo,
+          folio,
+          rutReceptor: `${d.detRutDoc ?? ''}-${String(d.detDvDoc ?? '').toUpperCase()}`,
+          nombreReceptor: String(d.detRznSoc ?? ''),
+          fechaEmision: fechaISO(String(d.detFchDoc ?? '')),
+          montoNeto: Number(d.detMntNeto ?? 0),
+          montoExento: Number(d.detMntExe ?? 0),
+          montoTotal: Number(d.detMntTotal ?? 0),
+          raw: d,
+        })
+      }
+    })
+    console.log(`[sii-sync] RCV ventas-full ${periodo}: ${out.length} docs (${VENTA_TIPOS_FULL.map((t, i) => `${porTipo[i].length}×${t}`).join(' ')})`)
+    return out
+  })
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // COMPRAS (Registro de Compras del RCV) — DRAFT, solo LECTURA. Espeja getVentas.
 //
 // A diferencia de una venta (donde el estudio es el emisor y el cliente el

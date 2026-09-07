@@ -15,7 +15,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { obtenerToken } from './auth.ts'
-import { getVentas, getCompras, getComprasRaw } from './rcv.ts'
+import { getVentas, getVentasFull, getCompras, getComprasRaw } from './rcv.ts'
 import { conciliar, normalizarRut } from './match.ts'
 import { getConfig, getEmisor, getResol } from './config.ts'
 import { parseCaf } from './caf.ts'
@@ -380,6 +380,69 @@ serve(async (req) => {
         ok: true, periodo: periodoC, ambiente,
         totalSII: compras.length, guardadas, sinProveedor: filas.length - conProveedor,
       })
+    }
+
+    // TRAÍDO HISTÓRICO READ-ONLY del Registro de VENTAS del SII (facturas + notas de
+    // crédito tipo 61). Espeja cada documento en sii_cargas_docs con estado
+    // 'rcv_historico', que es INVISIBLE a los flujos existentes (todos filtran
+    // estado='sin_registrar'). NO concilia, NO toca billing, NO cambia estados ni
+    // emite/anula. ignoreDuplicates=true → nunca pisa una fila ya presente. Es la
+    // fuente de la verdad del SII para el cuadre histórico (lectura pura).
+    // body: { action:'sync-ventas-rcv', periodo:'YYYY-MM' }
+    if (body.action === 'sync-ventas-rcv') {
+      const periodoV = String(body.periodo || '')
+      if (!/^\d{4}-\d{2}$/.test(periodoV)) return json({ error: 'periodo debe tener formato YYYY-MM' }, 400)
+      if (ambiente !== 'produccion') {
+        return json({ error: 'El RCV solo existe en produccion. Cambia SII_AMBIENTE a produccion.', ambiente }, 400)
+      }
+      console.log(`[sii-sync] sync-ventas-rcv ${periodoV} solicitado por ${email}`)
+
+      let tokenV = await obtenerToken()
+      let ventas
+      try {
+        ventas = await getVentasFull(periodoV, tokenV)
+      } catch (e) {
+        // Token expirado a mitad de operacion: renovar y reintentar UNA vez (igual que el sync de ventas)
+        console.log(`[sii-sync] ventas-rcv fallo, renovando token: ${e instanceof Error ? e.message : e}`)
+        tokenV = await obtenerToken(true)
+        ventas = await getVentasFull(periodoV, tokenV)
+      }
+
+      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
+      // Dedupe en memoria por la misma llave del indice unico (folio, tipo_dte).
+      const vistos = new Set<string>()
+      const filas = []
+      for (const v of ventas) {
+        const clave = `${v.folio}|${v.tipoDte}`
+        if (vistos.has(clave)) continue
+        vistos.add(clave)
+        filas.push({
+          folio: String(v.folio),
+          tipo_dte: v.tipoDte,
+          fecha_emision: v.fechaEmision || null,
+          receptor_rut: v.rutReceptor,
+          receptor_name: v.nombreReceptor,
+          monto: v.montoTotal || v.montoExento || 0,
+          estado: 'rcv_historico',
+          doc_json: { ...v.raw, periodo: periodoV, _neto: v.montoNeto, _exento: v.montoExento, _total: v.montoTotal },
+        })
+      }
+
+      let guardadas = 0
+      if (filas.length) {
+        // ignoreDuplicates: SOLO inserta lo que no existe; NUNCA pisa una fila ya
+        // presente (ni las del XML en 'sin_registrar', ni un mirror previo). Read-only puro.
+        const { error: upErr, count } = await sb
+          .from('sii_cargas_docs')
+          .upsert(filas, { onConflict: 'folio,tipo_dte', ignoreDuplicates: true, count: 'exact' })
+        if (upErr) return json({ error: 'No se pudo guardar RCV ventas: ' + upErr.message }, 500)
+        guardadas = count ?? 0
+      }
+
+      const nc = filas.filter((f) => f.tipo_dte === 61).length
+      console.log(`[sii-sync] sync-ventas-rcv ${periodoV}: ${ventas.length} del SII, ${filas.length} unicas, ${nc} NC, ${guardadas} nuevas`)
+      return json({ ok: true, periodo: periodoV, ambiente, totalSII: ventas.length, unicas: filas.length, notasCredito: nc, guardadas })
     }
 
     const periodo = String(body.periodo || '')
