@@ -5237,7 +5237,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       </div>
 
       {/* 5–8. Honorarios + costos en una línea (toggle UF/CLP compartido), cobro, notas — editable en venta nueva y en propuesta/borrador */}
-      {formNuevo&&(<>
+      {formNuevo&&cobroType!=='hora'&&(<>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
           <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6}}>Honorarios y costos<AiBadge field='amount_uf'/><AiBadge field='amount_clp'/></div>
           <div style={{display:'flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:6,overflow:'hidden'}}>
@@ -5271,11 +5271,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </div>
         </div>
         {costVal>0&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>}
-
+        <div onClick={()=>setCobroType('hora')} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',marginTop:2,marginBottom:8}}>¿Cobro por hora? Sin monto fijo →</div>
       </>)}
 
-      {/* 7. Forma de cobro — venta nueva y propuesta/borrador */}
-      {formNuevo&&totalCLP>0&&(
+      {/* 7. Forma de cobro — venta nueva y propuesta/borrador. Por hora: sin presupuesto, se elige aunque no haya honorarios. */}
+      {formNuevo&&(totalCLP>0||cobroType==='hora')&&(
         <div style={{marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Forma de cobro</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
