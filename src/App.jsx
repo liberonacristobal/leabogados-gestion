@@ -8717,6 +8717,7 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
 function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onFacturarAdelantos,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onReprocesarSinAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onCrearVentaRapida,onFacturaTercero,proveedores=[],onSaveProveedor,onIrConciliacion,onOpenPorSocio,onIrCobranza,intent,onIntentDone}) {
   const { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
   const [tblSort,setTblSort] = usePersisted('fd_bill_tblsort',{col:'fecha',dir:'desc'})   // Desktop "Todas": orden de la tabla, recordado entre sesiones
+  const [porRevOpen,setPorRevOpen] = useState(false)   // hub: tarjeta "Por revisar" desplegada
 
   return (
     <div>
@@ -8728,7 +8729,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             {filter==='resumen'&&<button onClick={()=>{setFilter('clientes');clearSel&&clearSel()}} title='Detalle por cliente' style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:'0.5px solid '+C.accent,background:'#fff',color:C.accent}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>Por cliente</button>}
             {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
-              <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
               <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{position:'absolute',width:1,height:1,opacity:0,pointerEvents:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
               {mesTandaReq&&<MesTandaModal def={mesTandaReq.def} onPick={v=>{ mesTandaReq.resolve(v); setMesTandaReq(null) }}/>}
               {respaldoRes&&(()=>{
@@ -8927,14 +8927,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   </div>
                 </Modal>
               )})()}
-              {impOpen&&<>
-                <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
-                <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
-                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['Cuadrar con SII',()=>setSiiOpen(true)],['Cargar XML',()=>{contarSinRegistrar();setXmlHub(true)}],['Cargas anteriores',abrirHistCargas]].map(([l,fn])=>(
-                    <div key={l} onClick={()=>{setImpOpen(false);fn()}} style={{padding:'10px 14px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{l}</div>
-                  ))}
-                </div>
-              </>}
             </div>
           </div>
         </div>
@@ -8951,6 +8943,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             return <div>
               {opt(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar XML','El respaldo .xml del SII (uno o varios)',()=>{ respaldoRef.current&&respaldoRef.current.click(); setTimeout(()=>setXmlHub(false),0) })}
               {onImportExcel&&opt(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>),{bg:C.tealBg,fg:C.tealText},'Importar Excel','El detalle .xls / .xlsx del SII (o una planilla)',()=>{ setXmlHub(false); onImportExcel() })}
+              {onUpload&&opt(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></>),{bg:C.overdueBg,fg:C.overdueText},'Cargar PDF','El PDF de la factura',()=>{ setXmlHub(false); onUpload() })}
+              {onImport&&opt(svg(<><path d='M22 12.5V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></>),{bg:C.azulBg,fg:C.accent},'Desde Drive','Importar facturas de Drive',()=>{ setXmlHub(false); onImport() })}
               {opt(svg(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>),{bg:C.soonBg,fg:C.soonText},'Cargadas sin registrar','Cargas pendientes de registrar — retómalas cuando quieras',()=>{ if(cargandoStage) return; cargarSinRegistrar() },sinRegN)}
               {opt(svg(<><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></>),{bg:C.azulBg,fg:C.accent},'Historial de cargas','Tus cargas anteriores',()=>{setXmlHub(false);abrirHistCargas()})}
               <div style={{fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:9,padding:'10px 12px',textAlign:'center',lineHeight:1.4}}><b style={{color:'#0B5A46'}}>Lo cargado queda guardado aunque salgas.</b> Lo registras cuando quieras.</div>
@@ -9277,50 +9271,56 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 (cob.length>0&&onDepurarCobradas)&&{k:'Pagadas sin marcar', s:'cobradas que no quedaron marcadas', n:cob.length, col:C.greenText, on:()=>setDepurarRows(cob)},
                 sinAnio.length>0&&{k:'Sin año', s:'facturas sin año de venta', n:sinAnio.length, col:C.soonText, on:()=>go('sinanio')},
               ].filter(Boolean)
-              return (
-              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:8}}>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  {/* kTile del Inicio: icono a la izq (bajado a la 2ª línea = label) + columna mes·label·cifra·sub alineada. */}
-                  <div onClick={()=>setCierreOpen(true)} style={{background:C.azulBg,border:'0.5px solid #D3E3F3',borderRadius:11,padding:'11px 12px',cursor:'pointer',position:'relative',display:'flex',gap:9,alignItems:'flex-start'}}>
-                    <span style={{width:26,height:26,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:14}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span>
-                    <div style={{minWidth:0,flex:1}}>
-                      <div style={kick}>{cap(MN[_pm.getMonth()])}</div>
-                      <div style={{fontSize:10.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:14}}>Cierre de mes</div>
-                      {emi.length>0?<><div style={{fontSize:20,fontWeight:800,color:C.accent,lineHeight:1,fontVariantNumeric:'tabular-nums',marginTop:5}}>{fmtShort(tCob)}</div><div style={{fontSize:9.5,color:'#3E6472',marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>de {fmtShort(tEmi)} cobrado · {tasa}%</div></>:<div style={{fontSize:11,color:'#3E6472',marginTop:5}}>Quién pagó y quién no</div>}
-                    </div>
-                    <span style={{position:'absolute',top:10,right:11,color:'#7FA6BE',fontSize:13}}>›</span>
+              const revTotal=revisar.reduce((a,r)=>a+(r.n||0),0)
+              const mesTop={fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+              const mesN={fontSize:12,fontWeight:500,letterSpacing:.4,textTransform:'uppercase',marginTop:1}
+              const money={fontSize:23,fontWeight:800,letterSpacing:-.6,marginTop:6,fontVariantNumeric:'tabular-nums',lineHeight:1}
+              // Tarjeta de acceso uniforme: icono + titular MAYÚSCULAS + sub, y valor/badge/chevron a la derecha.
+              const accCard=(sqbg,stroke,pathEl,titulo,sub,onClick,opts={})=>(
+                <div onClick={onClick} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',minHeight:66,display:'flex',flexDirection:'column',justifyContent:'center',gap:5}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{width:28,height:28,borderRadius:8,background:sqbg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={stroke} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'>{pathEl}</svg></span>
+                    {opts.value?<span style={{marginLeft:'auto',fontSize:14,fontWeight:800,color:opts.valCol||C.text,fontVariantNumeric:'tabular-nums',display:'flex',alignItems:'center',gap:5}}>{opts.dot&&<span style={{width:6,height:6,borderRadius:'50%',background:opts.dot}}/>}{opts.value}</span>
+                      :opts.badge!=null?<span style={{marginLeft:'auto',fontSize:15,fontWeight:800,color:opts.badgeCol||C.overdueText}}>{opts.badge}</span>
+                      :<span style={{marginLeft:'auto',color:C.done,fontSize:12}}>›</span>}
                   </div>
-                  <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:C.greenBg,border:'0.5px solid #C4E7D9',borderRadius:11,padding:'11px 12px',cursor:'pointer',position:'relative',display:'flex',gap:9,alignItems:'flex-start'}}>
-                    <span style={{width:26,height:26,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:14}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg></span>
-                    <div style={{minWidth:0,flex:1}}>
-                      <div style={kick}>{cap(MN[_now.getMonth()])}</div>
-                      <div style={{fontSize:10.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:14}}>Facturas por emitir</div>
-                      <div style={{fontSize:20,fontWeight:800,color:C.greenText,lineHeight:1,fontVariantNumeric:'tabular-nums',marginTop:5}}>{fmtShort(pemTot)}</div>
-                      <div style={{fontSize:9.5,color:'#3E7360',marginTop:4}}>{pemN} factura{pemN!==1?'s':''}</div>
-                    </div>
-                    <span style={{position:'absolute',top:10,right:11,color:'#7FC4A9',fontSize:13}}>›</span>
+                  <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{titulo}</div>
+                  <div style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+                </div>)
+              const P=d=><path d={d}/>
+              return (
+              <div style={{display:'flex',flexDirection:'column',gap:9,marginBottom:8}}>
+                {/* EL MES */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <div onClick={()=>setCierreOpen(true)} style={{background:C.azulBg,border:'1px solid #D3E3F3',borderRadius:12,padding:'11px 12px',cursor:'pointer',position:'relative',minHeight:96}}>
+                    <span style={{position:'absolute',top:9,right:11,color:'#7FA6BE',fontSize:13}}>›</span>
+                    <span style={{width:26,height:26,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:7}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span>
+                    <div style={{...mesTop,color:C.accent}}>Cierre de mes</div>
+                    <div style={{...mesN,color:C.accent}}>{MN[_pm.getMonth()].toUpperCase()}</div>
+                    {emi.length>0?<><div style={{...money,color:C.accent}}>{fmtShort(tCob)}</div><div style={{fontSize:9.5,color:'#3E6472',marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>de {fmtShort(tEmi)} pagado · {tasa}%</div></>:<div style={{fontSize:11,color:'#3E6472',marginTop:6}}>Quién pagó y quién no</div>}
+                  </div>
+                  <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:C.greenBg,border:'1px solid #C4E7D9',borderRadius:12,padding:'11px 12px',cursor:'pointer',position:'relative',minHeight:96}}>
+                    <span style={{position:'absolute',top:9,right:11,color:'#7FC4A9',fontSize:13}}>›</span>
+                    <span style={{width:26,height:26,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:7}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg></span>
+                    <div style={{...mesTop,color:C.greenText}}>Facturación del mes</div>
+                    <div style={{...mesN,color:C.greenText}}>{MN[_now.getMonth()].toUpperCase()}</div>
+                    <div style={{...money,color:C.greenText}}>{fmtShort(pemTot)}</div>
+                    <div style={{fontSize:9.5,color:'#3E7360',marginTop:4}}>{pemN} factura{pemN!==1?'s':''} por emitir</div>
                   </div>
                 </div>
-                {onOpenPorSocio&&<div onClick={onOpenPorSocio} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,padding:'11px 13px',cursor:'pointer'}}>
-                  <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Por socio</div><div style={{fontSize:9.5,color:C.muted}}>Facturado y caja · mes y año</div></div>
-                  <span style={{fontSize:10.5,fontWeight:700,color:C.accent,border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 11px',whiteSpace:'nowrap',flexShrink:0}}>Ver →</span>
-                </div>}
-                {minis.length>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  {minis.map((m,i)=><div key={i} onClick={m.on} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'8px 11px',cursor:'pointer',display:'flex',flexDirection:'column',gap:2,minHeight:52,justifyContent:'center'}}>
-                    <span style={{fontSize:10,fontWeight:600,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.k}</span>
-                    <span style={{fontSize:m.nav?12.5:15,fontWeight:m.nav?600:800,color:m.col,fontVariantNumeric:'tabular-nums',display:'flex',alignItems:'center',gap:6}}>{m.dot&&<span style={{width:6,height:6,borderRadius:'50%',background:m.dot,flexShrink:0}}/>}{m.v}</span>
+                {/* ACCESOS: tarjetas iguales */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {onOpenPorSocio&&accCard(C.azulBg,C.accent,P('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7'),'Por socio','Facturado y caja · mes/año',onOpenPorSocio)}
+                  {accCard(C.soonBg,C.soonText,P('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01'),'Anticipos disponibles','a favor de clientes',()=>go('anticipos'),{value:antDisp>0?fmtShort(antDisp):'—',valCol:antDisp>0?C.soonText:C.done,dot:antDisp>0?'#EF9F27':null})}
+                  {onIrCobranza&&accCard(C.greenBg,C.greenText,P('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0'),'Cobranza','Recordatorios que tocan',()=>onIrCobranza())}
+                  {revisar.length>0&&accCard(C.overdueBg,C.overdueText,P('M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01'),'Por revisar','rechazadas, sin marcar, sin año…',()=>setPorRevOpen(o=>!o),{badge:revTotal,badgeCol:C.overdueText})}
+                </div>
+                {porRevOpen&&revisar.length>0&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:11,overflow:'hidden',background:'#fff'}}>
+                  {revisar.map((r,i)=><div key={i} onClick={r.on} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 13px',borderTop:i>0?`0.5px solid ${C.border}`:'none',cursor:'pointer'}}>
+                    <span style={{width:24,textAlign:'center',fontSize:15,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.k}</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.s}</div></div>
+                    <span style={{color:C.done,fontSize:14,flexShrink:0}}>›</span>
                   </div>)}
-                </div>}
-                {revisar.length>0&&<div>
-                  <div style={{fontSize:8.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'4px 3px 6px'}}>Por revisar</div>
-                  <div style={{border:`0.5px solid ${C.border}`,borderRadius:11,overflow:'hidden',background:'#fff'}}>
-                    {revisar.map((r,i)=><div key={i} onClick={r.on} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 13px',borderTop:i>0?`0.5px solid ${C.border}`:'none',cursor:'pointer'}}>
-                      <span style={{width:24,textAlign:'center',fontSize:15,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
-                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.k}</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.s}</div></div>
-                      <span style={{color:C.done,fontSize:14,flexShrink:0}}>›</span>
-                    </div>)}
-                  </div>
                 </div>}
               </div>
             )})()}
