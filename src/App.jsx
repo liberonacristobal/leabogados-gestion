@@ -7692,14 +7692,14 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
       }
       if(visibles.length===0) return emptyEl
       // Agrupado por cliente (protagonista): grupos ordenados por saldo desc; dentro, el orden ya viene (detectado→sinpago→cobrada, monto desc). Reusa filaEl(f,true).
-      const grupos = Object.values(visibles.reduce((acc,f)=>{ const k=String(f.b.client_id||'sc'); if(!acc[k]) acc[k]={cid:f.b.client_id,nom:clientNom(f.b.client_id),fs:[],saldo:0,nDet:0}; const g=acc[k]; g.fs.push(f); g.saldo+=f.saldo; if(f.est==='detectado')g.nDet++; return acc },{})).sort((a,z)=>z.saldo-a.saldo)
+      const grupos = Object.values(visibles.reduce((acc,f)=>{ const k=String(f.b.client_id||'sc'); if(!acc[k]) acc[k]={cid:f.b.client_id,nom:clientNom(f.b.client_id),fs:[],saldo:0,cob:0,nDet:0}; const g=acc[k]; g.fs.push(f); g.saldo+=f.saldo; g.cob+=f.cobrado; if(f.est==='detectado')g.nDet++; return acc },{})).sort((a,z)=>z.saldo-a.saldo)
       const grpEl = g=>{ const key=String(g.cid||'sc'); const solo=g.fs.length===1; const open=grpOpen[key]!==undefined?grpOpen[key]:(solo||g.nDet>0)
         return (<div key={key} style={{borderBottom:`1px solid ${C.border}`}}>
           <div onClick={()=>setGrpOpen(p=>({...p,[key]:!open}))} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',cursor:'pointer',background:C.bgSoft}}>
             <span style={{color:C.done,fontSize:12,width:10,flexShrink:0}}>{open?'▾':'▸'}</span>
             <span style={{width:30,height:30,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='user' s={16} c={C.accent}/></span>
             <div onClick={ev=>{ev.stopPropagation();g.cid&&onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{minWidth:0,flex:1,cursor:g.cid?'pointer':'default'}}><div style={{fontSize:14,fontWeight:800,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.nom}</div></div>
-            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:g.saldo>0?C.text:C.greenText,fontVariantNumeric:'tabular-nums'}}>{g.saldo>0?fmt(g.saldo):'$0'}</div><div style={{fontSize:10,color:C.muted}}>{g.nDet>0&&<span style={{color:C.greenText,fontWeight:600}}>{g.nDet} listo{g.nDet!==1?'s':''} · </span>}{g.fs.length} factura{g.fs.length!==1?'s':''}</div></div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:g.saldo>0?C.text:C.greenText,fontVariantNumeric:'tabular-nums'}}>{g.saldo>0?fmt(g.saldo):'$0'}</div><div style={{fontSize:10,color:C.muted}}>{g.nDet>0&&<span style={{color:C.greenText,fontWeight:600}}>{g.nDet} listo{g.nDet!==1?'s':''} · </span>}{g.fs.length} factura{g.fs.length!==1?'s':''}</div>{g.cob>0&&g.saldo>0&&<div style={{fontSize:9.5,color:C.greenText,fontWeight:600,marginTop:1}}>cobrado {fmt(g.cob)}</div>}</div>
           </div>
           {open&&g.fs.map(f=>filaEl(f,true))}
         </div>) }
