@@ -9477,13 +9477,17 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 const facturas=rsActiva==='all'?visible:visible.filter(b=>{ const e=efEntity(b); return (e?String(e.id):'sin')===rsActiva })
                 const rsHead=rsLabel(c.id,clients,clientEntities)
                 return (<div key={c.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,padding:'10px 12px',marginBottom:7}}>
-                  <div onClick={()=>toggleClient(c.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,cursor:'pointer'}}>
-                    <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {cOpen?'▾':'▸'}</span>
-                    <span style={{fontSize:13,fontWeight:700,color:headColor,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(headMonto)}</span>
-                  </div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6,marginTop:1,minHeight:13}}>
-                    {(rsHead.multi||rsHead.name!==c.name||rsHead.rut)?<span style={{fontSize:9,color:rsHead.multi?C.soonText:C.muted,fontWeight:rsHead.multi?600:400,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsHead.multi?`${rsHead.multi} razones sociales`:`${rsDisplay(rsHead.name)}${rsHead.rut?` · ${rsHead.rut}`:''}`}</span>:<span style={{minWidth:0}}/>}
-                    {onOpenClientFicha&&c.id&&c.id!=='__none__'&&<span onClick={(e)=>{e.stopPropagation();onOpenClientFicha(c.id)}} style={{fontSize:9,color:C.accent,fontWeight:700,cursor:'pointer',flexShrink:0}}>Ficha →</span>}
+                  <div onClick={()=>toggleClient(c.id)} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+                    <span style={{color:C.done,fontSize:12,width:9,flexShrink:0}}>{cOpen?'▾':'▸'}</span>
+                    <span style={{width:30,height:30,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='user' s={16} c={C.accent}/></span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                      {(rsHead.multi||rsHead.name!==c.name||rsHead.rut)&&<div style={{fontSize:9,color:rsHead.multi?C.soonText:C.muted,fontWeight:rsHead.multi?600:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{rsHead.multi?`${rsHead.multi} razones sociales`:`${rsDisplay(rsHead.name)}${rsHead.rut?` · ${rsHead.rut}`:''}`}</div>}
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:headColor,whiteSpace:'nowrap'}}>{fmt(headMonto)}</div>
+                      {onOpenClientFicha&&c.id&&c.id!=='__none__'&&<div onClick={(e)=>{e.stopPropagation();onOpenClientFicha(c.id)}} style={{fontSize:9,color:C.accent,fontWeight:700,cursor:'pointer'}}>Ficha →</div>}
+                    </div>
                   </div>
                   {cOpen&&<div style={{marginTop:8}}>
                     {rsArr.length>=2&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8}}>
