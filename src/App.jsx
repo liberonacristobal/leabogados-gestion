@@ -294,7 +294,18 @@ const urgency = (due,status) => {
 // RUT: normalizador ÚNICO de toda la app = el de cartola (crNormRut): mayúscula, solo dígitos + K (sin puntos, espacios ni guion).
 // Antes esta copia conservaba el guion y usaba minúscula (outlier): fallaba dedupe/match entre "12345678-9" y "123456789".
 const normRut = crNormRut
-function dueFromIssued(iso){ if(!iso) return null; const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10) }
+// Vencimiento de pago = ÚLTIMO DÍA HÁBIL del mes de emisión si se emite dentro de los primeros 10 días;
+// si se emite después del día 10, salta al último día hábil del mes SIGUIENTE. (Feriados no contemplados: solo fin de semana → viernes.)
+function ultimoDiaHabilMesEmision(iso){
+  if(!iso) return null
+  const d=new Date(String(iso).slice(0,10)+'T00:00:00'); if(isNaN(d)) return null
+  let y=d.getFullYear(), m=d.getMonth()
+  if(d.getDate()>10){ m++; if(m>11){m=0;y++} }
+  const last=new Date(y,m+1,0); const w=last.getDay()
+  if(w===6) last.setDate(last.getDate()-1); else if(w===0) last.setDate(last.getDate()-2)
+  return `${last.getFullYear()}-${String(last.getMonth()+1).padStart(2,'0')}-${String(last.getDate()).padStart(2,'0')}`
+}
+function dueFromIssued(iso){ return ultimoDiaHabilMesEmision(iso) }
 // N° de cuota desde la glosa (las cuotas viven embebidas en el concepto, ej. "Título — Cuota 1/3"). Vacío si no aplica.
 function parseCuota(concept){
   if(!concept) return ''
@@ -21115,7 +21126,7 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   const inp = {width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const fmt0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
   const fmtD = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
-  const dueFromIssued = iso => { if(!iso) return null; const d=new Date(iso+'T12:00'); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10) }
+  const dueFromIssued = iso => ultimoDiaHabilMesEmision(iso)   // último día hábil del mes de emisión (regla del estudio)
   // Pagada sin fecha de pago: se asume pagada a los 20 días de emitida (criterio del estudio).
   const pagoInferido = iso => { if(!iso) return null; const d=new Date(iso+'T12:00'); d.setDate(d.getDate()+20); return d.toISOString().slice(0,10) }
   const parseMonto = v => { if(v==null||v==='') return null; if(typeof v==='number') return Math.round(v); let s=String(v).replace(/[^\d,.-]/g,''); if(s.includes(',')&&s.includes('.')) s=s.replace(/\./g,'').replace(',','.'); else if(s.includes(',')) s=s.replace(',','.'); const n=parseFloat(s); return isNaN(n)?null:Math.round(n) }
@@ -29855,7 +29866,11 @@ export default function App() {
   const handleEmitirProgramada=useCallback(async(bill, entity)=>{
     try{
       const today=new Date().toISOString().slice(0,10)
-      const patch={status:'Pendiente', issued_at:bill.issued_at||today, due:bill.due||dueFromIssued(today), updated_at:new Date().toISOString()}
+      const iss=bill.issued_at||today
+      // Al emitir, el vencimiento pasa a la regla (último día hábil del mes de emisión / mes siguiente si emite pasado el día 10).
+      // La cuota estándar guarda due=día 1 solo para agrupar → se recalcula. Las fechas NEGOCIADAS (porcentaje/personalizada, que no son día 1) se respetan.
+      const negociado = bill.due && new Date(bill.due+'T00:00:00').getDate()!==1
+      const patch={status:'Pendiente', issued_at:iss, due:negociado?bill.due:dueFromIssued(iss), updated_at:new Date().toISOString()}
       if(entity){ patch.entity_id=entity.id; patch.receptor_name=entity.name||null; patch.receptor_rut=entity.rut||null }
       await supabase.from('billing').update(patch).eq('id',bill.id)
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
