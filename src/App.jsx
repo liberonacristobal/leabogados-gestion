@@ -25431,6 +25431,21 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       const aplicado = Math.max(0, Math.min(resto, saldo))
       if(aplicado<=0){ setBusy(null); appAlert(saldo<=0 ? `La Factura N°${folioN(factura.invoice_no)||'—'} ya está conciliada (sin saldo). Usa "Liberar calce" para soltarla y poder reasignar este pago.` : 'Este pago ya quedó completamente conciliado.'); return }   // INV-7: monto_aplicado siempre > 0; avisa por qué no se aplicó
+      // REGLA: ninguna conciliación MANUAL se aplica sin mostrar el detalle de qué se concilia (factura ↔ movimiento ↔ montos).
+      // Los lotes/auto/SII (origen distinto de 'manual') no piden confirmación (son calces únicos de alta confianza).
+      if(origen==='manual'){
+        const cli=clients.find(c=>String(c.id)===String(factura.client_id))
+        const cubre = aplicado >= saldo - TOL
+        const op = mov.n_operacion?` · Op ${mov.n_operacion}`:''
+        const fx = n => '$'+Math.round(n||0).toLocaleString('es-CL')
+        const msg = `¿Conciliar este pago?\n\n`+
+          `Factura N° ${folioN(factura.invoice_no)||'—'}${cli?.name?` · ${cli.name}`:''}\n`+
+          `Saldo de la factura: ${fx(saldo)}\n\n`+
+          `Pago del banco: ${mov.fecha?fmtFechaDMY(mov.fecha):''} · ${mov.nombre_contraparte||'—'}${op}\n`+
+          `Disponible del abono: ${fx(resto)}\n\n`+
+          `Se aplicará ${fx(aplicado)} → ${cubre?'la factura queda PAGADA y enlazada al banco.':`pago PARCIAL, quedará saldo ${fx(saldo-aplicado)}.`}`
+        if(!await appConfirm(msg)){ setBusy(null); return }
+      }
       const manualExtra = Math.max(0, (factura.paid_amount||0) - (aplicadoByFactura[factura.id]||0))  // abono manual fuera de las filas de conciliación: súmalo, no lo reemplaces
       const aplTot = (aplicadoByFactura[factura.id]||0)+aplicado+manualExtra
       const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen, marco_pago:marcaPago(factura,aplTot) }).select().single()
