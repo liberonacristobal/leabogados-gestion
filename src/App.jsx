@@ -9446,31 +9446,40 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <span style={{color:C.done,fontSize:16,flexShrink:0}}>›</span>
                   </div>
                 </div>
-                {siiPageOpen&&<Modal fullscreenOnMobile title='Facturación electrónica · SII' fsMaxWidth={640} onClose={()=>setSiiPageOpen(false)}>
-                  <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:11}}>
-                      <span style={{width:34,height:34,borderRadius:9,background:enProd?C.greenBg:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{siiIcon}</span>
-                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>Emisión electrónica · SII</div><div style={{fontSize:11,color:C.muted}}>{siiSub}</div></div>
-                      <span style={{fontSize:10,fontWeight:600,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'3px 9px',whiteSpace:'nowrap'}}>{estTxt}</span>
+                {siiPageOpen&&<div style={{position:'fixed',inset:0,zIndex:1000,background:C.bg,overflowY:'auto'}}>
+                  <div style={{maxWidth:isDesktop?900:560,margin:'0 auto',padding:'16px 16px 60px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:13}}>
+                      <span onClick={()=>setSiiPageOpen(false)} style={{color:C.muted,fontSize:20,cursor:'pointer',lineHeight:1}}>←</span>
+                      <span style={{fontSize:18,fontWeight:800,color:C.accent}}>Facturación electrónica</span>
+                      <span style={{marginLeft:'auto',fontSize:10,fontWeight:700,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'3px 11px',whiteSpace:'nowrap'}}>{estTxt}</span>
                     </div>
-                    {(()=>{ const f34=(foliosEstado||[]).find(x=>x.tipoDte===34); if(!f34) return null; const bajo=f34.disponibles<=5; return (
-                      <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:bajo?C.overdueText:C.muted,marginBottom:10}}>
-                        <span style={{width:6,height:6,borderRadius:'50%',background:bajo?C.overdue:C.normal,flexShrink:0}}/>
-                        {f34.disponibles} folio{f34.disponibles!==1?'s':''} disponible{f34.disponibles!==1?'s':''} (factura 34){bajo&&<b style={{color:C.overdueText}}> · solicita un nuevo CAF</b>}
+                    <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,alignItems:'start'}:{display:'flex',flexDirection:'column',gap:9}}>
+                      {/* Estado + folios */}
+                      <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:10}}>
+                          <span style={{width:32,height:32,borderRadius:9,background:enProd?C.greenBg:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{siiIcon}</span>
+                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Emisión SII</div><div style={{fontSize:14,fontWeight:800,color:C.accent}}>{enProd?'Conectado':'En certificación'}</div></div>
+                        </div>
+                        <div style={{fontSize:11,color:C.muted,marginTop:6}}>{siiSub}</div>
+                        {(()=>{ const f34=(foliosEstado||[]).find(x=>x.tipoDte===34); if(!f34) return null; const bajo=f34.disponibles<=5; return (
+                          <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:bajo?C.overdueText:C.muted,marginTop:8}}>
+                            <span style={{width:6,height:6,borderRadius:'50%',background:bajo?C.overdue:C.normal,flexShrink:0}}/>
+                            {f34.disponibles} folio{f34.disponibles!==1?'s':''} disponible{f34.disponibles!==1?'s':''} (factura 34){bajo&&<b style={{color:C.overdueText}}> · solicita un nuevo CAF</b>}
+                          </div>
+                        ) })()}
                       </div>
-                    ) })()}
-                    {enProd?(<>
-                      <div style={{borderTop:`0.5px solid ${C.bgWarm}`,paddingTop:10,marginBottom:11}}>
+                      {/* Emitidas (prod) / Puesta en marcha (cert) */}
+                      <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px'}}>
+                      {enProd?(<>
                         <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Últimas emitidas</div>
                         {emitidas.slice(0,3).map((b,i)=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); const ok=/acept/i.test(b.dte_estado||''); return (
-                          <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
-                            <div style={{minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}><span style={{fontSize:12,fontWeight:600}}>Factura N° {b.folio||'—'}</span> <span style={{fontSize:11,color:C.muted}}>· {cli?.name||'—'}</span></div>
-                            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:12,fontWeight:600}}>{fmt(b.amount)}</span><span style={{fontSize:10,color:ok?C.greenText:C.soonText,background:ok?C.greenBg:C.ambarBg,borderRadius:4,padding:'1px 6px'}}>{ok?'Aceptada':'Enviada'}</span></div>
+                          <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
+                            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>Factura N° {b.folio||folioN(b.invoice_no)||'—'} · {cli?.name||'—'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>Emitida {fmtFechaDMY(b.dte_emitido_at||b.issued_at)} · <span style={{color:b.email_sent_at?C.muted:C.overdueText,fontWeight:b.email_sent_at?400:700}}>{b.email_sent_at?`enviada ${fmtFechaDMY(b.email_sent_at)}`:'sin enviar'}</span> · {fmt(b.amount)}</div></div>
+                            <span style={{fontSize:10,color:ok?C.greenText:C.soonText,background:ok?C.greenBg:C.ambarBg,borderRadius:4,padding:'1px 6px',flexShrink:0}}>{ok?'Aceptada':'Enviada'}</span>
                           </div>) })}
-                      </div>
-                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Ver facturas',()=>go('clientes'),true)}{Btn('Verificar estados',siiVerificarEstados)}{Btn('Enviar resumen',siiResumenSemanal)}{Btn('Probar conexión',siiProbar)}{Btn('Historial',cargarSiiLog)}</div>
-                    </>):(<>
-                      <div style={{borderTop:`0.5px solid ${C.bgWarm}`,paddingTop:10,marginBottom:11}}>
+                        {!emitidas.length&&<div style={{fontSize:11,color:C.muted}}>Aún no emites facturas.</div>}
+                      </>):(<>
+                        <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:8}}>Puesta en marcha</div>
                         {[['Certificado digital cargado','ok'],['Postulación + set de pruebas · en curso','now'],['Autorización del SII','next'],['Emitir en producción','next']].map(([t,st],i)=>(
                           <div key={i} style={{display:'flex',alignItems:'center',gap:9,marginBottom:i<3?7:0}}>
                             {st==='ok'?<span style={{width:16,height:16,borderRadius:'50%',background:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg></span>
@@ -9478,37 +9487,57 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                              :<span style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${C.border}`,flexShrink:0}}/>}
                             <span style={{fontSize:12,color:st==='now'?C.text:st==='ok'?C.muted:C.done,fontWeight:st==='now'?600:400}}>{t}</span>
                           </div>))}
+                      </>)}
                       </div>
-                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>{setSiiResult(null);if(!siiSetJson)setSiiSetJson(SII_SET_SAMPLE);setSiiPanel('set')})}{Btn('Libro de ventas',()=>{setSiiResult(null);setSiiPanel('libro')})}{Btn('Historial',cargarSiiLog)}</div>
-                    </>)}
-                    <div style={{borderTop:`0.5px solid ${C.bgWarm}`,marginTop:12,paddingTop:11}}>
-                      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Fuente de la verdad · histórico SII (solo lectura)</div>
-                      <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Trae del SII las facturas y notas de crédito de <b>2025-01 a 2026-06</b> y las guarda como espejo para el cuadre. No toca facturación ni cambia nada.</div>
-                      {siiHistProg&&<div style={{fontSize:11,color:siiHistProg.done?C.greenText:C.accent,background:siiHistProg.done?C.greenBg:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{siiHistProg.done?`Listo · ${siiHistProg.docs} doc(s) del SII · ${siiHistProg.guardadas} nuevo(s) · ${siiHistProg.nc} nota(s) de crédito${siiHistProg.errores?.length?` · ${siiHistProg.errores.length} mes(es) con error`:''}`:`Trayendo ${siiHistProg.mes}… (${siiHistProg.i}/${siiHistProg.total})`}</div>}
-                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn(siiBusy?'Trayendo del SII…':'Traer histórico del SII (2025-01 → 2026-06)',siiTraerHistorico)}</div>
-                    </div>
-                    {/* #4 · Notas de crédito del RCV por resolver → misma compuerta (ncConfirm/anularPorNC) */}
-                    <div style={{borderTop:`0.5px solid ${C.bgWarm}`,marginTop:12,paddingTop:11}}>
-                      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Notas de crédito del SII</div>
-                      {(()=>{ const items=ncResolver||[]
-                        if(ncResolver==null) return <div style={{fontSize:11,color:C.muted}}>Revisando…</div>
-                        if(!items.length) return <div style={{fontSize:11,color:C.muted}}>Sin notas de crédito por resolver — las del SII ya están aplicadas a su factura.</div>
-                        return (<>
-                          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                            <span style={{width:26,height:26,borderRadius:8,background:'#FAECE7',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={14} c={C.coralText}/></span>
-                            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.coralText}}>{items.length} por resolver</div><div style={{fontSize:10,color:C.muted}}>anulan una factura que sigue viva — confirma la anulación</div></div>
-                          </div>
-                          {items.map(it=>(
-                            <div key={it.ncFolio} style={{border:`0.5px solid ${C.border}`,borderRadius:9,padding:'8px 10px',marginBottom:6}}>
-                              <div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.facCliente||it.receptor||'—'}</div>
-                              <div style={{fontSize:10.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>NC N°{it.ncFolio}{it.ncFecha?` · ${fmtFechaDMY(it.ncFecha)}`:''} · {fmt(it.monto)} · anula Factura N°{it.facFolio} ({it.facStatus})</div>
-                              <div style={{marginTop:7}}><button onClick={()=>{setNcVincular(!!it.replId);setNcConfirm({item:it})}} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'6px 13px',cursor:'pointer'}}>Revisar y anular ›</button></div>
+                      {/* Acciones */}
+                      <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',...(isDesktop?{gridColumn:'1 / -1'}:{})}}>
+                        <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:8}}>Acciones</div>
+                        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{enProd
+                          ? <>{Btn('Ver facturas',()=>{setSiiPageOpen(false);go('clientes')},true)}{Btn('Verificar estados',siiVerificarEstados)}{Btn('Enviar resumen',siiResumenSemanal)}{Btn('Probar conexión',siiProbar)}{Btn('Historial',cargarSiiLog)}</>
+                          : <>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>{setSiiResult(null);if(!siiSetJson)setSiiSetJson(SII_SET_SAMPLE);setSiiPanel('set')})}{Btn('Libro de ventas',()=>{setSiiResult(null);setSiiPanel('libro')})}{Btn('Historial',cargarSiiLog)}</>}</div>
+                      </div>
+                      {/* Histórico SII + pareo */}
+                      <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',...(isDesktop?{gridColumn:'1 / -1'}:{})}}>
+                        <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Fuente de la verdad · histórico SII (solo lectura)</div>
+                        <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Trae del SII las facturas y notas de crédito de <b>2025-01 a 2026-06</b> como espejo para el cuadre. No toca facturación ni cambia nada.</div>
+                        {siiHistProg&&!siiHistProg.done&&<div style={{fontSize:11,color:C.accent,background:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>Trayendo {siiHistProg.mes}… ({siiHistProg.i}/{siiHistProg.total})</div>}
+                        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn(siiBusy?'Trayendo del SII…':'Traer histórico del SII (2025-01 → 2026-06)',siiTraerHistorico)}</div>
+                        {siiHistProg?.done&&(()=>{ const docs=siiHistProg.docs||0, nuevas=siiHistProg.guardadas||0, ncN=siiHistProg.nc||0, pareadas=Math.max(0,docs-nuevas); return (
+                          <div style={{marginTop:11}}>
+                            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.done,marginBottom:6}}>Resultado · qué se parea con el sistema</div>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7}}>
+                              <div style={{background:C.greenBg,border:'1px solid #CFE9DD',borderRadius:9,padding:'9px 10px'}}><div style={{fontSize:17,fontWeight:800,color:C.greenText}}>{pareadas}</div><div style={{fontSize:9,color:C.greenText,fontWeight:600}}>pareadas · ya en el sistema</div></div>
+                              <div style={{background:C.ambarBg,border:'1px solid #EBD9AE',borderRadius:9,padding:'9px 10px'}}><div style={{fontSize:17,fontWeight:800,color:C.soonText}}>{nuevas}</div><div style={{fontSize:9,color:C.soonText,fontWeight:600}}>sin parear · nuevas</div></div>
+                              <div style={{background:'#FAECE7',border:'1px solid #F1DDD2',borderRadius:9,padding:'9px 10px'}}><div style={{fontSize:17,fontWeight:800,color:C.coralText}}>{ncN}</div><div style={{fontSize:9,color:C.coralText,fontWeight:600}}>notas de crédito</div></div>
                             </div>
-                          ))}
-                        </>) })()}
+                            <div style={{fontSize:11,color:C.muted,marginTop:7}}>De <b style={{color:C.text}}>{docs} documento{docs!==1?'s':''} del SII</b>: {pareadas} ya están en tus facturas{nuevas?`, ${nuevas} no calzan con ninguna`:''}.{siiHistProg.errores?.length?` · ${siiHistProg.errores.length} mes(es) con error`:''}</div>
+                            {nuevas>0&&<button onClick={()=>{setSiiPageOpen(false);go('clientes')}} style={{marginTop:8,fontSize:11,fontWeight:700,color:'#fff',background:C.soonText,border:'none',borderRadius:7,padding:'7px 13px',cursor:'pointer'}}>Ver las {nuevas} sin parear →</button>}
+                          </div>
+                        ) })()}
+                      </div>
+                      {/* #4 · Notas de crédito del RCV por resolver → misma compuerta (ncConfirm/anularPorNC) */}
+                      <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',...(isDesktop?{gridColumn:'1 / -1'}:{})}}>
+                        <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Notas de crédito del SII</div>
+                        {(()=>{ const items=ncResolver||[]
+                          if(ncResolver==null) return <div style={{fontSize:11,color:C.muted}}>Revisando…</div>
+                          if(!items.length) return <div style={{fontSize:11,color:C.muted}}>Sin notas de crédito por resolver — las del SII ya están aplicadas a su factura.</div>
+                          return (<>
+                            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                              <span style={{width:26,height:26,borderRadius:8,background:'#FAECE7',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={14} c={C.coralText}/></span>
+                              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.coralText}}>{items.length} por resolver</div><div style={{fontSize:10,color:C.muted}}>anulan una factura que sigue viva — confirma la anulación</div></div>
+                            </div>
+                            {items.map(it=>(
+                              <div key={it.ncFolio} style={{border:`0.5px solid ${C.border}`,borderRadius:9,padding:'8px 10px',marginBottom:6}}>
+                                <div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.facCliente||it.receptor||'—'}</div>
+                                <div style={{fontSize:10.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>NC N°{it.ncFolio}{it.ncFecha?` · ${fmtFechaDMY(it.ncFecha)}`:''} · {fmt(it.monto)} · anula Factura N°{it.facFolio} ({it.facStatus})</div>
+                                <div style={{marginTop:7}}><button onClick={()=>{setNcVincular(!!it.replId);setNcConfirm({item:it})}} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'6px 13px',cursor:'pointer'}}>Revisar y anular ›</button></div>
+                              </div>
+                            ))}
+                          </>) })()}
+                      </div>
                     </div>
                   </div>
-                </Modal>}
+                </div>}
               </>)
             })()}
           </div>)
