@@ -172,9 +172,18 @@ export const getBilling = async () => {
 }
 
 export const upsertBilling = async (bill) => {
+  // Toda factura debe tener año de venta. Si es fila NUEVA (sin id) sin venta enlazada
+  // (sale_id) ni año manual (sale_year) pero con fecha de emisión, se le copia el año de
+  // emisión como respaldo — así nunca queda huérfana de año. Las que tienen sale_id derivan
+  // el año en vivo (sale_year queda null a propósito); los updates traen id y no se tocan.
+  let row = bill
+  if (bill && !bill.id && bill.sale_id == null && bill.sale_year == null && bill.issued_at) {
+    const y = new Date(bill.issued_at).getFullYear()
+    if (y > 1990 && y < 2100) row = { ...bill, sale_year: y }
+  }
   const { data, error } = await supabase
     .from('billing')
-    .upsert(bill, { onConflict: 'id' })
+    .upsert(row, { onConflict: 'id' })
     .select()
     .single()
   if (error) throw error

@@ -21081,8 +21081,10 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
     // Fila por fila: si un N° de factura ya existe (incl. borradas, que igual ocupan el número único), se omite esa sola y sigue.
     let ok=0, dups=0, errs=0, lastErr=''
     for(const r of aImportar){
+      const _yImp = r.emision ? new Date(r.emision).getFullYear() : (r.pago ? new Date(r.pago).getFullYear() : null)
       const payload={client_id:r.client_id||null, entity_id:r.entity_id||null, concept:r.concepto, amount:r.monto, status:r.status,
         invoice_no:r.factura||null, issued_at:r.emision||null, due:r.emision?dueFromIssued(r.emision):null, paid_at:r.pago||null,
+        sale_year:(_yImp>1990&&_yImp<2100)?_yImp:null,
         receptor_name:r.receptor_name||null, receptor_rut:r.receptor_rut||null, billing_type:'honorarios', updated_at:new Date().toISOString()}
       const {error}=await supabase.from('billing').insert(payload)
       if(error){ if(/duplicate|unique/i.test(error.message)) dups++; else { errs++; lastErr=error.message } } else ok++
@@ -23223,6 +23225,10 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const enEspera = useMemo(()=> (billing||[]).filter(b=>{ if(!facturaCobrable(b)) return false; const dl=daysLeft(b.due); if(!(dl!=null&&dl<0)) return false; const last=recMap[String(b.id)]; if(!last) return false; const gap=Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000); return gap<COBRANZA_GAP }).length, [billing,recMap,hoy])
   const totalDue = grupos.reduce((a,g)=>a+g.total,0)
   const nFacturas = grupos.reduce((a,g)=>a+g.items.length,0)
+  // Contexto: "Por pagar total" (todo lo emitido sin pagar, vencido + al día) para explicar la diferencia con Facturación. Cobranza actúa solo sobre lo vencido.
+  const _cobr=b=>!b.deleted_at && b.invoice_no && !['reembolso','nota_credito'].includes(b.billing_type) && ['Pendiente','Vencido'].includes(b.status) && saldoBill(b)>0
+  const porPagarTotal=(billing||[]).filter(_cobr).reduce((s,b)=>s+saldoBill(b),0)
+  const nAlDia=(billing||[]).filter(b=>_cobr(b)&&!(b.due&&b.due<hoy)).length
 
   async function enviarCliente(g, skipConfirm){
     const cl=clients.find(c=>String(c.id)===String(g.cid)); const to=(cl?.email||'').trim()
@@ -23287,9 +23293,10 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
         {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
       </div>
       <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:14,color:'#fff'}}>
-        <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Por cobrar hoy · recordatorios que tocan</div>
+        <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Vencido</div>
         <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(totalDue)}</div>
         <div style={{fontSize:10.5,opacity:.85}}>{grupos.length} cliente{grupos.length!==1?'s':''} · {nFacturas} factura{nFacturas!==1?'s':''} vencida{nFacturas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
+        {porPagarTotal>totalDue&&<div style={{marginTop:9,paddingTop:9,borderTop:'1px solid rgba(255,255,255,.18)',fontSize:10.5,opacity:.9,display:'flex',justifyContent:'space-between',gap:8}}><span>Por pagar total</span><span style={{fontWeight:700}}>{f0(porPagarTotal)}{nAlDia>0?` · ${nAlDia} al día`:''}</span></div>}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px',marginBottom:12}}>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Cobranza automática</div><div style={{fontSize:10,color:C.muted}}>{autoGlobal?'La app envía sola los recordatorios de los clientes que liberaste.':'Off — aunque liberes un cliente, no se envía solo hasta activar esto.'}</div></div>
