@@ -121,6 +121,7 @@ export const demoData = {
     { id:'mov4', fecha:'2026-06-26', monto:677309, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Depositos con documentos misma plaza sucursal APOQUINDO', n_operacion:'237515' },
     { id:'mov5', fecha:'2026-07-05', monto:500000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:'76.111.222-3', nombre_contraparte:'Comercial Andes SpA', descripcion:'Transferencia de Comercial Andes SpA', n_operacion:'889001' },
     { id:'mov6', fecha:'2026-07-08', monto:450000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:null, nombre_contraparte:'Notaría Achondo', descripcion:'Pago servicios notariales', n_operacion:'55012' },
+    { id:'mov7', fecha:'2026-07-03', monto:300000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'19.889.733-7', nombre_contraparte:'Martín Campero Mantelli', descripcion:'Transferencia a Martín Campero', n_operacion:'55020' },
   ],
   cliente_alias: [],
   conciliacion: [

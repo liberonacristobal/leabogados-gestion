@@ -26143,7 +26143,12 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     if(m.tipo!=='cargo'||m.es_interno) return null
     const k=crNormRut(m.rut_contraparte)
     if(k){
-      if(EQUIPO_RUT[k]) return {fam:'oficina',category:'Sueldos',sub:EQUIPO_RUT[k],via:'RUT'}
+      if(EQUIPO_RUT[k]){ const per=EQUIPO_RUT[k]
+        // Si la glosa ya se aprendió antes (p.ej. "Comisión"), respeta lo aprendido por sobre el RUT.
+        const gk0=glosaKey(m.descripcion); if(gk0&&costoOfiLearn[gk0]) return {fam:'oficina',category:costoOfiLearn[gk0].category,sub:costoOfiLearn[gk0].subcategory||null,via:'glosa'}
+        // Persona del equipo CON caja chica: un cargo a su cuenta es tan probable reposición de caja como sueldo → no asumir, preguntar.
+        const tieneCaja=(pettyCash||[]).some(p=>p.user_name===per)
+        return tieneCaja ? {fam:'oficina',persona:per,via:'RUT',ambiguoCaja:true} : {fam:'oficina',category:'Sueldos',sub:per,via:'RUT'} }
       if(SOCIO_RUT[k])  return {fam:'oficina',category:'Retiros',sub:SOCIO_RUT[k],via:'RUT'}
       if(CONTADORA_RUT[k]) return {fam:'oficina',category:'Contadora',sub:null,via:'RUT'}
       if(provByRut[k]) return {fam:'oficina',category:'Proveedores',sub:provByRut[k],via:'RUT'}
@@ -26407,6 +26412,20 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     const rowSty=(i)=>({display:'flex',alignItems:'center',gap:10,padding:'9px 11px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'})
     const backHd=(label,onBack)=><div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span onClick={onBack} style={{color:C.accent,fontSize:15,cursor:'pointer'}}>←</span><span style={{fontSize:11.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span><span style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmtM(monto)}</span></div>
     const sugBar=()=>{ if(!sug) return null
+      // Cargo a alguien del equipo CON caja chica: no asumir "Sueldo" — preguntar y dejar elegir (siempre confirma antes de asignar).
+      if(sug.ambiguoCaja){ const per=sug.persona
+        const opt=(bg,bd,col,lbl,sub,onClick,flag)=><button disabled={busy===m.id} onClick={onClick} style={{flex:1,minWidth:0,position:'relative',background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'8px 6px',cursor:busy===m.id?'default':'pointer',textAlign:'center'}}>
+          {flag&&<span style={{position:'absolute',top:-7,right:-4,fontSize:8,fontWeight:800,color:'#fff',background:C.normal,borderRadius:10,padding:'1px 6px'}}>{flag}</span>}
+          <div style={{fontSize:12,fontWeight:700,color:col}}>{lbl}</div><div style={{fontSize:8.5,color:C.done,marginTop:2}}>{sub}</div></button>
+        return <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',marginBottom:8}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Cargo a {per} · ¿qué fue?</div>
+          <div style={{fontSize:9.5,color:C.done,marginBottom:9}}>Tiene caja chica — puede ser reposición o sueldo. Elige tú.</div>
+          <div style={{display:'flex',gap:7}}>
+            {opt(C.tealBg,'#BFE6E3',C.tealText,'Caja chica','repone su fondo',()=>registrarCargoOficina(m,'Caja chica',per),'probable')}
+            {opt('#F2F7FB','#CFE0EC',C.accent,'Sueldo','costo oficina',()=>registrarCargoOficina(m,'Sueldos',per))}
+            {opt(C.ambarBg,'#EBD9AE',C.coralText,'Otro…','comisión, retiro',()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:undefined}));setCcQ(p=>({...p,[m.id]:''}))})}
+          </div>
+        </div> }
       if(sug.fam==='oficina'){ const hint=cargoRachaHint(sug.category,sug.sub); const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`; const canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
         return <div style={{display:'flex',alignItems:'center',gap:9,background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{path}</div><div style={{fontSize:9.5,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
@@ -26749,6 +26768,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         <button disabled={busy===m.id} onClick={()=>costoOficinaSplit(m,grupo.items)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:busy===m.id?'default':'pointer',flexShrink:0}}>Repartir en {grupo.items.length}</button>
       </div>)
     if(!sug) return null
+    if(sug.ambiguoCaja) return (
+      <div onClick={stop} style={{marginTop:8,background:C.tealBg,border:'1px solid #BFE6E3',borderRadius:9,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.tealText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Cargo a {sug.persona} · ¿caja chica o sueldo?</div><div style={{fontSize:9.5,color:C.tealText,marginTop:1}}>tiene caja chica — elige tú</div></div>
+        <button disabled={busy===m.id} onClick={()=>setModalMov(m.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Elegir</button>
+      </div>)
     if(sug.fam==='oficina'){
       const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`, canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
       const viaTxt=sug.via==='RUT'?'por el RUT · siempre lo clasificas así':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'
