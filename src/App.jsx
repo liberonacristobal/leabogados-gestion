@@ -26885,7 +26885,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
       l=l.filter(m=>{ const nm=(m.nombre_contraparte||'').toLowerCase(), cl=(cmap[m.cliente_id]||'').toLowerCase(), rut=(m.rut_contraparte||'').toLowerCase().replace(/[^0-9kk]/g,'')
         return nm.includes(qq)||cl.includes(qq)||(qd.length>=3&&rut.includes(qd)) }) }
     l=l.slice().sort((a,b)=> orden==='asc' ? ((a.fecha||'')<(b.fecha||'')?-1:1) : ((a.fecha||'')>(b.fecha||'')?-1:1))
-    return l.slice(0,400)
+    return l.slice(0,3000)   // tope de seguridad (antes 400): con 400 y orden nueva→antigua se ESCONDÍAN los movimientos más antiguos (la lista "terminaba" a mitad de año). Las filas de meses colapsados no se renderizan, así que un tope alto no pesa. Los años/meses/búsqueda ya permiten acotar.
   },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concView,concByMov,billing,q,orden,cmap,modalMov])
   // Contadores de los chips de estado sobre la MISMA base filtrada que la lista (cuenta/mes/año/resp) — evita mostrar "88" cuando la vista filtrada está vacía.
   const chipCounts = useMemo(()=>{
