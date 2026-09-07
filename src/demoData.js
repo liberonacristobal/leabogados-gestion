@@ -63,6 +63,8 @@ export const demoData = {
     { id:'b11', client_id:'c5', sale_id:'s5', concept:'Marcas — cuota 1/2',                      amount:23400000, status:'Pendiente',  invoice_no:'1320', issued_at:'2026-06-02', due:'2026-06-30', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b12', client_id:'c4', sale_id:'s4', concept:'Asesoría permanente — mayo',              amount:4000000,  status:'Pendiente',  invoice_no:'1330', issued_at:'2026-05-31', due:'2026-06-20', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b19', client_id:'c3', sale_id:null, concept:'Estudio de títulos — saldo',              amount:677309,   status:'Vencido',    invoice_no:'1305', issued_at:'2026-04-01', due:'2026-05-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    // Calce cercano (#8): factura $250.000 con RUT del cliente; el abono llegó $3.189 menor por comisión bancaria (Webpay)
+    { id:'bcc', client_id:'c5', sale_id:null, concept:'Servicios — pago con tarjeta',            amount:250000,   status:'Pendiente',  invoice_no:'1340', issued_at:'2026-09-02', due:'2026-09-30', paid_at:null, billing_type:'honorarios', monto_terceros:0, receptor_rut:'76.222.333-4' },
     // Vencidas (aging)
     { id:'b13', client_id:'c3', sale_id:'s3', concept:'Litigio laboral — cuota 2',              amount:35000000, status:'Vencido',    invoice_no:'1270', issued_at:'2026-04-01', due:'2026-05-05', paid_at:'2026-05-20', paid_amount:35000000, payment_date:'2026-05-20', billing_type:'honorarios', monto_terceros:0 },
     { id:'b14', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 2/3',          amount:26000000, status:'Vencido',    invoice_no:'1248', issued_at:'2026-03-10', due:'2026-03-25', paid_at:'2026-04-15', paid_amount:26000000, reconciled_at:'2026-04-15', billing_type:'honorarios', monto_terceros:0 },
@@ -124,6 +126,7 @@ export const demoData = {
     { id:'mov5', fecha:'2026-07-05', monto:500000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:'76.111.222-3', nombre_contraparte:'Comercial Andes SpA', descripcion:'Transferencia de Comercial Andes SpA', n_operacion:'889001' },
     { id:'mov6', fecha:'2026-07-08', monto:450000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:null, nombre_contraparte:'Notaría Achondo', descripcion:'Pago servicios notariales', n_operacion:'55012' },
     { id:'mov7', fecha:'2026-07-03', monto:300000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'19.889.733-7', nombre_contraparte:'Martín Campero Mantelli', descripcion:'Transferencia a Martín Campero', n_operacion:'55020' },
+    { id:'mov8', fecha:'2026-09-04', monto:246811, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:'c5', rut_contraparte:'76.222.333-4', nombre_contraparte:'Viñedos del Maipo Ltda', descripcion:'Abono Webpay neto de comisión', n_operacion:'900123' },
   ],
   cliente_alias: [],
   conciliacion: [
