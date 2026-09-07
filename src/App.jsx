@@ -27682,13 +27682,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             return (
               <Fragment key={m.id}>
               {_newY&&(
-                <div onClick={()=>setConcYCol(p=>{const n=new Set(p);n.has(_y)?n.delete(_y):n.add(_y);return n})} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'11px 13px',background:C.azulBg,borderTop:i>0?`1px solid ${C.border}`:'none'}}>
-                  <span style={{fontSize:15,fontWeight:800,color:C.accent,letterSpacing:'-.2px'}}>{_y}</span>
-                  <span style={{fontSize:12,color:C.accent,transform:_yOpen?'rotate(180deg)':'none'}}>{'▾'}</span>
+                <div onClick={()=>setConcYCol(p=>{const n=new Set(p);n.has(_y)?n.delete(_y):n.add(_y);return n})} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'12px 14px',background:C.accent,borderTop:i>0?`1px solid ${C.border}`:'none'}}>
+                  <span style={{fontSize:16,fontWeight:800,color:'#fff',letterSpacing:'-.3px'}}>{_y}</span>
+                  <span style={{fontSize:12,color:'#cfe0ef',transform:_yOpen?'rotate(180deg)':'none'}}>{'▾'}</span>
                 </div>
               )}
               {_yOpen&&_newM&&(()=>{ const mi=_mInfo(); return (
-                <div onClick={()=>setConcMOpen(prev=>{ const base=prev===null?new Set([_firstYM]):new Set(prev); base.has(_ym)?base.delete(_ym):base.add(_ym); return base })} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'9px 13px 9px 18px',background:C.bgSoft,borderTop:`1px solid ${C.border}`}}>
+                <div onClick={()=>setConcMOpen(prev=>{ const base=prev===null?new Set([_firstYM]):new Set(prev); base.has(_ym)?base.delete(_ym):base.add(_ym); return base })} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'10px 13px 10px 18px',background:C.azulBg,borderTop:`1px solid ${C.border}`}}>
                   <span style={{fontSize:13.5,fontWeight:700,color:C.accent}}>{_MES[+_ym.slice(5,7)-1]||_ym}</span>
                   <span style={{display:'flex',alignItems:'center',gap:9}}><span style={{fontSize:12,fontWeight:700,color:mi.t>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{mi.t>=0?'+':'−'}{fmtM(Math.abs(mi.t))}</span><span style={{fontSize:11,color:C.done,transform:_mOpen?'rotate(180deg)':'none'}}>{'▾'}</span></span>
                 </div>
