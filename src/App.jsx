@@ -4008,7 +4008,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
                 <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{n}{seg.k!=='ocasional'&&carteraTot.ufSeg[seg.k]>0?` · ${fmtUFk(carteraTot.ufSeg[seg.k])}`:''}</span>
                 {n>0&&<span style={{fontSize:12,color:C.done,flexShrink:0}}>{open?'▴':'▾'}</span>}
               </div>
-              {open&&rows.slice(0,15).map(x=>(
+              {open&&rows.slice(0,500).map(x=>(
                 <div key={x.c.id} onClick={()=>x.c.id&&onOpenClientFicha&&onOpenClientFicha(x.c.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0 7px 18px',borderTop:'0.5px solid #EEF1F3',cursor:'pointer'}}>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:12.5,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.c.name}</div>
@@ -14750,7 +14750,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             )})}</div>}
             {notaLedger.n>0&&cobrosVista==='ot'&&<>
               <div style={{display:'flex',alignItems:'center',gap:8,background:'#F1F4F6',border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 12px',marginBottom:10}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg><input value={cobrosQ} onChange={e=>setCobrosQ(e.target.value)} placeholder='Buscar OT, concepto o cliente…' style={{border:'none',background:'none',outline:'none',fontSize:12.5,color:C.text,width:'100%'}}/></div>
-              <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{otFilt.slice(0,300).map((r,j)=>(
+              <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{otFilt.slice(0,3000).map((r,j)=>(
                 <div key={j} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:j?`0.5px solid #EEF1F3`:'none'}}>
                   <span style={{fontSize:11,fontWeight:700,color:r.err?C.overdueText:C.azulInfo,width:64,flexShrink:0}}>{fmtOt(r.e.ot_number)||'s/OT'}</span>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.e.concept||'—'}{cnOf(r.e)?<span style={{color:C.muted}}> · {cnOf(r.e)}</span>:''}</div><div style={{fontSize:10,color:C.done}}>{r.carga}{r.err?<span style={{color:C.overdueText,fontWeight:600}}> · ⚠ {r.err==='sincliente'?'sin cliente':'duplicado'}</span>:''}</div></div>
@@ -27754,6 +27754,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
                     <span style={{fontSize:10,color:C.tealText}}>Acreditar al fondo de {cmap[m.cliente_id]||'cliente'}:</span>
                     <button disabled={busy===m.id} onClick={()=>crearFondoProvision(m)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.tealBg,color:C.tealText,border:'none'}}>+ Crear fondo {fmtM((m.monto||0)-(m.monto_conciliado||0))}</button></div>)
+                })()}
+                {/* Abono con cliente pero categorizado como "resuelto" (Otro ingreso / Pago histórico / etc.): quedó fuera de conciliación. Opción para RECLASIFICARLO como adelanto (saldo a favor) — quita la categoría y lo deja disponible para imputar a una factura. Reversible (Deshacer). */}
+                {m.tipo==='abono'&&!m.es_interno&&m.cliente_id&&m.categoria&&!['Cliente','Provisión de gastos'].includes(m.categoria)&&!(concByMov[m.id]?.length)&&(()=>{
+                  const resto=(m.monto||0)-(m.monto_conciliado||0); if(resto<=0) return null
+                  return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
+                    <span style={{fontSize:10,color:C.muted}}>¿Era un adelanto de {cmap[m.cliente_id]||'este cliente'}?</span>
+                    <button disabled={busy===m.id} onClick={async()=>{ if(!await appConfirm(`¿Dejar este abono de ${fmtM(resto)} como ADELANTO (saldo a favor) de ${cmap[m.cliente_id]||'este cliente'}?\n\nSe quita la categoría "${m.categoria}" y queda disponible para imputar a una factura.`)) return; await setCategoria(m,null); await saldoAFavor({...m,categoria:null}) }} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'3px 11px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.accent,border:'none'}}>Dejar como adelanto</button>
+                  </div>)
                 })()}
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
                 {sub==='abonos'&&esConciliable(m)&&(()=>{
