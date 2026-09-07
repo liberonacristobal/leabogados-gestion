@@ -24761,7 +24761,8 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
 // cargada (abono del mismo cliente/RUT, monto exacto, fecha cercana al pago). Separa calce exacto (conciliar en lote) /
 // por revisar / sin pago, mes a mes. Concilia reusando onConciliar=reconciliar (fuente única; una Pagado sin respaldo
 // tiene saldoFactura=monto, así que se liga sin cambiar estado ni mandar correo). No re-usa un mismo abono dos veces.
-function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=[],aplicadoByFactura={},onConciliar,busy,onOpenClientFicha,onClose}){
+function CobradasSinRespaldoPage({billing=[],movs=[],clients=[],clientEntities=[],aplicadoByFactura={},onConciliar,busy,onOpenClientFicha,onClose}){
+  const isDesktop = useIsDesktop()
   const fmtM = fmt
   const nrm = crNormRut   // normalizador único de RUT
   const cmap = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>m[c.id]=c.name); return m },[clients])
@@ -24837,10 +24838,19 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
   const secLbl = t => <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:C.muted,margin:'16px 2px 8px'}}>{t}</div>
   const verMas = (n,open,setOpen,txt) => n>0 && <div onClick={()=>setOpen(!open)} style={{textAlign:'center',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',padding:'4px 0 8px'}}>{open?'ver menos':`${n} ${txt} ▾`}</div>
   return (
-    <Modal fullscreenOnMobile title='Conciliar cobradas · cartola' onClose={onClose}>
+    <div style={{paddingBottom:80,...(isDesktop?{maxWidth:900,margin:'0 auto'}:{})}}>
+      <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:20,fontWeight:600,color:C.text,letterSpacing:-.4}}>Conciliar cobradas · cartola</div>
+            <div style={{fontSize:11,color:C.muted}}>cobradas sin respaldo · {items.length}</div>
+          </div>
+        </div>
+      </div>
+      <div style={{padding:'14px 20px 0'}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
         <select value={yr} onChange={e=>{setYr(e.target.value);setPickFac(null)}} style={{fontSize:13,fontWeight:600,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,color:C.accent}}><option value='todos'>Todos</option>{yrs.map(y=><option key={y} value={y}>{y}</option>)}</select>
-        <span style={{fontSize:11,color:C.muted}}>cobradas sin respaldo · {items.length}</span>
       </div>
       {items.length===0
         ? <div style={{background:C.greenBg,border:'1px solid #BFE3D5',borderRadius:12,padding:'14px',fontSize:12,color:C.greenText,fontWeight:600}}>✓ {yr==='todos'?'Ninguna cobrada quedó sin respaldo.':`Ninguna cobrada del ${yr} quedó sin respaldo.`}</div>
@@ -24895,7 +24905,8 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
           </div>}
         </div>}
       </>}
-    </Modal>
+      </div>
+    </div>
   )
 }
 
@@ -26662,6 +26673,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}</div>
   })() : null
   if(hubOpen) return concHub
+  // "Conciliar cobradas · cartola" es PÁGINA (no modal): cuando está abierta reemplaza la vista (móvil y escritorio), con "← volver".
+  if(cobradasOpen) return <CobradasSinRespaldoPage billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onOpenClientFicha={onOpenClientFicha} onClose={()=>setCobradasOpen(false)}/>
   // Opción A — el interior se enfoca en la tarjeta que abriste: el header ES el contexto (icono + nombre + conteo),
   // y NO se repiten los tiles "Por resolver" (eso ya lo dijo la tarjeta). Cambiar de foco = una línea de texto.
   // El overview (tarjeta "Abonos", concView==='todos') queda idéntico → el móvil no se rompe.
@@ -27009,7 +27022,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           )}
         </div>
         )})()}
-        {cobradasOpen&&<CobradasSinRespaldoModal billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onOpenClientFicha={onOpenClientFicha} onClose={()=>setCobradasOpen(false)}/>}
 
         {/* Dentro de un foco (opción A): cambiar de foco es una línea de texto — no se repiten los tiles que ya dijo la tarjeta. */}
         {sub==='abonos'&&focused&&(()=>{
