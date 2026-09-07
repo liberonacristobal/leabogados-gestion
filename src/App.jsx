@@ -7528,7 +7528,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
     return out }, [mes,emitidasAll,resp,respaldoMap])   // eslint-disable-line
   const prev=trend[4], cur=trend[5]
 
-  const shiftMes = d => { const [y,m]=mes.split('-').map(Number); let mm=m+d, yy=y; while(mm<=0){mm+=12;yy--} while(mm>12){mm-=12;yy++}; setMes(`${yy}-${String(mm).padStart(2,'0')}`); setExpand(null); setEstFiltro(null) }
+  const shiftMes = d => { const [y,m]=mes.split('-').map(Number); let mm=m+d, yy=y; while(mm<=0){mm+=12;yy--} while(mm>12){mm-=12;yy++}; setMes(`${yy}-${String(mm).padStart(2,'0')}`); setExpand(null) }   // mantiene la tarjeta activa (estFiltro) al cambiar de mes: sin resetearla, la lista persiste y el ancho no colapsa
   const mesLabel = `${MESNOM[+mes.slice(5,7)-1]} ${mes.slice(0,4)}`
   const pct = x => `${Math.round(x*100)}%`
   const deltaTxt = (a,b)=>{ if(!b) return a>0?'nuevo':''; const d=Math.round((a-b)/b*100); return `${d>=0?'▲':'▼'} ${Math.abs(d)}%` }
@@ -7545,7 +7545,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
 
   const dfmt = d => { const s=fmtDate(d); return s||'—' }
 
-  return (<div style={{maxWidth:isDesktop?1100:660,margin:'0 auto'}}>
+  return (<div style={{width:'100%',maxWidth:isDesktop?1100:660,margin:'0 auto'}}>
     {/* Navegador de mes + modo */}
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
       <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
@@ -9225,49 +9225,26 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {[['','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v||'t'} onClick={()=>setFYear(v)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${fYear===v?C.accent:C.border}`,background:fYear===v?C.azulBg:'#fff',color:fYear===v?C.accent:C.muted}}>{l}</span>)}
             </div>
             <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'14px 15px',marginBottom:7}}>
-              <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:12}}>Etapas del cobro</div>
+              <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',marginBottom:12}}>Ciclo de la factura</div>
               <div style={{display:'flex',alignItems:'stretch'}}>
                 <div onClick={()=>irAEstado('programadas')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
                   <SIcon n='clock' s={19} c={C.muted}/>
-                  <div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:3}}>Por facturar</div>
-                  <div style={{fontSize:15,fontWeight:700,color:C.muted}}>{fmtShort(porFacturarRealTot)}</div>
+                  <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:4,fontWeight:600}}>Por facturar</div>
+                  <div style={{fontSize:15.5,fontWeight:800,color:C.muted,marginTop:1}}>{fmtShort(porFacturarRealTot)}</div>
                 </div>
-                <div style={{display:'flex',alignItems:'center',color:C.done,fontSize:15,paddingTop:14}}>→</div>
+                <div style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:15,paddingTop:14}}>→</div>
                 <div onClick={()=>irAEstado('emitidas')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
                   <SIcon n='file' s={19} c={C.accent}/>
-                  <div style={{fontSize:8,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginTop:3}}>Por cobrar</div>
-                  <div style={{fontSize:15,fontWeight:700,color:C.accent}}>{fmtShort(porCobrar)}</div>
+                  <div style={{fontSize:9,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginTop:4,fontWeight:600}}>Por pagar</div>
+                  <div style={{fontSize:15.5,fontWeight:800,color:C.accent,marginTop:1}}>{fmtShort(porCobrar)}</div>
                 </div>
-                <div style={{display:'flex',alignItems:'center',color:C.done,fontSize:15,paddingTop:14}}>→</div>
+                <div style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:15,paddingTop:14}}>→</div>
                 <div onClick={()=>irAEstado('pagado')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
                   <SIcon n='check' s={19} c={C.normal}/>
-                  <div style={{fontSize:8,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:3}}>Cobrado</div>
-                  <div style={{fontSize:15,fontWeight:700,color:C.greenText}}>{fmtShort(cobAll)}</div>
+                  <div style={{fontSize:9,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:4,fontWeight:600}}>Pagado</div>
+                  <div style={{fontSize:15.5,fontWeight:800,color:C.greenText,marginTop:1}}>{fmtShort(cobAll)}</div>
                 </div>
               </div>
-              {/* De "Por cobrar", desglose por ANTIGÜEDAD de vencimiento (venceBill = due, o emisión+30d — fuente única): chips verde→rojo, cada uno abre su lista filtrada por tramo (irAEstadoAging). "Al día" (aún no vence) al pie. Reemplaza los tiles "vencido/al día" (planos, drill roto). */}
-              {(()=>{
-                const vHoy=new Date(hoy).getTime()
-                const dV=b=>{ const v=venceBill(b); if(!v) return null; return Math.round((vHoy-new Date(v+'T00:00:00').getTime())/86400000) }
-                const bkt=b=>{ const d=dV(b); if(d==null||d<=0) return 'aldia'; if(d<=30) return '1-30'; if(d<=60) return '31-60'; if(d<=90) return '61-90'; return '90' }
-                const sumB=k=>pend.filter(b=>bkt(b)===k).reduce((a,b)=>a+saldoBill(b),0)
-                const cntB=k=>pend.filter(b=>bkt(b)===k).length
-                const alDia=sumB('aldia')
-                const TR=[['1-30','1–30',C.greenBg,C.greenText],['31-60','31–60',C.soonBg,C.soonText],['61-90','61–90','#FAECE7',C.coralText],['90','+90','#F7C1C1','#791F1F']]
-                  .map(([k,l,bg,tx])=>({k,l,bg,tx,m:sumB(k),n:cntB(k)})).filter(t=>t.m>0)
-                return (
-                  <div style={{marginTop:12,paddingTop:11,borderTop:`0.5px solid ${C.border}`}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:7}}>
-                      <span style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.3,textTransform:'uppercase'}}>Vencido · por antigüedad</span>
-                      <span style={{fontSize:9,color:C.azulInfo}}>vence a 30 días</span>
-                    </div>
-                    {TR.length>0?<div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                      {TR.map(t=><span key={t.k} onClick={()=>irAEstadoAging(t.k)} title={`${t.n} factura${t.n!==1?'s':''} · ${t.l} días vencidas`} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'4px 9px',cursor:'pointer',background:t.bg,color:t.tx,fontVariantNumeric:'tabular-nums'}}>{t.l} · {fmtShort(t.m)}</span>)}
-                    </div>:<div style={{fontSize:11,color:C.greenText,fontWeight:600}}>Nada vencido</div>}
-                    <div style={{fontSize:9.5,color:C.done,marginTop:8}}>Al día (aún no vence) · {fmtShort(alDia)}</div>
-                  </div>
-                )
-              })()}
             </div>
             {/* Bloque del mes (rediseño 2026-08-04, pedido del usuario). Fila 1 = 2 tiles con TONO propio y mes como KICKER (cabe en meses largos): Cierre AZUL (reporte del mes anterior) + Facturas por emitir VERDE (pendiente del mes actual), $ como cifra. Fila(s) 2+ = tiles chicos uniformes: Anticipos disponibles + Ver cobranza fijos; higiene condicional (Ya emitidas·vincular, Pagadas sin marcar, Sin año). Reemplaza Cierre/Facturas-del-mes/duplicados/cobradas-sin-marcar/chips (Proveedores fuera). */}
             {(()=>{
