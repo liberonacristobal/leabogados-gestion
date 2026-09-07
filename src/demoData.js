@@ -116,7 +116,11 @@ export const demoData = {
     { id:'tp1', billing_id:'b4',  proveedor_id:'pv1', proveedor:'Notaría Edwards',     monto:4000000, estado:'por_pagar', tipo_costo:'Notaría',      sale_id:'s7', created_at:'2026-03-22' },
     { id:'tp2', billing_id:'b10', proveedor_id:'pv2', proveedor:'Estudio Contable MJ', monto:3000000, estado:'pendiente', tipo_costo:'Contabilidad', sale_id:'s6', created_at:'2026-05-28' },
   ],
-  anticipos: [],
+  anticipos: [
+    { id:'ant1', client_id:'c4', monto:1500000, fecha:'2026-06-10', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+    { id:'ant2', client_id:'c4', monto:1500000, fecha:'2026-07-15', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+    { id:'ant3', client_id:'c4', monto:1200000, fecha:'2026-08-01', nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+  ],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.
   cartola_movimientos: [
     { id:'mov1', fecha:'2026-07-10', monto:40000000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:40000000, rol_cuenta:'honorarios', cliente_id:'c6', rut_contraparte:'77.444.555-6', nombre_contraparte:'Clínica San Rafael SpA', descripcion:'Abono por transferencia de Clinica San Rafael SpA Rut 77444555-6 desde BCI', n_operacion:'6618172' },
