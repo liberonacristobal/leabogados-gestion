@@ -40,6 +40,7 @@ export const demoData = {
     { id:'s8',  client_id:'c2',               title:'Due diligence adquisición',          area:'Corporativo', moneda:'UF',  amount_uf:1200, cost_uf:0,  uf_value:39000, year:2026, month:5, status:'Activo', cobro_type:'unico',         responsible:'Erasmo',    created_at:'2026-05-03' },
     { id:'s11', client_id:'c5',               title:'Asesoría M&A — venta de activos',     area:'Corporativo', moneda:'UF',  amount_uf:1800, cost_uf:0,  uf_value:39000, year:2026, month:4, status:'Activo', cobro_type:'cuotas',        responsible:'Cristóbal', created_at:'2026-04-20' },
     { id:'s12', client_id:'c6',               title:'Reestructuración financiera',         area:'Corporativo', moneda:'CLP', amount_clp:45000000, cost_clp:0, year:2026, month:6, status:'Activo', cobro_type:'cuotas',        responsible:'Erasmo',    created_at:'2026-06-02' },
+    { id:'s13', client_id:'c3',               title:'Asesoría laboral por hora',           area:'Laboral',     moneda:'UF',  amount_uf:60,   cost_uf:0,  uf_value:39000, year:2026, month:9, status:'Activo', cobro_type:'hora', cobro_config:{tarifaHoraUF:3,topeHoras:20,topePeriodo:'mes'}, responsible:'Martín',    created_at:'2026-09-01' },
     // 2025 (para el selector de año)
     { id:'s9',  client_id:'c1',               title:'Asesoría corporativa 2025',          area:'Corporativo', moneda:'UF',  amount_uf:1200, cost_uf:0,  uf_value:37500, year:2025, month:6, status:'Activo', cobro_type:'cuotas',        responsible:'Cristóbal', created_at:'2025-06-01' },
     { id:'s10', client_id:'c3',               title:'Litigio civil 2025',                 area:'Litigios',    moneda:'CLP', amount_clp:60000000, cost_clp:0, year:2025, month:9, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2025-09-10' },
@@ -143,6 +144,9 @@ export const demoData = {
     { id:'h7', user_name:'Demo', client_id:'c1', fecha:'2026-08-27', horas:1.5, glosa:'Reunión con el cliente', billable:true, source:'manual' },
     { id:'h8', user_name:'Demo', client_id:'c1', fecha:'2026-08-26', horas:2,   glosa:'Revisión de minuta', billable:true, source:'manual' },
     { id:'h9', user_name:'Demo', client_id:'c4', fecha:'2026-08-24', horas:1,   glosa:'Llamada de coordinación (cortesía)', billable:false, source:'manual' },
+    { id:'h10', user_name:'Martín', client_id:'c3', sale_id:'s13', fecha:'2026-09-02', horas:8, glosa:'Audiencia y preparación', billable:true, source:'manual' },
+    { id:'h11', user_name:'Martín', client_id:'c3', sale_id:'s13', fecha:'2026-09-04', horas:6, glosa:'Escritos y seguimiento', billable:true, source:'manual' },
+    { id:'h12', user_name:'Martín', client_id:'c3', sale_id:'s13', fecha:'2026-09-05', horas:4, glosa:'Reuniones con el cliente', billable:true, source:'manual' },
   ],
   vacaciones: [
     { id:'vac1', user_name:'Demo', desde:new Date(Date.now()+5*864e5).toISOString().slice(0,10), hasta:new Date(Date.now()+9*864e5).toISOString().slice(0,10) },
