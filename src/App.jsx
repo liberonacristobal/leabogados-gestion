@@ -23840,6 +23840,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
     const margen = genera-costo, pct = genera>0?Math.round(margen/genera*100):0
     return { name, horasTot, horasFact, costo, genera, margen, pct }
   }).filter(x=>x.horasTot>0).sort((a,b)=>b.margen-a.margen), [horas, costoHora, overheadHora, hayOverhead, anioAct, tarifaCLP])
+  const [margenTab,setMargenTab] = useState('cliente')   // Rentabilidad: una sola lista con tabs Por cliente / Por abogado (antes eran dos listas apiladas)
   const exportYTD = () => {
     const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#537281'}'>${d.exCLP>0?f0(d.exCLP):'—'}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#0F6E56'}'>${d.exCLP>0?'Reajustar':'OK'}</td></tr>`).join('')
     const heroExc = excedenteYTD>0?`<div style='background:#F5F7F9;border-radius:8px;padding:12px 14px;margin-bottom:16px'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#537281;font-weight:700'>Podrías haber facturado · ${anioAct}</div><div style='font-size:22px;font-weight:800;color:#003C50;margin-top:2px'>${f0(excedenteYTD)}</div><div style='font-size:10px;color:#537281;margin-top:2px'>Trabajo facturable por sobre lo incluido cada mes, a tu valor hora (cobrarlo es opcional). Base para el reajuste ${Number(anioAct)+1}.</div></div>`:''
@@ -24017,8 +24018,10 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums',color:margenTot.margen>=0?'#fff':'#FFD2CC'}}>{f0(margenTot.margen)}</div>
             <div style={{fontSize:10.5,opacity:.85,lineHeight:1.4}}>Ingreso {f0(margenTot.ing)} − costo {f0(margenTot.costo)} (horas × costo/hora).</div>
           </div>}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px'}}>
-            <span style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>Margen por cliente</span>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px',gap:8}}>
+            <span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,padding:2,flexShrink:0}}>
+              {[['cliente','Por cliente'],['abogado','Por abogado']].map(([v,l])=><span key={v} onClick={()=>setMargenTab(v)} style={{fontSize:10,fontWeight:700,padding:'4px 11px',borderRadius:18,cursor:'pointer',color:margenTab===v?'#fff':C.muted,background:margenTab===v?C.accent:'transparent'}}>{l}</span>)}
+            </span>
             <span onClick={()=>setCostosOpen(o=>!o)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Costo/hora {costosOpen?'▴':'▾'}</span>
           </div>
           {costosOpen && <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px',marginBottom:9}}>
@@ -24056,7 +24059,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             </div>
           </div>}
           {!hayCostos && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:13,fontSize:12,color:C.done,marginBottom:10,lineHeight:1.5}}>Define el <b style={{color:C.text}}>costo/hora por abogado</b> (toca “Costo/hora ▾”) para ver el margen real de cada cliente.</div>}
-          {hayCostos && <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>{margenData.filter(d=>!d.sinIng).map(d=>{ const neg=d.margen<0; return (
+          {hayCostos && margenTab==='cliente' && <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>{margenData.filter(d=>!d.sinIng).map(d=>{ const neg=d.margen<0; return (
             <div key={d.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
                 <span onClick={()=>cliOpen(d.cid)} style={{fontSize:12.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</span>
@@ -24068,9 +24071,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               {d.faltaCosto && <div style={{fontSize:9,color:C.soonText,marginTop:4}}>Falta costo/hora de algún abogado — el costo está subestimado.</div>}
             </div>
           )})}</div>}
-          {hayCostos && margenAbogado.length>0 && <>
-            <div style={{fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'13px 2px 7px'}}>Rentabilidad por abogado</div>
-            <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>
+          {hayCostos && margenTab==='abogado' && (margenAbogado.length>0
+            ? <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:8,alignItems:'start'}:undefined}>
             {margenAbogado.map(a=>{ const neg=a.margen<0; return (
               <div key={a.name} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',marginBottom:8}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
@@ -24082,7 +24084,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
                 <div style={{fontSize:9,color:C.done,marginTop:4}}>{fh(a.horasFact)} facturables de {fh(a.horasTot)} · valoradas a {tarifaUF} UF/h</div>
               </div>
             )})}</div>
-          </>}
+            : <div style={{fontSize:12,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:13}}>Aún no hay horas con costo/hora definido por abogado.</div>)}
           <div style={{height:6}}/>
         </>}
         {excedenteYTD>0 && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:10,color:'#fff'}}>
