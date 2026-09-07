@@ -7478,6 +7478,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   const [expand,setExpand] = useState(null)   // factura.id con detalle abierto
   const [busyId,setBusyId] = useState(null)
   const [sinIdOpen,setSinIdOpen] = useState(false)   // banner "pagos sin identificar" desplegado
+  const [grpOpen,setGrpOpen] = useState({})   // acordeón por cliente en la lista (key = client_id)
   const isDesktop = useIsDesktop()   // escritorio: 2 columnas (resumen + tendencia) y la lista como tabla ancha
 
   const respBySale = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
@@ -7507,10 +7508,11 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
     .sort((a,z)=> (a.est==='detectado'?0:a.est==='sinpago'?1:2)-(z.est==='detectado'?0:z.est==='sinpago'?1:2) || z.monto-a.monto)
   , [emitidasAll, mes, modo, resp, respaldoMap, abonos])   // eslint-disable-line
 
-  const tot = useMemo(()=>{ let emi=0,cob=0,pen=0,nC=0,nD=0,nS=0,mC=0,mD=0,mS=0
+  const tot = useMemo(()=>{ let emi=0,cob=0,pen=0,nC=0,nD=0,nS=0,mC=0,mD=0,mS=0,nV=0,mV=0
     filas.forEach(f=>{ emi+=f.monto; cob+=f.cobrado; pen+=f.saldo
-      if(f.est==='cobrada'){nC++;mC+=f.monto} else if(f.est==='detectado'){nD++;mD+=f.saldo} else {nS++;mS+=f.saldo} })
-    return {emi,cob,pen,tasa:emi>0?cob/emi:0,nC,nD,nS,mC,mD,mS} },[filas])
+      if(f.est==='cobrada'){nC++;mC+=f.monto} else if(f.est==='detectado'){nD++;mD+=f.saldo} else {nS++;mS+=f.saldo}
+      if(f.saldo>0 && f.b.due && f.b.due<hoyISO){nV++;mV+=f.saldo} })   // Vencido = subconjunto de Por cobrar (anidado en la foto)
+    return {emi,cob,pen,tasa:emi>0?cob/emi:0,nC,nD,nS,mC,mD,mS,nV,mV} },[filas])
 
   // Pagos del banco del período que no calzan con ninguna factura pendiente → plata recibida sin identificar.
   const matchedAbonos = useMemo(()=>{ const s=new Set(); emitidasAll.forEach(b=>{ if(saldoDe(b)>0){ (pagosDe?pagosDe(b):[]).forEach(({m})=>s.add(String(m.id))) } }); return s },[emitidasAll,abonos,respaldoMap])   // eslint-disable-line
@@ -7532,18 +7534,14 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   const deltaTxt = (a,b)=>{ if(!b) return a>0?'nuevo':''; const d=Math.round((a-b)/b*100); return `${d>=0?'▲':'▼'} ${Math.abs(d)}%` }
   const deltaCol = (a,b,inv)=>{ if(a===b) return C.done; const up=a>b; return (inv?!up:up)?C.greenText:C.overdueText }
 
-  const visibles = estFiltro==='porcobrar' ? filas.filter(f=>f.est==='detectado'||f.est==='sinpago') : (estFiltro ? filas.filter(f=>f.est===estFiltro) : filas)
+  const visibles = estFiltro==='porcobrar' ? filas.filter(f=>f.est==='detectado'||f.est==='sinpago')
+    : estFiltro==='vencido' ? filas.filter(f=>f.saldo>0&&f.b.due&&f.b.due<hoyISO)
+    : (estFiltro ? filas.filter(f=>f.est===estFiltro) : filas)
   const vencidasSinPago = filas.filter(f=>f.est==='sinpago' && f.b.due && f.b.due < hoyISO)
   const puedeSig = mes < hoyKey
 
   const enlazar = async(f)=>{ if(busyId||!f.pagos.length) return; setBusyId(f.b.id); try{ await onConciliarPago(f.pagos[0].m, f.b) }catch(_){}; setBusyId(null); setExpand(null) }
 
-  const tile = (k,n,m)=>{ const e=CIERRE_EST[k]; const on=estFiltro===k
-    return <button onClick={()=>setEstFiltro(on?null:k)} style={{flex:1,minWidth:0,textAlign:'left',background:on?C.bgSoft:'#fff',border:`0.5px solid ${on?C.accent:C.border}`,borderRadius:11,padding:'8px 9px',cursor:'pointer'}}>
-      <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:2}}><span style={{width:6,height:6,borderRadius:'50%',background:e.dot,flexShrink:0}}/><span style={{fontSize:10,fontWeight:600,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.label}</span></div>
-      <div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-.2}}>{fmtShort(m)}</div>
-      <div style={{fontSize:9,color:C.done}}>{n} factura{n!==1?'s':''}</div>
-    </button> }
 
   const dfmt = d => { const s=fmtDate(d); return s||'—' }
 
@@ -7566,32 +7564,29 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
         return <button key={v||'all'} onClick={()=>setResp(v)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?(pc?pc.color:C.accent):C.border}`,background:on?(pc?pc.bg:C.azulBg):'#fff',color:on?(pc?pc.color:C.accent):C.muted,whiteSpace:'nowrap'}}>{l}</button> })}
     </div>}
 
-    {/* Foto: Emitido (protagonista) con Cobrado / Pendiente anidados */}
-    <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginBottom:8}}>
-      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:8}}>{modo==='mes'?`Emitido · ${mesLabel}`:`Emitido acumulado ${mesYear} (a ${MESNOM[+mes.slice(5,7)-1].toLowerCase()})`}</div>
-      <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:11}}>
+    {/* Foto (canon): Emitido protagonista → Cobrado + Por cobrar (con Vencido y "listas para conciliar" ANIDADOS bajo Por cobrar). Sin cifras repetidas; iconos del canon. */}
+    <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'14px 16px',marginBottom:8}}>
+      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>{modo==='mes'?`Emitido · ${mesLabel}`:`Emitido acumulado ${mesYear} (a ${MESNOM[+mes.slice(5,7)-1].toLowerCase()})`}</div>
+      <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:12}}>
         <div style={{fontSize:26,fontWeight:800,color:C.accent,letterSpacing:-.5}}>{fmt(tot.emi)}</div>
         <div style={{fontSize:11.5,color:C.muted,fontWeight:600}}>{filas.length} factura{filas.length!==1?'s':''}</div>
       </div>
-      <div style={{display:'flex',gap:0,alignItems:'stretch',borderTop:`1px solid ${C.border}`,paddingTop:10}}>
-        <div onClick={()=>setEstFiltro('cobrada')} style={{flex:1,cursor:'pointer',paddingRight:12}}>
-          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Cobrado</div>
-          <div style={{fontSize:17,fontWeight:700,color:C.greenText,letterSpacing:-.3}}>{fmt(tot.cob)}</div>
-          <div style={{fontSize:10,color:C.done}}>Tasa de cobro {pct(tot.tasa)}</div>
+      <div style={{display:isDesktop?'grid':'flex',gridTemplateColumns:'1fr 1fr',flexDirection:'column',gap:isDesktop?16:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+        <div onClick={()=>setEstFiltro(estFiltro==='cobrada'?null:'cobrada')} style={{display:'flex',alignItems:'flex-start',gap:9,cursor:'pointer'}}>
+          <span style={{width:30,height:30,borderRadius:9,background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={17} c={C.greenText}/></span>
+          <div style={{minWidth:0}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Cobrado</div><div style={{fontSize:18,fontWeight:800,color:C.greenText,letterSpacing:-.3}}>{fmt(tot.cob)}</div><div style={{fontSize:10,color:C.done}}>tasa de cobro {pct(tot.tasa)} · {tot.nC} factura{tot.nC!==1?'s':''}</div></div>
         </div>
-        <div onClick={()=>setEstFiltro('porcobrar')} style={{flex:1,cursor:'pointer',paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
-          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Por cobrar</div>
-          <div style={{fontSize:17,fontWeight:700,color:C.accent,letterSpacing:-.3}}>{fmt(tot.pen)}</div>
-          <div style={{fontSize:10,color:C.done}}>{tot.nD+tot.nS} facturas</div>
+        <div style={{minWidth:0}}>
+          <div onClick={()=>setEstFiltro(estFiltro==='porcobrar'?null:'porcobrar')} style={{display:'flex',alignItems:'flex-start',gap:9,cursor:'pointer'}}>
+            <span style={{width:30,height:30,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={17} c={C.accent}/></span>
+            <div style={{minWidth:0}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Por cobrar</div><div style={{fontSize:18,fontWeight:800,color:C.accent,letterSpacing:-.3}}>{fmt(tot.pen)}</div><div style={{fontSize:10,color:C.done}}>{tot.nD+tot.nS} facturas</div></div>
+          </div>
+          {(tot.mV>0||tot.nD>0)&&<div style={{display:'flex',gap:7,marginTop:9,flexWrap:'wrap'}}>
+            {tot.mV>0&&<div onClick={()=>setEstFiltro(estFiltro==='vencido'?null:'vencido')} style={{display:'flex',alignItems:'center',gap:6,background:estFiltro==='vencido'?C.overdueText:C.overdueBg,border:`0.5px solid ${estFiltro==='vencido'?C.overdueText:C.border}`,borderRadius:9,padding:'5px 9px',cursor:'pointer'}}><SIcon n='alert' s={13} c={estFiltro==='vencido'?'#fff':C.overdueText}/><div><div style={{fontSize:12,fontWeight:700,color:estFiltro==='vencido'?'#fff':C.overdueText,lineHeight:1.1}}>{fmt(tot.mV)}</div><div style={{fontSize:9,color:estFiltro==='vencido'?'#fff':C.muted}}>Vencido · {tot.nV}</div></div></div>}
+            {tot.nD>0&&<div onClick={()=>setEstFiltro(estFiltro==='detectado'?null:'detectado')} style={{display:'flex',alignItems:'center',gap:6,background:C.greenBg,border:`1px solid #CFE9DD`,borderRadius:9,padding:'5px 9px',cursor:'pointer'}}><SIcon n='exchange' s={13} c={C.greenText}/><div><div style={{fontSize:12,fontWeight:700,color:C.greenText,lineHeight:1.1}}>{tot.nD} lista{tot.nD!==1?'s':''} para conciliar</div><div style={{fontSize:9,color:C.done}}>hay pago del banco que calza</div></div></div>}
+          </div>}
         </div>
       </div>
-    </div>
-
-    {/* Estados (clickeables → filtran la lista) */}
-    <div style={{display:'flex',gap:6,marginBottom:8}}>
-      {tile('cobrada',tot.nC,tot.mC)}
-      {tile('detectado',tot.nD,tot.mD)}
-      {tile('sinpago',tot.nS,tot.mS)}
     </div>
 
     {/* Pagos del banco sin identificar (desplegable) */}
@@ -7623,9 +7618,16 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
     {estFiltro&&<div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:CIERRE_EST[estFiltro].color}}>Mostrando: {CIERRE_EST[estFiltro].label}</span><button onClick={()=>setEstFiltro(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Ver todas</button></div>}
     {(()=>{
       const emptyEl = <div style={{textAlign:'center',color:C.muted,fontSize:12.5,padding:'22px 0'}}>No hay facturas emitidas {modo==='mes'?`en ${mesLabel.toLowerCase()}`:`en ${mesYear}`}{resp?` de ${resp}`:''}.</div>
-      const filaEl = (f)=>{ const e=CIERRE_EST[f.est]; const abierto=expand===f.b.id; const rd=diasDesde?diasDesde(recordadoMap[String(f.b.id)]):null; const rec=rd!=null&&rd<=2
+      const filaEl = (f,inGroup)=>{ const e=CIERRE_EST[f.est]; const abierto=expand===f.b.id; const rd=diasDesde?diasDesde(recordadoMap[String(f.b.id)]):null; const rec=rd!=null&&rd<=2
         const dep=f.est==='detectado'&&f.pagos[0]?f.pagos[0].m:null; const depMonto=dep?((dep.monto||0)-(dep.monto_conciliado||0)):0
         const rn=r=>String(r||'').replace(/[.\s-]/g,'').toUpperCase(); const rutMatch=!!(dep&&f.b.receptor_rut&&dep.rut_contraparte&&rn(dep.rut_contraparte)===rn(f.b.receptor_rut)); const montoExacto=!!(dep&&depMonto===f.monto)
+        const mult=(f.pagos||[]).length>1
+        // Conciliar en un toque (el motor al revés): aparece SOLO si el banco tiene un abono que calza, y NO cuando el detalle está abierto (ahí ya se ve la comparación completa). Un toque → conciliarPago, que muestra TODO y confirma antes de aplicar.
+        const sugInline = dep&&!abierto ? (
+          <div onClick={ev=>ev.stopPropagation()} style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,border:'1px solid #CFE9DD',borderRadius:9,padding:'7px 11px',margin:isDesktop?'0 14px 9px':'8px 9px 9px'}}>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,color:C.greenText,letterSpacing:.3}}>PAGO DEL BANCO QUE CALZA{rutMatch?' · MISMO RUT':montoExacto?' · MISMO MONTO':''}</div><div style={{fontSize:11.5,color:C.text,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtDate(dep.fecha)} · <b>{fmt(depMonto)}</b>{dep.nombre_contraparte?` · ${dep.nombre_contraparte}`:''}{mult?` · +${f.pagos.length-1} más`:dep.n_operacion?` · Op ${dep.n_operacion}`:''}</div></div>
+            <button onClick={()=>mult?setExpand(f.b.id):enlazar(f)} disabled={busyId===f.b.id} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'7px 15px',cursor:busyId===f.b.id?'default':'pointer',flexShrink:0,opacity:busyId===f.b.id?.6:1}}>{busyId===f.b.id?'Conciliando…':mult?`Ver ${f.pagos.length}`:'Conciliar'}</button>
+          </div>) : null
         // Detalle expandible — idéntico en móvil y escritorio (fechas + calce del depósito + acciones).
         const detalleInner = (<>
             <div style={{display:'flex',flexWrap:'wrap',gap:'2px 14px',fontSize:10.5,color:C.muted,margin:'8px 0 9px'}}>
@@ -7649,15 +7651,20 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
         </>)
         if(isDesktop) return (
           <div key={f.b.id} style={{borderLeft:`3px solid ${e.dot}`,borderBottom:`1px solid ${C.bgSoft}`}}>
-            <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'grid',gridTemplateColumns:'1fr 58px 96px 104px 104px 104px 92px',gap:10,alignItems:'center',padding:'10px 14px',cursor:'pointer'}}>
-              <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer',minWidth:0}}>{clientNom(f.b.client_id)}</div>
-              <span style={{fontSize:11,color:C.muted}}>{folioN(f.b.invoice_no)||folioN(f.b.folio)}</span>
+            <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'grid',gridTemplateColumns:inGroup?'1fr 96px 104px 104px 104px 92px':'1fr 58px 96px 104px 104px 104px 92px',gap:10,alignItems:'center',padding:'10px 14px',cursor:'pointer'}}>
+              {inGroup
+                ? <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}</div>{f.b.concept&&<div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{f.b.concept}</div>}</div>
+                : <>
+                    <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer',minWidth:0}}>{clientNom(f.b.client_id)}</div>
+                    <span style={{fontSize:11,color:C.muted}}>{folioN(f.b.invoice_no)||folioN(f.b.folio)}</span>
+                  </>}
               <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.resp||'—'}</span>
               <span style={{fontSize:12,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(f.monto)}</span>
               <span style={{fontSize:12,fontWeight:600,color:f.cobrado>0?C.greenText:C.done,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{f.cobrado>0?fmt(f.cobrado):'—'}</span>
               <span style={{fontSize:12.5,fontWeight:700,color:f.saldo>0?C.text:C.greenText,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{f.saldo>0?fmt(f.saldo):'$0'}</span>
               <span style={{textAlign:'right'}}><span style={{fontSize:9,fontWeight:600,color:e.color,background:e.bg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{e.label}</span></span>
             </div>
+            {sugInline}
             {abierto&&<div style={{padding:'0 14px 12px 17px'}}>{detalleInner}</div>}
           </div>
         )
@@ -7665,8 +7672,12 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
           <div key={f.b.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderLeft:`2px solid ${e.dot}`,borderRadius:10,overflow:'hidden'}}>
             <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',cursor:'pointer'}}>
               <div style={{flex:1,minWidth:0}}>
-                <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}}>{clientNom(f.b.client_id)}</div>
-                <div style={{fontSize:10,color:C.done,marginTop:1}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}{f.resp?` · ${f.resp}`:''}</div>
+                {inGroup
+                  ? <><div style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}</div>{f.b.concept&&<div style={{fontSize:10,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.b.concept}{f.resp?` · ${f.resp}`:''}</div>}</>
+                  : <>
+                      <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}}>{clientNom(f.b.client_id)}</div>
+                      <div style={{fontSize:10,color:C.done,marginTop:1}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}{f.resp?` · ${f.resp}`:''}</div>
+                    </>}
               </div>
               <div style={{textAlign:'right',flexShrink:0}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{fmt(f.monto)}</div>
@@ -7674,20 +7685,32 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
               </div>
               <span style={{fontSize:12,color:C.done}}>{abierto?'▾':'▸'}</span>
             </div>
+            {sugInline}
             {abierto&&<div style={{padding:'0 11px 10px',borderTop:`1px solid ${C.bgSoft}`}}>{detalleInner}</div>}
           </div>
         )
       }
       if(visibles.length===0) return emptyEl
-      if(isDesktop) return (
-        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 58px 96px 104px 104px 104px 92px',gap:10,padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>
-            <span>Cliente</span><span>N°</span><span>Resp.</span><span style={{textAlign:'right'}}>Emitido</span><span style={{textAlign:'right'}}>Cobrado</span><span style={{textAlign:'right'}}>Saldo</span><span style={{textAlign:'right'}}>Estado</span>
+      // Agrupado por cliente (protagonista): grupos ordenados por saldo desc; dentro, el orden ya viene (detectado→sinpago→cobrada, monto desc). Reusa filaEl(f,true).
+      const grupos = Object.values(visibles.reduce((acc,f)=>{ const k=String(f.b.client_id||'sc'); if(!acc[k]) acc[k]={cid:f.b.client_id,nom:clientNom(f.b.client_id),fs:[],saldo:0,nDet:0}; const g=acc[k]; g.fs.push(f); g.saldo+=f.saldo; if(f.est==='detectado')g.nDet++; return acc },{})).sort((a,z)=>z.saldo-a.saldo)
+      const grpEl = g=>{ const key=String(g.cid||'sc'); const solo=g.fs.length===1; const open=grpOpen[key]!==undefined?grpOpen[key]:(solo||g.nDet>0)
+        return (<div key={key} style={{borderBottom:`1px solid ${C.border}`}}>
+          <div onClick={()=>setGrpOpen(p=>({...p,[key]:!open}))} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',cursor:'pointer',background:C.bgSoft}}>
+            <span style={{color:C.done,fontSize:12,width:10,flexShrink:0}}>{open?'▾':'▸'}</span>
+            <span style={{width:30,height:30,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='user' s={16} c={C.accent}/></span>
+            <div onClick={ev=>{ev.stopPropagation();g.cid&&onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{minWidth:0,flex:1,cursor:g.cid?'pointer':'default'}}><div style={{fontSize:14,fontWeight:800,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.nom}</div></div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:g.saldo>0?C.text:C.greenText,fontVariantNumeric:'tabular-nums'}}>{g.saldo>0?fmt(g.saldo):'$0'}</div><div style={{fontSize:10,color:C.muted}}>{g.nDet>0&&<span style={{color:C.greenText,fontWeight:600}}>{g.nDet} listo{g.nDet!==1?'s':''} · </span>}{g.fs.length} factura{g.fs.length!==1?'s':''}</div></div>
           </div>
-          {visibles.map(filaEl)}
+          {open&&g.fs.map(f=>filaEl(f,true))}
+        </div>) }
+      return (
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          {isDesktop&&<div style={{display:'grid',gridTemplateColumns:'1fr 96px 104px 104px 104px 92px',gap:10,padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>
+            <span>Factura · glosa</span><span>Resp.</span><span style={{textAlign:'right'}}>Emitido</span><span style={{textAlign:'right'}}>Cobrado</span><span style={{textAlign:'right'}}>Saldo</span><span style={{textAlign:'right'}}>Estado</span>
+          </div>}
+          {grupos.map(grpEl)}
         </div>
       )
-      return <div style={{display:'flex',flexDirection:'column',gap:5}}>{visibles.map(filaEl)}</div>
     })()}
 
     {/* Historial y comparación */}
@@ -8272,9 +8295,14 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const aplicado=Math.min(resto,saldo)
     if(aplicado<=0){ appAlert('Ese movimiento ya no tiene saldo por imputar.'); return }
     const cubre=aplicado>=saldo   // el abono cubre TODO el saldo de la factura → queda pagada; si no, es pago parcial
+    // "Mostrar todo antes de conciliar" (directriz del usuario): el confirm despliega el detalle COMPLETO — factura+cliente+glosa+saldo y el movimiento del banco (fecha, monto, quién pagó, RUT, n° operación) — nunca concilia a ciegas.
+    const cli=clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||'cliente'
+    const rn=r=>String(r||'').replace(/[.\s-]/g,'').toUpperCase()
+    const rutOk=!!(b.receptor_rut&&m.rut_contraparte&&rn(b.receptor_rut)===rn(m.rut_contraparte))
+    const detalle=`FACTURA N° ${folioN(b.invoice_no)} · ${cli}${b.concept?`\n${b.concept}`:''}\nSaldo por cobrar: ${fmt(saldo)}\n\nPAGO DEL BANCO:\n${fmtDate(m.fecha)} · ${fmt(m.monto)}${m.nombre_contraparte?` · ${m.nombre_contraparte}`:''}${m.rut_contraparte?`\nRUT ${m.rut_contraparte}`:''}${m.n_operacion?` · Op ${m.n_operacion}`:''}${resto!==(m.monto||0)?`\nDisponible por imputar: ${fmt(resto)}`:''}${rutOk?'\n✓ Mismo RUT que la factura':''}\n\n`
     const msg = cubre
-      ? `¿Conciliar el pago de ${fmt(m.monto)} (${fmtDate(m.fecha)}) con la Factura N° ${folioN(b.invoice_no)}? Quedará pagada y enlazada al movimiento del banco.`
-      : `El pago (${fmt(resto)}) es MENOR que el saldo de la Factura N° ${folioN(b.invoice_no)} (${fmt(saldo)}).\n¿Imputar ${fmt(aplicado)} como pago PARCIAL? La factura seguirá pendiente con saldo ${fmt(saldo-aplicado)}.`
+      ? detalle+`¿Conciliar? La factura quedará PAGADA y enlazada a este movimiento del banco.`
+      : detalle+`El pago disponible (${fmt(resto)}) es MENOR que el saldo (${fmt(saldo)}).\n¿Imputar ${fmt(aplicado)} como pago PARCIAL? La factura seguirá pendiente con saldo ${fmt(saldo-aplicado)}.`
     if(!await appConfirm(msg)) return
     setPagoBusy(true)
     try{
