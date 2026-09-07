@@ -27651,7 +27651,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {!unoMode&&<>
         <div style={{display:'flex',alignItems:'center',gap:8,margin:'2px 3px 6px'}}>
           <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Movimientos</span>
-          <span style={{fontSize:10,color:C.muted,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{lista.length}</span>
           <span onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{marginLeft:'auto',fontSize:10.5,fontWeight:600,color:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:3}}>Fecha
             <svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:orden==='asc'?'rotate(180deg)':'none'}}><line x1='12' y1='5' x2='12' y2='19'/><polyline points='6 13 12 19 18 13'/></svg>
           </span>
@@ -27682,15 +27681,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:C.bgWarm,color:C.grisText}):null
             return (
               <Fragment key={m.id}>
-              {_newY&&(()=>{ const yc=_yCount(); return (
-                <div onClick={()=>setConcYCol(p=>{const n=new Set(p);n.has(_y)?n.delete(_y):n.add(_y);return n})} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'10px 12px',background:C.bgSoft,borderTop:i>0?`1px solid ${C.border}`:'none'}}>
-                  <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{_y}</span>
-                  <span style={{display:'flex',alignItems:'center',gap:9}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>{yc} mov.</span><span style={{fontSize:12,color:C.done,transform:_yOpen?'rotate(180deg)':'none'}}>{'▾'}</span></span>
+              {_newY&&(
+                <div onClick={()=>setConcYCol(p=>{const n=new Set(p);n.has(_y)?n.delete(_y):n.add(_y);return n})} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'11px 13px',background:C.azulBg,borderTop:i>0?`1px solid ${C.border}`:'none'}}>
+                  <span style={{fontSize:15,fontWeight:800,color:C.accent,letterSpacing:'-.2px'}}>{_y}</span>
+                  <span style={{fontSize:12,color:C.accent,transform:_yOpen?'rotate(180deg)':'none'}}>{'▾'}</span>
                 </div>
-              )})()}
+              )}
               {_yOpen&&_newM&&(()=>{ const mi=_mInfo(); return (
-                <div onClick={()=>setConcMOpen(prev=>{ const base=prev===null?new Set([_firstYM]):new Set(prev); base.has(_ym)?base.delete(_ym):base.add(_ym); return base })} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'8px 12px 8px 18px',borderTop:`1px solid ${C.border}`}}>
-                  <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{_MES[+_ym.slice(5,7)-1]||_ym}<span style={{color:C.done,fontWeight:500}}> · {mi.c}</span></span>
+                <div onClick={()=>setConcMOpen(prev=>{ const base=prev===null?new Set([_firstYM]):new Set(prev); base.has(_ym)?base.delete(_ym):base.add(_ym); return base })} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'9px 13px 9px 18px',background:C.bgSoft,borderTop:`1px solid ${C.border}`}}>
+                  <span style={{fontSize:13.5,fontWeight:700,color:C.accent}}>{_MES[+_ym.slice(5,7)-1]||_ym}</span>
                   <span style={{display:'flex',alignItems:'center',gap:9}}><span style={{fontSize:12,fontWeight:700,color:mi.t>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{mi.t>=0?'+':'−'}{fmtM(Math.abs(mi.t))}</span><span style={{fontSize:11,color:C.done,transform:_mOpen?'rotate(180deg)':'none'}}>{'▾'}</span></span>
                 </div>
               )})()}
