@@ -27679,13 +27679,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     </div>
   )
   if(!isDesktop) return interiorEl
-  // Escritorio 2-panel: rail de navegación a la izquierda + la lista/detalle llenando el ancho (mata el aire; el móvil no se toca).
-  return (
-    <div style={{display:'flex',height:'calc(100vh - 66px)',background:C.bg}}>
-      <div style={{width:296,flexShrink:0,borderRight:`1px solid ${C.border}`,overflowY:'auto',background:C.bg}}>{deskRail}</div>
-      <div style={{flex:1,minWidth:0,overflowY:'auto'}}>{interiorEl}</div>
-    </div>
-  )
+  // Escritorio: SIN rail. La lista/detalle va a todo el ancho (interiorEl ya se centra a 980px) y la navegación
+  // entre secciones es por el HUB de tarjetas (el botón ← vuelve al hub). Antes había un 2-panel con rail que se veía recargado.
+  return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{interiorEl}</div>  // deskRail ya no se usa (queda definido, sin render)
 }
 
 // Ajuste manual de saldo (solo admin): crea un gasto categoría "Ajuste" que rebaja el saldo del cliente. Visible/auditable en sus movimientos.
