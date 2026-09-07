@@ -9335,12 +9335,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                           </div>) })}
                       </div>
                       <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Ver facturas',()=>go('clientes'),true)}{Btn('Verificar estados',siiVerificarEstados)}{Btn('Enviar resumen',siiResumenSemanal)}{Btn('Probar conexión',siiProbar)}{Btn('Historial',cargarSiiLog)}</div>
-                      <div style={{borderTop:`0.5px solid ${C.bgWarm}`,marginTop:12,paddingTop:11}}>
-                        <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Fuente de la verdad · histórico SII (solo lectura)</div>
-                        <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Trae del SII las facturas y notas de crédito de <b>2025-01 a 2026-06</b> y las guarda como espejo para el cuadre. No toca facturación ni cambia nada.</div>
-                        {siiHistProg&&<div style={{fontSize:11,color:siiHistProg.done?C.greenText:C.accent,background:siiHistProg.done?C.greenBg:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{siiHistProg.done?`Listo · ${siiHistProg.docs} doc(s) del SII · ${siiHistProg.guardadas} nuevo(s) · ${siiHistProg.nc} nota(s) de crédito${siiHistProg.errores?.length?` · ${siiHistProg.errores.length} mes(es) con error`:''}`:`Trayendo ${siiHistProg.mes}… (${siiHistProg.i}/${siiHistProg.total})`}</div>}
-                        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn(siiBusy?'Trayendo del SII…':'Traer histórico del SII (2025-01 → 2026-06)',siiTraerHistorico)}</div>
-                      </div>
                     </>):(<>
                       <div style={{borderTop:`0.5px solid ${C.bgWarm}`,paddingTop:10,marginBottom:11}}>
                         {[['Certificado digital cargado','ok'],['Postulación + set de pruebas · en curso','now'],['Autorización del SII','next'],['Emitir en producción','next']].map(([t,st],i)=>(
@@ -9353,6 +9347,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       </div>
                       <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>{setSiiResult(null);if(!siiSetJson)setSiiSetJson(SII_SET_SAMPLE);setSiiPanel('set')})}{Btn('Libro de ventas',()=>{setSiiResult(null);setSiiPanel('libro')})}{Btn('Historial',cargarSiiLog)}</div>
                     </>)}
+                    <div style={{borderTop:`0.5px solid ${C.bgWarm}`,marginTop:12,paddingTop:11}}>
+                      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Fuente de la verdad · histórico SII (solo lectura)</div>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Trae del SII las facturas y notas de crédito de <b>2025-01 a 2026-06</b> y las guarda como espejo para el cuadre. No toca facturación ni cambia nada.</div>
+                      {siiHistProg&&<div style={{fontSize:11,color:siiHistProg.done?C.greenText:C.accent,background:siiHistProg.done?C.greenBg:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{siiHistProg.done?`Listo · ${siiHistProg.docs} doc(s) del SII · ${siiHistProg.guardadas} nuevo(s) · ${siiHistProg.nc} nota(s) de crédito${siiHistProg.errores?.length?` · ${siiHistProg.errores.length} mes(es) con error`:''}`:`Trayendo ${siiHistProg.mes}… (${siiHistProg.i}/${siiHistProg.total})`}</div>}
+                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn(siiBusy?'Trayendo del SII…':'Traer histórico del SII (2025-01 → 2026-06)',siiTraerHistorico)}</div>
+                    </div>
                   </div>
                 </Modal>}
               </>)
