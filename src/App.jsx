@@ -26676,51 +26676,28 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         </div>
         {/* Estructura A: Abonos/Cargos (mirar, lo que entró/salió) + UNA "Por resolver" (trabajar) + Sin respaldo/Cargar cartola (utilidades). Sin métricas de vanidad; sin duplicar sin identificar/descalces como tarjetas. */}
         {(()=>{
-          const ioc=(icon,ibg,ic,t,s,go)=>(
-            <div onClick={go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'12px 13px':'11px 12px',display:'flex',alignItems:'center',gap:10}}>
-              <span style={{width:32,height:32,borderRadius:9,background:ibg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={17} c={ic}/></span>
-              <div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>{t}</div><div style={{fontSize:11,color:C.muted}}>{s}</div></div>
-            </div>)
-          const mini=(icon,ic,t,s,go)=>(
-            <div onClick={go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 11px',display:'flex',alignItems:'center',gap:9}}>
-              <SIcon n={icon} s={15} c={ic}/><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{t}</div><div style={{fontSize:10,color:C.muted}}>{s}</div></div>
+          // Grilla de tarjetas (todas del mismo tamaño, ninguna full-width). Orden: Abonos·Cargos / Por confirmar·Conciliados / Sin respaldo·Cargar cartola.
+          const conciliadosN=(movs||[]).filter(m=>m.tipo==='abono'&&concByMov[m.id]?.length).length
+          const c2=(sqbg,stroke,icon,titulo,tCol,valor,valCol,sub,onClick,opts={})=>(
+            <div onClick={onClick} style={{cursor:'pointer',background:opts.bg||C.surface,border:`1px solid ${opts.border||C.border}`,borderRadius:12,padding:D?'12px 13px':'11px 12px',position:'relative',minHeight:D?90:80}}>
+              {opts.badge!=null?<span style={{position:'absolute',top:9,right:11,fontSize:15,fontWeight:800,color:valCol}}>{opts.badge}</span>:<span style={{position:'absolute',top:9,right:11,color:C.done,fontSize:12}}>›</span>}
+              <span style={{width:28,height:28,borderRadius:8,background:sqbg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:7}}><SIcon n={icon} s={16} c={stroke}/></span>
+              <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:tCol,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{titulo}</div>
+              {valor?<div style={{fontSize:opts.big?18:16,fontWeight:800,letterSpacing:-.3,marginTop:4,color:valCol,fontVariantNumeric:'tabular-nums'}}>{valor}</div>:null}
+              <div style={{fontSize:9.5,color:C.done,marginTop:valor?1:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
             </div>)
           return <>
-            {listosN>0&&<div onClick={()=>goHub(()=>setLoteConfirm(listosExactos))} style={{cursor:'pointer',background:C.greenBg,border:`1px solid ${C.greenText}`,borderRadius:13,padding:D?'13px 15px':'12px 14px',marginBottom:D?12:10,display:'flex',alignItems:'center',gap:11}}>
-              <span style={{width:30,height:30,borderRadius:9,background:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={16} c={C.greenText}/></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Listo para conciliar</div><div style={{fontSize:10.5,color:C.greenText}}>{listosN} {listosN===1?'calza':'calzan'} exacto con su factura</div></div>
-              <span style={{background:C.greenText,color:'#fff',borderRadius:9,padding:'8px 13px',fontSize:12,fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}>Conciliar {listosN}</span>
-            </div>}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?14:10}}>
-              {ioc('exchange',C.greenBg,C.greenText,'Abonos',`${G.nAbo} movimiento${G.nAbo!==1?'s':''}`,()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
-              {ioc('wallet',ccN>0?C.soonBg:C.bgSoft,ccN>0?C.soonText:C.accent,'Cargos',ccN>0?`${ccN} por clasificar · ${fmtM(ccMonto)}`:`${G.nCar} movimiento${G.nCar!==1?'s':''}`,()=>goHub(()=>{setSub('cargos');setConcView(ccN>0?'clasificar':'todos')}))}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?12:9}}>
+              {c2(C.greenBg,C.greenText,'exchange','Abonos',C.greenText,String(G.nAbo),C.greenText,'movimientos del banco',()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
+              {c2(ccN>0?C.soonBg:C.bgSoft,ccN>0?C.soonText:C.accent,'wallet','Cargos',ccN>0?C.soonText:C.accent,String(ccN>0?ccN:G.nCar),ccN>0?C.soonText:C.accent,ccN>0?`por clasificar · ${fmtM(ccMonto)}`:'movimientos del banco',()=>goHub(()=>{setSub('cargos');setConcView(ccN>0?'clasificar':'todos')}))}
+              {prN>0
+                ? c2(C.surface,C.overdueText,'alert','Por confirmar',C.overdueText,fmtM(prMonto),C.overdueText,'calza o la app propone — confirma',()=>goHub(()=>{setSub('abonos');setConcView('porresolver')}),{bg:C.overdueBg,border:'#F3C9C4',badge:prN,big:true})
+                : c2(C.greenBg,C.greenText,'check','Por confirmar',C.greenText,'',C.greenText,'todo cruzado — nada por confirmar',()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
+              {c2(C.greenBg,C.greenText,'check','Conciliados',C.greenText,String(conciliadosN),C.greenText,'ya cruzados con su factura',()=>goHub(()=>{setSub('abonos');setConcView('conciliados')}))}
+              {c2(C.azulBg,C.accent,'receipt','Sin respaldo',C.accent,'',C.accent,'facturas pagadas sin banco',()=>goHub(()=>setCobradasOpen(true)))}
+              {c2(C.tealBg,C.tealText,'file','Cargar cartola',C.tealText,'',C.tealText,cartolas.length?`${cartolas.length} cargada${cartolas.length!==1?'s':''} · subir`:'subir · verificar',()=>goHub(()=>setVerCarga(true)))}
             </div>
-            <div onClick={()=>goHub(()=>{setSub('abonos');setConcView(prN>0?'porresolver':'todos')})} style={{cursor:'pointer',border:`1px solid ${prN>0?C.overdueText:C.border}`,background:prN>0?C.overdueBg:C.surface,borderRadius:13,padding:D?'14px 16px':'12px 14px'}}>
-              <div style={{fontSize:11.5,fontWeight:700,color:prN>0?C.overdueText:C.greenText}}>{prN>0?'Por resolver':'Todo conciliado'}</div>
-              {prN>0?<>
-                <div style={{fontSize:D?22:19,fontWeight:800,color:C.overdueText,letterSpacing:-.4,lineHeight:1,marginTop:3}}>{prN} · {fmtM(prMonto)}</div>
-                <div style={{fontSize:10.5,color:C.overdueText,opacity:.85,marginTop:3}}>abonos sin cruzar{pr90>0?` · ${fmtM(pr90)} lleva +90 días`:''}</div>
-                <div style={{background:C.surface,borderRadius:9,marginTop:10,overflow:'hidden'}}>
-                  {prSub.map((r,i)=>(
-                    <div key={r.cv} onClick={(e)=>{e.stopPropagation();goHub(()=>{setSub('abonos');setConcView(r.cv)})}} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:'pointer'}}>
-                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{r.t}</div><div style={{fontSize:9.5,color:C.muted}}>{r.n} mov · {r.s}</div></div>
-                      <span style={{fontSize:12.5,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmtM(r.m)}</span>
-                      <span style={{fontSize:9.5,fontWeight:700,color:C.accent,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 9px',whiteSpace:'nowrap',flexShrink:0}}>{r.act} ›</span>
-                    </div>
-                  ))}
-                </div>
-              </>:<div style={{fontSize:11,color:C.muted,marginTop:3}}>No hay abonos pendientes de cruzar.</div>}
-            </div>
-            {sugeridosId.length>0&&<div onClick={()=>goHub(()=>{setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)})} style={{cursor:'pointer',border:`1px solid ${C.azulInfo}`,background:C.azulBg,borderRadius:12,padding:'10px 12px',marginTop:D?12:9,display:'flex',alignItems:'center',gap:9}}>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.azulInfo}}>Identificar por su nombre</div><div style={{fontSize:9.5,color:C.muted}}>{sugeridosId.length} abono{sugeridosId.length!==1?'s':''} · la app ya sabe de quién es</div></div>
-              <span style={{fontSize:12.5,fontWeight:800,color:C.azulInfo,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmtM(sugMonto)}</span>
-              <span style={{fontSize:9.5,fontWeight:700,color:C.azulInfo,border:`1px solid ${C.azulInfo}`,borderRadius:6,padding:'4px 9px',whiteSpace:'nowrap',flexShrink:0}}>Revisar ›</span>
-            </div>}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginTop:D?12:9}}>
-              {mini('receipt',C.accent,'Sin respaldo','Facturas sin banco',()=>goHub(()=>setCobradasOpen(true)))}
-              {mini('file',C.tealText,'Cargar cartola',cartolas.length?`${cartolas.length} cargada${cartolas.length!==1?'s':''}`:'Subir · verificar',()=>goHub(()=>setVerCarga(true)))}
-            </div>
-            <div style={{display:'flex',justifyContent:'flex-end',marginTop:10}}>
+            <div style={{display:'flex',justifyContent:'flex-end',marginTop:2}}>
               <button onClick={exportConc} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Exportar estado (CSV) ↓</button>
             </div>
           </>
