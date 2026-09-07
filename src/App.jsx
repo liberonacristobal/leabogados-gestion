@@ -10598,6 +10598,7 @@ function FusionAnticiposModal({bank, manual, clients=[], sales=[], clientEntitie
 function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar,onFusionar,onAbrir,onOpenClientFicha,onOpenFactura}) {
   const [fusionPair,setFusionPair] = useState(null)
   const [fil,setFil] = useState('disponible')
+  const [expCli,setExpCli] = useState(null)   // cliente con su detalle de anticipos desplegado (plegado por defecto: la lista es muy larga)
   const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
   const disponibles = anticipos.filter(a=>a.estado==='disponible')
   const consumidos = anticipos.filter(a=>a.estado==='consumido')
@@ -10641,11 +10642,11 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
         const rs=arr.map(rsName).find(Boolean)||''
         return (
           <div key={cid} style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:C.bgSoft,padding:'8px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-              <div><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(cid)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cliName(cid)}</div>{rs&&<div style={{fontSize:11,color:C.done}}>{rs}</div>}</div>
-              <div style={{textAlign:'right'}}><div style={flabel}>Disponible</div><div style={{fontSize:14,fontWeight:600,color:C.normal}}>{fmtCLP0(totCli)}</div></div>
+            <div onClick={()=>setExpCli(o=>o===cid?null:cid)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:C.bgSoft,padding:'8px 14px',borderBottom:expCli===cid?`0.5px solid ${C.border}`:'none',cursor:'pointer',gap:10}}>
+              <div style={{minWidth:0}}><div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(cid)}} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cliName(cid)}</div>{rs&&<div style={{fontSize:11,color:C.done}}>{rs}</div>}<div style={{fontSize:10,color:C.done,marginTop:1}}>{arr.length} anticipo{arr.length!==1?'s':''}</div></div>
+              <div style={{textAlign:'right',display:'flex',alignItems:'center',gap:8}}><div><div style={flabel}>Disponible</div><div style={{fontSize:14,fontWeight:600,color:C.normal}}>{fmtCLP0(totCli)}</div></div><span style={{fontSize:12,color:C.accent}}>{expCli===cid?'▾':'▸'}</span></div>
             </div>
-            {(()=>{ const disp=arr.filter(a=>a.estado==='disponible'); const pairs=[]
+            {expCli===cid&&(()=>{ const disp=arr.filter(a=>a.estado==='disponible'); const pairs=[]
               for(let i=0;i<disp.length;i++) for(let j=i+1;j<disp.length;j++){ const a=disp[i],b=disp[j]; const dd=Math.abs((new Date(a.fecha+'T12:00')-new Date(b.fecha+'T12:00'))/86400000); if((a.monto||0)===(b.monto||0)&&dd<=7) pairs.push([a,b]) }
               if(!pairs.length) return null
               return pairs.map(([x,y],k)=>{ const bank=/conciliaci[oó]n/i.test(x.nota||'')?x:(/conciliaci[oó]n/i.test(y.nota||'')?y:x); const manual=bank===x?y:x; const distintos=bank!==manual; return (
@@ -10654,7 +10655,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
                   {onFusionar&&<button onClick={()=>setFusionPair({bank,manual})} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Fusionar</button>}
                 </div>
               )}) })()}
-            {arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); const cubreCuotas=billing.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
+            {expCli===cid&&arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); const cubreCuotas=billing.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
               <div key={a.id} style={{padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
                 <div onClick={()=>onAbrir&&onAbrir(a)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,cursor:onAbrir?'pointer':'default'}}>
                   {bigDate(a.fecha)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{a.proyecto||'Anticipo'}</div>{a.nota&&<div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
@@ -23599,24 +23600,24 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
         return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             <table style={{borderCollapse:'collapse',width:'100%'}}>
-              <thead><tr>{th('cliente','Cliente')}{th('facturas','Facturas')}{th('mora','Mora')}<th style={thS}>Último contacto</th>{th('vencido','Vencido',true)}{th('total','Total deuda',true)}<th style={{...thS,textAlign:'right'}}>Acción</th></tr></thead>
+              <thead><tr>{th('cliente','Cliente')}{th('facturas','Facturas')}{th('mora','Mora')}{th('vencido','Vencido',true)}{th('total','Total deuda',true)}</tr></thead>
               <tbody>
                 {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:12.5,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
                   <tr onClick={()=>setExpCli(open?null:g.cid)} style={{cursor:'pointer'}}>
-                    <td style={td}><span onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span></td>
+                    <td style={td}><span style={{color:C.done,marginRight:7,fontSize:11}}>{open?'▾':'▸'}</span><span onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span></td>
                     <td style={{...td,color:C.muted}}>{g.items.length}</td>
                     <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
-                    <td style={{...td,fontSize:11,color:!conVenc?C.done:(gap==='sin contactar'?C.overdueText:C.muted)}}>{conVenc?gap:'—'}{conVenc&&nc>0&&<span style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:3}}>· {nc}<SIcon n='check' s={11} c={C.muted}/></span>}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:g.vencido>0?C.overdueText:C.done}}>{g.vencido>0?f0(g.vencido):'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:C.accent}}>{f0(g.total)}</td>
-                    <td style={{...td,textAlign:'right',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
-                      {!conVenc ? <span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Al día</span>
+                  </tr>
+                  {open&&<tr><td colSpan={5} style={{background:C.bgSoft,borderTop:`1px dashed ${C.border}`,padding:'8px 14px 10px'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap',marginBottom:4}} onClick={e=>e.stopPropagation()}>
+                      <span style={{fontSize:10.5,color:C.muted}}>Último contacto: <b style={{color:conVenc?(gap==='sin contactar'?C.overdueText:C.muted):C.done}}>{conVenc?gap:'—'}</b>{conVenc&&nc>0?` · ${nc} envío${nc!==1?'s':''} confirmado${nc!==1?'s':''}`:''}</span>
+                      {!conVenc ? <span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Al día — sin vencidas</span>
                       : auto ? <span style={{display:'inline-flex',gap:6,alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'5px 9px'}}>En automático</span><button onClick={()=>pausar(g.cid)} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.done,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:600,cursor:'pointer'}}>Pausar</button></span>
                         : <span style={{display:'inline-flex',gap:6,alignItems:'center'}}>{nc>=LIBERAR_UMBRAL&&<button onClick={()=>liberar(g.cid)} style={{background:'#fff',border:`1px solid ${C.greenText}55`,color:C.greenText,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:700,cursor:'pointer'}}>Liberar →</button>}<button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:7,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></span>}
-                    </td>
-                  </tr>
-                  {open&&<tr><td colSpan={7} style={{background:C.bgSoft,borderTop:`1px dashed ${C.border}`,padding:'4px 14px 10px'}}>
+                    </div>
                     {g.items.map(detItem)}
                   </td></tr>}
                   </Fragment>
