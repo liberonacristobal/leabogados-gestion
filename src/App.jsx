@@ -4959,7 +4959,9 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       }
       setSavingTariff(true)
       const rec=await onCambiarFormato(sale,{newFmt,newHon:baseHon||null,newCosto:panelCosto||null,vigDate,motivo:null,nuevasCuotas})
-      if(rec){ setTariffs(p=>[...p,rec]); onSave({...f,cobros,cobro_type:cobroType,cobro_config:cobroConfig,_actualizarPago:false}) }
+      if(rec){ setTariffs(p=>[...p,rec])
+        if(newFmt==='hora'){ const cfg={...cobroConfig, tarifaHoraUF:parseFloat(String(tarifaHoraUF).replace(',','.'))||null, topeHoras:parseInt(topeHoras)||null, topePeriodo}; onSave({...f,cobros:[],cobro_type:'hora',cobro_config:cfg,_actualizarPago:false}) }
+        else onSave({...f,cobros,cobro_type:cobroType,cobro_config:cobroConfig,_actualizarPago:false}) }
     }
     setSavingTariff(false)
   }
@@ -5687,7 +5689,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 <>
                   <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:8}}>Nuevo formato</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-                    {[{k:'mensual',lbl:'Mensual',desc:'Cobro recurrente / mes'},{k:'cuotas',lbl:'Cuotas iguales',desc:'N cuotas de igual valor'},{k:'personalizada',lbl:'Personalizada',desc:'Montos y fechas libres'},{k:'unico',lbl:'Pago único',desc:'Un solo cobro'}].map(({k,lbl,desc})=>(
+                    {[{k:'mensual',lbl:'Mensual',desc:'Cobro recurrente / mes'},{k:'cuotas',lbl:'Cuotas iguales',desc:'N cuotas de igual valor'},{k:'personalizada',lbl:'Personalizada',desc:'Montos y fechas libres'},{k:'unico',lbl:'Pago único',desc:'Un solo cobro'},{k:'hora',lbl:'Por hora',desc:'Tarifa + tope; se factura por horas'}].map(({k,lbl,desc})=>(
                       <div key={k} onClick={()=>setNewFmt(k)} style={{padding:'10px 10px 8px',borderRadius:10,border:`0.5px solid ${newFmt===k?C.accent:C.border}`,background:newFmt===k?'#EDF3F5':'transparent',cursor:'pointer'}}>
                         <div style={{fontSize:12,fontWeight:newFmt===k?600:400,color:newFmt===k?C.accent:C.text,marginBottom:2}}>{lbl}</div>
                         <div style={{fontSize:10,color:C.muted,lineHeight:1.3}}>{desc}</div>
@@ -5730,7 +5732,19 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                       <Fld label='Costo (opc.)'><Inp type='number' value={newCosto} onChange={e=>setNewCosto(e.target.value)} placeholder='0'/></Fld>
                     </div>
                   )}
-                  {newVig&&newFmt&&(()=>{const vigDate=newVig+'-01';const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=vigDate).length;return <div style={{fontSize:11,color:C.soon,background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',margin:'8px 0',lineHeight:1.4}}>Reemplaza <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}. Las emitidas/pagadas no se tocan.</div>})()}
+                  {newFmt==='hora'&&(
+                    <div style={{background:C.azulBg,border:'0.5px solid #CFE0EC',borderRadius:10,padding:'12px',margin:'8px 0'}}>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                        <Fld label='Tarifa (UF/hora)'><Inp type='number' step='0.1' value={tarifaHoraUF} onChange={e=>setTarifaHoraUF(e.target.value)} placeholder='3.0'/></Fld>
+                        <Fld label='Tope de horas'><Inp type='number' value={topeHoras} onChange={e=>setTopeHoras(e.target.value)} placeholder='Ej: 20'/></Fld>
+                      </div>
+                      <div style={{display:'flex',gap:6,marginTop:8}}>
+                        {[['mes','Por mes'],['total','Total']].map(([v,l])=><button key={v} type='button' onClick={()=>setTopePeriodo(v)} style={{flex:1,padding:'7px',borderRadius:8,border:`1.5px solid ${topePeriodo===v?C.accent:C.border}`,background:topePeriodo===v?'#fff':C.bgSoft,color:topePeriodo===v?C.accent:C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>)}
+                      </div>
+                      <div style={{fontSize:10.5,color:C.greenText,marginTop:8,lineHeight:1.4}}>Sin monto fijo — se factura por las horas registradas. No genera cuotas.</div>
+                    </div>
+                  )}
+                  {newVig&&newFmt&&(()=>{const vigDate=newVig+'-01';const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=vigDate).length; const hora=newFmt==='hora'; return <div style={{fontSize:11,color:C.soonText,background:C.soonBg,border:'0.5px solid #EBD9AE',borderRadius:8,padding:'8px 10px',margin:'8px 0',lineHeight:1.4}}>{hora?<>Se <strong>cancelan {progN}</strong> cuota{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig} y la venta pasa a <strong>cobro por hora</strong>.</>:<>Reemplaza <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}.</>} Las emitidas/pagadas no se tocan.</div>})()}
                 </>
               )}
             </div>
