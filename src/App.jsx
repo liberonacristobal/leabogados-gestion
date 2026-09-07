@@ -5393,11 +5393,16 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               )}
             </div>
           )}
-          {cobros.length>0&&(
-            <div style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:C.azulBg,fontSize:11,color:C.accent}}>
-              Se crearán <strong>{cobros.length} cobro{cobros.length!==1?'s':''}</strong> pendientes: {cobros.map(c=>`${c.label} ${fmt(c.monto)} (${fmtFechaDMY(c.fecha)})`).join(' · ')}
+          {cobros.length>0&&(()=>{ const av=_activandoPropuesta||propBorr; return (
+            <div style={{marginTop:9,borderRadius:9,padding:'9px 11px',background:av?C.soonBg:C.azulBg,border:`1px solid ${av?'#EBD9AE':C.border}`}}>
+              {av&&<div style={{display:'flex',alignItems:'center',gap:6,fontSize:10.5,fontWeight:700,color:C.soonText,marginBottom:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>Se programará la facturación · revisa antes de guardar</div>}
+              <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                {cobros.slice(0,6).map((c,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:11,color:av?C.soonText:C.accent}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.label} · {fmtFechaDMY(c.fecha)}</span><span style={{fontWeight:700,whiteSpace:'nowrap',marginLeft:8}}>{fmt(c.monto)}</span></div>)}
+                {cobros.length>6&&<div style={{fontSize:10,color:C.done}}>+ {cobros.length-6} cuota{cobros.length-6!==1?'s':''} más</div>}
+              </div>
+              <div style={{fontSize:9.5,color:av?C.soonText:C.done,marginTop:6}}>Se {av?'reprograman':'crean'} {cobros.length} cuota{cobros.length!==1?'s':''} programada{cobros.length!==1?'s':''}. Las emitidas/pagadas no se tocan.</div>
             </div>
-          )}
+          ) })()}
         </div>
       )}
 
