@@ -95,7 +95,7 @@ serve(async (req) => {
   // Acceso: admin (email en el JWT) O el cron con su secreto, pero el secreto SOLO autoriza los jobs de reporte
   // (nunca emitir/anular/libro). Así, si el secreto se filtrara, no puede emitir DTE en tu nombre.
   // sync-compras entra aca: es un sync de solo LECTURA del RCV + escritura en sii_compras_docs (NUNCA emite/anula/libro).
-  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras']
+  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas']
   const email = emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !ADMINS.includes(email))) {
@@ -443,6 +443,65 @@ serve(async (req) => {
       const nc = filas.filter((f) => f.tipo_dte === 61).length
       console.log(`[sii-sync] sync-ventas-rcv ${periodoV}: ${ventas.length} del SII, ${filas.length} unicas, ${nc} NC, ${guardadas} nuevas`)
       return json({ ok: true, periodo: periodoV, ambiente, totalSII: ventas.length, unicas: filas.length, notasCredito: nc, guardadas })
+    }
+
+    // CUADRE MENSUAL AUTOMÁTICO (cron): persiste el RCV de ventas del mes ANTERIOR y el ACTUAL en sii_cargas_docs
+    // (como sync-ventas-rcv, read-only, ignoreDuplicates) y luego AUTO-ENLAZA los docs con billing por
+    // folio+RUT+monto (función SQL link_sii_billing, 1:1 inequívoco). Nunca corrige receptores ni toca cifras
+    // de facturas ya conciliadas: solo marca el vínculo (estado='registrada' + billing.sii_synced_at). Idempotente.
+    // body: { action:'cron-cuadre-ventas', cronSecret, periodo? }  — sin periodo usa [mes anterior, mes actual].
+    if (body.action === 'cron-cuadre-ventas') {
+      if (ambiente !== 'produccion') return json({ error: 'El RCV solo existe en produccion.', ambiente }, 400)
+      const per = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+      const hoy = new Date()
+      const prev = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() - 1, 1))
+      const periodos = body.periodo && /^\d{4}-\d{2}$/.test(String(body.periodo)) ? [String(body.periodo)] : [per(prev), per(hoy)]
+      console.log(`[sii-sync] cron-cuadre-ventas ${periodos.join(', ')} por ${email || 'cron'}`)
+      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      let tk = await obtenerToken()
+      const detalle = []
+      for (const p of periodos) {
+        let ventas
+        try {
+          ventas = await getVentasFull(p, tk)
+        } catch (e) {
+          console.log(`[sii-sync] cron-cuadre ${p} fallo, renovando token: ${e instanceof Error ? e.message : e}`)
+          tk = await obtenerToken(true)
+          ventas = await getVentasFull(p, tk)
+        }
+        const vistos = new Set<string>()
+        const filas = []
+        for (const v of ventas) {
+          const clave = `${v.folio}|${v.tipoDte}`
+          if (vistos.has(clave)) continue
+          vistos.add(clave)
+          filas.push({
+            folio: String(v.folio),
+            tipo_dte: v.tipoDte,
+            fecha_emision: v.fechaEmision || null,
+            receptor_rut: v.rutReceptor,
+            receptor_name: v.nombreReceptor,
+            monto: v.montoTotal || v.montoExento || 0,
+            estado: 'rcv_historico',
+            doc_json: { ...v.raw, periodo: p, _neto: v.montoNeto, _exento: v.montoExento, _total: v.montoTotal },
+          })
+        }
+        let guardadas = 0
+        if (filas.length) {
+          const { error: upErr, count } = await sb
+            .from('sii_cargas_docs')
+            .upsert(filas, { onConflict: 'folio,tipo_dte', ignoreDuplicates: true, count: 'exact' })
+          if (upErr) return json({ error: `No se pudo guardar RCV ventas ${p}: ${upErr.message}` }, 500)
+          guardadas = count ?? 0
+        }
+        detalle.push({ periodo: p, delSII: ventas.length, unicas: filas.length, guardadas })
+      }
+      // Auto-enlace folio+RUT+monto (1:1) → marca el vínculo, sin tocar cifras.
+      const { data: link, error: linkErr } = await sb.rpc('link_sii_billing')
+      if (linkErr) return json({ error: `Auto-enlace fallo: ${linkErr.message}`, detalle }, 500)
+      const enlace = Array.isArray(link) ? link[0] : link
+      console.log(`[sii-sync] cron-cuadre-ventas enlazó ${enlace?.facturas_enlazadas ?? 0} facturas, ${enlace?.nc_enlazadas ?? 0} NC`)
+      return json({ ok: true, ambiente, periodos, detalle, enlace })
     }
 
     const periodo = String(body.periodo || '')
