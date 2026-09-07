@@ -4488,6 +4488,11 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
               </div>
               <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
             </div>
+            {r.proveedor_id&&<div style={{display:'flex',alignItems:'center',gap:7,marginTop:6}}>
+              <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>Comisión desde</span>
+              <input type='month' value={r.desde||''} onChange={e=>up(i,'desde',e.target.value)} style={{...inp,height:30,fontSize:11,flex:1,minWidth:0}}/>
+              <span style={{fontSize:9.5,color:C.done,whiteSpace:'nowrap'}}>{r.desde?'en adelante':'todas'}</span>
+            </div>}
             {(r._edit || !((parseFloat(r.valor)||0)>0))?(
               <div style={{display:'flex',height:36,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff',marginTop:6}}>
                 <input type='number' value={r.valor??''} onChange={e=>up(i,'valor',e.target.value)} placeholder={tipo==='pct'?'% que te cobra':tipo==='uf'?'Cuánto (UF)':'Cuánto ($)'} style={{flex:1,minWidth:0,border:'none',padding:'0 9px',fontSize:13,color:C.text,outline:'none'}}/>
@@ -4562,9 +4567,14 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],p
   // (cada fila se reparte en N cuotas, así que varios registros = una fila del formulario).
   const [reparto,setReparto] = useState(()=>{
     const mine=(terceros||[]).filter(t=>String(t.sale_id)===String(sale?.id))
+    const dueById={}; (billing||[]).forEach(b=>{ dueById[String(b.id)]=(b.due||b.issued_at||'').slice(0,7) })
     const g={}
-    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??''} })
-    return Object.values(g)
+    // "desde" (mes) inferido = cuota MÁS ANTIGUA con comisión de ese proveedor → conserva el efecto "desde X" al reabrir/re-guardar sin columna nueva.
+    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??'',_dues:[]}; const dm=t.billing_id?dueById[String(t.billing_id)]:''; if(dm) g[k]._dues.push(dm) })
+    const cuotasN=(billing||[]).filter(b=>String(b.sale_id)===String(sale?.id)&&b.billing_type!=='reembolso').length
+    return Object.values(g).map(x=>{ const dues=(x._dues||[]).filter(Boolean).sort(); const {_dues,...rest}=x
+      // Solo marca "desde" si la comisión NO cubre todas las cuotas (si cubre todas, es "todas", sin fecha).
+      return {...rest, desde:(dues.length && dues.length<cuotasN)?dues[0]:''} })
   })
   const [tariffs,setTariffs] = useState([])
   const [histAbierto,setHistAbierto] = useState(false)   // Historial de honorarios colapsado por defecto (form más corto al reabrir)
@@ -28769,6 +28779,7 @@ export default function App() {
             }
             for(const cuota of cuotasVenta){
               if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
+              if(row.desde && String(cuota.due||'').slice(0,7) < String(row.desde)) continue   // comisión "desde X en adelante": no aplica a cuotas anteriores
               const m = montoCuota(row,cuota); if(m<=0) continue
               nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
                 proveedor: provNom, rut:prov?.rut||null,
