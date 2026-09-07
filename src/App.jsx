@@ -294,15 +294,30 @@ const urgency = (due,status) => {
 // RUT: normalizador ÚNICO de toda la app = el de cartola (crNormRut): mayúscula, solo dígitos + K (sin puntos, espacios ni guion).
 // Antes esta copia conservaba el guion y usaba minúscula (outlier): fallaba dedupe/match entre "12345678-9" y "123456789".
 const normRut = crNormRut
+// Feriados de Chile (fuente: api.boostr.cl / apis.digital.gob.cl). Se cargan al iniciar y se cachean; si la API no responde,
+// el cálculo del día hábil cae a solo fin de semana (comportamiento anterior, seguro).
+const FERIADOS_CL = new Set()   // 'YYYY-MM-DD'
+async function cargarFeriadosCL(){
+  const ys=[currentYear-1,currentYear,currentYear+1]
+  const _add = d => { if(typeof d==='string' && /^\d{4}-\d{2}-\d{2}/.test(d)) FERIADOS_CL.add(d.slice(0,10)) }
+  for(const y of ys){
+    let ok=false
+    for(const url of [`https://api.boostr.cl/feriados/${y}.json`, `https://apis.digital.gob.cl/fl/feriados/${y}`]){
+      try{ const r=await fetch(url); if(!r.ok) continue; const j=await r.json(); const arr=Array.isArray(j)?j:(j.data||j.feriados||[]); if(!Array.isArray(arr)||!arr.length) continue; arr.forEach(f=>_add(typeof f==='string'?f:(f.fecha||f.date))); ok=true; break }catch(_){}
+    }
+    if(!ok){/* sin feriados de ese año: el helper usará solo fin de semana */}
+  }
+}
+const _esDiaHabil = dt => { const w=dt.getDay(); if(w===0||w===6) return false; const s=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; return !FERIADOS_CL.has(s) }
 // Vencimiento de pago = ÚLTIMO DÍA HÁBIL del mes de emisión si se emite dentro de los primeros 10 días;
-// si se emite después del día 10, salta al último día hábil del mes SIGUIENTE. (Feriados no contemplados: solo fin de semana → viernes.)
+// si se emite después del día 10, salta al último día hábil del mes SIGUIENTE. Día hábil = ni fin de semana ni feriado (Chile).
 function ultimoDiaHabilMesEmision(iso){
   if(!iso) return null
   const d=new Date(String(iso).slice(0,10)+'T00:00:00'); if(isNaN(d)) return null
   let y=d.getFullYear(), m=d.getMonth()
   if(d.getDate()>10){ m++; if(m>11){m=0;y++} }
-  const last=new Date(y,m+1,0); const w=last.getDay()
-  if(w===6) last.setDate(last.getDate()-1); else if(w===0) last.setDate(last.getDate()-2)
+  const last=new Date(y,m+1,0)
+  let guard=0; while(!_esDiaHabil(last) && guard++<15) last.setDate(last.getDate()-1)   // retrocede sobre fines de semana y feriados
   return `${last.getFullYear()}-${String(last.getMonth()+1).padStart(2,'0')}-${String(last.getDate()).padStart(2,'0')}`
 }
 function dueFromIssued(iso){ return ultimoDiaHabilMesEmision(iso) }
@@ -470,6 +485,7 @@ function ChipSearch({value,onChange,placeholder='Buscar...',autoFocus,style}){
 }
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
+cargarFeriadosCL().catch(()=>{})   // carga los feriados de Chile (para el "último día hábil" del vencimiento); no bloquea
 const ddItem = { padding:'9px 14px', fontSize:13, color:C.text, cursor:'pointer', display:'flex', alignItems:'center', gap:8, borderRadius:6, margin:'0 4px' }
 // Iniciales nombre+apellido de cada responsable (mismas de su correo)
 const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina':'MP','Rodrigo':'RD'}
