@@ -7462,7 +7462,7 @@ function DepurarCobradasModal({rows=[], clients=[], respaldoMap={}, onOpenFactur
 const CIERRE_EST = {
   cobrada:   { label:'Pagada',        color:C.greenText,   bg:C.greenBg,   dot:C.normal },
   detectado: { label:'Por conciliar', color:C.soonText,    bg:C.soonBg,    dot:C.soon },
-  sinpago:   { label:'Sin pago',      color:C.overdueText, bg:C.overdueBg, dot:C.overdue },
+  sinpago:   { label:'Por pagar',     color:C.overdueText, bg:C.overdueBg, dot:C.overdue },
   porcobrar: { label:'Por cobrar',    color:C.accent,      bg:C.azulBg,    dot:C.accent },   // pseudo-filtro: detectado + sinpago (todo lo que tiene saldo)
 }
 function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abonos=[], pagosDe, onConciliarPago, onRecordar, onRecordarTanda, recordadoMap={}, diasDesde, onOpenClientFicha, onOpenFactura, onOpenConciliacion, mesInicial }) {
@@ -7474,7 +7474,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   const [mes,setMes] = useState(mesInicial && /^\d{4}-\d{2}$/.test(mesInicial) ? mesInicial : prevKey)
   const [modo,setModo] = useState('mes')      // 'mes' | 'acum' (acumulado del año hasta el mes elegido)
   const [resp,setResp] = useState(null)       // abogado responsable (null = todos)
-  const [estFiltro,setEstFiltro] = useState(null)   // null | 'cobrada' | 'detectado' | 'sinpago'
+  const [estFiltro,setEstFiltro] = useState('porcobrar')   // tarjeta-acordeón activa: 'porcobrar' | 'cobrada' | 'vencido' | 'sinid' | null
   const [expand,setExpand] = useState(null)   // factura.id con detalle abierto
   const [busyId,setBusyId] = useState(null)
   const [sinIdOpen,setSinIdOpen] = useState(false)   // banner "pagos sin identificar" desplegado
@@ -7564,59 +7564,53 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
         return <button key={v||'all'} onClick={()=>setResp(v)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?(pc?pc.color:C.accent):C.border}`,background:on?(pc?pc.bg:C.azulBg):'#fff',color:on?(pc?pc.color:C.accent):C.muted,whiteSpace:'nowrap'}}>{l}</button> })}
     </div>}
 
-    {/* Foto (canon): Emitido protagonista → Cobrado + Por cobrar (con Vencido y "listas para conciliar" ANIDADOS bajo Por cobrar). Sin cifras repetidas; iconos del canon. */}
-    <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'14px 16px',marginBottom:8}}>
-      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>{modo==='mes'?`Emitido · ${mesLabel}`:`Emitido acumulado ${mesYear} (a ${MESNOM[+mes.slice(5,7)-1].toLowerCase()})`}</div>
-      <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:12}}>
-        <div style={{fontSize:26,fontWeight:800,color:C.accent,letterSpacing:-.5}}>{fmt(tot.emi)}</div>
-        <div style={{fontSize:11.5,color:C.muted,fontWeight:600}}>{filas.length} factura{filas.length!==1?'s':''}</div>
-      </div>
-      <div style={{display:isDesktop?'grid':'flex',gridTemplateColumns:'1fr 1fr',flexDirection:'column',gap:isDesktop?16:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
-        <div onClick={()=>setEstFiltro(estFiltro==='cobrada'?null:'cobrada')} style={{display:'flex',alignItems:'flex-start',gap:9,cursor:'pointer'}}>
-          <span style={{width:30,height:30,borderRadius:9,background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={17} c={C.greenText}/></span>
-          <div style={{minWidth:0}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Cobrado</div><div style={{fontSize:18,fontWeight:800,color:C.greenText,letterSpacing:-.3}}>{fmt(tot.cob)}</div><div style={{fontSize:10,color:C.done}}>tasa de cobro {pct(tot.tasa)} · {tot.nC} factura{tot.nC!==1?'s':''}</div></div>
-        </div>
-        <div style={{minWidth:0}}>
-          <div onClick={()=>setEstFiltro(estFiltro==='porcobrar'?null:'porcobrar')} style={{display:'flex',alignItems:'flex-start',gap:9,cursor:'pointer'}}>
-            <span style={{width:30,height:30,borderRadius:9,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={17} c={C.accent}/></span>
-            <div style={{minWidth:0}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Por cobrar</div><div style={{fontSize:18,fontWeight:800,color:C.accent,letterSpacing:-.3}}>{fmt(tot.pen)}</div><div style={{fontSize:10,color:C.done}}>{tot.nD+tot.nS} facturas</div></div>
-          </div>
-          {(tot.mV>0||tot.nD>0)&&<div style={{display:'flex',gap:7,marginTop:9,flexWrap:'wrap'}}>
-            {tot.mV>0&&<div onClick={()=>setEstFiltro(estFiltro==='vencido'?null:'vencido')} style={{display:'flex',alignItems:'center',gap:6,background:estFiltro==='vencido'?C.overdueText:C.overdueBg,border:`0.5px solid ${estFiltro==='vencido'?C.overdueText:C.border}`,borderRadius:9,padding:'5px 9px',cursor:'pointer'}}><SIcon n='alert' s={13} c={estFiltro==='vencido'?'#fff':C.overdueText}/><div><div style={{fontSize:12,fontWeight:700,color:estFiltro==='vencido'?'#fff':C.overdueText,lineHeight:1.1}}>{fmt(tot.mV)}</div><div style={{fontSize:9,color:estFiltro==='vencido'?'#fff':C.muted}}>Vencido · {tot.nV}</div></div></div>}
-            {tot.nD>0&&<div onClick={()=>setEstFiltro(estFiltro==='detectado'?null:'detectado')} style={{display:'flex',alignItems:'center',gap:6,background:C.greenBg,border:`1px solid #CFE9DD`,borderRadius:9,padding:'5px 9px',cursor:'pointer'}}><SIcon n='exchange' s={13} c={C.greenText}/><div><div style={{fontSize:12,fontWeight:700,color:C.greenText,lineHeight:1.1}}>{tot.nD} lista{tot.nD!==1?'s':''} para conciliar</div><div style={{fontSize:9,color:C.done}}>hay pago del banco que calza</div></div></div>}
-          </div>}
-        </div>
-      </div>
+    {/* Emitido (hero) + 4 tarjetas-acordeón: Pagado · Por pagar · Sin identificar · Vencidas. Al tocar una se despliega SU listado abajo (estFiltro). Wording: al emitir ya está cobrado → Pagado / Por pagar. */}
+    <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginBottom:9}}>
+      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>{modo==='mes'?`Emitido · ${mesLabel}`:`Emitido acumulado ${mesYear} (a ${MESNOM[+mes.slice(5,7)-1].toLowerCase()})`}</div>
+      <div style={{display:'flex',alignItems:'baseline',gap:9,marginTop:4}}><div style={{fontSize:25,fontWeight:800,color:C.accent,letterSpacing:-.6}}>{fmt(tot.emi)}</div><div style={{fontSize:11,color:C.muted,fontWeight:600}}>{filas.length} factura{filas.length!==1?'s':''}</div></div>
     </div>
-
-    {/* Pagos del banco sin identificar (desplegable) */}
-    {sinIdentificar.length>0&&<div style={{background:C.ambarBg,borderRadius:11,padding:'9px 12px',marginBottom:8}}>
-      <div onClick={()=>setSinIdOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer'}}>
-        <span style={{width:6,height:6,borderRadius:'50%',background:C.soon,flexShrink:0}}/>
-        <div style={{flex:1,fontSize:12,fontWeight:600,color:C.soonText}}>{sinIdentificar.length} pago{sinIdentificar.length!==1?'s':''} del banco sin identificar · {fmt(totSinId)}</div>
-        <span style={{fontSize:12,color:C.soon}}>{sinIdOpen?'▾':'▸'}</span>
-      </div>
-      {sinIdOpen&&<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
-        {sinIdentificar.slice(0,8).map(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); return (
-          <div key={m.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:9,padding:'7px 9px'}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.greenText}}>+{fmt(resto)} <span style={{color:C.done,fontWeight:400,fontSize:10}}>· {fmtDate(m.fecha)}</span></div>
-            <div style={{fontSize:10,color:C.text,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.nombre_contraparte||'Sin remitente en la glosa'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</div>
-            {m.descripcion&&<div style={{fontSize:9.5,color:C.done,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.descripcion}</div>}
-          </div>) })}
-        {sinIdentificar.length>8&&<div style={{fontSize:10,color:C.soonText,textAlign:'center'}}>Y {sinIdentificar.length-8} más</div>}
-        {onOpenConciliacion&&<button onClick={onOpenConciliacion} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.done}`,borderRadius:7,padding:'6px 12px',cursor:'pointer',alignSelf:'center',marginTop:2}}>Revisar en Conciliación ›</button>}
-      </div>}
-    </div>}
-
-    {/* Tanda de recordatorios */}
-    {vencidasSinPago.length>0&&<div style={{display:'flex',alignItems:'center',gap:9,background:C.overdueBg,borderRadius:11,padding:'9px 12px',marginBottom:8}}>
-      <div style={{flex:1,fontSize:12,fontWeight:600,color:C.overdueText}}>{vencidasSinPago.length} factura{vencidasSinPago.length!==1?'s':''} vencida{vencidasSinPago.length!==1?'s':''} sin pago</div>
-      {onRecordarTanda&&<button onClick={()=>onRecordarTanda(vencidasSinPago.map(f=>f.b))} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.done}`,borderRadius:7,padding:'6px 12px',cursor:'pointer',flexShrink:0}}>Recordar a {vencidasSinPago.length} ›</button>}
-    </div>}
-
-    {/* Lista de facturas del período */}
-    {estFiltro&&<div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:CIERRE_EST[estFiltro].color}}>Mostrando: {CIERRE_EST[estFiltro].label}</span><button onClick={()=>setEstFiltro(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Ver todas</button></div>}
     {(()=>{
+      const card=(k,ic,icC,bg,lbl,n,nC,sub)=>{ const active=estFiltro===k; return (
+        <div onClick={()=>setEstFiltro(active?null:k)} style={{background:'#fff',border:`1px solid ${active?C.accent:C.border}`,boxShadow:active?`0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:'10px 12px',cursor:'pointer'}}>
+          <div style={{display:'flex',alignItems:'center',gap:7}}>
+            <span style={{width:28,height:28,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={16} c={icC}/></span>
+            <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:icC,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lbl}</span>
+            <span style={{marginLeft:'auto',color:C.done,fontSize:12,transform:active?'rotate(90deg)':'none',transition:'transform .12s'}}>›</span>
+          </div>
+          <div style={{fontSize:17,fontWeight:800,letterSpacing:-.3,color:nC,marginTop:6,fontVariantNumeric:'tabular-nums'}}>{n}</div>
+          <div style={{fontSize:9,color:C.done,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+        </div>) }
+      return (<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:9}}>
+        {card('cobrada','check',C.greenText,C.greenBg,'Pagado',fmt(tot.cob),C.greenText,`${tot.nC} factura${tot.nC!==1?'s':''} · ${pct(tot.tasa)}`)}
+        {card('porcobrar','file',C.accent,C.azulBg,'Por pagar',fmt(tot.pen),C.accent,`${tot.nD+tot.nS} facturas`)}
+        {card('sinid','exchange',C.soonText,C.ambarBg,'Sin identificar',fmt(totSinId),C.soonText,`${sinIdentificar.length} pago${sinIdentificar.length!==1?'s':''} del banco`)}
+        {card('vencido','alert',C.overdueText,C.overdueBg,'Vencidas',String(tot.nV),C.overdueText,`${fmtShort(tot.mV)} · recordar`)}
+      </div>)
+    })()}
+
+    {/* Panel de "Sin identificar": abonos del banco sin cruzar (se muestra al tocar esa tarjeta) */}
+    {estFiltro==='sinid'&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:9}}>
+      {sinIdentificar.length===0
+        ? <div style={{fontSize:12,color:C.muted,padding:'16px',textAlign:'center'}}>Sin pagos del banco por identificar.</div>
+        : <div style={{padding:'8px 12px',display:'flex',flexDirection:'column',gap:6}}>
+            {sinIdentificar.slice(0,12).map(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); return (
+              <div key={m.id} style={{borderTop:`1px solid ${C.bgSoft}`,paddingTop:6}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:C.greenText}}>+{fmt(resto)} <span style={{color:C.done,fontWeight:400,fontSize:10}}>· {fmtDate(m.fecha)}</span></div>
+                <div style={{fontSize:10.5,color:C.text,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.nombre_contraparte||'Sin remitente en la glosa'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</div>
+              </div>) })}
+            {sinIdentificar.length>12&&<div style={{fontSize:10,color:C.soonText,textAlign:'center'}}>Y {sinIdentificar.length-12} más</div>}
+            {onOpenConciliacion&&<button onClick={onOpenConciliacion} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.done}`,borderRadius:7,padding:'6px 12px',cursor:'pointer',alignSelf:'center',marginTop:2}}>Revisar en Conciliación ›</button>}
+          </div>}
+    </div>}
+
+    {/* Tanda de recordatorios: sobre la lista de vencidas */}
+    {estFiltro==='vencido'&&vencidasSinPago.length>0&&onRecordarTanda&&<div style={{display:'flex',alignItems:'center',gap:9,background:C.overdueBg,borderRadius:11,padding:'9px 12px',marginBottom:8}}>
+      <div style={{flex:1,fontSize:12,fontWeight:600,color:C.overdueText}}>{vencidasSinPago.length} vencida{vencidasSinPago.length!==1?'s':''} sin pago</div>
+      <button onClick={()=>onRecordarTanda(vencidasSinPago.map(f=>f.b))} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.done}`,borderRadius:7,padding:'6px 12px',cursor:'pointer',flexShrink:0}}>Recordar a {vencidasSinPago.length} ›</button>
+    </div>}
+
+    {/* Lista de facturas: solo cuando hay una tarjeta de facturas activa (no sinid, no null) */}
+    {estFiltro&&estFiltro!=='sinid'&&(()=>{
       const emptyEl = <div style={{textAlign:'center',color:C.muted,fontSize:12.5,padding:'22px 0'}}>No hay facturas emitidas {modo==='mes'?`en ${mesLabel.toLowerCase()}`:`en ${mesYear}`}{resp?` de ${resp}`:''}.</div>
       const filaEl = (f,inGroup)=>{ const e=CIERRE_EST[f.est]; const abierto=expand===f.b.id; const rd=diasDesde?diasDesde(recordadoMap[String(f.b.id)]):null; const rec=rd!=null&&rd<=2
         const dep=f.est==='detectado'&&f.pagos[0]?f.pagos[0].m:null; const depMonto=dep?((dep.monto||0)-(dep.monto_conciliado||0)):0
@@ -7717,7 +7711,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
     <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginTop:10}}>
       <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:10}}>Historial y comparación</div>
       {cur&&prev&&<div style={{display:'flex',gap:7,marginBottom:12}}>
-        {[['Emitido',cur.emi,prev.emi,false],['Cobrado',cur.cob,prev.cob,false],['Por cobrar',cur.pen,prev.pen,true]].map(([l,a,b,inv])=>
+        {[['Emitido',cur.emi,prev.emi,false],['Pagado',cur.cob,prev.cob,false],['Por pagar',cur.pen,prev.pen,true]].map(([l,a,b,inv])=>
           <div key={l} style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 9px'}}>
             <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
             <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-.2}}>{fmtShort(a)}</div>
