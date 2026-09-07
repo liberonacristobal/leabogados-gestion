@@ -26532,8 +26532,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [unoSkip,setUnoSkip] = useState(()=>new Set())
   const [unoTotal,setUnoTotal] = useState(0)
   const [verValores,setVerValores] = useState(false)
-  // Escritorio: no hay pantalla-hub separada — se colapsa a rail + lista (2-panel). El móvil conserva el hub.
-  useEffect(()=>{ if(isDesktop && hubOpen){ setHubOpen(false); if(sub!=='cargos'&&concView==='todos') setConcView('porresolver') } },[isDesktop,hubOpen])
+  // Escritorio y móvil comparten el HUB de entrada (grilla de tarjetas). Al tocar una tarjeta se entra al interior
+  // (en escritorio, el 2-panel rail+lista); el botón "volver" regresa al hub. Antes el escritorio saltaba directo al rail.
   // "Por resolver" — fuente ÚNICA de cifras/desglose (usada por el hub móvil y el rail de escritorio).
   const _hoyPR=Date.now()
   const porResolverMovs = movs.filter(m=> m.tipo==='abono' && !m.es_interno && !(concByMov[m.id]?.length) && !RESUELTAS_ABO.includes(m.categoria) && (!m.cliente_id || esConciliable(m)))
@@ -26629,7 +26629,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}</div>
     return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}</div>
   })() : null
-  if(hubOpen && !isDesktop) return concHub
+  if(hubOpen) return concHub
   // Opción A — el interior se enfoca en la tarjeta que abriste: el header ES el contexto (icono + nombre + conteo),
   // y NO se repiten los tiles "Por resolver" (eso ya lo dijo la tarjeta). Cambiar de foco = una línea de texto.
   // El overview (tarjeta "Abonos", concView==='todos') queda idéntico → el móvil no se rompe.
