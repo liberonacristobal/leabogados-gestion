@@ -4545,6 +4545,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],p
   const [tarifaHoraUF,setTarifaHoraUF] = useState(sale?.cobro_config?.tarifaHoraUF||'')
   const [topeHoras,setTopeHoras] = useState(sale?.cobro_config?.topeHoras||'')
   const [topePeriodo,setTopePeriodo] = useState(sale?.cobro_config?.topePeriodo||'mes')
+  const [openSec,setOpenSec] = useState({})   // acordeones de secciones secundarias del form (Clasificación, Notas)
   const [cuotaEdits,setCuotaEdits] = useState({})   // ediciones inline de cuotas programadas guardadas {id:{due,amount}} (amount en la unidad cuotaUnit)
   const [savingCuotas,setSavingCuotas] = useState(false)
   const [cuotaUnit,setCuotaUnit] = useState(sale?.moneda||'UF')   // unidad para editar las cuotas (parte por la de la venta)
@@ -5214,27 +5215,37 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </div>
       )}
 
-      {/* 3. Área + Responsable */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-        <Fld label={<>Área<AiBadge field='area'/></>}><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
-        <Fld label={<>Responsable<AiBadge field='responsible'/></>}>
-          <select value={f.responsible||''} onChange={e=>up('responsible',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:14,boxSizing:'border-box'}}>
-            <option value=''>— Seleccionar —</option>
-            {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
-          </select>
-        </Fld>
+      {/* 3-4. Clasificación (accordion colapsable): Área/Responsable + Estado/Año/Mes */}
+      {(()=>{ const open=!!openSec.clasif; return (
+      <div style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:10,overflow:'hidden'}}>
+        <div onClick={()=>setOpenSec(p=>({...p,clasif:!p.clasif}))} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
+          <span style={{width:22,height:22,borderRadius:6,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg></span>
+          <span style={{fontSize:12,fontWeight:700,color:C.accent,flex:1}}>Clasificación</span>
+          {!open&&<span style={{fontSize:10,color:C.done,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'46%'}}>{f.area||'Corporativo'} · {f.responsible||'sin resp.'} · {f.year||currentYear}</span>}
+          <span style={{color:C.done,fontSize:12,flexShrink:0}}>{open?'▾':'›'}</span>
+        </div>
+        {open&&<div style={{padding:'0 12px 12px',borderTop:`1px solid ${C.bgSoft}`}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'10px 0'}}>
+            <Fld label={<>Área<AiBadge field='area'/></>}><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
+            <Fld label={<>Responsable<AiBadge field='responsible'/></>}>
+              <select value={f.responsible||''} onChange={e=>up('responsible',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:14,boxSizing:'border-box'}}>
+                <option value=''>— Seleccionar —</option>
+                {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
+              </select>
+            </Fld>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+            <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado']}/></Fld>
+            <Fld label='Año'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
+            <Fld label='Mes'>
+              <select value={f.month||currentMonth} onChange={e=>up('month',parseInt(e.target.value))} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:14,boxSizing:'border-box'}}>
+                {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+              </select>
+            </Fld>
+          </div>
+        </div>}
       </div>
-
-      {/* 4. Estado + Año + Mes */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
-        <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado']}/></Fld>
-        <Fld label='Año'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
-        <Fld label='Mes'>
-          <select value={f.month||currentMonth} onChange={e=>up('month',parseInt(e.target.value))} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:14,boxSizing:'border-box'}}>
-            {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
-          </select>
-        </Fld>
-      </div>
+      )})()}
 
       {/* 5–8. Honorarios + costos en una línea (toggle UF/CLP compartido), cobro, notas — editable en venta nueva y en propuesta/borrador */}
       {formNuevo&&cobroType!=='hora'&&(<>
@@ -5391,7 +5402,17 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       )}
 
       {/* 8. Notas — solo nueva venta */}
-      {formNuevo&&<Fld label={<>Notas<AiBadge field='notes'/></>}><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>}
+      {formNuevo&&(()=>{ const open=!!openSec.notas; return (
+      <div style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:10,overflow:'hidden'}}>
+        <div onClick={()=>setOpenSec(p=>({...p,notas:!p.notas}))} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
+          <span style={{width:22,height:22,borderRadius:6,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><line x1='8' y1='13' x2='16' y2='13'/></svg></span>
+          <span style={{fontSize:12,fontWeight:700,color:C.accent,flex:1}}>Notas<AiBadge field='notes'/></span>
+          {!open&&f.notes&&<span style={{fontSize:10,color:C.done,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'50%'}}>{f.notes}</span>}
+          <span style={{color:C.done,fontSize:12,flexShrink:0}}>{open?'▾':'›'}</span>
+        </div>
+        {open&&<div style={{padding:'10px 12px',borderTop:`1px solid ${C.bgSoft}`}}><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></div>}
+      </div>
+      )})()}
 
       {/* 9. CONDICIONES REGISTRADAS — solo venta activa guardada (en propuesta/borrador se edita con el form completo) */}
       {sale?.id&&!propBorr&&(()=>{
