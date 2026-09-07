@@ -4530,6 +4530,10 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],p
   const [cuotaDistPos,setCuotaDistPos] = useState(sale?.cobro_config?.cuotaDistPos||'primera')
   const [cuotaDistMonto,setCuotaDistMonto] = useState(sale?.cobro_config?.cuotaDistMonto||'')
   const [cuotaRec,setCuotaRec] = useState(sale?.cobro_config?.cuotaRec||'')
+  // Cobro POR HORA: tarifa (UF/hora, override del valor global del estudio) + tope de horas + periodo del tope. Se factura por consumo real (tabla horas por sale_id), no genera cuotas programadas.
+  const [tarifaHoraUF,setTarifaHoraUF] = useState(sale?.cobro_config?.tarifaHoraUF||'')
+  const [topeHoras,setTopeHoras] = useState(sale?.cobro_config?.topeHoras||'')
+  const [topePeriodo,setTopePeriodo] = useState(sale?.cobro_config?.topePeriodo||'mes')
   const [cuotaEdits,setCuotaEdits] = useState({})   // ediciones inline de cuotas programadas guardadas {id:{due,amount}} (amount en la unidad cuotaUnit)
   const [savingCuotas,setSavingCuotas] = useState(false)
   const [cuotaUnit,setCuotaUnit] = useState(sale?.moneda||'UF')   // unidad para editar las cuotas (parte por la de la venta)
@@ -4839,7 +4843,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     return cobros
   }
   const cobros = generarCobros()
-  const cobroConfig = {nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio,cuotaDist,cuotaDistPos,cuotaDistMonto,cuotaRec}
+  const cobroConfig = {nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio,cuotaDist,cuotaDistPos,cuotaDistMonto,cuotaRec,
+    ...(cobroType==='hora' ? {tarifaHoraUF:parseFloat(String(tarifaHoraUF).replace(',','.'))||null, topeHoras:parseInt(topeHoras)||null, topePeriodo} : {})}
   // Propuesta/Borrador: aún no es venta activa → se edita con el MISMO formulario completo que una venta nueva
   // (honorarios, costos, forma de cobro, notas). Sus cuotas son todas Programadas sin emitir, así que al guardar se regeneran.
   const propBorr = !!(sale?.id && (sale?.status==='Propuesta'||sale?.status==='Borrador'))
@@ -5263,7 +5268,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         <div style={{marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Forma de cobro</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
-            {[['cuotas','Cuotas mensuales'],['mensual','Mensual recurrente'],['porcentaje','Por porcentaje'],['personalizada','Personalizada']].map(([v,l])=>(
+            {[['cuotas','Cuotas mensuales'],['mensual','Mensual recurrente'],['porcentaje','Por porcentaje'],['personalizada','Personalizada'],['hora','Por hora']].map(([v,l])=>(
               <button key={v} onClick={()=>setCobroType(v)} style={{padding:'8px 4px',borderRadius:8,border:`2px solid ${cobroType===v?C.accent:C.border}`,background:cobroType===v?C.azulBg:'transparent',color:cobroType===v?C.accent:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',textAlign:'center'}}>{l}</button>
             ))}
           </div>
@@ -5282,6 +5287,20 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   <button type='button' onClick={()=>setMensualInicio(`${ym}-01`)} style={{...chipBtn('soft'),height:22}}>Usar {ym}</button>
                 </div>
               )})()}
+            </div>
+          )}
+          {cobroType==='hora'&&(
+            <div style={{background:C.bgSoft,borderRadius:8,padding:'12px 14px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <Fld label='Tarifa (UF/hora)'><Inp type='number' step='0.1' value={tarifaHoraUF} onChange={e=>setTarifaHoraUF(e.target.value)} placeholder='3.0 (estudio)'/></Fld>
+                <Fld label='Tope de horas'><Inp type='number' value={topeHoras} onChange={e=>setTopeHoras(e.target.value)} placeholder='Ej: 20'/></Fld>
+              </div>
+              <div style={{display:'flex',gap:6,marginTop:8}}>
+                {[['mes','Tope por mes'],['total','Total del proyecto']].map(([v,l])=>(
+                  <button key={v} type='button' onClick={()=>setTopePeriodo(v)} style={{flex:1,padding:'7px',borderRadius:8,border:`1.5px solid ${topePeriodo===v?C.accent:C.border}`,background:topePeriodo===v?C.azulBg:'#fff',color:topePeriodo===v?C.accent:C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+                ))}
+              </div>
+              <div style={{fontSize:11,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'8px 10px',marginTop:9,lineHeight:1.45}}>No genera cuotas programadas — se factura por las horas cargadas a esta venta. Tarifa vacía usa la del estudio (3 UF/h).</div>
             </div>
           )}
           {cobroType==='cuotas'&&(
@@ -5365,7 +5384,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
       {/* 9. CONDICIONES REGISTRADAS — solo venta activa guardada (en propuesta/borrador se edita con el form completo) */}
       {sale?.id&&!propBorr&&(()=>{
-        const COBRO_LBL = {cuotas:'Cuotas mensuales',mensual:'Mensual recurrente',porcentaje:'Por porcentaje',personalizada:'Personalizada'}
+        const COBRO_LBL = {cuotas:'Cuotas mensuales',mensual:'Mensual recurrente',porcentaje:'Por porcentaje',personalizada:'Personalizada',hora:'Por hora'}
         const curHon = moneda==='UF' ? (amountUF>0?fmtUF(amountUF):'—') : (montoCLP>0?fmt(montoCLP):'—')
         const curCost = moneda==='UF' ? (parseFloat(f.cost_uf)>0?fmtUF(parseFloat(f.cost_uf)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—')) : (parseFloat(f.cost_clp)>0?fmt(parseFloat(f.cost_clp)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—'))
         const curCobro = COBRO_LBL[cobroType]||'—'
@@ -5418,6 +5437,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Forma</span><span style={{fontWeight:500,color:C.text}}>{curCobro}</span></div>
                   {cobroType==='mensual'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Inicio mensual</span><span style={{fontWeight:500,color:C.text}}>{mesLbl(mensualInicio)} · 12 meses</span></div>}
                   {cobroType==='cuotas'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Cuotas</span><span style={{fontWeight:500,color:C.text}}>{nCuotas} desde {mesLbl(cobroInicio)}</span></div>}
+                  {cobroType==='hora'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Por hora</span><span style={{fontWeight:500,color:C.text}}>{(parseFloat(String(tarifaHoraUF).replace(',','.'))||3)} UF/h · tope {topeHoras||'—'} h/{topePeriodo==='total'?'total':'mes'}</span></div>}
                   <div style={{fontSize:11,color:C.muted,marginTop:6,lineHeight:1.4}}>Para cambiar el formato o el inicio se regeneran las cuotas programadas (las emitidas/pagadas no se tocan).</div>
                   <button type='button' onClick={()=>{ setModCobro(true); setModMode('cambiar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Cambiar forma de cobro</button>
                 </div>
@@ -23768,12 +23788,42 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const inp = {width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:9,padding:'0 11px',fontSize:13,background:'#fff',color:C.text,boxSizing:'border-box',outline:'none'}
   const lbl = {fontSize:9.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'2px 2px 8px'}
 
+  // Ventas POR HORA: consumo real (tabla horas por sale_id) vs tope; alarma al acercarse/pasar el tope.
+  const consumoVenta = (sid, periodo) => horas.filter(h=>String(h.sale_id)===String(sid) && (periodo!=='mes' || String(h.fecha||'').startsWith(mesActual))).reduce((a,h)=>a+(Number(h.horas)||0),0)
+  const ventasPorHora = (sales||[]).filter(s=>s.cobro_type==='hora' && s.status==='Activo' && !s.deleted_at).map(s=>{
+    const cc=s.cobro_config||{}; const tarifa=parseFloat(cc.tarifaHoraUF)||tarifaUF||3; const tope=parseInt(cc.topeHoras)||0; const periodo=cc.topePeriodo||'mes'
+    const cons=consumoVenta(s.id,periodo); const pct=tope>0?cons/tope*100:0
+    return { s, tarifa, tope, periodo, cons, pct, facturableUF:cons*tarifa }
+  }).sort((a,b)=>b.pct-a.pct)
   return (
     <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?940:560,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Horas</div>
         <span style={{fontSize:11,color:C.done}}>Esta semana: <b style={{color:C.accent}}>{fh(totSem)}</b></span>
       </div>
+      {ventasPorHora.length>0 && <div style={{marginTop:12,marginBottom:4}}>
+        <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.done,margin:'0 2px 7px'}}>Ventas por hora · consumo y tope</div>
+        <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}:{display:'flex',flexDirection:'column',gap:8}}>
+          {ventasPorHora.map(({s,tarifa,tope,periodo,cons,pct,facturableUF})=>{
+            const over=tope>0&&cons>tope, near=tope>0&&!over&&pct>=90
+            const barCol=over?C.overdue:near?'#EF9F27':C.normal, stCol=over?C.overdueText:near?C.soonText:C.greenText, stBg=over?C.overdueBg:near?C.soonBg:C.greenBg
+            return (
+            <div key={s.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{background:'#fff',border:`1px solid ${over?'#F3C9C4':near?'#EBD9AE':C.border}`,borderRadius:12,padding:'11px 12px',cursor:onOpenClientFicha?'pointer':'default'}}>
+              <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:tope>0?8:0}}>
+                <span style={{width:28,height:28,borderRadius:8,background:stBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={stCol} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/></svg></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(s.client_id)}</div><div style={{fontSize:9.5,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div></div>
+                {tope>0&&<span style={{fontSize:10,fontWeight:800,borderRadius:20,padding:'2px 8px',background:stBg,color:stCol,flexShrink:0}}>{Math.round(pct)}%</span>}
+              </div>
+              {tope>0
+                ? <>
+                  <div style={{height:8,borderRadius:6,background:C.border,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:`${Math.min(100,pct)}%`,background:barCol,borderRadius:6}}/></div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:5}}>{fh(cons)} de {tope} h/{periodo==='total'?'total':'mes'} · {tarifa} UF/h · facturable ≈ {fmtUF(facturableUF)}{over?` · ${fh(cons-tope)} sobre el tope`:near?` · quedan ${fh(tope-cons)}`:''}</div>
+                </>
+                : <div style={{fontSize:10,color:C.muted,marginTop:6}}>{fh(cons)} este {periodo==='total'?'proyecto':'mes'} · {tarifa} UF/h · facturable ≈ {fmtUF(facturableUF)} · sin tope</div>}
+            </div>
+            )})}
+        </div>
+      </div>}
       {(dow===3||dow===4) && <div style={{background:C.soonBg,borderRadius:11,padding:'10px 12px',marginBottom:12,display:'flex',alignItems:'center',gap:8}}><span style={{width:6,height:6,borderRadius:'50%',background:C.soonText,flexShrink:0}}/><span style={{flex:1,fontSize:11.5,color:C.soonText,fontWeight:600}}>{dow===4?'Es viernes':'Es jueves'} — llevas <b>{fh(misHorasSem)}</b> registradas esta semana. Revisa que no quede nada por registrar.</span></div>}
       {isAdmin && <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',marginBottom:14}}>{[['mias','Mis horas'],['equipo','Equipo'],['ytd','Rentabilidad']].map(([k,l])=><button key={k} onClick={()=>setVista(k)} style={{fontSize:11,fontWeight:700,padding:'5px 13px',border:'none',background:vista===k?C.accent:'#fff',color:vista===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}</div>}
 
