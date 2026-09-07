@@ -4076,22 +4076,23 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
-  const [fStatus,setFStatus] = useState('Activo')
   const [q,setQ] = useState('')
+  const [hubView,setHubView] = useState(null)               // null = solo tarjetas · 'vendido' = filtros + desglose · 'propuestas' = lista de propuestas
+  const [estSel,setEstSel] = useState(()=>new Set(['Activo','Terminado']))   // filtro de estado MULTI-selección (afecta Vendido + desglose)
+  const [abogSel,setAbogSel] = useState(()=>new Set())      // filtro de abogado multi (vacío = todos)
+  const toggleSet = (setter,val)=>setter(prev=>{ const n=new Set(prev); n.has(val)?n.delete(val):n.add(val); return n })
   const ufState = useUF()
   const ufHoy = ufState.uf
   const ufRef = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
+  // Búsqueda libre: por título de venta o nombre de cliente (respeta año/área). Solo se usa cuando hay texto.
   const filtered = useMemo(()=>{
-    let r = sales
-    // Búsqueda libre: si hay texto, busca por título de venta o nombre de cliente e ignora el filtro de estado.
-    if(q.trim()){ const ql=q.toLowerCase(); r=r.filter(s=>{ const cn=(clients.find(c=>String(c.id)===String(s.client_id))?.name||'').toLowerCase(); return (s.title||'').toLowerCase().includes(ql)||cn.includes(ql) }) }
+    if(!q.trim()) return []
+    const ql=q.toLowerCase()
+    let r = sales.filter(s=>{ const cn=(clients.find(c=>String(c.id)===String(s.client_id))?.name||'').toLowerCase(); return (s.title||'').toLowerCase().includes(ql)||cn.includes(ql) })
     if(fYear) r = r.filter(s=>String(s.year)===fYear)
     if(fArea) r = r.filter(s=>s.area===fArea)
-    if(fStatus&&!q.trim()) r = r.filter(s=>s.status===fStatus)
     return r.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0))
-  },[sales,clients,q,fYear,fArea,fStatus])
-  const totalUF = filtered.reduce((a,s)=>a+ventaUF(s,ufRef),0)
-  const totalCLP = Math.round(filtered.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
+  },[sales,clients,q,fYear,fArea])
   // Encabezado "Vendido del año" = Activo + Terminado del año seleccionado (mismo universo que el Dashboard), independiente del filtro de la lista. UF por defecto, toca para CLP.
   const [montoUF,setMontoUF] = useState(true)
   const yearSales = sales.filter(s=> (!fYear || String(s.year)===fYear) && (!fArea || s.area===fArea))
@@ -4099,12 +4100,16 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const termYr = yearSales.filter(s=>s.status==='Terminado')
   const sumUF = arr=>arr.reduce((a,s)=>a+ventaUF(s,ufRef),0)
   const sumCLP = arr=>Math.round(arr.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
-  const vendUF=sumUF(actYr)+sumUF(termYr), vendCLP=sumCLP(actYr)+sumCLP(termYr)
+  // "Vendido" = ventas del año/área con estado dentro del filtro multi (por defecto Activo+Terminado) y abogado dentro del filtro (vacío = todos). El desglose suma exacto a este total.
+  const vendSrc = yearSales.filter(s=> estSel.has(s.status) && (abogSel.size===0 || abogSel.has(s.responsible||'Sin abogado')))
+  const vendUF=sumUF(vendSrc), vendCLP=sumCLP(vendSrc)
   const fmtMonto = (uf,clp)=> montoUF ? fmtUFk(uf) : fmtShort(clp)
+  const ESTADOS = ['Activo','Terminado','Pausado','Propuesta','Borrador','Rechazada']
+  const abogados = [...new Set(sales.map(s=>s.responsible).filter(Boolean))]
   const years = [...new Set(sales.map(s=>s.year).filter(Boolean))].sort((a,b)=>b-a)
   if(!years.includes(currentYear)) years.unshift(currentYear)
 
-  // Pipeline KPIs (solo cuando fStatus === 'Propuesta')
+  // Pipeline KPIs (Propuestas)
   const propuestasFiltradas = useMemo(()=>{
     let r = sales.filter(s=>s.status==='Propuesta')
     if(fYear) r = r.filter(s=>String(s.year)===fYear)
@@ -4141,8 +4146,8 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const AREA_COL = {'Tributario':'#BA7517','Corporativo':'#534AB7'}
   const colorGrupo = k => groupBy==='abogado' ? (k==='Sin abogado'?C.done:personChip(k).color) : (AREA_COL[k]||'#537281')
   const grupos = useMemo(()=>{
-    // El desglose desglosa el MISMO universo que el hero "Vendido del año" (Activo + Terminado), así suma exacto al total.
-    const src = sales.filter(s=> (!fYear||String(s.year)===fYear) && (!fArea||s.area===fArea) && (s.status==='Activo'||s.status==='Terminado'))
+    // El desglose desglosa el MISMO universo que "Vendido" (estado en el filtro multi + abogado en el filtro), así suma exacto al total.
+    const src = sales.filter(s=> (!fYear||String(s.year)===fYear) && (!fArea||s.area===fArea) && estSel.has(s.status) && (abogSel.size===0||abogSel.has(s.responsible||'Sin abogado')))
     const m={}
     src.forEach(s=>{
       const k = groupBy==='abogado' ? (s.responsible||'Sin abogado') : (s.area||'Sin área')
@@ -4150,10 +4155,11 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
       m[k].count++; m[k].uf+=ventaUF(s,ufRef); m[k].rows.push(s)
     })
     return Object.values(m).sort((a,b)=>b.uf-a.uf)
-  },[sales,fYear,fArea,groupBy,ufRef])
+  },[sales,fYear,fArea,groupBy,ufRef,estSel,abogSel])
   const buscando = q.trim().length>0
-  // El desglose (Vendido = Activo+Terminado) se muestra en el estado por defecto; los estados no-vendido (Propuesta/etc.) y la búsqueda van como lista plana.
-  const flatView = buscando || !(fStatus===''||fStatus==='Activo')
+  // Lista plana = búsqueda (todas las coincidencias) o vista de Propuestas. El desglose (Vendido) va en 'vendido'.
+  const flatView = buscando || hubView==='propuestas'
+  const flatRows = buscando ? filtered : (hubView==='propuestas' ? propuestasFiltradas.slice().sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)) : [])
   const saleRow = s => {
     const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), rec=esRecurrente(s)
     const client=clients.find(c=>String(c.id)===String(s.client_id))
@@ -4198,59 +4204,76 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   return (
     <div style={isDesktop?{maxWidth:1180,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <button onClick={onAdd} style={chipBtn('soft')}>Nueva venta</button>
-            <button onClick={onAddPropuesta} style={chipBtn('primary')}>Nueva propuesta</button>
-          </div>
+          <span onClick={()=>setMontoUF(v=>!v)} title='Alternar UF / pesos' style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,padding:2,cursor:'pointer',flexShrink:0}}>
+            <span style={{fontSize:11,fontWeight:700,padding:'3px 12px',borderRadius:18,background:montoUF?C.accent:'transparent',color:montoUF?'#fff':C.done,lineHeight:1}}>UF</span>
+            <span style={{fontSize:11,fontWeight:700,padding:'3px 12px',borderRadius:18,background:!montoUF?C.accent:'transparent',color:!montoUF?'#fff':C.done,lineHeight:1}}>$</span>
+          </span>
         </div>
-        <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar venta...' style={{marginTop:10,marginBottom:8}}/>
-        <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
-          <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12}}>
-            <option value=''>Todos</option>
-            {['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado'].map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
-          <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{flex:1,minWidth:70,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12}}>
-            <option value=''>Todos</option>
-            {years.map(y=><option key={y} value={y}>{y}</option>)}
-          </select>
-          <select value={fArea} onChange={e=>setFArea(e.target.value)} style={{flex:1,minWidth:100,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12}}>
-            <option value=''>Todas las áreas</option>
-            {['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-        {/* Hero: Vendido del año (navy suave, toggle UF·$) + Propuestas (toca para filtrar a propuestas). La META no se muestra acá a propósito: vive en el Dashboard "Cómo va el año" (fuente única, sobre neto) — evita duplicar un % de meta bruto que pelee con el de allá. */}
-        <div style={{display:'flex',gap:8,marginBottom:8}}>
-          <div onClick={()=>setMontoUF(v=>!v)} style={{flex:1.3,minWidth:0,background:C.azulBg,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Vendido {fYear||'total'}</span>
-              <span onClick={e=>{e.stopPropagation();setMontoUF(v=>!v)}} title='Alternar UF / pesos' style={{display:'inline-flex',fontSize:8.5,fontWeight:700,borderRadius:5,overflow:'hidden',border:`1px solid ${C.border}`,flexShrink:0}}>
-                <span style={{padding:'1px 6px',background:montoUF?C.accent:'#fff',color:montoUF?'#fff':C.muted}}>UF</span>
-                <span style={{padding:'1px 6px',background:!montoUF?C.accent:'#fff',color:!montoUF?'#fff':C.muted}}>$</span>
-              </span>
-            </div>
-            <div style={{fontSize:23,fontWeight:800,color:C.accent,lineHeight:1.05,fontVariantNumeric:'tabular-nums',marginTop:2}}>{fmtMonto(vendUF,vendCLP)}</div>
-            <div style={{fontSize:9.5,color:C.muted,marginTop:3}}><span onClick={e=>{e.stopPropagation();setFStatus(fStatus==='Activo'?'':'Activo')}} style={{cursor:'pointer',fontWeight:fStatus==='Activo'?700:400,color:fStatus==='Activo'?C.accent:C.muted}}>{actYr.length} activas</span> · <span onClick={e=>{e.stopPropagation();setFStatus(fStatus==='Terminado'?'':'Terminado')}} style={{cursor:'pointer',fontWeight:fStatus==='Terminado'?700:400,color:fStatus==='Terminado'?C.accent:C.muted}}>{termYr.length} terminadas</span></div>
+        <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar venta...' style={{marginTop:10,marginBottom:9}}/>
+        {/* Hub en tarjetas (formato Banco): fila 1 Vendido · Propuestas · fila 2 Nueva venta · Nueva propuesta. Al tocar Vendido se despliegan los filtros. META no va acá: vive en el Dashboard "Cómo va el año" (fuente única, neto). */}
+        {!buscando && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+          {/* Vendido — protagonista */}
+          <div onClick={()=>setHubView(v=>v==='vendido'?null:'vendido')} style={{background:C.accent,borderRadius:12,padding:'12px',cursor:'pointer',position:'relative',...(hubView==='vendido'?{outline:`2px solid ${C.normal}`,outlineOffset:1}:{})}}>
+            <span style={{position:'absolute',top:10,right:11,color:'rgba(255,255,255,.6)',fontSize:13,transform:hubView==='vendido'?'rotate(90deg)':'none'}}>›</span>
+            <span style={{width:30,height:30,borderRadius:8,background:'rgba(255,255,255,.14)',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M23 6l-9.5 9.5-5-5L1 18'/><path d='M17 6h6v6'/></svg></span>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:'rgba(255,255,255,.8)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Vendido {fYear||'total'}</div>
+            <div style={{fontSize:20,fontWeight:800,color:'#fff',letterSpacing:-.4,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
+            <div style={{fontSize:9.5,color:'rgba(255,255,255,.7)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vendSrc.length} · {actYr.length} activas · {termYr.length} terminadas</div>
           </div>
-          {(()=>{ const vacio=propuestasFiltradas.length===0; return (
-          <div onClick={vacio?onAddPropuesta:()=>setFStatus(fStatus==='Propuesta'?'':'Propuesta')} title={vacio?'Crear la primera propuesta':'Ver propuestas'} style={{flex:1,minWidth:0,background:fStatus==='Propuesta'?C.azulBg:'#fff',border:`1px solid ${fStatus==='Propuesta'?C.accent:C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
-            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Propuestas</div>
-            <div style={{fontSize:18,fontWeight:700,color:C.accent,lineHeight:1.2,marginTop:2}}>{vacio?'—':fmtUF(pipelineUF)}</div>
-            <div style={{fontSize:9.5,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2}}>{vacio?'+ Crear la primera':`${propuestasFiltradas.length} en pipeline`}</div>
+          {/* Propuestas */}
+          {(()=>{ const vacio=propuestasFiltradas.length===0; const tard=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}).length; return (
+          <div onClick={vacio?onAddPropuesta:()=>setHubView(v=>v==='propuestas'?null:'propuestas')} title={vacio?'Crear la primera propuesta':'Ver propuestas'} style={{background:'#fff',border:`1px solid ${hubView==='propuestas'?C.accent:C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',position:'relative'}}>
+            <span style={{position:'absolute',top:10,right:11,color:C.done,fontSize:13,transform:hubView==='propuestas'?'rotate(90deg)':'none'}}>›</span>
+            <span style={{width:30,height:30,borderRadius:8,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><SIcon n='check' s={16} c={C.muted}/></span>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Propuestas</div>
+            <div style={{fontSize:19,fontWeight:800,color:C.accent,letterSpacing:-.4,marginTop:3}}>{vacio?'—':fmtUF(pipelineUF)}</div>
+            <div style={{fontSize:9.5,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vacio?'+ Crear la primera':`${propuestasFiltradas.length} en pipeline${tard?` · ${tard} tardía${tard!==1?'s':''}`:''}`}</div>
           </div>
           )})()}
-        </div>
+          {/* Nueva venta */}
+          <div onClick={onAdd} style={{background:'#fff',border:`1px dashed ${C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
+            <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span>
+            <div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Nueva venta</div>
+          </div>
+          {/* Nueva propuesta */}
+          <div onClick={onAddPropuesta} style={{background:'#fff',border:`1px dashed ${C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
+            <span style={{width:30,height:30,borderRadius:8,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg></span>
+            <div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Nueva propuesta</div>
+          </div>
+        </div>}
+        {/* Filtros — se despliegan al abrir Vendido */}
+        {hubView==='vendido' && !buscando && <div style={{marginBottom:8}}>
+          <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,margin:'2px 2px 5px'}}>Estado · uno o varios</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+            {ESTADOS.map(st=>{ const on=estSel.has(st); return <span key={st} onClick={()=>toggleSet(setEstSel,st)} style={{fontSize:10.5,fontWeight:600,borderRadius:20,padding:'4px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,display:'inline-flex',alignItems:'center',gap:4}}>{on&&<span style={{fontSize:9,fontWeight:800}}>✓</span>}{st}</span> })}
+          </div>
+          {abogados.length>0 && <>
+            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,margin:'9px 2px 5px'}}>Abogado</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+              {abogados.map(a=>{ const on=abogSel.has(a); const pc=personChip(a); return <span key={a} onClick={()=>toggleSet(setAbogSel,a)} style={{fontSize:10.5,fontWeight:600,borderRadius:20,padding:'4px 10px',cursor:'pointer',border:`1px solid ${on?pc.color:C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted,display:'inline-flex',alignItems:'center',gap:5}}><span style={{width:7,height:7,borderRadius:'50%',background:pc.color}}/>{a}</span> })}
+            </div>
+          </>}
+          <div style={{display:'flex',gap:7,marginTop:8}}>
+            <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{flex:1,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12}}>
+              <option value=''>Todos los años</option>{years.map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+            <select value={fArea} onChange={e=>setFArea(e.target.value)} style={{flex:1,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12}}>
+              <option value=''>Todas las áreas</option>{['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        </div>}
       </div>
       <div style={{padding:'4px 20px 100px'}}>
         {flatView ? (
-          filtered.length===0
-            ? <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>
-            : <div style={isDesktop?{maxWidth:720}:undefined}>{filtered.map(saleRow)}</div>
-        ) : grupos.length===0 ? (
-          <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>
+          flatRows.length===0
+            ? <div style={{color:C.muted,textAlign:'center',padding:40}}>{buscando?'Sin resultados para tu búsqueda':'No hay propuestas'}</div>
+            : <div style={isDesktop?{maxWidth:720}:undefined}>{flatRows.map(saleRow)}</div>
+        ) : hubView!=='vendido' ? null : grupos.length===0 ? (
+          <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas con estos filtros</div>
         ) : (()=>{ const _tbl = (<>
-          {(()=>{ const tardias=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}); if(!tardias.length) return null; return <div onClick={()=>setFStatus('Propuesta')} style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'9px 12px',marginBottom:9,cursor:'pointer'}}><SIcon n='alert' s={16} c={C.soonText}/><span style={{flex:1,fontSize:11,color:C.soonText,fontWeight:600}}>{tardias.length} propuesta{tardias.length!==1?'s':''} llevan +14 días sin respuesta</span></div> })()}
+          {(()=>{ const tardias=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}); if(!tardias.length) return null; return <div onClick={()=>setHubView('propuestas')} style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'9px 12px',marginBottom:9,cursor:'pointer'}}><SIcon n='alert' s={16} c={C.soonText}/><span style={{flex:1,fontSize:11,color:C.soonText,fontWeight:600}}>{tardias.length} propuesta{tardias.length!==1?'s':''} llevan +14 días sin respuesta</span></div> })()}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px'}}>
             <span style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Desglose · suma {fmtMonto(vendUF,vendCLP)}</span>
             <div style={{display:'flex',gap:5}}>
