@@ -25392,10 +25392,13 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   const cargar = useCallback(async()=>{
     setLoading(true)
     if(DEMO){ setMovs(demoData.cartola_movimientos||[]); setAliases(demoData.cliente_alias||[]); setConc(demoData.conciliacion||[]); setLoading(false); return }
-    const [{data:m},{data:a},{data:cc}] = await Promise.all([
-      supabase.from('cartola_movimientos').select('*').order('fecha',{ascending:false}).limit(8000),
-      supabase.from('cliente_alias').select('*'),
-      supabase.from('conciliacion').select('*'),
+    // Supabase/PostgREST corta cada consulta en ~1000 filas (db-max-rows) e IGNORA .limit(8000): hay que PAGINAR
+    // con .range o solo se cargaban los 1000 movimientos más nuevos (se caían los meses más antiguos de la cartola).
+    const fetchAll = async(tabla, orderCol)=>{ let all=[], from=0; const SZ=1000; for(;;){ let q=supabase.from(tabla).select('*'); if(orderCol) q=q.order(orderCol,{ascending:false}); const {data,error}=await q.range(from,from+SZ-1); if(error) throw error; if(!data||!data.length) break; all=all.concat(data); if(data.length<SZ) break; from+=SZ } return all }
+    const [m,a,cc] = await Promise.all([
+      fetchAll('cartola_movimientos','fecha'),
+      supabase.from('cliente_alias').select('*').then(r=>r.data||[]),
+      fetchAll('conciliacion',null),
     ])
     setMovs(m||[]); setAliases(a||[]); setConc(cc||[]); setLoading(false)
   },[])
