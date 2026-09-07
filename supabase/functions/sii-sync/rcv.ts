@@ -126,16 +126,32 @@ export async function getVentas(periodo: string, token: string): Promise<VentaSI
 // omite. Uso: espejo historico del RCV en sii_cargas_docs (fuente de la verdad),
 // SIN conciliar ni tocar billing. Devuelve tambien la fila cruda del SII en `raw`
 // (para preservar cualquier campo extra, p.ej. referencias de la NC).
-const VENTA_TIPOS_FULL = [33, 34, 61, 56]  // afecta, exenta, nota credito, nota debito
 
 export async function getVentasFull(periodo: string, token: string): Promise<Array<VentaSII & { raw: any }>> {
   return await conReintentos('consulta RCV ventas full', async () => {
-    const porTipo = await Promise.all(VENTA_TIPOS_FULL.map((t) => detallePorTipo(t, periodo, token)))
-    const out: Array<VentaSII & { raw: any }> = []
+    // 33 (afecta) y 34 (exenta) son el NÚCLEO: si fallan, se propaga el error para que el
+    // caller renueve el token y reintente (mismo criterio que getVentas).
+    const [t33, t34] = await Promise.all([
+      detallePorTipo(33, periodo, token),
+      detallePorTipo(34, periodo, token),
+    ])
+    // 61 (nota de crédito) y 56 (nota de débito) son BEST-EFFORT: no estan verificados en
+    // ventas; si el SII los rechaza para este registro, se registran vacios y NO se bota el mes.
+    const extra = await Promise.allSettled([
+      detallePorTipo(61, periodo, token),
+      detallePorTipo(56, periodo, token),
+    ])
+    const t61 = extra[0].status === 'fulfilled' ? extra[0].value : []
+    const t56 = extra[1].status === 'fulfilled' ? extra[1].value : []
+    if (extra[0].status === 'rejected') console.log(`[sii-sync] ventas-full ${periodo}: tipo 61 (NC) no disponible: ${extra[0].reason}`)
+    if (extra[1].status === 'rejected') console.log(`[sii-sync] ventas-full ${periodo}: tipo 56 (ND) no disponible: ${extra[1].reason}`)
+
     // OJO (igual que compras): detTipoDoc puede llegar NULL en la fila → el tipo lo
     // da la consulta, no el campo. Por eso se etiqueta con el tipo consultado.
-    VENTA_TIPOS_FULL.forEach((tipo, i) => {
-      for (const d of porTipo[i]) {
+    const grupos: Array<[number, any[]]> = [[33, t33], [34, t34], [61, t61], [56, t56]]
+    const out: Array<VentaSII & { raw: any }> = []
+    for (const [tipo, rows] of grupos) {
+      for (const d of rows) {
         const folio = Number(d.detNroDoc ?? 0)
         if (folio <= 0) continue
         out.push({
@@ -150,8 +166,8 @@ export async function getVentasFull(periodo: string, token: string): Promise<Arr
           raw: d,
         })
       }
-    })
-    console.log(`[sii-sync] RCV ventas-full ${periodo}: ${out.length} docs (${VENTA_TIPOS_FULL.map((t, i) => `${porTipo[i].length}×${t}`).join(' ')})`)
+    }
+    console.log(`[sii-sync] RCV ventas-full ${periodo}: ${out.length} docs (${t33.length}×33 ${t34.length}×34 ${t61.length}×61 ${t56.length}×56)`)
     return out
   })
 }
