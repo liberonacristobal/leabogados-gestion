@@ -4080,6 +4080,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const [hubView,setHubView] = useState(null)               // null = solo tarjetas · 'vendido' = filtros + desglose · 'propuestas' = lista de propuestas
   const [estSel,setEstSel] = useState(()=>new Set(['Activo','Terminado']))   // filtro de estado MULTI-selección (afecta Vendido + desglose)
   const [abogSel,setAbogSel] = useState(()=>new Set())      // filtro de abogado multi (vacío = todos)
+  const [openF,setOpenF] = useState(null)                   // desplegable de filtro abierto: 'estado' | 'abogado' | null
   const toggleSet = (setter,val)=>setter(prev=>{ const n=new Set(prev); n.has(val)?n.delete(val):n.add(val); return n })
   const ufState = useUF()
   const ufHoy = ufState.uf
@@ -4244,26 +4245,42 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
           </div>
         </div>}
         {/* Filtros — se despliegan al abrir Vendido */}
-        {hubView==='vendido' && !buscando && <div style={{marginBottom:8}}>
-          <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,margin:'2px 2px 5px'}}>Estado · uno o varios</div>
-          <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-            {ESTADOS.map(st=>{ const on=estSel.has(st); return <span key={st} onClick={()=>toggleSet(setEstSel,st)} style={{fontSize:10.5,fontWeight:600,borderRadius:20,padding:'4px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,display:'inline-flex',alignItems:'center',gap:4}}>{on&&<span style={{fontSize:9,fontWeight:800}}>✓</span>}{st}</span> })}
-          </div>
-          {abogados.length>0 && <>
-            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,margin:'9px 2px 5px'}}>Abogado</div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-              {abogados.map(a=>{ const on=abogSel.has(a); const pc=personChip(a); return <span key={a} onClick={()=>toggleSet(setAbogSel,a)} style={{fontSize:10.5,fontWeight:600,borderRadius:20,padding:'4px 10px',cursor:'pointer',border:`1px solid ${on?pc.color:C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted,display:'inline-flex',alignItems:'center',gap:5}}><span style={{width:7,height:7,borderRadius:'50%',background:pc.color}}/>{a}</span> })}
+        {hubView==='vendido' && !buscando && (()=>{
+          // Filtros como CHIPS desplegables (sin muro de pills): Estado y Abogado abren un checklist; Año/Área son selects compactos con look de chip.
+          const chip=(active,label,val,onClick,open)=>(
+            <span onClick={onClick} style={{display:'inline-flex',alignItems:'center',gap:7,maxWidth:'100%',background:active?C.azulBg:C.bgSoft,border:`1px solid ${active||open?C.accent:C.border}`,borderRadius:9,padding:'7px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>
+              <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done,flexShrink:0}}>{label}</span>
+              <span style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis'}}>{val}</span>
+              <span style={{color:C.done,fontSize:11,flexShrink:0}}>{open?'▴':'▾'}</span>
+            </span>)
+          const estTxt = estSel.size===0?'Ninguno':(estSel.size===ESTADOS.length?'Todos':ESTADOS.filter(e=>estSel.has(e)).join(', '))
+          const abTxt = abogSel.size===0?'Todos':abogados.filter(a=>abogSel.has(a)).join(', ')
+          const chipSel={display:'inline-flex',alignItems:'center',gap:2,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:9,padding:'0 6px 0 11px'}
+          const chipLbl={fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done,flexShrink:0}
+          const selBare={border:'none',background:'transparent',fontSize:12,fontWeight:600,color:C.accent,padding:'7px 4px',cursor:'pointer',outline:'none'}
+          const popSty={marginTop:8,border:`1px solid ${C.border}`,borderRadius:11,overflow:'hidden',maxWidth:260,background:'#fff',boxShadow:'0 8px 22px rgba(0,40,60,.12)',position:'relative',zIndex:6}
+          const optSty={display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',fontSize:12.5,color:C.text}
+          const ckSty=on=>({width:17,height:17,borderRadius:5,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'transparent',color:'#fff',fontSize:11,fontWeight:800,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0})
+          const popHd={fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done,padding:'8px 12px 4px',background:C.bgSoft}
+          return (
+          <div style={{marginBottom:8,position:'relative'}}>
+            {openF&&<div onClick={()=>setOpenF(null)} style={{position:'fixed',inset:0,zIndex:5}}/>}
+            <div style={{display:'flex',flexWrap:'wrap',gap:7,alignItems:'center',position:'relative',zIndex:6}}>
+              {chip(estSel.size!==ESTADOS.length, 'Estado', estTxt, ()=>setOpenF(o=>o==='estado'?null:'estado'), openF==='estado')}
+              {abogados.length>0 && chip(abogSel.size>0, 'Abogado', abTxt, ()=>setOpenF(o=>o==='abogado'?null:'abogado'), openF==='abogado')}
+              <span style={chipSel}><span style={chipLbl}>Año</span><select value={fYear} onChange={e=>setFYear(e.target.value)} style={selBare}><option value=''>Todos</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></span>
+              <span style={chipSel}><span style={chipLbl}>Área</span><select value={fArea} onChange={e=>setFArea(e.target.value)} style={selBare}><option value=''>Todas</option>{['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}</select></span>
             </div>
-          </>}
-          <div style={{display:'flex',gap:7,marginTop:8}}>
-            <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{flex:1,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12}}>
-              <option value=''>Todos los años</option>{years.map(y=><option key={y} value={y}>{y}</option>)}
-            </select>
-            <select value={fArea} onChange={e=>setFArea(e.target.value)} style={{flex:1,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12}}>
-              <option value=''>Todas las áreas</option>{['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}
-            </select>
+            {openF==='estado' && <div style={popSty}>
+              <div style={popHd}>Estado · uno o varios</div>
+              {ESTADOS.map(st=>{ const on=estSel.has(st); return <div key={st} onClick={()=>toggleSet(setEstSel,st)} style={optSty}><span style={ckSty(on)}>{on?'✓':''}</span>{st}</div> })}
+            </div>}
+            {openF==='abogado' && <div style={popSty}>
+              <div style={popHd}>Abogado · uno o varios</div>
+              {abogados.map(a=>{ const on=abogSel.has(a); const pc=personChip(a); return <div key={a} onClick={()=>toggleSet(setAbogSel,a)} style={optSty}><span style={ckSty(on)}>{on?'✓':''}</span><span style={{width:8,height:8,borderRadius:'50%',background:pc.color,flexShrink:0}}/>{a}</div> })}
+            </div>}
           </div>
-        </div>}
+          )})()}
       </div>
       <div style={{padding:'4px 20px 100px'}}>
         {flatView ? (
@@ -4273,7 +4290,6 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
         ) : hubView!=='vendido' ? null : grupos.length===0 ? (
           <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas con estos filtros</div>
         ) : (()=>{ const _tbl = (<>
-          {(()=>{ const tardias=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}); if(!tardias.length) return null; return <div onClick={()=>setHubView('propuestas')} style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'9px 12px',marginBottom:9,cursor:'pointer'}}><SIcon n='alert' s={16} c={C.soonText}/><span style={{flex:1,fontSize:11,color:C.soonText,fontWeight:600}}>{tardias.length} propuesta{tardias.length!==1?'s':''} llevan +14 días sin respuesta</span></div> })()}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px'}}>
             <span style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Desglose · suma {fmtMonto(vendUF,vendCLP)}</span>
             <div style={{display:'flex',gap:5}}>
