@@ -18435,6 +18435,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [respPick,setRespPick] = useState(false)   // asignar/cambiar abogado responsable desde el encabezado
   const ufState = useUF()
   const ufRef = ufState.uf || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
+  const isDesktop = useIsDesktop()   // desktop: ficha full-screen con KPIs a lo ancho + columna de contexto; móvil = columna simple
   const clientSales = sales.filter(s=>s.client_id===client.id&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada'&&!esSubarriendo(s))
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
@@ -18493,7 +18494,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       <div style={{padding:'16px 20px 0',display:ftab==='resumen'?'block':'none'}}>
 
         {/* Resumen financiero */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
+        <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:8,marginBottom:20}}>
           {[
             ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E6EEF1',C.accent,'financiero'],
             ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?C.azulBg:C.bgSoft,totalPorCobrar>0?C.accent:C.muted,'financiero'],   // canon: por cobrar = navy (rojo es solo para vencido)
@@ -18507,6 +18508,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             </div>
           ))}
         </div>
+
+        {/* Desktop: cuerpo en 2 columnas (secciones | contexto). Móvil: columna simple (wrapper y col sin estilo). */}
+        <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 316px',gap:18,alignItems:'start'}:undefined}>
+        <div style={{minWidth:0}}>
 
         {/* Portal del cliente (Fase 1a): interruptor para compartir su estado */}
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:8}}>
@@ -18846,6 +18851,22 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           )
         })()}
 
+        </div>{/* fin columna izquierda */}
+        {isDesktop&&(()=>{
+          const ents=(clientEntities||[]).filter(e=>e.client_id===client.id)
+          const hasContacto=client.email||client.telefono||client.phone||client.direccion
+          const bx={background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px',marginBottom:12}
+          const hh={fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginBottom:9}
+          const kv=(k,v,col)=>v?(<div style={{display:'flex',gap:8,fontSize:12,marginBottom:7}}><span style={{color:C.muted,width:62,flexShrink:0}}>{k}</span><span style={{color:col||C.text,fontWeight:600,minWidth:0,wordBreak:'break-word'}}>{v}</span></div>):null
+          return (
+          <aside style={{position:'sticky',top:90,alignSelf:'start'}}>
+            {hasContacto&&<div style={bx}><div style={hh}>Contacto</div>{kv('Correo',client.email,C.azulInfo)}{kv('Teléfono',client.telefono||client.phone)}{kv('Dirección',[client.direccion,client.comuna].filter(Boolean).join(', '))}</div>}
+            {ents.length>0&&<div style={bx}><div style={hh}>Razones sociales · {ents.length}</div>{ents.map(e=>(<div key={e.id} style={{fontSize:11.5,color:C.text,fontWeight:600,marginBottom:5,wordBreak:'break-word'}}>{rsDisplay(e.name)}{e.rut?<span style={{color:C.muted,fontWeight:400}}> · {e.rut}</span>:''}</div>))}</div>}
+            <div style={{...bx,marginBottom:0}}><div style={hh}>Responsable</div><div style={{fontSize:12,color:C.text,fontWeight:600}}>{responsable||'Sin asignar'}</div></div>
+          </aside>
+          )
+        })()}
+        </div>{/* fin grid 2-col */}
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields} clientBilling={clientBilling} onOpenFinanciero={()=>setFtab('financiero')}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)} onOpenConciliacion={onOpenConciliacion} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onOpenSale={onOpenSale}/>}
@@ -18965,52 +18986,48 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   const rendModal = rendicionClient?(<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>):null
 
   // DESKTOP: 2-paneles maestro-detalle — lista (izq) + ficha (der). Reusa cl/balances/ClientFicha; el móvil no cambia.
-  if(isDesktop) return (
-    <div style={{display:'grid',gridTemplateColumns:'336px 1fr',height:'calc(100vh - 66px)',borderTop:`1px solid ${C.border}`}}>
-      <div style={{borderRight:`1px solid ${C.border}`,overflowY:'auto',background:C.bg}}>
-        <div style={{padding:'14px 14px 10px',position:'sticky',top:0,background:C.bg,zIndex:5}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
-            <div style={{fontSize:16,fontWeight:700,color:C.text}}>Clientes <span style={{fontSize:12,color:C.done,fontWeight:500}}>· {cl.length}</span></div>
-            <div style={{display:'flex',gap:6}}><button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),color:C.accent}}>Colaboradores</button><button onClick={onAdd} style={chipBtn('primary')}>+ Cliente</button></div>
-          </div>
-          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…'/>
-          <div style={{display:'flex',gap:5,marginTop:8}}>
-            {[['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>{ const on=(v==='Activo'&&!sFilter)||sFilter===v; return (
-              <button key={v} onClick={()=>{setSFilter(v==='Activo'?null:v);setRespSel(new Set())}} style={{flex:1,padding:'5px 0',borderRadius:7,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.muted,fontSize:10.5,fontWeight:600,cursor:'pointer'}}>{l}</button>
-            )})}
-          </div>
+  // DESKTOP: al elegir un cliente su ficha ocupa toda la pantalla (como Colaboradores); si no, DIRECTORIO alfabético
+  // multicolumna que aprovecha el ancho (más ancho = más columnas, vía CSS columns). El móvil no cambia.
+  if(isDesktop){
+    if(selected) return (<>{fichaEl}{rendModal}</>)
+    const dirGrupos={}; cl.forEach(c=>{ const L=(_normTxt(c.name||'').replace(/[^a-z0-9ñ]/gi,'')[0]||'#').toUpperCase(); (dirGrupos[L]=dirGrupos[L]||[]).push(c) })
+    const dirLetras=Object.keys(dirGrupos).sort((a,b)=>a.localeCompare(b,'es'))
+    return (
+      <div style={{padding:'20px 24px 100px',borderTop:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:11,flexWrap:'wrap',gap:8}}>
+          <div style={{fontSize:20,fontWeight:700,color:C.text,letterSpacing:-.4}}>Clientes <span style={{fontSize:13,color:C.done,fontWeight:500}}>· {cl.length}</span></div>
+          <div style={{display:'flex',gap:7}}><button onClick={onImportDrive} title='Sincronizar con Drive' style={driveBtn}><DriveIcon size={20}/></button><button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),color:C.accent}}>Colaboradores</button><button onClick={onAdd} style={chipBtn('primary')}>+ Cliente</button></div>
         </div>
-        <div style={{padding:'2px 8px 24px'}}>
-          {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13}}>Sin clientes</div>}
-          {cl.map(c=>{
-            const rs=rsLabel(c.id,clients,clientEntities); const sub=rs.multi?`${rs.multi} razones sociales`:(rs.name&&rs.name!==c.name?rsDisplay(rs.name):(c.type||'Sin razón social'))
-            const bal=balances[c.id]||0, tareasC=tareasDe[c.id]||0
-            const on=selected&&String(selected.id)===String(c.id)
-            const ini=(c.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-            const ended=c.status==='Terminado'
-            return (
-              <div key={c.id} onClick={()=>{setForceFtab(null);setExtOpen(false);setSelected(c)}} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:9,cursor:'pointer',marginBottom:1,background:on?C.azulBg:'transparent',opacity:ended?.55:1}} onMouseEnter={e=>{if(!on)e.currentTarget.style.background=C.bgSoft}} onMouseLeave={e=>{if(!on)e.currentTarget.style.background='transparent'}}>
-                <span style={{width:30,height:30,borderRadius:8,background:C.accent,color:'#fff',fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:on?700:600,color:on?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div><div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div></div>
-                {tareasC>0&&<span style={{fontSize:9,fontWeight:800,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 6px',flexShrink:0}}>{tareasC}</span>}
-                {bal<0&&<span style={{fontSize:11,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmt(bal)}</span>}
-              </div>
-            )
-          })}
+        <div style={{display:'flex',gap:8,marginBottom:9,alignItems:'center',flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:220}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…'/></div>
+          {[['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>{ const on=(v==='Activo'&&!sFilter)||sFilter===v; return (
+            <button key={v} onClick={()=>{setSFilter(v==='Activo'?null:v);setRespSel(new Set())}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+          )})}
         </div>
+        {sFilter&&responsables.length>0&&<div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>{responsables.map(r=>{ const on=respSel.has(r); return <button key={r} onClick={()=>toggleResp(r)} style={{height:26,padding:'0 10px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontSize:10,fontWeight:on?600:500,cursor:'pointer'}}>{r}</button> })}</div>}
+        {cl.length===0
+          ? <div style={{color:C.muted,textAlign:'center',padding:40,fontSize:13}}>Sin clientes</div>
+          : <div style={{columns:'250px',columnGap:26}}>
+              {dirLetras.map(L=>(
+                <div key={L} style={{breakInside:'avoid',marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:800,color:C.accent,borderBottom:`2px solid ${C.border}`,padding:'0 4px 3px',marginBottom:4}}>{L}</div>
+                  {dirGrupos[L].map(c=>{
+                    const bal=balances[c.id]||0, tareasC=tareasDe[c.id]||0, ended=c.status==='Terminado'
+                    return (
+                      <div key={c.id} onClick={()=>{setForceFtab(null);setExtOpen(false);setSelected(c)}} className='lf-row' style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:7,cursor:'pointer',opacity:ended?.55:1}}>
+                        <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                        {tareasC>0&&<span style={{fontSize:8.5,fontWeight:800,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'0 6px',lineHeight:'15px',flexShrink:0}}>{tareasC}</span>}
+                        {bal<0&&<span style={{fontSize:10.5,fontWeight:700,color:C.overdue,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(bal)}</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>}
+        {rendModal}
       </div>
-      <div style={{overflowY:'auto',background:C.bg}}>
-        {selected ? fichaEl : (
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',color:C.done,gap:11,padding:40,textAlign:'center'}}>
-            <svg width='44' height='44' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.3'><rect x='4' y='3' width='16' height='18' rx='2'/><circle cx='12' cy='10' r='2.5'/><path d='M8.5 17a3.5 3.5 0 0 1 7 0'/></svg>
-            <div style={{fontSize:15,fontWeight:700,color:C.muted}}>Elige un cliente</div>
-            <div style={{fontSize:12.5,maxWidth:240}}>Su ficha aparece aquí, a la derecha, sin perder la lista.</div>
-          </div>
-        )}
-      </div>
-      {rendModal}
-    </div>
-  )
+    )
+  }
 
   if(selected) return (<>{fichaEl}{rendModal}</>)
 
