@@ -28610,6 +28610,7 @@ export default function App() {
     }
   }; document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h) },[isDesktop])
   const [concFocus,setConcFocus]=useState(null)       // saltar a un movimiento puntual en Conciliación desde el Estado de cuenta del cliente
+  const [billingIntent,setBillingIntent]=useState(null) // gatillo: abrir Facturación con un foco puntual (checklist/cierre/cotejo) desde navTo; lo consume BillingView y lo limpia
   const handleOpenConciliacion=useCallback((movId)=>{ navTo({tab:'conciliacion',conc:movId||null}) },[navTo])
   const [concPend,setConcPend]=useState(0)            // abonos sin conciliar (burbuja del icono de banco en el landing)
   const [openConcProp,setOpenConcProp]=useState(false) // gatillo: abrir el panel de propuesta al entrar a Conciliación
