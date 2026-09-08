@@ -25759,7 +25759,12 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
 
   // ─── Motor de conciliación (Fase 2) ───────────────────────────────────────
   // Σ aplicado por factura (de la tabla conciliacion) y conciliaciones por movimiento.
-  const aplicadoByFactura = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0) }); return m },[conc])
+  const aplicadoByFactura = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0) })
+    // Respaldo INDIRECTO (igual que respaldoMap de Facturación): un anticipo con conciliación bancaria (tipo 'anticipo')
+    // consumido en una factura respalda ESA factura. Sin esto, las pagadas con anticipos salían falsamente "sin depósito que calce".
+    const antBancarios=new Set(conc.filter(c=>c.tipo_destino==='anticipo'&&c.anticipo_id).map(c=>String(c.anticipo_id)))
+    for(const a of (anticipos||[])){ if(a.estado==='consumido'&&a.billing_id&&antBancarios.has(String(a.id))) m[a.billing_id]=(m[a.billing_id]||0)+(Number(a.monto)||0) }
+    return m },[conc,anticipos])
   const cartolaHasta = useMemo(()=>{ let mx=''; for(const x of (movs||[])){ const f=String(x.fecha||'').slice(0,10); if(f>mx) mx=f } return mx||null },[movs])
   const concByMov = useMemo(()=>{ const m={}; conc.forEach(c=>{ (m[c.movimiento_id]=m[c.movimiento_id]||[]).push(c) }); return m },[conc])
   const saldoFactura = b => Math.max(0,montoFactura(b) - (aplicadoByFactura[b.id]||0))   // AUTORIDAD del DTE, no el amount programado
