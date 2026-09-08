@@ -26967,8 +26967,10 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     }
     // Búsqueda por RUT / nombre del banco / cliente resuelto.
     if(q.trim()){ const qq=q.trim().toLowerCase(), qd=q.replace(/[^0-9kK]/g,'').toLowerCase()
+      const qn=qq.replace(/[^0-9]/g,'')   // dígitos de la búsqueda → permite buscar por CIFRA ("250000" o "250.000")
       l=l.filter(m=>{ const nm=(m.nombre_contraparte||'').toLowerCase(), cl=(cmap[m.cliente_id]||'').toLowerCase(), rut=(m.rut_contraparte||'').toLowerCase().replace(/[^0-9kk]/g,'')
-        return nm.includes(qq)||cl.includes(qq)||(qd.length>=3&&rut.includes(qd)) }) }
+        const mn=String(Math.abs(m.monto||0))
+        return nm.includes(qq)||cl.includes(qq)||(qd.length>=3&&rut.includes(qd))||(qn.length>=3&&mn.includes(qn)) }) }
     l=l.slice().sort((a,b)=> orden==='asc' ? ((a.fecha||'')<(b.fecha||'')?-1:1) : ((a.fecha||'')>(b.fecha||'')?-1:1))
     return l.slice(0,3000)   // tope de seguridad (antes 400): con 400 y orden nueva→antigua se ESCONDÍAN los movimientos más antiguos (la lista "terminaba" a mitad de año). Las filas de meses colapsados no se renderizan, así que un tope alto no pesa. Los años/meses/búsqueda ya permiten acotar.
   },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concView,concByMov,billing,q,orden,cmap,modalMov])
@@ -27248,7 +27250,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgSoft}}>
                 <span onClick={()=>setVerCartolas(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer'}}>
                   <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Cartolas</span>
-                  <span style={{fontSize:11,color:C.muted}}>{movs.length} mov · <b style={{color:C.greenText}}>+{fmtM(G.sumAbo)}</b> · <b style={{color:C.overdue}}>−{fmtM(G.sumCar)}</b></span>
+                  <span style={{fontSize:11,color:C.muted}}>{movs.length} mov</span>
                   <span style={{fontSize:13,color:C.muted}}>{verCartolas?'▴':'▾'}</span>
                 </span>
                 <button onClick={()=>setVerCarga(v=>!v)} style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>+ Cargar</button>
@@ -27700,19 +27702,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             return (
               <Fragment key={m.id}>
               {_newY&&(
-                <div onClick={()=>setConcYCol(p=>{const n=new Set(p);n.has(_y)?n.delete(_y):n.add(_y);return n})} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'12px 14px',background:C.accent,borderTop:i>0?`1px solid ${C.border}`:'none'}}>
+                <div onClick={()=>setConcYCol(p=>{const n=new Set(p);n.has(_y)?n.delete(_y):n.add(_y);return n})} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'12px 14px',background:C.accent,marginTop:i>0?12:0}}>
                   <span style={{fontSize:16,fontWeight:800,color:'#fff',letterSpacing:'-.3px'}}>{_y}</span>
                   <span style={{fontSize:12,color:'#cfe0ef',transform:_yOpen?'rotate(180deg)':'none'}}>{'▾'}</span>
                 </div>
               )}
               {_yOpen&&_newM&&(()=>{ const mi=_mInfo(); return (
-                <div onClick={()=>setConcMOpen(prev=>{ const base=prev===null?new Set([_firstYM]):new Set(prev); base.has(_ym)?base.delete(_ym):base.add(_ym); return base })} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'10px 13px 10px 18px',background:C.azulBg,borderTop:`1px solid ${C.border}`}}>
+                <div onClick={()=>setConcMOpen(prev=>{ const base=prev===null?new Set([_firstYM]):new Set(prev); base.has(_ym)?base.delete(_ym):base.add(_ym); return base })} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'10px 13px 10px 18px',background:C.toggleOff,borderTop:`1px solid ${C.border}`}}>
                   <span style={{fontSize:13.5,fontWeight:700,color:C.accent}}>{_MES[+_ym.slice(5,7)-1]||_ym}</span>
                   <span style={{display:'flex',alignItems:'center',gap:9}}><span style={{fontSize:12,fontWeight:700,color:mi.t>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{mi.t>=0?'+':'−'}{fmtM(Math.abs(mi.t))}</span><span style={{fontSize:11,color:C.done,transform:_mOpen?'rotate(180deg)':'none'}}>{'▾'}</span></span>
                 </div>
               )})()}
               {_yOpen&&_mOpen&&(
-              <div id={'mov-'+m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
+              <div id={'mov-'+m.id} style={{padding:'9px 12px',background:'#fff',borderTop:`1px solid #D7DEE3`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
                 <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer',display:'flex',gap:10,alignItems:'center'}}>
                   <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}>{(()=>{const dp=String(m.fecha||'').slice(0,10).split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return <><div style={{fontSize:18,fontWeight:700,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:C.muted,fontWeight:600}}>{dp.length>=3?`${M[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></>})()}</div>
                   <div style={{flex:1,minWidth:0}}>
