@@ -24040,20 +24040,19 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
           </div>
         </div>
       </div>
-      <div style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 13px',marginBottom:12}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Cobranza automática</div><div style={{fontSize:10,color:C.muted}}>{autoGlobal?'La app envía sola los recordatorios de los clientes que liberaste.':'Off — aunque liberes un cliente, no se envía solo hasta activar esto.'}</div></div>
-        <div onClick={()=>setAutoGlob(!autoGlobal)} title={autoGlobal?'Desactivar envío automático':'Activar envío automático'} style={{width:44,height:24,borderRadius:20,background:autoGlobal?C.greenText:C.border,position:'relative',cursor:'pointer',flexShrink:0,transition:'background .15s'}}><span style={{position:'absolute',top:2,left:autoGlobal?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/></div>
-      </div>
-      {gruposAccion.length>1 && <button onClick={enviarTodos} disabled={sending} style={{width:'100%',background:'#fff',border:`1px solid ${C.border}`,color:C.accent,borderRadius:10,padding:'10px',fontSize:12.5,fontWeight:700,cursor:'pointer',marginBottom:12}}>Enviar a todos los que toca · {gruposAccion.filter(g=>!autoCli[g.cid]).length}</button>}
       {grupos.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
       {grupos.length>0 && (()=>{ const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]; return (
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:10}}>
           <span style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Ordenar</span>
           {SORTS.map(([col,lbl])=>{ const on=sortBy.col===col; return <button key={col} onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{fontSize:10.5,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{lbl}{on?(sortBy.dir==='desc'?' ↓':' ↑'):''}</button> })}
+          <div style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:14}}>
+            {gruposAccion.length>1 && <span onClick={()=>!sending&&enviarTodos()} title="Enviar recordatorio a todos los clientes que corresponde" style={{fontSize:10.5,fontWeight:600,color:sending?C.done:C.azulInfo,cursor:sending?'default':'pointer'}}>{sending?'Enviando…':`Enviar a todos (${gruposAccion.filter(g=>!autoCli[g.cid]).length})`}</span>}
+            <span onClick={()=>setAutoGlob(!autoGlobal)} title={autoGlobal?'Envío automático activado — la app envía sola a los clientes que liberaste':'Envío automático desactivado — actívalo para que la app envíe sola'} style={{display:'inline-flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:10.5,fontWeight:600,color:C.muted}}>Automática<span style={{width:30,height:16,borderRadius:20,background:autoGlobal?C.greenText:C.toggleOff,position:'relative',flexShrink:0,transition:'background .15s'}}><span style={{position:'absolute',top:2,left:autoGlobal?16:2,width:12,height:12,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></span></span>
+          </div>
         </div>) })()}
       {isDesktop ? (()=>{
-        const thS={fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,background:C.bgSoft,padding:'9px 12px',textAlign:'left',whiteSpace:'nowrap'}
-        const th=(col,lbl,r)=>(<th onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{...thS,textAlign:r?'right':'left',cursor:'pointer',userSelect:'none'}}>{lbl}{sortBy.col===col?<span style={{color:C.accent}}> {sortBy.dir==='desc'?'▾':'▴'}</span>:''}</th>)
+        const thS={fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:'#fff',background:'#003C50',padding:'9px 12px',textAlign:'left',whiteSpace:'nowrap'}
+        const th=(col,lbl,r)=>(<th onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{...thS,textAlign:r?'right':'left',cursor:'pointer',userSelect:'none'}}>{lbl}{sortBy.col===col?<span style={{color:'#cfe0ef'}}> {sortBy.dir==='desc'?'▾':'▴'}</span>:''}</th>)
         const gapDe=g=>{ const l=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; return l?`hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(l).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar' }
         return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
@@ -24062,14 +24061,14 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
               <tbody>
                 {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:12.5,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
-                  <tr onClick={()=>setExpCli(open?null:g.cid)} style={{cursor:'pointer'}}>
+                  <tr onClick={()=>setExpCli(open?null:g.cid)} onMouseEnter={e=>e.currentTarget.style.background='#FFFFFF'} onMouseLeave={e=>e.currentTarget.style.background=''} style={{cursor:'pointer'}}>
                     <td style={td}><span style={{color:C.done,marginRight:7,fontSize:11}}>{open?'▾':'▸'}</span><span style={{fontWeight:700,color:C.accent}}>{cn(g.cid)}</span></td>
                     <td style={{...td,color:C.muted}}>{g.items.length}</td>
                     <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:g.vencido>0?C.overdueText:C.done}}>{g.vencido>0?f0(g.vencido):'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:C.accent}}>{f0(g.total)}</td>
                   </tr>
-                  {open&&<tr><td colSpan={5} style={{background:C.bgSoft,borderTop:`1px dashed ${C.border}`,padding:'8px 14px 10px'}}>
+                  {open&&<tr><td colSpan={5} style={{background:'#FFFFFF',borderTop:`1px dashed ${C.border}`,padding:'8px 14px 10px'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap',marginBottom:4}} onClick={e=>e.stopPropagation()}>
                       <span style={{fontSize:10.5,color:C.muted}}>Último contacto: <b style={{color:conVenc?(gap==='sin contactar'?C.overdueText:C.muted):C.done}}>{conVenc?gap:'—'}</b>{conVenc&&nc>0?` · ${nc} envío${nc!==1?'s':''} confirmado${nc!==1?'s':''}`:''}{onOpenClientFicha?<> · <span onClick={()=>onOpenClientFicha(g.cid)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha ›</span></>:''}</span>
                       {!conVenc ? <span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Al día — sin vencidas</span>
