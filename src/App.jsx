@@ -7219,6 +7219,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const [yaOpen,setYaOpen] = useState(false)
   const [autoOpen,setAutoOpen] = useState(false)   // "se cargaron solas" colapsado por defecto
   const [recoExp,setRecoExp] = useState(()=>new Set())   // folios con la comparación En el SII ↔ Tu cliente abierta
+  const [ambShowAll,setAmbShowAll] = useState(()=>new Set())   // "Elige la factura": ver TODAS las candidatas aunque una calce el mes (por defecto solo la del mes correcto)
   const [corrExp,setCorrExp] = useState(()=>new Set())   // billingIds con la comparación En el SII ↔ Tu factura (folio) abierta
   const [yy,mm] = mes.split('-').map(Number)
   const mesLabel = `${MESES_ABR[mm-1]} ${yy}`
@@ -7342,6 +7343,9 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
       const data = await llamar({periodo:mes})
       setResult(data)
       const ts=new Date().toISOString(); setLastSync(ts); try{ localStorage.setItem('sii_lastsync',ts); localStorage.setItem('sii_lastsync_'+mes,ts) }catch(_){}
+      // Persistir el mes en el espejo (sii_cargas_docs) + auto-enlazar. Antes 'Sincronizar' solo cotejaba en vivo y el mes
+      // no quedaba guardado, dejando huecos en el cuadre con SII (p.ej. julio). Read-only sobre el SII; idempotente.
+      try{ await llamar({action:'sync-ventas-rcv',periodo:mes}); await supabase.rpc('link_sii_billing') }catch(_){}
       if(data.actualizadas?.length&&onRefresh) await onRefresh()
     }catch(e){ setError(msgErr(e)) }
     setLoading(false)
@@ -7489,8 +7493,15 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                         const byId=new Map(); pool.forEach(c=>{ if(!byId.has(String(c.id))) byId.set(String(c.id),c) })
                         const cuN=c=>{ const m=String(c.concepto||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?+m[1]:99 }
                         const uniq=[...byId.values()].sort((a,b)=>cuN(a)-cuN(b))
-                        const seen=new Map(); uniq.forEach(c=>{ const k=`${c.cliente}|${c.concepto}|${c.monto}`; if(seen.has(k)){ const s=seen.get(k); s._dups++; if(c.estado==='Programada'&&s.estado!=='Programada'){ s.id=c.id; s.estado=c.estado } } else seen.set(k,{...c,_dups:1}) }); return [...seen.values()]
-                      })(); return (   /* candidatos = todas las cuotas sin emitir de la venta, en orden; dedupe cliente|concepto|monto */
+                        const seen=new Map(); uniq.forEach(c=>{ const k=`${c.cliente}|${c.concepto}|${c.monto}`; if(seen.has(k)){ const s=seen.get(k); s._dups++; if(c.estado==='Programada'&&s.estado!=='Programada'){ s.id=c.id; s.estado=c.estado } } else seen.set(k,{...c,_dups:1}) })
+                        const list=[...seen.values()]
+                        // RANKING POR MES: la factura del SII tiene fecha; una candidata cuyo mes (concepto o vencimiento−1) calza es LA correcta.
+                        // Sin esto, mensuales de igual monto se ven todas "monto exacto" y se puede cuadrar al mes equivocado (folio de julio → cuota de diciembre).
+                        const iso=isoFecha(it.fechaEmision); const dSII=iso?new Date(iso):null; const gmes=dSII&&!isNaN(dSII)?dSII.getUTCMonth():null
+                        list.forEach(c=>{ const bb=(billing||[]).find(x=>String(x.id)===String(c.id)); c._mScore=mesScoreCandidata(c.concepto,bb?.due,gmes); c._mes=periodoDeTexto(c.concepto||'').mes })
+                        list.sort((a,b)=> (b._mScore-a._mScore) || (cuN(a)-cuN(b)))
+                        return list
+                      })(); return (   /* candidatos = todas las cuotas sin emitir de la venta, ordenadas por calce de mes y luego N° de cuota */
                     <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
                       <div onClick={()=>!done&&setAmbExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:done?'default':'pointer'}}>
                         {bigDate(isoFecha(it.fechaEmision),C.muted)}
@@ -7511,7 +7522,9 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                               : <AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={async(_,cid)=>{ await ingresarHuerfana(it,cid); const cc=clients.find(x=>String(x.id)===String(cid)); setAmbDone(p=>({...p,[it.folio]:cc?.name||'—'})) }} label='Elegir cliente' placeholder='Buscar cliente…'/>}
                           </div>
                         ) })()}
-                        {cands.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); return (
+                        {(()=>{ const claro=cands.filter(c=>c._mScore>=3); const unico=claro.length===1; const showAll=ambShowAll.has(it.folio); const visibles=(unico&&!showAll)?claro:cands; return (<>
+                          {unico&&!showAll&&<div style={{fontSize:10.5,color:C.greenText,padding:'5px 0',lineHeight:1.4}}>Coincide con el mes de la factura ({dmy(it.fechaEmision)}). Las otras cuotas son de otro mes.</div>}
+                          {visibles.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); const mesOk=cand._mScore>=3; return (
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
@@ -7519,11 +7532,13 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
-                              {exacto&&<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>Monto exacto</div>}
+                              {mesOk?<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>Coincide el mes</div>:(cand._mes!=null&&<div style={{fontSize:9,fontWeight:600,color:C.soonText}}>{MESES_ABR[cand._mes]}</div>)}
                             </div>
-                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:26,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
+                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:26,padding:'0 13px',borderRadius:8,background:(mesOk||unico)?C.accent:'#fff',color:(mesOk||unico)?'#fff':C.accent,border:(mesOk||unico)?'none':`1px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
                           </div>
-                        )})}
+                          )})}
+                          {unico&&cands.length>1&&<button onClick={()=>setAmbShowAll(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{background:'none',border:'none',color:C.muted,fontSize:10.5,cursor:'pointer',padding:'6px 0',textDecoration:'underline'}}>{showAll?'Ocultar otras cuotas':`Ver otras ${cands.length-1} cuota(s) de otro mes`}</button>}
+                        </>) })()}
                       </div>}
                     </div>
                   )})}
