@@ -7206,6 +7206,7 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
 }
 
 function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],initialMes,onOpenClientFicha}) {
+  const isDesktop = useIsDesktop()
   const hoy = new Date()
   const [mes,setMes] = useState((/^\d{4}-\d{2}$/.test(initialMes||'')?initialMes:`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`))
   const [loading,setLoading] = useState(false)
@@ -7364,13 +7365,14 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const Fila = ({children}) => <div style={{display:'flex',alignItems:'center',padding:'11px 20px',borderBottom:'0.5px solid #E4E8EB'}}>{children}</div>
   const CheckVerde = () => <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><polyline points='20 6 9 17 4 12'/></svg>
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-      <div style={{background:'#fff',borderRadius:14,maxWidth:480,width:'100%',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'16px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:1}}>
-          <span style={{fontSize:15,fontWeight:500,color:C.text}}>Cuadrar con SII</span>
-          <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:'0.5px solid #E4E8EB',background:'none',color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round'><line x1='6' y1='6' x2='18' y2='18'/><line x1='18' y1='6' x2='6' y2='18'/></svg>
+    <div style={{position:'fixed',inset:0,background:C.bg,zIndex:200,overflowY:'auto'}}>
+      <div style={{background:'#fff',maxWidth:isDesktop?960:'100%',width:'100%',margin:'0 auto',minHeight:'100%',boxShadow:isDesktop?'0 0 40px rgba(0,0,0,.06)':'none'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:2}}>
+          <button onClick={onClose} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}>
+            <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>
+            {isDesktop&&'Volver'}
           </button>
+          <span style={{fontSize:16,fontWeight:700,color:C.accent}}>Cuadrar con SII</span>
         </div>
         <div style={{display:'flex',gap:10,padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB'}}>
           <div style={{display:'flex',border:'0.5px solid #E4E8EB',borderRadius:8,overflow:'hidden',flex:1,height:36}}>
