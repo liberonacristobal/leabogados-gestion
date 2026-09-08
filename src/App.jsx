@@ -27055,17 +27055,28 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
       </div>
     </div>
   }
+  // Glosa: distingue traspaso interno REAL vs pago de tercero. El estudio es RUT 77.700.387-9 con cuentas BICE 01-38392-2 (gastos) y 01-40383-4 (honorarios).
+  // Interno = el banco lo declara "entre cuentas propias" O el REMITENTE es el propio estudio (de LIBERONA ESCALA ABOGADOS ... a LIBERONA ESCALA ABOGADOS / de QUAD ASES, mismo RUT).
+  // OJO: "... a LIBERONA ESCALA ABOGADOS" por sí solo NO es interno (el beneficiario es el estudio en TODO pago entrante); hay que anclar en el remitente.
+  const _glosaInterna = d => { const s=(d||'').toLowerCase(); return /entre cuentas propias/.test(s) || (/transferencia de\s+liberona escala abogados/.test(s) && /a\s+liberona escala abogados/.test(s)) || /transferencia de\s+quad ases/.test(s) }
+  // Tercero = pago entrante de un tercero nombrado, salida a terceros, o el ENMASCARADO de BICE (cuando nos pagan desde otra cuenta BICE aparece "de CLIENTE ... a BENEFICIARIO" con nuestro propio RUT, muy parecido a un traspaso interno).
+  const _glosaTercero = d => { const s=(d||'').toLowerCase(); return /abono por transferencia de /.test(s) || /transf\.?\s*a\s*terceros/.test(s) || /\bbeneficiario\b/.test(s) || /transferencia de\s+cliente\b/.test(s) || /dep[oó]sito/.test(s) }
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
   const conciliarAuto = async()=>{
     if(autoRun||busy) return
     setAutoRun(true); let ok=0, monto=0, marc=0, enl=0, cmb=0, nInt=0; const used=new Set(), doneMovs=new Set()
     let sinId=0, sinIdM=0, sinCalce=0, sinCalceM=0   // Mejora 2: desglose de lo que QUEDA tras el auto, por razón
     try{
-      // 1) Traspasos internos: cargo↔abono del mismo monto exacto en cuentas distintas, ±2 días, par único → ambos internos. (Sin comisiones en CL, el monto calza exacto.)
+      // 1) Traspasos internos — LA GLOSA MANDA (BICE no muestra el nombre de quien nos paga, así que un pago de tercero se ve casi igual que un traspaso propio; solo la glosa los distingue):
+      //    · glosa PROPIA ("entre cuentas propias" / "de LIBERONA ESCALA ABOGADOS ... a LIBERONA ESCALA ABOGADOS" / "de QUAD ASES") → interno directo, sin necesidad de par.
+      //    · glosa de TERCERO ("Abono por transferencia de <nombre>" entrante, "Transf. a terceros" saliente, o el enmascarado "de CLIENTE ... a BENEFICIARIO") → NUNCA se empareja como interno.
+      //    · el par cargo↔abono (mismo monto, otra cuenta, ±2 días, único) queda solo como respaldo para glosas neutras que no declaran nada.
       const libres = movs.filter(m=> !m.es_interno && !(concByMov[m.id]?.length) && !m.cliente_id && !m.categoria)
       const W2=2*86400000, usadosI=new Set(); const intSet=new Set()
-      libres.filter(m=>m.tipo==='cargo').forEach(c=>{ const ms=libres.filter(a=> a.tipo==='abono' && !usadosI.has(a.id) && a.rol_cuenta!==c.rol_cuenta && (a.monto||0)===(c.monto||0) && Math.abs(new Date(a.fecha)-new Date(c.fecha))<=W2); if(ms.length===1 && !usadosI.has(c.id)){ usadosI.add(c.id); usadosI.add(ms[0].id); intSet.add(c.id); intSet.add(ms[0].id) } })
-      if(intSet.size){ const idsInt=[...intSet]; const { error:ei } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno'}).in('id',idsInt); if(ei) throw ei; setMovs(p=>p.map(x=>intSet.has(x.id)?{...x,es_interno:true,estado:'interno'}:x)); nInt=idsInt.length/2 }
+      libres.forEach(m=>{ if(_glosaInterna(m.descripcion)) intSet.add(m.id) })   // 1a) glosa propia explícita
+      // 1b) par por monto SOLO entre patas cuya glosa no es de tercero (bloquea el pago enmascarado "CLIENTE→BENEFICIARIO")
+      libres.filter(m=>m.tipo==='cargo' && !intSet.has(m.id) && !_glosaTercero(m.descripcion)).forEach(c=>{ const ms=libres.filter(a=> a.tipo==='abono' && !usadosI.has(a.id) && !intSet.has(a.id) && !_glosaTercero(a.descripcion) && a.rol_cuenta!==c.rol_cuenta && (a.monto||0)===(c.monto||0) && Math.abs(new Date(a.fecha)-new Date(c.fecha))<=W2); if(ms.length===1 && !usadosI.has(c.id)){ usadosI.add(c.id); usadosI.add(ms[0].id); intSet.add(c.id); intSet.add(ms[0].id) } })
+      if(intSet.size){ const idsInt=[...intSet]; const { error:ei } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno'}).in('id',idsInt); if(ei) throw ei; setMovs(p=>p.map(x=>intSet.has(x.id)?{...x,es_interno:true,estado:'interno'}:x)); nInt=idsInt.length }
       // 1.5) Auto-identificar abonos sin cliente cuando UNA sola factura (de un único cliente) calza el monto EXACTO en la ventana de fecha (clientePorMonto, mismo criterio que la sugerencia manual). No aprende alias: la id por monto no se propaga a otros movimientos. El paso 2 los concilia.
       const idMap={}
       const _inwinId=(payT,iso)=>{ if(!payT||!iso) return true; const d=(payT-new Date(iso.slice(0,10)+'T12:00').getTime())/86400000; return d>=-3&&d<=60 }
@@ -27102,7 +27113,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
       sinId = sinIdList.length; sinIdM = sinIdList.reduce((s,m)=>s+(m.monto||0),0)
     }catch(e){ appAlert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
-    const hecho = (ok||nInt)? `Conciliadas ${ok} · ${fmtM(monto)}.${marc?`\n${marc} marcaron la factura pagada`:''}${enl?` · ${enl} enlazaron facturas ya pagadas`:''}${cmb?` · ${cmb} pagaron varias facturas`:''}${nInt?`\n${nInt} traspasos internos marcados`:''}` : 'No hubo calces nuevos.'
+    const hecho = (ok||nInt)? `Conciliadas ${ok} · ${fmtM(monto)}.${marc?`\n${marc} marcaron la factura pagada`:''}${enl?` · ${enl} enlazaron facturas ya pagadas`:''}${cmb?` · ${cmb} pagaron varias facturas`:''}${nInt?`\n${nInt} movimiento${nInt!==1?'s':''} interno${nInt!==1?'s':''} marcado${nInt!==1?'s':''} (por glosa)`:''}` : 'No hubo calces nuevos.'
     const queda = (sinId||sinCalce)
       ? `\n\nQuedan sin conciliar:${sinId?`\n· ${sinId} sin identificar (${fmtM(sinIdM)}) — falta cruzar el pagador`:''}${sinCalce?`\n· ${sinCalce} identificadas sin calce exacto (${fmtM(sinCalceM)}) — el monto no cuadra con una factura`:''}`
       : '\n\nNo queda nada por conciliar.'
