@@ -76,13 +76,24 @@ function extraerContraparte(desc: string) {
   let m
   if ((m = desc.match(reAbono))) return { nombre: _flat(m[1]) || null, rut: _flat(m[2]) || null }
   if ((m = desc.match(reCCA))) return { rut: _flat(m[1]) || null, nombre: _flat(m[2]) || null }
-  if ((m = desc.match(reTransf))) return { nombre: _flat(m[1]) || null, rut: _flat(m[2]) || null }
+  if ((m = desc.match(reTransf))) {
+    const nombre = _flat(m[1]) || null, rut = _flat(m[2]) || null
+    // "Transf. a terceros a cuenta <nuestra>, Liberona Escala, Rut <nuestro>": el banco enmascara al pagador (un tercero con cuenta BICE) mostrando NUESTROS datos → contraparte desconocida, no somos nosotros.
+    if ((rut && esRutPropio(rut)) || /liberona escala|quad ases/.test(_norm(nombre))) return { nombre: null, rut: null }
+    return { nombre, rut }
+  }
   return { rut: null, nombre: null }
 }
-function detectarInterno(desc: string, rut: string | null) {
+function detectarInterno(desc: string, _rut: string | null) {
   const d = _norm(desc)
+  // Traspaso ENTRE NUESTRAS cuentas: el banco lo declara "cuentas propias", o el REMITENTE es el propio estudio
+  // (de LIBERONA ESCALA ... a LIBERONA ESCALA / de QUAD ASES).
+  // NO basta con que el RUT de la glosa sea el nuestro: cuando un tercero con cuenta BICE nos paga, el banco
+  // ENMASCARA al pagador y muestra NUESTRO nombre/RUT ("Transf. a terceros a cuenta <nuestra>, Liberona Escala,
+  // Rut 77.700.387-9" o "de CLIENTE ... a BENEFICIARIO Rut 77.700.387-9"). Eso es un pago de TERCERO, no interno.
   if (d.includes('cuentas propias')) return true
-  if (rut && esRutPropio(rut)) return true
+  if (/transferencia de\s+liberona escala/.test(d) && /a\s+liberona escala/.test(d)) return true
+  if (/transferencia de\s+quad ases/.test(d)) return true
   return false
 }
 function etiquetaInterno(desc: string, tipo: string, cuentaPropia: string) {

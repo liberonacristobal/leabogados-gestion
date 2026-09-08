@@ -97,15 +97,23 @@ function extraerContraparte(desc){
   let m
   if((m=desc.match(reAbono)))  return { nombre:_flat(m[1])||null, rut:_flat(m[2])||null }
   if((m=desc.match(reCCA)))    return { rut:_flat(m[1])||null, nombre:_flat(m[2])||null }
-  if((m=desc.match(reTransf))) return { nombre:_flat(m[1])||null, rut:_flat(m[2])||null }
+  if((m=desc.match(reTransf))){
+    const nombre=_flat(m[1])||null, rut=_flat(m[2])||null
+    // "Transf. a terceros a cuenta <nuestra>, Liberona Escala, Rut <nuestro>": el banco enmascara al pagador (tercero con cuenta BICE) mostrando NUESTROS datos → contraparte desconocida.
+    if((rut&&esRutPropio(rut))||/liberona escala|quad ases/.test(_norm(nombre))) return { nombre:null, rut:null }
+    return { nombre, rut }
+  }
   return { rut:null, nombre:null }
 }
 
-// Detecta traspaso entre cuentas propias: glosa "cuentas propias" o contraparte = RUT propio.
-function detectarInterno(desc, rut){
+// Interno = traspaso ENTRE NUESTRAS cuentas. LA GLOSA MANDA: "cuentas propias", o el REMITENTE es el estudio
+// (de LIBERONA ESCALA ... a LIBERONA ESCALA / de QUAD ASES). NO basta con que el RUT sea el nuestro: cuando un
+// tercero con cuenta BICE nos paga, el banco enmascara al pagador mostrando nuestro RUT (eso es pago de tercero).
+function detectarInterno(desc, _rut){
   const d = _norm(desc)
   if(d.includes('cuentas propias')) return true
-  if(rut && esRutPropio(rut)) return true
+  if(/transferencia de\s+liberona escala/.test(d) && /a\s+liberona escala/.test(d)) return true
+  if(/transferencia de\s+quad ases/.test(d)) return true
   return false
 }
 // Etiqueta del traspaso interno con el número COMPLETO de la cuenta contraparte (la otra cuenta, distinta a la propia).
