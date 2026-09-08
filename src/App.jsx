@@ -25731,12 +25731,12 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:C.azulBg,color:C.accent},'Proveedor':{bg:C.ambarBg,color:C.soonText},'Cliente':{bg:C.greenBg,color:C.greenText},'Gastos Oficina':{bg:C.azulBg,color:C.azulInfo},'Notaría':{bg:'#FAECE7',color:C.coralText},'Impuestos':{bg:C.overdueBg,color:C.overdueText},'Provisión de gastos':{bg:C.tealBg,color:C.tealText},'Otro ingreso':{bg:C.bgWarm,color:C.grisText},'Devolución':{bg:'#FAECE7',color:C.coralText},'Reembolso':{bg:'#FAECE7',color:C.coralText},'Traspaso interno':{bg:C.bgWarm,color:C.grisText},'Intereses':{bg:C.ambarBg,color:C.soonText},'Tercero':{bg:'#EEF1F3',color:C.muted},'Pago histórico':{bg:C.bgWarm,color:C.grisText} }
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:C.azulBg,color:C.accent},'Proveedor':{bg:C.ambarBg,color:C.soonText},'Cliente':{bg:C.greenBg,color:C.greenText},'Gastos Oficina':{bg:C.azulBg,color:C.azulInfo},'Notaría':{bg:'#FAECE7',color:C.coralText},'Impuestos':{bg:C.overdueBg,color:C.overdueText},'Provisión de gastos':{bg:C.tealBg,color:C.tealText},'Otro ingreso':{bg:C.bgWarm,color:C.grisText},'Devolución':{bg:'#FAECE7',color:C.coralText},'Reembolso':{bg:'#FAECE7',color:C.coralText},'Traspaso interno':{bg:C.bgWarm,color:C.grisText},'Intereses':{bg:C.ambarBg,color:C.soonText},'Tercero':{bg:'#EEF1F3',color:C.muted},'Pago histórico':{bg:C.bgWarm,color:C.grisText},'Subarriendo':{bg:C.tealBg,color:C.tealText} }
   // Categorías distintas por sentido: cargos = a quién le pagas; abonos = solo se clasifican los de la cuenta de
   // Gastos que NO calzan factura (provisión de gastos = ocasional); un abono de honorarios es el pago del cliente.
   const CATS_CARGO = ['Gastos Oficina','Notaría','Proveedor','Equipo','Contadora','Socio','Impuestos','Devolución']
-  const CATS_ABONO = ['Reembolso','Traspaso interno','Intereses','Tercero','Pago histórico','Provisión de gastos','Otro ingreso']
-  const RESUELTAS_ABO = ['Reembolso','Intereses','Tercero','Pago histórico']  // clasificadas = fuera de "sin identificar"
+  const CATS_ABONO = ['Reembolso','Traspaso interno','Intereses','Tercero','Pago histórico','Provisión de gastos','Otro ingreso','Subarriendo']
+  const RESUELTAS_ABO = ['Reembolso','Intereses','Tercero','Pago histórico','Subarriendo']  // clasificadas = fuera de "sin identificar" (Subarriendo = ingreso por arriendo, NO honorarios/venta)
   const ESTRUCT_ABO = ['Reembolso','Traspaso interno','Intereses','Tercero','Pago histórico']  // categoría deducible por RUT/nombre → se aprende
   // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
   // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
