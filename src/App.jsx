@@ -16564,6 +16564,7 @@ function DocumentosDrive({client, onCount, onPick}){
   )
 }
 function ContactoTab({client, entities, onSaveFields, clientBilling=[], onOpenFinanciero}) {
+  const isDesktop = useIsDesktop()   // desktop: formulario a ancho cómodo centrado (no estirado a toda la pantalla)
   const fields = ['rut']
   const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
   const [form,setForm] = useState(fromClient())
@@ -16630,7 +16631,7 @@ function ContactoTab({client, entities, onSaveFields, clientBilling=[], onOpenFi
   )
 
   return (
-    <div style={{padding:'16px 20px 60px'}}>
+    <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?820:undefined,margin:isDesktop?'0 auto':undefined}}>
       <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
         <IconSection icon='id' title='Identificación' summary={client.rut||'sin RUT'} open={sec.id} onToggle={()=>tog('id')}>
           <div style={{display:'grid',gap:10,paddingTop:4}}>
@@ -17110,6 +17111,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
 // Pestaña "Estado de cuenta" (ex Documentos): vista unificada y trazable del cliente. Lee conciliacion +
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
 function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste}){
+  const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
   const [sec,setSec]=useState({})   // secciones-icono (Honorarios/Fondos/Movimientos/Anticipos), colapsadas por defecto
   const secT=k=>setSec(s=>({...s,[k]:!s[k]}))
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
@@ -17152,7 +17154,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=montoFactura(b);o.pag+=cobradoBill(b);o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
   const kpi=(label,val,sub,col,corner)=>(<div style={{background:C.bgSoft,borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
   const Hdr=({icon,title,purpose,summary,sumCol,k})=>(<div onClick={()=>secT(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.bgWarm}`,background:sec[k]?C.bgPanel:'transparent'}}><SIcon n={icon} s={18} c={C.muted}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{title}</div>{purpose&&<div style={{fontSize:9.5,color:C.muted,fontWeight:500,marginTop:1}}>{purpose}</div>}</div>{summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:sec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg></div>)
-  return (<div style={{padding:'14px 20px 40px'}}>
+  return (<div style={{padding:'14px 20px 40px',maxWidth:isDesktop?1040:undefined,margin:isDesktop?'0 auto':undefined}}>
     {/* Banda accionable: lo único que de verdad importa en una cuenta donde casi solo entra plata — lo que falta conciliar */}
     {(()=>{ const movBase=movs.filter(m=>!m.es_interno); const sinC=movBase.filter(m=>!conc.find(x=>x.movimiento_id===m.id)); if(!sinC.length) return null; const tot=sinC.reduce((s,m)=>s+(m.monto||0),0); return (
       <div onClick={()=>{ if(!sec.movs)secT('movs'); setMovF('sin') }} style={{display:'flex',alignItems:'center',gap:10,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'10px 13px',marginBottom:12,cursor:'pointer'}}>
@@ -17319,6 +17321,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
 }
 
 function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onConciliar, onOpenConciliacion, onAssignSeries, onStatusChange, onOpenSale}) {
+  const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
   // Cockpit de facturas: TODAS las del cliente — buscador + tabs por año + agrupación Proyecto → Razón social → Factura con orden por fecha.
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
@@ -17400,7 +17403,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   )
 
   return (
-    <div style={{padding:'16px 20px 60px'}}>
+    <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?1040:undefined,margin:isDesktop?'0 auto':undefined}}>
       {/* Tira de 4 KPIs del cliente (heredada del landing), scroll horizontal; Programado/Cobrado por año */}
       {(()=>{
         const cobYear=real.filter(b=>b.status==='Pagado'&&String(b.paid_at||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+montoFactura(b),0)
