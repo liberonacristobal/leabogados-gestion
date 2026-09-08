@@ -2843,7 +2843,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
     const byYear={}; const listByYear={}
     ;(billing||[]).forEach(b=>{
       if(!_esFactHon(b) || String(b.issued_at||'').slice(0,4)!==String(selYear)) return
-      const y = syById[String(b.sale_id)] ?? 0   // 0 = emitida sin venta asociada
+      // AÑO DE LA VENTA: venta enlazada (sale_id→sales.year) → sale_year (año resuelto a mano, aunque no haya venta enlazada) → año del vencimiento. Espeja anioVentaDe de Cobrado. Antes solo miraba sale_id y caía a "sin venta" ignorando sale_year.
+      const y = (b.sale_id!=null && syById[String(b.sale_id)]!=null) ? syById[String(b.sale_id)] : (b.sale_year!=null ? b.sale_year : (b.due?Number(String(b.due).slice(0,4)):0))
       byYear[y]=(byYear[y]||0)+montoFactura(b); (listByYear[y]=listByYear[y]||[]).push(b)
     })
     return {byYear,listByYear}
