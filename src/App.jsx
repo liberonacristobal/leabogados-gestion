@@ -158,9 +158,12 @@ const ESTADO_COBRO = {
   anticipada:  {label:'Anticipada',   color:C.azulInfo, bg:C.azulBg,    text:C.azulInfo,    icon:'clock'},
   anulada:     {label:'Anulada',      color:C.done,     bg:C.bgWarm,    text:C.grisText,    icon:'x'},
 }
-// Fecha de vencimiento canónica de una factura: due si existe, si no emisión + 30 días (plazo estándar). FUENTE ÚNICA (la usan esVencidaB y el Cierre).
-const venceBill = b => b?.due || (b?.issued_at ? (()=>{ const x=new Date(b.issued_at+'T00:00:00'); x.setDate(x.getDate()+30); return x.toISOString().slice(0,10) })() : '')
-const esVencidaB = b => !!b && (b.status==='Vencido' || (b.status==='Pendiente' && venceBill(b) && venceBill(b) < new Date().toISOString().slice(0,10)))
+// Vencimiento canónico de una factura emitida: SIEMPRE emisión + 30 días (plazo estándar), ignorando el `due` guardado.
+// Regla universal: una cuota emitida en "mes vencido" (con due = día 1 del período) NO debe nacer vencida; el plazo corre desde la emisión.
+// Sin issued_at (p.ej. programadas) cae al due programado. FUENTE ÚNICA (esVencidaB, Cierre, proyecciones).
+const venceBill = b => { if(b?.issued_at){ const x=new Date(b.issued_at+'T00:00:00'); x.setDate(x.getDate()+30); return x.toISOString().slice(0,10) } return b?.due||'' }
+// Vencida = emitida impaga cuyo vencimiento (emisión+30) ya pasó. Deriva del cálculo, no del status guardado (así un `due` viejo no la rompe).
+const esVencidaB = b => { if(!b||['Pagado','Anulada','Programada','Pausada'].includes(b.status)) return false; const v=venceBill(b); return !!v && v < new Date().toISOString().slice(0,10) }
 // Deriva el estado de cobro (folio + saldo + vencimiento + status) y devuelve su token de color. opts.yaFact = la sin-folio cuya factura emitida ya existe (duplicada), que la vista detecta y pasa.
 const estadoCobro = (b, opts={}) => {
   if(!b) return ESTADO_COBRO.porCobrar
