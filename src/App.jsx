@@ -23882,7 +23882,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
       g.items.push({b,acc,venc,diasVenc:venc?-dl:0}); g.total+=s
       if(venc){ g.vencido+=s; g.maxDias=Math.max(g.maxDias,-dl); if(acc&&acc.nivel==='final') g.nivel='final' }
       if(acc) g.nAccion++ })
-    Object.values(by).forEach(g=> g.items.sort((x,y)=> String(y.b.issued_at||y.b.due||'').localeCompare(String(x.b.issued_at||x.b.due||'')) ))   // nueva → antigua
+    Object.values(by).forEach(g=> g.items.sort((x,y)=> String(x.b.issued_at||x.b.due||'').localeCompare(String(y.b.issued_at||y.b.due||'')) ))   // dentro del cliente: antigua (arriba) → nueva (abajo)
     return Object.values(by)
   },[billing,recMap,hoy])
   // Facturas vencidas ya contactadas hace poco (dentro del piso) — contexto, sin acción.
@@ -23935,31 +23935,26 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
   const _MA = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   // Detalle de una factura vencida (compartido móvil/escritorio): fecha día-grande + folio + glosa + estado + saldo, y acciones Buscar pago (→ Conciliación) / Abrir factura (→ ficha/factura, con el Conciliar en un toque). Reusa helpers (folioN, saldoBill, fmtFechaDMY).
   const detItem = ({b,acc,venc,diasVenc})=>{ const s=String(b.issued_at||b.due||'').slice(0,10); const dd=/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-'):null; const parcial=(b.paid_amount||0)>0
-    // Color por severidad de mora (mismo criterio de contraste que abonos/cargos): verde al día · ámbar <30 d · rojo ≥30 d.
-    const sev = !venc ? {col:C.greenText,bg:C.greenBg} : (diasVenc>=30 ? {col:C.overdueText,bg:C.overdueBg} : {col:C.soonText,bg:C.soonBg})
+    // Color por severidad de mora (mismo criterio que abonos/cargos): verde al día · ámbar <30 d · rojo ≥30 d. SIN línea izquierda (ya no se usa).
+    const sevCol = !venc ? C.greenText : (diasVenc>=30 ? C.overdueText : C.soonText)
+    const dl = daysLeft(b.due)   // >0 = días para vencer (al día)
+    const kk = {fontSize:8,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}
+    const dv = {fontSize:11,fontWeight:700,fontVariantNumeric:'tabular-nums'}
     return (
-    <div key={b.id} style={{borderTop:`1px solid ${C.bgSoft}`,borderLeft:`3px solid ${sev.col}`,background:`linear-gradient(90deg, ${sev.bg}, transparent 55%)`,padding:'8px 10px',borderRadius:8,marginTop:4}}>
-      <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,cursor:onOpenFactura?'pointer':'default'}}>
-        <div style={{width:40,textAlign:'center',flexShrink:0,lineHeight:1.1}}>{dd?<><div style={{fontSize:15,fontWeight:800,color:sev.col}}>{dd[2]}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>{_MA[+dd[1]-1]} {dd[0].slice(2)}</div></>:<span style={{fontSize:11,color:C.done}}>—</span>}</div>
-        <SIcon n={venc?'alert':'clock'} s={15} c={venc?C.overdueText:C.done}/>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}</div>
-          {b.concept&&<div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{b.concept}</div>}
-          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:2}}>
-            {venc
-              ? <span style={{fontSize:8.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:12,padding:'1px 7px'}}>Vencida {diasVenc} d</span>
-              : <span style={{fontSize:8.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:12,padding:'1px 7px'}}>Al día</span>}
-            <span style={{fontSize:9,color:C.done}}>{b.issued_at?`emitida ${fmtFechaDMY(b.issued_at)}`:''}{b.due?` · vence ${fmtFechaDMY(b.due)}`:''}</span>
-          </div>
-        </div>
-        <div style={{textAlign:'right',flexShrink:0}}>
-          <div style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</div>
-          {parcial&&<div style={{fontSize:8.5,color:C.done}}>abonado {f0(b.paid_amount)} de {f0(b.amount)}</div>}
+    // Toda la fila abre la factura (→ su detalle con "Volver"); la fecha de emisión y los días de vencida son el foco.
+    <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,borderTop:`1px solid ${C.bgSoft}`,padding:'9px 4px',cursor:onOpenFactura?'pointer':'default'}}>
+      <div style={{width:38,textAlign:'center',flexShrink:0,lineHeight:1.05}}>{dd?<><div style={{fontSize:15,fontWeight:800,color:sevCol}}>{dd[2]}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>{_MA[+dd[1]-1]} {dd[0].slice(2)}</div></>:<span style={{fontSize:11,color:C.done}}>—</span>}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?<span style={{color:C.muted,fontWeight:500}}> · {b.concept}</span>:''}</div>
+        <div style={{display:'flex',gap:18,marginTop:3}}>
+          <div><div style={kk}>Emitida</div><div style={{...dv,color:C.text}}>{b.issued_at?fmtFechaDMY(b.issued_at):'—'}</div></div>
+          <div><div style={kk}>{venc?'Vencida':'Vence en'}</div><div style={{...dv,color:sevCol}}>{venc?`${diasVenc} días`:(dl>0?`${dl} días`:'hoy')}</div></div>
         </div>
       </div>
-      <div style={{display:'flex',gap:6,marginTop:6,marginLeft:51,flexWrap:'wrap'}}>
-        {onIrConciliacion&&<button onClick={()=>onIrConciliacion()} style={{fontSize:10.5,fontWeight:600,color:C.greenText,background:'#fff',border:`1px solid #CFE9DD`,borderRadius:7,padding:'5px 10px',cursor:'pointer'}}>Buscar pago ›</button>}
-        {onOpenFactura&&<button onClick={()=>onOpenFactura(b)} style={{fontSize:10.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer'}}>Abrir factura ›</button>}
+      <div style={{textAlign:'right',flexShrink:0}}>
+        <div style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</div>
+        {parcial&&<div style={{fontSize:8.5,color:C.done}}>abonado {f0(b.paid_amount)} de {f0(b.amount)}</div>}
+        {onIrConciliacion&&<div onClick={e=>{e.stopPropagation();onIrConciliacion()}} style={{fontSize:10,fontWeight:700,color:C.greenText,cursor:'pointer',marginTop:3,whiteSpace:'nowrap'}}>Buscar pago ›</div>}
       </div>
     </div>) }
 
@@ -24007,7 +24002,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
                 {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:12.5,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
                   <tr onClick={()=>setExpCli(open?null:g.cid)} style={{cursor:'pointer'}}>
-                    <td style={td}><span style={{color:C.done,marginRight:7,fontSize:11}}>{open?'▾':'▸'}</span><span onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span></td>
+                    <td style={td}><span style={{color:C.done,marginRight:7,fontSize:11}}>{open?'▾':'▸'}</span><span style={{fontWeight:700,color:C.accent}}>{cn(g.cid)}</span></td>
                     <td style={{...td,color:C.muted}}>{g.items.length}</td>
                     <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:g.vencido>0?C.overdueText:C.done}}>{g.vencido>0?f0(g.vencido):'—'}</td>
@@ -24015,7 +24010,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
                   </tr>
                   {open&&<tr><td colSpan={5} style={{background:C.bgSoft,borderTop:`1px dashed ${C.border}`,padding:'8px 14px 10px'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap',marginBottom:4}} onClick={e=>e.stopPropagation()}>
-                      <span style={{fontSize:10.5,color:C.muted}}>Último contacto: <b style={{color:conVenc?(gap==='sin contactar'?C.overdueText:C.muted):C.done}}>{conVenc?gap:'—'}</b>{conVenc&&nc>0?` · ${nc} envío${nc!==1?'s':''} confirmado${nc!==1?'s':''}`:''}</span>
+                      <span style={{fontSize:10.5,color:C.muted}}>Último contacto: <b style={{color:conVenc?(gap==='sin contactar'?C.overdueText:C.muted):C.done}}>{conVenc?gap:'—'}</b>{conVenc&&nc>0?` · ${nc} envío${nc!==1?'s':''} confirmado${nc!==1?'s':''}`:''}{onOpenClientFicha?<> · <span onClick={()=>onOpenClientFicha(g.cid)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha ›</span></>:''}</span>
                       {!conVenc ? <span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Al día — sin vencidas</span>
                       : auto ? <span style={{display:'inline-flex',gap:6,alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:7,padding:'5px 9px'}}>En automático</span><button onClick={()=>pausar(g.cid)} style={{background:'#fff',border:`1px solid ${C.border}`,color:C.done,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:600,cursor:'pointer'}}>Pausar</button></span>
                         : <span style={{display:'inline-flex',gap:6,alignItems:'center'}}>{nc>=LIBERAR_UMBRAL&&<button onClick={()=>liberar(g.cid)} style={{background:'#fff',border:`1px solid ${C.greenText}55`,color:C.greenText,borderRadius:7,padding:'6px 10px',fontSize:10.5,fontWeight:700,cursor:'pointer'}}>Liberar →</button>}<button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:7,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></span>}
@@ -24031,7 +24026,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
       })() : gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const conVenc=g.nAccion>0||g.vencido>0; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
         <div key={g.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-            <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(g.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(g.cid)}</span>
+            <span onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,cursor:'pointer'}}>{cn(g.cid)}</span>
             <div style={{textAlign:'right',lineHeight:1.15,flexShrink:0}}>
               {g.vencido>0 && <><div style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Vencido</div><div style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{f0(g.vencido)}</div></>}
               <div style={{fontSize:g.vencido>0?11:15,fontWeight:g.vencido>0?600:800,color:g.vencido>0?C.muted:C.accent,fontVariantNumeric:'tabular-nums'}}>{g.vencido>0?`Total ${f0(g.total)}`:f0(g.total)}</div>
@@ -24039,6 +24034,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
           </div>
           <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap',cursor:'pointer'}}>
             <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} pendiente{g.items.length!==1?'s':''}{g.maxDias>0?` · vencida hasta ${g.maxDias} d · ${gapTxt}`:' · al día'}</span>
+            {onOpenClientFicha&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(g.cid)}} style={{fontSize:11,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha ›</span>}
             <span style={{fontSize:11,color:C.accent,fontWeight:600,marginLeft:'auto'}}>{expCli===g.cid?'▾':'▸'}</span>
           </div>
           {expCli===g.cid&&<div style={{marginTop:6,borderTop:`1px solid ${C.bgSoft}`}}>{g.items.map(detItem)}</div>}
