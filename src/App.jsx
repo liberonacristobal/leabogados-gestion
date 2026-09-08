@@ -18429,8 +18429,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [openSaleGrp,setOpenSaleGrp] = useState(()=>new Set())   // grupos de ventas (Activas/Terminadas), colapsados por defecto
   const toggleSaleGrp = k => setOpenSaleGrp(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
-  // En escritorio, Cobros/Ventas/Gastos abiertos por defecto (como el render aprobado); en móvil, colapsadas (densidad).
-  const [rSec,setRSec] = useState(()=> (typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(min-width: 1024px)').matches) ? {cobros:true,ventas:true,gastos:true} : {})
+  const [rSec,setRSec] = useState({})   // secciones del Resumen colapsadas por defecto (el embudo de arriba da el resumen; se expande al tocar)
   const rtog = k => setRSec(s=>({...s,[k]:!s[k]}))
   const RHdr = ({icon,title,purpose,summary,sumCol,k,iconCol}) => (<div onClick={()=>rtog(k)} style={{display:'flex',alignItems:'center',gap:11,padding:'13px',cursor:'pointer',background:rSec[k]?'#F7F9FA':'#fff'}}>
     <SIcon n={icon} s={18} c={iconCol||C.muted}/>
@@ -18457,6 +18456,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const totalPorCobrar = porCobrarBills(clientBilling)   // fuente única (mismo helper que Financiero/lista/Dashboard)
   // Saldo del cliente: fuente única (fgCliente) — mismo criterio (todo lo no-fondo es gasto) que la lista de Gastos y el Dashboard.
   const {fondos, gastos, saldo:saldoFondos} = fgCliente(expenses, client.id)
+  // Embudo del cliente: cifras a UNA décima (resumen escaneable; el detalle de las filas va en fmt completo).
+  const fmtM1 = n => { const a=Math.abs(n||0),s=n<0?'-':''; if(a>=1e6) return s+'$'+(a/1e6).toFixed(1).replace('.',',')+'M'; if(a>=1e3) return s+'$'+Math.round(a/1e3)+'K'; return s+'$'+Math.round(a).toLocaleString('es-CL') }
+  const ufM1 = n => n>0 ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}` : '—'
+  const nVencFicha = porCobrar.filter(b=>esVencidaB(b)).length
 
   // Tareas agrupadas por proyecto
   const taskGroups = {}
@@ -18499,21 +18502,29 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
       <div style={{padding:'16px 20px 0',display:ftab==='resumen'?'block':'none'}}>
 
-        {/* Resumen financiero */}
-        <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:8,marginBottom:20}}>
-          {[
-            ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E6EEF1',C.accent,'financiero'],
-            ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?C.azulBg:C.bgSoft,totalPorCobrar>0?C.accent:C.muted,'financiero'],   // canon: por cobrar = navy (rojo es solo para vencido)
-            ['Cobrado',fmt(cobrado),'#E1F5EE',C.normal,'financiero'],
-            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?C.overdueBg:C.greenBg,saldoFondos<0?C.overdue:C.normal,'documentos'],
-          ].map(([l,v,bg,col,go])=>(
-            <div key={l} onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`,position:'relative',cursor:go?'pointer':'default'}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
-              <div style={{fontSize:14,fontWeight:700,color:col}}>{v}</div>
-              {go&&<span className="lf-chev" aria-hidden="true" style={{position:'absolute',top:9,right:10,fontSize:15,lineHeight:1,color:C.done}}>›</span>}
+        {/* Foto del cliente: embudo Vendido→Facturado→Cobrado→Por cobrar (del negocio) + Fondos (plata del cliente, aparte). Cifras a 1 décima; clickeable → su lista. */}
+        {(()=>{
+          const fst=(l,v,sub,col,go)=>(<div onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:C.surface,padding:'11px 13px',cursor:go?'pointer':'default'}}>
+            <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
+            <div style={{fontSize:isDesktop?17:16,fontWeight:800,color:col,marginTop:3,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{v}</div>
+            <div style={{fontSize:9,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+          </div>)
+          const nFact=clientBilling.filter(esFacturada).length
+          return (
+          <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:isDesktop?'nowrap':'wrap',alignItems:'stretch'}}>
+            <div style={{flex:1,minWidth:isDesktop?0:230,display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:1,background:C.border,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+              {fst('Vendido', ufM1(vendidoUF), `${clientSales.length} venta${clientSales.length!==1?'s':''}`, C.accent, 'financiero')}
+              {fst('Facturado', fmtM1(facturado), `${nFact} factura${nFact!==1?'s':''}`, C.accent, 'documentos')}
+              {fst('Cobrado', fmtM1(cobrado), 'del año', C.greenText, 'documentos')}
+              {fst('Por cobrar', totalPorCobrar>0?fmtM1(totalPorCobrar):'$0', nVencFicha>0?`saldo · ${nVencFicha} vencida${nVencFicha!==1?'s':''}`:'saldo vivo', totalPorCobrar>0?(nVencFicha>0?C.overdueText:C.accent):C.muted, 'financiero')}
             </div>
-          ))}
-        </div>
+            <div onClick={()=>setFtab('documentos')} className='lf-kpi' style={{width:isDesktop?150:'100%',flexShrink:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 13px',cursor:'pointer'}}>
+              <div style={{fontSize:9,fontWeight:800,color:C.tealText,textTransform:'uppercase',letterSpacing:.3}}>Fondos</div>
+              <div style={{fontSize:isDesktop?17:16,fontWeight:800,color:saldoFondos<0?C.overdueText:C.tealText,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtM1(saldoFondos)}</div>
+              <div style={{fontSize:9,color:C.muted,marginTop:1}}>{saldoFondos<0?'por reponer':'disponibles'}</div>
+            </div>
+          </div>)
+        })()}
 
         {/* Desktop: cuerpo en 2 columnas (secciones | contexto). Móvil: columna simple (wrapper y col sin estilo). */}
         <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 316px',gap:18,alignItems:'start'}:undefined}>
@@ -18613,7 +18624,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             const otras = sortOld(clientSales.filter(s=>!known.has(s.status)))
             if(otras.length) grupos.push({k:'__otras__',lbl:'Otras',col:C.muted,items:otras})
             return grupos.filter(g=>g.items.length>0).map(g=>{
-              const gopen = (isDesktop && g.k==='Activo') ? !openSaleGrp.has(g.k) : openSaleGrp.has(g.k)   // desktop: Activas abiertas por defecto (como el render)
+              const gopen = openSaleGrp.has(g.k)
               const totUF = g.items.reduce((a,s)=>a+ventaUF(s,ufRef),0)
               return (
                 <div key={g.k} style={{marginBottom:8}}>
@@ -18638,7 +18649,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         {/* Cobros pendientes */}
         {porCobrar.length>0&&(
           <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,order:-3}}>
-            {RHdr({icon:'file',title:'Cobros pendientes',k:'cobros',summary:fmt(totalPorCobrar),sumCol:C.accent,iconCol:C.accent})}
+            {RHdr({icon:'file',title:'Cobros pendientes',purpose:'lo que el cliente debe',k:'cobros',summary:`${porCobrar.length} factura${porCobrar.length!==1?'s':''}`,iconCol:C.accent})}
             {rSec.cobros&&<div style={{padding:'2px 13px 12px'}}>
             <button onClick={onAddBilling} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:8}}>+ Nuevo</button>
             {(()=>{
@@ -18653,7 +18664,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               return groups.map(g=>{
                 const sinRS = g.name==='Sin razón social'
                 const col = sinRS ? C.soon : C.accent
-                const open = isDesktop ? !openRS.has(g.name) : openRS.has(g.name)   // desktop: grupos de RS abiertos por defecto (como el render); openRS guarda los cerrados
+                const open = openRS.has(g.name)
                 return (
                 <div key={g.name} style={{marginBottom:8}}>
                   <div onClick={()=>toggleRS(g.name)} className="lf-row" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`2px solid ${col}`}}>
