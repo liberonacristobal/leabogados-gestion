@@ -18613,7 +18613,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             const otras = sortOld(clientSales.filter(s=>!known.has(s.status)))
             if(otras.length) grupos.push({k:'__otras__',lbl:'Otras',col:C.muted,items:otras})
             return grupos.filter(g=>g.items.length>0).map(g=>{
-              const gopen = openSaleGrp.has(g.k)
+              const gopen = (isDesktop && g.k==='Activo') ? !openSaleGrp.has(g.k) : openSaleGrp.has(g.k)   // desktop: Activas abiertas por defecto (como el render)
               const totUF = g.items.reduce((a,s)=>a+ventaUF(s,ufRef),0)
               return (
                 <div key={g.k} style={{marginBottom:8}}>
@@ -18653,7 +18653,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               return groups.map(g=>{
                 const sinRS = g.name==='Sin razón social'
                 const col = sinRS ? C.soon : C.accent
-                const open = openRS.has(g.name)
+                const open = isDesktop ? !openRS.has(g.name) : openRS.has(g.name)   // desktop: grupos de RS abiertos por defecto (como el render); openRS guarda los cerrados
                 return (
                 <div key={g.name} style={{marginBottom:8}}>
                   <div onClick={()=>toggleRS(g.name)} className="lf-row" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`2px solid ${col}`}}>
