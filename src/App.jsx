@@ -7495,13 +7495,14 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                         const uniq=[...byId.values()].sort((a,b)=>cuN(a)-cuN(b))
                         const seen=new Map(); uniq.forEach(c=>{ const k=`${c.cliente}|${c.concepto}|${c.monto}`; if(seen.has(k)){ const s=seen.get(k); s._dups++; if(c.estado==='Programada'&&s.estado!=='Programada'){ s.id=c.id; s.estado=c.estado } } else seen.set(k,{...c,_dups:1}) })
                         const list=[...seen.values()]
-                        // RANKING POR MES: la factura del SII tiene fecha; una candidata cuyo mes (concepto o vencimiento−1) calza es LA correcta.
-                        // Sin esto, mensuales de igual monto se ven todas "monto exacto" y se puede cuadrar al mes equivocado (folio de julio → cuota de diciembre).
-                        const iso=isoFecha(it.fechaEmision); const dSII=iso?new Date(iso):null; const gmes=dSII&&!isNaN(dSII)?dSII.getUTCMonth():null
-                        list.forEach(c=>{ const bb=(billing||[]).find(x=>String(x.id)===String(c.id)); c._mScore=mesScoreCandidata(c.concepto,bb?.due,gmes); c._mes=periodoDeTexto(c.concepto||'').mes })
-                        list.sort((a,b)=> (b._mScore-a._mScore) || (cuN(a)-cuN(b)))
+                        // REGLA (FIFO): al asignar un folio del SII a una cuota, SIEMPRE la MÁS ANTIGUA sin pagar, no la del mismo mes de emisión.
+                        // Las mensuales se emiten con desfase variable (mes vencido, atrasos: p.ej. "junio 26" se emitió en agosto), así que el mes
+                        // de emisión NO indica la cuota; el orden de emisión sí. Se ordena por período (vencimiento, o mes del concepto) ascendente.
+                        const perC=c=>{ const bb=(billing||[]).find(x=>String(x.id)===String(c.id)); if(bb&&bb.due) return String(bb.due); const p=periodoDeTexto(c.concepto||''); if(p.mes!=null){ const y=p.anio!=null?(p.anio<100?2000+p.anio:p.anio):9999; return `${y}-${String(p.mes+1).padStart(2,'0')}-01` } return '9999-12-31' }
+                        list.forEach(c=>{ c._per=perC(c) })
+                        list.sort((a,b)=> String(a._per).localeCompare(String(b._per)) || (cuN(a)-cuN(b)))
                         return list
-                      })(); return (   /* candidatos = todas las cuotas sin emitir de la venta, ordenadas por calce de mes y luego N° de cuota */
+                      })(); return (   /* candidatos = cuotas sin emitir de la venta, ordenadas de la MÁS ANTIGUA a la más nueva (FIFO) */
                     <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
                       <div onClick={()=>!done&&setAmbExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:done?'default':'pointer'}}>
                         {bigDate(isoFecha(it.fechaEmision),C.muted)}
@@ -7522,9 +7523,9 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                               : <AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={async(_,cid)=>{ await ingresarHuerfana(it,cid); const cc=clients.find(x=>String(x.id)===String(cid)); setAmbDone(p=>({...p,[it.folio]:cc?.name||'—'})) }} label='Elegir cliente' placeholder='Buscar cliente…'/>}
                           </div>
                         ) })()}
-                        {(()=>{ const claro=cands.filter(c=>c._mScore>=3); const unico=claro.length===1; const showAll=ambShowAll.has(it.folio); const visibles=(unico&&!showAll)?claro:cands; return (<>
-                          {unico&&!showAll&&<div style={{fontSize:10.5,color:C.greenText,padding:'5px 0',lineHeight:1.4}}>Coincide con el mes de la factura ({dmy(it.fechaEmision)}). Las otras cuotas son de otro mes.</div>}
-                          {visibles.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); const mesOk=cand._mScore>=3; return (
+                        {(()=>{ const showAll=ambShowAll.has(it.folio); const visibles=(cands.length>1&&!showAll)?cands.slice(0,1):cands; return (<>
+                          {cands.length>1&&!showAll&&<div style={{fontSize:10.5,color:C.greenText,padding:'5px 0',lineHeight:1.4}}>Se propone la cuota <b>más antigua sin pagar</b> (las facturas se emiten en orden, mes vencido). Revisa antes de asignar.</div>}
+                          {visibles.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); const primera=cand===cands[0]; return (
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
@@ -7532,12 +7533,12 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
-                              {mesOk?<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>Coincide el mes</div>:(cand._mes!=null&&<div style={{fontSize:9,fontWeight:600,color:C.soonText}}>{MESES_ABR[cand._mes]}</div>)}
+                              {primera&&<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>Más antigua sin pagar</div>}
                             </div>
-                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:26,padding:'0 13px',borderRadius:8,background:(mesOk||unico)?C.accent:'#fff',color:(mesOk||unico)?'#fff':C.accent,border:(mesOk||unico)?'none':`1px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
+                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:26,padding:'0 13px',borderRadius:8,background:primera?C.accent:'#fff',color:primera?'#fff':C.accent,border:primera?'none':`1px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
                           </div>
                           )})}
-                          {unico&&cands.length>1&&<button onClick={()=>setAmbShowAll(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{background:'none',border:'none',color:C.muted,fontSize:10.5,cursor:'pointer',padding:'6px 0',textDecoration:'underline'}}>{showAll?'Ocultar otras cuotas':`Ver otras ${cands.length-1} cuota(s) de otro mes`}</button>}
+                          {cands.length>1&&<button onClick={()=>setAmbShowAll(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{background:'none',border:'none',color:C.muted,fontSize:10.5,cursor:'pointer',padding:'6px 0',textDecoration:'underline'}}>{showAll?'Ver solo la más antigua':`Ver todas las cuotas (${cands.length})`}</button>}
                         </>) })()}
                       </div>}
                     </div>
