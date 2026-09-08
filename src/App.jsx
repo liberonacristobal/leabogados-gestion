@@ -10948,8 +10948,8 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
 const MOTIVOS_BAJA = ['Servicio no prestado','Cliente canceló el servicio','Error al programar','Facturado por otro medio','Otro']
 
 // ─── PROVEEDORES (catálogo + ficha de proveedores, costos de terceros) ──────
-function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sales=[],onSave,onRevertirPago,onAsignarFacturas,onOpenSale,onClose,saving}) {
-  const [view,setView] = useState('list')   // list | ficha | form
+function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sales=[],anticipos=[],onSave,onRevertirPago,onAsignarFacturas,onOpenSale,onClose,saving}) {
+  const [view,setView] = useState('list')   // list | ficha | form | subarriendo
   const [selId,setSelId] = useState(null)
   const [q,setQ] = useState('')
   const [asgOpen,setAsgOpen] = useState(false)   // panel de asignar facturas
@@ -10987,6 +10987,20 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const aniosDisp = [...new Set((terceros||[]).map(yearOf).filter(y=>/^\d{4}$/.test(y)))].sort((a,b)=>b.localeCompare(a))
   if(!aniosDisp.includes(yr)) aniosDisp.unshift(yr)
   const genDe = id => (terceros||[]).filter(t=>String(t.proveedor_id)===String(id)&&billOk(t.billing_id)&&yearOf(t)===yr).reduce((s,t)=>s+(t.monto||0),0)
+
+  // ── Subarrendamiento (ingreso por arriendo; NO honorarios). Vive acá, no en Ventas/Clientes.
+  // Fuente única: la venta marcada esSubarriendo + sus facturas (billing_type='subarriendo') + sus anticipos (pago sin factura).
+  // Cobrado = facturas subarriendo pagadas + anticipos recibidos · Facturado = DTE emitidos (con folio) · Por facturar = anticipos que esperan su factura.
+  const subVentas = (sales||[]).filter(s=>esSubarriendo(s)&&!s.deleted_at)
+  const subFacturas = (billing||[]).filter(b=>b?.billing_type==='subarriendo'&&!b.deleted_at&&b.status!=='Anulada')
+  const subAnticipos = (anticipos||[]).filter(a=> subVentas.some(s=>String(s.id)===String(a.sale_id)) )
+  const subFacturado = subFacturas.filter(b=>b.invoice_no).reduce((s,b)=>s+(Number(b.amount)||0),0)
+  const subFacturasPagadas = subFacturas.filter(b=>b.invoice_no).reduce((s,b)=>s+(Number(b.paid_amount)||(b.status==='Pagado'?Number(b.amount)||0:0)),0)
+  const subPorFacturar = subAnticipos.filter(a=>a.estado!=='consumido').reduce((s,a)=>s+(Number(a.monto)||0),0)
+  const subCobrado = subFacturasPagadas + subPorFacturar
+  const subCli = subVentas[0] ? (clients||[]).find(c=>String(c.id)===String(subVentas[0].client_id)) : null
+  const subMensual = subVentas[0] ? (Number(subVentas[0].amount_clp)||0) : 0
+  const hasSub = subVentas.length>0
 
   const lista = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
   const filtrados = q.trim()
@@ -11037,6 +11051,24 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
     <>
       {headerBack('Colaboradores',null)}
       <div style={{padding:'14px 20px 20px'}}>
+        {/* Subarrendamiento (ingreso por arriendo) — tarjeta clickeable que abre el detalle mes a mes */}
+        {hasSub&&(
+          <div onClick={()=>setView('subarriendo')} style={{display:'flex',gap:12,alignItems:'flex-start',background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:14,marginBottom:16,cursor:'pointer',boxShadow:'0 3px 12px rgba(0,0,0,.05)'}}>
+            <span style={{width:38,height:38,borderRadius:10,background:C.tealBg,color:C.tealText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18'/><path d='M5 21V7l8-4v18'/><path d='M19 21V11l-6-4'/></svg>
+            </span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:800,color:C.accent}}>Subarrendamiento</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subCli?.name||'Rodrigo Díaz'} · {fmtC(subMensual)} / mes</div>
+              <div style={{display:'flex',gap:16,marginTop:8}}>
+                <div><div style={{fontSize:14,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtC(subCobrado)}</div><div style={{fontSize:8.5,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Cobrado</div></div>
+                <div><div style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtC(subFacturado)}</div><div style={{fontSize:8.5,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Facturado</div></div>
+                <div><div style={{fontSize:14,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtC(subPorFacturar)}</div><div style={{fontSize:8.5,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Por facturar</div></div>
+              </div>
+            </div>
+            <span style={{color:C.done,fontSize:13,alignSelf:'center'}}>›</span>
+          </div>
+        )}
         {/* Foto del ciclo Generadas → Cobradas → Pagadas + filtro de año */}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>Ciclo de comisiones</span>
@@ -11083,6 +11115,57 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
             })}
           </div>
         )}
+      </div>
+    </>
+  )
+
+  // ── SUBARRENDAMIENTO (detalle) ──
+  if(view==='subarriendo') return (
+    <>
+      {headerBack('Subarrendamiento',()=>setView('list'))}
+      <div style={{padding:'14px 20px 20px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:11,marginBottom:14}}>
+          <span style={{width:42,height:42,borderRadius:12,background:C.tealBg,color:C.tealText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18'/><path d='M5 21V7l8-4v18'/><path d='M19 21V11l-6-4'/></svg>
+          </span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:16,fontWeight:800,color:C.accent}}>{subCli?.name||'Rodrigo Díaz'}</div>
+            <div style={{fontSize:11,color:C.muted}}>Subarrendamiento de oficina · {fmtC(subMensual)} / mes</div>
+          </div>
+        </div>
+        {/* KPIs: cobrado / facturado / por facturar */}
+        <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
+          <div style={{flex:1,padding:'11px 12px',textAlign:'center'}}><div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Cobrado</div><div style={{fontSize:16,fontWeight:800,color:C.greenText,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtC(subCobrado)}</div></div>
+          <div style={{flex:1,padding:'11px 12px',textAlign:'center',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Facturado</div><div style={{fontSize:16,fontWeight:800,color:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtC(subFacturado)}</div></div>
+          <div style={{flex:1,padding:'11px 12px',textAlign:'center',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Por facturar</div><div style={{fontSize:16,fontWeight:800,color:C.soonText,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtC(subPorFacturar)}</div></div>
+        </div>
+        {/* Facturas emitidas (SII) */}
+        {subFacturas.length>0&&(<>
+          <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',margin:'2px 0 6px'}}>Facturas emitidas</div>
+          <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+            {subFacturas.sort((a,b)=>String(b.issued_at||'').localeCompare(String(a.issued_at||''))).map(b=>{
+              const cl=onOpenSale? ()=>onOpenSale((sales||[]).find(s=>String(s.id)===String(b.sale_id))) : null
+              return (
+              <div key={b.id} onClick={cl||undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`,cursor:cl?'pointer':'default'}}>
+                <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{b.invoice_no||'—'}</div><div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'Subarriendo'} · {fmtD(String(b.issued_at||'').slice(0,10))}</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12.5,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtC(Number(b.amount)||0)}</div><span style={{fontSize:9,fontWeight:700,color:b.status==='Pagado'?C.greenText:C.soonText,background:b.status==='Pagado'?C.greenBg:C.soonBg,borderRadius:20,padding:'1px 7px'}}>{b.status}</span></div>
+              </div>)
+            })}
+          </div>
+        </>)}
+        {/* Pagos recibidos por facturar (anticipos) */}
+        {subAnticipos.filter(a=>a.estado!=='consumido').length>0&&(<>
+          <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',margin:'2px 0 6px'}}>Pagos por facturar · esperando su factura</div>
+          <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
+            {subAnticipos.filter(a=>a.estado!=='consumido').sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))).map(a=>(
+              <div key={a.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`}}>
+                <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{a.nota?.replace(/\s*\(.*\)$/,'')||'Pago de subarriendo'}</div><div style={{fontSize:10.5,color:C.muted}}>{fmtD(String(a.fecha||'').slice(0,10))} · recibido en banco</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12.5,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtC(Number(a.monto)||0)}</div><span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 7px'}}>Por emitir</span></div>
+              </div>
+            ))}
+          </div>
+        </>)}
+        <div style={{fontSize:10.5,color:C.muted,lineHeight:1.55,background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}>El subarriendo es un <b style={{color:C.text}}>ingreso por arriendo</b>, no honorarios: no cuenta en Vendido ni en las metas de venta. Los pagos "por emitir" ya están en el banco esperando su factura; cuando emitas el DTE en el SII, se enlaza solo al pago.</div>
       </div>
     </>
   )
@@ -18771,7 +18854,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   const isDesktop = useIsDesktop()   // Fase 2: en desktop, lista + ficha lado a lado (2-paneles)
   // Proveedores inline (mismo formato que clientes: lista → ficha, pantalla completa)
   if(verProv) return (
-    <ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={onSaveProveedor} onRevertirPago={onRevertirPagoProveedor} onAsignarFacturas={onAsignarFacturas} onOpenSale={onOpenSale} onClose={()=>setVerProv(false)} saving={provSaving}/>
+    <ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} anticipos={anticipos} onSave={onSaveProveedor} onRevertirPago={onRevertirPagoProveedor} onAsignarFacturas={onAsignarFacturas} onOpenSale={onOpenSale} onClose={()=>setVerProv(false)} saving={provSaving}/>
   )
 
   const fichaEl = selected ? (
