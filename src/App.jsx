@@ -24061,7 +24061,7 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
               <tbody>
                 {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:12.5,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
-                  <tr onClick={()=>setExpCli(open?null:g.cid)} onMouseEnter={e=>e.currentTarget.style.background='#FFFFFF'} onMouseLeave={e=>e.currentTarget.style.background=''} style={{cursor:'pointer'}}>
+                  <tr onClick={()=>setExpCli(open?null:g.cid)} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'} style={{cursor:'pointer',background:'#fff'}}>
                     <td style={td}><span style={{color:C.done,marginRight:7,fontSize:11}}>{open?'▾':'▸'}</span><span style={{fontWeight:700,color:C.accent}}>{cn(g.cid)}</span></td>
                     <td style={{...td,color:C.muted}}>{g.items.length}</td>
                     <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
