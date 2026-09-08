@@ -5,6 +5,11 @@ Revisión detallada al 2026-07-03. Fuente: memoria del proyecto + código. Marca
 
 ---
 
+## A0. Anotados 2026-09-08 (pendientes de ejecutar)
+
+- ⚠ **BM Soluciones · Asesoría permanente a 20 UF/mes (jul–dic).** Ajustar la venta recurrente "Asesoría permanente" de **BM Soluciones** a **20 UF mensuales** para las cuotas de **julio a diciembre 2026**. **Julio y agosto** se planifican para **emitir este mes** → serían **dos facturas de 20 UF cada una**. (Toca cifras/facturación recurrente → verificar montos antes de ejecutar.)
+- 🔨 **Excel de emisión de facturas: mostrar N° de cuota / total.** El archivo Excel que se descarga para emitir facturas debe mostrar, cuando el cobro es por cuotas, el **total de cuotas y cuál se está facturando** (ej. `4/10`). **NO** mostrar el "monto guardado". (Buscar el generador del Excel de emisión y agregar la columna cuota; usar el nº de cuota de la programación.)
+
 ## A. En curso / prioridad de esta tanda
 
 - ✅ **Depurar "ya cobradas sin marcar"** — alerta + marcar Pagadas en lote (reversible). HECHO hoy.
