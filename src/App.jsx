@@ -18429,7 +18429,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [openSaleGrp,setOpenSaleGrp] = useState(()=>new Set())   // grupos de ventas (Activas/Terminadas), colapsados por defecto
   const toggleSaleGrp = k => setOpenSaleGrp(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
-  const [rSec,setRSec] = useState({})   // secciones-icono del Resumen (Cobros/Ventas/Gastos/Tareas), colapsadas por defecto
+  // En escritorio, Cobros/Ventas/Gastos abiertos por defecto (como el render aprobado); en móvil, colapsadas (densidad).
+  const [rSec,setRSec] = useState(()=> (typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(min-width: 1024px)').matches) ? {cobros:true,ventas:true,gastos:true} : {})
   const rtog = k => setRSec(s=>({...s,[k]:!s[k]}))
   const RHdr = ({icon,title,purpose,summary,sumCol,k,iconCol}) => (<div onClick={()=>rtog(k)} style={{display:'flex',alignItems:'center',gap:11,padding:'13px',cursor:'pointer',background:rSec[k]?'#F7F9FA':'#fff'}}>
     <SIcon n={icon} s={18} c={iconCol||C.muted}/>
@@ -18516,7 +18517,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
         {/* Desktop: cuerpo en 2 columnas (secciones | contexto). Móvil: columna simple (wrapper y col sin estilo). */}
         <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 316px',gap:18,alignItems:'start'}:undefined}>
-        <div style={{minWidth:0}}>
+        <div style={{minWidth:0,...(isDesktop?{display:'flex',flexDirection:'column'}:{})}}>
 
         {/* Portal del cliente (Fase 1a): interruptor para compartir su estado */}
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:8}}>
@@ -18557,7 +18558,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         })()}
 
         {/* Ventas */}
-        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,order:-2}}>
           {RHdr({icon:'briefcase',title:'Ventas',purpose:'qué le vendiste',k:'ventas',summary:`${clientSales.filter(s=>s.status==='Activo').length} activas`})}
           {rSec.ventas&&<div style={{padding:'2px 13px 12px'}}>
           {clientSales.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin ventas registradas</div>}
@@ -18636,7 +18637,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
         {/* Cobros pendientes */}
         {porCobrar.length>0&&(
-          <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+          <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,order:-3}}>
             {RHdr({icon:'file',title:'Cobros pendientes',k:'cobros',summary:fmt(totalPorCobrar),sumCol:C.accent,iconCol:C.accent})}
             {rSec.cobros&&<div style={{padding:'2px 13px 12px'}}>
             <button onClick={onAddBilling} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:8}}>+ Nuevo</button>
@@ -18688,7 +18689,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         )}
 
         {/* Gastos y fondos */}
-        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,order:-1}}>
           {RHdr({icon:'wallet',title:'Gastos y fondos',k:'gastos',summary:`saldo ${fmt(saldoFondos)}`,sumCol:saldoFondos<0?C.overdue:C.normal})}
           {rSec.gastos&&<div style={{padding:'2px 13px 12px'}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-start',marginBottom:8}}>
