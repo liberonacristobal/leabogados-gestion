@@ -28829,12 +28829,16 @@ export default function App() {
       ensureProyectoCartera(data)   // si quedó Activa, aparece en el Panel de Cartera (idempotente)
       // Insertar cuotas (función reutilizable)
       const insertarCuotas = async() => {
-        // Resguardo: no crear una programada por un cobro ya cubierto por facturas PAGADAS de esta venta.
-        // La programada es para un cobro FUTURO; si ya existe una factura pagada, ese cobro ya ocurrió (la programada sería fantasma/duplicada).
+        // Resguardo: no crear una programada por un cobro que YA está representado por una factura de esta venta.
+        // La programada es para un cobro FUTURO; si ese mes ya tiene factura, la programada sería un fantasma/duplicado.
+        // Cubre dos casos (antes solo se miraba 'Pagado', lo que regeneraba meses ya EMITIDOS pero impagos → fantasmas sin folio):
+        //   (a) factura PAGADA de esta venta, y (b) factura EMITIDA con folio (Pendiente/Vencido) de esta venta.
         let cubierto = 0
         try {
-          const {data:pg} = await supabase.from('billing').select('amount').eq('sale_id',data.id).eq('status','Pagado').neq('billing_type','reembolso').is('deleted_at',null)
-          cubierto = (pg||[]).reduce((a,b)=>a+(b.amount||0),0)
+          const {data:pg} = await supabase.from('billing').select('amount,status,invoice_no').eq('sale_id',data.id).neq('billing_type','reembolso').is('deleted_at',null)
+          cubierto = (pg||[])
+            .filter(b => b.status==='Pagado' || (b.invoice_no && String(b.invoice_no).trim()!==''))
+            .reduce((a,b)=>a+(b.amount||0),0)
         } catch(_){}
         for(const c of cobros){
           let monto = c.monto||0
