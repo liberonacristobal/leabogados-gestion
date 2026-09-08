@@ -2603,7 +2603,8 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
+function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso}) {
+  const go = t => navTo ? navTo({tab:t}) : setTab(t)   // salto que apila origen+scroll (navTo) para que "Volver" regrese al Inicio en su posición exacta
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   const [verTodosProy,setVerTodosProy] = useState(false)   // "Ver todos" en Mis proyectos: carga mis terminados y muestra los 3 grupos
   const [terminadosProy,setTerminadosProy] = useState(null) // mis proyectos terminados (activo:false), cargados bajo demanda
@@ -2896,8 +2897,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
       propTardias.length&&{sev:2,dot:C.done,ico:'clock',lbl:'Propuestas tardías (+14d)',sub:`${propTardias.length} propuesta${propTardias.length!==1?'s':''}`,amt:fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0))),go:'sales',navLbl:`Ver las ${propTardias.length}`,rows:propTardias.slice(0,3).map(s=>({name:s.title||cnD(s.client_id),val:'',cid:s.client_id})),iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
       plzVenc.length&&{sev:0,dot:C.overdue,ico:'clock',lbl:'Plazos vencidos',sub:`${plzVenc.length} plazo${plzVenc.length!==1?'s':''}`,amt:'',onNav:()=>onOpenPlazos&&onOpenPlazos(),navLbl:'Ver plazos',rows:plzVenc.slice(0,3).map(p=>({name:p.titulo||'Plazo',val:fmtPlz(p.fecha),cid:p.client_id})),iaTxt:`${plzVenc.length} plazos vencidos`},
       plzProx.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Plazos esta semana',sub:`${plzProx.length} plazo${plzProx.length!==1?'s':''}`,amt:'',onNav:()=>onOpenPlazos&&onOpenPlazos(),navLbl:'Ver plazos',rows:plzProx.slice(0,3).map(p=>({name:p.titulo||'Plazo',val:fmtPlz(p.fecha),cid:p.client_id})),iaTxt:`${plzProx.length} plazos vencen esta semana`},
-      cartCrit.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Proyectos críticos',sub:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''}`,amt:'',onNav:()=>setTab&&setTab('cartera'),navLbl:'Ver proyectos',rows:cartCrit.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''} en rojo`},
-      cartStale.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Proyectos sin mover +2 semanas',sub:`${cartStale.length} proyecto${cartStale.length!==1?'s':''}`,amt:'',onNav:()=>setTab&&setTab('cartera'),navLbl:'Ver proyectos',rows:cartStale.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartStale.length} proyecto${cartStale.length!==1?'s':''} sin mover +2 semanas`},
+      cartCrit.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Proyectos críticos',sub:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''}`,amt:'',onNav:()=>go('cartera'),navLbl:'Ver proyectos',rows:cartCrit.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''} en rojo`},
+      cartStale.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Proyectos sin mover +2 semanas',sub:`${cartStale.length} proyecto${cartStale.length!==1?'s':''}`,amt:'',onNav:()=>go('cartera'),navLbl:'Ver proyectos',rows:cartStale.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartStale.length} proyecto${cartStale.length!==1?'s':''} sin mover +2 semanas`},
     ].filter(Boolean).sort((a,b)=>a.sev-b.sev)
     const head = vencidas.length ? `Hoy prioriza la cobranza: ${fmtShort(sum(vencidas))} en ${vencidas.length} factura${vencidas.length!==1?'s':''} vencida${vencidas.length!==1?'s':''}.`
       : tareasVenc.length ? `Tienes ${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''} vencida${tareasVenc.length!==1?'s':''} por resolver.`
@@ -2935,12 +2936,12 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
     const cnA=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'cliente'
     const _wk=(()=>{ const d=new Date(); const m=new Date(d); m.setDate(d.getDate()-((d.getDay()+6)%7)); return m.toLocaleDateString('en-CA') })()
     const raw=[
-      vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>setTab('cobranza')},
+      vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>go('cobranza')},
       (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
       progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
-      cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>setTab('billing')},
-      margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>setTab('repricing')},
-      (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>setTab('horas')},
+      cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}`,goLbl:'Pagar',go:()=>go('billing')},
+      margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>go('repricing')},
+      (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>go('horas')},
       porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
       (costosOfiYTD>0 && ingYTD_a>0 && ingYTD_a<costosOfiYTD) && {key:'estructura',sev:'a',icon:'wallet',monto:costosOfiYTD-ingYTD_a,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(ingYTD_a)} < costos ${fmtMon(costosOfiYTD)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
     ].filter(Boolean)
@@ -3050,13 +3051,13 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                 </div>
               )}
             </div>
-            <span onClick={()=>setTab('sales')} style={{fontSize:9,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver detalle ›</span>
+            <span onClick={()=>go('sales')} style={{fontSize:9,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver detalle ›</span>
           </div>
           <div style={{padding:'6px 20px 0'}}>
             {/* Embudo: Vendido → Facturado → Cobrado → Utilidad. Tono suave por etapa; bruto/neto en la misma tarjeta; meta como % chip. Cada cifra de su helper (sin recalcular). Todo clickeable. */}
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8}}>
               {m.bruto>0&&(
-                <div onClick={()=>setTab('sales')} style={{background:'#EAF2FB',border:'1px solid #D5E6F6',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+                <div onClick={()=>go('sales')} style={{background:'#EAF2FB',border:'1px solid #D5E6F6',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase'}}>Vendido</span>{m.meta>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.azulInfo,borderRadius:20,padding:'1px 7px'}}>{ventaPct}%</span>}</div>
                   <div style={{fontSize:22,fontWeight:800,color:C.text,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</div>
                   <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>neto {vMon(m.netoUF,m.neto)}</div>
@@ -3067,7 +3068,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                 <div style={{fontSize:22,fontWeight:800,color:C.text,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(facturadoYr)}</div>
                 <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>de lo vendido</div>
               </div>
-              <div onClick={()=>setTab('cobranza')} style={{background:'#E6F6EF',border:'1px solid #CDEBDD',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+              <div onClick={()=>go('cobranza')} style={{background:'#E6F6EF',border:'1px solid #CDEBDD',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase'}}>Cobrado</span>{metaCobranza>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.normal,borderRadius:20,padding:'1px 7px'}}>{cobroPct}%</span>}</div>
                 <div style={{fontSize:22,fontWeight:800,color:C.greenText,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(ingYTD)}</div>
                 <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>{comisPagadasAnioVenta.total>0?`a caja ${fmtMon(ingYTD-comisPagadasAnioVenta.total)}`:`por cobrar ${fmtMon(totalPorCobrar)}`}</div>
@@ -3565,7 +3566,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
         const nm=p=>clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'
         const ico=(d,c)=><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={c} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
-        const abrir=p=>{ onOpenProyecto?onOpenProyecto(p.id):setTab('cartera') }
+        const abrir=p=>{ onOpenProyecto?onOpenProyecto(p.id):go('cartera') }
         const groupHd=(icoEl,label,n,col,bg)=><div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 6px',background:C.bgSoft,borderTop:'1px solid #DDE2E6'}}><span style={{width:20,height:20,borderRadius:6,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icoEl}</span><span style={{flex:1,fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:col}}>{label}</span><span style={{fontSize:10,fontWeight:800,color:col}}>{n}</span></div>
         const rowCurso=p=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?new Date(s.iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):`hace ${dd} d`); const col=CART_DOT[p.estado||'verde']; return (
           <div key={p.id} onClick={()=>abrir(p)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
@@ -3602,7 +3603,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
             </>}
             {!verTodosProy
               ? <div onClick={cargarTerminadosProy} style={{padding:'11px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer',background:'#fff'}}>Ver todos →</div>
-              : <div onClick={()=>setTab('cartera')} style={{padding:'11px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer',background:'#fff'}}>Abrir en Cartera →</div>}
+              : <div onClick={()=>go('cartera')} style={{padding:'11px 12px',borderTop:'1px solid #DDE2E6',textAlign:'center',fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer',background:'#fff'}}>Abrir en Cartera →</div>}
           </div>
         </div>
         )
@@ -3621,7 +3622,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
 // Solo admin. KPIs sólidos + Oportunidades accionables calculadas con helpers fuente única.
 // El código calcula; el Resumen IA (claudeCall) se suma en una etapa siguiente.
 const IA_SPK = (<svg width='10' height='10' viewBox='0 0 24 24' fill='currentColor' style={{display:'inline-block',verticalAlign:'-1px',marginRight:4}}><path d='M12 2l1.5 5.5L19 9l-5.5 1.5L12 16l-1.5-5.5L5 9l5.5-1.5z'/></svg>)
-function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha, onOpenSale}){
+function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha, onOpenSale, navTo, onBack, backLabel}){
+  const go = t => navTo ? navTo({tab:t}) : (setTab&&setTab(t))   // salto que apila origen+scroll (navTo) con fallback a setTab
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [openOpp,setOpenOpp] = useState(null)
   const [openSeg,setOpenSeg] = useState(null)   // segmento de cartera abierto
@@ -3847,12 +3849,12 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div><div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Inteligencia</div><div style={{fontSize:10.5,color:C.muted,fontWeight:500,marginTop:1}}>oportunidades y salud de los proyectos</div></div>
-          <button onClick={()=>setTab&&setTab('dashboard')} style={chipBtn('soft')}>← Inicio</button>
+          <button onClick={()=>onBack?onBack():(setTab&&setTab('dashboard'))} style={chipBtn('soft')}>← {backLabel||'Volver'}</button>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-          {kpiCard('Vendido '+yr, fmtUFk(kpis.vendidoYTD), C.accent, ()=>setTab&&setTab('sales'))}
-          {kpiCard('Por cobrar', fmt(kpis.porCobrar), C.overdue, ()=>setTab&&setTab('billing'))}
-          {kpiCard('Cobrado '+yr, fmt(kpis.cobradoYTD), C.normal, ()=>setTab&&setTab('billing'))}
+          {kpiCard('Vendido '+yr, fmtUFk(kpis.vendidoYTD), C.accent, ()=>go('sales'))}
+          {kpiCard('Por cobrar', fmt(kpis.porCobrar), C.overdue, ()=>go('billing'))}
+          {kpiCard('Cobrado '+yr, fmt(kpis.cobradoYTD), C.normal, ()=>go('billing'))}
         </div>
       </div>
       <div style={{padding:'10px 20px 100px'}}>
@@ -4024,7 +4026,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               {open&&rows.length>15&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'5px 0'}}>+{rows.length-15} más</div>}
             </div>
           )})}
-          <div onClick={()=>setTab&&setTab('cartera')} style={{borderTop:`1px solid ${C.border}`,marginTop:6,paddingTop:10,fontSize:11.5,fontWeight:700,color:C.azulInfo,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>Ver seguimiento completo · novedades y rentabilidad ›</div>
+          <div onClick={()=>go('cartera')} style={{borderTop:`1px solid ${C.border}`,marginTop:6,paddingTop:10,fontSize:11.5,fontWeight:700,color:C.azulInfo,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>Ver seguimiento completo · novedades y rentabilidad ›</div>
         </div>
         </div>)}
         {biSec==='servicios'&&(<div style={{marginTop:12}}>
@@ -30496,8 +30498,8 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>setTab('presupuestoOficina')} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='mas')setPaletteOpen(true) }}/>}
-            {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>setTab('presupuestoOficina')} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
