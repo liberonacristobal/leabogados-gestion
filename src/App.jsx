@@ -11005,6 +11005,8 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   // Cobrado = facturas subarriendo pagadas + anticipos recibidos · Facturado = DTE emitidos (con folio) · Por facturar = anticipos que esperan su factura.
   const subVentas = (sales||[]).filter(s=>esSubarriendo(s)&&!s.deleted_at)
   const subFacturas = (billing||[]).filter(b=>b?.billing_type==='subarriendo'&&!b.deleted_at&&b.status!=='Anulada')
+  const subEmitidas = subFacturas.filter(b=>b.invoice_no)                                    // con folio (DTE en el SII)
+  const subProgramadas = subFacturas.filter(b=>!b.invoice_no&&b.status!=='Pagado')           // cuotas futuras "por emitir"
   const subAnticipos = (anticipos||[]).filter(a=> subVentas.some(s=>String(s.id)===String(a.sale_id)) )
   const subFacturado = subFacturas.filter(b=>b.invoice_no).reduce((s,b)=>s+(Number(b.amount)||0),0)
   const subFacturasPagadas = subFacturas.filter(b=>b.invoice_no).reduce((s,b)=>s+(Number(b.paid_amount)||(b.status==='Pagado'?Number(b.amount)||0:0)),0)
@@ -11152,10 +11154,10 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           <div style={{flex:1,padding:'11px 12px',textAlign:'center',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Por facturar</div><div style={{fontSize:16,fontWeight:800,color:C.soonText,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtC(subPorFacturar)}</div></div>
         </div>
         {/* Facturas emitidas (SII) */}
-        {subFacturas.length>0&&(<>
+        {subEmitidas.length>0&&(<>
           <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',margin:'2px 0 6px'}}>Facturas emitidas</div>
           <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
-            {subFacturas.sort((a,b)=>String(b.issued_at||'').localeCompare(String(a.issued_at||''))).map(b=>{
+            {subEmitidas.sort((a,b)=>String(b.issued_at||'').localeCompare(String(a.issued_at||''))).map(b=>{
               const cl=onOpenSale? ()=>onOpenSale((sales||[]).find(s=>String(s.id)===String(b.sale_id))) : null
               return (
               <div key={b.id} onClick={cl||undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`,cursor:cl?'pointer':'default'}}>
@@ -11173,6 +11175,18 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
               <div key={a.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`}}>
                 <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{a.nota?.replace(/\s*\(.*\)$/,'')||'Pago de subarriendo'}</div><div style={{fontSize:10.5,color:C.muted}}>{fmtD(String(a.fecha||'').slice(0,10))} · recibido en banco</div></div>
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12.5,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtC(Number(a.monto)||0)}</div><span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 7px'}}>Por emitir</span></div>
+              </div>
+            ))}
+          </div>
+        </>)}
+        {/* Cuotas programadas hacia adelante (aún sin cobrar) */}
+        {subProgramadas.length>0&&(<>
+          <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',margin:'2px 0 6px'}}>Programadas · próximos meses</div>
+          <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
+            {subProgramadas.sort((a,b)=>String(a.due||'').localeCompare(String(b.due||''))).map(b=>(
+              <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`}}>
+                <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(b.concept||'Subarriendo').replace('Subarrendamiento oficina — ','')}</div><div style={{fontSize:10.5,color:C.muted}}>vence {fmtD(String(b.due||'').slice(0,10))}</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12.5,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtC(Number(b.amount)||0)}</div><span style={{fontSize:9,fontWeight:700,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'1px 7px'}}>Programada</span></div>
               </div>
             ))}
           </div>
