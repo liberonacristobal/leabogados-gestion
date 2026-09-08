@@ -11222,6 +11222,13 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   }).filter(Boolean).sort((a,b)=>(b.sale.year-a.sale.year)||((b.sale.month||0)-(a.sale.month||0))) : []
   // Honorarios involucrados = suma de "su parte" (lo que cobra el proveedor), no el total de las ventas.
   const honInvUF = ventasInv.reduce((a,v)=>a+(v.parteUFeq||0),0)
+  // Colaborador ligado a un cliente (proveedores.client_id): sus DOS caras de ingreso hacia nosotros.
+  // "Comisiones que nos paga" = facturas honorarios del cliente (le cobramos comisión). "Subarrendamiento" = subData (si es su cliente).
+  const linkedCliId = sel?.client_id
+  const comisFacturas = linkedCliId ? (billing||[]).filter(b=>String(b.client_id)===String(linkedCliId)&&b.billing_type==='honorarios'&&!b.deleted_at&&b.status!=='Anulada').sort((a,b)=>String(b.issued_at||b.due||'').localeCompare(String(a.issued_at||a.due||''))) : []
+  const comisTot = comisFacturas.reduce((s,b)=>s+(Number(b.amount)||0),0)
+  const comisPagado = comisFacturas.filter(b=>b.status==='Pagado').reduce((s,b)=>s+(Number(b.amount)||0),0)
+  const subDeCli = hasSub && subVentas[0] && String(subVentas[0].client_id)===String(linkedCliId)
   return (
     <>
       {headerBack('Ficha del colaborador',()=>setView('list'))}
@@ -11243,6 +11250,40 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           </div>
         )}
 
+        {/* INGRESOS hacia nosotros (colaborador ligado a un cliente): subarriendo + comisiones que nos paga */}
+        {subDeCli&&(
+          <div onClick={()=>setView('subarriendo')} style={{display:'flex',gap:11,alignItems:'center',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginBottom:10,cursor:'pointer'}}>
+            <span style={{width:34,height:34,borderRadius:9,background:C.tealBg,color:C.tealText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18'/><path d='M5 21V7l8-4v18'/><path d='M19 21V11l-6-4'/></svg>
+            </span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:800,color:C.accent}}>Subarrendamiento <span style={{fontSize:8.5,fontWeight:800,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'1px 7px',marginLeft:4,letterSpacing:.3}}>INGRESO</span></div>
+              <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Cobrado {fmtC(subCobrado)} · por facturar {fmtC(subPorFacturar)}</div>
+            </div>
+            <span style={{color:C.done,fontSize:13}}>›</span>
+          </div>
+        )}
+        {comisFacturas.length>0&&(
+          <div style={{marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
+              <span style={flabel}>Comisiones que nos paga <span style={{fontSize:8.5,fontWeight:800,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'1px 7px',marginLeft:2,letterSpacing:.3,textTransform:'none'}}>INGRESO</span></span>
+              <span style={{fontSize:11,color:C.muted}}>pagado {fmtC(comisPagado)} / {fmtC(comisTot)}</span>
+            </div>
+            <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+              {comisFacturas.slice(0,8).map(b=>{
+                const cl=onOpenSale&&b.sale_id? ()=>onOpenSale((sales||[]).find(s=>String(s.id)===String(b.sale_id))) : null
+                return (
+                <div key={b.id} onClick={cl||undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',background:'#fff',borderBottom:`0.5px solid ${C.border}`,cursor:cl?'pointer':'default'}}>
+                  <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no||'Sin folio'}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'Comisiones'}{b.issued_at?` · ${fmtD(String(b.issued_at).slice(0,10))}`:''}</div></div>
+                  <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtC(Number(b.amount)||0)}</div><span style={{fontSize:8.5,fontWeight:700,color:b.status==='Pagado'?C.greenText:C.soonText,background:b.status==='Pagado'?C.greenBg:C.soonBg,borderRadius:20,padding:'1px 7px'}}>{b.status}</span></div>
+                </div>)
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Comisiones que LE PAGAMOS (reparto/egreso) — ventas en que participa: nº de ventas + honorarios totales involucrados */}
+        {ventasInv.length>0&&<div style={{...flabel,marginBottom:6}}>Comisiones que le pagamos <span style={{fontSize:8.5,fontWeight:800,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'1px 7px',marginLeft:2,letterSpacing:.3,textTransform:'none'}}>EGRESO</span></div>}
         {/* Ventas en que participa: nº de ventas + honorarios totales involucrados */}
         <div style={{display:'flex',border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
           <div style={{flex:1,padding:'11px 14px'}}>
@@ -18831,15 +18872,15 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   // Actualizar selected cuando cambian los datos
   useEffect(()=>{ if(selected) setSelected(clients.find(c=>c.id===selected.id)||null) },[clients])
 
-  const activeN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&(c.status||'Activo')==='Activo').length
-  const endedN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&c.status==='Terminado').length
-  const prospectoN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&c.status==='Prospecto').length
+  const activeN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&!c.is_colaborador&&(c.status||'Activo')==='Activo').length
+  const endedN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&!c.is_colaborador&&c.status==='Terminado').length
+  const prospectoN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&!c.is_colaborador&&c.status==='Prospecto').length
   // Responsable de un cliente = responsable de su venta más reciente (campo responsible en sales)
   const responsableDe = useMemo(()=>{ const m={}; clients.forEach(c=>{ if(c.abogado_responsable) m[c.id]=c.abogado_responsable }); [...sales].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[s.client_id]) m[s.client_id]=s.responsible }); return m },[clients,sales])
   const responsables = useMemo(()=>[...new Set(Object.values(responsableDe))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'es')),[responsableDe])
   const tareasDe = useMemo(()=>{ const m={}; tasks.forEach(t=>{ if(t.client_id&&t.status!=='Terminado') m[t.client_id]=(m[t.client_id]||0)+1 }); return m },[tasks])
   const cl = useMemo(()=>{
-    let base = clients.filter(c=>!c.is_occasional)   // los ocasionales viven en Gastos/cobranza, no en la lista formal
+    let base = clients.filter(c=>!c.is_occasional&&!c.is_colaborador)   // ocasionales viven en Gastos/cobranza; colaboradores (ej. BDA/Rodrigo) viven en Colaboradores, no en la lista formal de clientes
     if(sFilter==='Activo') base=base.filter(c=>(c.status||'Activo')==='Activo')
     else if(sFilter==='Terminado') base=base.filter(c=>c.status==='Terminado')
     else if(sFilter==='Prospecto') base=base.filter(c=>c.status==='Prospecto')
