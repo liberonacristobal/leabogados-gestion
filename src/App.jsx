@@ -2834,7 +2834,76 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
   const metaCobranza = Number(targets.find(t=>t.year===selYear)?.collection_target) || 0
   // Facturado del año = emitidas (con folio) del año, monto del DTE (fuente única montoFactura). Por sale.year, cae al año del vencimiento.
   const facturadoYr = useMemo(()=>{ const syById={}; sales.forEach(s=>{ if(s.year!=null) syById[String(s.id)]=s.year }); return (billing||[]).filter(b=> b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && !['reembolso','nota_credito'].includes(b.billing_type) && ((syById[String(b.sale_id)] ?? (b.due?Number(String(b.due).slice(0,4)):null))===selYear)).reduce((a,b)=>a+montoFactura(b),0) },[billing,sales,selYear])
+  // Facturado por AÑO DE VENTA (emitidas con folio, monto DTE), con la lista de facturas por año → para el drill del embudo (nivel 2: detalle de lo facturado).
+  const facturadoByYear = useMemo(()=>{
+    const syById={}; sales.forEach(s=>{ if(s.year!=null) syById[String(s.id)]=s.year })
+    const byYear={}; const listByYear={}
+    ;(billing||[]).forEach(b=>{
+      if(!b||b.deleted_at||!b.invoice_no||b.status==='Anulada'||['reembolso','nota_credito'].includes(b.billing_type)) return
+      const y = syById[String(b.sale_id)] ?? (b.due?Number(String(b.due).slice(0,4)):null)
+      if(y==null) return
+      byYear[y]=(byYear[y]||0)+montoFactura(b); (listByYear[y]=listByYear[y]||[]).push(b)
+    })
+    return {byYear,listByYear}
+  },[billing,sales])
+  const [resDrill,setResDrill] = usePersistedState('d_resdrill',null)   // {tile:'vend'|'fact'|'cob', year:number|null} — embudo: nivel1 años, nivel2 detalle
   const [ingDrill,setIngDrill] = usePersistedState('d_ingdrill',null)   // año de venta cuyo detalle (facturas) está abierto ('sin' = sin año)
+  // Descargar la foto "Resultado del año" como PNG branded (canvas propio, no screenshot → salida limpia; en iPhone usa la hoja de compartir). RECUPERADO (se había perdido al quitar el hero "Cómo va el año").
+  const descargarResultado = async () => {
+    try{
+      const S=2, W=440, H=360
+      const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
+      const g=cv.getContext('2d'); g.scale(S,S)
+      const F=(w,s)=>`${w} ${s}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
+      const rr=(x,y,w,h,r)=>{ g.beginPath(); if(g.roundRect) g.roundRect(x,y,w,h,r); else { g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.arcTo(x+w,y,x+w,y+r,r); g.lineTo(x+w,y+h-r); g.arcTo(x+w,y+h,x+w-r,y+h,r); g.lineTo(x+r,y+h); g.arcTo(x,y+h,x,y+h-r,r); g.lineTo(x,y+r); g.arcTo(x,y,x+r,y,r); } g.closePath() }
+      const iv=ingresosPorAnioVenta
+      const ventas=vMon(m.brutoUF,m.bruto), meta=vMon(metaUF,m.meta)
+      const denomM=dashMoneda==='UF'?metaUF:m.meta, heroM=dashMoneda==='UF'?m.brutoUF:m.bruto
+      const pct=denomM>0?Math.min(100,Math.round(heroM/denomM*100)):0
+      const facturado=fmtMon(facturadoYr), cobradoAno=fmtMon(iv.delAnio||0), utilidad=vMon(m.netoUF,m.neto)
+      const ingresado=fmtMon(iv.total||0), metaCob=metaCobranza>0?fmtMon(metaCobranza):'—'
+      const metaPct=metaCobranza>0?Math.round((iv.total||0)/metaCobranza*100):0
+      const anteriores=Math.max(0,(iv.total||0)-(iv.delAnio||0)-(iv.sinMonto||0))
+      const hoy=new Date(), dd=String(hoy.getDate()).padStart(2,'0'), mo=String(hoy.getMonth()+1).padStart(2,'0'), yy=hoy.getFullYear(), hh=String(hoy.getHours()).padStart(2,'0'), mi=String(hoy.getMinutes()).padStart(2,'0')
+      g.fillStyle='#fff'; g.fillRect(0,0,W,H)
+      g.fillStyle='#003C50'; g.fillRect(0,0,W,56)
+      g.fillStyle='#fff'; g.font=F(700,17); g.fillText(`RESULTADO DEL AÑO · ${selYear}`,18,28)
+      g.fillStyle='#85B7EB'; g.font=F(500,11.5); g.fillText('Liberona Escala Abogados',18,46)
+      g.fillStyle='#99ABB4'; g.font=F(700,10); g.fillText(`VENDIDO · ${selYear}`,18,84)
+      g.fillStyle='#003C50'; g.font=F(700,30); g.fillText(ventas,18,116)
+      g.fillStyle='#537281'; g.font=F(600,12); g.fillText(`${pct}% de la meta · Meta ${meta}`,18,134)
+      g.fillStyle='#EDEFF1'; rr(18,146,W-36,9,4.5); g.fill()
+      g.fillStyle='#003C50'; rr(18,146,(W-36)*pct/100,9,4.5); g.fill()
+      ;[[facturado,'FACTURADO','#BA7517'],[cobradoAno,`COBRADO ${selYear}`,'#0F6E56'],[utilidad,'UTILIDAD','#003C50']].forEach((c,i)=>{ const cx=18+i*((W-36)/3); g.fillStyle=c[2]; g.font=F(700,15); g.fillText(c[0],cx,190); g.fillStyle='#A8B2B8'; g.font=F(700,9); g.fillText(c[1],cx,204) })
+      g.strokeStyle='#EDEFF1'; g.lineWidth=1; g.beginPath(); g.moveTo(18,222); g.lineTo(W-18,222); g.stroke()
+      const tw=(W-36-10)/2
+      g.fillStyle='#0F6E56'; rr(18,234,tw,72,12); g.fill()
+      g.fillStyle='rgba(255,255,255,.85)'; g.font=F(700,9); g.fillText('INGRESADO A CAJA',32,258)
+      g.fillStyle='#fff'; g.font=F(700,22); g.fillText(ingresado,32,286)
+      g.fillStyle='#E1F5EE'; rr(28+tw,234,tw,72,12); g.fill()
+      g.fillStyle='#0F6E56'; g.font=F(700,9); g.fillText('META COBRANZA',42+tw,258)
+      g.fillStyle='#0F6E56'; g.font=F(700,22); g.fillText(metaCob,42+tw,286)
+      g.fillStyle='#2E7D5B'; g.font=F(600,10); g.fillText(metaCobranza>0?`${metaPct}% de la meta`:'sin meta',42+tw,301)
+      g.fillStyle='#537281'; g.font=F(600,10); g.fillText(`A caja: ventas ${selYear} ${cobradoAno} · anteriores ${fmtMon(anteriores)}`,18,332)
+      g.fillStyle='#99ABB4'; g.font=F(700,10); g.fillText(`CORTE AL ${dd}-${mo}-${yy} · ${hh}:${mi} HRS`,18,H-12)
+      const blob=await new Promise(res=>cv.toBlob(res,'image/png'))
+      if(!blob) throw new Error('canvas vacío')
+      const file=new File([blob],`RESULTADO-DEL-ANO-${selYear}.png`,{type:'image/png'})
+      if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:`Resultado del año ${selYear}`}); return }catch(_){ } }
+      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000)
+    }catch(e){ appAlert('No se pudo generar la imagen: '+(e.message||e)) }
+  }
+  // Imprimir informe del año (HTML limpio → Imprimir/PDF). Reusa las mismas cifras y el desglose por año de venta.
+  const imprimirResultado = () => {
+    const iv=ingresosPorAnioVenta
+    const A='#003C50', MUT='#537281', GRAY='#E4E8EB'
+    const rowKpi=(l,v,s)=>`<tr><td style='padding:9px 12px;border-bottom:1px solid #EFF1F3'><b>${l}</b>${s?`<div style='font-size:10px;color:${MUT}'>${s}</div>`:''}</td><td style='padding:9px 12px;border-bottom:1px solid #EFF1F3;text-align:right;font-weight:800;font-size:15px'>${v}</td></tr>`
+    const yrsC=(iv.allYears||[]).map(y=>`<tr><td style='padding:6px 12px;color:${MUT}'>Cobrado de ventas ${y}${y!==selYear?' (anterior)':''}</td><td style='padding:6px 12px;text-align:right;font-weight:700'>${fmtMon(iv.byYear[y]||0)}</td></tr>`).join('')
+    const yrsF=Object.keys(facturadoByYear.byYear).map(Number).sort((a,b)=>b-a).map(y=>`<tr><td style='padding:6px 12px;color:${MUT}'>Facturado de ventas ${y}${y!==selYear?' (anterior)':''}</td><td style='padding:6px 12px;text-align:right;font-weight:700'>${fmtMon(facturadoByYear.byYear[y]||0)}</td></tr>`).join('')
+    const hoy=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'})
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Resultado del año ${selYear} — ${BRAND.nombre}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:#3D3D3D;background:#fff;font-size:12px}.page{max-width:720px;margin:0 auto}@page{size:letter portrait;margin:16mm}@media print{.no-print{display:none}}table{width:100%;border-collapse:collapse}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:16px;font-weight:700'>${BRAND.nombre}</div><div style='font-size:11px;opacity:.8;margin-top:2px'>Resultado del año · ${selYear}</div></div><div style='font-size:10px;opacity:.85'>Corte ${hoy}</div></div><div style='padding:22px 24px'><table>${rowKpi('Vendido',vMon(m.brutoUF,m.bruto),`neto ${vMon(m.netoUF,m.neto)} · meta ${vMon(metaUF,m.meta)}`)}${rowKpi('Facturado',fmtMon(facturadoYr),'de ventas del año (DTE)')}${rowKpi('Cobrado de ventas '+selYear,fmtMon(iv.delAnio||0),'')}${rowKpi('Total ingresado a caja '+selYear,fmtMon(iv.total||0),metaCobranza>0?`meta cobranza ${fmtMon(metaCobranza)}`:'')}${rowKpi('Utilidad',vMon(m.netoUF,m.neto),'margen')}</table><div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 6px'>Cobrado por año de venta</div><table>${yrsC}</table><div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 6px'>Facturado por año de venta</div><table>${yrsF}</table><div style='margin-top:24px;padding-top:12px;border-top:1px solid ${GRAY};font-size:9px;color:${MUT}'>Documento interno del estudio · cifras al corte indicado.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() } else appAlert('Habilita las ventanas emergentes para imprimir el informe.')
+  }
   // Años con meta cargada O con ventas registradas (así 2025/2024 aparecen al ingresar sus ventas, sin necesidad de meta)
   const aniosDisponibles = [...new Set([currentYear, ...targets.map(t=>t.year), ...sales.filter(s=>!['Borrador','Propuesta','Rechazada'].includes(s.status)).map(s=>s.year).filter(Boolean)])].sort((a,b)=>b-a)
   const ufFecha = ufState.asOf ? new Date(ufState.asOf+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}) : ''
@@ -3051,27 +3120,37 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                 </div>
               )}
             </div>
-            <span onClick={()=>go('sales')} style={{fontSize:9,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver detalle ›</span>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <button onClick={descargarResultado} title="Descargar imagen" style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:9,fontWeight:700,color:C.accent}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Imagen
+              </button>
+              <button onClick={imprimirResultado} title="Imprimir informe" style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:9,fontWeight:700,color:C.accent}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Imprimir
+              </button>
+              <span onClick={()=>go('sales')} style={{fontSize:9,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver detalle ›</span>
+            </div>
           </div>
           <div style={{padding:'6px 20px 0'}}>
             {/* Embudo: Vendido → Facturado → Cobrado → Utilidad. Tono suave por etapa; bruto/neto en la misma tarjeta; meta como % chip. Cada cifra de su helper (sin recalcular). Todo clickeable. */}
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8}}>
               {m.bruto>0&&(
-                <div onClick={()=>go('sales')} style={{background:'#EAF2FB',border:'1px solid #D5E6F6',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+                <div onClick={()=>setResDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})} style={{background:'#EAF2FB',border:`1px solid ${resDrill?.tile==='vend'?C.azulInfo:'#D5E6F6'}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase'}}>Vendido</span>{m.meta>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.azulInfo,borderRadius:20,padding:'1px 7px'}}>{ventaPct}%</span>}</div>
                   <div style={{fontSize:22,fontWeight:800,color:C.text,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</div>
                   <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>neto {vMon(m.netoUF,m.neto)}</div>
                 </div>
               )}
-              <div onClick={()=>onAcceso&&onAcceso('facturasMes')} style={{background:'#FDF4E2',border:'1px solid #F5E6C6',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+              <div onClick={()=>setResDrill(d=>d&&d.tile==='fact'?null:{tile:'fact',year:null})} style={{background:'#FDF4E2',border:`1px solid ${resDrill?.tile==='fact'?C.amber||'#BA7517':'#F5E6C6'}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase'}}>Facturado</span>{m.bruto>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:'#BA7517',borderRadius:20,padding:'1px 7px'}}>{factPct}%</span>}</div>
                 <div style={{fontSize:22,fontWeight:800,color:C.text,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(facturadoYr)}</div>
                 <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>de lo vendido</div>
               </div>
-              <div onClick={()=>go('cobranza')} style={{background:'#E6F6EF',border:'1px solid #CDEBDD',borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+              <div onClick={()=>setResDrill(d=>d&&d.tile==='cob'?null:{tile:'cob',year:null})} style={{background:'#E6F6EF',border:`1px solid ${resDrill?.tile==='cob'?C.normal:'#CDEBDD'}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase'}}>Cobrado</span>{metaCobranza>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.normal,borderRadius:20,padding:'1px 7px'}}>{cobroPct}%</span>}</div>
-                <div style={{fontSize:22,fontWeight:800,color:C.greenText,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(ingYTD)}</div>
-                <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>{comisPagadasAnioVenta.total>0?`a caja ${fmtMon(ingYTD-comisPagadasAnioVenta.total)}`:`por cobrar ${fmtMon(totalPorCobrar)}`}</div>
+                <div style={{fontSize:22,fontWeight:800,color:C.greenText,letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fmtMon(ingresosPorAnioVenta.delAnio)}</div>
+                <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>de ventas {selYear} · <span style={{color:C.azulInfo,fontWeight:700}}>por año ›</span></div>
               </div>
               {costosOfiAnual>0&&(
                 <div onClick={onOpenEstadoResultados||onOpenCostosOfi} style={{background:'#EDF1F4',border:'1px solid #DCE4EA',borderRadius:12,padding:'12px 13px',cursor:(onOpenEstadoResultados||onOpenCostosOfi)?'pointer':'default'}}>
@@ -3081,6 +3160,40 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                 </div>
               )}
             </div>
+            {resDrill&&(()=>{
+              const t=resDrill.tile
+              const cn = cid => (clients.find(c=>String(c.id)===String(cid))||{}).name || 'Sin cliente'
+              const openYear = y => setResDrill(d=>({...d, year: d.year===y?null:y}))
+              const R={display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.border}`}
+              const RC={...R,cursor:'pointer'}
+              const IT={display:'flex',justifyContent:'space-between',gap:10,padding:'7px 12px 7px 24px',fontSize:11.5,background:C.bgSoft,borderTop:`1px solid ${C.border}`,cursor:'pointer'}
+              const box={margin:'9px 0 2px',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}
+              if(t==='vend'){
+                const faltaUF=Math.max(0,metaUF-m.brutoUF), faltaCLP=Math.max(0,m.meta-m.bruto)
+                return (<div style={box}>
+                  <div style={{...R,borderTop:'none',background:C.azulBg}}><span style={{fontWeight:700,color:C.accent}}>Meta de ventas {selYear}</span><span style={{fontWeight:800,color:C.azulInfo}}>{vMon(metaUF,m.meta)}</span></div>
+                  <div style={R}><span style={{color:C.muted}}>Vendido</span><span style={{fontWeight:700,color:C.text}}>{vMon(m.brutoUF,m.bruto)}</span></div>
+                  <div style={R}><span style={{color:C.muted}}>Falta para la meta</span><span style={{fontWeight:700,color:C.text}}>{vMon(faltaUF,faltaCLP)}</span></div>
+                  <div onClick={()=>go('sales')} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>Ver todo en Ventas ›</div>
+                </div>)
+              }
+              const isCob=t==='cob'
+              const g = isCob?ingresosPorAnioVenta:facturadoByYear
+              const byYear=g.byYear||{}, listByYear=g.listByYear||{}
+              const yrs=Object.keys(byYear).map(Number).sort((a,b)=>b-a)
+              return (<div style={box}>
+                {yrs.map(y=>{ const open=resDrill.year===y; const items=(listByYear[y]||[]); return (
+                  <Fragment key={y}>
+                    <div onClick={()=>openYear(y)} style={RC}><span style={{fontWeight:700,color:C.accent}}>Ventas {y}{y!==selYear?' · anterior':''}</span><span style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontWeight:800,color:isCob?C.greenText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMon(byYear[y])}</span><Chev open={open}/></span></div>
+                    {open&&items.slice(0,50).map(it=>{ const cid=it.client_id; const folio=isCob?it.folio:it.invoice_no; const mo=isCob?it._cobrado:montoFactura(it); return (
+                      <div key={it.id||it.invoice_no} onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={IT}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{cn(cid)}{folio?` · N°${folioN(folio)||folio}`:''}{it._esAnticipo?' · anticipo':''}</span><span style={{fontWeight:700,color:C.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtMon(mo)}</span></div>) })}
+                    {open&&items.length>50&&<div style={{...IT,color:C.muted,cursor:'default'}}><span>… {items.length-50} más</span><span/></div>}
+                  </Fragment>) })}
+                {isCob&&<div style={{...R,background:C.greenBg}}><span style={{fontWeight:800,color:C.text}}>Total a caja {selYear}</span><span style={{fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtMon(ingresosPorAnioVenta.total)}</span></div>}
+                {isCob&&metaCobranza>0&&<div style={{...R,background:C.azulBg}}><span style={{fontWeight:700,color:C.accent}}>Meta de cobranza {selYear}</span><span style={{fontWeight:800,color:C.azulInfo}}>{fmtMon(metaCobranza)} · {cobroPct}%</span></div>}
+                <div onClick={()=>go(isCob?'cobranza':'billing')} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>Ver todo en {isCob?'Cobranza':'Facturación'} ›</div>
+              </div>)
+            })()}
           </div>
         </>)
       })()}
