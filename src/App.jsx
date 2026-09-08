@@ -16631,7 +16631,7 @@ function ContactoTab({client, entities, onSaveFields, clientBilling=[], onOpenFi
   )
 
   return (
-    <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?820:undefined,margin:isDesktop?'0 auto':undefined}}>
+    <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined}}>
       <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
         <IconSection icon='id' title='Identificación' summary={client.rut||'sin RUT'} open={sec.id} onToggle={()=>tog('id')}>
           <div style={{display:'grid',gap:10,paddingTop:4}}>
@@ -17154,7 +17154,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=montoFactura(b);o.pag+=cobradoBill(b);o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
   const kpi=(label,val,sub,col,corner)=>(<div style={{background:C.bgSoft,borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
   const Hdr=({icon,title,purpose,summary,sumCol,k})=>(<div onClick={()=>secT(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.bgWarm}`,background:sec[k]?C.bgPanel:'transparent'}}><SIcon n={icon} s={18} c={C.muted}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{title}</div>{purpose&&<div style={{fontSize:9.5,color:C.muted,fontWeight:500,marginTop:1}}>{purpose}</div>}</div>{summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:sec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg></div>)
-  return (<div style={{padding:'14px 20px 40px',maxWidth:isDesktop?1040:undefined,margin:isDesktop?'0 auto':undefined}}>
+  return (<div style={{padding:'14px 20px 40px',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined}}>
     {/* Banda accionable: lo único que de verdad importa en una cuenta donde casi solo entra plata — lo que falta conciliar */}
     {(()=>{ const movBase=movs.filter(m=>!m.es_interno); const sinC=movBase.filter(m=>!conc.find(x=>x.movimiento_id===m.id)); if(!sinC.length) return null; const tot=sinC.reduce((s,m)=>s+(m.monto||0),0); return (
       <div onClick={()=>{ if(!sec.movs)secT('movs'); setMovF('sin') }} style={{display:'flex',alignItems:'center',gap:10,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'10px 13px',marginBottom:12,cursor:'pointer'}}>
@@ -17403,21 +17403,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   )
 
   return (
-    <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?1040:undefined,margin:isDesktop?'0 auto':undefined}}>
-      {/* Tira de 4 KPIs del cliente (heredada del landing), scroll horizontal; Programado/Cobrado por año */}
-      {(()=>{
-        const cobYear=real.filter(b=>b.status==='Pagado'&&String(b.paid_at||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+montoFactura(b),0)
-        const progYear=real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&String(b.due||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
-        return <div style={{display:'flex',gap:7,overflowX:'auto',marginBottom:12,paddingBottom:2,scrollbarWidth:'none',alignItems:'stretch'}}>
-          {/* Por cobrar con Vencido ANIDADO (jerarquía: el vencido es parte del por cobrar, no una tarjeta paralela) */}
-          <div onClick={()=>{setVSec(p=>({...p,facturas:true}));setFicEst({'Por cobrar':true,'Por facturar':false,'Pagadas':false,'Anuladas':false})}} title='Ver facturas por cobrar' style={{flex:'0 0 auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 11px',cursor:'pointer'}}>
-            <div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div>
-            <div style={{fontSize:14,fontWeight:700,color:porCobrar>0?C.accent:C.text,whiteSpace:'nowrap'}}>{fmt(porCobrar)}</div>
-            {overdueTot>0&&<div style={{fontSize:10,fontWeight:600,color:C.overdue,whiteSpace:'nowrap',marginTop:2}}>Vencido {fmt(overdueTot)}</div>}
-          </div>
-          {[['Por facturar '+(selYear||''),progYear,C.muted,'Por facturar'],['Cobrado '+(selYear||''),cobYear,C.normal,'Pagadas']].map(([l,v,col,est])=>(<div key={l} onClick={()=>{setVSec(p=>({...p,facturas:true}));setFicEst({'Por cobrar':false,'Por facturar':false,'Pagadas':false,'Anuladas':false,[est]:true})}} title={`Ver ${est.toLowerCase()}`} style={{flex:'0 0 auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 11px',cursor:'pointer'}}><div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:col,whiteSpace:'nowrap'}}>{fmt(v)}</div></div>))}
-        </div>
-      })()}
+    <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined}}>
+      {/* La foto (Vendido/Facturado/Cobrado/Por cobrar) vive en el embudo del Resumen — no se repite acá. Ventas = proyectos + facturas + anticipos. */}
 
       {/* Proyectos (icono-sección colapsada): Vigentes + Terminados, con barra de cobro (facturado→cobrado) */}
       {(()=>{
@@ -18500,35 +18487,73 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         <FichaTabs tab={ftab} setTab={setFtab} role="admin"/>
       </div>
 
-      <div style={{padding:'16px 20px 0',display:ftab==='resumen'?'block':'none'}}>
+      <div style={{padding:'16px 20px 0',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined,display:ftab==='resumen'?'block':'none'}}>
 
-        {/* Foto del cliente: embudo Vendido→Facturado→Cobrado→Por cobrar (del negocio) + Fondos (plata del cliente, aparte). Cifras a 1 décima; clickeable → su lista. */}
+        {/* FOTO: 5 tarjetas KPI individuales (Vendido·Facturado·Cobrado·Por cobrar·Fondos) + 2 tarjetas accionables (Vencidas·Próximas tareas). Sin duplicar: el detalle vive en las pestañas. */}
         {(()=>{
-          const fst=(l,v,sub,col,go)=>(<div onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:C.surface,padding:'11px 13px',cursor:go?'pointer':'default'}}>
+          const kc=(l,v,sub,col,go)=>(<div onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',cursor:go?'pointer':'default'}}>
             <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
-            <div style={{fontSize:isDesktop?17:16,fontWeight:800,color:col,marginTop:3,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{v}</div>
-            <div style={{fontSize:9,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+            <div style={{fontSize:17,fontWeight:800,color:col,marginTop:4,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{v}</div>
+            <div style={{fontSize:9,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
           </div>)
           const nFact=clientBilling.filter(esFacturada).length
-          return (
-          <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:isDesktop?'nowrap':'wrap',alignItems:'stretch'}}>
-            <div style={{flex:1,minWidth:isDesktop?0:230,display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:1,background:C.border,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-              {fst('Vendido', ufM1(vendidoUF), `${clientSales.length} venta${clientSales.length!==1?'s':''}`, C.accent, 'financiero')}
-              {fst('Facturado', fmtM1(facturado), `${nFact} factura${nFact!==1?'s':''}`, C.accent, 'documentos')}
-              {fst('Cobrado', fmtM1(cobrado), 'del año', C.greenText, 'documentos')}
-              {fst('Por cobrar', totalPorCobrar>0?fmtM1(totalPorCobrar):'$0', nVencFicha>0?`saldo · ${nVencFicha} vencida${nVencFicha!==1?'s':''}`:'saldo vivo', totalPorCobrar>0?(nVencFicha>0?C.overdueText:C.accent):C.muted, 'financiero')}
+          const _MAf=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+          const dcol=iso=>{const p=String(iso||'').slice(0,10).split('-');return p.length>=3?{dd:p[2],mm:_MAf[+p[1]-1]||''}:null}
+          const venc=porCobrar.filter(b=>esVencidaB(b)).sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
+          const vencTot=venc.reduce((s,b)=>s+saldoBill(b),0)
+          const dvenc=b=>{const dl=daysLeft(b.due);return dl!=null&&dl<0?-dl:0}
+          const tks=[...clientTasks].sort((a,b)=>String(a.due||'zzzz').localeCompare(String(b.due||'zzzz'))).slice(0,3)
+          return (<>
+          <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(5,1fr)':'repeat(2,1fr)',gap:10,marginBottom:14}}>
+            {kc('Vendido', ufM1(vendidoUF), `${clientSales.length} venta${clientSales.length!==1?'s':''}`, C.accent, 'financiero')}
+            {kc('Facturado', fmtM1(facturado), `${nFact} factura${nFact!==1?'s':''}`, C.accent, 'documentos')}
+            {kc('Cobrado', fmtM1(cobrado), 'histórico', C.greenText, 'documentos')}
+            {kc('Por cobrar', totalPorCobrar>0?fmtM1(totalPorCobrar):'$0', nVencFicha>0?`${nVencFicha} vencida${nVencFicha!==1?'s':''}`:'saldo vivo', totalPorCobrar>0?(nVencFicha>0?C.overdueText:C.accent):C.muted, 'financiero')}
+            {kc('Fondos', fmtM1(saldoFondos), saldoFondos<0?'por reponer':'disponibles', saldoFondos<0?C.overdueText:C.tealText, 'documentos')}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12,marginBottom:8,alignItems:'start'}}>
+            {/* Vencidas (accionable) */}
+            <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+              {venc.length>0 ? (<>
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:`1px solid ${C.bgSoft}`}}>
+                  <span style={{width:28,height:28,borderRadius:8,background:C.overdueBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={15} c={C.overdueText}/></span>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Vencidas</div><div style={{fontSize:9.5,color:C.muted}}>a cobrar ya</div></div>
+                  <span style={{fontSize:13,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(vencTot)}</span>
+                </div>
+                {venc.slice(0,3).map(b=>{const d=dcol(b.issued_at||b.due);return (
+                  <div key={b.id} onClick={()=>onEditBilling&&onEditBilling(b)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onEditBilling?'pointer':'default',fontSize:12}}>
+                    <div style={{width:30,textAlign:'center',flexShrink:0}}>{d?<><div style={{fontSize:13,fontWeight:800,color:C.overdueText,lineHeight:1}}>{d.dd}</div><div style={{fontSize:7.5,color:C.done,textTransform:'uppercase'}}>{d.mm}</div></>:'—'}</div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.concept||'Factura'}</div><div style={{fontSize:9.5,color:C.muted}}>{b.invoice_no?`N° ${folioN(b.invoice_no)||b.invoice_no} · `:''}{dvenc(b)} d</div></div>
+                    <span style={{fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(saldoBill(b))}</span>
+                  </div>)})}
+                <div onClick={()=>setFtab('financiero')} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.overdueText,cursor:'pointer'}}>Cobrar · ir a Ventas ›</div>
+              </>) : (
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px'}}>
+                  <span style={{width:28,height:28,borderRadius:8,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={15} c={C.greenText}/></span>
+                  <div style={{flex:1}}><div style={{fontSize:12.5,fontWeight:700,color:C.greenText}}>Al día</div><div style={{fontSize:9.5,color:C.muted}}>sin facturas vencidas</div></div>
+                </div>)}
             </div>
-            <div onClick={()=>setFtab('documentos')} className='lf-kpi' style={{width:isDesktop?150:'100%',flexShrink:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 13px',cursor:'pointer'}}>
-              <div style={{fontSize:9,fontWeight:800,color:C.tealText,textTransform:'uppercase',letterSpacing:.3}}>Fondos</div>
-              <div style={{fontSize:isDesktop?17:16,fontWeight:800,color:saldoFondos<0?C.overdueText:C.tealText,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtM1(saldoFondos)}</div>
-              <div style={{fontSize:9,color:C.muted,marginTop:1}}>{saldoFondos<0?'por reponer':'disponibles'}</div>
+            {/* Próximas tareas */}
+            <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:`1px solid ${C.bgSoft}`}}>
+                <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={15} c={C.accent}/></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>Próximas tareas</div><div style={{fontSize:9.5,color:C.muted}}>{clientTasks.length} pendiente{clientTasks.length!==1?'s':''}</div></div>
+              </div>
+              {tks.length===0
+                ? <div style={{padding:'12px 14px',fontSize:11.5,color:C.muted}}>Sin tareas pendientes.</div>
+                : tks.map(t=>(<div key={t.id} onClick={()=>onEditTask&&onEditTask(t)} style={{display:'flex',alignItems:'flex-start',gap:9,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onEditTask?'pointer':'default',fontSize:12}}>
+                    <span style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),marginTop:5,flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.title}</div><div style={{fontSize:9.5,color:C.muted}}>{taskAssignees(t).join(', ')||'—'}{t.due?` · vence ${new Date(t.due+'T12:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'})}`:''}</div></div>
+                  </div>))}
+              {onAddTask&&<div onClick={()=>onAddTask()} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>+ Nueva tarea</div>}
             </div>
-          </div>)
+          </div>
+          </>)
         })()}
 
-        {/* Desktop: cuerpo en 2 columnas (secciones | contexto). Móvil: columna simple (wrapper y col sin estilo). */}
-        <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 316px',gap:18,alignItems:'start'}:undefined}>
-        <div style={{minWidth:0,...(isDesktop?{display:'flex',flexDirection:'column'}:{})}}>
+        {/* Secciones antiguas OCULTAS: su contenido vive ahora en las pestañas (Ventas/Cartola/Contacto) y en las 2 tarjetas de arriba. Se dejan renderizadas pero ocultas para no perder lógica; limpieza posterior. */}
+        <div style={{display:'none'}}>
+        <div style={{minWidth:0}}>
 
         {/* Portal del cliente (Fase 1a): interruptor para compartir su estado */}
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:8}}>
