@@ -5,10 +5,10 @@ Revisión detallada al 2026-07-03. Fuente: memoria del proyecto + código. Marca
 
 ---
 
-## A0. Anotados 2026-09-08 (pendientes de ejecutar)
+## A0. Anotados 2026-09-08
 
-- ⚠ **BM Soluciones · Asesoría permanente a 20 UF/mes (jul–dic).** Ajustar la venta recurrente "Asesoría permanente" de **BM Soluciones** a **20 UF mensuales** para las cuotas de **julio a diciembre 2026**. **Julio y agosto** se planifican para **emitir este mes** → serían **dos facturas de 20 UF cada una**. (Toca cifras/facturación recurrente → verificar montos antes de ejecutar.)
-- 🔨 **Excel de emisión de facturas: mostrar N° de cuota / total.** El archivo Excel que se descarga para emitir facturas debe mostrar, cuando el cobro es por cuotas, el **total de cuotas y cuál se está facturando** (ej. `4/10`). **NO** mostrar el "monto guardado". (Buscar el generador del Excel de emisión y agregar la columna cuota; usar el nº de cuota de la programación.)
+- ✅ **BM Soluciones · Asesoría permanente a 20 UF/mes (jul–dic).** HECHO 2026-09-08: venta f251bd33 amount_uf 35→20; 6 cuotas Programadas jul–dic 2026 amount 1.426.915→815.380 (20 UF, ratio 20/35). Jul (vence 01-08) y Ago (vence 01-09) quedan Programadas y listas para emitir este mes (2 facturas de 20 UF). Factura 239 (ene–jun, Pagada) intacta. El monto exacto al emitir usa la UF del día.
+- ✅ **Excel de emisión: N° de cuota / total.** HECHO 2026-09-08: `descargarExcel` (Facturar_{mes}.xlsx, App.jsx ~6294) — se quitó "Monto guardado ($)" y se agregó columna **Cuota** = posición/total de la cuota entre las de su venta (ej. 4/10; vacío si la venta tiene una sola). NOTA: el export `descargarProgramadas` (Programadas.xlsx, ~8886) — export de planificación con fila TOTAL — se dejó igual; aplicar el mismo criterio ahí si se pide.
 
 ## A. En curso / prioridad de esta tanda
 

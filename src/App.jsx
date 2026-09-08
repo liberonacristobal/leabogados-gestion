@@ -6291,7 +6291,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
       const ufHoy = ufState.uf || null
       const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}` : 'Monto hoy ($)'
-      const header=['Responsable','Cliente','Razón social','RUT','Concepto','UF','Monto guardado ($)',ufNota,'Devengo de la cuota']
+      const header=['Responsable','Cliente','Razón social','RUT','Concepto','Cuota','UF',ufNota,'Devengo de la cuota']
       // Fuente única de fila (misma que "↓ Programadas"): reusada por ambas hojas para que no divergan.
       const rowOf = b => {
         const c=clients.find(x=>x.id===b.client_id)
@@ -6301,15 +6301,19 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
         const ufVal=venta?.uf_value||null
         const ufEq=(!esCLP&&ufVal)?(b.amount/ufVal):null
         const montoHoy=esCLP?(b.amount||0):((ufEq&&ufHoy)?Math.round(ufEq*ufHoy):null)
+        // N° de cuota / total: posición de esta cuota entre las de su venta (por devengo). Vacío si la venta tiene una sola.
+        const cuotasSale = b.sale_id ? billing.filter(x=>!x.deleted_at && x.sale_id===b.sale_id && x.billing_type!=='reembolso' && x.status!=='Anulada').sort((x,y)=>String(x.due||x.issued_at||'').localeCompare(String(y.due||y.issued_at||''))) : []
+        const cidx = cuotasSale.findIndex(x=>String(x.id)===String(b.id))
+        const cuotaLbl = (cuotasSale.length>1 && cidx>=0) ? `${cidx+1}/${cuotasSale.length}` : ''
         const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id)
         let rs=null
         if(b.entity_id) rs=ents.find(e=>e.id===b.entity_id)||null
         else if(ents.length===1) rs=ents[0]
         const rsName=rs?rs.name:(ents.length>1?'definir razón social':(b.receptor_name||''))
         const rsRut=rs?(rs.rut||''):(b.entity_id?'':(ents.length>1?'':(b.receptor_rut||'')))
-        return [resp, c?.name||'Sin cliente', rsName, rsRut, b.concept||'', esCLP?'—':(ufEq?Number(ufEq.toFixed(2)):''), b.amount||0, montoHoy??'', b.due||'']
+        return [resp, c?.name||'Sin cliente', rsName, rsRut, b.concept||'', cuotaLbl, esCLP?'—':(ufEq?Number(ufEq.toFixed(2)):''), montoHoy??'', b.due||'']
       }
-      const cols=[{wch:16},{wch:24},{wch:26},{wch:14},{wch:30},{wch:10},{wch:16},{wch:18},{wch:16}]
+      const cols=[{wch:16},{wch:24},{wch:26},{wch:14},{wch:30},{wch:8},{wch:10},{wch:18},{wch:16}]
       const wb=XLSX.utils.book_new()
       if(porEmitir.length){
         const ws=XLSX.utils.aoa_to_sheet([header,...porEmitir.map(rowOf)])
