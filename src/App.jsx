@@ -3220,12 +3220,22 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               const cn = cid => (clients.find(c=>String(c.id)===String(cid))||{}).name || 'Sin cliente'
               const openYear = y => setResDrill(d=>({...d, year: d.year===y?null:y}))
               const box={margin:'9px 0 2px',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}
-              const R={display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 13px',borderTop:`1px solid ${C.border}`}
+              const R={display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.border}`}
               const RC={...R,cursor:'pointer'}
+              // ADN de fila único (mismo tamaño/peso en los 4 paneles; el COLOR de la cifra solo por rol):
+              const rowL={fontSize:12.5,fontWeight:600,color:C.muted}                                   // etiqueta gris
+              const rowV={fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',flexShrink:0} // cifra neutra/subtotal (azul marino)
+              const vPos={...rowV,color:C.greenText}                                                     // neto/positivo (verde)
+              const vNeg={...rowV,color:C.overdueText}                                                   // resta (rojo)
+              const lbYr={fontSize:12.5,fontWeight:800,color:C.accent}                                   // protagonista de fila (año)
+              // Héroe único (arriba de cada panel): verde='neto', navy=total, rojo=pérdida
+              const heroCol=v=> v==='g'?C.greenText:(v==='r'?C.overdueText:C.accent)
+              const Hero=({v,l,val})=>(<div style={{padding:'12px 14px 10px',textAlign:'center',background:v==='g'?C.greenBg:(v==='r'?C.overdueBg:C.azulBg)}}><div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.5px',color:heroCol(v)}}>{l}</div><div style={{fontSize:24,fontWeight:800,letterSpacing:'-.5px',lineHeight:1.05,marginTop:3,fontVariantNumeric:'tabular-nums',color:heroCol(v)}}>{val}</div></div>)
+              const metaBand=(l,pctV,val)=>(<div style={{...R,background:C.azulBg}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent}}>{l} <span style={{background:C.azulInfo,color:'#fff',fontSize:9,fontWeight:800,borderRadius:20,padding:'1px 7px',marginLeft:4}}>{pctV}%</span></span><span style={{...rowV,color:C.azulInfo}}>{val}</span></div>)
               const verlink=(txt,dest)=>(<div onClick={()=>go(dest)} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>{txt} ›</div>)
               // Lista de comisiones pagadas del año (base caja), para "ver los pagos" dentro del panel
               const comisPagos=(terceros||[]).filter(x=>x&&x.estado==='pagado'&&String(x.pagado_at||'').startsWith(String(selYear))).sort((a,b)=>String(b.pagado_at||'').localeCompare(String(a.pagado_at||'')))
-              const comisChip=(<div onClick={e=>{e.stopPropagation();setResComis(v=>!v)}} style={{...R,cursor:'pointer',background:C.overdueBg}}><span style={{color:C.overdueText,fontWeight:600,display:'flex',alignItems:'center',gap:6}}>Comisiones pagadas <span style={{fontSize:10,color:C.azulInfo,fontWeight:700}}>ver {comisPagos.length} ›</span></span><span style={{fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>− {fmtMon(comisYTD)}</span></div>)
+              const comisChip=(<div onClick={e=>{e.stopPropagation();setResComis(v=>!v)}} style={RC}><span style={{...rowL,display:'flex',alignItems:'center',gap:6}}>Comisiones pagadas <span style={{fontSize:10,color:C.azulInfo,fontWeight:700}}>ver {comisPagos.length} ›</span></span><span style={vNeg}>− {fmtMon(comisYTD)}</span></div>)
               const comisList = resComis && comisPagos.slice(0,30).map((x,i)=>{ const mes=x.pagado_at?new Date(x.pagado_at+'T12:00').toLocaleDateString('es-CL',{month:'short'}):''; return (
                 <div key={x.id||i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 13px 6px 24px',fontSize:11,background:C.bgSoft,borderTop:`1px solid ${C.border}`}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{x.proveedor||'Colaborador'}{mes?` · ${mes}`:''}</span><span style={{fontWeight:700,color:C.overdueText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtMon(Number(x.monto)||0)}</span></div>) })
 
@@ -3233,22 +3243,22 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               if(t==='vend'){
                 const faltaUF=Math.max(0,metaUF-m.brutoUF), faltaCLP=Math.max(0,m.meta-m.bruto)
                 return (<div style={box}>
-                  <div style={{padding:'11px 13px 9px',background:C.greenBg,textAlign:'center'}}><div style={{fontSize:9.5,fontWeight:800,color:C.greenText,textTransform:'uppercase',letterSpacing:'.5px'}}>Neto de comisiones · vendido</div><div style={{fontSize:24,fontWeight:800,color:C.greenText,letterSpacing:'-.5px',lineHeight:1,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{vMon(m.netoUF,m.neto)}</div></div>
-                  <div style={{...R,background:C.bgSoft}}><span style={{color:C.muted,fontWeight:600}}>Bruto vendido</span><span style={{fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</span></div>
-                  <div style={{...R,background:C.bgSoft}}><span style={{color:C.overdueText,fontWeight:600}}>Comisiones devengadas</span><span style={{fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>− {vMon(m.costoUF,m.costo)}</span></div>
-                  {m.meta>0&&<div style={{...R,background:C.azulBg}}><span style={{fontWeight:700,color:C.accent}}>Meta de ventas {selYear} <span style={{background:C.azulInfo,color:'#fff',fontSize:9,fontWeight:800,borderRadius:20,padding:'1px 7px',marginLeft:4}}>{ventaPct}%</span></span><span style={{fontWeight:800,color:C.azulInfo,fontVariantNumeric:'tabular-nums'}}>{vMon(metaUF,m.meta)}</span></div>}
-                  {m.meta>0&&<div style={R}><span style={{color:C.muted}}>Falta para la meta</span><span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{vMon(faltaUF,faltaCLP)}</span></div>}
+                  <Hero v='g' l='Neto de comisiones · vendido' val={vMon(m.netoUF,m.neto)}/>
+                  <div style={R}><span style={rowL}>Bruto vendido</span><span style={rowV}>{vMon(m.brutoUF,m.bruto)}</span></div>
+                  <div style={R}><span style={rowL}>Comisiones devengadas</span><span style={vNeg}>− {vMon(m.costoUF,m.costo)}</span></div>
+                  {m.meta>0&&metaBand(`Meta de ventas ${selYear}`,ventaPct,vMon(metaUF,m.meta))}
+                  {m.meta>0&&<div style={R}><span style={rowL}>Falta para la meta</span><span style={rowV}>{vMon(faltaUF,faltaCLP)}</span></div>}
                   {verlink('Ver todo en Ventas','sales')}
                 </div>)
               }
               // MARGEN — cascada Cobrado − Comisiones − Costos de oficina = Margen
               if(t==='marg'){
                 return (<div style={box}>
-                  <div style={{...R,borderTop:'none'}}><span style={{color:C.greenText,fontWeight:600}}>Cobrado a caja</span><span style={{fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMon(ingYTD)}</span></div>
+                  <Hero v={pos?'n':'r'} l={pos?'Margen del ejercicio':'Pérdida del ejercicio'} val={`${pos?'':'−'}${fmtMon(Math.abs(resultado))}`}/>
+                  <div style={R}><span style={rowL}>Cobrado a caja</span><span style={rowV}>{fmtMon(ingYTD)}</span></div>
                   {comisChip}
                   {comisList}
-                  <div onClick={()=>go('presupuestoOficina')} style={{...RC,background:C.overdueBg}}><span style={{color:C.overdueText,fontWeight:600,display:'flex',alignItems:'center',gap:6}}>Costos de oficina <span style={{fontSize:10,color:C.azulInfo,fontWeight:700}}>ver ›</span></span><span style={{fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>− {fmtMon(costosOfiYTD)}</span></div>
-                  <div style={{...R,background:C.bgPanel}}><span style={{fontWeight:800,color:C.accent}}>{pos?'Margen del ejercicio':'Pérdida del ejercicio'}</span><span style={{fontSize:15,fontWeight:800,color:pos?C.accent:C.overdue,fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmtMon(Math.abs(resultado))}</span></div>
+                  <div onClick={()=>go('presupuestoOficina')} style={RC}><span style={{...rowL,display:'flex',alignItems:'center',gap:6}}>Costos de oficina <span style={{fontSize:10,color:C.azulInfo,fontWeight:700}}>ver ›</span></span><span style={vNeg}>− {fmtMon(costosOfiYTD)}</span></div>
                   {onOpenEstadoResultados&&<div onClick={onOpenEstadoResultados} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>Ver estado de resultados ›</div>}
                 </div>)
               }
@@ -3261,24 +3271,26 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               const dateOf = it => isCob?it.paid_at:(it.issued_at||it.due)
               const anyOpen = yrs.some(y=>resDrill.year===y)
               return (<div style={box}>
-                {isCob&&<div style={{padding:'11px 13px 9px',background:C.greenBg,textAlign:'center'}}><div style={{fontSize:9.5,fontWeight:800,color:C.greenText,textTransform:'uppercase',letterSpacing:'.5px'}}>Neto de comisiones · cobrado</div><div style={{fontSize:24,fontWeight:800,color:C.greenText,letterSpacing:'-.5px',lineHeight:1,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMon(ingYTD-comisYTD)}</div></div>}
-                {isCob&&<div style={{...R,background:C.bgSoft}}><span style={{color:C.muted,fontWeight:600}}>Bruto a caja</span><span style={{fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMon(ingYTD)}</span></div>}
+                {isCob
+                  ? <Hero v='g' l='Neto de comisiones · cobrado' val={fmtMon(ingYTD-comisYTD)}/>
+                  : <Hero v='n' l={`Facturado en ${selYear}`} val={fmtMon(facturadoYr)}/>}
+                {isCob&&<div style={R}><span style={rowL}>Bruto a caja</span><span style={rowV}>{fmtMon(ingYTD)}</span></div>}
                 {isCob&&comisChip}
                 {isCob&&comisList}
-                <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',padding:'9px 13px 5px'}}>{isCob?'Cobrado':'Facturado'} según año de la venta</div>
-                {anyOpen&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'0 13px 8px'}}><span style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.4px',marginRight:'auto'}}>Orden</span><span style={{display:'inline-flex',background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:2}}>{['fecha','monto'].map(o=>(<span key={o} onClick={()=>setResOrd(o)} style={{fontSize:9.5,fontWeight:800,padding:'2px 10px',borderRadius:12,cursor:'pointer',color:resOrd===o?'#fff':C.muted,background:resOrd===o?C.accent:'transparent'}}>{o==='fecha'?'Fecha':'Monto'}</span>))}</span></div>)}
+                <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',padding:'10px 14px 4px'}}>{isCob?'Cobrado':'Facturado'} según año de la venta</div>
+                {anyOpen&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'0 14px 8px'}}><span style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.4px',marginRight:'auto'}}>Orden</span><span style={{display:'inline-flex',background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:2}}>{['fecha','monto'].map(o=>(<span key={o} onClick={()=>setResOrd(o)} style={{fontSize:9.5,fontWeight:800,padding:'2px 10px',borderRadius:12,cursor:'pointer',color:resOrd===o?'#fff':C.muted,background:resOrd===o?C.accent:'transparent'}}>{o==='fecha'?'Fecha':'Monto'}</span>))}</span></div>)}
                 {yrs.map(y=>{ const open=resDrill.year===y; let items=(listByYear[y]||[]).slice(); items.sort((a,b)=> resOrd==='monto' ? (montoOf(b)-montoOf(a)) : String(dateOf(b)||'').localeCompare(String(dateOf(a)||''))); const key=`${t}-${y}`; const seeAll=resSeeAll[key]; const shown=seeAll?items:items.slice(0,6); return (
                   <Fragment key={y}>
-                    <div onClick={()=>openYear(y)} style={RC}><span style={{fontSize:12.5,fontWeight:800,color:C.accent}}>{y?<>De ventas {y}{y!==selYear?<span style={{fontSize:9.5,color:C.done,fontWeight:600,marginLeft:5}}>anterior</span>:''}</>:'Sin venta asociada'}</span><span style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:12.5,fontWeight:800,color:isCob?C.greenText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMon(byYear[y])}</span><Chev open={open}/></span></div>
+                    <div onClick={()=>openYear(y)} style={RC}><span style={lbYr}>{y?<>De ventas {y}{y!==selYear?<span style={{fontSize:9.5,color:C.done,fontWeight:600,marginLeft:5}}>anterior</span>:''}</>:'Sin venta asociada'}</span><span style={{display:'flex',alignItems:'center',gap:8}}><span style={rowV}>{fmtMon(byYear[y])}</span><Chev open={open}/></span></div>
                     {open&&shown.map(it=>{ const cid=it.client_id; const folio=isCob?it.folio:it.invoice_no; return (
-                      <div key={it.id||it.invoice_no} onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 13px',borderTop:`1px solid ${C.border}`,background:C.surface,cursor:'pointer'}}>
+                      <div key={it.id||it.invoice_no} onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,cursor:'pointer'}}>
                         {bigDate(dateOf(it))}
                         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cn(cid)}</div><div style={{fontSize:9.5,color:C.done,fontWeight:600}}>{folio?`N°${folioN(folio)||folio}`:(it._esAnticipo?'anticipo':(it.concept||''))}</div></div>
-                        <span style={{fontSize:12.5,fontWeight:800,color:isCob?C.greenText:C.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtMon(montoOf(it))}</span>
+                        <span style={{...rowV,fontSize:12.5}}>{fmtMon(montoOf(it))}</span>
                       </div>) })}
                     {open&&items.length>6&&<div onClick={()=>setResSeeAll(s=>({...s,[key]:!s[key]}))} style={{textAlign:'center',padding:9,fontSize:11,fontWeight:700,color:C.azulInfo,background:C.bg,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>{seeAll?'Ver menos':`Ver las ${items.length} ›`}</div>}
                   </Fragment>) })}
-                {isCob&&metaCobranza>0&&<div style={{...R,background:C.azulBg}}><span style={{fontWeight:700,color:C.accent}}>Meta de cobranza <span style={{background:C.azulInfo,color:'#fff',fontSize:9,fontWeight:800,borderRadius:20,padding:'1px 7px',marginLeft:4}}>{cobroPct}%</span></span><span style={{fontWeight:800,color:C.azulInfo,fontVariantNumeric:'tabular-nums'}}>{fmtMon(metaCobranza)}</span></div>}
+                {isCob&&metaCobranza>0&&metaBand('Meta de cobranza',cobroPct,fmtMon(metaCobranza))}
                 {verlink(isCob?'Ver todo en Cobranza':'Ver todo en Facturación',isCob?'cobranza':'billing')}
               </div>)
             })()}
