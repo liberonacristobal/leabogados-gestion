@@ -402,6 +402,43 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
 // Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
 const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
 
+// ─── Corrimiento automático de cuotas Programadas no facturadas ───
+// Una cuota Programada (sin folio) cuyo mes de devengo ya PASÓ sin emitirse rueda al mes de facturación en curso,
+// preservando el día pactado. Dentro de una misma venta NO puede haber dos cuotas el mismo mes: si chocan, la de
+// más atrás empuja a la siguiente (una por mes, en cascada). También salta los meses ya ocupados por emitidas.
+// Cálculo PURO — no muta la base; la fecha real se estampa recién al emitir (handleEmitirProgramada). refISO = hoy.
+// Devuelve Map<billing.id, dueEfectivoISO> SOLO de las cuotas que efectivamente se movieron.
+function rolledDueMap(billing, refISO){
+  const ref = String(refISO||new Date().toISOString().slice(0,10)).slice(0,7)   // YYYY-MM del mes de corte (hoy)
+  const out = new Map()
+  const bySale = new Map()
+  ;(billing||[]).forEach(b=>{
+    if(!b || b.deleted_at || b.billing_type==='reembolso') return
+    const sid = b.sale_id ? String(b.sale_id) : ('solo:'+b.id)
+    const arr = bySale.get(sid); if(arr) arr.push(b); else bySale.set(sid,[b])
+  })
+  const monthOf = b => String(b.due||b.issued_at||'').slice(0,7)
+  const dayOf = b => Number(String(b.due||b.issued_at||'').slice(8,10))||1
+  const addMonths = (ym,n)=>{ const p=ym.split('-'); let y=+p[0], m=(+p[1]-1)+n; y+=Math.floor(m/12); m=((m%12)+12)%12; return `${y}-${String(m+1).padStart(2,'0')}` }
+  const clampDue = (ym, day) => { const p=ym.split('-'); const last=new Date(+p[0], +p[1], 0).getDate(); return `${ym}-${String(Math.min(day||1,last)).padStart(2,'0')}` }
+  for(const [,arr] of bySale){
+    const emitida = b => !!(b.invoice_no||b.folio)
+    const occupied = new Set(arr.filter(b=>emitida(b)&&b.status!=='Anulada').map(monthOf).filter(Boolean))
+    const progs = arr.filter(b=> b.status==='Programada' && !emitida(b) && monthOf(b))
+      .sort((a,b)=> monthOf(a).localeCompare(monthOf(b)))
+    let minM = ref
+    for(const b of progs){
+      const orig = monthOf(b)
+      let m = orig < minM ? minM : orig          // nunca antes del mes de corte
+      while(occupied.has(m)) m = addMonths(m,1)   // no pisar un mes ya ocupado (emitida u otra cuota rodada)
+      occupied.add(m)
+      minM = addMonths(m,1)                       // una por mes: la siguiente va al menos el mes siguiente
+      if(m !== orig) out.set(String(b.id), clampDue(m, dayOf(b)))
+    }
+  }
+  return out
+}
+
 // ─── Conciliación de facturas: motor de cruce + auto-generación de conocimiento ───
 // Normaliza texto (sin tildes/símbolos) y mide similitud por tokens (Jaccard) 0..1, para cruzar glosa↔proyecto.
 const _normTxt = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
@@ -3483,7 +3520,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
             const tint=pagado>0?{fg:C.greenText,bg:C.greenBg}:{fg:C.soonText,bg:C.ambarBg}
             const sub=pagado>0?('pagado'+(porPagar>0?' · por pagar '+fmtShort(porPagar):'')):(porPagar>0?'por pagar':'sin deudas')
             return kTile('cxp','Comisiones',val,col,'wallet',tint,sub) })()}
-          {onOpenCostosOfi&&costosOfiMes>0&&kTile('costosofi','Presupuesto Oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'por mes',onOpenCostosOfi)}
+          {onOpenCostosOfi&&costosOfiMes>0&&kTile('costosofi','Oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'costos · por mes',onOpenCostosOfi)}
         </div>
       </div>
       {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
@@ -3759,12 +3796,9 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
 
       {/* Rótulo unificado en "Indicadores" (arriba) */}
 
-      {/* Costos de oficina + Mis proyectos — tiles de media columna; Mis proyectos abre su lista debajo. */}
+      {/* Mis proyectos — tile de media columna; abre su lista debajo. (El acceso a Oficina ya vive en Indicadores, sin duplicar el gasto del mes acá.) */}
       <div style={{padding:'6px 20px 0'}}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {onOpenCostosOfi&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
-            const ym=new Date().toISOString().slice(0,7); const mesOfi=expenses.filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
-            return kTile('costos','Costos de oficina',fmtShort(mesOfi),C.text,'building',{fg:C.text,bg:C.border},'este mes',onOpenCostosOfi) })()}
           {(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
             return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>setMisProyOpen(o=>!o)) })()}
         </div>
@@ -6233,12 +6267,52 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
   const esEmitida = b => !!(b.invoice_no||b.folio)
   const mesKey = `${year}-${month}`
 
+  // Corrimiento: una Programada de un mes ya pasado rueda al mes en curso (fuente única rolledDueMap). Puro, no muta.
+  const refMonth = new Date().toISOString().slice(0,10).slice(0,7)
+  const rollMap = useMemo(()=> rolledDueMap(billing, new Date().toISOString().slice(0,10)), [billing])
+  const dueEff = b => rollMap.get(String(b.id)) || b.due   // vencimiento efectivo (rodado si aplica)
   const items = useMemo(()=> billing
-    .filter(b=> b.due && b.due.startsWith(mesKey) && (b.status==='Programada'||EMIT.includes(b.status)))
-    .sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
-  ,[billing,mesKey])
+    .filter(b=> { const d=rollMap.get(String(b.id))||b.due; return d && d.startsWith(mesKey) && (b.status==='Programada'||EMIT.includes(b.status)) })
+    .sort((a,b)=>{ const da=rollMap.get(String(a.id))||a.due||'', db=rollMap.get(String(b.id))||b.due||''; return da>db?1:-1 })
+  ,[billing,mesKey,rollMap])
   const porEmitir = items.filter(b=>!esEmitida(b) && b.billing_type!=='reembolso')   // las Programadas de este mes = las que debo emitir (los reembolsos NUNCA se facturan)
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
+  // "Vienen de meses anteriores": cuotas que rodaron a este mes desde un mes ya pasado (arrastre visible).
+  const vienenAntes = porEmitir.filter(b=> rollMap.has(String(b.id)))
+  const porEmitirMes = porEmitir.filter(b=> !rollMap.has(String(b.id)))
+  const mmmDe = ym => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const p=String(ym||'').split('-'); return p.length>=2?`${M[+p[1]-1]} ${p[0].slice(2)}`:'' }
+  // Fila de "Por emitir" (reusada por "Vienen de meses anteriores" y "De este mes"). moved=cuota rodada → muestra la traza.
+  const filaEmitir = b => { const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const tw=onReplaceProgramada?emitidaTwin(b):null; const exp=emitExp.has(b.id); const moved=rollMap.has(String(b.id)); const eff=dueEff(b); return (
+    <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
+      <div onClick={tw?()=>setEmitExp(s=>{ const n=new Set(s); n.has(b.id)?n.delete(b.id):n.add(b.id); return n }):(onEdit?()=>onEdit(b):undefined)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:(tw||onEdit)?'pointer':'default'}}>
+        {bigDate(eff||b.issued_at)}
+        <div style={{flex:1,minWidth:0}}>
+          <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
+          <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'}{moved?<span style={{color:C.soonText}}> · vence {mmmDe(eff)} (era {mmmDe(b.due||b.issued_at)})</span>:' · devengo'}</div>
+        </div>
+        {tw&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:7,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>Ya emitida · N°{folioN(tw.invoice_no)||tw.invoice_no} {exp?'▾':'▸'}</span>}
+        <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,textAlign:'right'}}>{fmt(b.amount)}</div>
+      </div>
+      {tw&&exp&&(()=>{ const dif=Math.abs((tw.amount||0)-(b.amount||0)); return (
+        <div style={{padding:'2px 12px 11px',background:C.bgSoft}}>
+          <div style={{display:'flex',gap:12,padding:'4px 0 6px'}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:9,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Programada</div>
+              <div style={{fontSize:12,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+              <div style={{fontSize:10.5,color:C.muted}}>Devengo {b.due?fmtDate(b.due):'—'}</div>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Emitida (en el SII)</div>
+              <div style={{fontSize:12,fontWeight:600,color:C.text}}>N°{folioN(tw.invoice_no)||tw.invoice_no} · {fmt(tw.amount)}</div>
+              <div style={{fontSize:10.5,color:C.muted}}>{fmtDate(tw.issued_at||tw.due)} · mismo RUT/RS</div>
+            </div>
+          </div>
+          <div style={{fontSize:10.5,color:dif>0?C.soonText:C.done,marginBottom:8}}>{dif>0?`Diferencia ${fmt(dif)} — variación de UF entre programación y emisión`:'Mismo monto'}</div>
+          <button onClick={()=>{ setEmitExp(s=>{const n=new Set(s);n.delete(b.id);return n}); onReplaceProgramada(b.id,tw.id) }} style={{height:30,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>Conciliar · retirar la programada</button>
+        </div>
+      )})()}
+    </div>
+  )}
   const cargadasXml = billing.filter(b=>!b.deleted_at && b.dte_xml && String(b.issued_at||'').startsWith(mesKey)).length   // respaldadas por XML este mes (trazabilidad de la carga)
   // Por enviar al cliente: emitidas con respaldo (XML/PDF) que aún no se envían por correo, del mes de emisión seleccionado.
   const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
@@ -6510,39 +6584,17 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
         <span style={{fontSize:10,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4}}>Por emitir · {porEmitir.length}{porEmitir.length?` · ${fmt(porEmitirTotal)}`:''}</span>
         <button onClick={descargarExcel} disabled={desc} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:desc?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{desc?'…':'↓ Descargar mes'}</button>
       </div>
+      {vienenAntes.length>0&&(<>
+        <div style={{fontSize:9.5,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 5px',display:'flex',alignItems:'center',gap:6}}><SIcon n='clock' s={12} c={C.soonText}/>Vienen de meses anteriores · {vienenAntes.length}</div>
+        <div style={{border:`1px solid ${C.soon}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
+          {vienenAntes.map(filaEmitir)}
+        </div>
+      </>)}
+      {vienenAntes.length>0&&<div style={{fontSize:9.5,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 5px'}}>De este mes · {porEmitirMes.length}</div>}
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
         {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><SIcon n='check' s={15} c={C.greenText}/>Todo emitido este mes</div>}
-        {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const tw=onReplaceProgramada?emitidaTwin(b):null; const exp=emitExp.has(b.id); return (
-          <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
-            <div onClick={tw?()=>setEmitExp(s=>{ const n=new Set(s); n.has(b.id)?n.delete(b.id):n.add(b.id); return n }):(onEdit?()=>onEdit(b):undefined)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:(tw||onEdit)?'pointer':'default'}}>
-              {bigDate(b.due||b.issued_at)}
-              <div style={{flex:1,minWidth:0}}>
-                <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
-                <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'} · devengo</div>
-              </div>
-              {tw&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:7,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>Ya emitida · N°{folioN(tw.invoice_no)||tw.invoice_no} {exp?'▾':'▸'}</span>}
-              <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,textAlign:'right'}}>{fmt(b.amount)}</div>
-            </div>
-            {tw&&exp&&(()=>{ const dif=Math.abs((tw.amount||0)-(b.amount||0)); return (
-              <div style={{padding:'2px 12px 11px',background:C.bgSoft}}>
-                <div style={{display:'flex',gap:12,padding:'4px 0 6px'}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:9,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Programada</div>
-                    <div style={{fontSize:12,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
-                    <div style={{fontSize:10.5,color:C.muted}}>Devengo {b.due?fmtDate(b.due):'—'}</div>
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Emitida (en el SII)</div>
-                    <div style={{fontSize:12,fontWeight:600,color:C.text}}>N°{folioN(tw.invoice_no)||tw.invoice_no} · {fmt(tw.amount)}</div>
-                    <div style={{fontSize:10.5,color:C.muted}}>{fmtDate(tw.issued_at||tw.due)} · mismo RUT/RS</div>
-                  </div>
-                </div>
-                <div style={{fontSize:10.5,color:dif>0?C.soonText:C.done,marginBottom:8}}>{dif>0?`Diferencia ${fmt(dif)} — variación de UF entre programación y emisión`:'Mismo monto'}</div>
-                <button onClick={()=>{ setEmitExp(s=>{const n=new Set(s);n.delete(b.id);return n}); onReplaceProgramada(b.id,tw.id) }} style={{height:30,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>Conciliar · retirar la programada</button>
-              </div>
-            )})()}
-          </div>
-        )})}
+        {vienenAntes.length>0 && porEmitirMes.length===0 && <div style={{color:C.done,textAlign:'center',padding:16,fontSize:11.5}}>Nada nuevo de este mes</div>}
+        {(vienenAntes.length>0?porEmitirMes:porEmitir).map(filaEmitir)}
       </div>
       </>)}
 
@@ -30317,16 +30369,18 @@ export default function App() {
   const handleEmitirProgramada=useCallback(async(bill, entity)=>{
     try{
       const today=new Date().toISOString().slice(0,10)
-      const iss=bill.issued_at||today
+      const iss=today   // la fecha de emisión es SIEMPRE la fecha real de emisión del DTE (hoy), no la planificada
       // Al emitir, el vencimiento pasa a la regla (último día hábil del mes de emisión / mes siguiente si emite pasado el día 10).
-      // La cuota estándar guarda due=día 1 solo para agrupar → se recalcula. Las fechas NEGOCIADAS (porcentaje/personalizada, que no son día 1) se respetan.
+      // La cuota estándar guarda due=día 1 solo para agrupar → se recalcula. Las fechas NEGOCIADAS (porcentaje/personalizada, que no son día 1) se respetan;
+      // pero si la cuota se pospuso (mes de devengo ya pasado sin emitir), su vencimiento ROdó al mes en curso → se estampa el efectivo (fuente única rolledDueMap).
       const negociado = bill.due && new Date(bill.due+'T00:00:00').getDate()!==1
-      const patch={status:'Pendiente', issued_at:iss, due:negociado?bill.due:dueFromIssued(iss), updated_at:new Date().toISOString()}
+      const rolled = negociado ? (rolledDueMap(billing, today).get(String(bill.id))||null) : null
+      const patch={status:'Pendiente', issued_at:iss, due:negociado?(rolled||bill.due):dueFromIssued(iss), updated_at:new Date().toISOString()}
       if(entity){ patch.entity_id=entity.id; patch.receptor_name=entity.name||null; patch.receptor_rut=entity.rut||null }
       await supabase.from('billing').update(patch).eq('id',bill.id)
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
     }catch(e){appAlert('Error: '+e.message)}
-  },[])
+  },[billing])
 
   // EMISIÓN ELECTRÓNICA (DTE directo al SII) vía edge function sii-sync (action:'emitir').
   // Distinto de handleEmitirProgramada (que solo MARCA como emitida). Siempre hace una vista previa
