@@ -26792,7 +26792,13 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
         // Persona del equipo CON caja chica: un cargo a su cuenta es tan probable reposición de caja como sueldo → no asumir, preguntar.
         const tieneCaja=(pettyCash||[]).some(p=>p.user_name===per)
         return tieneCaja ? {fam:'oficina',persona:per,via:'RUT',ambiguoCaja:true} : {fam:'oficina',category:'Sueldos',sub:per,via:'RUT'} }
-      if(SOCIO_RUT[k])  return {fam:'oficina',category:'Retiros',sub:SOCIO_RUT[k],via:'RUT'}
+      if(SOCIO_RUT[k]){
+        // REGLA (usuario): los RETIROS a socios son SIEMPRE cifras enteras/redondas; los SUELDOS no (llevan cola por descuentos).
+        // Un socio recibe sueldo Y retiro al mismo RUT, así que el RUT no basta: un cargo NO redondo a un socio = sueldo seguro.
+        const redondo = (Math.abs(Number(m.monto)||0) % 1000) === 0
+        return redondo
+          ? {fam:'oficina',category:'Retiros',sub:SOCIO_RUT[k],via:'RUT'}
+          : {fam:'oficina',category:'Sueldos',sub:SOCIO_RUT[k],via:'RUT',motivo:'monto no redondo'} }
       if(CONTADORA_RUT[k]) return {fam:'oficina',category:'Contadora',sub:null,via:'RUT'}
       if(provByRut[k]) return {fam:'oficina',category:'Proveedores',sub:provByRut[k],via:'RUT'}
     }
