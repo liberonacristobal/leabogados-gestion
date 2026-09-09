@@ -17,7 +17,7 @@ Revisión detallada al 2026-07-03. Fuente: memoria del proyecto + código. Marca
 - 🔨 **Costos de Oficina** — sacar costos reales de la firma (sueldos/arriendo) de Gastos a un módulo propio (cliente interno). Pieza 1 (categorías que aprenden) hecha; falta **panel mensual** + depurar lo ya cargado en Gastos.
 - 🔨 **Bandeja de envío masivo** — mandar todas las facturas del mes juntas, con destinatario recordado (la "etapa 2"). Avanzar para el próximo mes.
 - 📄 **Documentación facturación SII** — ya existen `checklist_certificacion_sii_dte.md`, `runbook_emision_dte.md`, `migracion_sii_software_propio_runbook.md`, `presentacion_sii_emision_dte.md`. Falta consolidar en una guía única accionable (Parte A contador/SII = postular + set de pruebas + CAF; Parte B motor ya está).
-- ⚠ **Cerrar el relay `notify-task`** — `verify_jwt=false` y sin auth → cualquiera con la URL manda correos desde la oficina. Requiere: verificar JWT de usuario @leabogados.cl (o CRON_SECRET para crons) + que el front mande el token del usuario, no la anon key. Deploy de edge fn (riesgo: rompe el envío que ya funciona → probar tras deploy).
+- ✅ **Cerrar el relay `notify-task`** — HECHO (verificado 2026-09-09). La edge fn desplegada (v35) tiene `autorizar()`: rechaza la anon key, exige sesión `@leabogados.cl` o la service key, con allowlist de orígenes (403 si no). El front manda el token de sesión del usuario (`tokenSesion()`); el cron `sii-sync` manda la `SERVICE_ROLE_KEY`. Ya no está abierto a internet.
 
 ## B. Cifras / datos (cero tolerancia a errores)
 
