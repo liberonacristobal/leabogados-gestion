@@ -117,6 +117,21 @@ Deno.serve(async (req) => {
       inserted = rows.length
     }
 
+    // --- Registro de la carga (fuente de verdad "llegó cartola de este día", aunque venga con 0 nuevos) ---
+    // Alimenta la alerta de cartolas faltantes: un día con carga registrada NO se marca como hueco.
+    try {
+      await sbFetch('cartola_cargas', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify([{
+          fecha_desde: minF, fecha_hasta: maxF,
+          movimientos_n: movs.length,
+          origen: 'diaria',
+          archivo: String(body.filename || '') || null,
+        }]),
+      })
+    } catch (_) { /* el registro es best-effort: nunca debe romper la ingesta */ }
+
     return json({
       ok: true,
       cuenta: parsed.cuenta,
