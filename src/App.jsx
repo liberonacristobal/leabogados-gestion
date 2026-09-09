@@ -483,6 +483,18 @@ const rsLabel = (clientId, clients, clientEntities, entityId) => {
 }
 // Folio limpio: invoice_no a veces trae la palabra "Factura" como texto; folioN devuelve solo el número/código (para contextos con prefijo "F°").
 const folioN = no => String(no||'').replace(/^factura\s*/i,'').trim()
+// Razón social a la que se emitió una factura (FUENTE ÚNICA, canon factura-rs-cruce-rut):
+// entity_id → cruce por receptor_rut ↔ client_entities → receptor_name del DTE → única RS del cliente.
+// Reutilizado por Facturación (ChecklistFacturacion) y Cobranza para no duplicar la lógica.
+const rsDeFactura = (b, clientEntities=[]) => {
+  if(!b) return null
+  if(b.entity_id){ const e=(clientEntities||[]).find(x=>String(x.id)===String(b.entity_id)); if(e) return e.name }
+  if(b.receptor_rut){ const k=crNormRut(b.receptor_rut); if(k){ const e=(clientEntities||[]).find(x=>crNormRut(x.rut)===k); if(e) return e.name } }
+  if(b.receptor_name) return b.receptor_name
+  const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(b.client_id))
+  if(ents.length===1) return ents[0].name
+  return null
+}
 // Folio SOLO dígitos: para deduplicar facturas sin importar si vienen "318" o "Factura 318" (causa de duplicados en cargas).
 const folioDigits = no => String(no||'').replace(/\D/g,'')
 // Razón social del SII en MAYÚSCULAS SOLO para mostrar (el dato crudo NUNCA se toca; PDF/export legal usan la RS tal cual).
@@ -6245,17 +6257,8 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
 function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], anticipos=[], onFacturarAdelantos, onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onEnviarVarias, onUnsend, onAssignSeries, onCotejar, onCargarXML, onReplaceProgramada}) {
-  // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
-  const rsDe = b => {
-    const nrm=crNormRut   // normalizador único de RUT
-    const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(b.client_id))
-    if(b.entity_id){ const e=ents.find(e=>String(e.id)===String(b.entity_id)); if(e) return e.name }
-    // Cruce por RUT del receptor (canon factura-rs-cruce-rut): la factura del SII trae receptor_rut; matchea la RS aunque haya varias.
-    if(b.receptor_rut){ const k=nrm(b.receptor_rut); if(k){ const e=(clientEntities||[]).find(x=>nrm(x.rut)===k); if(e) return e.name } }
-    if(b.receptor_name) return b.receptor_name
-    if(ents.length===1) return ents[0].name
-    return null
-  }
+  // Razón social a la que se emitió la factura — fuente única a nivel módulo (rsDeFactura).
+  const rsDe = b => rsDeFactura(b, clientEntities)
   const abrirCli = (e,b) => { if(!onOpenClientFicha||!b.client_id) return; e.stopPropagation(); onOpenClientFicha(b.client_id) }
   const now = new Date()
   const [year,setYear] = useState(String(now.getFullYear()))
@@ -23764,7 +23767,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
-function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose }){
+function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserName, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const LIBERAR_UMBRAL = 3
   const [recMap,setRecMap] = useState({})      // factura.id → fecha ISO último recordatorio
@@ -23853,12 +23856,20 @@ function CobranzaView({ billing=[], clients=[], currentUserName, onOpenClientFic
     const dl = daysLeft(b.due)   // >0 = días para vencer (al día)
     const kk = {fontSize:8,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}
     const dv = {fontSize:11,fontWeight:700,fontVariantNumeric:'tabular-nums'}
+    // Razón social a la que se emitió (fuente única rsDeFactura). Protagonista de la fila cuando aporta:
+    // el cliente tiene más de una RS, o la RS difiere de su nombre. Si no, se mantiene el folio como título.
+    const rs = rsDeFactura(b, clientEntities)
+    const nEnt = (clientEntities||[]).filter(e=>String(e.client_id)===String(b.client_id)).length
+    const showRs = !!rs && (nEnt>1 || _normTxt(rs)!==_normTxt(cn(b.client_id)))
     return (
     // Toda la fila abre la factura (→ su detalle con "Volver"); la fecha de emisión y los días de vencida son el foco.
     <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,borderTop:`1px solid ${C.bgSoft}`,padding:'9px 4px',cursor:onOpenFactura?'pointer':'default'}}>
       <div style={{width:38,textAlign:'center',flexShrink:0,lineHeight:1.05}}>{dd?<><div style={{fontSize:15,fontWeight:800,color:sevCol}}>{dd[2]}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>{_MA[+dd[1]-1]} {dd[0].slice(2)}</div></>:<span style={{fontSize:11,color:C.done}}>—</span>}</div>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?<span style={{color:C.muted,fontWeight:500}}> · {b.concept}</span>:''}</div>
+        {showRs
+          ? <><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{titleCase(rs)}</div>
+              <div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?` · ${b.concept}`:''}</div></>
+          : <div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?<span style={{color:C.muted,fontWeight:500}}> · {b.concept}</span>:''}</div>}
         <div style={{display:'flex',gap:18,marginTop:3}}>
           <div><div style={kk}>Emitida</div><div style={{...dv,color:C.text}}>{b.issued_at?fmtFechaDMY(b.issued_at):'—'}</div></div>
           <div><div style={kk}>{venc?'Vencida':'Vence en'}</div><div style={{...dv,color:sevCol}}>{venc?`${diasVenc} días`:(dl>0?`${dl} días`:'hoy')}</div></div>
@@ -30841,7 +30852,7 @@ export default function App() {
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
-            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onClose={goBack}/>}
+            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
             {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
