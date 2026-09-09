@@ -6985,6 +6985,102 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
     </div>
   )
 }
+// ── Retiros a socios: distribución de utilidades (cliente interno, categoría 'Retiros'). Identifica al socio por su RUT/nombre en la glosa. NO es costo de oficina; vive en su propia tarjeta del módulo Oficina. ──
+const _SOCIO_RET = e => { const g=String(e.personal_de||e.description||e.concept||e.src_name||'').toLowerCase(); if(/15\.?621\.?320|cristobal liberona|cristóbal liberona/.test(g)) return 'Cristóbal'; if(/15\.?371\.?733|erasmo escala/.test(g)) return 'Erasmo'; return e.personal_de||'Otro' }
+const _SOCIO_COL = {'Cristóbal':C.accent, 'Erasmo':'#8A7012', 'Martín':'#3B6D11', 'Martina':C.overdueText, 'Rodrigo':'#A8472A'}
+function retirosOficinaData(expenses, clients, year){
+  const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
+  const out={total:0, porSocio:{}, rows:[]}
+  if(!ofi) return out
+  ;(expenses||[]).forEach(e=>{ if(e.deleted_at||e.type!=='gasto'||String(e.client_id)!==String(ofi.id)) return
+    if(String(e.category||'').trim().toLowerCase()!=='retiros') return
+    if(year && String(e.date||'').slice(0,4)!==String(year)) return
+    const soc=_SOCIO_RET(e), amt=Number(e.amount)||0
+    out.total+=amt; out.porSocio[soc]=(out.porSocio[soc]||0)+amt; out.rows.push({id:e.id, date:e.date, amount:amt, socio:soc}) })
+  out.rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
+  return out
+}
+function RetirosOficinaModal({ expenses=[], clients=[] }){
+  const year = new Date().getFullYear()
+  const d = retirosOficinaData(expenses, clients, year)
+  const socios = Object.entries(d.porSocio).sort((a,b)=>b[1]-a[1])
+  const maxS = Math.max(1, ...socios.map(s=>s[1]))
+  const dif = socios.length>=2 ? Math.abs(socios[0][1]-socios[1][1]) : 0
+  const ini = n => String(n||'').split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()
+  return (<div>
+    <div style={{background:C.accent,color:'#fff',borderRadius:13,padding:'16px 18px',marginBottom:12}}>
+      <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,opacity:.85}}>Retirado en {year}</div>
+      <div style={{fontSize:25,fontWeight:800,marginTop:4,fontVariantNumeric:'tabular-nums'}}>{fmt(d.total)}</div>
+      <div style={{fontSize:10.5,opacity:.75,marginTop:3}}>{d.rows.length} retiro{d.rows.length!==1?'s':''} · distribución de utilidades (no es costo)</div>
+    </div>
+    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+      <div style={{padding:'12px 16px 4px',fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Por socio · {year}</div>
+      {socios.map(([s,v])=>{ const col=_SOCIO_COL[s]||C.muted; const pct=Math.round(v/(d.total||1)*100); return (
+        <div key={s} style={{padding:'13px 16px',borderTop:`1px solid ${C.border}`}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+            <span style={{width:32,height:32,borderRadius:'50%',background:col,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:12,flexShrink:0}}>{ini(s)}</span>
+            <span style={{fontWeight:800,color:C.accent,fontSize:13.5}}>{s}</span>
+            <span style={{marginLeft:'auto',textAlign:'right'}}><b style={{fontSize:18,fontWeight:800,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</b><div style={{fontSize:10,color:C.muted}}>{pct}% del total</div></span>
+          </div>
+          <div style={{height:11,borderRadius:7,background:C.bgSoft,overflow:'hidden'}}><div style={{height:'100%',width:(v/maxS*100)+'%',background:col,borderRadius:7}}/></div>
+        </div>) })}
+      {dif>0 && <div style={{display:'flex',alignItems:'center',gap:10,margin:'14px 16px',background:C.soonBg,border:'1px solid #F0E4B8',borderRadius:11,padding:'11px 13px'}}>
+        <span style={{flexShrink:0}}><SIcon n='alert' s={17} c={C.soonText}/></span>
+        <div style={{fontSize:11.5,color:C.soonText}}><b>Diferencia entre socios: {fmt(dif)}.</b> Si los retiros deben ser parejos, ajustar en el próximo.</div></div>}
+      {socios.length===0 && <div style={{padding:20,textAlign:'center',color:C.done,fontSize:12.5}}>Sin retiros registrados este año.</div>}
+    </div>
+    {d.rows.length>0 && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginTop:12}}>
+      <div style={{padding:'12px 16px 4px',fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Movimientos</div>
+      {d.rows.slice(0,15).map(r=>{ const col=_SOCIO_COL[r.socio]||C.muted; const dt=r.date?new Date(r.date+'T12:00'):null; return (
+        <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderTop:`1px solid ${C.border}`,fontSize:12.5}}>
+          <span style={{width:9,height:9,borderRadius:'50%',background:col,flexShrink:0}}/>
+          <span style={{fontWeight:700,color:C.accent}}>{r.socio}</span>
+          <span style={{color:C.muted,fontSize:11}}>{dt?dt.toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'—'}</span>
+          <span style={{marginLeft:'auto',fontWeight:800,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(r.amount)}</span>
+        </div>) })}
+      <div style={{padding:'8px 16px 12px',fontSize:10.5,color:C.done}}>Se identifican por el RUT del socio en la glosa. Excluidos del costo de oficina automáticamente.</div>
+    </div>}
+  </div>)
+}
+// Módulo Oficina — hub de tarjetas por ámbito (costos, retiros, nómina, subarriendo, varios, resultado). Cada cifra sale de su fuente única; el detalle vive adentro (reusa CostosOficinaModal/EstadoResultadosModal).
+function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], isDesktop=true, onOpenEstadoResultados, onOpenOficina }){
+  const [sub,setSub] = useState(null)
+  const ym = new Date().toISOString().slice(0,7), year=new Date().getFullYear()
+  const eff = r => (r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
+  const costoMes = costosOficinaMes(costosOfiRows, ym)
+  const nomina = (costosOfiRows||[]).filter(r=>['Remuneraciones','Leyes sociales'].includes(r.categoria)).reduce((a,r)=>a+(Number(eff(r))||0),0)
+  const subarr = (costosOfiRows||[]).filter(r=>r.es_ingreso).reduce((a,r)=>a+(Number(eff(r))||0),0)
+  const ret = retirosOficinaData(expenses, clients, year)
+  const retMes = ret.rows.filter(r=>String(r.date||'').slice(0,7)===ym).reduce((a,r)=>a+r.amount,0)
+  const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
+  const ESTRUCT = ['Retiros','Sueldos','Comisiones','Proveedores']
+  const variosMes = ofi ? (expenses||[]).filter(e=>!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,7)===ym&&!ESTRUCT.includes(String(e.category||''))).reduce((a,e)=>a+(Number(e.amount)||0),0) : 0
+  const porCobrar = ofi ? (expenses||[]).filter(e=>!e.deleted_at&&e.personal_de&&String(e.client_id)===String(ofi.id)&&!e.pagado_cliente_at).reduce((a,e)=>a+(Number(e.amount)||0),0) : 0
+  const cards = [
+    {k:'costos', ic:'building', bg:C.azulBg, col:C.accent, ti:'Costos fijos', big:fmtShort(costoMes), bigC:C.accent, ctx:'por mes · presupuesto', on:()=>setSub('costos')},
+    {k:'retiros', ic:'wallet', bg:C.tealBg, col:C.tealText, ti:'Retiros a socios', big:fmtShort(retMes||ret.total), bigC:C.tealText, ctx:retMes?`este mes · ${fmtShort(ret.total)} en el año`:`${fmtShort(ret.total)} en el año`, on:()=>setSub('retiros')},
+    {k:'nomina', ic:'users', bg:C.soonBg, col:C.soonText, ti:'Nómina', big:fmtShort(nomina), bigC:C.accent, ctx:'por mes · sueldos + leyes', on:()=>setSub('costos')},
+    {k:'sub', ic:'exchange', bg:C.greenBg, col:C.greenText, ti:'Subarriendo', big:'+'+fmtShort(subarr), bigC:C.greenText, ctx:'por mes · baja el arriendo', on:()=>setSub('costos')},
+    {k:'varios', ic:'receipt', bg:'#F1EFE8', col:C.muted, ti:'Varios y personales', big:fmtShort(variosMes), bigC:C.accent, ctx:porCobrar>0?`${fmtShort(porCobrar)} por cobrar al equipo`:'varios este mes', ctxC:porCobrar>0?C.overdueText:C.muted, on:()=>onOpenOficina&&onOpenOficina()},
+    {k:'res', ic:'chart', bg:'#EDF1F4', col:C.accent, ti:'Estado de resultados', big:'Ver ›', bigC:C.azulInfo, big2:true, ctx:'cobrado − comisiones − costos', on:()=>onOpenEstadoResultados&&onOpenEstadoResultados()},
+  ]
+  return (<div>
+    <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,1fr)':'1fr',gap:14}}>
+      {cards.map(c=>(
+        <div key={c.k} onClick={c.on} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
+          <span style={{position:'absolute',top:16,right:16,color:C.done,fontSize:16,fontWeight:700}}>›</span>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+            <span style={{width:36,height:36,borderRadius:9,background:c.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={c.ic} s={19} c={c.col}/></span>
+            <span style={{fontSize:13.5,fontWeight:800,color:C.accent}}>{c.ti}</span>
+          </div>
+          <div style={{fontSize:c.big2?15:26,fontWeight:800,letterSpacing:c.big2?0:-.6,color:c.bigC,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{c.big}</div>
+          <div style={{fontSize:11.5,color:c.ctxC||C.muted,marginTop:5}}>{c.ctx}</div>
+        </div>))}
+    </div>
+    {sub==='costos' && <Modal fullscreenOnMobile title='Costos de Oficina' maxWidth={760} onClose={()=>setSub(null)}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
+    {sub==='retiros' && <Modal fullscreenOnMobile title='Retiros a socios' maxWidth={560} onClose={()=>setSub(null)}><RetirosOficinaModal expenses={expenses} clients={clients}/></Modal>}
+  </div>)
+}
 // Estado de resultados mensual: ingresos cobrados − costos de oficina = resultado del mes. Navegable, comparable y exportable. Fuente única (cobradoBill, costosOficinaMes).
 function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
   const [ym,setYm] = useState(()=>new Date().toISOString().slice(0,7))
@@ -28284,10 +28380,10 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Presupuesto Oficina'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Presupuesto Oficina']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina']],
   limited:[['tasks','Tareas'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
@@ -30582,9 +30678,9 @@ export default function App() {
             {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
                 <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
-                <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Presupuesto Oficina</span>
+                <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Oficina</span>
               </div>
-              <CostosOficinaModal expenses={expenses} clients={clients}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenOficina={()=>{setOfiOpen(true);navTo({tab:'expenses'})}}/>
             </div>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/></> }
