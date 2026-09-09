@@ -25869,16 +25869,21 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
           const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true})
           const res=parseCartola(aoa,{filename:file.name})
           const rows=res.movimientos.map(m=>({ ...m, cliente_id: m.es_interno?null:(resolver(m.rut_contraparte)||resolverNombre(m.nombre_contraparte)), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
-          // dedup: separa los GENUINAMENTE nuevos de los ya cargados (NO escribe todavía — eso es la compuerta de confirmación)
+          const fechas=rows.map(r=>r.fecha).filter(Boolean).sort(); const minF=fechas[0]||null, maxF=fechas[fechas.length-1]||null
+          // dedup ROBUSTO por CONTEO (NO escribe todavía — es la compuerta de confirmación). El banco entrega DISTINTO n° de operación
+          // y glosa entre la cartola DIARIA y la MENSUAL (inserta espacios por corte de columna: "Rut"→"R ut", "Chile"→"Chil e", y a
+          // veces trunca distinto) → el hash NO calza y todo salía "nuevo". La única clave estable es cuenta|fecha|tipo|monto (montos y
+          // fechas sí parsean bien: los totales cuadran). Comparación por MULTISET: si el banco ya tiene N con esa clave y el archivo trae M,
+          // los primeros min(N,M) ya están (soporta 2 movimientos idénticos el mismo día, ej. dos $5.000.000 el 19-08 de clientes distintos).
           let nuevosRows=rows
-          if(rows.length){
-            const {data:ex}=await supabase.from('cartola_movimientos').select('hash').in('hash',rows.map(r=>r.hash))
-            const set=new Set((ex||[]).map(x=>x.hash)); nuevosRows=rows.filter(r=>!set.has(r.hash))
+          if(rows.length && minF){
+            const {data:ex}=await supabase.from('cartola_movimientos').select('fecha,tipo,monto').eq('cuenta',res.cuenta).gte('fecha',minF).lte('fecha',maxF)
+            const cnt={}; (ex||[]).forEach(x=>{ const k=`${String(x.fecha).slice(0,10)}|${x.tipo}|${Math.round(x.monto||0)}`; cnt[k]=(cnt[k]||0)+1 })
+            nuevosRows=rows.filter(r=>{ const k=`${r.fecha}|${r.tipo}|${Math.round(r.monto||0)}`; if(cnt[k]>0){ cnt[k]--; return false } return true })
           }
           const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
           const sinId=abo.filter(r=>!r.es_interno && !r.cliente_id).length
-          const fechas=rows.map(r=>r.fecha).filter(Boolean).sort(); const minF=fechas[0]||null, maxF=fechas[fechas.length-1]||null
           // Cruce fecha↔glosa (tu regla: al cargar, siempre cruzar). La glosa suele traer la fecha real ("...el DD/MM/YYYY"); si la fecha del
           // movimiento quedó MUY lejos (≥30 días) de esa, es data sospechosa (bug de parseo / columna mal leída) → se avisa ANTES de confirmar.
           const _fechaGlosa = desc => { const m=String(desc||'').match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/); return m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:null }
