@@ -25868,7 +25868,10 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
           const sheet=wb.Sheets[wb.SheetNames[0]]
           const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true})
           const res=parseCartola(aoa,{filename:file.name})
-          const rows=res.movimientos.map(m=>({ ...m, cliente_id: m.es_interno?null:(resolver(m.rut_contraparte)||resolverNombre(m.nombre_contraparte)), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
+          // RUT de una persona conocida (equipo/socios/contadora) NO es cliente → cliente_id=null (evita falsos positivos de resolverNombre,
+          // ej. "erasmo escala"→cliente "Liberona Escala" o "Martina…"→"Javier Vergara"); su cargo lo clasifica cargoSugerencia (sueldo/caja/retiro).
+          const _esPersona = m => { const k=crNormRut(m.rut_contraparte); return !!(k&&(EQUIPO_RUT[k]||SOCIO_RUT[k]||CONTADORA_RUT[k])) }
+          const rows=res.movimientos.map(m=>({ ...m, cliente_id: (m.es_interno||_esPersona(m))?null:(resolver(m.rut_contraparte)||resolverNombre(m.nombre_contraparte)), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
           const fechas=rows.map(r=>r.fecha).filter(Boolean).sort(); const minF=fechas[0]||null, maxF=fechas[fechas.length-1]||null
           // dedup ROBUSTO por CONTEO (NO escribe todavía — es la compuerta de confirmación). El banco entrega DISTINTO n° de operación
           // y glosa entre la cartola DIARIA y la MENSUAL (inserta espacios por corte de columna: "Rut"→"R ut", "Chile"→"Chil e", y a
@@ -26792,20 +26795,14 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     const k=crNormRut(m.rut_contraparte)
     if(k){
       if(EQUIPO_RUT[k]){ const per=EQUIPO_RUT[k]
-        const tieneCaja=(pettyCash||[]).some(p=>p.user_name===per)
-        // Persona del equipo CON caja chica: la glosa NO distingue sueldo de reposición de caja (lo decide el MONTO), así que NO se
-        // respeta la glosa aprendida ni se asume Sueldo. Su SUELDO = su línea de Remuneraciones del presupuesto (monto exacto) → Sueldo;
-        // cualquier otro monto = ambiguo → menú [Caja chica · Sueldo · Otro] en el primer nivel (la caja chica es recurrente, a un clic).
-        if(tieneCaja){
-          const abs=Math.round(Math.abs(Number(m.monto)||0))
-          const ym=String(m.fecha||'').slice(0,7)||new Date().toISOString().slice(0,7)
-          const effC=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
-          const esSueldo=(poolCostos||[]).some(r=>!r.es_ingreso && r.categoria==='Remuneraciones' && _normTxt(r.item).includes(_normTxt(per)) && Math.round(Number(effC(r))||0)===abs)
-          return esSueldo ? {fam:'oficina',category:'Sueldos',sub:per,via:'presupuesto'} : {fam:'oficina',persona:per,via:'RUT',ambiguoCaja:true}
-        }
-        // Sin caja chica: la glosa aprendida manda; si no, Sueldos por el RUT.
-        const gk0=glosaKey(m.descripcion); if(gk0&&costoOfiLearn[gk0]) return {fam:'oficina',category:costoOfiLearn[gk0].category,sub:costoOfiLearn[gk0].subcategory||null,via:'glosa'}
-        return {fam:'oficina',category:'Sueldos',sub:per,via:'RUT'} }
+        // El equipo (Martín/Martina) hace caja chica: la glosa NO distingue sueldo de reposición de caja (lo decide el MONTO), así que
+        // NO se respeta la glosa aprendida ni se asume Sueldo. Su SUELDO = su línea de Remuneraciones del presupuesto (monto exacto) →
+        // Sueldo auto; cualquier otro monto → menú [Caja chica · Sueldo · Otro] en el primer nivel (la caja chica es recurrente, a un clic).
+        const abs=Math.round(Math.abs(Number(m.monto)||0))
+        const ym=String(m.fecha||'').slice(0,7)||new Date().toISOString().slice(0,7)
+        const effC=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
+        const esSueldo=(poolCostos||[]).some(r=>!r.es_ingreso && r.categoria==='Remuneraciones' && _normTxt(r.item).includes(_normTxt(per)) && Math.round(Number(effC(r))||0)===abs)
+        return esSueldo ? {fam:'oficina',category:'Sueldos',sub:per,via:'presupuesto'} : {fam:'oficina',persona:per,via:'RUT',ambiguoCaja:true} }
       if(SOCIO_RUT[k]){
         // REGLA (usuario): los RETIROS a socios son SIEMPRE cifras enteras/redondas; los SUELDOS no (llevan cola por descuentos).
         // Un socio recibe sueldo Y retiro al mismo RUT, así que el RUT no basta: un cargo NO redondo a un socio = sueldo seguro.
@@ -26884,7 +26881,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     setBusy(null)
   }
   // Abono a caja chica ya ingresado a mano (mismo nombre, monto exacto, aún sin vincular a un movimiento).
-  const cajaChicaMatch = (persona, monto) => (pettyCash||[]).find(p => p.user_name===persona && (p.amount||0)>0 && Math.abs((p.amount||0)-monto)<=TOL && !String(p.nota||'').includes('mov:'))
+  const cajaChicaMatch = (persona, monto) => (pettyCash||[]).find(p => p.user_name===persona && (p.amount||0)>0 && Math.abs((p.amount||0)-monto)<=TOL && !String(p.notes||'').includes('mov:'))
   const _cierraCaja = (m,movAplic,estado)=>{ setMovs(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplic,categoria:'Caja chica'}:x)); setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''})) }
   // Caso común: la caja chica ya se ingresó a mano → VINCULAR (pide confirmar, no duplica). Solo crea si no hay match.
   const abonoCajaChica = async(m, persona) => {
@@ -26895,14 +26892,14 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     const estado=((m.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
     const match=cajaChicaMatch(persona, monto)
     if(match){
-      const vincular = await appConfirm(`Ya ingresaste ${fmtM(match.amount)} a la caja chica de ${persona}${match.nota?` (${match.nota})`:''}. ¿Es este mismo movimiento? Se vincula para NO duplicar.`)
+      const vincular = await appConfirm(`Ya ingresaste ${fmtM(match.amount)} a la caja chica de ${persona}${match.notes?` (${match.notes})`:''}. ¿Es este mismo movimiento? Se vincula para NO duplicar.`)
       if(vincular){
         setBusy(m.id)
         try{
-          const nota=`${match.nota||''} · mov:${m.id}`.trim()
-          const { error:pe } = await supabase.from('petty_cash').update({ nota }).eq('id',match.id); if(pe) throw pe
+          const nota=`${match.notes||''} · mov:${m.id}`.trim()
+          const { error:pe } = await supabase.from('petty_cash').update({ notes:nota }).eq('id',match.id); if(pe) throw pe
           const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id); if(me) throw me
-          setPettyCash&&setPettyCash(p=>p.map(x=>x.id===match.id?{...x,nota}:x)); _cierraCaja(m,movAplic,estado)
+          setPettyCash&&setPettyCash(p=>p.map(x=>x.id===match.id?{...x,notes:nota}:x)); _cierraCaja(m,movAplic,estado)
         }catch(e){ appAlert('Error al vincular caja chica: '+e.message) }
         setBusy(null); return
       }
@@ -26911,7 +26908,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     setBusy(m.id)
     let pc=null
     try{
-      const ins = await supabase.from('petty_cash').insert({ user_name:persona, amount:monto, nota:`Abono caja chica (banco) · mov:${m.id}` }).select().single()
+      const ins = await supabase.from('petty_cash').insert({ user_name:persona, amount:monto, notes:`Abono caja chica (banco) · mov:${m.id}` }).select().single()
       if(ins.error) throw ins.error; pc=ins.data
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id); if(me) throw me
       setPettyCash&&setPettyCash(p=>[pc,...p]); _cierraCaja(m,movAplic,estado)
@@ -26922,10 +26919,10 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     if(busy) return
     setBusy(m.id)
     try{
-      const pc=(pettyCash||[]).find(p=>String(p.nota||'').includes(`mov:${m.id}`))
+      const pc=(pettyCash||[]).find(p=>String(p.notes||'').includes(`mov:${m.id}`))
       if(pc){
-        if(/\(banco\)/.test(pc.nota||'')){ const {error:pe}=await supabase.from('petty_cash').delete().eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.filter(x=>x.id!==pc.id)) }   // lo creó la conciliación → borrar
-        else { const nota=String(pc.nota||'').replace(new RegExp(`\\s*·\\s*mov:${m.id}`),'').trim(); const {error:pe}=await supabase.from('petty_cash').update({nota}).eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.map(x=>x.id===pc.id?{...x,nota}:x)) }   // era manual → solo desvincular
+        if(/\(banco\)/.test(pc.notes||'')){ const {error:pe}=await supabase.from('petty_cash').delete().eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.filter(x=>x.id!==pc.id)) }   // lo creó la conciliación → borrar
+        else { const nota=String(pc.notes||'').replace(new RegExp(`\\s*·\\s*mov:${m.id}`),'').trim(); const {error:pe}=await supabase.from('petty_cash').update({notes:nota}).eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.map(x=>x.id===pc.id?{...x,notes:nota}:x)) }   // era manual → solo desvincular
       }
       const { error } = await supabase.from('cartola_movimientos').update({ estado:'pendiente', monto_conciliado:0, categoria:null }).eq('id',m.id)
       if(error) throw error
