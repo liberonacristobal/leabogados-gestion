@@ -27599,7 +27599,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const bG={fontSize:10.5,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:7,padding:'5px 11px',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}
     const bO={fontSize:10.5,fontWeight:700,color:C.accent,background:'transparent',border:`1px solid ${C.accent}`,borderRadius:7,padding:'5px 11px',cursor:'pointer',whiteSpace:'nowrap'}
     const bGh={fontSize:10,fontWeight:600,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer',whiteSpace:'nowrap'}
-    const wrap=kids=><div onClick={stop} style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:7}}>{kids}</div>
+    // Glosa enmascarada por BICE (sin remitente): pista para identificar SIN ocultar plata. B = pago de cliente ("a terceros a cuenta propia"); C = ambiguo ("de CLIENTE→BENEFICIARIO", posible traspaso interno gastos↔honorarios). El interno "entre cuentas propias"/"Liberona→Liberona" ya lo marca solo el parser.
+    const gm = (()=>{ if(m.rut_contraparte) return null; const d=(m.descripcion||'').toLowerCase()
+      const esCli=/transf\. a terceros/.test(d) && /(1403834|1383922|liberona escala)/.test(d)
+      const esAmb=/\bde cliente\b/.test(d) && /beneficiario/.test(d)
+      if(!esCli && !esAmb) return null
+      let sweep=null
+      if(esAmb){ const c=(movs||[]).find(x=> x.id!==m.id && x.tipo==='abono' && x.rol_cuenta!==m.rol_cuenta && (x.monto||0)===(m.monto||0) && x.cliente_id && (concByMov[x.id]?.length)); if(c) sweep=cmap[c.cliente_id]||'un cliente' }
+      const txt = esCli ? 'Pago de cliente · BICE ocultó al remitente' : sweep ? `¿Traspaso interno? calza pago de ${sweep}` : 'Remitente oculto (BICE) · ¿interno o cliente?'
+      return <div title="El banco no imprime quién envió; asigna por el monto o tu memoria" style={{fontSize:9.5,fontWeight:700,color:esCli?C.azulInfo:C.soonText,background:esCli?C.azulBg:C.soonBg,borderRadius:7,padding:'3px 8px',display:'inline-block'}}>{txt}</div> })()
+    const wrap=kids=><div onClick={stop} style={{marginTop:7}}>{gm}<div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:gm?6:0}}>{kids}</div></div>
     if(!m.cliente_id){
       const sc=sugMov(m)
       if(sc) return wrap(<><button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={bG}>Es {(sc.nombre||'').length>16?(sc.nombre.slice(0,16)+'…'):sc.nombre} ✓</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Otro ›</button></>)
