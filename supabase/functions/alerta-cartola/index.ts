@@ -4,8 +4,8 @@
 // también considera la última fecha con movimientos. Un día cubierto por cartola_cargas NO se marca como hueco
 // (incluye los días marcados "sin movimientos" desde la app).
 // El correo sale del buzón GMAIL_USER (= contacto@leabogados.cl) y lo firma la oficina.
-// SEGURIDAD: el envío está apagado por defecto. Solo envía si el secreto ALERTA_CARTOLA_ON = "on"; si no, dry-run.
-// Auth: secreto compartido (ALERTA_CARTOLA_SECRET / CRON_SECRET). verify_jwt=false (llamada máquina-a-máquina).
+// SEGURIDAD: interruptor de envío en la base (learnings config alerta_cartola = 'on'). Sin 'on' = dry-run (no envía).
+// Auth: secreto compartido (ALERTA_CARTOLA_SECRET / CRON_SECRET, el mismo 'lea-cron-…' de los otros cron). verify_jwt=false.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
@@ -16,7 +16,8 @@ const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
 const CRON_SECRET = Deno.env.get("ALERTA_CARTOLA_SECRET") || Deno.env.get("CRON_SECRET") || "";
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const ON = (Deno.env.get("ALERTA_CARTOLA_ON") || "").toLowerCase() === "on";   // interruptor de envío (default OFF)
+// Interruptor de envío en la base (learnings config alerta_cartola = 'on'/'off'), como cobranza-auto. Default OFF.
+// Se apaga/enciende con un UPDATE, sin redeploy. Sin la fila (o 'off') = dry-run (calcula pero no envía).
 
 const toAscii = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "");
 const qpSafe = (h: string) => String(h || "").replace(/[ \t]+$/gm, "");
@@ -66,6 +67,10 @@ Deno.serve(async (req) => {
   while (d < today && guard++ < 60) { const s = iso(d); if (esHabil(d) && !cov.has(s)) gap.push(s); d.setDate(d.getDate() + 1); }
   if (!gap.length) return json({ ok: true, gap: 0, ultima: lastCov });
 
+  // Interruptor de envío (base): learnings config alerta_cartola = 'on'
+  const cfg = await sb("learnings?select=value&kind=eq.config&key=eq.alerta_cartola");
+  const ON = String(cfg?.[0]?.value || "off").trim().toLowerCase() === "on";
+
   const asunto = gap.length === 1 ? `Falta la cartola BICE del ${lindo(gap[0])}` : `${gap.length} días sin cartola BICE`;
   const lista = gap.map(lindo).join(", ");
   const html = `<div style="font-family:-apple-system,Arial,sans-serif;max-width:520px;color:#3D3D3D;font-size:14px;line-height:1.55">
@@ -79,7 +84,7 @@ Deno.serve(async (req) => {
     <p style="color:#99ABB4;font-size:12px;margin-top:20px">Liberona Escala Abogados &middot; aviso automático de cartolas</p>
   </div>`;
 
-  if (!ON) return json({ ok: true, gap: gap.length, dias: gap, ultima: lastCov, enviado: false, motivo: "ALERTA_CARTOLA_ON != on (dry-run, no se envió)" });
+  if (!ON) return json({ ok: true, gap: gap.length, dias: gap, ultima: lastCov, enviado: false, motivo: "interruptor apagado (learnings config alerta_cartola != on) — dry-run" });
 
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
