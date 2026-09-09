@@ -540,6 +540,9 @@ const CAT_OFICINA_ALIAS = {
 const catOficinaNueva = c => CAT_OFICINA_ALIAS[String(c||'').trim()] || c
 // Fuente ÚNICA del total mensual de Costos de Oficina: valor vigente de cada ítem en el mes ym (desde/monto_prev), ingresos restan.
 function costosOficinaMes(rows, ym){ ym = ym || new Date().toISOString().slice(0,7); return (rows||[]).reduce((a,r)=>{ const eff=(r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; return a + (Number(eff)||0)*(r.es_ingreso?-1:1) },0) }
+// Cobrado del mes (fuente única, = EstadoResultadosModal): facturas con paid_at en el mes, netas de anuladas/reembolsos, vía cobradoBill. Comisión del mes = terceros_pagos pagados en el mes. Ambas reusadas por OficinaHub para no divergir.
+const ingresosMesBill = (billing, ym) => (billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.paid_at||'').startsWith(ym)).reduce((a,b)=>a+cobradoBill(b),0)
+const comisionMesTerc = (terceros, ym) => (terceros||[]).filter(t=>t&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).reduce((a,t)=>a+(Number(t.monto)||0),0)
 // Valor mensual de la asesoría en UF (fuente única): pesos → UF del primer día hábil del año (ufAnioEff).
 const ventaUFmesDe = (s, ufAnioEff) => s?.moneda==='CLP' ? (parseFloat(s?.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s?.amount_uf)||0)
 // Overhead de oficina por hora (fuente única): costos NO-remuneración/mes ÷ horas del equipo CON costo (Σ metas ×4,33).
@@ -7043,11 +7046,14 @@ function RetirosOficinaModal({ expenses=[], clients=[] }){
   </div>)
 }
 // Módulo Oficina — hub de tarjetas por ámbito (costos, retiros, nómina, subarriendo, varios, resultado). Cada cifra sale de su fuente única; el detalle vive adentro (reusa CostosOficinaModal/EstadoResultadosModal).
-function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], isDesktop=true, onOpenEstadoResultados, onOpenOficina }){
+function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenOficina }){
   const [sub,setSub] = useState(null)
   const ym = new Date().toISOString().slice(0,7), year=new Date().getFullYear()
   const eff = r => (r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
   const costoMes = costosOficinaMes(costosOfiRows, ym)
+  const cobradoMes = ingresosMesBill(billing, ym)          // fuente única (= Estado de resultados)
+  const comiMes = comisionMesTerc(terceros, ym)
+  const resMes = cobradoMes - costoMes - comiMes             // margen del mes (misma fórmula del P&L)
   const nomina = (costosOfiRows||[]).filter(r=>['Remuneraciones','Leyes sociales'].includes(r.categoria)).reduce((a,r)=>a+(Number(eff(r))||0),0)
   const subarr = (costosOfiRows||[]).filter(r=>r.es_ingreso).reduce((a,r)=>a+(Number(eff(r))||0),0)
   const ret = retirosOficinaData(expenses, clients, year)
@@ -7062,9 +7068,23 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], isDesktop=true,
     {k:'nomina', ic:'users', bg:C.soonBg, col:C.soonText, ti:'Nómina', big:fmtShort(nomina), bigC:C.accent, ctx:'por mes · sueldos + leyes', on:()=>setSub('costos')},
     {k:'sub', ic:'exchange', bg:C.greenBg, col:C.greenText, ti:'Subarriendo', big:'+'+fmtShort(subarr), bigC:C.greenText, ctx:'por mes · baja el arriendo', on:()=>setSub('costos')},
     {k:'varios', ic:'receipt', bg:'#F1EFE8', col:C.muted, ti:'Varios y personales', big:fmtShort(variosMes), bigC:C.accent, ctx:porCobrar>0?`${fmtShort(porCobrar)} por cobrar al equipo`:'varios este mes', ctxC:porCobrar>0?C.overdueText:C.muted, on:()=>onOpenOficina&&onOpenOficina()},
-    {k:'res', ic:'chart', bg:'#EDF1F4', col:C.accent, ti:'Estado de resultados', big:'Ver ›', bigC:C.azulInfo, big2:true, ctx:'cobrado − comisiones − costos', on:()=>onOpenEstadoResultados&&onOpenEstadoResultados()},
+    {k:'res', ic:'chart', bg:'#EDF1F4', col:C.accent, ti:'Estado de resultados', big:fmtShort(resMes), bigC:resMes>=0?C.greenText:C.overdueText, ctx:cobradoMes>0?`margen del mes · ${Math.round(resMes/cobradoMes*100)}%`:'margen del mes', on:()=>onOpenEstadoResultados&&onOpenEstadoResultados()},
+  ]
+  const strip=[
+    {l:'Resultado del mes', v:fmtShort(resMes), n:'cobrado − comisiones − costos', dark:true},
+    {l:'Cobrado a caja', v:fmtShort(cobradoMes), n:'ingreso del mes', c:C.accent},
+    {l:'Costos + comisiones', v:fmtShort(costoMes+comiMes), n:'lo que sale', c:C.overdueText},
+    {l:'Retirado por socios', v:fmtShort(retMes||ret.total), n:'distribución · no es costo', c:C.tealText},
   ]
   return (<div>
+    <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.4fr 1fr 1fr 1fr':'1fr 1fr',gap:12,marginBottom:14}}>
+      {strip.map((s,i)=>(
+        <div key={i} style={{background:s.dark?C.accent:'#fff',border:`1px solid ${s.dark?C.accent:C.border}`,borderRadius:13,padding:'14px 16px',color:s.dark?'#fff':undefined}}>
+          <div style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,opacity:s.dark?.85:1,color:s.dark?'#fff':C.muted}}>{s.l}</div>
+          <div style={{fontSize:21,fontWeight:800,marginTop:4,letterSpacing:-.4,fontVariantNumeric:'tabular-nums',color:s.dark?'#fff':(s.c||C.accent)}}>{s.v}</div>
+          <div style={{fontSize:10,marginTop:2,opacity:s.dark?.72:1,color:s.dark?'#fff':C.muted}}>{s.n}</div>
+        </div>))}
+    </div>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,1fr)':'1fr',gap:14}}>
       {cards.map(c=>(
         <div key={c.k} onClick={c.on} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
@@ -7086,10 +7106,10 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
   const [ym,setYm] = useState(()=>new Date().toISOString().slice(0,7))
   const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const mesLbl=y=>`${MESES[+y.slice(5,7)-1]} ${y.slice(0,4)}`
-  const ingresosDe=y=>(billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.paid_at||'').startsWith(y)).reduce((a,b)=>a+cobradoBill(b),0)
+  const ingresosDe=y=>ingresosMesBill(billing,y)
   const costosPorCat=y=>{ const m={}; (costosOfiRows||[]).forEach(r=>{ const eff=(r.desde&&y<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; m[r.categoria]=(m[r.categoria]||0)+(Number(eff)||0)*(r.es_ingreso?-1:1) }); return m }
   // Comisión del mes = comisiones PAGADAS (terceros_pagos) por pagado_at. Fuente ÚNICA y separada de Costos de oficina (que es el presupuesto costos_oficina, sin categoría Comisiones) → no se pisan.
-  const comisionDe=y=>(terceros||[]).filter(t=>t&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(y)).reduce((a,t)=>a+(Number(t.monto)||0),0)
+  const comisionDe=y=>comisionMesTerc(terceros,y)
   const comisPorColab=y=>{ const m={}; (terceros||[]).filter(t=>t&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(y)).forEach(t=>{ const k=t.proveedor||'Colaborador'; m[k]=(m[k]||0)+(Number(t.monto)||0) }); return m }
   const prevYmOf=y=>{ const [Y,M]=y.split('-').map(Number); const d=new Date(Y,M-2,1); return d.toISOString().slice(0,7) }
   const nav=delta=>{ const [Y,M]=ym.split('-').map(Number); const d=new Date(Y,M-1+delta,1); setYm(d.toISOString().slice(0,7)) }
@@ -30680,7 +30700,7 @@ export default function App() {
                 <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Oficina</span>
               </div>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenOficina={()=>{setOfiOpen(true);navTo({tab:'expenses'})}}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenOficina={()=>{setOfiOpen(true);navTo({tab:'expenses'})}}/>
             </div>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/></> }
