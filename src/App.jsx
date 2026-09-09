@@ -7003,12 +7003,17 @@ function retirosOficinaData(expenses, clients, year){
   out.rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
   return out
 }
-function RetirosOficinaModal({ expenses=[], clients=[] }){
+function RetirosOficinaModal({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[] }){
   const year = new Date().getFullYear()
   const d = retirosOficinaData(expenses, clients, year)
   const socios = Object.entries(d.porSocio).sort((a,b)=>b[1]-a[1])
   const maxS = Math.max(1, ...socios.map(s=>s[1]))
   const dif = socios.length>=2 ? Math.abs(socios[0][1]-socios[1][1]) : 0
+  // Utilidad distribuible YTD = Σ (cobrado − costos − comisiones) de cada mes del año (misma fuente única que Estado de resultados).
+  const _mNow = new Date().getFullYear()===year ? new Date().getMonth()+1 : 12
+  let margenYTD=0; for(let i=1;i<=_mNow;i++){ const m=`${year}-${String(i).padStart(2,'0')}`; margenYTD += ingresosMesBill(billing,m)-costosOficinaMes(costosOfiRows,m)-comisionMesTerc(terceros,m) }
+  const disponible = margenYTD - d.total
+  const pctRet = margenYTD>0 ? Math.round(d.total/margenYTD*100) : 0
   const ini = n => String(n||'').split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()
   return (<div>
     <div style={{background:C.accent,color:'#fff',borderRadius:13,padding:'16px 18px',marginBottom:12}}>
@@ -7032,6 +7037,19 @@ function RetirosOficinaModal({ expenses=[], clients=[] }){
         <div style={{fontSize:11.5,color:C.soonText}}><b>Diferencia entre socios: {fmt(dif)}.</b> Si los retiros deben ser parejos, ajustar en el próximo.</div></div>}
       {socios.length===0 && <div style={{padding:20,textAlign:'center',color:C.done,fontSize:12.5}}>Sin retiros registrados este año.</div>}
     </div>
+    {margenYTD>0 && (()=>{ const cmp=(lbl,val,w,col)=>(
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px'}}>
+          <div style={{fontSize:11,color:C.muted,width:150,flexShrink:0}}>{lbl}</div>
+          <div style={{flex:1,height:13,borderRadius:7,background:C.bgSoft,overflow:'hidden',position:'relative'}}><div style={{position:'absolute',top:0,bottom:0,left:0,width:Math.max(0,Math.min(100,w))+'%',background:col,borderRadius:7}}/></div>
+          <div style={{width:92,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:col}}>{fmt(val)}</div>
+        </div>)
+      return (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginTop:12}}>
+        <div style={{padding:'12px 16px 4px',fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Retiros vs utilidad distribuible · {year}</div>
+        {cmp('Margen acumulado', margenYTD, 100, C.greenText)}
+        {cmp('Ya retirado', d.total, margenYTD>0?d.total/margenYTD*100:0, C.tealText)}
+        {cmp('Disponible para retirar', disponible, margenYTD>0?disponible/margenYTD*100:0, C.done)}
+        <div style={{padding:'4px 16px 12px',fontSize:10.5,color:disponible<0?C.overdueText:C.muted}}>{disponible<0?`⚠ Se ha retirado más que la utilidad del año (${fmt(-disponible)} sobre el margen).`:`Van ${pctRet}% del margen distribuido — control de que los retiros no superen la utilidad real.`}</div>
+      </div>) })()}
     {d.rows.length>0 && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginTop:12}}>
       <div style={{padding:'12px 16px 4px',fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Movimientos</div>
       {d.rows.slice(0,15).map(r=>{ const col=_SOCIO_COL[r.socio]||C.muted; const dt=r.date?new Date(r.date+'T12:00'):null; return (
@@ -7098,7 +7116,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
         </div>))}
     </div>
     {sub==='costos' && <Modal fullscreenOnMobile title='Costos de Oficina' maxWidth={760} onClose={()=>setSub(null)}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
-    {sub==='retiros' && <Modal fullscreenOnMobile title='Retiros a socios' maxWidth={560} onClose={()=>setSub(null)}><RetirosOficinaModal expenses={expenses} clients={clients}/></Modal>}
+    {sub==='retiros' && <Modal fullscreenOnMobile title='Retiros a socios' maxWidth={560} onClose={()=>setSub(null)}><RetirosOficinaModal expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows}/></Modal>}
   </div>)
 }
 // Estado de resultados mensual: ingresos cobrados − costos de oficina = resultado del mes. Navegable, comparable y exportable. Fuente única (cobradoBill, costosOficinaMes).
