@@ -7357,6 +7357,13 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const rutMulti=useMemo(()=>{ const m={}; (clientEntities||[]).forEach(e=>{ const r=crNormRut(e.rut); if(!r) return; if(!m[r]) m[r]={ids:new Set(),rs:e.name}; m[r].ids.add(String(e.client_id)) }); return Object.entries(m).filter(([r,v])=>v.ids.size>1).map(([r,v])=>({rut:r, rs:v.rs, clientIds:[...v.ids]})) },[clientEntities])
   const folioDup=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||!b.invoice_no) return; const f=folioN(b.invoice_no); if(!/^\d+$/.test(f)) return; (m[f]=m[f]||[]).push(b) }); return Object.entries(m).filter(([f,a])=>a.length>1).map(([f,a])=>({folio:f, rows:a})) },[billing])
+  // Facturas posiblemente duplicadas: cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, EXCLUYENDO las anuladas por nota de crédito (status Anulada / NC). Dos entidades distintas con el mismo monto (ej. Tarragona a 3 RS, o folios de RUT distinto) NO se marcan; solo la MISMA entidad con la misma cuota repetida. La NC deja la factura fuera automáticamente.
+  const facDup=useMemo(()=>{ const norm=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' '); const m={}
+    ;(billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||['reembolso','nota_credito'].includes(b.billing_type||'')) return
+      const rut=crNormRut(b.receptor_rut); const ident=rut||norm(b.receptor_name)||('cli:'+b.client_id)
+      const key=ident+'|'+norm(b.concept)+'|'+Math.round(b.amount||0); (m[key]=m[key]||[]).push(b) })
+    return Object.values(m).filter(a=>a.length>1).map(a=>({ rut:a[0].receptor_rut||null, rs:a[0].receptor_name||null, cid:a[0].client_id, concept:a[0].concept, amount:a[0].amount, rows:a }))
+  },[billing])
   const montoNeDte=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.dte_xml&&b.amount!=null).map(b=>({b, dte:dteMontoTotal(b.dte_xml)})).filter(x=>x.dte!=null&&Math.round(x.dte)!==Math.round(x.b.amount)),[billing])
   const ventasDup=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s.deleted_at||!['Activo','Terminado'].includes(s.status)) return; const k=`${s.client_id}|${s.amount_uf||s.amount_clp||0}|${s.year}|${s.month}`; (m[k]=m[k]||[]).push(s) }); return Object.values(m).filter(a=>a.length>1) },[sales])
   // Facturas huérfanas: emitidas (con folio, no anuladas/borradas, no reembolso/NC) SIN cliente asignado → hay que vincularlas para que cuenten en el por-cobrar del cliente.
@@ -7378,7 +7385,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     })
     return out
   },[anticipos,conciliacion])
-  const total=rutMulti.length+folioDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length
+  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -7388,6 +7395,14 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       {folioDup.map(({folio,rows})=><div key={folio} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N°{folio} · {rows.length} filas</div>
         {rows.map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:10.5,color:C.muted,marginTop:3,paddingLeft:10,cursor:'pointer'}}>{cName(b.client_id)} · {b.concept||'—'} · {fmt(b.amount||0)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
+      </div>)}
+    </div>}
+    {facDup.length>0&&<div style={{marginTop:14}}>{sh('Facturas posiblemente duplicadas','#C0392B',facDup.length)}
+      <div style={{fontSize:9.5,color:C.done,marginBottom:2}}>misma entidad (RUT/RS) · mismo concepto · mismo monto · sin nota de crédito</div>
+      {facDup.map((g,i)=><div key={i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.text}}>{g.rs||cName(g.cid)}{g.rut?<span style={{color:C.muted,fontWeight:400}}> · {g.rut}</span>:''}</div>
+        <div style={{fontSize:10,color:C.muted,marginTop:1}}>{g.concept||'—'} · {fmt(g.amount||0)}</div>
+        {g.rows.map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:10.5,color:C.muted,marginTop:3,paddingLeft:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}><span style={{fontWeight:600,color:C.accent}}>{b.invoice_no?`N°${folioN(b.invoice_no)}`:'Programada'}</span><span>· {b.status} · {b.due?new Date(b.due+'T12:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'—'}</span>{lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
       </div>)}
     </div>}
     {rutMulti.length>0&&<div style={{marginTop:14}}>{sh('RUT repetido en fichas',C.coralText,rutMulti.length)}
