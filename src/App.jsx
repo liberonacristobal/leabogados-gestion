@@ -26792,11 +26792,20 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     const k=crNormRut(m.rut_contraparte)
     if(k){
       if(EQUIPO_RUT[k]){ const per=EQUIPO_RUT[k]
-        // Si la glosa ya se aprendió antes (p.ej. "Comisión"), respeta lo aprendido por sobre el RUT.
-        const gk0=glosaKey(m.descripcion); if(gk0&&costoOfiLearn[gk0]) return {fam:'oficina',category:costoOfiLearn[gk0].category,sub:costoOfiLearn[gk0].subcategory||null,via:'glosa'}
-        // Persona del equipo CON caja chica: un cargo a su cuenta es tan probable reposición de caja como sueldo → no asumir, preguntar.
         const tieneCaja=(pettyCash||[]).some(p=>p.user_name===per)
-        return tieneCaja ? {fam:'oficina',persona:per,via:'RUT',ambiguoCaja:true} : {fam:'oficina',category:'Sueldos',sub:per,via:'RUT'} }
+        // Persona del equipo CON caja chica: la glosa NO distingue sueldo de reposición de caja (lo decide el MONTO), así que NO se
+        // respeta la glosa aprendida ni se asume Sueldo. Su SUELDO = su línea de Remuneraciones del presupuesto (monto exacto) → Sueldo;
+        // cualquier otro monto = ambiguo → menú [Caja chica · Sueldo · Otro] en el primer nivel (la caja chica es recurrente, a un clic).
+        if(tieneCaja){
+          const abs=Math.round(Math.abs(Number(m.monto)||0))
+          const ym=String(m.fecha||'').slice(0,7)||new Date().toISOString().slice(0,7)
+          const effC=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
+          const esSueldo=(poolCostos||[]).some(r=>!r.es_ingreso && r.categoria==='Remuneraciones' && _normTxt(r.item).includes(_normTxt(per)) && Math.round(Number(effC(r))||0)===abs)
+          return esSueldo ? {fam:'oficina',category:'Sueldos',sub:per,via:'presupuesto'} : {fam:'oficina',persona:per,via:'RUT',ambiguoCaja:true}
+        }
+        // Sin caja chica: la glosa aprendida manda; si no, Sueldos por el RUT.
+        const gk0=glosaKey(m.descripcion); if(gk0&&costoOfiLearn[gk0]) return {fam:'oficina',category:costoOfiLearn[gk0].category,sub:costoOfiLearn[gk0].subcategory||null,via:'glosa'}
+        return {fam:'oficina',category:'Sueldos',sub:per,via:'RUT'} }
       if(SOCIO_RUT[k]){
         // REGLA (usuario): los RETIROS a socios son SIEMPRE cifras enteras/redondas; los SUELDOS no (llevan cola por descuentos).
         // Un socio recibe sueldo Y retiro al mismo RUT, así que el RUT no basta: un cargo NO redondo a un socio = sueldo seguro.
