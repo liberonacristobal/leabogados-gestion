@@ -4185,7 +4185,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             )})}
         </div>
         {openFoco&&(()=>{ const n=radar.find(x=>String(x.id)===String(openFoco)); if(!n) return null; const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; const tag=((n.numero||'').toUpperCase().includes((n.tipo||'').toUpperCase())?(n.numero||''):`${n.tipo||''} ${n.numero||''}`).toUpperCase().trim(); return (
-          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:12,padding:'12px 14px',marginBottom:13}}>
+          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:13}}>
             <div style={{fontSize:9,fontWeight:700,color:pr,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:5}}>{tag||'SII'}{n.prioridad?` · prioridad ${n.prioridad}`:''}</div>
             <div style={{fontSize:13.5,fontWeight:600,color:C.text,lineHeight:1.3,marginBottom:6}}>{n.titulo}</div>
             {(n.brief||n.resumen)&&<div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:10}}>{n.brief||n.resumen}</div>}
@@ -4356,7 +4356,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               <div style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 9px'}}><div style={{fontSize:9,color:C.muted}}>Costo terceros</div><div style={{fontSize:15,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(serviciosTot.costo)}</div></div>
               <div style={{flex:1,background:repr?C.greenBg:C.bgSoft,borderRadius:9,padding:'7px 9px'}}><div style={{fontSize:9,color:C.muted}}>Margen</div><div style={{fontSize:15,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{serviciosTot.uf>0?Math.round(serviciosTot.margen/serviciosTot.uf*100)+'%':'—'}</div></div>
             </div>
-            {!repr&&<div style={{background:C.ambarBg,borderLeft:`3px solid ${C.soon}`,borderRadius:'0 9px 9px 0',padding:'8px 11px',marginBottom:10}}><div style={{fontSize:11,color:C.soonText,lineHeight:1.4}}>El margen aún no es representativo: falta cargar el costo de terceros en <b>{serviciosTot.nTotal-serviciosTot.conCosto} ventas</b>. Cárgalo abajo y se enciende con cifras reales.</div></div>}
+            {!repr&&<div style={{background:C.ambarBg,borderRadius:9,padding:'8px 11px',marginBottom:10}}><div style={{fontSize:11,color:C.soonText,lineHeight:1.4}}>El margen aún no es representativo: falta cargar el costo de terceros en <b>{serviciosTot.nTotal-serviciosTot.conCosto} ventas</b>. Cárgalo abajo y se enciende con cifras reales.</div></div>}
             {areasCon.map(s=>{ const mp=Math.round(s.margenPct); const cp=Math.max(0,100-mp); return (
               <div key={s.area} style={{marginBottom:9}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.done,fontWeight:500}}>· {s.conCosto}/{s.n} con costo</span></span><span style={{fontWeight:700,color:C.greenText}}>{mp}% <span style={{fontSize:10,color:C.muted,fontWeight:500}}>Margen</span></span></div>
