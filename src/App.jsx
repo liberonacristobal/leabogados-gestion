@@ -1697,12 +1697,11 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       )}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bgSoft,zIndex:10}}>
         <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja Chica</div>
-        <div style={{display:'flex',background:C.bgSoft,borderRadius:10,padding:3}}>
+        <div style={{display:'flex',background:C.bgSoft,borderRadius:10,padding:3,border:`1px solid ${C.border}`}}>
           {[['liquidar','PENDIENTES'],['caja','CAJA']].map(([id,lbl])=>{ const on=tab===id; return (
-            <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'7px 0',borderRadius:8,
-              border:on?'0.5px solid rgba(0,0,0,.07)':'0.5px solid transparent',
-              background:on?'#fff':'transparent',color:on?C.text:C.muted,
-              fontSize:11,fontWeight:600,letterSpacing:'.05em',cursor:'pointer'}}>{lbl}</button>
+            <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'8px 0',borderRadius:8,border:'none',
+              background:on?C.accent:'transparent',color:on?'#fff':C.muted,
+              fontSize:11.5,fontWeight:700,letterSpacing:'.05em',cursor:'pointer',transition:'background .15s'}}>{lbl}</button>
           )})}
         </div>
       </div>
