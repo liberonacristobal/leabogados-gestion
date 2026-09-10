@@ -27663,6 +27663,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         <button disabled={busy===m.id} onClick={()=>marcarCargoCliente(m,sug.clientId)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.coralText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Confirmar</button>
       </div>)
   }
+  // Traspaso interno SEGURO: marca como interno SOLO este movimiento (la pata enmascarada por BICE que duplica plata ya conciliada en la otra cuenta),
+  // sale de la bandeja de ingresos. NO toca el pago real del cliente en la otra cuenta (por eso NO usa setCategoria, cuyo espejoInterno marcaría también ese pago). Reversible con desmarcarInterno.
+  const marcarTraspasoInterno = async(m)=>{
+    setBusy(m.id)
+    try{
+      if(!DEMO){ const { error } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno',categoria:null}).eq('id',m.id); if(error) throw error }
+      setMovs(p=>p.map(x=>x.id===m.id?{...x,es_interno:true,estado:'interno',categoria:null}:x))
+    }catch(e){ appAlert('Error: '+e.message) }
+    setBusy(null)
+  }
   // "Por resolver" accionable: acción por fila en el abono CERRADO según su etapa (sin cliente → Es X ✓ / Asignar; por confirmar → Conciliar N°X; sin factura → Imputar). Reusa sugMov/identificar/crearFondoPersonal/reconciliar/mejorCandidato. El buscador vive detrás de "Asignar"/"Otro" (abre la fila).
   const abonoInlineAcc = (m) => {
     const stop=e=>e.stopPropagation()
@@ -27670,19 +27680,23 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const bO={fontSize:10.5,fontWeight:700,color:C.accent,background:'transparent',border:`1px solid ${C.accent}`,borderRadius:7,padding:'5px 11px',cursor:'pointer',whiteSpace:'nowrap'}
     const bGh={fontSize:10,fontWeight:600,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer',whiteSpace:'nowrap'}
     // Glosa enmascarada por BICE (sin remitente): pista para identificar SIN ocultar plata. B = pago de cliente ("a terceros a cuenta propia"); C = ambiguo ("de CLIENTE→BENEFICIARIO", posible traspaso interno gastos↔honorarios). El interno "entre cuentas propias"/"Liberona→Liberona" ya lo marca solo el parser.
-    const gm = (()=>{ if(m.rut_contraparte) return null; const d=(m.descripcion||'').toLowerCase()
+    const gmI = (()=>{ if(m.rut_contraparte) return null; const d=(m.descripcion||'').toLowerCase()
       const esCli=/transf\. a terceros/.test(d) && /(1403834|1383922|liberona escala)/.test(d)
       const esAmb=/\bde cliente\b/.test(d) && /beneficiario/.test(d)
       if(!esCli && !esAmb) return null
       let sweep=null
       if(esAmb){ const c=(movs||[]).find(x=> x.id!==m.id && x.tipo==='abono' && x.rol_cuenta!==m.rol_cuenta && (x.monto||0)===(m.monto||0) && x.cliente_id && (concByMov[x.id]?.length)); if(c) sweep=cmap[c.cliente_id]||'un cliente' }
-      const txt = esCli ? 'Pago de cliente · BICE ocultó al remitente' : sweep ? `¿Traspaso interno? calza pago de ${sweep}` : 'Remitente oculto (BICE) · ¿interno o cliente?'
-      return <div title="El banco no imprime quién envió; asigna por el monto o tu memoria" style={{fontSize:9.5,fontWeight:700,color:esCli?C.azulInfo:C.soonText,background:esCli?C.azulBg:C.soonBg,borderRadius:7,padding:'3px 8px',display:'inline-block'}}>{txt}</div> })()
+      const txt = esCli ? 'Pago de cliente · BICE ocultó al remitente' : sweep ? `Traspaso interno · calza con el pago de ${sweep} en la otra cuenta` : 'Remitente oculto (BICE) · ¿interno o cliente?'
+      return {esCli,esAmb,sweep,node:<div title="El banco no imprime quién envió; asigna por el monto o tu memoria" style={{fontSize:9.5,fontWeight:700,color:esCli?C.azulInfo:C.soonText,background:esCli?C.azulBg:C.soonBg,borderRadius:7,padding:'3px 8px',display:'inline-block'}}>{txt}</div>} })()
+    const gm = gmI?.node
+    // Marcar traspaso interno (movimiento entre las 2 cuentas propias del estudio) — la opción que faltaba. Cuando calza EXACTO con un pago ya conciliado (sweep), va como acción PRIMARIA en un toque.
+    const intBtn = gmI?.esAmb ? <button disabled={busy===m.id} onClick={()=>marcarTraspasoInterno(m)} style={gmI.sweep?bG:bGh} title={gmI.sweep?`Calza con el pago de ${gmI.sweep} en la otra cuenta BICE — es el mismo dinero moviéndose entre cuentas del estudio`:'Marcar como movimiento entre las cuentas propias del estudio'}>{gmI.sweep?'✓ Es traspaso interno':'Marcar traspaso interno'}</button> : null
     const wrap=kids=><div onClick={stop} style={{marginTop:7}}>{gm}<div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:gm?6:0}}>{kids}</div></div>
     if(!m.cliente_id){
       const sc=sugMov(m)
-      if(sc) return wrap(<><button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={bG}>Es {(sc.nombre||'').length>16?(sc.nombre.slice(0,16)+'…'):sc.nombre} ✓</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Otro ›</button></>)
-      return wrap(<><button onClick={()=>setModalMov(m.id)} style={bO}>Asignar cliente</button><span onClick={stop} style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{fontSize:9,color:C.done}}>o fondo:</span><select disabled={busy===m.id} value='' onChange={e=>{ const p=e.target.value; e.target.value=''; if(p) crearFondoPersonal(m,p) }} style={{fontSize:9.5,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',background:'#fff',color:C.accent,cursor:'pointer'}}><option value=''>equipo…</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(p=><option key={p} value={p}>{p}</option>)}</select></span></>)
+      if(gmI?.sweep) return wrap(<>{intBtn}<button onClick={()=>setModalMov(m.id)} style={bGh}>Es de un cliente ›</button></>)
+      if(sc) return wrap(<><button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={bG}>Es {(sc.nombre||'').length>16?(sc.nombre.slice(0,16)+'…'):sc.nombre} ✓</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Otro ›</button>{intBtn}</>)
+      return wrap(<><button onClick={()=>setModalMov(m.id)} style={bO}>Asignar cliente</button><span onClick={stop} style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{fontSize:9,color:C.done}}>o fondo:</span><select disabled={busy===m.id} value='' onChange={e=>{ const p=e.target.value; e.target.value=''; if(p) crearFondoPersonal(m,p) }} style={{fontSize:9.5,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',background:'#fff',color:C.accent,cursor:'pointer'}}><option value=''>equipo…</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(p=><option key={p} value={p}>{p}</option>)}</select></span>{intBtn}</>)
     }
     if(tieneCand(m)){ const f=mejorCandidato(m)||candidatosMostrar(m)[0]; if(f) return wrap(<><button disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={bG}>Conciliar N°{folioN(f.invoice_no)||'—'}</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Ver ›</button></>) }
     const t=Math.abs(m.monto||0); const parc=facturasParaMov(m).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>t).sort((a,b)=>(a.f.issued_at||'').localeCompare(b.f.issued_at||''))[0]
