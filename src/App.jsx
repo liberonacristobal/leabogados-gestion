@@ -12689,7 +12689,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         }
         const ents=cli?entsOf(cli.id):[]
         let error=null
-        if(notaria && (!ot || !/\d/.test(ot))) return null   // fila sin OT válida (ej. fila "Total" del export) → se ignora
+        if(notaria && (!ot || !/\d/.test(ot)) && !cli && !(nombreEff&&nombreEff.trim())) return null   // solo se ignora la fila SIN OT y SIN cliente/compareciente (la fila "Total" del export). Un trabajo NUEVO sin OT pero con compareciente SÍ se carga (#2).
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
@@ -13115,6 +13115,22 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     }
     return (<div>
       {/* Guía de una línea (qué hacer) — baja la curva de la primera vez */}
+      {notaria&&(()=>{ const nLeidas=(rows||[]).length; const errs=(rows||[]).filter(r=>r.error); const nYa=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length; const nListas=(rows||[]).filter(notaSelOn).length; return (
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 13px',marginBottom:9}}>
+          <div style={{display:'flex',gap:16,flexWrap:'wrap',alignItems:'baseline'}}>
+            <div><span style={{fontSize:20,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{nLeidas}</span> <span style={{fontSize:11,color:C.muted}}>filas del archivo</span></div>
+            <div><span style={{fontSize:16,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{nListas}</span> <span style={{fontSize:11,color:C.muted}}>listas para cargar</span></div>
+            {nYa>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.done,fontVariantNumeric:'tabular-nums'}}>{nYa}</span> <span style={{fontSize:11,color:C.muted}}>ya en la app (se omiten)</span></div>}
+            {errs.length>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{errs.length}</span> <span style={{fontSize:11,color:C.muted}}>con error (no se cargan)</span></div>}
+          </div>
+          {errs.length>0&&<details style={{marginTop:8}}>
+            <summary style={{fontSize:11,color:C.overdueText,fontWeight:700,cursor:'pointer',listStyle:'none'}}>Ver las {errs.length} con error ›</summary>
+            <div style={{marginTop:6,maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8}}>
+              {errs.map(r=><div key={r.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 9px',fontSize:11,borderTop:`1px solid ${C.bgSoft}`}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{otDe(r)?`OT ${otDe(r)} · `:''}{r.nombre||r.requirente||r.concepto||'—'}</span><span style={{color:C.overdueText,flexShrink:0,fontWeight:600}}>{r.error}</span></div>)}
+            </div>
+          </details>}
+        </div>
+      )})()}
       <div style={{fontSize:11,color:C.muted,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 11px',marginBottom:9,lineHeight:1.5}}>Revisa por categoría → asigna lo que falte (cliente · Drive · gasto interno) → <b style={{color:C.accent}}>Cargar</b>. Nada se guarda hasta que confirmas.</div>
       {aprendido&&aprendido.name
         ? <div style={{display:'flex',alignItems:'center',gap:7,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.greenText}}>Aprendí que <b>{aprendido.name}</b> es <b>{aprendido.cli}</b> — no te lo vuelvo a preguntar.</span></div>
