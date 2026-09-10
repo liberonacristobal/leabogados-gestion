@@ -328,6 +328,9 @@ function ultimoDiaHabilMesEmision(iso){
   return `${last.getFullYear()}-${String(last.getMonth()+1).padStart(2,'0')}-${String(last.getDate()).padStart(2,'0')}`
 }
 function dueFromIssued(iso){ return ultimoDiaHabilMesEmision(iso) }
+// Guardapelos de año: un <input type=date> puede aceptar un año de 2 dígitos ("26" → "0026") y corromper toda la cadena
+// de cuotas (ej. cobroInicio "0026-09-09" → la venta no genera programadas). Expande cualquier año < 1000 a 20YY.
+const anio4ISO = iso => { const s=String(iso||''); const m=s.match(/^(\d{1,4})-(\d{2})-(\d{2})/); if(!m) return iso; let y=+m[1]; if(y<100) y=2000+y; else if(y<1000) y=2000+(y%100); return `${String(y).padStart(4,'0')}-${m[2]}-${m[3]}${s.slice(m[0].length)}` }
 // Días hábiles (no feriados) SIN cartola entre la última cargada y ayer. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
 // por cartola_cargas (días con carga registrada, aunque vinieran vacíos). Fuente de la alerta "faltan cartolas".
 // Tope de 60 días de barrido: si la frontera está más atrás, es un problema mayor (no la alarma de envío diario).
@@ -5139,7 +5142,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     if(!f.client_id||!totalCLP) return []
     const cobros = []
     // Vencimiento estándar: día 1 del mes de cada cuota (se emite del 1 al 5). El día del "Inicio cobro" no importa, solo su mes.
-    const mesISO=(inicio,i)=>{ const [yy,mm]=inicio.split('-').map(Number); let cy=yy, cm=mm+i; while(cm>12){cm-=12;cy++} return `${cy}-${String(cm).padStart(2,'0')}-01` }
+    const mesISO=(inicio,i)=>{ const [yy,mm]=anio4ISO(inicio).split('-').map(Number); let cy=yy, cm=mm+i; while(cm>12){cm-=12;cy++} return `${cy}-${String(cm).padStart(2,'0')}-01` }
     if(cobroType==='mensual' && mensualInicio) {
       const [y,m] = mensualInicio.split('-').map(Number); let cy=y, cm=m
       // Mes vencido: la cuota se DEVENGA/emite en un mes pero corresponde al servicio del mes ANTERIOR (la que emites en julio es junio). La fecha (devengo) no cambia, solo la etiqueta del mes.
@@ -5165,7 +5168,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     return cobros
   }
   const cobros = generarCobros()
-  const cobroConfig = {nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio,cuotaDist,cuotaDistPos,cuotaDistMonto,cuotaRec,
+  const cobroConfig = {nCuotas,cobroInicio:anio4ISO(cobroInicio),tramos,cuotasCustom,mensualInicio,cuotaDist,cuotaDistPos,cuotaDistMonto,cuotaRec,
     ...(cobroType==='hora' ? {tarifaHoraUF:parseFloat(String(tarifaHoraUF).replace(',','.'))||null, topeHoras:parseInt(topeHoras)||null, topePeriodo} : {})}
   // Propuesta/Borrador: aún no es venta activa → se edita con el MISMO formulario completo que una venta nueva
   // (honorarios, costos, forma de cobro, notas). Sus cuotas son todas Programadas sin emitir, así que al guardar se regeneran.
@@ -5643,7 +5646,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 {cuotaDist
                   ? <Fld label={`Monto por cuota (${moneda})`}><Inp type='number' step={moneda==='UF'?'0.01':'1'} value={cuotaRec} onChange={e=>setCuotaRec(e.target.value)} placeholder={moneda==='UF'?'0.00':'0'}/></Fld>
                   : <Fld label='N° cuotas'><Inp type='number' min='1' max='36' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>}
-                <Fld label='Inicio cobro'><Inp type='date' value={cobroInicio} onChange={e=>setCobroInicio(e.target.value)}/></Fld>
+                <Fld label='Inicio cobro'><Inp type='date' value={cobroInicio} onChange={e=>setCobroInicio(anio4ISO(e.target.value))}/></Fld>
               </div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderTop:`1px solid ${C.border}`}}>
                 <span style={{fontSize:13,fontWeight:600,color:C.text}}>Una cuota distinta</span>
