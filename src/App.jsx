@@ -13118,7 +13118,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         <div style={{padding:'8px 13px',fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,background:C.bgPanel,borderBottom:`.5px solid #EEF1F3`}}>Resultado de la carga</div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 13px',background:C.greenBg,borderBottom:`.5px solid #EEF1F3`}}>
           <div><div style={{fontSize:12,color:C.muted}}>Gastos que se cargan</div><div style={{fontSize:17,fontWeight:800,color:C.greenText,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{nCarga} · {fmt(totCarga)}</div></div>
-          <button disabled={guardando||(!nCarga&&!cats.falta.length)} onClick={async()=>{ const nPend=cats.falta.length; if(!nCarga&&!nPend) return; const aCli=cliList.length; const msg=`${nCarga?`Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` a ${aCli} cliente${aCli!==1?'s':''}`:''}`:'No hay gastos con pagador'}.${nPend?` Los ${nPend} sin cliente quedan pendientes por identificar — te aviso si pasan 3 días sin resolver.`:''} ¿Confirmas?`; if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:9,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
+          <button disabled={guardando||(!nCarga&&!cats.falta.length)} onClick={async()=>{ const nPend=cats.falta.length, nYa=cats.yacargadas.length; if(!nCarga&&!nPend) return; const aCli=cliList.length
+            let msg = nCarga ? `Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` a ${aCli} cliente${aCli!==1?'s':''}`:''}.` : 'No hay gastos con cliente ni interno para cargar.'
+            if(nPend) msg += ` Los ${nPend} sin cliente quedan pendientes por identificar (te aviso a los 3 días).`
+            if(nYa) msg += ` ${nYa} ya está${nYa!==1?'n':''} en la app y se omite${nYa!==1?'n':''}.`
+            msg += ' ¿Confirmas?'
+            if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:9,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
         </div>
         <div style={{fontSize:10.5,color:C.muted,padding:'8px 13px 0',lineHeight:1.5}}>Tus asignaciones se guardan al Cargar; lo que la app aprende (RUT y clientes) queda para siempre.</div>
         <div style={{fontSize:10.5,color:C.done,padding:'2px 13px 8px',lineHeight:1.5,borderBottom:`.5px solid #EEF1F3`}}>Si algo sale mal, puedes deshacer toda la carga con un clic.</div>
@@ -13244,9 +13249,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length; const noNs=(rows||[]).filter(r=>r.noNuestra)
         notaResumen={ leidas:(rows||[]).length, cargadas:pagadores.length, pendientes:pendRows.length, error:errRows.length, omitidas, erroresDet:errRows.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), noNuestras:noNs.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||''})) } }
       const res = await onBulkImport(target, {tipo, filename:fileName, notaResumen})
-      // Notaría: resumen para cerrar el ciclo (lo que queda por pagar a la notaría y a cuántos clientes rendir).
+      // Notaría: resumen REAL de lo cargado (usa lo efectivamente insertado tras dedup, no la intención pre-carga).
       if(notaria){ const conCli=pagadores.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
-        setResultado({...res, imported:pagadores.length, nota:{porPagar,clientes}, leidas:notaResumen.leidas, errores:notaResumen.error, erroresDet:notaResumen.erroresDet, omitidas:notaResumen.omitidas, pendientes:pendRows.length}) }
+        setResultado({...res, imported:res.cargadas??pagadores.length, nota:{porPagar,clientes}, leidas:notaResumen.leidas, errores:notaResumen.error, erroresDet:notaResumen.erroresDet, omitidas:notaResumen.omitidas, pendientes:res.pendientes??pendRows.length}) }
       else setResultado(res)
     }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
@@ -30140,7 +30145,9 @@ export default function App() {
     }
     setExpenses(p=>[...inserted,...p])
     setBulkImports(p=>[{id:batchId,created_at:new Date().toISOString(),created_by:user?.name||null,row_count:inserted.length,filename:filename||null,status:'active',...(resumen?{resumen}:{})},...p].slice(0,10))
-    return {imported:inserted.length, dupOmit, otDupOmit, sinCliente, sinFecha, batchId, filename}
+    // Conteo REAL de lo insertado (tras dedup): con pagador (cliente/oficina/miembro) vs pendiente (sin cliente).
+    const cargadasReal = inserted.filter(e=>e.client_id||e.personal_de).length
+    return {imported:inserted.length, cargadas:cargadasReal, pendientes:inserted.length-cargadasReal, dupOmit, otDupOmit, sinCliente, sinFecha, batchId, filename}
   },[expenses,user])
 
   // Conciliar una carga: ACTUALIZA en su lugar los gastos que ya existen (cliente/categoría) e IMPORTA solo los nuevos.
