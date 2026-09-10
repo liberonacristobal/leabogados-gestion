@@ -12648,14 +12648,19 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const sheetName = wb.SheetNames.find(n=>n.toLowerCase().trim()===target) || wb.SheetNames[0]
       const norm = s => String(s??'').toLowerCase().trim()
       // Construye una fila a partir de un getter de campo (sirve para la vía por objeto y la de matriz).
-      const buildRow = (getField,idx) => {
+      const buildRow = (getField,idx,allVals) => {
         const rut = String(getField('rut')||'').trim()
         const nombre = String(getField('cliente')||'').trim()
         const cBase = String(getField('concepto')||'').trim()
         const cDet  = String(getField('detalle')||'').trim()
         const concepto = cBase&&cDet ? `${cBase} — ${cDet}` : (cBase||cDet)
         const subconcepto = String(getField('subconcepto')||'').trim()   // detalle que distingue gastos con igual concepto (notaría)
-        const ot = String(getField('ot')||'').trim()                     // N° de orden de la notaría (OT-XXXX)
+        let ot = String(getField('ot')||'').trim()                       // N° de orden de la notaría (OT-XXXX)
+        // Segunda lectura (no re-subir el archivo): si la columna OT no calzó en una fila de notaría, releer la MISMA fila
+        // buscando una OT con prefijo explícito ("OT-12345", "O.T 12345"). Es conservador: NO agarra el Repertorio (número pelado).
+        if(notaria && (!ot || !/\d/.test(ot)) && Array.isArray(allVals)){
+          for(const v of allVals){ const m=String(v??'').match(/\bO\.?\s*T\.?\s*(?:n°|nro|no|#)?\s*[:\-–]?\s*(\d{3,})\b/i); if(m){ ot=m[1]; break } }
+        }
         const notas = String(getField('notas')||'').trim()
         const proyecto = String(getField('proyecto')||'').trim()
         const requirente = String(getField('requirente')||'').trim()   // quién pidió el trámite (señal para identificar cliente)
@@ -12691,7 +12696,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         let error=null
         // REGLA: un gasto de notaría SIEMPRE trae su OT (la OT es la fuente de la verdad). Si una fila tiene compareciente/monto pero NO se
         // extrajo OT, es un ERROR (no se carga sin OT: se marca para que revises la columna). Solo la fila "Total" (sin OT NI compareciente) se ignora.
-        if(notaria && (!ot || !/\d/.test(ot))){ if(!cli && !(nombreEff&&nombreEff.trim())) return null; error='OT no detectada · vuelve a leer el archivo (todo trabajo trae OT)' }
+        if(notaria && (!ot || !/\d/.test(ot))){ if(!cli && !(nombreEff&&nombreEff.trim())) return null; error='OT no detectada · revisa la columna OT del archivo (todo trabajo de notaría trae OT)' }
         if(!error){ if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
@@ -12702,8 +12707,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       let parsed = []
       const objs = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:''})
       objs.forEach(o=>{
-        const getField = field => { const aliases=COLALIAS[field]||[]; for(const k of Object.keys(o)){ if(aliases.includes(norm(k))) return o[k] } return '' }
-        const r = buildRow(getField, parsed.length); if(r) parsed.push(r)
+        const getField = field => { const aliases=COLALIAS[field]||[]; for(const k of Object.keys(o)){ if(aliases.includes(norm(k))) return o[k] }
+          // Match flexible para la columna OT: encabezados como "N° OT", "OT (orden de trabajo)" no calzan exacto → reconocer "ot" como token o "orden".
+          if(field==='ot'){ for(const k of Object.keys(o)){ const nk=norm(k); if((/(^|[^a-z])ot([^a-z]|$)/.test(nk)||nk.includes('orden')) && o[k]!=='' && o[k]!=null) return o[k] } }
+          return '' }
+        const r = buildRow(getField, parsed.length, Object.values(o)); if(r) parsed.push(r)
       })
       // VÍA 2 (respaldo): si la vía 1 no obtuvo filas, leer como matriz y detectar encabezado en las 5 primeras filas.
       if(parsed.length===0){
@@ -12718,7 +12726,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         aoa.slice(startRow).forEach(row=>{
           if(!Array.isArray(row)) return
           const getField = field => colMap[field]!==undefined ? row[colMap[field]] : ''
-          const r = buildRow(getField, parsed.length); if(r) parsed.push(r)
+          const r = buildRow(getField, parsed.length, row); if(r) parsed.push(r)
         })
       }
       if(parsed.length===0){ appAlert('No se encontraron filas. Revisa que el Excel tenga una columna de Cliente (o RUT) y otra de Monto. Puedes descargar la plantilla modelo como referencia.'); setRows(null); setCargando(false); return }
@@ -13126,7 +13134,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             {nYa>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.done,fontVariantNumeric:'tabular-nums'}}>{nYa}</span> <span style={{fontSize:11,color:C.muted}}>ya en la app (se omiten)</span></div>}
             {errs.length>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{errs.length}</span> <span style={{fontSize:11,color:C.muted}}>con error (no se cargan)</span></div>}
           </div>
-          {errs.some(r=>/OT no detectada/i.test(r.error||''))&&<div style={{marginTop:8,background:C.overdueBg,border:'1px solid #F3C9C4',borderRadius:8,padding:'8px 11px',fontSize:11.5,color:C.overdueText,fontWeight:600,lineHeight:1.5}}>No se leyó bien la columna <b>OT</b> en algunas filas. Todo trabajo de notaría trae OT → <b>vuelve a subir el archivo</b> (revisa que la columna OT esté presente y completa). Esas filas no se cargan.</div>}
+          {errs.some(r=>/OT no detectada/i.test(r.error||''))&&<div style={{marginTop:8,background:C.overdueBg,border:'1px solid #F3C9C4',borderRadius:8,padding:'8px 11px',fontSize:11.5,color:C.overdueText,fontWeight:600,lineHeight:1.5}}>La app <b>releyó estas filas</b> y aun así no encontró la OT. Todo trabajo de notaría trae OT → revisa que la columna <b>OT</b> del archivo esté presente y completa en esas filas. No se cargan sin OT.</div>}
           {errs.length>0&&<details style={{marginTop:8}}>
             <summary style={{fontSize:11,color:C.overdueText,fontWeight:700,cursor:'pointer',listStyle:'none'}}>Ver las {errs.length} con error ›</summary>
             <div style={{marginTop:6,maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8}}>
