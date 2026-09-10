@@ -9763,14 +9763,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         {cierreOpen&&<Modal title='Cierre de mes' fullscreen fsMaxWidth={1160} onClose={()=>setCierreOpen(false)}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>{setCierreOpen(false);onEdit&&onEdit(b)}} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></Modal>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='rechazadas'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
-            <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
+            <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${on?C.accent:C.border}`,cursor:'pointer',minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n='file' s={12} c={C.accent}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap'}}>Por cobrar</span></div>
               <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>{fmtShort(pending)}</div>
               {overdue>0&&<div onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{fontSize:10,color:C.overdue,fontWeight:600,marginTop:3,whiteSpace:'nowrap'}}>Vencido {fmtShort(overdue)}</div>}
             </button>
           )})()}
           {[['Por facturar',programado,'programadas','#537281','#EDF1F3','clock'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE','check']].map(([l,v,fl,col,bg,icon])=>{ const on=estadoActivo(fl); return (
-            <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,cursor:'pointer',minWidth:0}}>
+            <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${on?col:C.border}`,cursor:'pointer',minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n={icon} s={12} c={col}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</span></div>
               <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtShort(v)}</div>
             </button>
@@ -9782,7 +9782,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             .sort((a,z)=>((z.venc?1:0)-(a.venc?1:0))||(z.dias-a.dias))   // vencidas primero (lo urgente), luego por días desde el envío
           if(!lista.length) return null
           const tot=lista.reduce((a,x)=>a+saldoBill(x.b),0)
-          return (<div style={{background:C.overdueBg,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.overdue}`,borderRadius:'0 10px 10px 0',padding:'9px 12px',marginBottom:9}}>
+          return (<div style={{background:C.overdueBg,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 12px',marginBottom:9}}>
             <div onClick={()=>setCobranzaOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
               <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.overdue} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M10 5a2 2 0 0 1 4 0c4 1 4 5 4 7l1 3H5l1-3c0-2 0-6 4-7'/><path d='M9 18a3 3 0 0 0 6 0'/></svg>
               <span style={{fontSize:12.5,fontWeight:700,color:C.coralText,flex:1}}>{lista.length} {lista.length===1?'factura enviada sin pago':'facturas enviadas sin pago'} · {fmt(tot)}</span>
@@ -9799,7 +9799,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>)
         })()}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&filter!=='rechazadas'&&(calcesSugeridos.clean.length>0||calcesSugeridos.revisar.length>0)&&(
-          <div style={{background:C.greenBg,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`,borderRadius:'0 10px 10px 0',padding:'9px 12px',marginBottom:9}}>
+          <div style={{background:C.greenBg,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 12px',marginBottom:9}}>
             <div onClick={()=>setCalcesOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
               <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.normal} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>
               <span style={{fontSize:12.5,fontWeight:700,color:C.greenText,flex:1}}>{calcesSugeridos.clean.length} {calcesSugeridos.clean.length===1?'pago del banco listo para conciliar':'pagos del banco listos para conciliar'}{calcesSugeridos.revisar.length>0?` · ${calcesSugeridos.revisar.length} a revisar`:''}</span>
