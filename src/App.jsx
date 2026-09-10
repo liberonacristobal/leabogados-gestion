@@ -5211,7 +5211,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     }
     clearDraft()
     // En propuesta/borrador editada se regeneran las cuotas programadas (todas sin emitir) según la forma de cobro actual.
-    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false, _regenProg:propBorr, repartoTerceros:repartoLimpio, ...extra})
+    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false, _regenProg:propBorr, repartoTerceros:repartoLimpio, ...extra, _thenPrimerasTareas: !!((extra&&extra._thenPrimerasTareas)||(!sale?.id&&!_activandoPropuesta&&saveF.status==='Activo'))})   // venta nueva Activo (o activar propuesta) → arranque de tareas + correo
   }
 
   const handleSaveDraft = () => {
@@ -6116,6 +6116,8 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
   const addDays = n => { const d=new Date(); d.setDate(d.getDate()+(parseInt(n)||0)); return d.toISOString().slice(0,10) }
   const fmtDue = due => { try{ return new Date(String(due)+'T00:00:00').toLocaleDateString('es-CL',{day:'numeric',month:'long'}) }catch(e){ return String(due||'') } }
   const miEmail = EMAIL_BY_NAME[user?.name] || user?.email || null
+  // Regla: la 1ª tarea de toda venta nueva es pedir el fondo por rendir para gastos, asignable a una persona de la oficina.
+  const fondoItem = () => ({titulo:'Pedir fondo por rendir para gastos', due:addDays(2), nota:'Provisión inicial para gastos del encargo (notariales, inscripciones, etc.).', incluir:true, esFondo:true, asignado: sale?.responsible||user?.name||''})
   const [loading,setLoading]=useState(true)
   const [items,setItems]=useState([])   // {titulo, due, nota, incluir}
   const [responsable,setResponsable]=useState(sale?.responsible||user?.name||'')
@@ -6135,9 +6137,9 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
       const j = JSON.parse((txt.match(/\{[\s\S]*\}/)||[txt])[0])
       const arr = Array.isArray(j?.tareas)?j.tareas:[]
       const mapped = arr.slice(0,5).map(t=>({titulo:String(t.titulo||'').trim(), due:addDays(t.dias), nota:String(t.nota||'').trim(), incluir:true})).filter(t=>t.titulo)
-      setItems(mapped.length?mapped:[{titulo:'',due:addDays(3),nota:'',incluir:true}])
+      setItems([fondoItem(), ...(mapped.length?mapped:[{titulo:'',due:addDays(3),nota:'',incluir:true}])])
     }catch(e){
-      setItems([{titulo:'',due:addDays(3),nota:'',incluir:true}])
+      setItems([fondoItem(), {titulo:'',due:addDays(3),nota:'',incluir:true}])
     }
     setLoading(false)
   }
@@ -6200,15 +6202,19 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
       {/* Tareas */}
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
         {items.map((it,i)=>(
-          <div key={i} style={{display:'flex',gap:9,padding:'11px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',background:it.incluir?'#fff':C.bgSoft,alignItems:'flex-start'}}>
-            <button type='button' onClick={()=>upItem(i,'incluir',!it.incluir)} title={it.incluir?'Quitar':'Incluir'} style={{flexShrink:0,marginTop:2,width:19,height:19,borderRadius:5,border:it.incluir?'none':`1.5px solid ${C.done}`,background:it.incluir?C.accent:'#fff',color:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,padding:0}}>{it.incluir?'✓':''}</button>
+          <div key={i} style={{display:'flex',gap:9,padding:'11px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',background:it.esFondo?(it.incluir?C.greenBg:C.bgSoft):(it.incluir?'#fff':C.bgSoft),alignItems:'flex-start'}}>
+            <button type='button' onClick={()=>upItem(i,'incluir',!it.incluir)} title={it.incluir?'Quitar':'Incluir'} style={{flexShrink:0,marginTop:2,width:19,height:19,borderRadius:5,border:it.incluir?'none':`1.5px solid ${C.done}`,background:it.incluir?(it.esFondo?C.greenText:C.accent):'#fff',color:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,padding:0}}>{it.incluir?'✓':''}</button>
             <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:6,opacity:it.incluir?1:.55}}>
               <input value={it.titulo} onChange={e=>upItem(i,'titulo',e.target.value)} placeholder='Título de la tarea' style={{...inp,fontWeight:600}}/>
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                 <input type='date' value={it.due||''} onChange={e=>upItem(i,'due',e.target.value)} style={{...inp,width:'auto',padding:'5px 8px',fontSize:12}}/>
-                <input value={it.nota} onChange={e=>upItem(i,'nota',e.target.value)} placeholder='Nota breve (opcional)' style={{...inp,flex:1,minWidth:120,padding:'5px 8px',fontSize:12,color:C.muted}}/>
+                {it.esFondo
+                  ? <><select value={it.asignado||''} onChange={e=>upItem(i,'asignado',e.target.value)} title='A quién de la oficina se le asigna pedir el fondo' style={{...inp,width:'auto',padding:'5px 8px',fontSize:12,fontWeight:600,color:C.greenText}}><option value=''>Asignar a…</option>{WHO.map(w=><option key={w} value={w}>{w}</option>)}</select>
+                     <span style={{display:'inline-flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff'}}><span style={{fontSize:12,color:C.muted,padding:'0 2px 0 8px'}}>$</span><input value={it.monto||''} onChange={e=>upItem(i,'monto',e.target.value.replace(/[^\d]/g,''))} inputMode='numeric' placeholder='Monto del fondo' style={{border:'none',outline:'none',padding:'5px 8px 5px 2px',fontSize:12,width:110,color:C.text}}/></span></>
+                  : <input value={it.nota} onChange={e=>upItem(i,'nota',e.target.value)} placeholder='Nota breve (opcional)' style={{...inp,flex:1,minWidth:120,padding:'5px 8px',fontSize:12,color:C.muted}}/>}
                 <button type='button' onClick={()=>delItem(i)} title='Eliminar' style={{flexShrink:0,background:'none',border:'none',color:C.done,fontSize:17,cursor:'pointer',lineHeight:1,padding:'0 4px'}}>×</button>
               </div>
+              {it.esFondo&&<div style={{fontSize:9.5,color:C.greenText,fontWeight:600}}>Fondo por rendir · el monto viaja al correo de solicitud al cliente</div>}
             </div>
           </div>
         ))}
@@ -29650,12 +29656,12 @@ export default function App() {
   const handleCrearPrimerasTareas=useCallback(async({sale, items, responsable, to, cc, subject, html, text, area})=>{
     setSaving(true)
     try{
-      const rows = items.map(it=>({
-        title: it.titulo, who: responsable, assignees:[responsable],
+      const rows = items.map(it=>{ const asig = it.asignado||responsable; return ({
+        title: it.titulo, who: asig, assignees:[asig],
         client_id: sale.client_id||null, sale_id: sale.id||null, entity_id: sale.entity_id||null,
         due: it.due||null, status:'Activo', note: it.nota||null, project: sale.title||null,
         assigned_by: user?.name||null
-      }))
+      }) })
       const {data:ins,error} = await supabase.from('tasks').insert(rows).select()
       if(error) throw error
       if(ins&&ins.length) setTasks(p=>[...ins,...p])
