@@ -18394,8 +18394,10 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   }
   const fInp={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}
   const lbl={fontSize:10,color:C.muted,fontWeight:600,marginBottom:3}
-  return (<Modal fullscreen fsMaxWidth={880} title={<><span style={{color:C.accent}}>Enviar {multi?'facturas':'factura'}</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}{multi?` · ${listF.length}`:''}</span></>}</>} onClose={onClose}>
-    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+  const isDesktop = useIsDesktop()   // escritorio: dos columnas (redacción | panel de envío); móvil: una sola columna (idéntico)
+  return (<Modal fullscreen fsMaxWidth={isDesktop?1080:880} title={<><span style={{color:C.accent}}>Enviar {multi?'facturas':'factura'}</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}{multi?` · ${listF.length}`:''}</span></>}</>} onClose={onClose}>
+    <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.35fr 1fr':'1fr',gap:isDesktop?20:10,alignItems:'start'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:10,minWidth:0}}>
       <div><div style={lbl}>PARA</div><input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp}/>
         {contacts.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:5}}>{[...contacts].sort((a,b)=>{ const ta=(a.email||'').toLowerCase()===(para||'').toLowerCase(), tb=(b.email||'').toLowerCase()===(para||'').toLowerCase(); return (tb-ta)||((b.principal?1:0)-(a.principal?1:0)) }).map(c=>{ const isTo=(c.email||'').toLowerCase()===(para||'').toLowerCase(); return <button key={c.email} type='button' title={c.email} onClick={()=>{ if(isTo) return; if(!para.trim()) setPara(c.email); else addCc(c.email) }} style={{fontSize:10,border:isTo?`0.5px solid ${C.accent}`:`0.5px solid ${C.border}`,background:isTo?C.accent:'#fff',color:isTo?'#fff':C.accent,borderRadius:20,padding:'2px 9px',cursor:isTo?'default':'pointer'}}>{isTo?'✓ ':''}{c.nombre||c.email}</button> })}</div>}
       </div>
@@ -18423,8 +18425,10 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
             {!multi&&<button type='button' disabled={iaBusy} onClick={redactarIA} style={{fontSize:10,color:C.coralText,background:C.ambarBg,border:'none',borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:iaBusy?'default':'pointer'}}>{iaBusy?'Redactando…':<><Sparkle/> Redactar con IA</>}</button>}
           </div>
         </div>
-        <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={11} style={{...fInp,minHeight:210,lineHeight:1.6,resize:'vertical',fontFamily:'inherit'}}/>
+        <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={11} style={{...fInp,minHeight:isDesktop?280:210,lineHeight:1.6,resize:'vertical',fontFamily:'inherit'}}/>
       </div>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:10,minWidth:0}}>
       <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Include payment (bank transfer) details':'Incluir datos de pago (transferencia)'}</span></label>
       {otroSaldo>0&&<div>
         <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance (${otrasPendientes.length} invoice${otrasPendientes.length>1?'s':''} · ${fmtN(otroSaldo)})`:`Recordar saldo pendiente (${otrasPendientes.length} factura${otrasPendientes.length>1?'s':''} · ${fmtN(otroSaldo)})`}</span></label>
@@ -18477,6 +18481,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
         </div>
       </details>
       <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?(lang==='en'?'Sending…':'Enviando…'):(lang==='en'?(multi?`Send ${listF.length} invoices`:'Send invoice'):(multi?`Enviar las ${listF.length} facturas`:'Enviar factura'))}</button>
+      </div>
     </div>
   </Modal>)
 }
