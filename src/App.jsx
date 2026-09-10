@@ -7864,7 +7864,9 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   )
   const Fila = ({children}) => <div style={{display:'flex',alignItems:'center',padding:'11px 20px',borderBottom:'0.5px solid #E4E8EB'}}>{children}</div>
   const CheckVerde = () => <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><polyline points='20 6 9 17 4 12'/></svg>
-  return (
+  // Portal al body (igual que Modal, ver createPortal en su def): sin esto el overlay queda ATRAPADO en el contexto de apilamiento
+  // del header sticky (z:10) de Facturación y el apphead (z:20) lo tapa, pese a su z:200 (body{zoom} desktop convierte a body en el contexto).
+  return createPortal(
     <div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,background:C.bg,zIndex:200,overflowY:'auto'}}>
       <div style={{background:'#fff',maxWidth:isDesktop?960:'100%',width:'100%',margin:'0 auto',minHeight:'100%',boxShadow:isDesktop?'0 0 40px rgba(0,0,0,.06)':'none'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:2}}>
@@ -8123,7 +8125,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
         </>}
       </div>
     </div>
-  )
+  , document.body)
 }
 
 // Confirmación DETALLADA de "depurar cobradas": lista cada factura saldada (cliente, folio, monto, estado,
