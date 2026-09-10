@@ -27533,6 +27533,61 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [unoSkip,setUnoSkip] = useState(()=>new Set())
   const [unoTotal,setUnoTotal] = useState(0)
   const [verValores,setVerValores] = useState(false)
+  // ── Revisión de caja chica (Fase 2): cruza cargas SIN enlace de Martín/Martina con las transferencias del banco (mismo RUT vía EQUIPO_RUT, monto exacto, ±3 días). ──
+  const [ccRevOpen,setCcRevOpen] = useState(false)
+  const [ccBulk,setCcBulk] = useState(false)
+  const [ccAuto,setCcAuto] = useState(false)   // interruptor del barrido diario (edge fn); persiste en learnings config 'caja_chica_auto'
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','caja_chica_auto').maybeSingle().then(({data})=>{ if(data&&String(data.value).trim()==='on') setCcAuto(true) },()=>{}) },[])
+  const setCcAutoGlob = async(v)=>{ const prev=ccAuto; setCcAuto(v); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','config').eq('key','caja_chica_auto'); await supabase.from('learnings').insert({kind:'config',key:'caja_chica_auto',value:v?'on':'off'}) }catch(e){ setCcAuto(prev); appAlert('No se pudo guardar: '+e.message) } }
+  const CC_PERSONAS = Object.values(EQUIPO_RUT||{})
+  const revisionCC = useMemo(()=>{
+    const within3=(f1,f2)=>{ if(!f1||!f2) return false; const a=new Date(String(f1).slice(0,10)+'T00:00'),b=new Date(String(f2).slice(0,10)+'T00:00'); return Math.abs(a-b)<=3*86400000 }
+    const pcLibres=(pettyCash||[]).filter(p=>!p.movimiento_id && (p.amount||0)>0 && CC_PERSONAS.includes(p.user_name) && !String(p.notes||'').includes('mov:'))
+    const cargos=(movs||[]).filter(m=> m.tipo==='cargo' && !m.es_interno && !(concByMov[m.id]?.length) && m.categoria!=='Caja chica' && EQUIPO_RUT[crNormRut(m.rut_contraparte)])
+    const usados=new Set(), listas=[], porRevisar=[]
+    ;[...pcLibres].sort((a,b)=>String(b.delivered_at||'').localeCompare(String(a.delivered_at||''))).forEach(p=>{
+      const persona=p.user_name
+      const cand=cargos.filter(m=> !usados.has(m.id) && EQUIPO_RUT[crNormRut(m.rut_contraparte)]===persona && Math.abs((m.monto||0)-(p.amount||0))<=TOL)
+      const enVent=cand.filter(m=> within3(m.fecha,p.delivered_at))
+      if(enVent.length===1){ usados.add(enVent[0].id); listas.push({petty:p,cargo:enVent[0]}) }
+      else if(cand.length){ const c=cand[0]; usados.add(c.id); porRevisar.push({petty:p,cargo:c,motivo:enVent.length>1?`${cand.length} transferencias del mismo monto`:'la transferencia cae fuera de ±3 días'}) }
+      else porRevisar.push({petty:p,cargo:null,motivo:'sin transferencia que calce'})
+    })
+    const sinCaja=cargos.filter(m=>!usados.has(m.id))
+    return { listas, porRevisar, sinCaja }
+  },[pettyCash,movs,concByMov,EQUIPO_RUT,TOL])   // eslint-disable-line
+  const enlazarCajaChica = async(cargo,petty)=>{
+    if(busy||!cargo||!petty) return
+    setBusy(cargo.id)
+    try{
+      const monto=(cargo.monto||0)-(cargo.monto_conciliado||0), movAplic=(cargo.monto_conciliado||0)+monto, estado=((cargo.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      if(!DEMO){
+        const nota=`${petty.notes||''} · mov:${cargo.id}`.trim()
+        const { error:pe } = await supabase.from('petty_cash').update({ notes:nota, movimiento_id:cargo.id }).eq('id',petty.id); if(pe) throw pe
+        const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',cargo.id); if(me) throw me
+        setPettyCash&&setPettyCash(p=>p.map(x=>x.id===petty.id?{...x,notes:nota,movimiento_id:cargo.id}:x))
+      }
+      _cierraCaja(cargo,movAplic,estado)
+    }catch(e){ appAlert('Error al enlazar: '+e.message) }
+    setBusy(null)
+  }
+  const enlazarTodasCC = async()=>{ if(ccBulk) return; setCcBulk(true); for(const {cargo,petty} of revisionCC.listas){ await enlazarCajaChica(cargo,petty) } setCcBulk(false) }
+  const ccRow = (petty,cargo,kind,motivo)=> (
+    <div key={petty.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 11px',border:`1px solid ${kind==='ok'?'#CFE9DD':C.border}`,background:'#fff',borderRadius:9,marginBottom:7}}>
+      <span style={{width:26,height:26,borderRadius:8,background:C.accent,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>{(petty.user_name||'·')[0]}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{petty.user_name} · caja chica <span style={{color:C.accent}}>{fmtM(petty.amount)}</span></div>
+        <div style={{fontSize:10,color:C.muted,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:2}}>
+          <span>Carga {petty.delivered_at?fmtFechaDMY(petty.delivered_at):'sin fecha'}</span>
+          {cargo?<><span style={{color:C.done}}>↔</span><span>Transferencia {fmtFechaDMY(cargo.fecha)} · {cargo.rol_cuenta==='gastos'?'Gastos':'Honorarios'}</span></>:null}
+          {kind==='rev'&&motivo?<span style={{color:C.soonText,fontWeight:700}}>· {motivo}</span>:null}
+        </div>
+      </div>
+      {cargo
+        ? <button disabled={busy===cargo.id} onClick={()=>enlazarCajaChica(cargo,petty)} style={{fontSize:11,fontWeight:700,color:'#fff',background:kind==='ok'?C.greenText:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>{busy===cargo.id?'…':(kind==='ok'?'Enlazar':'Es esta ✓')}</button>
+        : <span style={{fontSize:10,color:C.muted,flexShrink:0,whiteSpace:'nowrap'}}>revisar a mano</span>}
+    </div>
+  )
   // Escritorio y móvil comparten el HUB de entrada (grilla de tarjetas). Al tocar una tarjeta se entra al interior
   // (en escritorio, el 2-panel rail+lista); el botón "volver" regresa al hub. Antes el escritorio saltaba directo al rail.
   // "Por resolver" — fuente ÚNICA de cifras/desglose (usada por el hub móvil y el rail de escritorio).
@@ -28058,6 +28113,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             </div>
           )
         })()}
+
+        {/* Revisión de caja chica: cruza transferencias a Martín/Martina con sus cargas de caja chica (±3 días). Abre el panel. */}
+        {sub==='cargos'&&(revisionCC.listas.length>0||revisionCC.porRevisar.length>0)&&(()=>{ const nL=revisionCC.listas.length, nR=revisionCC.porRevisar.length; return (
+          <div onClick={()=>setCcRevOpen(true)} style={{cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',borderRadius:13,padding:'12px 14px',marginBottom:10}}>
+            <div style={{display:'flex',alignItems:'center',gap:9}}>
+              <span style={{width:30,height:30,borderRadius:8,background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={16} c={C.greenText}/></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,fontWeight:700,color:C.accent}}>Revisión de caja chica</div><div style={{fontSize:10,color:C.muted}}>transferencias a Martín / Martina ↔ sus cargas</div></div>
+              <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
+                {nL>0&&<span style={{fontSize:10.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>{nL} para enlazar</span>}
+                {nR>0&&<span style={{fontSize:10.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'3px 9px'}}>{nR} por revisar</span>}
+                <span style={{fontSize:12,color:C.done}}>›</span>
+              </div>
+            </div>
+          </div>
+        )})()}
 
         {/* Leer los "VALORES" de la contadora: la IA extrae los costos exactos del mes → alimentan el cruce cargo↔presupuesto (incl. pagos agrupados). Replegado por defecto: es herramienta secundaria. */}
         {sub==='cargos'&&<div style={{background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:10}}>
@@ -28691,6 +28761,30 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               )})}
         </Modal>
       )}
+      {ccRevOpen && <Modal fullscreen fsMaxWidth={720} title={<span style={{color:C.accent}}>Revisión de caja chica</span>} onClose={()=>setCcRevOpen(false)}>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
+            <div><div style={{fontSize:12,fontWeight:700,color:C.text}}>Barrido automático diario</div><div style={{fontSize:10,color:C.muted}}>enlaza solo los calces únicos y exactos, dentro de ±3 días</div></div>
+            <span onClick={()=>setCcAutoGlob(!ccAuto)} title='Barrido diario' style={{width:34,height:18,borderRadius:20,background:ccAuto?C.greenText:C.toggleOff,position:'relative',flexShrink:0,cursor:'pointer'}}><span style={{position:'absolute',top:2,left:ccAuto?18:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></span>
+          </div>
+          {revisionCC.listas.length>0 && <div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7,gap:8}}>
+              <span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.greenText}}>Listas para enlazar · calce único y exacto (±3 días)</span>
+              {revisionCC.listas.length>1&&<button disabled={ccBulk} onClick={enlazarTodasCC} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 12px',cursor:ccBulk?'default':'pointer',flexShrink:0,whiteSpace:'nowrap'}}>{ccBulk?'Enlazando…':`Enlazar las ${revisionCC.listas.length}`}</button>}
+            </div>
+            {revisionCC.listas.map(({petty,cargo})=> ccRow(petty,cargo,'ok'))}
+          </div>}
+          {revisionCC.porRevisar.length>0 && <div>
+            <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.soonText,margin:'4px 0 7px'}}>Por revisar · tu ojo decide</div>
+            {revisionCC.porRevisar.map(({petty,cargo,motivo})=> ccRow(petty,cargo,'rev',motivo))}
+          </div>}
+          {revisionCC.sinCaja.length>0 && <div>
+            <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,margin:'4px 0 7px'}}>Transferencias sin caja chica que las espere · posible sueldo</div>
+            {revisionCC.sinCaja.map(m=> <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',border:`1px solid ${C.border}`,borderRadius:9,marginBottom:7,opacity:.82}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{EQUIPO_RUT[crNormRut(m.rut_contraparte)]} · {fmtFechaDMY(m.fecha)}</div><div style={{fontSize:10,color:C.muted}}>no calza ninguna caja chica → se ignora (sueldo u otro)</div></div><div style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtM(m.monto)}</div></div>)}
+          </div>}
+          {revisionCC.listas.length===0&&revisionCC.porRevisar.length===0&&<div style={{fontSize:12.5,color:C.done,textAlign:'center',padding:16}}>Todo enlazado. No hay caja chica pendiente de cruzar con el banco.</div>}
+        </div>
+      </Modal>}
     </div>
   )
   if(!isDesktop) return interiorEl
