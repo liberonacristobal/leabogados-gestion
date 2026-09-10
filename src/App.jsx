@@ -82,7 +82,7 @@ const MODULOS_CORE = new Set(MODULOS.filter(m=>m.core).map(m=>m.id))   // Núcle
 const MODULOS_OFF = new Set()   // se hidrata desde learnings 'fd_modulo_off' al iniciar; vacío = todo ON (LEA)
 const moduloOn = id => !id || MODULOS_CORE.has(id) || !MODULOS_OFF.has(id)   // core siempre ON; el resto ON salvo apagado explícito
 // Vista → módulo que la habilita. Sirve para ocultarla de la nav y bloquear su acceso si el módulo está apagado (para LEA: inerte, todo ON).
-const VIEW_MODULO = { horas:'horas', repricing:'horas', sales:'finanzas', billing:'finanzas', cobranza:'finanzas', conciliacion:'finanzas', anticipos:'finanzas', expenses:'gastos', cajachica:'gastos', cartera:'proyectos', inteligencia:'bi', bi:'bi', portal:'portal' }
+const VIEW_MODULO = { horas:'horas', repricing:'horas', sales:'finanzas', billing:'finanzas', cobranza:'finanzas', conciliacion:'finanzas', anticipos:'finanzas', presupuestoOficina:'finanzas', expenses:'gastos', cajachica:'gastos', cartera:'proyectos', inteligencia:'bi', bi:'bi', portal:'portal' }
 // Único puente a Claude. La API key NO vive en el front (sería pública en el bundle):
 // vive como secreto en la edge function claude-proxy, que valida el JWT del equipo.
 // Devuelve el JSON de Anthropic tal cual (el llamador lee data.content[0].text).
@@ -604,6 +604,9 @@ function costosOficinaMes(rows, ym){ ym = ym || new Date().toISOString().slice(0
 // Cobrado del mes (fuente única, = EstadoResultadosModal): facturas con paid_at en el mes, netas de anuladas/reembolsos, vía cobradoBill. Comisión del mes = terceros_pagos pagados en el mes. Ambas reusadas por OficinaHub para no divergir.
 const ingresosMesBill = (billing, ym) => (billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.paid_at||'').startsWith(ym)).reduce((a,b)=>a+cobradoBill(b),0)
 const comisionMesTerc = (terceros, ym) => (terceros||[]).filter(t=>t&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).reduce((a,t)=>a+(Number(t.monto)||0),0)
+// Facturado SII (DEVENGADO) de un período: SOLO facturas con DTE real (dte_xml not null) — el único facturado que reconoce el SII.
+// ym con 7 chars = un mes (AAAA-MM); con 4 = un año (AAAA). Fuente única del ingreso devengado (protagonista de Oficina · Estado de resultados).
+const facturadoSiiPeriodo = (billing, ym) => (billing||[]).filter(b=> b && !b.deleted_at && b.dte_xml && b.invoice_no && b.status!=='Anulada' && b.billing_type==='honorarios' && String(b.issued_at||'').startsWith(ym)).reduce((a,b)=>a+montoFactura(b),0)
 // Valor mensual de la asesoría en UF (fuente única): pesos → UF del primer día hábil del año (ufAnioEff).
 const ventaUFmesDe = (s, ufAnioEff) => s?.moneda==='CLP' ? (parseFloat(s?.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s?.amount_uf)||0)
 // Overhead de oficina por hora (fuente única): costos NO-remuneración/mes ÷ horas del equipo CON costo (Σ metas ×4,33).
@@ -7130,60 +7133,102 @@ function RetirosOficinaModal({ expenses=[], clients=[], billing=[], terceros=[],
     </div>}
   </div>)
 }
-// Módulo Oficina — hub de tarjetas por ámbito (costos, retiros, nómina, subarriendo, varios, resultado). Cada cifra sale de su fuente única; el detalle vive adentro (reusa CostosOficinaModal/EstadoResultadosModal).
+// Módulo Oficina — hub BENTO. Protagonista = Resultado DEVENGADO (Facturado SII − costos − comisiones);
+// Caja hoy (ancla config caja_ancla + movimientos de cartola) y Flujo del mes son contexto. Puertas: Costos, Retiros, Gastos varios.
+// Cada cifra sale de su fuente única; el detalle reusa CostosOficinaModal/EstadoResultadosModal/FlujoCajaModal/RetirosOficinaModal (nada en paralelo).
 function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenVarios }){
   const [sub,setSub] = useState(null)
+  const [caja,setCaja] = useState(null)
   const ym = new Date().toISOString().slice(0,7), year=new Date().getFullYear()
-  const eff = r => (r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
+  // Caja viva: ancla (config caja_ancla = 'AAAA-MM-DD:monto') + Σ(abonos − cargos) de cartola posteriores a la fecha del ancla, ambas cuentas.
+  useEffect(()=>{ let vivo=true
+    if(DEMO){ setCaja(44148153); return }
+    ;(async()=>{ try{
+      const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','caja_ancla').limit(1)
+      const raw=cfg&&cfg[0]?String(cfg[0].value):''; const i=raw.indexOf(':')
+      const adate=i>0?raw.slice(0,i):null, base=Number(i>0?raw.slice(i+1):raw)||0
+      if(!adate){ if(vivo) setCaja(base||null); return }
+      const {data:mv}=await supabase.from('cartola_movimientos').select('tipo,monto').gt('fecha',adate)
+      const delta=(mv||[]).reduce((a,m)=>a+((m.tipo==='abono'?1:-1)*(Number(m.monto)||0)),0)
+      if(vivo) setCaja(base+delta)
+    }catch(_){ if(vivo) setCaja(null) } })()
+    return ()=>{ vivo=false }
+  },[])
   const costoMes = costosOficinaMes(costosOfiRows, ym)
-  const cobradoMes = ingresosMesBill(billing, ym)          // fuente única (= Estado de resultados)
   const comiMes = comisionMesTerc(terceros, ym)
-  const resMes = cobradoMes - costoMes - comiMes             // margen del mes (misma fórmula del P&L)
-  const nomina = (costosOfiRows||[]).filter(r=>['Remuneraciones','Leyes sociales'].includes(r.categoria)).reduce((a,r)=>a+(Number(eff(r))||0),0)
-  const subarr = (costosOfiRows||[]).filter(r=>r.es_ingreso).reduce((a,r)=>a+(Number(eff(r))||0),0)
+  const factSiiMes = facturadoSiiPeriodo(billing, ym)              // DEVENGADO (dte_xml not null)
+  const resMes = factSiiMes - costoMes - comiMes                   // resultado del mes (devengado) — protagonista
+  const cobradoMes = ingresosMesBill(billing, ym)                  // cobrado a caja del mes (contexto)
+  const flujoMes = cobradoMes - costoMes                           // flujo de caja del mes (contexto)
   const ret = retirosOficinaData(expenses, clients, year)
   const retMes = ret.rows.filter(r=>String(r.date||'').slice(0,7)===ym).reduce((a,r)=>a+r.amount,0)
   const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
   const ESTRUCT = ['Retiros','Sueldos','Comisiones','Proveedores']
   const variosMes = ofi ? (expenses||[]).filter(e=>!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,7)===ym&&!ESTRUCT.includes(String(e.category||''))).reduce((a,e)=>a+(Number(e.amount)||0),0) : 0
-  const porCobrar = ofi ? (expenses||[]).filter(e=>!e.deleted_at&&e.personal_de&&String(e.client_id)===String(ofi.id)&&!e.pagado_cliente_at).reduce((a,e)=>a+(Number(e.amount)||0),0) : 0
-  const cards = [
-    {k:'costos', ic:'building', bg:C.azulBg, col:C.accent, ti:'Costos fijos', big:fmtShort(costoMes), bigC:C.accent, ctx:'por mes · presupuesto', on:()=>setSub('costos')},
-    {k:'retiros', ic:'wallet', bg:C.tealBg, col:C.tealText, ti:'Retiros a socios', big:fmtShort(retMes||ret.total), bigC:C.tealText, ctx:retMes?`este mes · ${fmtShort(ret.total)} en el año`:`${fmtShort(ret.total)} en el año`, on:()=>setSub('retiros')},
-    {k:'nomina', ic:'users', bg:C.soonBg, col:C.soonText, ti:'Nómina', big:fmtShort(nomina), bigC:C.accent, ctx:'por mes · sueldos + leyes', on:()=>setSub('costos')},
-    {k:'sub', ic:'exchange', bg:C.greenBg, col:C.greenText, ti:'Subarriendo', big:'+'+fmtShort(subarr), bigC:C.greenText, ctx:'por mes · baja el arriendo', on:()=>setSub('costos')},
-    {k:'varios', ic:'receipt', bg:'#F1EFE8', col:C.muted, ti:'Varios y personales', big:fmtShort(variosMes), bigC:C.accent, ctx:porCobrar>0?`${fmtShort(porCobrar)} por cobrar al equipo`:'varios este mes', ctxC:porCobrar>0?C.overdueText:C.muted, on:()=>onOpenVarios&&onOpenVarios()},
-    {k:'res', ic:'chart', bg:'#EDF1F4', col:C.accent, ti:'Estado de resultados', big:fmtShort(resMes), bigC:resMes>=0?C.greenText:C.overdueText, ctx:cobradoMes>0?`margen del mes · ${Math.round(resMes/cobradoMes*100)}%`:'margen del mes', on:()=>onOpenEstadoResultados&&onOpenEstadoResultados()},
-  ]
-  const strip=[
-    {l:'Resultado del mes', v:fmtShort(resMes), n:'cobrado − comisiones − costos', dark:true},
-    {l:'Cobrado a caja', v:fmtShort(cobradoMes), n:'ingreso del mes', c:C.accent},
-    {l:'Costos + comisiones', v:fmtShort(costoMes+comiMes), n:'lo que sale', c:C.overdueText},
-    {l:'Retirado por socios', v:fmtShort(retMes||ret.total), n:'distribución · no es costo', c:C.tealText},
-  ]
+  const porCobrarEq = ofi ? (expenses||[]).filter(e=>!e.deleted_at&&e.personal_de&&String(e.client_id)===String(ofi.id)&&!e.pagado_cliente_at).reduce((a,e)=>a+(Number(e.amount)||0),0) : 0
+  // KPIs del año (referencia): facturado SII y resultado devengado sobre los meses con DTE real; cobrado a caja; por cobrar (saldo vivo).
+  let factSiiYr=0, resYr=0, cobradoYr=0
+  for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; const f=facturadoSiiPeriodo(billing,mm); cobradoYr+=ingresosMesBill(billing,mm); if(f>0){ factSiiYr+=f; resYr += f - costosOficinaMes(costosOfiRows,mm) - comisionMesTerc(terceros,mm) } }
+  const porCobrar=(billing||[]).filter(b=>b&&!b.deleted_at&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
+  const gridStyle = isDesktop
+    ? {display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gridTemplateAreas:'"res res caja" "res res flujo" "cos ret gas"',gap:12}
+    : {display:'grid',gridTemplateColumns:'1fr 1fr',gridTemplateAreas:'"res res" "caja flujo" "cos ret" "gas gas"',gap:11}
+  const puerta = (area,ic,bg,icCol,ti,big,bigC,ctx,on)=>(
+    <div style={{gridArea:area,background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'15px 16px',cursor:'pointer',position:'relative'}} onClick={on}>
+      <span style={{position:'absolute',top:15,right:14,color:C.done,fontSize:15,fontWeight:700}}>›</span>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9}}>
+        <span style={{width:28,height:28,borderRadius:8,background:bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={16} c={icCol}/></span>
+        <span style={{fontSize:12,fontWeight:800,color:C.accent}}>{ti}</span>
+      </div>
+      <div style={{fontSize:18,fontWeight:800,letterSpacing:-.4,color:bigC,fontVariantNumeric:'tabular-nums'}}>{big}</div>
+      <div style={{fontSize:10.5,color:C.done,marginTop:3}}>{ctx}</div>
+    </div>)
+  const kpi=(l,v,c)=>(
+    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 13px'}}>
+      <div style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted}}>{l}</div>
+      <div style={{fontSize:16,fontWeight:800,marginTop:4,color:c||C.accent,fontVariantNumeric:'tabular-nums'}}>{v}</div>
+    </div>)
   return (<div>
-    <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.4fr 1fr 1fr 1fr':'1fr 1fr',gap:12,marginBottom:14}}>
-      {strip.map((s,i)=>(
-        <div key={i} style={{background:s.dark?C.accent:'#fff',border:`1px solid ${s.dark?C.accent:C.border}`,borderRadius:13,padding:'14px 16px',color:s.dark?'#fff':undefined}}>
-          <div style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,opacity:s.dark?.85:1,color:s.dark?'#fff':C.muted}}>{s.l}</div>
-          <div style={{fontSize:21,fontWeight:800,marginTop:4,letterSpacing:-.4,fontVariantNumeric:'tabular-nums',color:s.dark?'#fff':(s.c||C.accent)}}>{s.v}</div>
-          <div style={{fontSize:10,marginTop:2,opacity:s.dark?.72:1,color:s.dark?'#fff':C.muted}}>{s.n}</div>
-        </div>))}
+    <div style={gridStyle}>
+      {/* Protagonista: resultado devengado del mes → abre Estado de resultados */}
+      <div style={{gridArea:'res',background:C.accent,color:'#fff',borderRadius:15,padding:'18px 20px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:'pointer',position:'relative'}} onClick={()=>onOpenEstadoResultados&&onOpenEstadoResultados()}>
+        <span style={{position:'absolute',top:16,right:16,color:'#85B7EB',fontSize:16,fontWeight:700}}>›</span>
+        <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:'#85B7EB'}}>Resultado del mes · devengado</div>
+        <div style={{fontSize:isDesktop?36:29,fontWeight:800,letterSpacing:-1,margin:'6px 0 4px',lineHeight:1,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{resMes>=0?'+':'−'}{fmt(Math.abs(resMes))}</div>
+        <div style={{fontSize:11.5,color:'#85B7EB',marginBottom:14}}>facturado SII − costos − comisiones</div>
+        <div style={{display:'flex',borderTop:'1px solid rgba(255,255,255,.22)',paddingTop:12,gap:12}}>
+          {[['Facturado SII',factSiiMes,false],['Costos',costoMes,true],['Comisiones',comiMes,true]].map(([a,v,neg],i)=>(
+            <div key={i} style={{flex:1,borderLeft:i?'1px solid rgba(255,255,255,.14)':'none',paddingLeft:i?12:0}}>
+              <div style={{fontSize:9,color:'#85B7EB',textTransform:'uppercase',letterSpacing:.3}}>{a}</div>
+              <div style={{fontSize:14,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{neg?'−':''}{fmtShort(Math.abs(v))}</div>
+            </div>))}
+        </div>
+      </div>
+      {/* Caja hoy (viva) → abre Caja y flujo */}
+      <div style={{gridArea:'caja',background:C.tealBg,border:'1px solid #CBE8E5',borderRadius:14,padding:'14px 16px',cursor:'pointer'}} onClick={()=>setSub('flujo')}>
+        <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.tealText}}>Caja hoy</div>
+        <div style={{fontSize:21,fontWeight:800,letterSpacing:-.5,marginTop:3,color:C.tealText,fontVariantNumeric:'tabular-nums'}}>{caja==null?'—':fmt(caja)}</div>
+        <div style={{fontSize:10,color:C.done,marginTop:2}}>en el banco · se mueve con cada cartola</div>
+      </div>
+      {/* Flujo del mes → abre Caja y flujo */}
+      <div style={{gridArea:'flujo',background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'14px 16px',cursor:'pointer'}} onClick={()=>setSub('flujo')}>
+        <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Flujo del mes</div>
+        <div style={{fontSize:21,fontWeight:800,letterSpacing:-.5,marginTop:3,color:flujoMes>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{flujoMes>=0?'+':'−'}{fmt(Math.abs(flujoMes))}</div>
+        <div style={{fontSize:10,color:C.done,marginTop:2}}>cobrado − costos · desfase</div>
+      </div>
+      {puerta('cos','building',C.azulBg,C.accent,'Costos',fmtShort(costoMes),C.accent,'por mes',()=>setSub('costos'))}
+      {puerta('ret','wallet',C.tealBg,C.tealText,'Retiros',fmtShort(ret.total),C.tealText,'en el año',()=>setSub('retiros'))}
+      {puerta('gas','receipt',C.bgWarm,C.muted,'Gastos varios',fmtShort(variosMes),C.accent,porCobrarEq>0?`${fmtShort(porCobrarEq)} por cobrar`:'este mes',()=>onOpenVarios&&onOpenVarios())}
     </div>
-    <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,1fr)':'1fr',gap:14}}>
-      {cards.map(c=>(
-        <div key={c.k} onClick={c.on} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
-          <span style={{position:'absolute',top:16,right:16,color:C.done,fontSize:16,fontWeight:700}}>›</span>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
-            <span style={{width:36,height:36,borderRadius:9,background:c.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={c.ic} s={19} c={c.col}/></span>
-            <span style={{fontSize:13.5,fontWeight:800,color:C.accent}}>{c.ti}</span>
-          </div>
-          <div style={{fontSize:c.big2?15:26,fontWeight:800,letterSpacing:c.big2?0:-.6,color:c.bigC,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{c.big}</div>
-          <div style={{fontSize:11.5,color:c.ctxC||C.muted,marginTop:5}}>{c.ctx}</div>
-        </div>))}
+    <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
+      {kpi('Facturado SII · año',fmtShort(factSiiYr))}
+      {kpi('Cobrado · año',fmtShort(cobradoYr))}
+      {kpi('Por cobrar',fmtShort(porCobrar),C.soonText)}
+      {kpi('Resultado · año',`${resYr>=0?'+':'−'}${fmtShort(Math.abs(resYr))}`,C.greenText)}
     </div>
     {sub==='costos' && <Modal fullscreenOnMobile title='Costos de Oficina' maxWidth={760} onClose={()=>setSub(null)}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
     {sub==='retiros' && <Modal fullscreenOnMobile title='Retiros a socios' maxWidth={560} onClose={()=>setSub(null)}><RetirosOficinaModal expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows}/></Modal>}
+    {sub==='flujo' && <Modal fullscreenOnMobile title='Caja y flujo' maxWidth={620} onClose={()=>setSub(null)}><FlujoCajaModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros} saldoInicial={caja||0}/></Modal>}
   </div>)
 }
 // Estado de resultados mensual: ingresos cobrados − costos de oficina = resultado del mes. Navegable, comparable y exportable. Fuente única (cobradoBill, costosOficinaMes).
@@ -7191,7 +7236,7 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
   const [ym,setYm] = useState(()=>new Date().toISOString().slice(0,7))
   const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const mesLbl=y=>`${MESES[+y.slice(5,7)-1]} ${y.slice(0,4)}`
-  const ingresosDe=y=>ingresosMesBill(billing,y)
+  const ingresosDe=y=>facturadoSiiPeriodo(billing,y)   // DEVENGADO: facturado con DTE real del SII (no el cobrado a caja)
   const costosPorCat=y=>{ const m={}; (costosOfiRows||[]).forEach(r=>{ const eff=(r.desde&&y<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; m[r.categoria]=(m[r.categoria]||0)+(Number(eff)||0)*(r.es_ingreso?-1:1) }); return m }
   // Comisión del mes = comisiones PAGADAS (terceros_pagos) por pagado_at. Fuente ÚNICA y separada de Costos de oficina (que es el presupuesto costos_oficina, sin categoría Comisiones) → no se pisan.
   const comisionDe=y=>comisionMesTerc(terceros,y)
@@ -7205,7 +7250,7 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
   const comiList=Object.entries(comisPorColab(ym)).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1])
   const pos=res>=0
   const exportar=()=>{ const filas=catList.map(([c,v])=>`<tr><td style="padding:6px 0;color:#537281">${c}</td><td style="padding:6px 0;text-align:right">${fmt(-Math.abs(v)*(v<0?-1:1))}</td></tr>`).join('')
-    const html=`<html><head><meta charset="utf-8"><title>Estado de resultados ${mesLbl(ym)}</title></head><body style="font-family:-apple-system,Arial;max-width:560px;margin:30px auto;color:#3D3D3D"><h2 style="color:#003C50">Estado de resultados · ${mesLbl(ym)}</h2><table style="width:100%;border-collapse:collapse;font-size:14px"><tr><td style="padding:8px 0;border-bottom:1px solid #E4E8EB">Ingresos (cobrado)</td><td style="padding:8px 0;text-align:right;border-bottom:1px solid #E4E8EB;font-weight:700">${fmt(ing)}</td></tr><tr><td style="padding:8px 0">Costos de oficina</td><td style="padding:8px 0;text-align:right;color:#9A3A24;font-weight:700">-${fmt(costosTot)}</td></tr>${filas}${comi>0?`<tr><td style="padding:8px 0;border-top:1px solid #E4E8EB">Comisión (a colaboradores)</td><td style="padding:8px 0;text-align:right;color:#9A3A24;font-weight:700;border-top:1px solid #E4E8EB">-${fmt(comi)}</td></tr>`:''}<tr><td style="padding:10px 0;border-top:2px solid #003C50;font-weight:800;color:#003C50">Resultado</td><td style="padding:10px 0;text-align:right;border-top:2px solid #003C50;font-weight:800;font-size:18px;color:${pos?'#127A57':'#9A3A24'}">${pos?'':'-'}${fmt(Math.abs(res))}</td></tr></table><p style="font-size:11px;color:#99ABB4;margin-top:14px">Ingresos = cobrado a caja del mes · Costos = presupuesto de oficina vigente.</p></body></html>`
+    const html=`<html><head><meta charset="utf-8"><title>Estado de resultados ${mesLbl(ym)}</title></head><body style="font-family:-apple-system,Arial;max-width:560px;margin:30px auto;color:#3D3D3D"><h2 style="color:#003C50">Estado de resultados · ${mesLbl(ym)}</h2><table style="width:100%;border-collapse:collapse;font-size:14px"><tr><td style="padding:8px 0;border-bottom:1px solid #E4E8EB">Facturado (DTE del SII)</td><td style="padding:8px 0;text-align:right;border-bottom:1px solid #E4E8EB;font-weight:700">${fmt(ing)}</td></tr><tr><td style="padding:8px 0">Costos de oficina</td><td style="padding:8px 0;text-align:right;color:#9A3A24;font-weight:700">-${fmt(costosTot)}</td></tr>${filas}${comi>0?`<tr><td style="padding:8px 0;border-top:1px solid #E4E8EB">Comisión (a colaboradores)</td><td style="padding:8px 0;text-align:right;color:#9A3A24;font-weight:700;border-top:1px solid #E4E8EB">-${fmt(comi)}</td></tr>`:''}<tr><td style="padding:10px 0;border-top:2px solid #003C50;font-weight:800;color:#003C50">Resultado</td><td style="padding:10px 0;text-align:right;border-top:2px solid #003C50;font-weight:800;font-size:18px;color:${pos?'#127A57':'#9A3A24'}">${pos?'':'-'}${fmt(Math.abs(res))}</td></tr></table><p style="font-size:11px;color:#99ABB4;margin-top:14px">Facturado = emitido con DTE en el SII ese mes (devengado) · Costos = presupuesto de oficina vigente.</p></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() } }
   const [detOpen,setDetOpen]=useState(false)
   const [comiOpen,setComiOpen]=useState(false)
@@ -7220,7 +7265,7 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
         <button onClick={exportar} style={{fontSize:11,fontWeight:700,color:C.azulInfo,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>Exportar</button>
       </div>
       <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 13px'}}><span style={{fontSize:12.5,color:C.text}}>Ingresos <span style={{fontSize:9.5,color:C.done}}>(cobrado a caja)</span></span><span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(ing)}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 13px'}}><span style={{fontSize:12.5,color:C.text}}>Facturado <span style={{fontSize:9.5,color:C.done}}>(DTE del SII)</span></span><span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(ing)}</span></div>
         <div onClick={()=>setDetOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 13px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}><span style={{fontSize:12.5,color:C.text}}>Costos de oficina <span style={{fontSize:11,color:C.done}}>{detOpen?'▴':'▾'}</span></span><span style={{fontSize:13,fontWeight:700,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>−{fmt(costosTot)}</span></div>
         {detOpen && <div style={{background:C.bgSoft}}>{catList.map(([c,v])=>(<div key={c} style={{display:'flex',justifyContent:'space-between',padding:'6px 13px 6px 22px',fontSize:11}}><span style={{color:C.muted}}>{c}</span><span style={{color:v<0?C.greenText:C.muted,fontVariantNumeric:'tabular-nums'}}>{v<0?'+':'−'}{fmt(Math.abs(v))}</span></div>))}</div>}
         {comi>0&&<div onClick={()=>setComiOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 13px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}><span style={{fontSize:12.5,color:C.text}}>Comisión <span style={{fontSize:9.5,color:C.done}}>(a colaboradores) {comiList.length?(comiOpen?'▴':'▾'):''}</span></span><span style={{fontSize:13,fontWeight:700,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>−{fmt(comi)}</span></div>}
@@ -7230,13 +7275,13 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
           <div style={{textAlign:'right'}}><div style={{fontSize:19,fontWeight:800,color:pos?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{pos?'':'−'}{fmt(Math.abs(res))}</div>{tienePrev&&<div style={{fontSize:9,fontWeight:700,color:dif>=0?C.greenText:C.overdueText}}>{dif>=0?'▲':'▼'} {fmt(Math.abs(dif))} vs {MESES[+prevY.slice(5,7)-1].slice(0,3).toLowerCase()}</div>}</div>
         </div>
       </div>
-      <div style={{fontSize:10,color:C.done,marginTop:9,lineHeight:1.5}}>Ingresos = lo cobrado a caja ese mes. Costos = presupuesto de oficina vigente. Comisión = pagada a colaboradores ese mes (no se pisa con costos). El año se arma solo, mes a mes.</div>
+      <div style={{fontSize:10,color:C.done,marginTop:9,lineHeight:1.5}}>Facturado = lo emitido con DTE en el SII ese mes (devengado). Costos = presupuesto de oficina vigente. Comisión = pagada a colaboradores ese mes (no se pisa con costos). El año se arma solo, mes a mes.</div>
     </div>
   )
 }
 // Flujo de caja proyectado, semana a semana: entra (cobros esperados + programadas) vs sale (costos de oficina + proveedores). Marca la semana apretada.
-function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[] }){
-  const [saldo0,setSaldo0] = useState(0)
+function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], saldoInicial=0 }){
+  const [saldo0,setSaldo0] = useState(()=>Math.round(Number(saldoInicial)||0))
   const now=new Date(); const day=(now.getDay()+6)%7; const mon=new Date(now); mon.setDate(now.getDate()-day); mon.setHours(0,0,0,0)
   const iso=d=>d.toISOString().slice(0,10)
   const costosMes=costosOficinaMes(costosOfiRows); const costoSem=costosMes/4.3333
