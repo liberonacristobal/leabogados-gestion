@@ -13157,11 +13157,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     if(target.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
     setGuardando(true)
     try{
-      const res = await onBulkImport(target, {tipo, filename:fileName})
+      // Notaría: arma el resumen de estado (cargadas + con error + ya en la app) ANTES de importar, para persistirlo con la carga (nada sin rastro).
+      let notaResumen=null
+      if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length
+        notaResumen={ leidas:(rows||[]).length, error:errRows.length, omitidas, erroresDet:errRows.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})) } }
+      const res = await onBulkImport(target, {tipo, filename:fileName, notaResumen})
       // Notaría: resumen para cerrar el ciclo (lo que queda por pagar a la notaría y a cuántos clientes rendir).
       if(notaria){ const conCli=target.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
-        const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length   // resumen de estado: cargadas + con error (no entraron) + ya en la app
-        setResultado({...res, nota:{porPagar,clientes}, leidas:(rows||[]).length, errores:errRows.length, erroresDet:errRows.slice(0,60).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), omitidas}) }
+        setResultado({...res, nota:{porPagar,clientes}, leidas:notaResumen.leidas, errores:notaResumen.error, erroresDet:notaResumen.erroresDet, omitidas:notaResumen.omitidas}) }
       else setResultado(res)
     }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
@@ -15254,6 +15257,14 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         const estOf = e => (e.notaria_liquidado_at||e.notaria_render_id) ? ['Pagada',C.greenText,C.greenBg] : (e.client_rendered_at||e.client_render_id||e.rendered_at||e.render_id) ? ['Rendida',C.azulInfo,C.azulBg] : ['Cargada',C.muted,C.bgSoft]
         const cnOf = e => clients.find(c=>String(c.id)===String(e.client_id))?.name || (e.personal_de?`Personal · ${e.personal_de}`:'Sin cliente')
         const cargas = (bulkImports||[]).map(b=>{ const gs=liveBulk(b.id); return {...b, gs, total:gs.reduce((a,e)=>a+(e.amount||0),0)} })
+        const errSin = cargas.reduce((a,c)=> a + (c.status!=='undone' ? (c.resumen?.error||0) : 0), 0)   // filas con error que quedaron registradas y sin resolver
+        const totCarg = cargas.reduce((a,c)=> a + (c.status==='undone' ? 0 : (c.resumen?.cargadas ?? c.gs.length)), 0)
+        const exportarHistCSV = () => { const esc=s=>{ const t=String(s==null?'':s); return /[",\n;]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t }
+          const head=['OT','Concepto','Cliente','Monto','Estado','Error','Carga','Fecha']; const body=[]
+          cargas.forEach(c=>{ const fch=c.created_at?new Date(c.created_at).toLocaleDateString('es-CL'):''
+            c.gs.forEach(e=>{ const [lbl]=estOf(e); body.push([fmtOt(e.ot_number)||'s/OT', e.concept||'', cnOf(e), e.amount||0, c.status==='undone'?'Deshecha':lbl, '', c.filename||'', fch]) })
+            ;(c.resumen?.erroresDet||[]).forEach(er=> body.push([er.ot||'s/OT', er.nombre||'', '', '', 'Con error · no cargada', er.motivo||'', c.filename||'', fch])) })
+          const csv=[head,...body].map(r=>r.map(esc).join(';')).join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`historial_cargas_notaria_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href) }
         return (
           <div style={{padding:D?'8px 20px 60px':'6px 12px 40px',maxWidth:D?820:undefined,margin:'0 auto'}}>
             <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
@@ -15266,18 +15277,41 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <div><div style={{fontSize:14,fontWeight:700,color:C.text}}>Otros gastos</div><div style={{fontSize:11,color:C.muted}}>carga masiva general</div></div>
               </button>
             </div>
-            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:9}}>Cargas recientes</div>
+            <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:10,marginBottom:9}}>
+              <div><div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Historial de cargas</div>
+                {cargas.length>0&&<div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{cargas.length} carga{cargas.length!==1?'s':''} · {totCarg} cargada{totCarg!==1?'s':''}{errSin>0&&<> · <b style={{color:C.overdueText}}>{errSin} con error sin resolver</b></>}</div>}</div>
+              {cargas.length>0&&<button onClick={exportarHistCSV} style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>Exportar CSV</button>}
+            </div>
             {cargas.length===0&&<div style={{color:C.muted,textAlign:'center',padding:28,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Aún no hay cargas. Sube un Excel para empezar.</div>}
-            <div style={{display:'flex',flexDirection:'column',gap:8}}>{cargas.map(c=>{ const open=cargaOpen===c.id; const dd=c.created_at?new Date(c.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; const undone=c.status==='undone'; return (
-              <div key={c.id} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',opacity:undone?.6:1}}>
-                <div onClick={()=>setCargaOpen(open?null:c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
-                  <div style={{textAlign:'center',width:38,flexShrink:0}}><div style={{fontSize:19,fontWeight:700,color:C.text,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{dnum}</div><div style={{fontSize:10,color:C.muted,textTransform:'uppercase'}}>{dmon}</div></div>
-                  <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}><div style={{fontSize:13.5,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.filename||'Carga sin nombre'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{c.created_by?`${c.created_by} · `:''}{c.gs.length} OT{undone?' · deshecha':''}</div></div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>{cargas.map(c=>{ const open=cargaOpen===c.id; const dd=c.created_at?new Date(c.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; const undone=c.status==='undone'
+              const rz=c.resumen; const nErr=undone?0:(rz?.error||0); const nCarg=rz?.cargadas ?? c.gs.length; const nOmit=rz?.omitidas||0
+              const dotCol=undone?C.done:(nErr>0?C.overdue:C.normal); return (
+              <div key={c.id} style={{border:`1px solid ${nErr>0?'#F3C9C4':C.border}`,borderRadius:12,overflow:'hidden',opacity:undone?.6:1}}>
+                <div onClick={()=>setCargaOpen(open?null:c.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
+                  <span title={undone?'Deshecha':nErr>0?'Con errores sin resolver':'Cargada'} style={{width:9,height:9,borderRadius:'50%',background:dotCol,flexShrink:0}}/>
+                  <div style={{textAlign:'center',width:34,flexShrink:0}}><div style={{fontSize:18,fontWeight:700,color:C.text,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{dnum}</div><div style={{fontSize:10,color:C.muted,textTransform:'uppercase'}}>{dmon}</div></div>
+                  <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:11}}><div style={{fontSize:13.5,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.filename||'Carga sin nombre'}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',marginTop:3}}>
+                      {undone?<span style={{fontSize:10,color:C.muted}}>{c.created_by?`${c.created_by} · `:''}deshecha</span>:<>
+                        {c.created_by&&<span style={{fontSize:10,color:C.muted}}>{c.created_by}</span>}
+                        {nCarg>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'1px 7px'}}>{nCarg} ✓</span>}
+                        {nErr>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'1px 7px'}}>{nErr} error</span>}
+                        {nOmit>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.done,background:C.bgSoft,borderRadius:20,padding:'1px 7px'}}>{nOmit} ya app</span>}
+                      </>}
+                    </div></div>
                   <div style={{fontSize:13.5,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(c.total)}</div>
                   <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
                 </div>
                 {open&&<div style={{borderTop:`1px solid ${C.border}`}}>
-                  {c.gs.length===0&&<div style={{padding:'12px 13px',fontSize:12,color:C.muted}}>Sin gastos vivos en esta carga.</div>}
+                  {nErr>0&&(c.resumen?.erroresDet?.length>0)&&<div style={{background:C.overdueBg,borderBottom:`1px solid #F3C9C4`,padding:'10px 13px'}}>
+                    <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.overdueText,marginBottom:6}}>{nErr} con error · no se cargaron (quedan registradas)</div>
+                    <div style={{border:`1px solid #F3C9C4`,borderRadius:8,overflow:'hidden',background:'#fff'}}>
+                      {c.resumen.erroresDet.slice(0,40).map((er,ei)=><div key={ei} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 9px',fontSize:11,borderTop:ei?`0.5px solid ${C.bgSoft}`:'none'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{er.ot&&er.ot!=='s/OT'?`${er.ot} · `:''}{er.nombre||'—'}</span><span style={{color:C.overdueText,flexShrink:0,fontWeight:600}}>{er.motivo}</span></div>)}
+                    </div>
+                    <button onClick={()=>onBulk&&onBulk(true)} style={{marginTop:9,width:'100%',fontSize:11.5,fontWeight:700,color:'#fff',background:C.overdue,border:'none',borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>Volver a subir el archivo completo · carga solo lo que falta</button>
+                    <div style={{fontSize:10,color:C.overdueText,marginTop:5,lineHeight:1.5}}>La OT es la fuente de la verdad: al re-subir el archivo corregido, las OT ya cargadas se saltan solas y solo entra lo que falta.</div>
+                  </div>}
+                  {c.gs.length===0&&nErr===0&&<div style={{padding:'12px 13px',fontSize:12,color:C.muted}}>Sin gastos vivos en esta carga.</div>}
                   {c.gs.slice(0,60).map((e,i)=>{ const [lbl,col,bg]=estOf(e); return (
                     <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:i?`0.5px solid #EEF1F3`:'none'}}>
                       <span style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,width:60,flexShrink:0}}>{fmtOt(e.ot_number)||'s/OT'}</span>
@@ -29961,7 +29995,7 @@ export default function App() {
 
   // Carga masiva (PP-19 commit 4): dedupe vs existentes, registra el lote, inserta en tandas de 100.
   // Devuelve resumen. Cada gasto queda marcado con bulk_import_id para poder deshacer (commit 5).
-  const handleBulkImport=useCallback(async(filas,{tipo,filename,cajaOwner})=>{
+  const handleBulkImport=useCallback(async(filas,{tipo,filename,cajaOwner,notaResumen}={})=>{
     const keyOf = e => `${e.client_id||''}|${e.amount||0}|${e.date||''}|${(e.concept||'').trim().toLowerCase()}|${(e.subconcept||'').trim().toLowerCase()}|${(e.ot_number||'').trim().toLowerCase()}`
     const vistos = new Set((expenses||[]).map(keyOf))
     // Dedupe por OT: la OT es única por trámite. Si una OT ya existe (no borrada), se omite aunque cambie monto/texto.
@@ -30001,7 +30035,9 @@ export default function App() {
       payloads.push(row)
     }
     if(payloads.length===0) return {imported:0,dupOmit,otDupOmit,sinCliente:0,sinFecha:0,batchId:null,filename}
-    const {error:bErr} = await supabase.from('bulk_imports').insert({id:batchId,created_by:user?.name||null,row_count:payloads.length,filename:filename||null})
+    // Resumen permanente de la carga (nada sin rastro): cargadas + con error (no entraron) + ya en la app; guarda las filas con error.
+    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:payloads.length, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]).slice(0,80), notaria:true } : null
+    const {error:bErr} = await supabase.from('bulk_imports').insert({id:batchId,created_by:user?.name||null,row_count:payloads.length,filename:filename||null,...(resumen?{resumen}:{})})
     if(bErr) throw bErr
     const inserted=[]
     for(let i=0;i<payloads.length;i+=100){
@@ -30010,7 +30046,7 @@ export default function App() {
       if(data) inserted.push(...data)
     }
     setExpenses(p=>[...inserted,...p])
-    setBulkImports(p=>[{id:batchId,created_at:new Date().toISOString(),created_by:user?.name||null,row_count:inserted.length,filename:filename||null,status:'active'},...p].slice(0,10))
+    setBulkImports(p=>[{id:batchId,created_at:new Date().toISOString(),created_by:user?.name||null,row_count:inserted.length,filename:filename||null,status:'active',...(resumen?{resumen}:{})},...p].slice(0,10))
     return {imported:inserted.length, dupOmit, otDupOmit, sinCliente, sinFecha, batchId, filename}
   },[expenses,user])
 
