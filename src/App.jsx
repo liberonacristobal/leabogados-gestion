@@ -951,6 +951,7 @@ const TABS_ADMIN = [
 ]
 const TABS_LIMITED = [
   {id:'tasks',icon:'check',label:'Tareas',mod:'nucleo'},
+  {id:'cartera',icon:'briefcase',label:'Mi cartera',mod:'nucleo'},
   {id:'horas',icon:'clock',label:'Horas',mod:'horas'},
   {id:'expenses',icon:'card',label:'Gastos',mod:'gastos'},
   {id:'cajachica',icon:'coins',label:'Caja chica',mod:'gastos'},
@@ -25432,6 +25433,84 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   )
 }
 
+// MI CARTERA (limitados): vista enfocada de los proyectos del propio usuario, ordenados por "días sin mover".
+// Reusa el motor module-level (cartDias/cartDiasPlazo). "Registrar avance" resetea el reloj + deja bitácora.
+function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], currentUserName, onClose, onOpenClientFicha, onAddTaskForProject }){
+  const isDesktop = useIsDesktop()
+  const HOY = new Date().toISOString().slice(0,10)
+  const miIni = INICIALES_RESP[currentUserName] || null
+  const cnm = id => (clients.find(c=>String(c.id)===String(id))||{}).name || 'Sin cliente'
+  const [busy,setBusy] = useState(null)
+  const mis = useMemo(()=> (proyectos||[]).filter(p=> p.activo!==false && (miIni ? (p.responsable||'')===miIni : true)), [proyectos, miIni])
+  const nTareas = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id)))).length
+  const rows = useMemo(()=> mis.map(p=>{ const dias=cartDias(p.ultima_actividad); const dp=cartDiasPlazo(p.plazo)
+      const sev = (dias==null||dias>=15)?'bad':dias>=6?'soon':'ok'
+      return { p, dias, dp, nT:nTareas(p), sev }
+    }).sort((a,b)=> (b.dias==null?9999:b.dias)-(a.dias==null?9999:a.dias)), [mis, tasks])
+  const nBad = rows.filter(r=>r.sev==='bad').length
+  const nPlazoSem = rows.filter(r=>r.dp!=null && r.dp>=0 && r.dp<=7).length
+  const fmtDia = iso => iso ? new Date(iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : '—'
+  const plazoTxt = dp => dp==null?'sin plazo':dp<0?`${-dp}d vencido`:dp===0?'hoy':dp<=7?`${dp}d`:fmtDia(rows.find(r=>r.dp===dp)?.p?.plazo)
+  const SEV = { bad:{c:C.overdueText,bg:C.overdueBg,u:'días'}, soon:{c:C.soonText,bg:C.soonBg,u:'días'}, ok:{c:C.greenText,bg:C.greenBg,u:'días'} }
+  const registrarAvance = async(p)=>{
+    const nota = await appPrompt(`Registrar avance — ${p.nombre_proyecto||'proyecto'}\n¿Qué avanzó? (queda en la bitácora; reinicia el reloj de "sin mover")`, '')
+    if(nota===null) return
+    setBusy(p.id)
+    setProyectos && setProyectos(prev=>prev.map(x=>String(x.id)===String(p.id)?{...x,ultima_actividad:HOY}:x))
+    if(!DEMO){ try{
+      if((nota||'').trim()) await supabase.from('cartera_notas').insert({proyecto_id:p.id, texto:nota.trim(), autor:currentUserName||null})
+      await supabase.from('proyectos_cartera').update({ultima_actividad:HOY, updated_at:new Date().toISOString()}).eq('id',p.id)
+    }catch(e){ appAlert('No se pudo registrar el avance: '+(e.message||e)) } }
+    setBusy(null)
+  }
+  const kpi = (n,l,tone)=>(<div style={{flex:1,border:`1px solid ${tone?tone.bd:C.border}`,background:tone?tone.bg:'#fff',borderRadius:12,padding:'10px 8px',textAlign:'center'}}>
+    <div style={{fontSize:20,fontWeight:800,letterSpacing:'-.5px',color:tone?tone.c:C.accent}}>{n}</div>
+    <div style={{fontSize:8.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.2px',color:C.muted,marginTop:1,lineHeight:1.15}}>{l}</div>
+  </div>)
+  const Card = ({p,dias,dp,nT,sev})=>{ const s=SEV[sev]
+    return (
+    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:13,padding:'11px 12px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+        <div style={{minWidth:0,flex:1}}>
+          <div onClick={()=>p.cliente_id&&onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{fontSize:13,fontWeight:800,color:C.accent,lineHeight:1.2,cursor:onOpenClientFicha?'pointer':'default',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cnm(p.cliente_id)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre_proyecto||'Proyecto'}</div>
+        </div>
+        <div style={{textAlign:'center',borderRadius:10,padding:'5px 9px',minWidth:52,background:s.bg,flexShrink:0}}>
+          <div style={{fontSize:16,fontWeight:800,lineHeight:1,color:s.c}}>{dias==null?'—':dias}</div>
+          <div style={{fontSize:7.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.2px',marginTop:2,color:s.c}}>{s.u}</div>
+        </div>
+      </div>
+      <div style={{fontSize:10.5,color:C.muted,margin:'9px 0 0',paddingTop:8,borderTop:`1px solid ${C.bgSoft}`,display:'flex',justifyContent:'space-between',gap:8}}>
+        <span>Últ. actividad <b style={{color:C.text}}>{fmtDia(p.ultima_actividad)}</b></span>
+        <span>Plazo <b style={{color:dp!=null&&dp<0?C.overdueText:C.text}}>{plazoTxt(dp)}</b></span>
+      </div>
+      <div style={{display:'flex',gap:7,marginTop:9}}>
+        <button disabled={busy===p.id} onClick={()=>registrarAvance(p)} style={{flex:1,fontSize:11,fontWeight:700,borderRadius:8,padding:'7px',background:C.accent,color:'#fff',border:'none',cursor:'pointer',opacity:busy===p.id?.6:1}}>{busy===p.id?'…':'Registrar avance'}</button>
+        <button onClick={()=>onAddTaskForProject&&onAddTaskForProject(p)} style={{flex:1,fontSize:11,fontWeight:700,borderRadius:8,padding:'7px',background:'#fff',color:C.accent,border:`1px solid ${C.border}`,cursor:'pointer'}}>Nueva tarea{nT?` (${nT})`:''}</button>
+      </div>
+    </div>) }
+  return (
+    <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?960:560,margin:'0 auto'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
+        <div><div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Mi cartera</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>{currentUserName} · {mis.length} proyecto{mis.length!==1?'s':''} a cargo</div></div>
+        {onClose&&<span onClick={onClose} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer'}}>← Volver</span>}
+      </div>
+      <div style={{display:'flex',gap:7,marginBottom:14}}>
+        {kpi(nBad,'Sin mover +15d', {bg:C.overdueBg,bd:'#F3D2D0',c:C.overdueText})}
+        {kpi(nPlazoSem,'Plazo esta semana', {bg:C.soonBg,bd:'#F0E4B8',c:C.soonText})}
+        {kpi(mis.length,'Activos', null)}
+      </div>
+      {rows.length===0
+        ? <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>No tienes proyectos activos a tu nombre.</div>
+        : <>
+          <div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done,marginBottom:8}}>Ordenados por lo que lleva parado</div>
+          <div style={{display:isDesktop?'grid':'block',gridTemplateColumns:isDesktop?'1fr 1fr':undefined,gap:10}}>
+            {rows.map(r=> <div key={r.p.id} style={{marginBottom:isDesktop?0:9}}><Card {...r}/></div>)}
+          </div>
+        </>}
+    </div>
+  )
+}
 function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
@@ -31685,7 +31764,8 @@ export default function App() {
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
-            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
+            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
