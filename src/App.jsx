@@ -24036,21 +24036,22 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
           <span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Exposición por abogado</span>
           {aboFilter&&<span onClick={()=>setAboFilter(null)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>← Todos</span>}
         </div>
-        <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(porAbogado.length,isDesktop?5:3)},1fr)`,gap:isDesktop?12:8}}>
+        <div style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop&&porAbogado.length>1?'1fr 1fr':'1fr',flexDirection:'column',gap:7}}>
           {porAbogado.map(a=>{ const pct=a.total>0?Math.round(a.vencido/a.total*100):0
-            const sev = pct>=60?{c:C.overdueText,s:C.overdue}:pct>=30?{c:C.soonText,s:C.soon}:pct>0?{c:C.muted,s:C.done}:{c:C.greenText,s:C.normal}
-            const R=isDesktop?40:30, SZ=isDesktop?96:72, CC=2*Math.PI*R, off=CC*(1-pct/100), on=aboFilter===a.abo, isX=a.abo==='Sin asignar'
+            const pctCartera=deudaTotal>0?Math.round(a.total/deudaTotal*100):0
+            const sev = pct>=60?{c:C.overdueText,bg:C.overdueBg}:pct>=30?{c:C.soonText,bg:C.soonBg}:pct>0?{c:C.muted,bg:C.bgSoft}:{c:C.greenText,bg:C.greenBg}
+            const on=aboFilter===a.abo, isX=a.abo==='Sin asignar'
             return (
-            <div key={a.abo} onClick={()=>setAboFilter(on?null:a.abo)} title={`${a.abo} · ${a.nVenc} de ${a.n} vencidas`} style={{background:'#fff',border:`1px solid ${on?C.accent:(pct>=60?'#F0C9C6':C.border)}`,borderRadius:13,padding:isDesktop?'15px 10px 13px':'12px 6px 11px',textAlign:'center',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent} inset`:'none'}}>
-              <div style={{width:SZ,height:SZ,margin:'0 auto 7px',position:'relative'}}>
-                <svg width={SZ} height={SZ} style={{transform:'rotate(-90deg)'}}><circle cx={SZ/2} cy={SZ/2} r={R} fill='none' stroke={C.border} strokeWidth={isDesktop?10:8}/><circle cx={SZ/2} cy={SZ/2} r={R} fill='none' stroke={sev.s} strokeWidth={isDesktop?10:8} strokeDasharray={CC} strokeDashoffset={off} strokeLinecap='round'/></svg>
-                <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-                  <b style={{fontSize:isDesktop?21:17,fontWeight:800,color:sev.c,lineHeight:1}}>{pct}%</b>
-                  <span style={{fontSize:isDesktop?9:7,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginTop:1}}>vencido</span>
-                </div>
+            <div key={a.abo} onClick={()=>setAboFilter(on?null:a.abo)} title={`${a.abo} · ${a.nVenc} de ${a.n} vencidas`} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',background:'#fff',border:`1px solid ${on?C.accent:(pct>=60?'#F0C9C6':C.border)}`,borderRadius:10,cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent} inset`:'none'}}>
+              <span style={{width:26,height:26,borderRadius:8,background:sev.bg,color:sev.c,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,flexShrink:0}}>{isX?'?':(a.abo[0]||'·')}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:isX?C.muted:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.abo}</div>
+                <div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>{pctCartera}% de la cartera · {a.nVenc}/{a.n} vencidas</div>
               </div>
-              <div style={{fontSize:isDesktop?13:12,fontWeight:700,color:isX?C.muted:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.abo}</div>
-              <div style={{fontSize:isDesktop?11:10,color:C.muted,marginTop:2,fontVariantNumeric:'tabular-nums'}}><b style={{color:sev.c,fontWeight:800}}>{fM(a.vencido)}</b> / {fM(a.total)}</div>
+              <div style={{textAlign:'right',flexShrink:0,lineHeight:1.25}}>
+                <div style={{fontSize:13,fontWeight:800,color:sev.c,fontVariantNumeric:'tabular-nums'}}>{fM(a.vencido)} <span style={{fontSize:11}}>· {pct}%</span></div>
+                <div style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>de {fM(a.total)} total</div>
+              </div>
             </div>) })}
         </div>
       </div>}
