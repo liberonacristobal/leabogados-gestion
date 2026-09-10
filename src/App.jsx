@@ -8375,7 +8375,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
             </div>
         </>)
         if(isDesktop) return (
-          <div key={f.b.id} style={{borderLeft:`3px solid ${e.dot}`,borderBottom:`1px solid ${C.bgSoft}`}}>
+          <div key={f.b.id} style={{borderBottom:`1px solid ${C.bgSoft}`}}>
             <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'grid',gridTemplateColumns:inGroup?'1fr 96px 104px 104px 104px 92px':'1fr 58px 96px 104px 104px 104px 92px',gap:10,alignItems:'center',padding:'10px 14px',cursor:'pointer'}}>
               {inGroup
                 ? <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}</div>{f.b.concept&&<div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{f.b.concept}</div>}</div>
@@ -8394,7 +8394,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
           </div>
         )
         return (
-          <div key={f.b.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderLeft:`2px solid ${e.dot}`,borderRadius:10,overflow:'hidden'}}>
+          <div key={f.b.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',cursor:'pointer'}}>
               <div style={{flex:1,minWidth:0}}>
                 {inGroup
@@ -11133,8 +11133,8 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
           <div style={{fontSize:11,color:C.done,marginBottom:8}}>Este cliente no tiene facturas emitidas abiertas para asignar.</div>
         )}
         <div style={{display:'flex',flexDirection:'column',gap:6}}>
-          {onCubrir&&<div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.azulInfo}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:10.5,color:C.done}}>Marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>}
-          {programadasCli.length>0&&onConsolidar&&<div onClick={()=>onConsolidar(a)} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Asignar a 1 factura</div><div style={{fontSize:10.5,color:C.done}}>1 factura por el total · anula las programadas</div></div><span style={{color:C.done}}>→</span></div>}
+          {onCubrir&&<div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:10.5,color:C.done}}>Marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>}
+          {programadasCli.length>0&&onConsolidar&&<div onClick={()=>onConsolidar(a)} style={{border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Asignar a 1 factura</div><div style={{fontSize:10.5,color:C.done}}>1 factura por el total · anula las programadas</div></div><span style={{color:C.done}}>→</span></div>}
         </div>
         {facturasAbiertas.length>0&&<button disabled={!selFac||busy} onClick={asignar} style={{width:'100%',height:40,borderRadius:9,border:'none',background:(selFac&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(selFac&&!busy)?'pointer':'default',marginTop:10}}>{busy?'Asignando…':'Guardar asignación'}</button>}
         {onReclasificar&&<div style={{marginTop:12,paddingTop:9,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>¿Era un gasto? <span onClick={()=>onReclasificar(a)} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>Reclasificar a Fondo por rendir</span></div>}
@@ -17683,7 +17683,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   return (<div style={{padding:'14px 20px 40px',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined}}>
     {/* Banda accionable: lo único que de verdad importa en una cuenta donde casi solo entra plata — lo que falta conciliar */}
     {(()=>{ const movBase=movs.filter(m=>!m.es_interno); const sinC=movBase.filter(m=>!conc.find(x=>x.movimiento_id===m.id)); if(!sinC.length) return null; const tot=sinC.reduce((s,m)=>s+(m.monto||0),0); return (
-      <div onClick={()=>{ if(!sec.movs)secT('movs'); setMovF('sin') }} style={{display:'flex',alignItems:'center',gap:10,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'10px 13px',marginBottom:12,cursor:'pointer'}}>
+      <div onClick={()=>{ if(!sec.movs)secT('movs'); setMovF('sin') }} style={{display:'flex',alignItems:'center',gap:10,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderRadius:11,padding:'10px 13px',marginBottom:12,cursor:'pointer'}}>
         <SIcon n='alert' s={17} c={C.soonText}/>
         <span style={{flex:1,fontSize:12,fontWeight:700,color:C.soonText}}>{sinC.length} movimiento{sinC.length!==1?'s':''} sin conciliar</span>
         <span style={{fontSize:13,fontWeight:700,color:C.soonText}}>{fmt(tot)}</span>
@@ -18013,7 +18013,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
             const e = estadoFacturaLabel(b,(respaldoMap&&respaldoMap[b.id])||0,cartolaHasta)
             const pend = ['Pendiente','Vencido'].includes(b.status)
             return (
-              <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${borde(b)}`,borderRadius:'0 8px 8px 0',padding:'8px 10px',marginBottom:5}}>
+              <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',marginBottom:5}}>
                 <div onClick={()=> conciliada ? toggleDet(b.id) : (onEditBilling&&onEditBilling(b))} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer'}}>
                   {bigDate(kpiDate(b))}
                   <SIcon n={estadoCobro(b).icon} s={15} c={borde(b)}/>
@@ -21499,7 +21499,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
         <Row label='Estado'>{task.status||'—'}</Row>
       </div>
       {terminada&&task.completion_note&&(
-        <div style={{background:C.greenBg,borderLeft:`3px solid ${C.normal}`,borderRadius:8,padding:'10px 12px',margin:'0 0 12px'}}>
+        <div style={{background:C.greenBg,borderRadius:8,padding:'10px 12px',margin:'0 0 12px'}}>
           <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Gestión realizada{task.completion_status?` · ${task.completion_status}`:''}</div>
           <div style={{fontSize:13,color:C.text,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{task.completion_note}</div>
           {task.completed_by&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Reportó {task.completed_by}{task.completed_at?` · ${fmtDate(String(task.completed_at).slice(0,10))}`:''}</div>}
@@ -21872,7 +21872,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                             onMouseEnter={(e)=>{setHoverPos({x:e.clientX,y:e.clientY});setHoverTask(t)}}
                             onMouseLeave={()=>setHoverTask(null)}
                             onTouchStart={(e)=>startPress(t,e)} onTouchEnd={endPress} onTouchMove={endPress}
-                            style={{background:asignadaPorMi?C.greenBg:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${asignadaPorMi?C.normal:C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
+                            style={{background:asignadaPorMi?C.greenBg:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
                             <div style={{fontSize:9,fontWeight:600,color:C.text,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',lineHeight:1.2,wordBreak:'break-word'}}>{t.title}</div>
                             {cl&&<div style={{fontSize:8,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
                           </div>
@@ -22248,7 +22248,7 @@ ${muestra}`
       {/* Revisión con IA (Opus 4.8) — solo audita, no modifica */}
       <button onClick={revisarIA} disabled={iaBusy} style={{width:'100%',marginBottom:10,height:38,borderRadius:9,border:`1px solid ${C.accent}`,background:iaBusy?C.bgSoft:C.azulBg,color:C.accent,fontSize:12,fontWeight:600,cursor:iaBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{iaBusy?<Spin/>:null}{iaBusy?'Analizando con Opus 4.8…':(iaReport?'Volver a revisar con IA':'Revisar con IA (Opus 4.8)')}</button>
       {iaReport&&(
-        <div style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'12px 13px',marginBottom:12,background:C.bgSoft}}>
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 13px',marginBottom:12,background:C.bgSoft}}>
           <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Revisión IA · Opus 4.8</div>
           {iaReport.resumen&&<div style={{fontSize:12,color:C.text,lineHeight:1.45,marginBottom:9}}>{iaReport.resumen}</div>}
           {Array.isArray(iaReport.alertas)&&iaReport.alertas.length>0&&<div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:9}}>
@@ -28450,7 +28450,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 <button onClick={()=>setVerCarga(v=>!v)} style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>+ Cargar</button>
               </div>
               {verCartolas&&cartolas.map((c,i)=>{ const pc=c.rol==='honorarios'?C.accent:'#EF9F27'; const mesLbl=(()=>{const[y,mo]=c.mes.split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${M[+mo-1]||mo} ${y}`})(); return (
-                <div key={i} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`,borderLeft:`3px solid ${pc}`}}>
+                <div key={i} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
                     <span style={{fontSize:13,fontWeight:600,color:C.text}}>{c.rol==='honorarios'?'Cta. Honorarios':'Cta. Gastos'} · {mesLbl}</span>
                     <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmtFechaDMY?fmtFechaDMY(c.fMin):c.fMin} → {fmtFechaDMY?fmtFechaDMY(c.fMax):c.fMax} · {c.n} mov.</span>
@@ -29299,7 +29299,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               if(siiMovHit.err) return <div style={{fontSize:10,color:C.overdueText,background:C.overdueBg,borderRadius:7,padding:'5px 9px',marginTop:4}}>{siiMovHit.err}</div>
                               const rows=siiMovHit.rows||[]; const abs=Math.abs(Number(m.monto)||0)
                               if(!rows.length) return <div style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:7,padding:'6px 9px',marginTop:4}}>Sin facturas nuevas en el SII para este pago{siiMovHit.aplicadas?` (${siiMovHit.aplicadas} ya calzada${siiMovHit.aplicadas!==1?'s':''} arriba)`:''}.{onCotejarSII&&<> · <button onClick={e=>{e.stopPropagation();onCotejarSII(String(m.fecha||'').slice(0,7))}} style={{fontSize:10,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',textDecoration:'underline',padding:0}}>Ver el mes completo</button></>}</div>
-                              return <div style={{marginTop:5,marginBottom:4,borderLeft:`2px solid ${C.azulInfo}`,paddingLeft:8}}>
+                              return <div style={{marginTop:5,marginBottom:4,paddingLeft:8}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>En el SII · {rows.length} que calza{rows.length!==1?'n':''} con este pago</div>
                                 {rows.map(row=>{ const exacto=Math.abs(Number(row.monto)||0)===abs; const ing=siiMovIng===row.folio; return (
                                   <div key={row.folio} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,fontSize:11,padding:'5px 0',borderBottom:`1px solid #F1F1F1`}}>
