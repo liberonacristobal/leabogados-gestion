@@ -3229,7 +3229,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const resultado=ingYTD-comisYTD-costosOfiYTD                     // Margen = Cobrado − Comisiones − Costos de oficina (base caja; espeja la vista mensual res=ing−costos−comi)
         const proyR=(ingYTD+proyIngresosDash)-costosOfiAnual
         const pos=resultado>=0
-        const ventaPct=metaUF>0?Math.min(100,Math.round(m.brutoUF/metaUF*100)):0   // MISMO % que "Cómo va el año" (brutoUF/metaUF), para no mostrar dos cifras distintas
+        const ventaPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%)
+        const ventaNetoPct=metaUF>0?Math.round(m.netoUF/metaUF*100):0   // venta NETA (neto de comisiones) vs la MISMA meta
         const factPct=m.bruto>0?Math.min(100,Math.round(facturadoYr/m.bruto*100)):0
         const cobroPct=metaCobranza>0?Math.min(100,Math.round(ingYTD/metaCobranza*100)):0
         const bePct=costosOfiAnual>0?Math.min(100,Math.round(ingYTD/costosOfiAnual*100)):0
@@ -3310,13 +3311,15 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
 
               // VENDIDO — neto de comisiones (devengadas) + meta/falta
               if(t==='vend'){
-                const faltaUF=Math.max(0,metaUF-m.brutoUF), faltaCLP=Math.max(0,m.meta-m.bruto)
+                const sobreMeta=m.brutoUF>=metaUF, difBrutoUF=Math.abs(m.brutoUF-metaUF), difBrutoCLP=Math.abs(m.bruto-m.meta)
+                const netoSobre=m.netoUF>=metaUF, difNetoUF=Math.abs(metaUF-m.netoUF), difNetoCLP=Math.abs(m.meta-m.neto)
                 return (<div style={box}>
                   <Hero v='g' l='Neto de comisiones · vendido' val={vMon(m.netoUF,m.neto)}/>
                   <div style={R}><span style={rowL}>Bruto vendido</span><span style={rowV}>{vMon(m.brutoUF,m.bruto)}</span></div>
                   <div style={R}><span style={rowL}>Comisiones devengadas</span><span style={vNeg}>− {vMon(m.costoUF,m.costo)}</span></div>
                   {m.meta>0&&metaBand(`Meta de ventas ${selYear}`,ventaPct,vMon(metaUF,m.meta))}
-                  {m.meta>0&&<div style={R}><span style={rowL}>Falta para la meta</span><span style={rowV}>{vMon(faltaUF,faltaCLP)}</span></div>}
+                  {m.meta>0&&<div style={R}><span style={rowL}>{sobreMeta?'Sobre meta (bruto)':'Falta para la meta (bruto)'}</span><span style={{...rowV,color:sobreMeta?C.greenText:C.text}}>{sobreMeta?'+ ':''}{vMon(difBrutoUF,difBrutoCLP)}</span></div>}
+                  {m.meta>0&&<div style={R}><span style={rowL}>Venta neta vs meta <span style={{color:C.done,fontWeight:400}}>· {ventaNetoPct}%</span></span><span style={{...rowV,color:netoSobre?C.greenText:C.muted}}>{netoSobre?'+ ':'falta '}{vMon(difNetoUF,difNetoCLP)}</span></div>}
                   {verlink('Ver todo en Ventas','sales')}
                 </div>)
               }
@@ -24374,7 +24377,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
                 <div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>{pctVencOfi}% del vencido de la oficina · {a.nVenc}/{a.n} vencidas</div>
               </div>
               <div style={{textAlign:'right',flexShrink:0,lineHeight:1.25}}>
-                <div style={{fontSize:13,fontWeight:800,color:sev.c,fontVariantNumeric:'tabular-nums'}}>{fM(a.vencido)} <span style={{fontSize:11,fontWeight:600}}>· {pct}% vencido</span></div>
+                <div style={{fontSize:13,fontWeight:800,color:sev.c,fontVariantNumeric:'tabular-nums'}}>{fM(a.vencido)} <span style={{fontSize:10.5,fontWeight:400,color:C.muted}}>vencido</span></div>
                 <div style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>de {fM(a.total)} de su cartera</div>
               </div>
             </div>) }) })()}
