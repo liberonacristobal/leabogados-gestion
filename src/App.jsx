@@ -12167,6 +12167,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   const fmtFDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
   const [genPlantilla,setGenPlantilla] = useState(false)
   const [matching,setMatching] = useState(false)        // análisis de matching/IA en curso
+  const [readyBanner,setReadyBanner] = useState(false)   // aviso "análisis listo · a revisar" al terminar de leer
   const [respFilter,setRespFilter] = useState(null)      // filtro del preview por abogado responsable ('__sin__' = sin responsable)
   const [bucketFilter,setBucketFilter] = useState(null)  // filtro del preview por bucket (auto/sug/rev/man); clic en el chip filtra la lista
   const respDeRow = r => (r.client_id ? (clients.find(c=>String(c.id)===String(r.client_id))?.abogado_responsable||null) : null)
@@ -12492,7 +12493,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       }
       setRows(rows.map(r=>({...r})))
     }catch(e){ console.error('matching',e) }
-    finally{ setMatching(false); setMatchProg(null) }
+    finally{ setMatching(false); setMatchProg(null)
+      if(notaria){ try{ const c=notaCats(rows); const nD=c.listas.length+c.oficina.length+c.personal.length; const nR=c.falta.length+c.confirma.length; flash(`Análisis listo · ${nD} para cargar${nR?` · ${nR} por revisar`:''}`); setReadyBanner(true) }catch(_){ flash('Análisis listo · revisa la carga') ; setReadyBanner(true) } }
+    }
   }
 
   // Fecha tolerante: Date nativo, serial Excel, dd.mm.yy(yy), dd-mm-yyyy, dd/mm/yyyy, yyyy-mm-dd. Vacío → ''.
@@ -12537,7 +12540,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     subconcepto:['subconcepto','sub concepto','sub-concepto','subconc','detalle adicional','sub detalle','subglosa','sub glosa'],
     ot:        ['ot','o.t.','orden','orden de trabajo','n° ot','nro ot','ot n°','numero ot','número ot','n ot'],
     categoria: ['categoría','categoria','tipo','proveedor','category'],
-    monto:     ['monto','importe','valor','amount','total','derecho','derechos'],
+    monto:     ['monto','importe','valor','amount','total','derecho','derechos','saldo','saldo a pagar','arancel','aranceles','derecho notarial'],
     notas:     ['notas','nota','observaciones','observación','observacion','comments'],
     proyecto:  ['proyecto','propuesta','propuesta - proyecto','project'],
     requirente:['requirente','solicitante','requerido por','requiere','requirente/interesado','interesado','rogante','peticionario','compareciente','comparecientes','partes'],
@@ -13192,6 +13195,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     }
     return (<div>
       {/* Guía de una línea (qué hacer) — baja la curva de la primera vez */}
+      {notaria&&readyBanner&&!matching&&<div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:11,padding:'10px 13px',marginBottom:9}}>
+        <span style={{width:26,height:26,borderRadius:'50%',background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.6'><path d='M5 13l4 4L19 7'/></svg></span>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.greenText}}>Análisis listo · ya puedes revisar y trabajar la carga</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Revisa por categoría abajo y confirma con Cargar.</div></div>
+        <button onClick={()=>setReadyBanner(false)} style={{fontSize:16,color:C.done,background:'none',border:'none',cursor:'pointer',flexShrink:0,lineHeight:1,padding:0}}>×</button>
+      </div>}
       {notaria&&(()=>{ const cts=notaCats(rows||[]); const nLeidas=(rows||[]).length; const errs=cts.errores
         // Partición única (suman las filas del archivo): se cargan = con destino (cliente/oficina/miembro); por revisar = falta+confirma; ya en la app; anuladas; con error.
         const nDest=cts.listas.length+cts.oficina.length+cts.personal.length; const nRev=cts.falta.length+cts.confirma.length; const nYa=cts.yacargadas.length; const nAnul=cts.sinefecto.length; const nNoN=cts.nonuestra.length; return (
