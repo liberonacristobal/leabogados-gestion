@@ -12691,7 +12691,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         let error=null
         // REGLA: un gasto de notaría SIEMPRE trae su OT (la OT es la fuente de la verdad). Si una fila tiene compareciente/monto pero NO se
         // extrajo OT, es un ERROR (no se carga sin OT: se marca para que revises la columna). Solo la fila "Total" (sin OT NI compareciente) se ignora.
-        if(notaria && (!ot || !/\d/.test(ot))){ if(!cli && !(nombreEff&&nombreEff.trim())) return null; error='OT no detectada · revisa la columna OT del archivo' }
+        if(notaria && (!ot || !/\d/.test(ot))){ if(!cli && !(nombreEff&&nombreEff.trim())) return null; error='OT no detectada · vuelve a leer el archivo (todo trabajo trae OT)' }
         if(!error){ if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
@@ -13126,6 +13126,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             {nYa>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.done,fontVariantNumeric:'tabular-nums'}}>{nYa}</span> <span style={{fontSize:11,color:C.muted}}>ya en la app (se omiten)</span></div>}
             {errs.length>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{errs.length}</span> <span style={{fontSize:11,color:C.muted}}>con error (no se cargan)</span></div>}
           </div>
+          {errs.some(r=>/OT no detectada/i.test(r.error||''))&&<div style={{marginTop:8,background:C.overdueBg,border:'1px solid #F3C9C4',borderRadius:8,padding:'8px 11px',fontSize:11.5,color:C.overdueText,fontWeight:600,lineHeight:1.5}}>No se leyó bien la columna <b>OT</b> en algunas filas. Todo trabajo de notaría trae OT → <b>vuelve a subir el archivo</b> (revisa que la columna OT esté presente y completa). Esas filas no se cargan.</div>}
           {errs.length>0&&<details style={{marginTop:8}}>
             <summary style={{fontSize:11,color:C.overdueText,fontWeight:700,cursor:'pointer',listStyle:'none'}}>Ver las {errs.length} con error ›</summary>
             <div style={{marginTop:6,maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8}}>
