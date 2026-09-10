@@ -13029,7 +13029,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
     const consChk = kind==='nonuestra', consOn = consChk && notaConsultaSel.has(r.id)   // "No es nuestra": seleccionable para consultar a la notaría
     return (
-      <div key={r.id} style={{padding:'10px 0',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10,opacity:info&&!consChk?.8:1}}>
+      <div key={r.id} style={{padding:'10px 12px',display:'flex',gap:10,opacity:info&&!consChk?.85:1,background:'#fff',border:`1px solid ${open?C.azulInfo:C.border}`,borderRadius:11,marginBottom:8,boxShadow:open?'0 2px 10px rgba(24,95,165,.10)':'none'}}>
         {chk&&<span onClick={()=>setConfDesel(p=>{ const n=new Set(p); n.has(r.id)?n.delete(r.id):n.add(r.id); return n })} title={on?'Marcada — se confirma':'Marca para confirmar'} style={{cursor:'pointer',flexShrink:0,marginTop:2}}>{on?<svg width='17' height='17' viewBox='0 0 24 24' fill={C.normal} stroke={C.normal}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>}</span>}
         {consChk&&<span onClick={()=>toggleConsulta(r.id)} title={consOn?'Seleccionada para consultar a la notaría':'Marca para consultar a la notaría'} style={{cursor:'pointer',flexShrink:0,marginTop:2}}>{consOn?<svg width='17' height='17' viewBox='0 0 24 24' fill={C.overdueText} stroke={C.overdueText}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>}</span>}
         <div style={{flex:1,minWidth:0}}>
@@ -13064,7 +13064,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         </div>}
         {kind==='listas'&&<div style={{display:'flex',gap:12,marginTop:6,flexWrap:'wrap',alignItems:'center'}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button><button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11,fontWeight:600,color:C.tealText,background:'none',border:'none',cursor:'pointer',padding:0}}>Gasto interno {persPick===r.id?'▴':'▾'}</button><button onClick={()=>marcarNoNuestra(r.id)} title='La notaría la envió pero no es un trabajo de la oficina → no se carga' style={{fontSize:11,fontWeight:600,color:C.overdueText,background:'none',border:'none',cursor:'pointer',padding:0}}>No es nuestra</button></div>}
         {kind==='nonuestra'&&<div style={{marginTop:6}}><button onClick={()=>reactivarRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Sí es nuestra · volver a la revisión</button></div>}
-        {open&&<div style={{marginTop:8,paddingTop:8,borderTop:`.5px solid #EEF1F3`}}>
+        {open&&<div style={{marginTop:8,padding:'9px 11px',background:'#EEF4FB',border:'1px solid #CFE0F2',borderRadius:9}}>
           {/* Descripción completa para confirmar bien (misma en toda categoría) */}
           <table style={{width:'100%',borderCollapse:'collapse',marginBottom:info?0:9}}><tbody>
             <tr><td style={tdL}>Trámite</td><td style={tdV}>{r.materia||'—'}</td></tr>
@@ -13171,10 +13171,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               {rws.length>10&&buscador(k)}
               {groups.map(g=>{ const cubre=g.saldo!=null&&g.saldo>=g.tt; const adel=g.saldo!=null?Math.max(0,g.tt-g.saldo):0; return (
                 <div key={g.cid}>
-                  {/* subencabezado de cliente (etiqueta, no colapsable) + sus filas — igual que los subgrupos de "Falta" */}
-                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0 4px'}}>
-                    <span style={{flex:1,minWidth:0,fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9,fontWeight:600,color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'0 5px',marginLeft:5}}>{g.nEnt} RS</span>}{g.saldo!=null&&<span style={{fontSize:9.5,fontWeight:600,color:cubre?C.greenText:C.overdueText,marginLeft:5}}>· {cubre?'cubre':`adelanto ${fmt(adel)}`}</span>}</span>
-                    <span style={{fontSize:10.5,color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{g.rs.length} OT · {fmt(g.tt)}</span>
+                  {/* banda de cliente (navy, nombre en blanco): marca el corte entre un cliente y otro */}
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',background:C.accent,borderRadius:9,margin:'6px 0 8px'}}>
+                    <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:800,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',letterSpacing:-.1}}>{g.name}{g.nEnt>1&&<span style={{fontSize:9,fontWeight:700,color:'#CFE3F5',background:'rgba(255,255,255,.16)',borderRadius:20,padding:'1px 6px',marginLeft:6}}>{g.nEnt} RS</span>}{g.saldo!=null&&<span style={{fontSize:9.5,fontWeight:600,color:cubre?'#9FE1CB':'#F3C0C0',marginLeft:6}}>· {cubre?'cubre':`adelanto ${fmt(adel)}`}</span>}</span>
+                    <span style={{fontSize:10.5,color:'#AEC4CE',flexShrink:0,fontVariantNumeric:'tabular-nums',fontWeight:600}}>{g.rs.length} OT · {fmt(g.tt)}</span>
                   </div>
                   {g.rs.map(r=>notaCatRow(r,'listas'))}
                 </div>
