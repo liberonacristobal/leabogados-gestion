@@ -24301,8 +24301,8 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
           {aboFilter&&<span onClick={()=>setAboFilter(null)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>← Todos</span>}
         </div>
         <div style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop&&porAbogado.length>1?'1fr 1fr':'1fr',flexDirection:'column',gap:7}}>
-          {porAbogado.map(a=>{ const pct=a.total>0?Math.round(a.vencido/a.total*100):0
-            const pctCartera=deudaTotal>0?Math.round(a.total/deudaTotal*100):0
+          {(()=>{ const vencidoTotal=porAbogado.reduce((s,x)=>s+(x.vencido||0),0); return porAbogado.map(a=>{ const pct=a.total>0?Math.round(a.vencido/a.total*100):0
+            const pctVencOfi=vencidoTotal>0?Math.round(a.vencido/vencidoTotal*100):0   // participación en el VENCIDO de la oficina = "quién trabaja sin que le paguen" (suma 100%)
             const sev = pct>=60?{c:C.overdueText,bg:C.overdueBg}:pct>=30?{c:C.soonText,bg:C.soonBg}:pct>0?{c:C.muted,bg:C.bgSoft}:{c:C.greenText,bg:C.greenBg}
             const on=aboFilter===a.abo, isX=a.abo==='Sin asignar'
             return (
@@ -24310,13 +24310,13 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
               <span style={{width:26,height:26,borderRadius:8,background:sev.bg,color:sev.c,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,flexShrink:0}}>{isX?'?':(a.abo[0]||'·')}</span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:isX?C.muted:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.abo}</div>
-                <div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>{pctCartera}% de la cartera · {a.nVenc}/{a.n} vencidas</div>
+                <div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>{pctVencOfi}% del vencido de la oficina · {a.nVenc}/{a.n} vencidas</div>
               </div>
               <div style={{textAlign:'right',flexShrink:0,lineHeight:1.25}}>
                 <div style={{fontSize:13,fontWeight:800,color:sev.c,fontVariantNumeric:'tabular-nums'}}>{fM(a.vencido)} <span style={{fontSize:11,fontWeight:600}}>· {pct}% vencido</span></div>
                 <div style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>de {fM(a.total)} de su cartera</div>
               </div>
-            </div>) })}
+            </div>) }) })()}
         </div>
       </div>}
       {grupos.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
