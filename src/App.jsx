@@ -30724,10 +30724,21 @@ export default function App() {
     return billing.filter(b=> !b.deleted_at && b.status==='Vencido' && (b.billing_type||'')!=='reembolso' && saldoBill(b)>0).length
   },[billing])
 
-  if(loadingAuth) return <div style={{minHeight:'100vh',background:C.bg,display:'flex',alignItems:'center',justifyContent:'center'}}><Spin/></div>
+  // Loader de arranque: marca FirmDesk + spinner, fondo de la app (nunca negro), SIN texto de "sesión" (el usuario lo pidió).
+  // Mismo lienzo para "verificando sesión" y "resolviendo rol" → una sola sensación de carga, no una pantalla en blanco.
+  const bootScreen = (
+    <div style={{height:'100dvh',minHeight:'100svh',background:C.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:18}}>
+      <div style={{width:52,height:52,borderRadius:'22%',background:'#101418',display:'flex',flexDirection:'column',justifyContent:'center',gap:'14%',padding:14}}>
+        <span style={{display:'block',height:'11%',width:'100%',borderRadius:2,background:'#12A150'}}/>
+        <span style={{display:'block',height:'11%',width:'68%',borderRadius:2,background:'#5B6570'}}/>
+        <span style={{display:'block',height:'11%',width:'84%',borderRadius:2,background:'#5B6570'}}/>
+      </div>
+      <Spin/>
+    </div>)
+  if(loadingAuth) return bootScreen
   if(!session) return <LoginScreen loading={loadingAuth}/>
-  // Sesión OK pero el rol aún no resuelve (o falló y está reintentando): spinner, NUNCA el área de contenido en blanco.
-  if(!userRole) return <div style={{minHeight:'100vh',background:C.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}><Spin/><div style={{fontSize:13,color:C.muted}}>Preparando tu cuenta…</div></div>
+  // Sesión OK pero el rol aún no resuelve (o falló y está reintentando): mismo loader, NUNCA el área de contenido en blanco.
+  if(!userRole) return bootScreen
 
   return (
     <>
