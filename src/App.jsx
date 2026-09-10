@@ -7920,6 +7920,14 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
           </div>
         )})()}
         {loading&&<SiiDots/>}
+        {/* Ya cuadrado hoy pero sin cotejo en vivo esta sesión: evita la página vacía — muestra la foto del mes desde datos locales. */}
+        {!result&&!loading&&!error&&(()=>{ const emitidasMes=(billing||[]).filter(b=>b.invoice_no&&!b.deleted_at&&b.status!=='Anulada'&&!['reembolso','nota_credito'].includes(b.billing_type||'')&&String(b.issued_at||'').startsWith(mes)).length; const porEmitir=(billing||[]).filter(b=>b.status==='Programada'&&!b.deleted_at&&String(b.due||'').startsWith(mes)).length; return (
+          <div style={{padding:'44px 20px',textAlign:'center'}}>
+            <div style={{width:46,height:46,borderRadius:'50%',background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:11}}><CheckVerde/></div>
+            <div style={{fontSize:14.5,fontWeight:700,color:C.greenText}}>Cuadrado con el SII</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:5}}>{emitidasMes} factura{emitidasMes!==1?'s':''} de {mesLabel} cargada{emitidasMes!==1?'s':''}{porEmitir>0?` · ${porEmitir} por emitir`:''}</div>
+            <button onClick={sincronizar} style={{marginTop:14,height:34,padding:'0 16px',background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:9,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>Volver a cotejar</button>
+          </div>) })()}
         {result&&!loading&&<>
           {vacio
             ? <div style={{display:'flex',gap:12,padding:'16px 20px',alignItems:'center'}}>
