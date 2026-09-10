@@ -18668,7 +18668,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
 // Solicitar fondos al cliente (#7): correo auto-redactado pidiendo provisión de fondo por rendir. PARA = contactos del cliente,
 // CC = abogado responsable (automático). Reusa enviarComoUsuario + la cuenta de gastos + los learnings factura_to/cc y la tabla
 // contacts → los correos ingresados se APRENDEN y se sugieren en TODO correo futuro al cliente (facturas, rendiciones, etc.). Linkeado al cliente.
-function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial, responsable, user, onClose}){
+function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial, responsable, user, expenses=[], onClose}){
   const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
   const [client,setClient]=useState(clientProp||null)   // si viene sin cliente (tarjeta del hub) se elige con el buscador
   const [cq,setCq]=useState('')
@@ -18686,6 +18686,22 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
   const [msg,setMsg]=useState('')
   const [sending,setSending]=useState(false)
   const bodyTocado=useRef(false)
+  const [extras,setExtras]=useState([])   // adjuntos (presupuesto, cotización) que viajan con el correo
+  const [prevOpen,setPrevOpen]=useState(false)   // móvil: ver la vista previa (colapsable)
+  const MAX_ADJ=18*1024*1024
+  const fmtBytes=n=>n<1024*1024?Math.max(1,Math.round(n/1024))+' KB':(n/1024/1024).toFixed(1)+' MB'
+  const onExtras=fileList=>{ const files=Array.from(fileList||[]); files.forEach(f=>{ const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setExtras(p=>{ if(p.some(x=>x.name===f.name&&x.size===f.size)) return p; if(p.reduce((a,x)=>a+(x.size||0),0)+f.size>MAX_ADJ){ appAlert(`"${f.name}" no cabe: los adjuntos superan ~18 MB en total.`); return p } return [...p,{name:f.name,base64:b,mime:f.type||'application/octet-stream',size:f.size}] }) }; r.readAsDataURL(f) }) }
+  const removeExtra=(name,size)=>setExtras(p=>p.filter(x=>!(x.name===name&&x.size===size)))
+  // Historial de solicitudes: se carga de fund_requests y se cruza con los depósitos (fondos) del cliente.
+  const [tab,setTab]=useState('nueva')   // 'nueva' | 'historial'
+  const [reqs,setReqs]=useState(null)    // null=cargando
+  const cargarReqs=()=>{ supabase.from('fund_requests').select('*').order('enviada_at',{ascending:false}).limit(200).then(({data})=>setReqs(data||[]),()=>setReqs([])) }
+  useEffect(()=>{ if(tab==='historial'&&reqs===null) cargarReqs() },[tab])   // eslint-disable-line
+  const cnReq=id=>clients.find(c=>String(c.id)===String(id))?.name||'Cliente'
+  // Depósito recibido = fondo del cliente (expenses type='fondo') con fecha >= la solicitud (monto aproximado si viene). Nada sin rastro.
+  const depositoDe=(r)=>{ const fs=(expenses||[]).filter(e=>e.type==='fondo'&&!e.deleted_at&&String(e.client_id)===String(r.client_id)&&String(e.date||e.created_at||'').slice(0,10)>=String(r.enviada_at||'').slice(0,10)); if(!fs.length) return null; if(r.monto>0){ const m=fs.find(e=>Math.abs((e.amount||0)-r.monto)<=Math.max(1000,r.monto*0.02)); if(m) return m } return fs.sort((a,b)=>String(a.date||a.created_at).localeCompare(String(b.date||b.created_at)))[0] }
+  const reqEstado=(r)=>{ const dep=depositoDe(r); if(dep) return {k:'rec',dep,dias:0}; const dias=Math.floor((Date.now()-new Date(r.enviada_at).getTime())/86400000); return {k:dias>=7?'sin':'env',dias} }
+  const volverAPedir=(r)=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); if(c) pickClient(c); if(r.monto) setMonto(String(r.monto)); setTab('nueva') }
   const genMsg=()=>`Junto con saludar${proyecto?`, y en el marco del encargo ${proyecto}`:''}, solicitamos la provisión de un fondo por rendir${monto?` por ${fmtN(+monto||0)}`:''}, destinado a gastos notariales, inscripciones y otros trámites asociados, el cual será debidamente rendido.\n\nPuede transferir a la cuenta que se indica a continuación. Quedamos atentos a su confirmación.`
   useEffect(()=>{ if(!bodyTocado.current) setMsg(genMsg()) },[monto,proyecto])   // eslint-disable-line
   useEffect(()=>{ if(!client?.id) return; let alive=true
@@ -18706,7 +18722,8 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
   const enviar=async()=>{ if(!para.trim()){ appAlert('Falta el destinatario.'); return } setSending(true)
     try{
       const text=`${saludo}\n\n${msg}\n\nCuenta destinada a gastos: ${cta.banco} · ${cta.cuenta} · ${cta.razon} · ${cta.rut}\n\n${BRAND.dominio}`
-      const via=await enviarComoUsuario({to:para.trim(), cc:cc.join(','), subject:asunto, html:buildHtml(), text, soloUsuario:true})
+      const adjuntos=extras.map(a=>({base64:a.base64,name:a.name,mime:a.mime}))
+      const via=await enviarComoUsuario({to:para.trim(), cc:cc.join(','), subject:asunto, html:buildHtml(), text, attachments:adjuntos, soloUsuario:true})
       if(via==='reauth'){ appAlert('No se envió: tu acceso a Gmail expiró. Cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl.'); setSending(false); return }
       if(via===null){ setSending(false); return }
       if(client?.id){
@@ -18716,37 +18733,81 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
         // Los correos ingresados quedan como contactos del cliente → sugeridos en todo correo futuro (compartido con FacturaEmailModal).
         try{ const ya=new Set(contacts.map(c=>(c.email||'').toLowerCase())); const nuevos=[...new Set([para.trim(),...cc].map(e=>String(e).trim().toLowerCase()).filter(e=>e&&e.includes('@')&&!ya.has(e)))]; if(nuevos.length) await supabase.from('contacts').insert(nuevos.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))) }catch(_){}
       }
+      // Registro permanente de la solicitud (historial + cruce con el depósito): nada sin rastro.
+      try{ await supabase.from('fund_requests').insert({ client_id:client?.id||null, sale_id:sale?.id||null, monto:+monto||0, asunto, para:para.trim(), cc:cc.join(','), enviada_por:user?.name||null, n_adjuntos:extras.length }) }catch(_){}
       appAlert('Solicitud de fondos enviada al cliente'+(cc.length?' (con copia al abogado responsable).':'.')); onClose()
     }catch(e){ appAlert('Error al enviar: '+(e.message||e)) }
     setSending(false)
   }
   const fInp={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}
   const lbl={fontSize:10,color:C.muted,fontWeight:600,marginBottom:3}
-  return (<Modal fullscreen fsMaxWidth={640} title={<><span style={{color:C.accent}}>Solicitar fondos</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose}>
-    <div style={{display:'flex',flexDirection:'column',gap:11}}>
-      {!client && <div><div style={lbl}>ELIGE EL CLIENTE</div><input value={cq} onChange={e=>setCq(e.target.value)} placeholder='Buscar cliente…' style={fInp} autoFocus/>{cq.trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden',maxHeight:260,overflowY:'auto'}}>{(clients||[]).filter(c=>!c.is_internal&&c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(cq))).slice(0,8).map(c=><div key={c.id} onClick={()=>pickClient(c)} style={{padding:'9px 11px',fontSize:12.5,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}{c.abogado_responsable?<span style={{color:C.done,fontSize:10}}> · {c.abogado_responsable}</span>:''}</div>)}</div>}</div>}
-      {client && <>
-      <div><div style={lbl}>PARA</div><input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp}/>
-        {contacts.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:5}}>{contacts.map(c=>{ const isTo=(c.email||'').toLowerCase()===(para||'').toLowerCase(); return <button key={c.email} type='button' title={c.email} onClick={()=>{ if(isTo) return; if(!para.trim()) setPara(c.email); else addCc(c.email) }} style={{fontSize:10,border:`0.5px solid ${isTo?C.accent:C.border}`,background:isTo?C.accent:'#fff',color:isTo?'#fff':C.accent,borderRadius:20,padding:'2px 9px',cursor:isTo?'default':'pointer'}}>{isTo?'✓ ':''}{c.nombre||c.email}</button> })}</div>}
-      </div>
-      <div><div style={lbl}>CC {resp&&<span style={{fontWeight:400,textTransform:'none',color:C.done}}>· abogado responsable ({resp})</span>}</div>
-        <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>{cc.map(e=><span key={e} style={{fontSize:10,background:C.greenBg,color:C.greenText,borderRadius:20,padding:'2px 4px 2px 9px',display:'inline-flex',alignItems:'center'}}>{e}<button type='button' onClick={()=>removeCc(e)} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontWeight:700,padding:'0 4px'}}>×</button></span>)}
-          <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>addCc(ccInput)} placeholder='+ correo' style={{flex:1,minWidth:90,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/></div>
-      </div>
-      <div style={{display:'flex',gap:10}}>
-        <div style={{flex:1}}><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e=>setAsunto(e.target.value)} style={fInp}/></div>
-        <div style={{width:150}}><div style={lbl}>MONTO DEL FONDO</div><span style={{display:'flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,background:'#fff'}}><span style={{fontSize:13,color:C.muted,padding:'0 2px 0 10px'}}>$</span><input value={monto} onChange={e=>setMonto(e.target.value.replace(/[^\d]/g,''))} inputMode='numeric' placeholder='opcional' style={{border:'none',outline:'none',flex:1,padding:'9px 8px 9px 2px',fontSize:13,minWidth:0}}/></span></div>
-      </div>
-      <div><div style={lbl}>SALUDO</div><input value={saludo} onChange={e=>setSaludo(e.target.value)} style={fInp}/></div>
-      <div><div style={lbl}>MENSAJE</div><textarea value={msg} onChange={e=>{bodyTocado.current=true;setMsg(e.target.value)}} rows={7} style={{...fInp,minHeight:isDesktop?150:130,lineHeight:1.6,resize:'vertical',fontFamily:'inherit'}}/></div>
-      <div style={{background:C.soonBg,border:'1px solid #F0E4B8',borderRadius:9,padding:'9px 11px'}}>
-        <div style={{fontSize:9.5,color:C.soonText,fontWeight:700,marginBottom:6}}>Cuenta destinada a gastos (se recuerda)</div>
-        <div style={{display:'flex',gap:6,marginBottom:6}}><input value={cta.banco} onChange={e=>setCta(p=>({...p,banco:e.target.value}))} placeholder='Banco' style={{...fInp,padding:'6px 8px',fontSize:12,flex:1}}/><input value={cta.cuenta} onChange={e=>setCta(p=>({...p,cuenta:e.target.value}))} placeholder='N° cuenta' style={{...fInp,padding:'6px 8px',fontSize:12,flex:1}}/></div>
-        <div style={{display:'flex',gap:6}}><input value={cta.razon} onChange={e=>setCta(p=>({...p,razon:e.target.value}))} placeholder='Razón social' style={{...fInp,padding:'6px 8px',fontSize:12,flex:2}}/><input value={cta.rut} onChange={e=>setCta(p=>({...p,rut:e.target.value}))} placeholder='RUT' style={{...fInp,padding:'6px 8px',fontSize:12,flex:1}}/></div>
-      </div>
-      <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:2,padding:12,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?'Enviando…':'Enviar solicitud'}</button>
-      </>}
+  const dz={display:'block',border:`1.5px dashed ${C.border}`,borderRadius:9,padding:'10px',textAlign:'center',cursor:'pointer'}
+  const tabBtn=on=>({fontSize:12.5,fontWeight:700,color:on?C.accent:C.muted,background:'none',border:'none',borderBottom:`2px solid ${on?C.accent:'transparent'}`,padding:'7px 4px',marginBottom:-1,cursor:'pointer'})
+  return (<Modal fullscreen fsMaxWidth={(tab==='historial'||(client&&isDesktop))?980:640} title={<><span style={{color:C.accent}}>Solicitar fondos</span>{tab==='nueva'&&client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose}>
+    <div style={{display:'flex',gap:16,marginBottom:14,borderBottom:`1px solid ${C.border}`}}>
+      <button onClick={()=>setTab('nueva')} style={tabBtn(tab==='nueva')}>Nueva solicitud</button>
+      <button onClick={()=>setTab('historial')} style={tabBtn(tab==='historial')}>Historial{reqs?.length?` · ${reqs.length}`:''}</button>
     </div>
+    {tab==='historial' ? (()=>{
+      if(reqs===null) return <div style={{textAlign:'center',padding:30,color:C.muted,fontSize:13}}><Spin/> Cargando…</div>
+      if(!reqs.length) return <div style={{textAlign:'center',padding:30,color:C.muted,fontSize:13,background:C.bgSoft,borderRadius:11}}>Aún no has enviado solicitudes de fondos.</div>
+      const sinResp=reqs.filter(r=>reqEstado(r).k==='sin').length
+      const byCli={}; reqs.forEach(r=>{ (byCli[String(r.client_id)]=byCli[String(r.client_id)]||[]).push(r) })
+      const grupos=Object.entries(byCli).sort((a,b)=>String(b[1][0].enviada_at||'').localeCompare(String(a[1][0].enviada_at||'')))
+      return (<div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>{reqs.length} solicitud{reqs.length!==1?'es':''} · {reqs.filter(r=>reqEstado(r).k==='rec').length} con fondo recibido{sinResp>0&&<> · <b style={{color:C.overdueText}}>{sinResp} sin depósito +7 días</b></>}</div>
+        {grupos.map(([cid,rs])=>{ const tot=rs.reduce((a,r)=>a+(r.monto||0),0); const rec=rs.reduce((a,r)=>a+(reqEstado(r).k==='rec'?(depositoDe(r)?.amount||r.monto||0):0),0); return (
+          <div key={cid} style={{marginBottom:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',background:C.accent,borderRadius:9}}><span style={{flex:1,minWidth:0,fontSize:13,fontWeight:800,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cnReq(cid)}</span><span style={{fontSize:10.5,color:'#AEC4CE',fontWeight:600,flexShrink:0}}>pedido {fmt(tot)}{rec>0?` · recibido ${fmt(rec)}`:''}</span></div>
+            {rs.map(r=>{ const est=reqEstado(r); const dd=r.enviada_at?new Date(r.enviada_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; return (
+              <div key={r.id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 11px',borderBottom:`.5px solid #EEF1F3`}}>
+                <div style={{textAlign:'center',width:34,flexShrink:0}}><div style={{fontSize:16,fontWeight:700,color:C.text,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{dnum}</div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>{dmon}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.asunto||'Solicitud de fondos'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.enviada_por?`${r.enviada_por} · `:''}a {r.para||'—'}{r.monto?` · ${fmt(r.monto)}`:''}{r.n_adjuntos>0?` · ${r.n_adjuntos} adj.`:''}</div></div>
+                <span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',flexShrink:0,color:est.k==='rec'?C.greenText:est.k==='sin'?C.overdueText:C.soonText,background:est.k==='rec'?C.greenBg:est.k==='sin'?C.overdueBg:C.soonBg}}>{est.k==='rec'?`✓ Fondo recibido`:est.k==='sin'?`Sin depósito · ${est.dias} d`:'Enviada'}</span>
+                {est.k!=='rec'&&<button onClick={()=>volverAPedir(r)} style={{fontSize:10.5,fontWeight:700,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:7,padding:'4px 9px',cursor:'pointer',flexShrink:0}}>Volver a pedir</button>}
+              </div>
+            )})}
+          </div>
+        )})}
+      </div>)
+    })() : !client
+      ? <div><div style={lbl}>ELIGE EL CLIENTE</div><input value={cq} onChange={e=>setCq(e.target.value)} placeholder='Buscar cliente…' style={fInp} autoFocus/>{cq.trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden',maxHeight:260,overflowY:'auto'}}>{(clients||[]).filter(c=>!c.is_internal&&c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(cq))).slice(0,8).map(c=><div key={c.id} onClick={()=>pickClient(c)} style={{padding:'9px 11px',fontSize:12.5,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}{c.abogado_responsable?<span style={{color:C.done,fontSize:10}}> · {c.abogado_responsable}</span>:''}</div>)}</div>}</div>
+      : (()=>{
+        const formEl=(<div style={{display:'flex',flexDirection:'column',gap:11}}>
+          <div><div style={lbl}>PARA</div><input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp}/>
+            {contacts.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:5}}>{contacts.map(c=>{ const isTo=(c.email||'').toLowerCase()===(para||'').toLowerCase(); return <button key={c.email} type='button' title={c.email} onClick={()=>{ if(isTo) return; if(!para.trim()) setPara(c.email); else addCc(c.email) }} style={{fontSize:10,border:`0.5px solid ${isTo?C.accent:C.border}`,background:isTo?C.accent:'#fff',color:isTo?'#fff':C.accent,borderRadius:20,padding:'2px 9px',cursor:isTo?'default':'pointer'}}>{isTo?'✓ ':''}{c.nombre||c.email}</button> })}</div>}
+          </div>
+          <div><div style={lbl}>CC {resp&&<span style={{fontWeight:400,textTransform:'none',color:C.done}}>· abogado responsable ({resp})</span>}</div>
+            <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>{cc.map(e=><span key={e} style={{fontSize:10,background:C.greenBg,color:C.greenText,borderRadius:20,padding:'2px 4px 2px 9px',display:'inline-flex',alignItems:'center'}}>{e}<button type='button' onClick={()=>removeCc(e)} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontWeight:700,padding:'0 4px'}}>×</button></span>)}
+              <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>addCc(ccInput)} placeholder='+ correo' style={{flex:1,minWidth:90,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/></div>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <div style={{flex:1}}><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e=>setAsunto(e.target.value)} style={fInp}/></div>
+            <div style={{width:150}}><div style={lbl}>MONTO DEL FONDO</div><span style={{display:'flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,background:'#fff'}}><span style={{fontSize:13,color:C.muted,padding:'0 2px 0 10px'}}>$</span><input value={monto} onChange={e=>setMonto(e.target.value.replace(/[^\d]/g,''))} inputMode='numeric' placeholder='opcional' style={{border:'none',outline:'none',flex:1,padding:'9px 8px 9px 2px',fontSize:13,minWidth:0}}/></span></div>
+          </div>
+          <div><div style={lbl}>SALUDO</div><input value={saludo} onChange={e=>setSaludo(e.target.value)} style={fInp}/></div>
+          <div><div style={lbl}>MENSAJE</div><textarea value={msg} onChange={e=>{bodyTocado.current=true;setMsg(e.target.value)}} rows={7} style={{...fInp,minHeight:isDesktop?150:130,lineHeight:1.6,resize:'vertical',fontFamily:'inherit'}}/></div>
+          <div style={{background:C.soonBg,border:'1px solid #F0E4B8',borderRadius:9,padding:'9px 11px'}}>
+            <div style={{fontSize:9.5,color:C.soonText,fontWeight:700,marginBottom:6}}>Cuenta destinada a gastos (se recuerda)</div>
+            <div style={{display:'flex',gap:6,marginBottom:6}}><input value={cta.banco} onChange={e=>setCta(p=>({...p,banco:e.target.value}))} placeholder='Banco' style={{...fInp,padding:'6px 8px',fontSize:12,flex:1}}/><input value={cta.cuenta} onChange={e=>setCta(p=>({...p,cuenta:e.target.value}))} placeholder='N° cuenta' style={{...fInp,padding:'6px 8px',fontSize:12,flex:1}}/></div>
+            <div style={{display:'flex',gap:6}}><input value={cta.razon} onChange={e=>setCta(p=>({...p,razon:e.target.value}))} placeholder='Razón social' style={{...fInp,padding:'6px 8px',fontSize:12,flex:2}}/><input value={cta.rut} onChange={e=>setCta(p=>({...p,rut:e.target.value}))} placeholder='RUT' style={{...fInp,padding:'6px 8px',fontSize:12,flex:1}}/></div>
+          </div>
+          <div><div style={lbl}>ADJUNTOS <span style={{fontWeight:400,textTransform:'none',color:C.done}}>· opcional (presupuesto, cotización)</span></div>
+            <label style={dz}><input type='file' multiple onChange={e=>{onExtras(e.target.files);e.target.value=''}} style={{display:'none'}}/><span style={{fontSize:11.5,color:C.muted}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{verticalAlign:-3,marginRight:5}}><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>Toca para adjuntar</span></label>
+            {extras.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>{extras.map(a=><span key={a.name+a.size} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,color:C.accent,background:C.azulBg,borderRadius:8,padding:'5px 9px'}}>{a.name}<span style={{color:C.muted}}>· {fmtBytes(a.size)}</span><button type='button' onClick={()=>removeExtra(a.name,a.size)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontWeight:700,padding:0,lineHeight:1,fontSize:14}}>×</button></span>)}</div>}
+          </div>
+        </div>)
+        const previewEl=(<div>
+          <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,marginBottom:6}}>Vista previa del correo</div>
+          <div style={{fontSize:10.5,color:C.muted,marginBottom:7,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {para||'—'}{cc.length?<> · <b style={{color:C.text}}>CC:</b> {cc.join(', ')}</>:''}{extras.length?<> · {extras.length} adjunto{extras.length!==1?'s':''}</>:''}</div>
+          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff',maxHeight:isDesktop?'60vh':420,overflowY:'auto'}}><div style={{padding:12}} dangerouslySetInnerHTML={{__html:buildHtml()}}/></div>
+        </div>)
+        const sendBtn=(<button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:6,width:'100%',padding:12,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?'Enviando…':'Enviar solicitud'}</button>)
+        return isDesktop
+          ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:16,alignItems:'start'}}><div>{formEl}{sendBtn}</div><div>{previewEl}</div></div>
+          : <div style={{display:'flex',flexDirection:'column',gap:11}}>{formEl}<div style={{borderTop:`1px solid ${C.border}`,paddingTop:9}}><button type='button' onClick={()=>setPrevOpen(o=>!o)} style={{fontSize:12,fontWeight:700,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{prevOpen?'Ocultar vista previa ▴':'Ver cómo se verá el correo ▾'}</button>{prevOpen&&<div style={{marginTop:9}}>{previewEl}</div>}</div>{sendBtn}</div>
+      })()
+    }
   </Modal>)
 }
 function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSent, onClose}) {
@@ -31461,7 +31522,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal fullscreen fsMaxWidth={600} title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} title='Cargar un PDF y leerlo con IA para autocompletar' style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Lectura con IA</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
-        {modal?.type==='solicitarFondos'&&<SolicitarFondosModal client={modal.data?.client} clients={clients} sale={modal.data?.sale} montoInicial={modal.data?.monto} responsable={modal.data?.responsable} user={user} onClose={()=>setModal(null)}/>}
+        {modal?.type==='solicitarFondos'&&<SolicitarFondosModal client={modal.data?.client} clients={clients} sale={modal.data?.sale} montoInicial={modal.data?.monto} responsable={modal.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/>}
         {modal?.type==='primerasTareas'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Primeras tareas</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:400}}>{modal.data?.title||'Encargo'}</span></>} onClose={()=>setModal(null)} closeOnBackdrop={false} maxWidth={560}><PrimerasTareasModal sale={modal.data} clients={clients} clientEntities={clientEntities} user={user} onConfirm={handleCrearPrimerasTareas} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='conciliaHub'&&(()=>{ const mesA=new Date().toISOString().slice(0,7)
           // Contador de Duplicados = facturas (programadas emitidas + copias/folios repetidos) + anticipos a mano que calzan con el banco.
