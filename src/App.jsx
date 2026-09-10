@@ -13115,7 +13115,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         <div style={{padding:'8px 13px',fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,background:C.bgPanel,borderBottom:`.5px solid #EEF1F3`}}>Resultado de la carga</div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 13px',background:C.greenBg,borderBottom:`.5px solid #EEF1F3`}}>
           <div><div style={{fontSize:12,color:C.muted}}>Gastos que se cargan</div><div style={{fontSize:17,fontWeight:800,color:C.greenText,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{nCarga} · {fmt(totCarga)}</div></div>
-          <button disabled={guardando||!nCarga} onClick={async()=>{ if(!nCarga) return; const aCli=cliList.length; const msg=`Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` — ${aCli} cliente${aCli!==1?'s':''}`:''}${quedan?`, ${quedan} quedan por revisar`:''}. ¿Confirmas?`; if(await appConfirm(msg)) guardar(false,cargarRows) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:9,background:C.normal,color:'#fff',padding:'11px 20px',cursor:nCarga&&!guardando?'pointer':'default',opacity:nCarga&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
+          <button disabled={guardando||(!nCarga&&!cats.falta.length)} onClick={async()=>{ const nPend=cats.falta.length; if(!nCarga&&!nPend) return; const aCli=cliList.length; const msg=`${nCarga?`Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` a ${aCli} cliente${aCli!==1?'s':''}`:''}`:'No hay gastos con pagador'}.${nPend?` Los ${nPend} sin cliente quedan pendientes por identificar — te aviso si pasan 3 días sin resolver.`:''} ¿Confirmas?`; if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:9,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
         </div>
         <div style={{fontSize:10.5,color:C.muted,padding:'8px 13px 0',lineHeight:1.5}}>Tus asignaciones se guardan al Cargar; lo que la app aprende (RUT y clientes) queda para siempre.</div>
         <div style={{fontSize:10.5,color:C.done,padding:'2px 13px 8px',lineHeight:1.5,borderBottom:`.5px solid #EEF1F3`}}>Si algo sale mal, puedes deshacer toda la carga con un clic.</div>
@@ -13124,7 +13124,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           {cliList.map((c,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:11.5,padding:'5px 0',borderTop:`.5px dashed ${C.border}`}}><span style={{fontSize:9.5,fontWeight:700,color:C.done,width:16,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{i+1}</span><span style={{flex:1,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}<span style={{color:C.done}}> · {c.n} OT</span></span><span style={{color:C.accent,fontWeight:700,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(c.tot)}</span></div>)}
           {cliList.length>1&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,fontWeight:700,color:C.muted,padding:'6px 0 0',marginTop:2,borderTop:`1px solid ${C.border}`}}><span>Total a clientes</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(cliList.reduce((a,c)=>a+c.tot,0))}</span></div>}
         </div>}
-        <div onClick={()=>setCatOpen(new Set(['falta','confirma']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 13px',fontSize:12.5,borderTop:`.5px solid #EEF1F3`,cursor:'pointer'}}><span style={{color:C.muted}}>Quedan por revisar</span><span style={{display:'flex',alignItems:'center',gap:7}}><b style={{color:C.soonText}}>{quedan}</b><span style={{fontSize:10,color:C.done}}>{cats.falta.length} sin cliente{cats.confirma.length?` · ${cats.confirma.length} por confirmar`:''}</span><span style={{color:C.done}}>›</span></span></div>
+        <div onClick={()=>setCatOpen(new Set(['falta','confirma']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 13px',fontSize:12.5,borderTop:`.5px solid #EEF1F3`,cursor:'pointer'}}><span style={{color:C.muted}}>Quedan por revisar</span><span style={{display:'flex',alignItems:'center',gap:7}}><b style={{color:C.soonText}}>{quedan}</b><span style={{fontSize:10,color:C.done}}>{cats.falta.length?`${cats.falta.length} sin cliente → pendientes`:''}{cats.falta.length&&cats.confirma.length?' · ':''}{cats.confirma.length?`${cats.confirma.length} por confirmar`:''}</span><span style={{color:C.done}}>›</span></span></div>
       </div>
     )
   }
@@ -13230,12 +13230,15 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     try{
       // Notaría: arma el resumen de estado (cargadas + con error + ya en la app) ANTES de importar, para persistirlo con la carga (nada sin rastro).
       let notaResumen=null
+      // Pendientes por identificar = filas del target sin cliente ni miembro (se cargan como gasto sin cliente → van a la alarma de +3 días).
+      const pendRows = target.filter(r=>!r.client_id&&!r.personal_de&&!r.error)
+      const pagadores = target.filter(r=>(r.client_id||r.personal_de)&&!r.error)
       if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length; const noNs=(rows||[]).filter(r=>r.noNuestra)
-        notaResumen={ leidas:(rows||[]).length, error:errRows.length, omitidas, erroresDet:errRows.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), noNuestras:noNs.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||''})) } }
+        notaResumen={ leidas:(rows||[]).length, cargadas:pagadores.length, pendientes:pendRows.length, error:errRows.length, omitidas, erroresDet:errRows.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), noNuestras:noNs.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||''})) } }
       const res = await onBulkImport(target, {tipo, filename:fileName, notaResumen})
       // Notaría: resumen para cerrar el ciclo (lo que queda por pagar a la notaría y a cuántos clientes rendir).
-      if(notaria){ const conCli=target.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
-        setResultado({...res, nota:{porPagar,clientes}, leidas:notaResumen.leidas, errores:notaResumen.error, erroresDet:notaResumen.erroresDet, omitidas:notaResumen.omitidas}) }
+      if(notaria){ const conCli=pagadores.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
+        setResultado({...res, imported:pagadores.length, nota:{porPagar,clientes}, leidas:notaResumen.leidas, errores:notaResumen.error, erroresDet:notaResumen.erroresDet, omitidas:notaResumen.omitidas, pendientes:pendRows.length}) }
       else setResultado(res)
     }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
@@ -13368,9 +13371,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:resultado.omitidos>0?6:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.concil?`${resultado.actualizados} corregido(s) · ${resultado.imported} nuevo(s)`:notaria?`${resultado.imported} OT cargada${resultado.imported!==1?'s':''}${resultado.sinCliente>0?` · ${resultado.imported-resultado.sinCliente} a clientes`:''}`:`${resultado.imported} ${tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)`}</div>
       {notaria&&<div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center',marginBottom:resultado.errores>0?8:12}}>
         <span style={{fontSize:11.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'4px 11px'}}>{resultado.imported||0} cargadas</span>
+        {resultado.pendientes>0&&<span style={{fontSize:11.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'4px 11px'}}>{resultado.pendientes} pendientes por identificar</span>}
         {resultado.omitidas>0&&<span style={{fontSize:11.5,fontWeight:700,color:C.done,background:C.bgSoft,borderRadius:20,padding:'4px 11px'}}>{resultado.omitidas} ya en la app</span>}
         {resultado.errores>0&&<span style={{fontSize:11.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'4px 11px'}}>{resultado.errores} con error · no cargadas</span>}
       </div>}
+      {notaria&&resultado.pendientes>0&&<div style={{maxWidth:440,margin:'0 auto 12px',fontSize:11.5,color:C.soonText,background:C.soonBg,border:`1px solid #F0D88A`,borderRadius:9,padding:'8px 11px',lineHeight:1.5}}>Las <b>{resultado.pendientes} sin cliente</b> quedaron guardadas como <b>pendientes por identificar</b> (no se cargan a nadie). Aparecen en Notaría · «Sin cliente» y te avisaré si pasan 3 días sin resolver.</div>}
       {notaria&&resultado.errores>0&&<details style={{maxWidth:440,margin:'0 auto 12px',textAlign:'left'}}>
         <summary style={{fontSize:11.5,color:C.overdueText,fontWeight:700,cursor:'pointer',listStyle:'none',textAlign:'center'}}>Ver las {resultado.errores} con error ›</summary>
         <div style={{marginTop:6,maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8}}>
@@ -15559,6 +15564,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         return (
           <div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
             <div style={{textAlign:'right',fontSize:12,color:C.muted,marginBottom:12,marginTop:-2}}>{fmtShort(notaPendTotal)} pendiente</div>
+            {(()=>{ const sinCli=notaGroups.sin||[]; if(!sinCli.length) return null; const diasDe=e=>e.created_at?Math.floor((Date.now()-new Date(e.created_at).getTime())/86400000):0; const venc=sinCli.filter(e=>diasDe(e)>=3); const alerta=venc.length>0; return (
+              <div onClick={()=>setNotaTab('pend')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:alerta?C.overdueBg:C.soonBg,border:`1px solid ${alerta?'#F3C9C4':'#F0D88A'}`,borderRadius:12,padding:'11px 13px',marginBottom:12}}>
+                <span style={{width:30,height:30,borderRadius:9,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='clock' s={16} c={alerta?C.overdueText:C.soonText}/></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:alerta?C.overdueText:C.soonText}}>{sinCli.length} OT sin identificar{alerta?` · ${venc.length} llevan +3 días`:''}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Asígnales cliente para cargarlas a quien las paga{alerta?' — ya deberían estar resueltas':''}</div></div>
+                <span style={{color:C.done,fontSize:14}}>›</span>
+              </div>
+            )})()}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8}}>
               {cards.map(c=>(
                 <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
@@ -30109,7 +30121,7 @@ export default function App() {
     }
     if(payloads.length===0) return {imported:0,dupOmit,otDupOmit,sinCliente:0,sinFecha:0,batchId:null,filename}
     // Resumen permanente de la carga (nada sin rastro): cargadas + con error (no entraron) + ya en la app; guarda las filas con error.
-    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:payloads.length, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]).slice(0,80), noNuestras:(notaResumen.noNuestras||[]).slice(0,80), notaria:true } : null
+    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:notaResumen.cargadas??payloads.length, pendientes:notaResumen.pendientes||0, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]).slice(0,80), noNuestras:(notaResumen.noNuestras||[]).slice(0,80), notaria:true } : null
     const {error:bErr} = await supabase.from('bulk_imports').insert({id:batchId,created_by:user?.name||null,row_count:payloads.length,filename:filename||null,...(resumen?{resumen}:{})})
     if(bErr) throw bErr
     const inserted=[]
