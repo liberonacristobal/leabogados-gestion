@@ -20125,8 +20125,32 @@ async function liquidacionExcelB64({gastos, clients, titulo, sub}){
 const MAIL_OFICINA_CONFIRM = 'No se pudo enviar desde tu correo: tu acceso a Gmail expiró.\n\nPara que salga desde TU correo: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl, y reintenta el envío.\n\n¿Enviarlo ahora desde la cuenta de oficina en su lugar?\n(Cancelar = no enviar; reingresas y lo mandas tú)'
 // Envía desde el Gmail del usuario; si falla, PREGUNTA antes de usar la oficina. Devuelve 'usuario' | 'oficina' | null (cancelado, no se envió).
 // Para envíos masivos pasa modo pre-decidido en `batch` ('usuario'|'oficina'|'cancelar') para no preguntar por cada correo.
+// Convierte los logos del correo (header blanco + firma color) en imágenes INLINE (CID), para que se muestren
+// SIEMPRE aunque el cliente bloquee imágenes externas (Gmail lo hace por defecto). Devuelve el html con
+// src="cid:..." + la lista inlineImages [{cid,b64,mime}]. Si algo falla, deja ese logo con su URL remota.
+async function incrustarLogosCorreo(html, existing){
+  const imgs = Array.isArray(existing) ? [...existing] : []
+  if(!html || typeof fetch==='undefined') return { html, inlineImages: imgs.length?imgs:null }
+  const defs = [ [BRAND.logo.blanco,'lea-logo-blanco'], [BRAND.logo.color,'lea-logo-color'], [BRAND.logo.full,'lea-logo-full'] ]
+  let out = html
+  for(const [path,cid] of defs){
+    if(!path || !out.includes(path)) continue
+    const urls = [ `${location.origin}${path}`, `${BRAND.logoUrl}${path}` ]   // según cómo se armó el src
+    if(!urls.some(u=>out.includes(u))) continue
+    try{
+      const blob = await (await fetch(`${location.origin}${path}`)).blob()
+      const b64 = await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onloadend=()=>res(String(fr.result||'').split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(blob) })
+      if(!b64) continue
+      urls.forEach(u=>{ out = out.split(u).join(`cid:${cid}`) })
+      imgs.push({ cid, b64, mime: blob.type||'image/png' })
+    }catch(_){ /* sin conexión al asset: se queda con la URL remota */ }
+  }
+  return { html: out, inlineImages: imgs.length?imgs:null }
+}
 async function enviarComoUsuario(opts, batch){
-  const gmail = {to:opts.to, cc:opts.cc, subject:opts.subject, bodyText:opts.text, bodyHtml:opts.html, pdfBase64:opts.pdfBase64, pdfName:opts.pdfName, attachments:opts.attachments, inlineImages:opts.inlineImages}
+  // Gmail = logo INLINE (CID) para que se vea siempre; el preview en la app y el SMTP de oficina siguen con URL.
+  const emb = await incrustarLogosCorreo(opts.html, opts.inlineImages)
+  const gmail = {to:opts.to, cc:opts.cc, subject:opts.subject, bodyText:opts.text, bodyHtml:emb.html, pdfBase64:opts.pdfBase64, pdfName:opts.pdfName, attachments:opts.attachments, inlineImages:emb.inlineImages}
   const server = {to:opts.to, cc:opts.cc, subject:opts.subject, html:opts.html, text:opts.text, pdfBase64:opts.pdfBase64, pdfName:opts.pdfName, attachments:opts.attachments}
   if(batch==='oficina'){ await sendMailServer(server); return 'oficina' }
   if(batch==='cancelar'){ return null }
