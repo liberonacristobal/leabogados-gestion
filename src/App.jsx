@@ -27048,7 +27048,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     setBusy(null)
   }
   // Abono a caja chica ya ingresado a mano (mismo nombre, monto exacto, aún sin vincular a un movimiento).
-  const cajaChicaMatch = (persona, monto) => (pettyCash||[]).find(p => p.user_name===persona && (p.amount||0)>0 && Math.abs((p.amount||0)-monto)<=TOL && !String(p.notes||'').includes('mov:'))
+  const cajaChicaMatch = (persona, monto) => (pettyCash||[]).find(p => p.user_name===persona && (p.amount||0)>0 && Math.abs((p.amount||0)-monto)<=TOL && !p.movimiento_id && !String(p.notes||'').includes('mov:'))
   const _cierraCaja = (m,movAplic,estado)=>{ setMovs(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplic,categoria:'Caja chica'}:x)); setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''})) }
   // Caso común: la caja chica ya se ingresó a mano → VINCULAR (pide confirmar, no duplica). Solo crea si no hay match.
   const abonoCajaChica = async(m, persona) => {
@@ -27064,9 +27064,9 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
         setBusy(m.id)
         try{
           const nota=`${match.notes||''} · mov:${m.id}`.trim()
-          const { error:pe } = await supabase.from('petty_cash').update({ notes:nota }).eq('id',match.id); if(pe) throw pe
+          const { error:pe } = await supabase.from('petty_cash').update({ notes:nota, movimiento_id:m.id }).eq('id',match.id); if(pe) throw pe   // enlace real 1:1 (columna, no solo el texto)
           const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id); if(me) throw me
-          setPettyCash&&setPettyCash(p=>p.map(x=>x.id===match.id?{...x,notes:nota}:x)); _cierraCaja(m,movAplic,estado)
+          setPettyCash&&setPettyCash(p=>p.map(x=>x.id===match.id?{...x,notes:nota,movimiento_id:m.id}:x)); _cierraCaja(m,movAplic,estado)
         }catch(e){ appAlert('Error al vincular caja chica: '+e.message) }
         setBusy(null); return
       }
@@ -27075,7 +27075,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     setBusy(m.id)
     let pc=null
     try{
-      const ins = await supabase.from('petty_cash').insert({ user_name:persona, amount:monto, notes:`Abono caja chica (banco) · mov:${m.id}` }).select().single()
+      const ins = await supabase.from('petty_cash').insert({ user_name:persona, amount:monto, delivered_at:m.fecha||null, movimiento_id:m.id, notes:`Abono caja chica (banco) · mov:${m.id}` }).select().single()   // creada desde el banco: fecha de entrega = fecha de la transferencia + enlace real
       if(ins.error) throw ins.error; pc=ins.data
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id); if(me) throw me
       setPettyCash&&setPettyCash(p=>[pc,...p]); _cierraCaja(m,movAplic,estado)
@@ -27086,10 +27086,10 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     if(busy) return
     setBusy(m.id)
     try{
-      const pc=(pettyCash||[]).find(p=>String(p.notes||'').includes(`mov:${m.id}`))
+      const pc=(pettyCash||[]).find(p=>String(p.movimiento_id)===String(m.id)||String(p.notes||'').includes(`mov:${m.id}`))
       if(pc){
         if(/\(banco\)/.test(pc.notes||'')){ const {error:pe}=await supabase.from('petty_cash').delete().eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.filter(x=>x.id!==pc.id)) }   // lo creó la conciliación → borrar
-        else { const nota=String(pc.notes||'').replace(new RegExp(`\\s*·\\s*mov:${m.id}`),'').trim(); const {error:pe}=await supabase.from('petty_cash').update({notes:nota}).eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.map(x=>x.id===pc.id?{...x,notes:nota}:x)) }   // era manual → solo desvincular
+        else { const nota=String(pc.notes||'').replace(new RegExp(`\\s*·\\s*mov:${m.id}`),'').trim(); const {error:pe}=await supabase.from('petty_cash').update({notes:nota, movimiento_id:null}).eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.map(x=>x.id===pc.id?{...x,notes:nota,movimiento_id:null}:x)) }   // era manual → desvincular (limpia el enlace real)
       }
       const { error } = await supabase.from('cartola_movimientos').update({ estado:'pendiente', monto_conciliado:0, categoria:null }).eq('id',m.id)
       if(error) throw error
