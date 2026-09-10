@@ -23964,18 +23964,20 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
         {onClose&&<span onClick={onClose} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer'}}>← Volver</span>}
       </div>
       {/* Canon de la foto: un protagonista (deuda por cobrar) con su parte accionable (vencido) ANIDADA, no en paralelo. Ambas cifras clickeables (ordenan la lista). */}
-      <div style={{background:C.accent,borderRadius:12,padding:'14px 16px',marginBottom:14,color:'#fff'}}>
-        <div onClick={()=>setSortBy({col:'total',dir:'desc'})} style={{cursor:'pointer'}}>
-          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',color:C.onNavyLabel,fontWeight:700}}>Deuda por cobrar</div>
-          <div style={{fontSize:26,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.6px',fontVariantNumeric:'tabular-nums'}}>{f0(deudaTotal)}</div>
-          <div style={{fontSize:10.5,color:C.onNavyLabel}}>{grupos.length} cliente{grupos.length!==1?'s':''}{nAlDia>0?` · ${nAlDia} al día`:''}</div>
+      <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:14,color:'#fff'}}>
+        <div style={{display:'flex',gap:14}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Deuda vencida</div>
+            <div style={{fontSize:22,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(vencidoTotal)}</div>
+            <div style={{fontSize:10,opacity:.8}}>{gruposAccion.length} cliente{gruposAccion.length!==1?'s':''} · {nVencidas} factura{nVencidas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
+          </div>
+          <div style={{width:1,background:'rgba(255,255,255,.18)'}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Deuda total</div>
+            <div style={{fontSize:22,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(deudaTotal)}</div>
+            <div style={{fontSize:10,opacity:.8}}>{grupos.length} cliente{grupos.length!==1?'s':''}{nAlDia>0?` · ${nAlDia} al día`:''}</div>
+          </div>
         </div>
-        {vencidoTotal>0 && <div onClick={()=>setSortBy({col:'vencido',dir:'desc'})} style={{display:'flex',alignItems:'center',gap:9,marginTop:11,paddingTop:11,borderTop:'1px solid rgba(255,255,255,.16)',cursor:'pointer'}}>
-          <span style={{width:8,height:8,borderRadius:'50%',background:C.onNavyRed,flexShrink:0}}/>
-          <span style={{fontSize:11.5,color:'#fff',fontWeight:700}}>Vencido</span>
-          <span style={{fontSize:15,fontWeight:800,color:C.onNavyRed,fontVariantNumeric:'tabular-nums'}}>{f0(vencidoTotal)}</span>
-          <span style={{marginLeft:'auto',fontSize:10.5,color:C.onNavyLabel}}>{gruposAccion.length} cliente{gruposAccion.length!==1?'s':''} · {nVencidas} factura{nVencidas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</span>
-        </div>}
       </div>
       {grupos.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
       {grupos.length>0 && (()=>{ const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]; return (
