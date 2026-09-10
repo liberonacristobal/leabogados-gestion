@@ -9591,7 +9591,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <span style={{fontSize:15,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.3}}>Cargar XML del SII · {respaldoRes.length}</span>
                   </div>
                   <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
-                  <div style={{maxWidth:600,margin:'0 auto',padding:'14px 16px 34px'}}>
+                  <div style={{maxWidth:isDesktop?820:600,margin:'0 auto',padding:'14px 16px 34px'}}>
                   <div style={{fontSize:11,color:C.muted,marginBottom:10,background:C.bgSoft,borderRadius:8,padding:'7px 10px'}}><b style={{color:C.text}}>Lo cargado queda guardado aunque salgas.</b> Se registra en las fichas cuando tú quieras.</div>
                   <div style={{display:'flex',gap:8,marginBottom:10}}>
                     <div onClick={()=>goSec('prog')} style={{flex:1,background:C.bgWarm,borderRadius:9,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Programadas</div></div>
@@ -9661,25 +9661,42 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
-        {xmlHub&&<Modal title='Cargar del SII' maxWidth={400} onClose={()=>setXmlHub(false)}>
-          {(()=>{ const opt=(icon,ic,titulo,sub,onClick,badge)=>(
-            <button onClick={onClick} style={{display:'flex',alignItems:'center',gap:13,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderRadius:13,padding:14,cursor:'pointer',textAlign:'left',marginBottom:10}}>
+        {xmlHub&&(()=>{
+          // Doble formato: en móvil el Modal launcher de siempre; en escritorio una PÁGINA a todo el ancho (grid 2-col de opciones), reusando el patrón de la página SII electrónica.
+          const opt=(icon,ic,titulo,sub,onClick,badge)=>(
+            <button key={titulo} onClick={onClick} style={{display:'flex',alignItems:'center',gap:13,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderRadius:13,padding:14,cursor:'pointer',textAlign:'left'}}>
               <span style={{width:42,height:42,borderRadius:11,background:ic.bg,color:ic.fg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icon}</span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.accent}}>{titulo}</div><div style={{fontSize:11,color:C.muted}}>{sub}</div></div>
               {badge>0&&<span style={{fontSize:13,fontWeight:800,color:C.soonText,background:C.soonBg,borderRadius:20,minWidth:26,textAlign:'center',padding:'3px 9px',flexShrink:0}}>{badge}</span>}
               <span style={{color:C.done,fontSize:18,flexShrink:0,marginLeft:6}}>›</span>
             </button>)
-            const svg=d=><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
-            return <div>
-              {opt(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar XML','El respaldo .xml del SII (uno o varios)',()=>{ respaldoRef.current&&respaldoRef.current.click(); setTimeout(()=>setXmlHub(false),0) })}
-              {onImportExcel&&opt(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>),{bg:C.tealBg,fg:C.tealText},'Importar Excel','El detalle .xls / .xlsx del SII (o una planilla)',()=>{ setXmlHub(false); onImportExcel() })}
-              {onUpload&&opt(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></>),{bg:C.overdueBg,fg:C.overdueText},'Cargar PDF','El PDF de la factura',()=>{ setXmlHub(false); onUpload() })}
-              {onImport&&opt(svg(<><path d='M22 12.5V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></>),{bg:C.azulBg,fg:C.accent},'Desde Drive','Importar facturas de Drive',()=>{ setXmlHub(false); onImport() })}
-              {opt(svg(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>),{bg:C.soonBg,fg:C.soonText},'Cargadas sin registrar','Cargas pendientes de registrar — retómalas cuando quieras',()=>{ if(cargandoStage) return; cargarSinRegistrar() },sinRegN)}
-              {opt(svg(<><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></>),{bg:C.azulBg,fg:C.accent},'Historial de cargas','Tus cargas anteriores',()=>{setXmlHub(false);abrirHistCargas()})}
-              <div style={{fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:9,padding:'10px 12px',textAlign:'center',lineHeight:1.4}}><b style={{color:'#0B5A46'}}>Lo cargado queda guardado aunque salgas.</b> Lo registras cuando quieras.</div>
-            </div> })()}
-        </Modal>}
+          const svg=d=><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
+          const cards=[
+            opt(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar XML','El respaldo .xml del SII (uno o varios)',()=>{ respaldoRef.current&&respaldoRef.current.click(); setTimeout(()=>setXmlHub(false),0) }),
+            onImportExcel&&opt(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>),{bg:C.tealBg,fg:C.tealText},'Importar Excel','El detalle .xls / .xlsx del SII (o una planilla)',()=>{ setXmlHub(false); onImportExcel() }),
+            onUpload&&opt(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></>),{bg:C.overdueBg,fg:C.overdueText},'Cargar PDF','El PDF de la factura',()=>{ setXmlHub(false); onUpload() }),
+            onImport&&opt(svg(<><path d='M22 12.5V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></>),{bg:C.azulBg,fg:C.accent},'Desde Drive','Importar facturas de Drive',()=>{ setXmlHub(false); onImport() }),
+            opt(svg(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>),{bg:C.soonBg,fg:C.soonText},'Cargadas sin registrar','Cargas pendientes de registrar — retómalas cuando quieras',()=>{ if(cargandoStage) return; cargarSinRegistrar() },sinRegN),
+            opt(svg(<><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></>),{bg:C.azulBg,fg:C.accent},'Historial de cargas','Tus cargas anteriores',()=>{setXmlHub(false);abrirHistCargas()}),
+          ].filter(Boolean)
+          const banner=<div style={{fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:9,padding:'10px 12px',textAlign:'center',lineHeight:1.4}}><b style={{color:'#0B5A46'}}>Lo cargado queda guardado aunque salgas.</b> Lo registras cuando quieras.</div>
+          if(isDesktop) return createPortal(
+            <div style={{position:'fixed',inset:0,zIndex:1000,background:C.bg,overflowY:'auto'}}>
+              <div style={{maxWidth:900,margin:'0 auto',padding:'16px 16px 60px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+                  <button onClick={()=>setXmlHub(false)} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
+                  <span style={{fontSize:18,fontWeight:800,color:C.accent}}>Cargar del SII</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,alignItems:'start'}}>{cards}</div>
+                <div style={{marginTop:12}}>{banner}</div>
+              </div>
+            </div>, document.body)
+          return (
+            <Modal title='Cargar del SII' maxWidth={400} onClose={()=>setXmlHub(false)}>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>{cards}{banner}</div>
+            </Modal>
+          )
+        })()}
         {cargasHist!==null&&<Modal title='Cargas del SII' maxWidth={520} onClose={()=>setCargasHist(null)}>
           {cargasHist==='loading'
             ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Cargando…</div>
