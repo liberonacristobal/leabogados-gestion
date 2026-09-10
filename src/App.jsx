@@ -1513,10 +1513,11 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         const toAll = (cc||'').trim() ? dest+','+cc.trim() : dest
         const pdfName = `Liquidacion ${me} ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'
         let pdf=null; try{ pdf = await liquidacionPdfBase64({me, periodo, gastos:marcados, clients}) }catch(_){}
+        const emb = await incrustarLogosCorreo(html)   // logo INLINE (CID) para que se vea en Gmail (no imagen remota)
         // 1) desde el correo del propio usuario (Gmail API)
         try{
           const token = await driveToken()
-          if(token && pdf){ await sendGmailWithPdf(token, {to:toAll, subject:asunto, bodyText:texto, bodyHtml:html, pdfBase64:pdf, pdfName}); sent=true }
+          if(token && pdf){ await sendGmailWithPdf(token, {to:toAll, subject:asunto, bodyText:texto, bodyHtml:emb.html, inlineImages:emb.inlineImages, pdfBase64:pdf, pdfName}); sent=true }
         }catch(_){ sent=false }
         // 2) si el Gmail del usuario falló, se PREGUNTA antes de usar la oficina; si dice que no, cae al mailto (3) desde su correo
         if(!sent && pdf && await appConfirm(MAIL_OFICINA_CONFIRM)){ try{ await sendMailServer({to:toAll, subject:asunto, html, text:texto, pdfBase64:pdf, pdfName}); sent=true }catch(_){ sent=false } }
@@ -1624,7 +1625,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       {/* Confirmación post-liquidación (PASO 3) */}
       {toast&&(
         <div style={{position:'fixed',top:12,left:0,right:0,zIndex:400,display:'flex',justifyContent:'center',padding:'0 16px',pointerEvents:'none'}}>
-          <div style={{background:'#fff',border:'1px solid #1D9E75',borderLeft:'4px solid #1D9E75',borderRadius:10,padding:'12px 16px',maxWidth:520,width:'100%',boxShadow:'0 6px 24px rgba(0,0,0,.15)',pointerEvents:'auto',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+          <div style={{background:'#fff',border:'1px solid #1D9E75',borderRadius:10,padding:'12px 16px',maxWidth:520,width:'100%',boxShadow:'0 6px 24px rgba(0,0,0,.15)',pointerEvents:'auto',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:C.greenText}}>Liquidación registrada</div>
               <div style={{fontSize:12,color:C.text,marginTop:2}}>{toast.n} gasto{toast.n!==1?'s':''} liquidado{toast.n!==1?'s':''} por {fmtCLP(toast.total)}</div>
@@ -4143,8 +4144,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
           {kpiCard('Vendido '+yr, fmtUFk(kpis.vendidoYTD), C.accent, ()=>go('sales'))}
-          {kpiCard('Por cobrar', fmt(kpis.porCobrar), C.overdue, ()=>go('billing'))}
-          {kpiCard('Cobrado '+yr, fmt(kpis.cobradoYTD), C.normal, ()=>go('billing'))}
+          {kpiCard('Por cobrar', fmtShort(kpis.porCobrar), C.overdue, ()=>go('billing'))}
+          {kpiCard('Cobrado '+yr, fmtShort(kpis.cobradoYTD), C.normal, ()=>go('billing'))}
         </div>
       </div>
       <div style={{padding:'10px 20px 100px'}}>
@@ -19161,7 +19162,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const {fondos, gastos, saldo:saldoFondos} = fgCliente(expenses, client.id)
   // Embudo del cliente: cifras a UNA décima (resumen escaneable; el detalle de las filas va en fmt completo).
   const fmtM1 = n => { const a=Math.abs(n||0),s=n<0?'-':''; if(a>=1e6) return s+'$'+(a/1e6).toFixed(1).replace('.',',')+'M'; if(a>=1e3) return s+'$'+Math.round(a/1e3)+'K'; return s+'$'+Math.round(a).toLocaleString('es-CL') }
-  const ufM1 = n => n>0 ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}` : '—'
+  const ufM1 = n => n>0 ? `UF ${Math.round(n).toLocaleString('es-CL')}` : '—'   // KPI hero: UF redonda (sin ",0" colgando)
   const nVencFicha = porCobrar.filter(b=>esVencidaB(b)).length
 
   // Tareas agrupadas por proyecto
@@ -29273,7 +29274,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           </div>
                         )})()}
                         {combo&&comboFor===m.id&&(()=>{ const tot=combo.reduce((s,f)=>s+saldoFactura(f),0); return (
-                          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:6,borderLeft:`2px solid #99ABB4`,paddingLeft:8}}>
+                          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:6,paddingLeft:8}}>
                             {combo.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliar(m,f,'manual')}} title='Conciliar solo esta factura' style={{textAlign:'left',fontSize:11,color:C.text,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer'}}>Factura N°{folioN(f.invoice_no)||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,28)} · <b>{fmtM(saldoFactura(f))}</b></button>))}
                             <div style={{fontSize:10,color:C.muted}}>Suma: {fmtM(tot)} {tot===(m.monto||0)?'=':'≠'} abono {fmtM(m.monto)} · toca una para conciliar solo esa</div>
                             <div style={{display:'flex',gap:8,marginTop:2}}>
