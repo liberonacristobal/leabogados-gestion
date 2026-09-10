@@ -8625,12 +8625,21 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       }
       setRespaldoFiles(null); respaldoSummaryRef.current=null; batchIdRef.current=null; setRespaldoBatchId(null)
       setRespaldoRes(rows); setXmlHub(false)
-      // CERO TOQUE por RUT: auto-registra las programadas de calce CLARO — cliente resuelto por RUT + UNA sola cuota candidata (sin ambigüedad).
-      // Los dudosos (RUT sin resolver, o varias candidatas) quedan para confirmar a mano. Reversible desde la factura.
-      const claras = rows.filter(r=>r.estado==='programada' && r.clienteId && (r.progCand||[]).length<=1)
+      // CERO TOQUE por RUT: TODA factura del SII cuyo RUT resolvió el cliente DEBE quedar registrada — no es opcional
+      // (si no, un DTE emitido queda "nuevo"/invisible para Cobranza y los totales). Dos casos:
+      //  1) Programada de calce único → se consume (registrarProg).
+      //  2) Sin cuota que calce → se CREA la factura igual; si el cliente tiene UNA venta activa, se asocia por RUT (si no, factura sin venta, reclasificable a tercero después).
+      // Solo queda a mano lo REALMENTE ambiguo: RUT sin resolver, o programada con varias candidatas. Todo reversible desde la factura.
       let autoOk=0
-      for(const it of claras){ try{ await registrarProg(it); autoOk++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada',_auto:true}:r)) }catch(_){} }
-      if(autoOk){ onRefresh&&onRefresh(); appAlert(`${autoOk} factura${autoOk!==1?'s':''} registrada${autoOk!==1?'s':''} automáticamente por RUT (calce único). El resto queda para revisar.`) }
+      for(const it of rows.filter(r=>r.estado==='programada' && r.clienteId && (r.progCand||[]).length<=1)){
+        try{ await registrarProg(it); autoOk++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada',_auto:true}:r)) }catch(_){}
+      }
+      for(const it of rows.filter(r=>r.estado==='nueva' && r.clienteId)){
+        try{ const vac=(sales||[]).filter(s=>!s.deleted_at&&String(s.client_id)===String(it.clienteId)&&s.status==='Activo'); const saleId=vac.length===1?vac[0].id:null
+          const fac=await onIngresarSII({...it.row, doc:it.doc, ...(saleId?{sale_id:saleId}:{}), import_batch_id:(await ensureBatch())}, it.clienteId)
+          if(fac?.id){ marcarStaged(it.row?.folio,'registrada',fac.id); autoOk++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'creada',_auto:true}:r)) } }catch(_){}
+      }
+      if(autoOk){ onRefresh&&onRefresh(); appAlert(`${autoOk} factura${autoOk!==1?'s':''} registrada${autoOk!==1?'s':''} automáticamente por RUT. Solo queda a mano lo que el RUT no pudo cruzar.`) }
       contarSinRegistrar()
       if(!rows.length) appAlert('No hay cargas sin registrar. Todo lo cargado ya está registrado.')
     }catch(e){ appAlert('No se pudo abrir lo cargado sin registrar. ¿Corriste el SQL de sii_cargas_docs? '+(e.message||'')) }
