@@ -8642,14 +8642,15 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     setRespaldoBatchId(batchIdRef.current)
     return batchIdRef.current
   }
-  const crearDesdeXML = async(item, idx)=>{
+  const crearDesdeXML = async(item, idx, saleId=null)=>{
     if(!onIngresarSII||creandoFac) return
     const clienteId = crearCli[item.row.folio]||item.clienteId||null   // usa el cliente ya resuelto por RUT si no elegiste otro
     const cliNom = clienteId ? ((clients||[]).find(c=>String(c.id)===String(clienteId))?.name||'') : ''
-    if(!await appConfirm(`¿Crear la Factura N°${item.row.folio} (${item.row.receptor||'—'} · ${fmt(item.row.monto)})${cliNom?`\nCliente: ${cliNom}`:''} en el sistema?\nSe emitió en el SII pero no estaba acá.`)) return
+    const ventaNom = saleId ? ((sales||[]).find(s=>String(s.id)===String(saleId))?.title||'') : ''
+    if(!await appConfirm(`¿Crear la Factura N°${item.row.folio} (${item.row.receptor||'—'} · ${fmt(item.row.monto)})${cliNom?`\nCliente: ${cliNom}`:''}${ventaNom?`\nVenta: ${ventaNom}`:''} en el sistema?\nSe emitió en el SII pero no estaba acá.`)) return
     setCreandoFac(item.row.folio)
     try{
-      const fac = await onIngresarSII({...item.row, doc:item.doc, import_batch_id:(await ensureBatch())}, clienteId)   // crea el batch al registrar (no en el preview) + liga la factura
+      const fac = await onIngresarSII({...item.row, doc:item.doc, ...(saleId?{sale_id:saleId}:{}), import_batch_id:(await ensureBatch())}, clienteId)   // crea el batch al registrar (no en el preview) + liga la factura (a la venta existente si se pasó saleId)
       if(fac?.id){ try{ const token=await driveToken(); if(token){ const carpeta=await driveCarpetaFacturacion(token, item.row.fechaEmision||''); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const yaEnDrive=await driveBuscarEnCarpeta(token,carpeta,fname); let fileId,url2; if(yaEnDrive.length){fileId=yaEnDrive[0].id;url2=yaEnDrive[0].webViewLink||null}else{const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,carpeta,new File([u8],fname,{type:'application/pdf'}),fname); fileId=up.id;url2=up.webViewLink||null} await supabase.from('billing_attachments').delete().eq('billing_id',fac.id).eq('uploaded_by','Respaldo SII'); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:fileId,name:fname,url:url2,uploaded_by:'Respaldo SII'}) } }catch(_){} }
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
       setRespaldoRes(p=>(p||[]).map((r,i)=>i===idx?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))
@@ -9518,9 +9519,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>{titulo}</div><div style={{fontSize:10,color:C.muted}}>{sub}</div></div>
                         <span style={{color:C.done,fontSize:15,flexShrink:0}}>›</span>
                       </div>)
+                      // Ventas ACTIVAS del cliente reconocido POR RUT → ofrecer asociar (no duplicar). Si hay una sola, es la opción recomendada.
+                      const ventasCli=(sales||[]).filter(s=>!s.deleted_at&&String(s.client_id)===String(r.clienteId)&&s.status==='Activo')
                       return <div onClick={e=>e.stopPropagation()} style={{marginTop:9,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
                         <div style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,padding:'9px 12px 3px'}}>¿A qué corresponde esta factura?</div>
-                        {opt('◆','Una venta nuestra','Crea la venta · suma a las metas',()=>{setQueCorr(null);abrirCrearVenta(r)},{bg:C.azulBg,fg:C.accent})}
+                        {ventasCli.slice(0,4).map(s=>opt('◆',`Asociar a «${s.title||'Venta'}»`, ventasCli.length===1?'reconocida por RUT · no duplica la venta':'venta activa del cliente',()=>{setQueCorr(null);crearDesdeXML(r,i,s.id)},{bg:C.greenBg,fg:C.greenText}))}
+                        {opt('◆',ventasCli.length?'Otra venta nueva':'Una venta nuestra','Crea la venta · suma a las metas',()=>{setQueCorr(null);abrirCrearVenta(r)},{bg:C.azulBg,fg:C.accent})}
                         {opt('▤','Solo la factura','Sin venta asociada',()=>{setQueCorr(null);crearDesdeXML(r,i)},{bg:C.bgSoft,fg:C.muted})}
                         {opt('⇆','El ingreso es de un externo','La cobramos nosotros, pero la plata es de otro',()=>{setQueCorr(null);abrirTercero(r)},{bg:C.tealBg,fg:C.tealText})}
                       </div> })()}
