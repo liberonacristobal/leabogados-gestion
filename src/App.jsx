@@ -9968,7 +9968,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const dias=b=>b.due?Math.round((new Date(hoy)-new Date(b.due))/86400000):0
           const porCobrar=pend.reduce((a,b)=>a+saldoBill(b),0)
           const inResYear=(dateStr)=> !fYear || String(dateStr||'').slice(0,4)===fYear
-          const cobAll=bb.filter(b=>cobradoBill(b)>0&&inResYear(b.status==='Pagado'?(b.paid_at||b.issued_at):b.issued_at)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única)
+          const cobAll=bb.filter(b=>cobradoBill(b)>0&&!['nota_credito','subarriendo'].includes(b.billing_type||'')&&inResYear(b.status==='Pagado'?(b.paid_at||b.issued_at):b.issued_at)).reduce((a,b)=>a+cobradoBill(b),0)   // honorarios cobrado (parciales incl.); excluye reembolso (bb), NC y subarriendo — no son ingreso
           const progAll=bb.filter(b=>b.status==='Programada'&&inResYear(b.due)).reduce((a,b)=>a+(b.amount||0),0)
           // "Por facturar" = todo sin folio (no pagado/anulado). Se separa: real (falta emitir) vs ya facturadas (duplicado, su factura emitida ya existe → vincular).
           const porFactBucket=bb.filter(b=>!b.deleted_at&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&inResYear(b.due))
@@ -10293,8 +10293,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 const cOpen=openClients.has(c.id)
                 const porCobrar=visible.filter(esCobrar).reduce((a,b)=>a+saldoBill(b),0)
                 const porFacturar=visible.filter(esFacturar).reduce((a,b)=>a+montoDe(b),0)
-                const headMonto=porCobrar>0?porCobrar:porFacturar
-                const headColor=porCobrar>0?C.accent:C.muted
+                const cobrado=visible.filter(b=>['Pagado','Anticipada'].includes(b.status)).reduce((a,b)=>a+cobradoBill(b),0)   // filtro "Pagadas": muestra lo cobrado, no saldo $0
+                const headMonto=porCobrar>0?porCobrar:(porFacturar>0?porFacturar:cobrado)
+                const headColor=porCobrar>0?C.accent:(porFacturar>0?C.muted:C.greenText)
                 const rsMap={}; visible.forEach(b=>{ const e=efEntity(b); const id=e?String(e.id):'sin'; if(!rsMap[id]) rsMap[id]={id,name:e?rsDisplay(e.name):(b.receptor_name?rsDisplay(b.receptor_name):'Sin razón social')} })
                 const rsArr=Object.values(rsMap)
                 const rsActiva=rsSel[c.id]||'all'
@@ -12686,7 +12687,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        else if(notaria && /sin efecto/i.test(notas)) error='Sin efecto (anulada)'
+        else if(notaria && /sin efecto/i.test(notas) && (monto<=1)) error='Sin efecto (anulada)'   // anulada REAL = costo $1. Las "sin efecto" con cobro real (>$1) son anuladas por la notaría pero el trabajo se hizo → facturables a su cliente (no error).
         return {id:idx, rut, nombre:nombreEff, fecha, monto, concepto:conceptoEff, subconcepto, ot, notas, proyecto, requirente, materia, categoria, abogadoResp, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='rut_exact'?100:method==='name_exact'?95:90):undefined), error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
@@ -24710,7 +24711,13 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       {(()=>{
         const _c={}; horas.forEach(h=>{ if(h.user_name===me&&h.client_id) _c[h.client_id]=(_c[h.client_id]||0)+1 })
         const _t={}; (tasks||[]).forEach(t=>{ if(t.client_id&&(isAssignee(t,me)||t.who===me)) _t[t.client_id]=(_t[t.client_id]||0)+1 })
-        const frec=clients.filter(c=>!c.is_internal&&c.status!=='Terminado').map(c=>({c,s:(_c[c.id]||0)*3+(_t[c.id]||0)+(_normTxt(c.abogado_responsable||'')===_normTxt(me)?2:0)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,4).map(x=>x.c)
+        const _sc=clients.filter(c=>!c.is_internal&&c.status!=='Terminado').map(c=>({c,s:(_c[c.id]||0)*3+(_t[c.id]||0)+(_normTxt(c.abogado_responsable||'')===_normTxt(me)?2:0)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).map(x=>x.c)
+        // Orden de sugerencia pedido: 1° clientes con VENTAS POR HORA, 2° ASESORÍA PERMANENTE, 3° frecuentes (por horas/tareas/responsable).
+        const _vph=[...new Set((ventasPorHora||[]).map(x=>String(x.s?.client_id)).filter(Boolean))]
+        const _perm=[...new Set((permanentes||[]).map(x=>String(x.cid)).filter(Boolean))]
+        const _prio=[...new Set([..._vph,..._perm])]
+        const _byId=id=>clients.find(c=>String(c.id)===String(id)&&!c.is_internal&&c.status!=='Terminado')
+        const frec=[...(_prio.map(_byId).filter(Boolean)), ..._sc.filter(c=>!_prio.includes(String(c.id)))].slice(0,6)
         const projsFor=cid=>(sales||[]).filter(s=>String(s.client_id)===String(cid)&&s.title&&!['Rechazada','Borrador'].includes(s.status))
         const projs=qC?projsFor(qC):[]
         const selCli=qC?clients.find(c=>String(c.id)===String(qC)):null
