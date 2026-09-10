@@ -1957,6 +1957,17 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                     <button key={m} onClick={()=>setNewMonto(String(m))} style={fpill(on)}>{fmtCLP(m)}</button>
                   )})}
                 </div>
+                {/* Saldo resultante EN VIVO: evita cargar un monto mal calculado (antes un ajuste manual dejó el saldo en $0 en vez de +$250.000 por restar mal). */}
+                {newMonto&&parseInt(newMonto)>0&&(()=>{ const cajaEdit=editCajaId?(pettyCash||[]).find(x=>x.id===editCajaId):null; const saldoRes=saldoCaja-(cajaEdit?.amount||0)+(parseInt(newMonto)||0); return (
+                  <div style={{marginTop:9,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,background:saldoRes<0?C.overdueBg:C.greenBg,borderRadius:9,padding:'8px 11px'}}>
+                    <span style={{fontSize:11.5,color:saldoRes<0?C.overdueText:C.greenText,fontWeight:600}}>Con esto el saldo de la caja quedará en</span>
+                    <span style={{fontSize:14,fontWeight:800,color:saldoRes<0?C.overdue:C.normal,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(saldoRes)}</span>
+                  </div>
+                )})()}
+                {/* Atajo: dejar el saldo en un número exacto sin hacer la resta a mano. */}
+                {(()=>{ const cajaEdit=editCajaId?(pettyCash||[]).find(x=>x.id===editCajaId):null; const base=saldoCaja-(cajaEdit?.amount||0); return (
+                  <div style={{marginTop:7,fontSize:11,color:C.muted}}>¿Quieres dejar el saldo en un número exacto? <button onClick={async()=>{ const v=await appPrompt('¿En cuánto quieres dejar el saldo de la caja? (CLP)', String(Math.max(0,saldoCaja))); if(v!=null){ const s=parseInt(String(v).replace(/\D/g,'')); if(!isNaN(s)) setNewMonto(String(Math.max(0,s-base))) } }} style={{background:'none',border:'none',color:C.azulInfo,fontWeight:700,cursor:'pointer',padding:0,fontSize:11}}>ajustar a un saldo…</button></div>
+                )})()}
               </div>
 
               <div style={{marginBottom:16}}>
