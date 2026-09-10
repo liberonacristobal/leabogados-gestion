@@ -12689,11 +12689,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         }
         const ents=cli?entsOf(cli.id):[]
         let error=null
-        if(notaria && (!ot || !/\d/.test(ot)) && !cli && !(nombreEff&&nombreEff.trim())) return null   // solo se ignora la fila SIN OT y SIN cliente/compareciente (la fila "Total" del export). Un trabajo NUEVO sin OT pero con compareciente SÍ se carga (#2).
-        if(monto==null) error='Monto vacío o inválido'
+        // REGLA: un gasto de notaría SIEMPRE trae su OT (la OT es la fuente de la verdad). Si una fila tiene compareciente/monto pero NO se
+        // extrajo OT, es un ERROR (no se carga sin OT: se marca para que revises la columna). Solo la fila "Total" (sin OT NI compareciente) se ignora.
+        if(notaria && (!ot || !/\d/.test(ot))){ if(!cli && !(nombreEff&&nombreEff.trim())) return null; error='OT no detectada · revisa la columna OT del archivo' }
+        if(!error){ if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        else if(notaria && /sin efecto/i.test(notas) && (monto<=1)) error='Sin efecto (anulada)'   // anulada REAL = costo $1. Las "sin efecto" con cobro real (>$1) son anuladas por la notaría pero el trabajo se hizo → facturables a su cliente (no error).
+        else if(notaria && /sin efecto/i.test(notas) && (monto<=1)) error='Sin efecto (anulada)' }   // anulada REAL = costo $1. Las "sin efecto" con cobro real (>$1) son anuladas por la notaría pero el trabajo se hizo → facturables a su cliente (no error).
         return {id:idx, rut, nombre:nombreEff, fecha, monto, concepto:conceptoEff, subconcepto, ot, notas, proyecto, requirente, materia, categoria, abogadoResp, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='rut_exact'?100:method==='name_exact'?95:90):undefined), error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
