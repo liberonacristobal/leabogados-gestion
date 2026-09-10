@@ -9171,7 +9171,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   }
   // Envía el recordatorio ya previsualizado (desde el modal de vista previa).
   const enviarRecordatorio = async({b, to, r})=>{
-    try{ const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; setRecPreview(null); appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
+    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; setRecPreview(null); appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Recordatorio de cobro por TANDA (desde el Cierre de mes): una sola compuerta que lista los destinatarios;
@@ -9182,7 +9182,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     if(!dest.length){ appAlert('Ninguna de estas facturas tiene correo del cliente en la ficha para recordar.'); return }
     if(!await appConfirm(`¿Enviar ${dest.length} recordatorio${dest.length!==1?'s':''} de cobro desde tu cuenta?\n\n${dest.slice(0,8).map(d=>`· ${d.name} — ${d.r.folio}`).join('\n')}${dest.length>8?`\n… y ${dest.length-8} más`:''}${sinCorreo>0?`\n\n(${sinCorreo} sin correo se omiten.)`:''}`)) return
     let ok=0
-    for(const d of dest){ try{ const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(d.b.id),at) }catch(_){}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(_){} }
+    for(const d of dest){ try{ const ad=await facturaPdfAdjunto(d.b); const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text, attachments:ad?[ad]:null}); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(d.b.id),at) }catch(_){}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(_){} }
     appAlert(`${ok} de ${dest.length} recordatorio${dest.length!==1?'s':''} enviado${ok!==1?'s':''}.`)
   }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
@@ -17885,8 +17885,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     const to=(client.email||'').trim()
     if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
     const r=recordatorioCobro(b)
-    if(!await appConfirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
-    try{ const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
+    if(!await appConfirm(`¿Enviar recordatorio de cobro a ${to} por ${r.folio} (${r.monto})? Se adjunta el PDF de la factura.`)) return
+    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   const borde = b => estadoCobro(b).color
@@ -18266,22 +18266,47 @@ async function acusePagoEmail(to, {folio, monto, fecha}){
 // Plantilla genérica auto-rellenada + destinatarios de la ficha (contactos) + CC aprendido. PDF a mano por ahora (con la emisión DTE saldrá solo).
 // Contenido del recordatorio de cobro — FUENTE ÚNICA (Facturación y ficha). Secuencia escalada (dunning) por días de mora:
 // amable (al día) → firme (vencida ≤30d) → final (vencida >30d, anuncia gestiones de cobranza).
-function recordatorioCobro(b){
-  const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
-  const monto='$'+(saldoBill(b)||b.amount||0).toLocaleString('es-CL')
-  const _v=venceBill(b); const venc=_v?fmtFechaDMY(_v):''   // vencimiento por la fuente única (emisión+30), no el due crudo
-  const dl=daysLeftB(b); const diasVenc=(dl!=null&&dl<0)?-dl:0
-  const nivel=diasVenc<=0?'amable':diasVenc<=30?'firme':'final'
-  const concept=b.concept?` (${b.concept})`:''
-  const apertura=nivel==='amable'
-    ? `Les recordamos amablemente el pago pendiente de ${folio}${concept} por ${monto}${venc?`, con vencimiento ${venc}`:''}.`
-    : nivel==='firme'
-    ? `Nos dirigimos a ustedes para hacer presente que ${folio}${concept}, por ${monto}, se encuentra pendiente y vencida${venc?` (venció el ${venc})`:''}. Les agradeceremos regularizar el pago a la brevedad.`
-    : `Reiteramos que ${folio}${concept}, por ${monto}, se encuentra vencida hace ${diasVenc} días${venc?` (venció el ${venc})`:''} y aún sin pago. Les solicitamos regularizarla con urgencia; de lo contrario, nos veremos en la necesidad de iniciar las gestiones de cobranza que correspondan.`
+// Correo de recordatorio de cobro (FUENTE ÚNICA). `bs` = una factura o un arreglo (correo COMBINADO por cliente).
+// Tono ÚNICO y amable (sin rojos), firmado por Administración con logo + pie de firma (mismo cascarón que las facturas).
+// `nivel` se conserva solo para la cadencia y los mensajes del llamador; el TEXTO no escala nunca.
+function recordatorioCobro(bs){
+  const arr=(Array.isArray(bs)?bs:[bs]).filter(Boolean)
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-  const text=`Estimados,\n\n${apertura}\n\n${DATOS_PAGO_TXT}\n\nSi ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.\n\nSaludos cordiales,\n${BRAND.nombre}`
-  const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${DATOS_PAGO_HTML}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>${BRAND.nombre}</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio}</div></div>`
-  return { nivel, folio, monto, subject:`${nivel==='amable'?'Recordatorio de cobro':'Pago vencido'} — ${folio}`, html, text }
+  const fm=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
+  const items=arr.map(b=>{ const _v=venceBill(b); const dl=daysLeftB(b)
+    return { b, folio:folioN(b.invoice_no)||b.invoice_no||'—', monto:saldoBill(b)||b.amount||0, venc:_v?fmtFechaDMY(_v):'', diasVenc:(dl!=null&&dl<0)?-dl:0, concept:(b.concept||'').trim() } })
+  const multi=items.length>1
+  const total=items.reduce((a,x)=>a+x.monto,0)
+  const maxDias=items.reduce((m,x)=>Math.max(m,x.diasVenc),0)
+  const nivel=maxDias<=0?'amable':maxDias<=30?'firme':'final'   // solo cadencia/mensajes; el texto es amable siempre
+  const fol=items.map(x=>`N° ${x.folio}`)
+  const folStr=fol.length<=1?(fol[0]||'la factura'):fol.slice(0,-1).join(', ')+' y '+fol[fol.length-1]
+  // Apertura (Opción C, aprobada): amable, "hacer seguimiento", "puede tratarse de un olvido".
+  const aperturaHtml=multi
+    ? `Junto con saludar, nos permitimos hacer seguimiento a los pagos pendientes de las <b>Facturas ${esc(folStr)}</b>, por un total de <b>${fm(total)}</b>, que a la fecha se encuentran pendientes. Entendemos que puede tratarse de un olvido.`
+    : `Junto con saludar, nos permitimos hacer seguimiento al pago de la <b>Factura ${esc(fol[0])}</b> por <b>${fm(total)}</b>, que a la fecha se encuentra pendiente. Entendemos que puede tratarse de un olvido.`
+  const aperturaTxt=multi
+    ? `Junto con saludar, nos permitimos hacer seguimiento a los pagos pendientes de las Facturas ${folStr}, por un total de ${fm(total)}, que a la fecha se encuentran pendientes. Entendemos que puede tratarse de un olvido.`
+    : `Junto con saludar, nos permitimos hacer seguimiento al pago de la Factura ${fol[0]} por ${fm(total)}, que a la fecha se encuentra pendiente. Entendemos que puede tratarse de un olvido.`
+  // Tabla de facturas SOLO en combinado (folio · concepto · vence · monto). Sin rojos: paleta navy/gris.
+  const tabla=multi
+    ? `<table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0"><thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50;color:#537281;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px">Factura</th><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50;color:#537281;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px">Vence</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #003C50;color:#537281;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px">Monto</th></tr></thead><tbody>${items.map(x=>`<tr><td style="padding:7px 8px;border-bottom:1px solid #E4E8EB">N° ${esc(x.folio)}${x.concept?`<div style="font-size:11px;color:#537281">${esc(x.concept)}</div>`:''}</td><td style="padding:7px 8px;border-bottom:1px solid #E4E8EB;color:#537281">${x.venc||'—'}</td><td style="padding:7px 8px;border-bottom:1px solid #E4E8EB;text-align:right;font-variant-numeric:tabular-nums">${fm(x.monto)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="2" style="padding:8px;font-weight:700">Total pendiente</td><td style="padding:8px;text-align:right;font-weight:700;color:#003C50;font-variant-numeric:tabular-nums">${fm(total)}</td></tr></tfoot></table>`
+    : ''
+  const cierre='Les agradeceremos gestionar su pago.'
+  const despedida='Si ya realizaron el pago, por favor omitan este mensaje. Quedamos atentos a su confirmación. Muchas gracias.'
+  const inner=`<div style="font-size:14px;color:#1a1a1a;margin:0 0 14px">Estimados,</div><div style="font-size:14px;color:#3D3D3D;line-height:1.65;margin:0 0 14px">${aperturaHtml}</div>${tabla}<div style="font-size:14px;color:#3D3D3D;line-height:1.65;margin:0 0 4px">${cierre}</div>${DATOS_PAGO_HTML}<div style="font-size:13px;color:#537281;line-height:1.6;margin:14px 0 0">${despedida}</div><div style="font-size:14px;color:#3D3D3D;margin:16px 0 0">Saludos cordiales,</div>`
+  const html=facturaCorreoShell(inner, {nombre:'Administración', cargo:BRAND.nombre}, 'es')
+  const tablaTxt=multi ? '\n\n'+items.map(x=>`• N° ${x.folio}${x.concept?` (${x.concept})`:''} · vence ${x.venc||'—'} · ${fm(x.monto)}`).join('\n')+`\nTotal pendiente: ${fm(total)}` : ''
+  const text=`Estimados,\n\n${aperturaTxt}${tablaTxt}\n\n${cierre}\n\n${DATOS_PAGO_TXT}\n\n${despedida}\n\nSaludos cordiales,\nAdministración`
+  const subject=multi?`Recordatorio de pago — Facturas ${folStr}`:`Recordatorio de pago — Factura ${fol[0]}`
+  return { nivel, folio:multi?`Facturas ${folStr}`:`Factura ${fol[0]}`, monto:fm(total), subject, html, text, items }
+}
+// Re-adjunta el PDF con timbre de una factura: se regenera al vuelo desde su DTE (por regla, toda factura tiene XML).
+async function facturaPdfAdjunto(b){
+  try{ const doc=splitSetDTE(b?.dte_xml||'')[0]; if(!doc) return null
+    const r=await facturaDtePdfBase64(doc)
+    return { base64:r.base64, name:`Factura ${folioN(b.invoice_no)||r.folio||''}.pdf`, mime:'application/pdf' }
+  }catch(_){ return null }
 }
 // Cadencia de cobranza (fuente única): ¿toca recordatorio para esta factura hoy? Escala por mora,
 // respeta un piso de días entre envíos para no spamear. lastISO = fecha del último recordatorio (factura_recordado).
@@ -24221,6 +24246,76 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
   )
 }
 
+// Vista previa + flexibilidad del recordatorio de cobro: elegir qué facturas incluir (vencidas marcadas por
+// defecto; al día seleccionables), un solo correo con todas o uno por factura, y re-adjuntar el PDF. El preview
+// del correo está SIEMPRE visible (desplegable). El envío efectivo lo hace el padre vía onEnviar (fuente única).
+function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, onClose, onEnviar }){
+  const isDesktop = useIsDesktop()
+  const cand = grupo.items   // {b, acc, venc, diasVenc} — vencidas y al día
+  const [sel,setSel] = useState(()=> new Set(cand.filter(x=>x.venc).map(x=>String(x.b.id))))
+  const [combinado,setCombinado] = useState(true)   // un solo correo con todas (default) vs uno por factura
+  const [adjuntar,setAdjuntar] = useState(true)      // re-adjuntar el PDF con timbre de cada factura
+  const [verPreview,setVerPreview] = useState(true)  // preview desplegable, abierto por defecto
+  const f0 = n=>'$'+Math.round(n||0).toLocaleString('es-CL')
+  const toggle = id=>setSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
+  const selItems = cand.filter(x=>sel.has(String(x.b.id)))
+  const selBs = selItems.map(x=>x.b)
+  const totalSel = selItems.reduce((a,x)=>a+(saldoBill(x.b)||x.b.amount||0),0)
+  const preview = selBs.length ? recordatorioCobro(combinado?selBs:selBs[0]) : null
+  const nCorreos = combinado?1:selBs.length
+  const okDisabled = sending || !selBs.length
+  const chk = on=>({width:18,height:18,borderRadius:5,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'})
+  const Row = ({label,desc,on,onToggle,disabled})=> (
+    <div onClick={disabled?undefined:onToggle} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 0',cursor:disabled?'default':'pointer',opacity:disabled?.5:1}}>
+      <span style={{width:34,height:19,borderRadius:20,background:on?C.greenText:C.done,position:'relative',flexShrink:0,transition:'background .15s'}}><span style={{position:'absolute',top:2,left:on?17:2,width:15,height:15,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></span>
+      <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{label}</div>{desc&&<div style={{fontSize:10.5,color:C.muted,lineHeight:1.4}}>{desc}</div>}</div>
+    </div>
+  )
+  return (
+    <Modal fullscreenOnMobile fsMaxWidth={isDesktop?900:640} title='Recordatorio de cobro' onClose={onClose}>
+      <div style={{fontSize:11.5,color:C.muted,marginBottom:12,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {to} · <b style={{color:C.text}}>{nombre}</b> · firma <b style={{color:C.text}}>Administración</b></div>
+      <div style={{display:isDesktop?'grid':'block',gridTemplateColumns:isDesktop?'1fr 1fr':undefined,gap:18}}>
+        {/* Columna 1: opciones */}
+        <div>
+          <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,marginBottom:6}}>Facturas a incluir</div>
+          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+            {cand.map(x=>{ const id=String(x.b.id); const on=sel.has(id); const s=saldoBill(x.b)||x.b.amount||0
+              return (
+              <div key={id} onClick={()=>toggle(id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:on?'#fff':C.bgSoft}}>
+                <span style={chk(on)}>{on&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4"><path d="M5 13l4 4L19 7"/></svg>}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color:on?C.accent:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(x.b.invoice_no)||'—'}{x.b.concept?<span style={{fontWeight:500,color:C.muted}}> · {x.b.concept}</span>:''}</div>
+                  <div style={{fontSize:10.5,color:x.venc?C.soonText:C.done}}>{x.venc?`Vencida hace ${x.diasVenc} día${x.diasVenc!==1?'s':''}`:'Al día'}</div>
+                </div>
+                <div style={{fontSize:12.5,fontWeight:700,color:on?C.text:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{f0(s)}</div>
+              </div>) })}
+          </div>
+          {selBs.length>1 && <Row label='Un solo correo con todas' desc={combinado?'Se lista cada factura y el total en un mismo correo.':'Se envía un correo por cada factura seleccionada.'} on={combinado} onToggle={()=>setCombinado(v=>!v)}/>}
+          <Row label='Adjuntar la(s) factura(s) en PDF' desc='Se re-genera el PDF con timbre de cada factura incluida.' on={adjuntar} onToggle={()=>setAdjuntar(v=>!v)}/>
+        </div>
+        {/* Columna 2: preview siempre visible, desplegable */}
+        <div>
+          <div onClick={()=>setVerPreview(v=>!v)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',marginBottom:6}}>
+            <span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Vista previa del correo</span>
+            <span style={{fontSize:11,fontWeight:700,color:C.azulInfo}}>{verPreview?'Ocultar ▲':'Ver ▼'}</span>
+          </div>
+          {verPreview && (preview
+            ? <>
+                <div style={{fontSize:10.5,color:C.muted,marginBottom:7,lineHeight:1.5}}><b style={{color:C.text}}>Asunto:</b> {preview.subject}{!combinado&&selBs.length>1?<span style={{color:C.soonText}}> · +{selBs.length-1} correo{selBs.length-1!==1?'s':''} más</span>:''}</div>
+                <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff',maxHeight:isDesktop?'52vh':'40vh',overflowY:'auto'}}><div style={{padding:12}} dangerouslySetInnerHTML={{__html:preview.html}}/></div>
+              </>
+            : <div style={{fontSize:12,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:16,textAlign:'center'}}>Selecciona al menos una factura para ver el correo.</div>)}
+        </div>
+      </div>
+      <div style={{display:'flex',gap:9,justifyContent:'flex-end',alignItems:'center',marginTop:16,borderTop:`1px solid ${C.border}`,paddingTop:13}}>
+        <div style={{marginRight:'auto',fontSize:11,color:C.muted}}>{selBs.length} factura{selBs.length!==1?'s':''} · {f0(totalSel)} · {nCorreos} correo{nCorreos!==1?'s':''}</div>
+        <button onClick={onClose} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 16px',fontSize:13,color:C.muted,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={okDisabled} onClick={()=>onEnviar({bs:selBs, combinado:selBs.length>1?combinado:true, adjuntar})} style={{background:okDisabled?C.done:C.accent,border:'none',borderRadius:9,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:okDisabled?'default':'pointer',display:'inline-flex',alignItems:'center',gap:7}}>{sending?<Spin/>:null}{sending?'Enviando…':`Enviar ${nCorreos>1?`(${nCorreos})`:'recordatorio'}`}</button>
+      </div>
+    </Modal>
+  )
+}
+
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
@@ -24292,28 +24387,53 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   const _cobr=b=>!b.deleted_at && b.invoice_no && !['reembolso','nota_credito'].includes(b.billing_type) && ['Pendiente','Vencido'].includes(b.status) && saldoBill(b)>0
   const nAlDia=(billing||[]).filter(b=>_cobr(b)&&!esVencidaB(b)).length   // "al día" por la FUENTE ÚNICA (emisión+30), no el due crudo → consistente con la lista
 
-  async function enviarCliente(g, skipConfirm){
-    const cl=clients.find(c=>String(c.id)===String(g.cid))
-    const toRem=g.items.filter(x=>x.acc)   // solo VENCIDAS que toca recordar (no las al día)
-    if(!toRem.length){ appAlert('Este cliente no tiene facturas vencidas por recordar.'); return }
-    // Correo del cliente igual que los envíos de facturas: ficha → correo aprendido (factura_to) → contactos. (Antes solo miraba la ficha y decía "sin correo" aunque sí lo tuviera.)
-    let to=(cl?.email||'').trim()
+  // Correo del cliente igual que los envíos de facturas: ficha → correo aprendido (factura_to) → contactos.
+  const resolverTo = async(g)=>{ const cl=clients.find(c=>String(c.id)===String(g.cid)); let to=(cl?.email||'').trim()
     if(!to){ try{ const {data}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(g.cid)).maybeSingle(); if(data?.value) to=String(data.value).split(/[,;]/)[0].trim() }catch(_){} }
     if(!to){ try{ const {data}=await supabase.from('contacts').select('email,principal').eq('client_id',g.cid); const c=(data||[]).find(x=>x.principal&&x.email)||(data||[]).find(x=>x.email); if(c) to=String(c.email).trim() }catch(_){} }
-    if(!to||!/@/.test(to)){ appAlert('Ese cliente no tiene correo (ni en la ficha, ni aprendido de facturas, ni en contactos). Agrégalo para recordar.'); return }
-    // Vista previa antes de enviar (a menos que sea envío en lote skipConfirm).
-    if(!skipConfirm && !DEMO){ const r0=recordatorioCobro(toRem[0].b); setRecPrev({g, to, nombre:cn(g.cid), n:toRem.length, vencido:g.vencido, html:r0.html, subject:r0.subject}); return }
-    if(!skipConfirm && DEMO && !(await appConfirm(`¿Enviar el recordatorio a ${cn(g.cid)} — ${toRem.length} factura${toRem.length!==1?'s':''} vencida${toRem.length!==1?'s':''}, ${f0(g.vencido)} — a ${to}? Se envía como tú.`))) return
+    if(!to && DEMO) to='cliente@ejemplo.cl'   // demo: correo de ejemplo para poder ver la vista previa (no se envía)
+    return (to&&/@/.test(to))?to:null }
+  // Abre la vista previa (RecordatorioModal): el usuario elige facturas, un correo o varios, y adjuntar el PDF.
+  async function enviarCliente(g){
+    const toRem=g.items.filter(x=>x.acc)   // vencidas que toca recordar hoy
+    if(!toRem.length){ appAlert('Este cliente no tiene facturas vencidas por recordar.'); return }
+    const to=await resolverTo(g)
+    if(!to){ appAlert('Ese cliente no tiene correo (ni en la ficha, ni aprendido de facturas, ni en contactos). Agrégalo para recordar.'); return }
+    setRecPrev({g, to, nombre:cn(g.cid)})
+  }
+  // Envío efectivo (fuente única): combinado (un correo con todas) o separado (uno por factura), con/ sin PDF adjunto.
+  async function doEnviar({g, to, bs, combinado, adjuntar}){
+    if(!bs.length) return
     setSending(g.cid)
-    if(DEMO){ await new Promise(r=>setTimeout(r,400)); const now=new Date().toISOString(); setRecMap(m=>{ const n={...m}; toRem.forEach(({b})=>n[String(b.id)]=now); return n }); setOkCount(o=>({...o,[g.cid]:(o[g.cid]||0)+1})); setSending(null); appAlert('En demo no se envía; se registró la cadencia.'); return }
-    let ok=0
-    for(const {b} of toRem){ try{ const r=recordatorioCobro(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at) }catch(_){}; setRecMap(m=>({...m,[String(b.id)]:at})) } }catch(_){} }
-    if(ok){ const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); try{ await setLearningKV('cobranza_ok',String(g.cid),String(nc)) }catch(_){}; appAlert(`Recordatorio enviado a ${cn(g.cid)} (${ok} factura${ok!==1?'s':''}).`) }
+    const sentIds=[]
+    try{
+      if(DEMO){ await new Promise(r=>setTimeout(r,400)); bs.forEach(b=>sentIds.push(String(b.id))) }
+      else{
+        const build=async(x)=>{ const r=recordatorioCobro(x); let attachments=null
+          if(adjuntar){ const list=Array.isArray(x)?x:[x]; const a=[]; for(const b of list){ const ad=await facturaPdfAdjunto(b); if(ad) a.push(ad) } if(a.length) attachments=a }
+          return {r, attachments} }
+        if(combinado){ const {r,attachments}=await build(bs); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments}); if(via) bs.forEach(b=>sentIds.push(String(b.id))) }
+        else{ for(const b of bs){ const {r,attachments}=await build(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments}); if(via) sentIds.push(String(b.id)) } }
+      }
+    }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
+    if(sentIds.length){ const at=new Date().toISOString()
+      if(!DEMO) for(const id of sentIds){ try{ await setLearningKV('factura_recordado',id,at) }catch(_){} }
+      setRecMap(m=>{ const n={...m}; sentIds.forEach(id=>n[id]=at); return n })
+      const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); if(!DEMO){ try{ await setLearningKV('cobranza_ok',String(g.cid),String(nc)) }catch(_){} }
+      setRecPrev(null)
+      appAlert(`Recordatorio enviado a ${cn(g.cid)}${DEMO?' (demo)':''} — ${combinado?'1 correo':sentIds.length+' correos'}, ${sentIds.length} factura${sentIds.length!==1?'s':''}.`)
+    }
     setSending(null)
   }
+  // Envío automático (lote / "Enviar a todos"): sin vista previa, combinado con PDF, solo las vencidas que tocan hoy.
+  async function enviarClienteAuto(g){
+    const bs=g.items.filter(x=>x.acc).map(x=>x.b); if(!bs.length) return
+    const to=await resolverTo(g); if(!to) return
+    await doEnviar({g, to, bs, combinado:true, adjuntar:true})
+  }
   async function enviarTodos(){
-    if(!(await appConfirm(`¿Enviar el recordatorio que corresponde a ${gruposAccion.length} cliente${gruposAccion.length!==1?'s':''} (${nVencidas} factura${nVencidas!==1?'s':''} vencida${nVencidas!==1?'s':''}, ${f0(vencidoTotal)})?`))) return
-    for(const g of gruposAccion){ if(!autoCli[g.cid]) await enviarCliente(g, true) }
+    if(!(await appConfirm(`¿Enviar el recordatorio que corresponde a ${gruposAccion.length} cliente${gruposAccion.length!==1?'s':''} (${nVencidas} factura${nVencidas!==1?'s':''} vencida${nVencidas!==1?'s':''}, ${f0(vencidoTotal)})?\n\nSe envía un correo por cliente (con todas sus facturas y el PDF adjunto).`))) return
+    for(const g of gruposAccion){ if(!autoCli[g.cid]) await enviarClienteAuto(g) }
   }
   async function setAutoGlob(v){   // interruptor global (config cobranza_auto) que habilita el envío automático del edge fn
     const prev=autoGlobal; setAutoGlobal(v); if(DEMO) return
@@ -24365,15 +24485,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
 
   return (
     <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?1040:560,margin:'0 auto'}}>
-      {recPrev&&<Modal fullscreenOnMobile fsMaxWidth={640} title='Recordatorio de cobro' onClose={()=>setRecPrev(null)}>
-        <div style={{fontSize:11.5,color:C.muted,marginBottom:9,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {recPrev.to} · <b style={{color:C.text}}>{recPrev.nombre}</b> · {recPrev.n} factura{recPrev.n!==1?'s':''} vencida{recPrev.n!==1?'s':''} · {f0(recPrev.vencido)}</div>
-        {recPrev.n>1&&<div style={{fontSize:10.5,color:C.soonText,background:C.soonBg,border:'1px solid #F0E4B8',borderRadius:8,padding:'7px 10px',marginBottom:9}}>Se envía un correo por cada factura vencida — esta es la vista previa de la primera.</div>}
-        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff',maxHeight:'52vh',overflowY:'auto',marginBottom:13}}><div style={{padding:12}} dangerouslySetInnerHTML={{__html:recPrev.html}}/></div>
-        <div style={{display:'flex',gap:9,justifyContent:'flex-end'}}>
-          <button onClick={()=>setRecPrev(null)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 16px',fontSize:13,color:C.muted,cursor:'pointer'}}>Cancelar</button>
-          <button onClick={()=>{ const g=recPrev.g; setRecPrev(null); enviarCliente(g,true) }} style={{background:C.accent,border:'none',borderRadius:9,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:'pointer'}}>Enviar {recPrev.n>1?`los ${recPrev.n}`:'recordatorio'}</button>
-        </div>
-      </Modal>}
+      {recPrev&&<RecordatorioModal grupo={recPrev.g} to={recPrev.to} nombre={recPrev.nombre} clientEntities={clientEntities} sending={sending===recPrev.g.cid} onClose={()=>setRecPrev(null)} onEnviar={({bs,combinado,adjuntar})=>doEnviar({g:recPrev.g, to:recPrev.to, bs, combinado, adjuntar})}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Cobranza</div>
         {onClose&&<span onClick={onClose} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer'}}>← Volver</span>}
