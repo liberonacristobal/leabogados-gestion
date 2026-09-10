@@ -6247,7 +6247,9 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
   const [pos,setPos] = useState(null)
   const matches = useMemo(()=>{ if(!q.trim()) return []; const t=q.toLowerCase(); return (clients||[]).filter(c=>_normTxt(c.name).includes(_normTxt(q))||(c.rut||'').toLowerCase().includes(t)).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,8) },[q,clients])
   // El dropdown va por PORTAL con position:fixed para no quedar recortado por contenedores con overflow (listas/modales).
-  useEffect(()=>{ if(open&&wrapRef.current){ const r=wrapRef.current.getBoundingClientRect(); setPos({top:r.bottom+4,left:r.left,width:Math.max(r.width,200)}) } },[open,q,matches.length])
+  // body{zoom:1.18} (desktop) escala también al elemento fixed dentro de body → dividir las coords por el zoom aplicado
+  // para que caiga JUSTO debajo del input (antes aparecía desplazado "en otro lugar").
+  useEffect(()=>{ if(open&&wrapRef.current){ const r=wrapRef.current.getBoundingClientRect(); const z=parseFloat(getComputedStyle(document.body).zoom)||1; setPos({top:(r.bottom+4)/z,left:r.left/z,width:Math.max(r.width,200)/z}) } },[open,q,matches.length])
   if(!open) return (
     <button onClick={()=>setOpen(true)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
   )
@@ -12804,6 +12806,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Gasto INTERNO de la oficina (lo asume la firma): lo asigna al cliente interno.
   const marcarOficinaRow = (rowId) => { const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi){ appAlert('No encuentro el cliente interno de la oficina.'); return } setRows(p=>p.map(r=> r.id===rowId ? {...r, client_id:ofi.id, clientName:ofi.name, personal_de:null, entity_id:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:'oficina'} : r)); setPersPick(null); flash('Marcado como gasto de la oficina · se guarda al Cargar') }
   const quitarInternoRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, personal_de:null, client_id:(r.client_id&&esOficinaCli(r.client_id))?null:r.client_id, clientName:(r.client_id&&esOficinaCli(r.client_id))?null:r.clientName, matchMethod:undefined} : r)); flash('Devuelto a «Falta el cliente»') }
+  // Marca una OT como "no es nuestra / cargada por error desde la notaría": sale del total y NO se importa (va a Anuladas). Reversible.
+  const marcarNoNuestra = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, anuladaManual:true, client_id:null, clientName:null, entity_id:null, personal_de:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:undefined} : r)); setPersPick(null); flash('Marcada como no reconocida por la oficina · no se carga') }
+  const reactivarRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, anuladaManual:false} : r)); flash('Reactivada · vuelve a la revisión') }
   const [driveBusy,setDriveBusy] = useState(null)   // fila con búsqueda en Drive en curso
   const [driveMsg,setDriveMsg] = useState({})       // resultado de la búsqueda en Drive por fila
   const [driveAll,setDriveAll] = useState(null)     // {done,total} de "Buscar todas en Drive"
@@ -12829,7 +12834,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   useEffect(()=>{ if(!notaria || !rows || driveAutoRef.current || driveAll) return
     if(catOpen.has('falta')){ const nSin=(rows||[]).filter(r=>!r.client_id&&!r.personal_de&&!r.isInternal&&!r.error&&!r.suggestion).length; if(nSin>=2 && nSin<=40){ driveAutoRef.current=true; buscarTodasDrive() } } },[catOpen,rows,notaria])
   const toggleGrpNota = cid => setGrpOpen(p=>{ const n=new Set(p); n.has(cid)?n.delete(cid):n.add(cid); return n })
-  const notaSelOn = r => !!r.client_id && !r.error && !deselNota.has(r.id)   // seleccionada para importar
+  // Seleccionada para importar = tiene destino (cliente, oficina o miembro), no es error, no está ya en la app, no fue desmarcada.
+  // Una sola definición: de aquí salen el contador del banner, el botón "Importar seleccionadas" y el recibo → todo cuadra.
+  const notaSelOn = r => (!!r.client_id || !!r.personal_de) && !r.error && !dupInfo[r.id]?.otState && !deselNota.has(r.id)
   const toggleSelNota = id => setDeselNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   const toggleRowNota = id => setRowOpenNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
@@ -12949,6 +12956,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const c={falta:[],confirma:[],listas:[],personal:[],oficina:[],yacargadas:[],sinefecto:[],errores:[]}
     flt.forEach(r=>{
       if(r.error){ if(/sin efecto/i.test(r.error)) c.sinefecto.push(r); else c.errores.push(r); return }   // 'Sin efecto (anulada)' aparte de errores reales (ej. 'OT no detectada')
+      if(r.anuladaManual){ c.sinefecto.push(r); return }   // marcada a mano "no es nuestra / cargada por error" → Anuladas (no se carga, reversible)
       if(dupInfo[r.id]?.otState){ c.yacargadas.push(r); return }
       if(r.personal_de){ c.personal.push(r); return }   // gasto personal de un miembro (Cristóbal/Erasmo/…)
       if(r.isInternal || (r.client_id && esOficinaCli(r.client_id))){ c.oficina.push(r); return }
@@ -12984,7 +12992,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const oldY = fy && !isNaN(fy) && fy < new Date().getFullYear()   // OT de un año anterior
     const info = kind==='yacargadas'||kind==='sinefecto'||kind==='errores'   // solo lectura
     const st = dupInfo[r.id]?.otState
-    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
+    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='sinefecto' ? (r.anuladaManual?'No la reconoce la oficina — no se carga':'Anulada — no se carga') : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
     const prot = (kind==='listas'||kind==='personal') ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
     const sub  = kind==='listas' ? (cn||'') : kind==='personal' ? (noName?'':nomDe(r)) : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
@@ -13009,7 +13017,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           {!noName&&<button disabled={driveBusy===r.id} onClick={async()=>{ setDriveBusy(r.id); setDriveMsg(m=>({...m,[r.id]:''})); const res=await driveFindClient(r.nombre||r.requirente); setDriveBusy(null); if(res&&res.client){ driveSuggest(r.id,res) } else setDriveMsg(m=>({...m,[r.id]:res&&res.error?('Error: '+res.error):'No lo encontré en Drive'})) }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.azulInfo,border:'none',borderRadius:8,padding:'7px 13px',cursor:driveBusy===r.id?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>{driveBusy===r.id?'Buscando en Drive…':'Buscar en Drive'}</button>}
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{open?'Cerrar':'Asignar a mano'}</button>
           {onCreateOccasional&&!noName&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Nuevo</button>}
-          <button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:600,color:C.grisText,background:C.bgWarm,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Gasto interno ▾</button>
+          <button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:700,color:C.tealText,background:C.tealBg,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Gasto interno {persPick===r.id?'▴':'▾'}</button>
+          <button onClick={()=>marcarNoNuestra(r.id)} title='La notaría la envió pero no es un trabajo de la oficina (cargada por error) → no se carga' style={{fontSize:11.5,fontWeight:600,color:C.overdueText,background:'none',border:'none',cursor:'pointer',padding:'6px 4px'}}>No es nuestra</button>
           {driveMsg[r.id]&&<span style={{fontSize:10.5,fontWeight:600,color:driveMsg[r.id].startsWith('✓')?C.greenText:C.muted}}>{driveMsg[r.id]}</span>}
         </div>}
         {kind==='personal'&&<div style={{display:'flex',gap:10,marginTop:6}}><button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Cambiar</button><button onClick={()=>quitarInternoRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.overdueText,background:'none',border:'none',cursor:'pointer',padding:0}}>Ya no es interno</button></div>}
@@ -13018,8 +13027,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           <span style={{fontSize:11.5,color:C.text}}>{r.suggestFrom==='drive'?<>Encontrado en Drive: <b>{r.suggestion.name}</b>{r.driveFolder?<span style={{color:C.muted}}> · carpeta "{r.driveFolder}"</span>:''}</>:<>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}% de certeza</span>:''}</>}</span>
           <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Confirmar sola</button>
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Otro</button>
+          <button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:700,color:C.tealText,background:C.tealBg,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Gasto interno {persPick===r.id?'▴':'▾'}</button>
         </div>}
         {kind==='listas'&&<div style={{marginTop:6}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button></div>}
+        {kind==='sinefecto'&&r.anuladaManual&&<div style={{marginTop:6}}><button onClick={()=>reactivarRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Reactivar · vuelve a la revisión</button></div>}
         {open&&<div style={{marginTop:8,paddingTop:8,borderTop:`.5px solid #EEF1F3`}}>
           {/* Descripción completa para confirmar bien (misma en toda categoría) */}
           <table style={{width:'100%',borderCollapse:'collapse',marginBottom:info?0:9}}><tbody>
@@ -13038,14 +13049,33 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           </>}
         </div>}
         {ocasPick===r.id&&<div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>Ocasional «{r.nombre}» · resp:</span>{MIEMBROS_NOTA.map(m=>{const pc=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:'none'}}>{m}</button>})}<button onClick={()=>crearOcasional(r,null)} style={{fontSize:10,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:'pointer',background:C.bgWarm,color:C.grisText,border:'none'}}>Sin resp.</button></div>}
-        {persPick===r.id&&<div style={{marginTop:7,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 10px'}}><div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:6}}>Gasto interno · ¿de la oficina o de un miembro?</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}><button onClick={()=>marcarOficinaRow(r.id)} style={{fontSize:11,borderRadius:20,padding:'4px 11px',fontWeight:700,cursor:'pointer',background:C.tealBg,color:C.tealText,border:(r.client_id&&esOficinaCli(r.client_id))?`1px solid ${C.tealText}`:'1px solid transparent'}}>Oficina</button><span style={{width:1,alignSelf:'stretch',background:C.border,margin:'0 2px'}}/>{MIEMBROS_NOTA.map(m=>{const pc=personChip(m);const on=r.personal_de===m;return <button key={m} onClick={()=>marcarPersonalRow(r.id,m)} style={{fontSize:11,borderRadius:20,padding:'4px 11px',fontWeight:700,cursor:'pointer',background:pc.bg,color:pc.color,border:on?`1px solid ${pc.color}`:'1px solid transparent'}}>{m}</button>})}</div></div>}
+        {persPick===r.id&&(()=>{ const esOfi=r.client_id&&esOficinaCli(r.client_id); return (
+          <div style={{marginTop:8,border:`1px solid ${C.border}`,borderRadius:11,overflow:'hidden',background:'#fff'}}>
+            <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted,padding:'9px 12px 6px'}}>{r.suggestion||r.client_id?'O márcalo como gasto interno — ¿de quién es?':'¿De quién es este gasto?'}</div>
+            <div onClick={()=>marcarOficinaRow(r.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',borderTop:`.5px solid #EEF1F3`,cursor:'pointer',background:esOfi?C.tealBg:'transparent'}}>
+              <span style={{width:30,height:30,borderRadius:9,background:C.tealBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.tealText} strokeWidth='2'><rect x='4' y='3' width='12' height='18' rx='1'/><path d='M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'/></svg></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:esOfi?C.tealText:C.text}}>De la oficina</div><div style={{fontSize:10,color:C.muted}}>no va a un cliente</div></div>
+              <span style={{color:C.done,fontSize:16}}>›</span>
+            </div>
+            <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,padding:'8px 12px 4px',background:C.bgSoft,borderTop:`.5px solid #EEF1F3`}}>De un miembro</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr'}}>
+              {MIEMBROS_NOTA.map((m,mi)=>{ const pc=personChip(m); const on=r.personal_de===m; return (
+                <div key={m} onClick={()=>marcarPersonalRow(r.id,m)} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:`.5px solid #EEF1F3`,borderRight:mi%2===0?`.5px solid #EEF1F3`:'none',cursor:'pointer',background:on?pc.bg:'transparent'}}>
+                  <span style={{width:26,height:26,borderRadius:8,background:pc.bg,color:pc.color,fontSize:11,fontWeight:800,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{(INICIALES_RESP&&INICIALES_RESP[m])||String(m)[0]}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:on?pc.color:C.text}}>{m}</span>
+                </div>
+              )})}
+            </div>
+          </div>
+        )})()}
         </div>
       </div>
     )
   }
   // Recibo del resultado (clickeable): la acción "Cargar" cuelga del dato; A clientes se despliega.
   const notaReceipt = (cats) => {
-    const cargarRows=[...cats.falta,...cats.confirma,...cats.listas,...cats.personal,...cats.oficina]
+    // Se cargan = solo las filas CON destino resuelto (cliente / oficina / miembro), respetando lo desmarcado. Falta y confirma NO se cargan: quedan por revisar.
+    const cargarRows=[...cats.listas,...cats.oficina,...cats.personal].filter(notaSelOn)
     const nCarga=cargarRows.length, totCarga=cargarRows.reduce((a,r)=>a+(r.monto||0),0)
     const byCli={}; cats.listas.forEach(r=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); const k=r.client_id; (byCli[k]=byCli[k]||{name:c?.name||'Cliente',n:0,tot:0}); byCli[k].n++; byCli[k].tot+=(r.monto||0) })
     const cliList=Object.values(byCli).sort((a,b)=>b.tot-a.tot)
@@ -13126,13 +13156,17 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     }
     return (<div>
       {/* Guía de una línea (qué hacer) — baja la curva de la primera vez */}
-      {notaria&&(()=>{ const nLeidas=(rows||[]).length; const errs=(rows||[]).filter(r=>r.error); const nYa=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length; const nListas=(rows||[]).filter(notaSelOn).length; return (
+      {notaria&&(()=>{ const cts=notaCats(rows||[]); const nLeidas=(rows||[]).length; const errs=cts.errores
+        // Partición única (suman las filas del archivo): se cargan = con destino (cliente/oficina/miembro); por revisar = falta+confirma; ya en la app; anuladas; con error.
+        const nDest=cts.listas.length+cts.oficina.length+cts.personal.length; const nRev=cts.falta.length+cts.confirma.length; const nYa=cts.yacargadas.length; const nAnul=cts.sinefecto.length; return (
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 13px',marginBottom:9}}>
-          <div style={{display:'flex',gap:16,flexWrap:'wrap',alignItems:'baseline'}}>
+          <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'baseline'}}>
             <div><span style={{fontSize:20,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{nLeidas}</span> <span style={{fontSize:11,color:C.muted}}>filas del archivo</span></div>
-            <div><span style={{fontSize:16,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{nListas}</span> <span style={{fontSize:11,color:C.muted}}>listas para cargar</span></div>
-            {nYa>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.done,fontVariantNumeric:'tabular-nums'}}>{nYa}</span> <span style={{fontSize:11,color:C.muted}}>ya en la app (se omiten)</span></div>}
-            {errs.length>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{errs.length}</span> <span style={{fontSize:11,color:C.muted}}>con error (no se cargan)</span></div>}
+            <div><span style={{fontSize:16,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{nDest}</span> <span style={{fontSize:11,color:C.muted}}>se cargan</span></div>
+            {nRev>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nRev}</span> <span style={{fontSize:11,color:C.muted}}>por revisar</span></div>}
+            {nYa>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.done,fontVariantNumeric:'tabular-nums'}}>{nYa}</span> <span style={{fontSize:11,color:C.muted}}>ya en la app</span></div>}
+            {nAnul>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.grisText,fontVariantNumeric:'tabular-nums'}}>{nAnul}</span> <span style={{fontSize:11,color:C.muted}}>anuladas</span></div>}
+            {errs.length>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{errs.length}</span> <span style={{fontSize:11,color:C.muted}}>con error</span></div>}
           </div>
           {errs.some(r=>/OT no detectada/i.test(r.error||''))&&<div style={{marginTop:8,background:C.overdueBg,border:'1px solid #F3C9C4',borderRadius:8,padding:'8px 11px',fontSize:11.5,color:C.overdueText,fontWeight:600,lineHeight:1.5}}>La app <b>releyó estas filas</b> y aun así no encontró la OT. Todo trabajo de notaría trae OT → revisa que la columna <b>OT</b> del archivo esté presente y completa en esas filas. No se cargan sin OT.</div>}
           {errs.length>0&&<details style={{marginTop:8}}>
@@ -13371,7 +13405,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{fontSize:10.5,color:C.overdueText,marginTop:2}}>{nP>0?`${nP} ya pagada${nP!==1?'s':''} a la notaría`:''}{nP>0&&nR>0?' · ':''}{nR>0?`${nR} ya rendida${nR!==1?'s':''} al cliente`:''}. Aparecen marcadas abajo; no las cargues sin verlas.</div>
             </div>
           )})()}
-          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const interno=val.filter(r=>r.personal_de||(r.client_id&&esOficinaCli(r.client_id))).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend-interno; const anul=(rows||[]).filter(r=>/sin efecto/i.test(r.notas||'')).length
+          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error&&!r.anuladaManual); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const interno=val.filter(r=>r.personal_de||(r.client_id&&esOficinaCli(r.client_id))).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend-interno; const anul=notaCats(rows||[]).sinefecto.length
             const reconSolas=val.filter(r=>(r.client_id&&r.matchMethod!=='manual')||dupInfo[r.id]?.otState).length; const aprHoy=aprendidasSet.size; return (
             // Hero blanco (canon de la foto): protagonista = Total, con sus partes anidadas (a clientes / sin asignar / interno). Sin azul pleno.
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'13px 15px',marginBottom:12}}>
