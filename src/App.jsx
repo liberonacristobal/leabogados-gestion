@@ -8624,7 +8624,14 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
         rows.push({folio:s.folio, estado:progId?'programada':'nueva', cliente:cliName, clienteId:cliId, progId, progCand, glosa:s.glosa, monto:s.monto, fecha:s.fecha_emision, row, doc:s.doc_json?.doc||null, _stageId:s.id})
       }
       setRespaldoFiles(null); respaldoSummaryRef.current=null; batchIdRef.current=null; setRespaldoBatchId(null)
-      setRespaldoRes(rows); setXmlHub(false); contarSinRegistrar()
+      setRespaldoRes(rows); setXmlHub(false)
+      // CERO TOQUE por RUT: auto-registra las programadas de calce CLARO — cliente resuelto por RUT + UNA sola cuota candidata (sin ambigüedad).
+      // Los dudosos (RUT sin resolver, o varias candidatas) quedan para confirmar a mano. Reversible desde la factura.
+      const claras = rows.filter(r=>r.estado==='programada' && r.clienteId && (r.progCand||[]).length<=1)
+      let autoOk=0
+      for(const it of claras){ try{ await registrarProg(it); autoOk++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada',_auto:true}:r)) }catch(_){} }
+      if(autoOk){ onRefresh&&onRefresh(); appAlert(`${autoOk} factura${autoOk!==1?'s':''} registrada${autoOk!==1?'s':''} automáticamente por RUT (calce único). El resto queda para revisar.`) }
+      contarSinRegistrar()
       if(!rows.length) appAlert('No hay cargas sin registrar. Todo lo cargado ya está registrado.')
     }catch(e){ appAlert('No se pudo abrir lo cargado sin registrar. ¿Corriste el SQL de sii_cargas_docs? '+(e.message||'')) }
     setCargandoStage(false)
