@@ -13151,7 +13151,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     try{
       const res = await onBulkImport(target, {tipo, filename:fileName})
       // Notaría: resumen para cerrar el ciclo (lo que queda por pagar a la notaría y a cuántos clientes rendir).
-      if(notaria){ const conCli=target.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size; setResultado({...res, nota:{porPagar,clientes}}) }
+      if(notaria){ const conCli=target.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
+        const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length   // resumen de estado: cargadas + con error (no entraron) + ya en la app
+        setResultado({...res, nota:{porPagar,clientes}, leidas:(rows||[]).length, errores:errRows.length, erroresDet:errRows.slice(0,60).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), omitidas}) }
       else setResultado(res)
     }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
@@ -13282,6 +13284,17 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         <svg width='27' height='27' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>
       </div>
       <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:resultado.omitidos>0?6:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.concil?`${resultado.actualizados} corregido(s) · ${resultado.imported} nuevo(s)`:notaria?`${resultado.imported} OT cargada${resultado.imported!==1?'s':''}${resultado.sinCliente>0?` · ${resultado.imported-resultado.sinCliente} a clientes`:''}`:`${resultado.imported} ${tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)`}</div>
+      {notaria&&<div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center',marginBottom:resultado.errores>0?8:12}}>
+        <span style={{fontSize:11.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'4px 11px'}}>{resultado.imported||0} cargadas</span>
+        {resultado.omitidas>0&&<span style={{fontSize:11.5,fontWeight:700,color:C.done,background:C.bgSoft,borderRadius:20,padding:'4px 11px'}}>{resultado.omitidas} ya en la app</span>}
+        {resultado.errores>0&&<span style={{fontSize:11.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'4px 11px'}}>{resultado.errores} con error · no cargadas</span>}
+      </div>}
+      {notaria&&resultado.errores>0&&<details style={{maxWidth:440,margin:'0 auto 12px',textAlign:'left'}}>
+        <summary style={{fontSize:11.5,color:C.overdueText,fontWeight:700,cursor:'pointer',listStyle:'none',textAlign:'center'}}>Ver las {resultado.errores} con error ›</summary>
+        <div style={{marginTop:6,maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8}}>
+          {(resultado.erroresDet||[]).map((e,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 9px',fontSize:11,borderTop:i?`1px solid ${C.bgSoft}`:'none'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{e.ot?`OT ${e.ot} · `:''}{e.nombre}</span><span style={{color:C.overdueText,flexShrink:0,fontWeight:600}}>{e.motivo}</span></div>)}
+        </div>
+      </details>}
       {resultado.omitidos>0&&<div style={{fontSize:12,color:C.soonText,marginBottom:12,lineHeight:1.4}}><b>{resultado.omitidos} omitido(s)</b> porque ya existían idénticos (mismo cliente, monto, fecha y glosa) — duplicados evitados.</div>}
       <div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center',marginBottom:18}}>
         {resultado.sinCliente>0&&<span style={{fontSize:11,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinCliente}</b> sin cliente</span>}
