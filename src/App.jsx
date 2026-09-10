@@ -13058,7 +13058,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         {kind==='oficina'&&<div style={{display:'flex',gap:10,marginTop:6}}><button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Cambiar (interno)</button><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Asignar a un cliente'}</button><button onClick={()=>quitarInternoRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.overdueText,background:'none',border:'none',cursor:'pointer',padding:0}}>Quitar</button></div>}
         {kind==='confirma'&&r.suggestion&&<div style={{display:'flex',gap:7,marginTop:8,alignItems:'center',flexWrap:'wrap'}}>
           <span style={{fontSize:11.5,color:C.text}}>{r.suggestFrom==='drive'?<>Encontrado en Drive: <b>{r.suggestion.name}</b>{r.driveFolder?<span style={{color:C.muted}}> · carpeta "{r.driveFolder}"</span>:''}</>:<>Sugerido: <b>{r.suggestion.name}</b>{r.confidence?<span style={{color:C.muted}}> · {r.confidence}% de certeza</span>:''}</>}</span>
-          <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Confirmar sola</button>
+          <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Confirmar</button>
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Otro</button>
           <button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:700,color:C.tealText,background:C.tealBg,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Gasto interno {persPick===r.id?'▴':'▾'}</button>
         </div>}
@@ -27932,7 +27932,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}</div>
     return <div style={{background:C.bg,minHeight:'100%'}}>{hubInner}</div>
   })() : null
-  if(hubOpen) return concHub
+  // OJO Reglas de Hooks: el `return concHub` va MÁS ABAJO, después de TODOS los hooks (ccAutoRef/traspasosAuto/useEffect),
+  // para que esos hooks se llamen SIEMPRE (antes estaba aquí y saltaba 3 hooks en el hub → crash "más hooks que antes" al entrar al detalle).
   // "Conciliar cobradas · cartola" es PÁGINA (no modal): cuando está abierta reemplaza la vista (móvil y escritorio), con "← volver".
   if(cobradasOpen) return <CobradasSinRespaldoPage billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onOpenClientFicha={onOpenClientFicha} onClose={()=>setCobradasOpen(false)}/>
   // Opción A — el interior se enfoca en la tarjeta que abriste: el header ES el contexto (icono + nombre + conteo),
@@ -28011,6 +28012,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const ccAutoRef = useRef(new Set())
   const traspasosAuto = useMemo(()=> (movs||[]).filter(m=>{ const s=traspasoSweep(m); return s && s.gap<=7 }), [movs,concByMov])   // eslint-disable-line
   useEffect(()=>{ if(DEMO) return; traspasosAuto.forEach(m=>{ if(!ccAutoRef.current.has(m.id)){ ccAutoRef.current.add(m.id); marcarTraspasoInterno(m) } }) }, [traspasosAuto])   // eslint-disable-line
+  if(hubOpen) return concHub   // ← movido aquí: recién después de TODOS los hooks (ver nota arriba). Nunca poner un return entre hooks.
   // "Por resolver" accionable: acción por fila en el abono CERRADO según su etapa (sin cliente → Es X ✓ / Asignar; por confirmar → Conciliar N°X; sin factura → Imputar). Reusa sugMov/identificar/crearFondoPersonal/reconciliar/mejorCandidato. El buscador vive detrás de "Asignar"/"Otro" (abre la fila).
   const abonoInlineAcc = (m) => {
     const stop=e=>e.stopPropagation()
