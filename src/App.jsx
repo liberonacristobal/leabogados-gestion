@@ -13496,7 +13496,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>
             </div>
             )})()}
-          {modo!=='conciliar'&&!notaria&&<div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
+          {modo!=='conciliar'&&<div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
             {notaria&&(()=>{ const nSin=(rows||[]).filter(r=>!r.client_id&&!r.personal_de&&!r.isInternal&&!r.error&&!r.suggestion).length; return (
               <button disabled={!!driveAll||(!nSin&&!driveAll)} onClick={buscarTodasDrive} title='Busca en tus carpetas de Drive el cliente de cada OT sin cliente' style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:driveAll||!nSin?'default':'pointer',border:`1px solid ${C.accent}`,background:driveAll?C.azulBg:'#fff',color:C.accent,opacity:driveAll||!nSin?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6}}>
                 <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 12l-4-4v3h-8v2h8v3z'/><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8'/></svg>
@@ -24471,7 +24471,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
             const over=tope>0&&cons>tope, near=tope>0&&!over&&pct>=90
             const barCol=over?C.overdue:near?'#EF9F27':C.normal, stCol=over?C.overdueText:near?C.soonText:C.greenText, stBg=over?C.overdueBg:near?C.soonBg:C.greenBg
             return (
-            <div key={s.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{background:'#fff',border:`1px solid ${over?'#F3C9C4':near?'#EBD9AE':C.border}`,borderRadius:12,padding:'11px 12px',cursor:onOpenClientFicha?'pointer':'default'}}>
+            <div key={s.id} onClick={()=>{ setVista('mias'); setQC(s.client_id); setQS(s.id); setTimeout(()=>document.getElementById('horas-reg')?.scrollIntoView({behavior:'smooth',block:'start'}),80) }} title='Registrar horas en este proyecto' style={{background:'#fff',border:`1px solid ${over?'#F3C9C4':near?'#EBD9AE':C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer'}}>
               <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:tope>0?8:0}}>
                 <span style={{width:28,height:28,borderRadius:8,background:stBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={stCol} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/></svg></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(s.client_id)}</div><div style={{fontSize:9.5,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div></div>
@@ -24668,6 +24668,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
       </>}
 
       {vista==='mias' && <>
+      <div id='horas-reg' style={{scrollMarginTop:70}}/>
       {/* Cronómetro en vivo (A2) */}
       {!timer ? (
         <div onClick={startTimer} style={{display:'flex',alignItems:'center',gap:9,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:12,cursor:'pointer'}}>
