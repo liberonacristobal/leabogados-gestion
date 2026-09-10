@@ -23874,7 +23874,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
-function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserName, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose }){
+function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], currentUserName, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const LIBERAR_UMBRAL = 3
   const [recMap,setRecMap] = useState({})      // factura.id → fecha ISO último recordatorio
@@ -23884,9 +23884,11 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
   const [autoGlobal,setAutoGlobal] = useState(false)   // interruptor GLOBAL: la app envía sola los recordatorios de los clientes liberados (config cobranza_auto; lo lee el edge fn cobranza-auto). Sin esto, "En automático" queda inerte.
   const [sortBy,setSortBy] = useState({col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
   const [expCli,setExpCli] = useState(null)   // escritorio: cliente con sus facturas desplegadas
+  const [aboFilter,setAboFilter] = useState(null)   // anillo de abogado seleccionado → filtra la lista de clientes (hero y anillos siguen globales)
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
+  const fM = n => '$'+((n||0)/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+'M'   // compacto para la foto (hero + anillos); el detalle por factura mantiene el peso exacto
   useEffect(()=>{
     if(DEMO){ setRecMap({}); setOkCount({c4:3}); setAutoCli({}); setAutoGlobal(false); return }
     supabase.from('learnings').select('kind,key,value').in('kind',['factura_recordado','cobranza_ok','fd_auto','config']).then(({data})=>{
@@ -23908,6 +23910,22 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
     Object.values(by).forEach(g=> g.items.sort((x,y)=> String(x.b.issued_at||x.b.due||'').localeCompare(String(y.b.issued_at||y.b.due||'')) ))   // dentro del cliente: antigua (arriba) → nueva (abajo)
     return Object.values(by)
   },[billing,recMap,hoy])
+  // Atribución de cada factura a un abogado: la venta (responsible) manda; si no, el responsable del cliente (misma regla que Facturación, App.jsx ~6399).
+  const saleById = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s])),[sales])
+  const aboDe = b=>{ const s=b.sale_id?saleById[String(b.sale_id)]:null; const r=(s&&s.responsible)||clients.find(c=>String(c.id)===String(b.client_id))?.abogado_responsable; return (r&&String(r).trim())||'Sin asignar' }
+  // Exposición por abogado (SIEMPRE visible, global): total por cobrar + vencido, sobre el MISMO universo cobrable que los grupos. Identifica quién debe apretar el cobro y quién trabaja sin recibir pago.
+  const porAbogado = useMemo(()=>{ const by={}
+    ;(billing||[]).forEach(b=>{ if(!facturaCobrable(b)||!['Pendiente','Vencido'].includes(b.status)) return
+      const a=aboDe(b); const s=saldoBill(b); const dl=daysLeftB(b); const venc=dl!=null&&dl<0
+      const g=(by[a]=by[a]||{abo:a,total:0,vencido:0,n:0,nVenc:0}); g.total+=s; g.n++; if(venc){g.vencido+=s;g.nVenc++} })
+    return Object.values(by).sort((x,y)=>y.total-x.total)
+  },[billing,saleById,clients])   // eslint-disable-line
+  // Lista de clientes filtrable por abogado (al tocar un anillo). El hero y los anillos NO se filtran: son la foto global.
+  const gruposView = useMemo(()=>{ if(!aboFilter) return grupos
+    return grupos.map(g=>{ const items=g.items.filter(x=>aboDe(x.b)===aboFilter); if(!items.length) return null
+      let total=0,vencido=0,maxDias=0,nAccion=0; items.forEach(x=>{ const s=saldoBill(x.b); total+=s; if(x.venc){vencido+=s;maxDias=Math.max(maxDias,x.diasVenc)} if(x.acc)nAccion++ })
+      return {...g,items,total,vencido,maxDias,nAccion} }).filter(Boolean)
+  },[grupos,aboFilter,saleById,clients])   // eslint-disable-line
   // Facturas vencidas ya contactadas hace poco (dentro del piso) — contexto, sin acción.
   const enEspera = useMemo(()=> (billing||[]).filter(b=>{ if(!facturaCobrable(b)) return false; const dl=daysLeft(b.due); if(!(dl!=null&&dl<0)) return false; const last=recMap[String(b.id)]; if(!last) return false; const gap=Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000); return gap<COBRANZA_GAP }).length, [billing,recMap,hoy])
   const vencidoTotal = grupos.reduce((a,g)=>a+g.vencido,0)
@@ -23917,8 +23935,8 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
   // Orden compartido (móvil y escritorio): por nombre / N° facturas / monto (deuda total) / vencido / mora, asc o desc.
   const gsort = useMemo(()=>{ const d=sortBy.dir==='desc'?-1:1
     const key={facturas:g=>g.items.length,total:g=>g.total,monto:g=>g.total,vencido:g=>g.vencido,mora:g=>g.maxDias}[sortBy.col]
-    return [...grupos].sort((a,b)=> sortBy.col==='cliente' ? (sortBy.dir==='asc'?1:-1)*cn(a.cid).localeCompare(cn(b.cid),'es') : d*((key?key(a):a.total)-(key?key(b):b.total)) )
-  },[grupos,sortBy])
+    return [...gruposView].sort((a,b)=> sortBy.col==='cliente' ? (sortBy.dir==='asc'?1:-1)*cn(a.cid).localeCompare(cn(b.cid),'es') : d*((key?key(a):a.total)-(key?key(b):b.total)) )
+  },[gruposView,sortBy])
   // Contexto: "Por cobrar total" (todo lo emitido sin pagar, vencido + al día) para explicar la diferencia con Facturación. Cobranza actúa solo sobre lo vencido.
   const _cobr=b=>!b.deleted_at && b.invoice_no && !['reembolso','nota_credito'].includes(b.billing_type) && ['Pendiente','Vencido'].includes(b.status) && saldoBill(b)>0
   const nAlDia=(billing||[]).filter(b=>_cobr(b)&&!esVencidaB(b)).length   // "al día" por la FUENTE ÚNICA (emisión+30), no el due crudo → consistente con la lista
@@ -23994,22 +24012,43 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Cobranza</div>
         {onClose&&<span onClick={onClose} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer'}}>← Volver</span>}
       </div>
-      {/* Canon de la foto: un protagonista (deuda por cobrar) con su parte accionable (vencido) ANIDADA, no en paralelo. Ambas cifras clickeables (ordenan la lista). */}
-      <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:14,color:'#fff'}}>
-        <div style={{display:'flex',gap:14}}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Deuda vencida</div>
-            <div style={{fontSize:22,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(vencidoTotal)}</div>
-            <div style={{fontSize:10,opacity:.8}}>{gruposAccion.length} cliente{gruposAccion.length!==1?'s':''} · {nVencidas} factura{nVencidas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
-          </div>
-          <div style={{width:1,background:'rgba(255,255,255,.18)'}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Deuda total</div>
-            <div style={{fontSize:22,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(deudaTotal)}</div>
-            <div style={{fontSize:10,opacity:.8}}>{grupos.length} cliente{grupos.length!==1?'s':''}{nAlDia>0?` · ${nAlDia} al día`:''}</div>
-          </div>
+      {/* Hero = DOS tarjetas separadas (no pareja con separador): Vencido (lo urgente) + Total por cobrar (la cartera). Ambas ordenan la lista al tocarlas. */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+        <div onClick={()=>setSortBy({col:'vencido',dir:'desc'})} title='Ordenar por vencido' style={{background:C.overdueBg,border:'1px solid #F3D2D0',borderRadius:12,padding:'13px 15px',cursor:'pointer'}}>
+          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:700,color:C.overdueText}}>Deuda vencida</div>
+          <div style={{fontSize:24,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fM(vencidoTotal)}</div>
+          <div style={{fontSize:10,color:'#B4534F'}}>{gruposAccion.length} cliente{gruposAccion.length!==1?'s':''} · {nVencidas} factura{nVencidas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
+        </div>
+        <div onClick={()=>setSortBy({col:'total',dir:'desc'})} title='Ordenar por deuda total' style={{background:C.accent,borderRadius:12,padding:'13px 15px',color:'#fff',cursor:'pointer'}}>
+          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:700,color:C.onNavyLabel}}>Deuda total por cobrar</div>
+          <div style={{fontSize:24,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fM(deudaTotal)}</div>
+          <div style={{fontSize:10,color:C.onNavyLabel}}>{grupos.length} cliente{grupos.length!==1?'s':''}{nAlDia>0?` · ${nAlDia} al día`:''}</div>
         </div>
       </div>
+      {/* Exposición por abogado (SIEMPRE visible): anillo con % vencido. Toca un anillo → filtra la lista a ese abogado. Muestra quién está más expuesto / trabaja sin cobrar. */}
+      {porAbogado.length>0 && <div style={{marginBottom:14}}>
+        <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:9}}>
+          <span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Exposición por abogado</span>
+          {aboFilter&&<span onClick={()=>setAboFilter(null)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>← Todos</span>}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(porAbogado.length,isDesktop?5:3)},1fr)`,gap:isDesktop?12:8}}>
+          {porAbogado.map(a=>{ const pct=a.total>0?Math.round(a.vencido/a.total*100):0
+            const sev = pct>=60?{c:C.overdueText,s:C.overdue}:pct>=30?{c:C.soonText,s:C.soon}:pct>0?{c:C.muted,s:C.done}:{c:C.greenText,s:C.normal}
+            const R=isDesktop?40:30, SZ=isDesktop?96:72, CC=2*Math.PI*R, off=CC*(1-pct/100), on=aboFilter===a.abo, isX=a.abo==='Sin asignar'
+            return (
+            <div key={a.abo} onClick={()=>setAboFilter(on?null:a.abo)} title={`${a.abo} · ${a.nVenc} de ${a.n} vencidas`} style={{background:'#fff',border:`1px solid ${on?C.accent:(pct>=60?'#F0C9C6':C.border)}`,borderRadius:13,padding:isDesktop?'15px 10px 13px':'12px 6px 11px',textAlign:'center',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent} inset`:'none'}}>
+              <div style={{width:SZ,height:SZ,margin:'0 auto 7px',position:'relative'}}>
+                <svg width={SZ} height={SZ} style={{transform:'rotate(-90deg)'}}><circle cx={SZ/2} cy={SZ/2} r={R} fill='none' stroke={C.border} strokeWidth={isDesktop?10:8}/><circle cx={SZ/2} cy={SZ/2} r={R} fill='none' stroke={sev.s} strokeWidth={isDesktop?10:8} strokeDasharray={CC} strokeDashoffset={off} strokeLinecap='round'/></svg>
+                <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                  <b style={{fontSize:isDesktop?21:17,fontWeight:800,color:sev.c,lineHeight:1}}>{pct}%</b>
+                  <span style={{fontSize:isDesktop?9:7,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginTop:1}}>vencido</span>
+                </div>
+              </div>
+              <div style={{fontSize:isDesktop?13:12,fontWeight:700,color:isX?C.muted:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.abo}</div>
+              <div style={{fontSize:isDesktop?11:10,color:C.muted,marginTop:2,fontVariantNumeric:'tabular-nums'}}><b style={{color:sev.c,fontWeight:800}}>{fM(a.vencido)}</b> / {fM(a.total)}</div>
+            </div>) })}
+        </div>
+      </div>}
       {grupos.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
       {grupos.length>0 && (()=>{ const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]; return (
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:10}}>
@@ -30995,7 +31034,7 @@ export default function App() {
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
-            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
+            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
             {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
