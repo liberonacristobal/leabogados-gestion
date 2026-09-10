@@ -24311,8 +24311,8 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
                 <div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>{pctCartera}% de la cartera · {a.nVenc}/{a.n} vencidas</div>
               </div>
               <div style={{textAlign:'right',flexShrink:0,lineHeight:1.25}}>
-                <div style={{fontSize:13,fontWeight:800,color:sev.c,fontVariantNumeric:'tabular-nums'}}>{fM(a.vencido)} <span style={{fontSize:11}}>· {pct}%</span></div>
-                <div style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>de {fM(a.total)} total</div>
+                <div style={{fontSize:13,fontWeight:800,color:sev.c,fontVariantNumeric:'tabular-nums'}}>{fM(a.vencido)} <span style={{fontSize:11,fontWeight:600}}>· {pct}% vencido</span></div>
+                <div style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>de {fM(a.total)} de su cartera</div>
               </div>
             </div>) })}
         </div>
