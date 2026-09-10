@@ -27729,6 +27729,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ appAlert('Error: '+e.message) }
     setBusy(null)
   }
+  // Traspaso interno "sweep": abono enmascarado (BICE, sin RUT, glosa "de cliente…beneficiario") que calza EXACTO con un abono YA
+  // conciliado de un cliente en la OTRA cuenta, con el pago del cliente PRIMERO (fecha <=). Es el mismo dinero moviéndose entre las 2
+  // cuentas del estudio. Devuelve {cliente, gap} (días entre el pago del cliente y el traspaso) o null.
+  const traspasoSweep = (m)=>{ if(m.rut_contraparte||m.es_interno) return null
+    const d=(m.descripcion||'').toLowerCase(); if(!(/\bde cliente\b/.test(d) && /beneficiario/.test(d))) return null
+    const c=(movs||[]).find(x=> x.id!==m.id && x.tipo==='abono' && x.rol_cuenta!==m.rol_cuenta && (x.monto||0)===(m.monto||0) && x.cliente_id && (concByMov[x.id]?.length) && x.fecha && m.fecha && new Date(String(x.fecha).slice(0,10))<=new Date(String(m.fecha).slice(0,10)))
+    if(!c) return null
+    return { cliente: cmap[c.cliente_id]||'un cliente', gap: Math.round((new Date(String(m.fecha).slice(0,10)).getTime()-new Date(String(c.fecha).slice(0,10)).getTime())/86400000) }
+  }
+  // Auto-marcado: los sweep con el pago del cliente primero y a <=7 dias se marcan SOLOS (alta confianza, single-leg, reversible). >7 dias => queda la opcion manual.
+  const ccAutoRef = useRef(new Set())
+  const traspasosAuto = useMemo(()=> (movs||[]).filter(m=>{ const s=traspasoSweep(m); return s && s.gap<=7 }), [movs,concByMov])   // eslint-disable-line
+  useEffect(()=>{ if(DEMO) return; traspasosAuto.forEach(m=>{ if(!ccAutoRef.current.has(m.id)){ ccAutoRef.current.add(m.id); marcarTraspasoInterno(m) } }) }, [traspasosAuto])   // eslint-disable-line
   // "Por resolver" accionable: acción por fila en el abono CERRADO según su etapa (sin cliente → Es X ✓ / Asignar; por confirmar → Conciliar N°X; sin factura → Imputar). Reusa sugMov/identificar/crearFondoPersonal/reconciliar/mejorCandidato. El buscador vive detrás de "Asignar"/"Otro" (abre la fila).
   const abonoInlineAcc = (m) => {
     const stop=e=>e.stopPropagation()
@@ -27740,10 +27753,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const esCli=/transf\. a terceros/.test(d) && /(1403834|1383922|liberona escala)/.test(d)
       const esAmb=/\bde cliente\b/.test(d) && /beneficiario/.test(d)
       if(!esCli && !esAmb) return null
-      let sweep=null
-      if(esAmb){ const c=(movs||[]).find(x=> x.id!==m.id && x.tipo==='abono' && x.rol_cuenta!==m.rol_cuenta && (x.monto||0)===(m.monto||0) && x.cliente_id && (concByMov[x.id]?.length)); if(c) sweep=cmap[c.cliente_id]||'un cliente' }
-      const txt = esCli ? 'Pago de cliente · BICE ocultó al remitente' : sweep ? `Traspaso interno · calza con el pago de ${sweep} en la otra cuenta` : 'Remitente oculto (BICE) · ¿interno o cliente?'
-      return {esCli,esAmb,sweep,node:<div title="El banco no imprime quién envió; asigna por el monto o tu memoria" style={{fontSize:9.5,fontWeight:700,color:esCli?C.azulInfo:C.soonText,background:esCli?C.azulBg:C.soonBg,borderRadius:7,padding:'3px 8px',display:'inline-block'}}>{txt}</div>} })()
+      const sw=esAmb?traspasoSweep(m):null; const sweep=sw?sw.cliente:null
+      const txt = esCli ? 'Pago de cliente · BICE ocultó al remitente' : sweep ? `Traspaso interno · calza con el pago de ${sweep}${sw.gap>0?` (hace ${sw.gap} d)`:''} en la otra cuenta` : 'Remitente oculto (BICE) · ¿interno o cliente?'
+      return {esCli,esAmb,sweep,gap:sw?sw.gap:null,node:<div title="El banco no imprime quién envió; asigna por el monto o tu memoria" style={{fontSize:9.5,fontWeight:700,color:esCli?C.azulInfo:C.soonText,background:esCli?C.azulBg:C.soonBg,borderRadius:7,padding:'3px 8px',display:'inline-block'}}>{txt}</div>} })()
     const gm = gmI?.node
     // Marcar traspaso interno (movimiento entre las 2 cuentas propias del estudio) — la opción que faltaba. Cuando calza EXACTO con un pago ya conciliado (sweep), va como acción PRIMARIA en un toque.
     const intBtn = gmI?.esAmb ? <button disabled={busy===m.id} onClick={()=>marcarTraspasoInterno(m)} style={gmI.sweep?bG:bGh} title={gmI.sweep?`Calza con el pago de ${gmI.sweep} en la otra cuenta BICE — es el mismo dinero moviéndose entre cuentas del estudio`:'Marcar como movimiento entre las cuentas propias del estudio'}>{gmI.sweep?'✓ Es traspaso interno':'Marcar traspaso interno'}</button> : null
