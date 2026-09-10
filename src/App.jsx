@@ -3278,10 +3278,27 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                   </div>
                 </div>
               )
-              return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8}}>
-                {m.bruto>0 && kpiTile('vend','Vendido','#EAF2FB','#D5E6F6','#D5E6F6',C.azulInfo, vMon(m.brutoUF,m.bruto), m.meta>0?ventaPct:null,'de la meta')}
+              // Tile PARTIDO (Vendido y Cobrado): Bruto | Neto de comisiones, cada uno con su % contra la meta.
+              // Respeta el color de la tarjeta (bruto=tono base, neto=tono profundo). Se apila solo si el tile es muy angosto.
+              const kpiTileSplit=(key,label,bg,bd,icoBg,icoCol, bV,bP, nV,nP, cap, colB, colN)=>{
+                const halfCap=(v,p,k,col)=>(<div style={{minWidth:92,flex:'1 1 92px'}}>
+                  <div style={{fontSize:8.5,fontWeight:800,letterSpacing:'.04em',color:C.done,textTransform:'uppercase'}}>{k}</div>
+                  <div style={{fontSize:17,fontWeight:800,color:col,letterSpacing:'-.4px',lineHeight:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:3}}>{v}</div>
+                  {p!=null&&<div style={{fontSize:9.5,color:C.muted,marginTop:3,whiteSpace:'nowrap'}}><b style={{color:col,fontWeight:800}}>{p}%</b> {cap}</div>}
+                </div>)
+                return (
+                <div key={key} onClick={()=>setResDrill(d=>d&&d.tile===key?null:{tile:key,year:null})} style={{background:bg,border:`1px solid ${resDrill?.tile===key?C.accent:bd}`,borderRadius:12,padding:'12px 13px',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start',boxShadow:resDrill?.tile===key?`0 0 0 1px ${C.accent} inset`:'none'}}>
+                  <span style={{width:30,height:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:10.5,fontWeight:700,letterSpacing:'.04em',color:C.muted,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}</div>
+                    <div style={{display:'flex',gap:10,flexWrap:'wrap',marginTop:6}}>{halfCap(bV,bP,'Bruto',colB)}{halfCap(nV,nP,'Neto',colN)}</div>
+                  </div>
+                </div>)
+              }
+              return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:8}}>
+                {m.bruto>0 && kpiTileSplit('vend','Vendido','#EAF2FB','#D5E6F6','#D5E6F6',C.azulInfo, vMon(m.brutoUF,m.bruto), m.meta>0?ventaPct:null, vMon(m.netoUF,m.neto), m.meta>0?ventaNetoPct:null,'de la meta', C.azulInfo, C.accent)}
+                {kpiTileSplit('cob','Cobrado','#E6F6EF','#CDEBDD','#CDEBDD',C.greenText, fmtMon(ingYTD), metaCobranza>0?cobroPct:null, fmtMon(ingYTD-comisYTD), metaCobranza>0?Math.round((ingYTD-comisYTD)/metaCobranza*100):null,'de la meta', C.normal, C.greenText)}
                 {kpiTile('fact','Facturado','#FDF4E2','#F5E6C6','#F1DFBB','#A8660F', fmtMon(facturadoYr), m.bruto>0?factPct:null,'de lo vendido')}
-                {kpiTile('cob','Cobrado','#E6F6EF','#CDEBDD','#CDEBDD',C.greenText, fmtMon(ingresosPorAnioVenta.total), metaCobranza>0?cobroPct:null,'de la meta')}
                 {costosOfiAnual>0 && kpiTile('marg','Margen','#EDF1F4','#DCE4EA','#DCE4EA',C.accent, (pos?'':'−')+fmtMon(Math.abs(resultado)), ingYTD>0?margenPct:null,'rentabilidad')}
               </div>)
             })()}
