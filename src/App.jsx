@@ -28245,9 +28245,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           return <>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?12:9}}>
               {c2(C.greenBg,C.greenText,'exchange','Abonos',C.greenText,String(G.nAbo),C.greenText,'movimientos del banco',()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
-              {c2(ccN>0?C.soonBg:C.bgSoft,ccN>0?C.soonText:C.accent,'wallet','Cargos',ccN>0?C.soonText:C.accent,String(ccN>0?ccN:G.nCar),ccN>0?C.soonText:C.accent,ccN>0?`por clasificar · ${fmtM(ccMonto)}`:'movimientos del banco',()=>goHub(()=>{setSub('cargos');setConcView(ccN>0?'clasificar':'todos')}))}
+              {c2(ccN>0?C.soonBg:C.bgSoft,ccN>0?C.soonText:C.accent,'wallet','Cargos',ccN>0?C.soonText:C.accent,String(ccN>0?ccN:G.nCar),ccN>0?C.soonText:C.accent,ccN>0?`por clasificar · ${fmtShort(ccMonto)}`:'movimientos del banco',()=>goHub(()=>{setSub('cargos');setConcView(ccN>0?'clasificar':'todos')}))}
               {prN>0
-                ? c2(C.surface,C.overdueText,'alert','Por confirmar',C.overdueText,fmtM(prMonto),C.overdueText,'calza o la app propone — confirma',()=>goHub(()=>{setSub('abonos');setConcView('porresolver')}),{bg:C.overdueBg,border:'#F3C9C4',badge:prN,big:true})
+                ? c2(C.surface,C.overdueText,'alert','Por confirmar',C.overdueText,fmtShort(prMonto),C.overdueText,'calza o la app propone — confirma',()=>goHub(()=>{setSub('abonos');setConcView('porresolver')}),{bg:C.overdueBg,border:'#F3C9C4',badge:prN,big:true})
                 : c2(C.greenBg,C.greenText,'check','Por confirmar',C.greenText,'',C.greenText,'todo cruzado — nada por confirmar',()=>goHub(()=>{setSub('abonos');setConcView('todos')}))}
               {c2(C.greenBg,C.greenText,'check','Conciliados',C.greenText,String(conciliadosN),C.greenText,'ya cruzados con su factura',()=>goHub(()=>{setSub('abonos');setConcView('conciliados')}))}
               {c2(C.azulBg,C.accent,'receipt','Sin respaldo',C.accent,'',C.accent,'facturas pagadas sin banco',()=>goHub(()=>setCobradasOpen(true)))}
