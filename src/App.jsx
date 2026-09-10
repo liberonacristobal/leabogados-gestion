@@ -164,6 +164,8 @@ const ESTADO_COBRO = {
 const venceBill = b => { if(b?.issued_at){ const x=new Date(b.issued_at+'T00:00:00'); x.setDate(x.getDate()+30); return x.toISOString().slice(0,10) } return b?.due||'' }
 // Vencida = emitida impaga cuyo vencimiento (emisión+30) ya pasó. Deriva del cálculo, no del status guardado (así un `due` viejo no la rompe).
 const esVencidaB = b => { if(!b||['Pagado','Anulada','Programada','Pausada'].includes(b.status)) return false; const v=venceBill(b); return !!v && v < new Date().toISOString().slice(0,10) }
+// Días para vencer sobre la FUENTE ÚNICA de vencimiento (venceBill = emisión+30). >0 faltan, <0 vencida hace N. Cobranza/recordatorios DEBEN usar esto (no daysLeft(due) crudo, que rompe si el due quedó viejo tras emitir tarde).
+const daysLeftB = b => daysLeft(venceBill(b))
 // Deriva el estado de cobro (folio + saldo + vencimiento + status) y devuelve su token de color. opts.yaFact = la sin-folio cuya factura emitida ya existe (duplicada), que la vista detecta y pasa.
 const estadoCobro = (b, opts={}) => {
   if(!b) return ESTADO_COBRO.porCobrar
@@ -8682,7 +8684,8 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const now=new Date().toISOString()
     const dteTot=item.doc?dteMontoTotal(item.doc):null
     const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(item.row.fechaEmision||item.fecha)
-    const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}), ...(bid?{import_batch_id:bid}:{}) }
+    // El plazo corre desde la emisión: al emitir por match de DTE, recalcula el due (si no, la programada conserva su due planificado viejo y nace "vencida").
+    const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, ...(isoF?{due:dueFromIssued(isoF)}:{}), dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}), ...(bid?{import_batch_id:bid}:{}) }
     const { error } = await supabase.from('billing').update(patch).eq('id',item.progId)
     if(error) throw error
     setBilling&&setBilling(p=>p.map(x=>x.id===item.progId?{...x,...patch}:x))
@@ -18019,8 +18022,8 @@ async function acusePagoEmail(to, {folio, monto, fecha}){
 function recordatorioCobro(b){
   const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
   const monto='$'+(saldoBill(b)||b.amount||0).toLocaleString('es-CL')
-  const venc=b.due?fmtFechaDMY(b.due):''
-  const dl=daysLeft(b.due); const diasVenc=(dl!=null&&dl<0)?-dl:0
+  const _v=venceBill(b); const venc=_v?fmtFechaDMY(_v):''   // vencimiento por la fuente única (emisión+30), no el due crudo
+  const dl=daysLeftB(b); const diasVenc=(dl!=null&&dl<0)?-dl:0
   const nivel=diasVenc<=0?'amable':diasVenc<=30?'firme':'final'
   const concept=b.concept?` (${b.concept})`:''
   const apertura=nivel==='amable'
@@ -18039,7 +18042,7 @@ const COBRANZA_GAP = 7   // días mínimos entre recordatorios de una misma fact
 function facturaCobrable(b){ return b && saldoBill(b)>0 && b.invoice_no && b.status!=='Programada' && b.status!=='Anulada' && b.billing_type!=='reembolso' && !b.deleted_at }
 function cobranzaAccion(b, lastISO, hoyISO){
   if(!facturaCobrable(b)) return null
-  const dl=daysLeft(b.due); const diasVenc=(dl!=null&&dl<0)?-dl:0
+  const dl=daysLeftB(b); const diasVenc=(dl!=null&&dl<0)?-dl:0   // fuente única (emisión+30), no el due crudo
   if(diasVenc<=0) return null   // solo vencidas (la etapa amable pre-vencimiento no se automatiza)
   const gap = lastISO ? Math.round((new Date(hoyISO+'T00:00')-new Date(String(lastISO).slice(0,10)+'T00:00'))/86400000) : null
   if(gap!=null && gap<COBRANZA_GAP) return null   // aún dentro del piso, no reenviar
@@ -23838,7 +23841,7 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
   const grupos = useMemo(()=>{
     const by={}
     ;(billing||[]).forEach(b=>{ if(!facturaCobrable(b)||!['Pendiente','Vencido'].includes(b.status)) return
-      const cid=String(b.client_id); const acc=cobranzaAccion(b, recMap[String(b.id)], hoy); const dl=daysLeft(b.due); const venc=dl!=null&&dl<0; const s=saldoBill(b)
+      const cid=String(b.client_id); const acc=cobranzaAccion(b, recMap[String(b.id)], hoy); const dl=daysLeftB(b); const venc=dl!=null&&dl<0; const s=saldoBill(b)
       const g=(by[cid]=by[cid]||{cid,items:[],total:0,vencido:0,maxDias:0,nivel:'firme',nAccion:0})
       g.items.push({b,acc,venc,diasVenc:venc?-dl:0}); g.total+=s
       if(venc){ g.vencido+=s; g.maxDias=Math.max(g.maxDias,-dl); if(acc&&acc.nivel==='final') g.nivel='final' }
@@ -23898,7 +23901,7 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
   const detItem = ({b,acc,venc,diasVenc})=>{ const s=String(b.issued_at||b.due||'').slice(0,10); const dd=/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-'):null; const parcial=(b.paid_amount||0)>0
     // Color por severidad de mora (mismo criterio que abonos/cargos): verde al día · ámbar <30 d · rojo ≥30 d. SIN línea izquierda (ya no se usa).
     const sevCol = !venc ? C.greenText : (diasVenc>=30 ? C.overdueText : C.soonText)
-    const dl = daysLeft(b.due)   // >0 = días para vencer (al día)
+    const dl = daysLeftB(b)   // >0 = días para vencer (al día) · fuente única (emisión+30)
     const kk = {fontSize:8,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}
     const dv = {fontSize:11,fontWeight:700,fontVariantNumeric:'tabular-nums'}
     // Razón social a la que se emitió (fuente única rsDeFactura). Protagonista de la fila cuando aporta:
@@ -28963,8 +28966,7 @@ export default function App() {
   // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
   const vencFlipDone=useRef(false)
   useEffect(()=>{ if(vencFlipDone.current||!billing.length) return; vencFlipDone.current=true
-    const today=new Date().toISOString().slice(0,10)
-    const ids=billing.filter(b=>b.status==='Pendiente'&&b.due&&String(b.due).slice(0,10)<today&&b.billing_type!=='reembolso'&&!b.deleted_at).map(b=>b.id)
+    const ids=billing.filter(b=>b.status==='Pendiente'&&esVencidaB(b)&&b.billing_type!=='reembolso'&&!b.deleted_at).map(b=>b.id)
     if(!ids.length) return
     supabase.from('billing').update({status:'Vencido'}).in('id',ids).then(({error})=>{ if(!error) setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,status:'Vencido'}:b)) })
   },[billing])
@@ -30618,8 +30620,9 @@ export default function App() {
       const r=await _siiFetch(ep.base)
       // El monto REAL de la factura es el del DTE emitido (UF del día), no el programado. Reemplaza amount al emitir.
       const dteTot=r.dteXml?dteMontoTotal(r.dteXml):null
-      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:ep.fecha, dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString(), dte_xml:r.dteXml||null, ...(dteTot!=null?{amount:dteTot}:{}) }
-      await supabase.from('billing').update({status:'Pendiente', issued_at:ep.fecha, ...(dteTot!=null?{amount:dteTot}:{})}).eq('id',ep.billId)
+      const dueEmi=ep.fecha?dueFromIssued(ep.fecha):null   // el plazo corre desde la emisión (no dejar el due planificado viejo)
+      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString(), dte_xml:r.dteXml||null, ...(dteTot!=null?{amount:dteTot}:{}) }
+      await supabase.from('billing').update({status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), ...(dteTot!=null?{amount:dteTot}:{})}).eq('id',ep.billId)
       setBilling(p=>p.map(x=>x.id===ep.billId?{...x,...patch}:x))
       setEmitirPreview(null)
       // Guarda el PDF (logo+timbre) y el XML en Drive (carpeta de facturación) y los adjunta a la factura. No bloquea.
