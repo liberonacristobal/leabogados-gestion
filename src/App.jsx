@@ -28952,6 +28952,7 @@ export function PortalApp(){
 export default function App() {
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
+  const [bootSlow,setBootSlow]=useState(false)   // arranque tarda >10s (sesión o rol sin resolver) → ofrecer Recargar, nunca dejar al usuario atrapado
   const [user,setUser]=useState(null)
   const [userRole,setUserRole]=useState(null)   // vista actual: 'admin' | 'limited' | null (admin puede previsualizar 'limited')
   const [actualRole,setActualRole]=useState(null) // rol REAL e inmutable de la DB — fuente de verdad para permisos
@@ -29154,10 +29155,24 @@ export default function App() {
 
   // Reintento de rol: si hay sesión pero el rol no resolvió (falla de red/RLS en loadUserRole), reintenta hasta lograrlo.
   // Evita que el usuario quede con userRole=null (área de contenido en blanco / "pantalla negra") esperando un refresh manual.
-  useEffect(()=>{ if(DEMO||!session||userRole) return; let alive=true
-    const t=setTimeout(()=>{ if(!alive) return; loadUserRole(session.user.email).then(u=>{ if(alive&&u) setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]}) }).catch(()=>{}) },1200)
-    return ()=>{ alive=false; clearTimeout(t) }
+  useEffect(()=>{ if(DEMO||!session||userRole) return; let alive=true, tries=0, timer=null
+    // BUCLE de reintento (antes era de UN solo disparo: si ese reintento fallaba, userRole quedaba null para siempre y la
+    // pantalla de carga se quedaba PEGADA hasta recargar a mano). Ahora reintenta con backoff hasta resolver el rol.
+    const attempt=async()=>{ if(!alive) return
+      let u=null; try{ u=await loadUserRole(session.user.email) }catch(_){}
+      if(!alive) return
+      if(u){ setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]}); return }   // resolvió → loadUserRole ya seteó userRole; el efecto se desmonta solo
+      tries++; timer=setTimeout(attempt, Math.min(1500*Math.pow(1.5,tries), 8000)) }
+    timer=setTimeout(attempt,1200)
+    return ()=>{ alive=false; if(timer) clearTimeout(timer) }
   },[session,userRole])
+
+  // Red de seguridad del arranque: si a los 10s seguimos verificando sesión o resolviendo rol, marcamos bootSlow → el loader
+  // muestra un botón "Recargar" (por si un reintento externo no basta). Se apaga solo cuando la app ya está lista.
+  useEffect(()=>{ const cargando = !DEMO && (loadingAuth || (session && !userRole))
+    if(!cargando){ setBootSlow(false); return }
+    const t=setTimeout(()=>setBootSlow(true),10000); return ()=>clearTimeout(t)
+  },[loadingAuth,session,userRole])
 
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
@@ -30734,6 +30749,10 @@ export default function App() {
         <span style={{display:'block',height:'11%',width:'84%',borderRadius:2,background:'#5B6570'}}/>
       </div>
       <Spin/>
+      {bootSlow && <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,marginTop:4}}>
+        <div style={{fontSize:12.5,color:C.muted}}>Está tardando más de lo normal.</div>
+        <button onClick={()=>window.location.reload()} style={{background:C.accent,color:'#fff',border:'none',borderRadius:9,padding:'9px 18px',fontSize:13,fontWeight:600,cursor:'pointer'}}>Recargar</button>
+      </div>}
     </div>)
   if(loadingAuth) return bootScreen
   if(!session) return <LoginScreen loading={loadingAuth}/>
