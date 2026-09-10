@@ -12809,6 +12809,33 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Marca una OT como "no es nuestra / cargada por error desde la notaría": sale del total y NO se importa (va a Anuladas). Reversible.
   const marcarNoNuestra = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, anuladaManual:true, client_id:null, clientName:null, entity_id:null, personal_de:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:undefined} : r)); setPersPick(null); flash('Marcada como no reconocida por la oficina · no se carga') }
   const reactivarRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, anuladaManual:false} : r)); flash('Reactivada · vuelve a la revisión') }
+  // Consulta a la notaría por las OT que no reconocemos (marcadas "No es nuestra"): se seleccionan y se les pide detalle.
+  const NOTA_DEST_DEFAULT='sdelgado@notarialascar.cl, sdanotaria@gmail.com'
+  const [notaDest,setNotaDest] = useState(NOTA_DEST_DEFAULT)
+  useEffect(()=>{ if(!notaria) return; supabase.from('learnings').select('value').eq('kind','notaria_email').limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaDest(v) },()=>{}) },[notaria])
+  const [notaConsultaSel,setNotaConsultaSel] = useState(()=>new Set())
+  const [consultando,setConsultando] = useState(false)
+  const toggleConsulta = id => setNotaConsultaSel(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
+  const consultarNotaria = async(selRows) => {
+    const dest=String(notaDest||NOTA_DEST_DEFAULT).split(/[,;]/).map(x=>x.trim()).filter(x=>x.includes('@')&&!/@leabogados\.cl$/i.test(x)).join(', ')
+    if(!dest){ appAlert('Falta el correo de la notaría.'); return }
+    if(!selRows.length){ appAlert('Selecciona al menos una OT para consultar.'); return }
+    if(!(await appConfirm(`Enviar a la notaría (${dest}) una consulta por ${selRows.length} OT que no reconocemos, pidiendo detalle? El estudio va en copia.`))) return
+    setConsultando(true)
+    try{
+      const ccEstudio='cl@leabogados.cl, ee@leabogados.cl, mc@leabogados.cl, mp@leabogados.cl'
+      const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      const filas=selRows.map(r=>`<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(otDe(r))}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(r.materia||r.concepto||'—')}${r.nombre||r.requirente?` <span style="color:#99ABB4">· ${esc(r.nombre||r.requirente)}</span>`:''}</td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(r.monto||0).toLocaleString('es-CL')}</td></tr>`).join('')
+      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:14px;color:#666;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666;margin:0 0 16px">Junto con saludar, revisando la liquidación encontramos las siguientes OT que <b>no logramos reconocer</b> como trabajos de nuestra oficina. ¿Nos podrían dar más detalle (compareciente, materia, a qué corresponden) para poder identificarlas?</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle que tenemos</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}</table><div style="font-size:13px;color:#666;margin:16px 0 0">Quedamos atentos.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">${BRAND.nombre}</b></div></div><div style="padding:16px 28px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio} · ${BRAND.nombre}</div></div></body></html>`
+      const texto='Estimados,\n\nJunto con saludar, revisando la liquidación encontramos las siguientes OT que no logramos reconocer como trabajos de nuestra oficina. ¿Nos podrían dar más detalle para identificarlas?\n\n'+selRows.map(r=>`• ${otDe(r)} · ${(r.materia||r.concepto||'—')}${r.nombre||r.requirente?` · ${r.nombre||r.requirente}`:''} · $${(r.monto||0).toLocaleString('es-CL')}`).join('\n')+'\n\nQuedamos atentos.\nSaludos cordiales,\n'+BRAND.nombre
+      const subject=`Consulta sobre OT no reconocidas — ${BRAND.nombre} — ${new Date().toLocaleDateString('es-CL')}`
+      const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject,html,text:texto})
+      if(via===null){ setConsultando(false); return }   // el usuario canceló la autorización de Gmail
+      flash(`Consulta enviada a la notaría por ${selRows.length} OT`)
+      setNotaConsultaSel(new Set())
+    }catch(e){ appAlert('No se pudo enviar la consulta: '+(e.message||e)) }
+    setConsultando(false)
+  }
   const [driveBusy,setDriveBusy] = useState(null)   // fila con búsqueda en Drive en curso
   const [driveMsg,setDriveMsg] = useState({})       // resultado de la búsqueda en Drive por fila
   const [driveAll,setDriveAll] = useState(null)     // {done,total} de "Buscar todas en Drive"
@@ -12996,9 +13023,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const prot = (kind==='listas'||kind==='personal') ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
     const sub  = kind==='listas' ? (cn||'') : kind==='personal' ? (noName?'':nomDe(r)) : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
+    const consChk = kind==='sinefecto' && r.anuladaManual, consOn = consChk && notaConsultaSel.has(r.id)   // "No es nuestra": seleccionable para consultar a la notaría
     return (
-      <div key={r.id} style={{padding:'10px 0',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10,opacity:info?.8:1}}>
+      <div key={r.id} style={{padding:'10px 0',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10,opacity:info&&!consChk?.8:1}}>
         {chk&&<span onClick={()=>setConfDesel(p=>{ const n=new Set(p); n.has(r.id)?n.delete(r.id):n.add(r.id); return n })} title={on?'Marcada — se confirma':'Marca para confirmar'} style={{cursor:'pointer',flexShrink:0,marginTop:2}}>{on?<svg width='17' height='17' viewBox='0 0 24 24' fill={C.normal} stroke={C.normal}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>}</span>}
+        {consChk&&<span onClick={()=>toggleConsulta(r.id)} title={consOn?'Seleccionada para consultar a la notaría':'Marca para consultar a la notaría'} style={{cursor:'pointer',flexShrink:0,marginTop:2}}>{consOn?<svg width='17' height='17' viewBox='0 0 24 24' fill={C.overdueText} stroke={C.overdueText}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>}</span>}
         <div style={{flex:1,minWidth:0}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
           <span style={{fontSize:13,fontWeight:700,color:noName&&kind!=='listas'?C.grisText:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{prot}</span>
@@ -13029,7 +13058,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Otro</button>
           <button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:700,color:C.tealText,background:C.tealBg,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Gasto interno {persPick===r.id?'▴':'▾'}</button>
         </div>}
-        {kind==='listas'&&<div style={{marginTop:6}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button></div>}
+        {kind==='listas'&&<div style={{display:'flex',gap:12,marginTop:6,flexWrap:'wrap',alignItems:'center'}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button><button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11,fontWeight:600,color:C.tealText,background:'none',border:'none',cursor:'pointer',padding:0}}>Gasto interno {persPick===r.id?'▴':'▾'}</button><button onClick={()=>marcarNoNuestra(r.id)} title='La notaría la envió pero no es un trabajo de la oficina → no se carga' style={{fontSize:11,fontWeight:600,color:C.overdueText,background:'none',border:'none',cursor:'pointer',padding:0}}>No es nuestra</button></div>}
         {kind==='sinefecto'&&r.anuladaManual&&<div style={{marginTop:6}}><button onClick={()=>reactivarRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Reactivar · vuelve a la revisión</button></div>}
         {open&&<div style={{marginTop:8,paddingTop:8,borderTop:`.5px solid #EEF1F3`}}>
           {/* Descripción completa para confirmar bien (misma en toda categoría) */}
@@ -13089,10 +13118,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         </div>
         <div style={{fontSize:10.5,color:C.muted,padding:'8px 13px 0',lineHeight:1.5}}>Tus asignaciones se guardan al Cargar; lo que la app aprende (RUT y clientes) queda para siempre.</div>
         <div style={{fontSize:10.5,color:C.done,padding:'2px 13px 8px',lineHeight:1.5,borderBottom:`.5px solid #EEF1F3`}}>Si algo sale mal, puedes deshacer toda la carga con un clic.</div>
-        <div onClick={()=>setRcOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 13px',fontSize:12.5,cursor:'pointer'}}><span style={{color:C.muted}}>A clientes</span><span style={{display:'flex',alignItems:'center',gap:7}}><b>{cliList.length} cliente{cliList.length!==1?'s':''}</b><span style={{color:C.done,transform:rcOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span></span></div>
-        {rcOpen&&<div style={{background:C.bgPanel,padding:'0 13px 8px'}}>
-          {cliList.slice(0,8).map((c,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:11.5,padding:'4px 0',borderTop:`.5px dashed ${C.border}`}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span><span style={{color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{c.n} · {fmt(c.tot)}</span></div>)}
-          {cliList.length>8&&<div style={{fontSize:11,color:C.azulInfo,fontWeight:600,paddingTop:4}}>y {cliList.length-8} clientes más</div>}
+        <div onClick={()=>setRcOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 13px',fontSize:12.5,cursor:'pointer'}}><span style={{color:C.muted}}>Cuánto debe cada cliente <span style={{fontSize:10,color:C.done}}>· de más a menos</span></span><span style={{display:'flex',alignItems:'center',gap:7}}><b>{cliList.length} cliente{cliList.length!==1?'s':''}</b><span style={{color:C.done,transform:rcOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span></span></div>
+        {rcOpen&&<div style={{background:C.bgPanel,padding:'2px 13px 9px',maxHeight:240,overflowY:'auto'}}>
+          {cliList.map((c,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:11.5,padding:'5px 0',borderTop:`.5px dashed ${C.border}`}}><span style={{fontSize:9.5,fontWeight:700,color:C.done,width:16,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{i+1}</span><span style={{flex:1,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}<span style={{color:C.done}}> · {c.n} OT</span></span><span style={{color:C.accent,fontWeight:700,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(c.tot)}</span></div>)}
+          {cliList.length>1&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,fontWeight:700,color:C.muted,padding:'6px 0 0',marginTop:2,borderTop:`1px solid ${C.border}`}}><span>Total a clientes</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(cliList.reduce((a,c)=>a+c.tot,0))}</span></div>}
         </div>}
         <div onClick={()=>setCatOpen(new Set(['falta','confirma']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 13px',fontSize:12.5,borderTop:`.5px solid #EEF1F3`,cursor:'pointer'}}><span style={{color:C.muted}}>Quedan por revisar</span><span style={{display:'flex',alignItems:'center',gap:7}}><b style={{color:C.soonText}}>{quedan}</b><span style={{fontSize:10,color:C.done}}>{cats.falta.length} sin cliente{cats.confirma.length?` · ${cats.confirma.length} por confirmar`:''}</span><span style={{color:C.done}}>›</span></span></div>
       </div>
@@ -13149,6 +13178,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>
             )}) })()}
             {k==='oficina'&&filtRows(rws,k).map(r=>notaCatRow(r,'oficina'))}
+            {k==='sinefecto'&&(()=>{ const noNs=rws.filter(r=>r.anuladaManual); if(!noNs.length) return null; const selRows=noNs.filter(r=>notaConsultaSel.has(r.id)); const allOn=selRows.length===noNs.length; return (
+              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:'2px 0 8px',marginBottom:2,borderBottom:`.5px solid #EEF1F3`}}>
+                <button onClick={()=>setNotaConsultaSel(allOn?new Set():new Set(noNs.map(r=>r.id)))} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{allOn?'Ninguna':`Todas las no reconocidas (${noNs.length})`}</button>
+                <button disabled={consultando||!selRows.length} onClick={()=>consultarNotaria(selRows)} style={{marginLeft:'auto',fontSize:11.5,fontWeight:700,color:'#fff',background:selRows.length?C.overdue:C.done,border:'none',borderRadius:8,padding:'6px 12px',cursor:selRows.length&&!consultando?'pointer':'default',opacity:selRows.length&&!consultando?1:.6,display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>{consultando?'Enviando…':`Consultar a la notaría (${selRows.length})`}</button>
+              </div>
+            )})()}
             {(k==='yacargadas'||k==='sinefecto'||k==='errores')&&rws.map(r=>notaCatRow(r,k))}
           </div>}
         </div>
