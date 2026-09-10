@@ -13924,7 +13924,7 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
           ))}
         </div>
       ) : puedeRepetir ? (
-        <div style={{background:C.azulBg,borderLeft:`3px solid ${C.accent}`,border:`1px solid ${C.border}`,borderRadius:9,padding:'10px 12px',margin:'6px 0 2px'}}>
+        <div style={{background:C.azulBg,border:`1px solid ${C.border}`,borderRadius:9,padding:'10px 12px',margin:'6px 0 2px'}}>
           <div style={{fontSize:11.5,fontWeight:700,color:C.accent,marginBottom:2}}>Aún no cargas los costos fijos de {_mesLabelOf(mes)}</div>
           <div style={{fontSize:10,color:C.muted,marginBottom:9}}>En {_mesLabelOf(prevMes)} fueron {prevItems.length} ítem{prevItems.length!==1?'s':''} · {fmt(repTot)}. ¿Los repito?</div>
           <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:10}}>
@@ -14627,7 +14627,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
         onDragStart={isDesktop?(ev=>{ try{ ev.dataTransfer.setData('text/expense-id',String(e.id)); ev.dataTransfer.effectAllowed='move' }catch(_){}; ev.currentTarget.style.opacity='.45' }):undefined}
         onDragEnd={isDesktop?(ev=>{ ev.currentTarget.style.opacity='1' }):undefined}
         title={isDesktop&&!isFondo&&e.client_id?'Arrastra a otro cliente de la lista para reasignar':undefined}
-        style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isDev?C.azulInfo:isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
+        style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
           {bigDate(e.date)}
           <div style={{minWidth:0,flex:1}}>
@@ -14740,11 +14740,11 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
                 {estadoFor===e.id && <>
                   <div onClick={()=>setEstadoFor(null)} style={{position:'fixed',inset:0,zIndex:90}}/>
                   <div style={{position:'absolute',top:26,right:0,zIndex:100,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,minWidth:188,overflow:'hidden',boxShadow:'0 4px 14px rgba(0,0,0,.1)'}}>
-                    <div onClick={()=>{marcarEstado(e,'historico');setEstadoFor(null)}} style={{padding:'8px 11px',borderBottom:`0.5px solid ${C.azulBg}`,borderLeft:`3px solid ${C.muted}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+                    <div onClick={()=>{marcarEstado(e,'historico');setEstadoFor(null)}} style={{padding:'8px 11px',borderBottom:`0.5px solid ${C.azulBg}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
                       <span style={{color:C.grisText,display:'inline-flex'}}>{icoReloj()}</span>
                       <div><div style={{fontSize:12,color:C.grisText,fontWeight:600}}>Histórico</div><div style={{fontSize:10,color:C.muted}}>No descuenta el saldo</div></div>
                     </div>
-                    <div onClick={()=>{marcarEstado(e,'descuenta');setEstadoFor(null)}} style={{padding:'8px 11px',borderLeft:`3px solid ${C.normal}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+                    <div onClick={()=>{marcarEstado(e,'descuenta');setEstadoFor(null)}} style={{padding:'8px 11px',cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
                       <span style={{color:C.greenText,display:'inline-flex'}}>{icoBaja()}</span>
                       <div><div style={{fontSize:12,color:C.greenText,fontWeight:600}}>Descuenta</div><div style={{fontSize:10,color:C.muted}}>Sí baja el saldo</div></div>
                     </div>
@@ -15305,7 +15305,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const diasDe = c=>{ const d=lastAct[String(c.id)]; if(!d) return null; return Math.floor((Date.now()-new Date(d))/86400000) }
               const sortCli = arr => [...arr].sort((a,b)=> cliOrd==='saldo' ? (Math.abs(saldoDe(b))-Math.abs(saldoDe(a))) : cliOrd==='actividad' ? ((lastAct[String(a.id)]||'')<(lastAct[String(b.id)]||'')?-1:1) : (a.name||'').localeCompare(b.name||'','es'))
               const row = c => { const sal=saldoDe(c); const col=sal<0?C.overdue:(sal>0?C.normal:C.done); const ents=(clientEntities||[]).filter(x=>String(x.client_id)===String(c.id)); const rs=ents.length>1?`${ents.length} razones sociales`:(ents[0]?rsDisplay(ents[0].name):''); const nPR=gastosPorRendir(c.id).length; const dias=diasDe(c); const inact=dias!=null&&dias>=45; return (
-                <div key={c.id} data-cid={String(c.id)} onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',borderLeft:`3px solid ${col}`,borderTop:`1px solid #EEF1F3`,cursor:'pointer'}}>
+                <div key={c.id} data-cid={String(c.id)} onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',borderTop:`1px solid #EEF1F3`,cursor:'pointer'}}>
+                  <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                     <div style={{display:'flex',alignItems:'center',gap:7,marginTop:1}}>
