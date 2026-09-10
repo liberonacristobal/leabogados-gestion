@@ -3302,6 +3302,18 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               // Héroe único (arriba de cada panel): verde='neto', navy=total, rojo=pérdida
               const heroCol=v=> v==='g'?C.greenText:(v==='r'?C.overdueText:C.accent)
               const Hero=({v,l,val})=>(<div style={{padding:'12px 14px 10px',textAlign:'center',background:v==='g'?C.greenBg:(v==='r'?C.overdueBg:C.azulBg)}}><div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.5px',color:heroCol(v)}}>{l}</div><div style={{fontSize:24,fontWeight:800,letterSpacing:'-.5px',lineHeight:1.05,marginTop:3,fontVariantNumeric:'tabular-nums',color:heroCol(v)}}>{val}</div></div>)
+              // Hero PARTIDO (solo Vendido/Cobrado al desplegar): Bruto | Neto, cada uno con su % de la meta. Fondo/color de la tarjeta.
+              const HeroSplit=({tone,cap,bK,bV,bP,nK,nV,nP})=>{ const az=tone==='az'
+                const bg=az?C.azulBg:C.greenBg, bd=az?'#D5E6F6':C.greenBd, capC=az?C.azulInfo:C.greenText, colB=az?C.azulInfo:C.normal, colN=az?C.accent:C.greenText
+                const half=(k,v,p,col,brd)=>(<div style={{flex:1,minWidth:0,...(brd?{borderLeft:`1px solid ${bd}`,paddingLeft:14}:{})}}>
+                  <div style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',color:C.done}}>{k}</div>
+                  <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.5px',lineHeight:1,margin:'3px 0 4px',color:col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div>
+                  {p!=null&&<div style={{fontSize:11,color:C.muted}}><b style={{color:col,fontWeight:800}}>{p}%</b> de la meta</div>}
+                </div>)
+                return (<div style={{padding:'12px 15px',background:bg}}>
+                  <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.5px',color:capC}}>{cap}</div>
+                  <div style={{display:'flex',marginTop:8}}>{half(bK,bV,bP,colB,false)}{half(nK,nV,nP,colN,true)}</div>
+                </div>) }
               const metaBand=(l,pctV,val)=>(<div style={{...R,background:C.azulBg}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent}}>{l} <span style={{background:C.azulInfo,color:'#fff',fontSize:9,fontWeight:800,borderRadius:20,padding:'1px 7px',marginLeft:4}}>{pctV}%</span></span><span style={{...rowV,color:C.azulInfo}}>{val}</span></div>)
               const verlink=(txt,dest)=>(<div onClick={()=>go(dest)} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>{txt} ›</div>)
               // Lista de comisiones pagadas del año (base caja), para "ver los pagos" dentro del panel
@@ -3315,12 +3327,9 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                 const sobreMeta=m.brutoUF>=metaUF, difBrutoUF=Math.abs(m.brutoUF-metaUF), difBrutoCLP=Math.abs(m.bruto-m.meta)
                 const netoSobre=m.netoUF>=metaUF, difNetoUF=Math.abs(metaUF-m.netoUF), difNetoCLP=Math.abs(m.meta-m.neto)
                 return (<div style={box}>
-                  <Hero v='g' l='Neto de comisiones · vendido' val={vMon(m.netoUF,m.neto)}/>
-                  <div style={R}><span style={rowL}>Bruto vendido</span><span style={rowV}>{vMon(m.brutoUF,m.bruto)}</span></div>
+                  <HeroSplit tone='az' cap={`Resultado de ventas ${selYear}`} bK='Bruto' bV={vMon(m.brutoUF,m.bruto)} bP={m.meta>0?ventaPct:null} nK='Neto de comisiones' nV={vMon(m.netoUF,m.neto)} nP={m.meta>0?ventaNetoPct:null}/>
                   <div style={R}><span style={rowL}>Comisiones devengadas</span><span style={vNeg}>− {vMon(m.costoUF,m.costo)}</span></div>
-                  {m.meta>0&&metaBand(`Meta de ventas ${selYear}`,ventaPct,vMon(metaUF,m.meta))}
                   {m.meta>0&&<div style={R}><span style={rowL}>{sobreMeta?'Sobre meta (bruto)':'Falta para la meta (bruto)'}</span><span style={{...rowV,color:sobreMeta?C.greenText:C.text}}>{sobreMeta?'+ ':''}{vMon(difBrutoUF,difBrutoCLP)}</span></div>}
-                  {m.meta>0&&<div style={R}><span style={rowL}>Venta neta vs meta <span style={{color:C.done,fontWeight:400}}>· {ventaNetoPct}%</span></span><span style={{...rowV,color:netoSobre?C.greenText:C.muted}}>{netoSobre?'+ ':'falta '}{vMon(difNetoUF,difNetoCLP)}</span></div>}
                   {verlink('Ver todo en Ventas','sales')}
                 </div>)
               }
@@ -3345,9 +3354,8 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               const anyOpen = yrs.some(y=>resDrill.year===y)
               return (<div style={box}>
                 {isCob
-                  ? <Hero v='g' l='Neto de comisiones · cobrado' val={fmtMon(ingYTD-comisYTD)}/>
+                  ? <HeroSplit tone='gr' cap={`Resultado cobrado ${selYear}`} bK='Bruto a caja' bV={fmtMon(ingYTD)} bP={metaCobranza>0?cobroPct:null} nK='Neto de comisiones' nV={fmtMon(ingYTD-comisYTD)} nP={metaCobranza>0?Math.round((ingYTD-comisYTD)/metaCobranza*100):null}/>
                   : <Hero v='n' l={`Facturado en ${selYear}`} val={fmtMon(facturadoYr)}/>}
-                {isCob&&<div style={R}><span style={rowL}>Bruto a caja</span><span style={rowV}>{fmtMon(ingYTD)}</span></div>}
                 {isCob&&comisChip}
                 {isCob&&comisList}
                 <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',padding:'10px 14px 4px'}}>{isCob?'Cobrado':'Facturado'} según año de la venta</div>
@@ -3363,7 +3371,6 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                       </div>) })}
                     {open&&items.length>6&&<div onClick={()=>setResSeeAll(s=>({...s,[key]:!s[key]}))} style={{textAlign:'center',padding:9,fontSize:11,fontWeight:700,color:C.azulInfo,background:C.bg,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>{seeAll?'Ver menos':`Ver las ${items.length} ›`}</div>}
                   </Fragment>) })}
-                {isCob&&metaCobranza>0&&metaBand('Meta de cobranza',cobroPct,fmtMon(metaCobranza))}
                 {verlink(isCob?'Ver todo en Cobranza':'Ver todo en Facturación',isCob?'cobranza':'billing')}
               </div>)
             })()}
