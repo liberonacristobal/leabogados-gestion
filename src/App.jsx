@@ -867,7 +867,7 @@ const TrashIcon = ({color}) => (
 const BanIcon = ({size=15,color}) => (
   <svg width={size} height={size} viewBox='0 0 24 24' fill='none' stroke={color||C.overdue} strokeWidth='2' strokeLinecap='round'><circle cx='12' cy='12' r='9'/><line x1='5.6' y1='5.6' x2='18.4' y2='18.4'/></svg>
 )
-const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeader=false,fullscreen=false,fullscreenOnMobile=false,footer=null,maxWidth=520,fsMaxWidth=720}) => {
+const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeader=false,fullscreen=false,fullscreenOnMobile=false,footer=null,maxWidth=520,fsMaxWidth=720,topmost=false}) => {
   // iPhone-first: `fullscreenOnMobile` hace pantalla completa bajo 600px (header fijo, cuerpo con scroll propio, footer anclado con safe-area).
   // `footer` (opcional) es una barra inferior anclada FUERA del scroll — para inputs/acciones que no deben quedar tapados por el teclado.
   const [mob,setMob] = useState(()=> typeof window!=='undefined' && window.innerWidth < 600)
@@ -875,7 +875,7 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
   const fs = fullscreen || (fullscreenOnMobile && mob)
   const flex = fs || !!footer   // layout en columna: header / cuerpo scroll / footer anclado
   const node = (
-  <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:fs?600:200,display:'flex',alignItems:fs?'stretch':'center',justifyContent:'center',padding:fs?0:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
+  <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:topmost?900:(fs?600:200),display:'flex',alignItems:fs?'stretch':'center',justifyContent:'center',padding:fs?0:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
     <div className={fs?'modal-fs':undefined} style={{background:C.surface,borderRadius:fs?0:16,width:'100%',maxWidth:fs?'none':maxWidth,maxHeight:fs?'100%':'90vh',height:fs?'100%':'auto',display:flex?'flex':'block',flexDirection:flex?'column':undefined,overflowY:flex?'hidden':'auto',boxShadow:fs?'none':'0 20px 60px rgba(0,0,0,.18)',border:fs?'none':`1px solid ${C.border}`,paddingBottom:(fs||flex)?0:(hideHeader?0:24)}}>
       {!hideHeader&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:fs?'calc(env(safe-area-inset-top,0px) + 16px) 18px 14px':'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:flex?'static':'sticky',top:0,background:C.surface,zIndex:1,flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
@@ -906,7 +906,7 @@ function DialogHost(){
   if(!q) return null
   const done = v => { const r=q.resolve; setQ(null); r(v) }
   const isAlert=q.kind==='alert', isPrompt=q.kind==='prompt'
-  return <Modal title={q.title||(isAlert?'Aviso':'Confirmar')} onClose={()=>done(isAlert?true:(isPrompt?null:false))} closeOnBackdrop={false}>
+  return <Modal topmost title={q.title||(isAlert?'Aviso':'Confirmar')} onClose={()=>done(isAlert?true:(isPrompt?null:false))} closeOnBackdrop={false}>
     <div style={{fontSize:14,color:C.text,lineHeight:1.55,whiteSpace:'pre-wrap',marginBottom:isPrompt?12:18}}>{q.message}</div>
     {isPrompt && <input autoFocus value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')done(val)}} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',fontSize:14,color:C.text,outline:'none',boxSizing:'border-box',marginBottom:18,fontFamily:'inherit'}}/>}
     <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
