@@ -12938,9 +12938,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Reparte las filas en 6 categorías accionables. Cada una es una tarjeta plegable; adentro, filas
   // que muestran compareciente + trámite + fecha (lo que identifica de quién es).
   const notaCats = (flt) => {
-    const c={falta:[],confirma:[],listas:[],personal:[],oficina:[],yacargadas:[],sinefecto:[]}
+    const c={falta:[],confirma:[],listas:[],personal:[],oficina:[],yacargadas:[],sinefecto:[],errores:[]}
     flt.forEach(r=>{
-      if(r.error){ c.sinefecto.push(r); return }
+      if(r.error){ if(/sin efecto/i.test(r.error)) c.sinefecto.push(r); else c.errores.push(r); return }   // 'Sin efecto (anulada)' aparte de errores reales (ej. 'OT no detectada')
       if(dupInfo[r.id]?.otState){ c.yacargadas.push(r); return }
       if(r.personal_de){ c.personal.push(r); return }   // gasto personal de un miembro (Cristóbal/Erasmo/…)
       if(r.isInternal || (r.client_id && esOficinaCli(r.client_id))){ c.oficina.push(r); return }
@@ -12958,8 +12958,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     oficina:{t:'De la oficina', s:'no van a un cliente', col:C.tealText, bg:C.tealBg},
     yacargadas:{t:'Ya cargadas', s:'están en la app · se omiten', col:C.muted, bg:C.bgSoft},
     sinefecto:{t:'Sin efecto', s:'anuladas · excluidas del total', col:C.grisText, bg:C.bgWarm},
+    errores:{t:'Con error · no se cargan', s:'revísalas (ej. OT no detectada en el archivo)', col:C.overdueText, bg:C.overdueBg},
   }
-  const catSvg = (k,col) => { const p={falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],personal:['M5 20c0-4 3.5-6 7-6s7 2 7 6'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],sinefecto:['M6 6l12 12']}[k]||[]
+  const catSvg = (k,col) => { const p={falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],personal:['M5 20c0-4 3.5-6 7-6s7 2 7 6'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],sinefecto:['M6 6l12 12'],errores:['M12 9v4','M12 17v.01']}[k]||[]
     const base = k==='falta'?<circle cx='9' cy='8' r='3'/>:k==='confirma'?<circle cx='12' cy='12' r='3.5'/>:k==='personal'?<circle cx='12' cy='8' r='3.5'/>:k==='oficina'?<rect x='4' y='3' width='12' height='18' rx='1'/>:k==='yacargadas'?<path d='M3 12a9 9 0 1 0 3-6.7L3 8'/>:k==='sinefecto'?<circle cx='12' cy='12' r='9'/>:null
     return <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth={k==='listas'?2.4:2} strokeLinecap='round' strokeLinejoin='round'>{base}{p.map((d,i)=><path key={i} d={d}/>)}</svg> }
   const tramDe = r => ((r.materia||'').trim().toLowerCase().replace(/^./,ch=>ch.toUpperCase()))||'Trámite notarial'
@@ -12973,9 +12974,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const noName = !String(r.nombre||r.requirente||'').replace(/^\s*n\/?a\.?\s*$/i,'').trim()   // sin compareciente utilizable
     const fy = r.fecha ? new Date(r.fecha).getFullYear() : null
     const oldY = fy && !isNaN(fy) && fy < new Date().getFullYear()   // OT de un año anterior
-    const info = kind==='yacargadas'||kind==='sinefecto'   // solo lectura
+    const info = kind==='yacargadas'||kind==='sinefecto'||kind==='errores'   // solo lectura
     const st = dupInfo[r.id]?.otState
-    const stNote = kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
+    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
     const prot = (kind==='listas'||kind==='personal') ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
     const sub  = kind==='listas' ? (cn||'') : kind==='personal' ? (noName?'':nomDe(r)) : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
@@ -13110,7 +13111,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>
             )}) })()}
             {k==='oficina'&&filtRows(rws,k).map(r=>notaCatRow(r,'oficina'))}
-            {(k==='yacargadas'||k==='sinefecto')&&rws.map(r=>notaCatRow(r,k))}
+            {(k==='yacargadas'||k==='sinefecto'||k==='errores')&&rws.map(r=>notaCatRow(r,k))}
           </div>}
         </div>
       )
@@ -13137,7 +13138,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {aprendido&&aprendido.name
         ? <div style={{display:'flex',alignItems:'center',gap:7,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.greenText}}>Aprendí que <b>{aprendido.name}</b> es <b>{aprendido.cli}</b> — no te lo vuelvo a preguntar.</span></div>
         : accionMsg&&<div style={{display:'flex',alignItems:'center',gap:7,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.text}}>{accionMsg}</span></div>}
-      {['falta','confirma','listas','personal','oficina','yacargadas','sinefecto'].map(card)}
+      {['errores','falta','confirma','listas','personal','oficina','yacargadas','sinefecto'].map(card)}
       {notaReceipt(cats)}
     </div>)
   }
