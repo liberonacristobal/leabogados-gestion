@@ -7865,7 +7865,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const Fila = ({children}) => <div style={{display:'flex',alignItems:'center',padding:'11px 20px',borderBottom:'0.5px solid #E4E8EB'}}>{children}</div>
   const CheckVerde = () => <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><polyline points='20 6 9 17 4 12'/></svg>
   return (
-    <div style={{position:'fixed',inset:0,background:C.bg,zIndex:200,overflowY:'auto'}}>
+    <div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,background:C.bg,zIndex:200,overflowY:'auto'}}>
       <div style={{background:'#fff',maxWidth:isDesktop?960:'100%',width:'100%',margin:'0 auto',minHeight:'100%',boxShadow:isDesktop?'0 0 40px rgba(0,0,0,.06)':'none'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:2}}>
           <button onClick={onClose} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}>
