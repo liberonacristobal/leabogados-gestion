@@ -18223,6 +18223,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [pdf,setPdf]=useState(null)
   const [pdfErr,setPdfErr]=useState(null)   // por qué no se pudo auto-generar el PDF del DTE (para no fallar en silencio)
   const [atts,setAtts]=useState([])   // adjuntos cuando es multi (un PDF por factura)
+  const [extras,setExtras]=useState([])   // documentos adicionales (anexos, comprobantes, cartas) que viajan junto a la factura
   const [dteTotals,setDteTotals]=useState(()=>{ const m={}; listF.forEach(f=>{ if(f.dte_xml){ const t=dteMontoTotal(f.dte_xml); if(t!=null) m[f.id]=t } }); return m })   // id factura → MntTotal REAL del DTE (autoridad = el DTE); prima sobre amount del sistema (programado)
   const amountOf=f=>{ const t=dteTotals[f?.id]; return (t!=null)?t:(f?.amount||0) }
   // Aprender la frase editada: se guarda como PLANTILLA con tokens {folios}/{total} (lo que cambia entre envíos), por cliente + (una|varias) + idioma.
@@ -18266,6 +18267,10 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
   const onFile=f=>{ if(!f) return; const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setPdf({name:f.name,base64:b}) }; r.readAsDataURL(f) }
+  // Documentos adicionales (uno o varios, cualquier tipo): se leen a base64 y se suman como adjuntos al correo.
+  const onExtras=fileList=>{ Array.from(fileList||[]).forEach(f=>{ const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setExtras(p=>[...p,{name:f.name,base64:b,mime:f.type||'application/octet-stream',size:f.size}]) }; r.readAsDataURL(f) }) }
+  const removeExtra=i=>setExtras(p=>p.filter((_,ix)=>ix!==i))
+  const fmtSize=n=> n>=1048576 ? `${(n/1048576).toFixed(1)} MB` : `${Math.max(1,Math.round((n||0)/1024))} KB`
   // Si la factura se emitió por el SII (tiene dte_xml), adjunta el PDF oficial con timbre automáticamente. (solo modo individual)
   useEffect(()=>{ if(multi||!factura?.dte_xml) return; let alive=true; (async()=>{ try{ const doc=splitSetDTE(factura.dte_xml)[0]; if(!doc){ if(alive) setPdfErr('El XML guardado no contiene el documento (<Documento>). Vuelve a cargar el XML del SII.'); return } const r=await facturaDtePdfBase64(doc); if(alive){ setPdf({name:`Factura ${folio||r.folio}.pdf`,base64:r.base64,auto:true}); setPdfErr(null); if(r.total!=null) setDteTotals(m=>({...m,[factura.id]:r.total})) } }catch(e){ if(alive) setPdfErr(e.message||'No se pudo generar el PDF del DTE.') } })(); return ()=>{alive=false} },[])
   // Multi: genera el PDF con timbre de CADA factura, los adjunta todos y guarda su total real.
@@ -18329,7 +18334,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
     setSending(true)
     try{
-      const adjuntos = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
+      const adjuntos = [...(multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])), ...extras.map(e=>({base64:e.base64,name:e.name,mime:e.mime}))]   // factura(s) + documentos adicionales
       const bodyTxt=cuerpoFull()   // ya incluye las cuentas (segmentos), en el orden correcto
       if(pedirFondo){ try{ await supabase.from('learnings').upsert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(ctaGastos)},{onConflict:'kind,key'}) }catch(_){} }   // recuerda la cuenta de gastos ingresada
       // La factura sale SIEMPRE desde el correo del usuario. Si su Gmail venció, NO cae a la oficina: se le pide reentrar y reintentar (control sobre el remitente).
@@ -18426,6 +18431,11 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
           : (pdf? <div style={{display:'flex',alignItems:'center',gap:10,fontSize:12,flexWrap:'wrap'}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span>{pdf.base64&&<button type='button' onClick={()=>verPdf(pdf.base64,pdf.name)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',cursor:'pointer'}}>Ver PDF</button>}<button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button></div>
               : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>)}
         {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente. Toca uno para verlo.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:(!pdf&&pdfErr)?<div style={{fontSize:9,color:C.overdueText,marginTop:3}}>No pude generar el PDF con timbre: {pdfErr} Puedes adjuntarlo a mano.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
+      </div>
+      <div><div style={lbl}>{lang==='en'?'ADDITIONAL DOCUMENT':'DOCUMENTO ADICIONAL'} <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:C.muted}}>{lang==='en'?'(optional)':'(opcional)'}</span></div>
+        {extras.length>0&&<div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:6}}>{extras.map((e,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,background:C.bgSoft,borderRadius:8,padding:'5px 9px'}}><span style={{color:C.accent,fontWeight:600,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={e.name}>{e.name}</span><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>{fmtSize(e.size)}</span><button type='button' onClick={()=>removeExtra(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontWeight:700,padding:'0 2px'}}>×</button></div>)}</div>}
+        <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ {lang==='en'?'Attach document':'Adjuntar documento'}<input type='file' multiple onChange={e=>{onExtras(e.target.files); e.target.value=''}} style={{display:'none'}}/></label>
+        <div style={{fontSize:9,color:C.muted,marginTop:3}}>{lang==='en'?'A file (or several) that will travel attached along with the invoice.':'Un archivo (o varios) que viajará adjunto junto con la factura.'}</div>
       </div>
       {/* Vista previa del correo — REPLEGADA por defecto (se abre a demanda); en vivo con cada opción. */}
       <details>
