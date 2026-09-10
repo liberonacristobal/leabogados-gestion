@@ -9133,7 +9133,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
     const r=recordatorioCobro(b)
     if(!await appConfirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
-    try{ const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
+    try{ const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Recordatorio de cobro por TANDA (desde el Cierre de mes): una sola compuerta que lista los destinatarios;
@@ -9144,7 +9144,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     if(!dest.length){ appAlert('Ninguna de estas facturas tiene correo del cliente en la ficha para recordar.'); return }
     if(!await appConfirm(`¿Enviar ${dest.length} recordatorio${dest.length!==1?'s':''} de cobro desde tu cuenta?\n\n${dest.slice(0,8).map(d=>`· ${d.name} — ${d.r.folio}`).join('\n')}${dest.length>8?`\n… y ${dest.length-8} más`:''}${sinCorreo>0?`\n\n(${sinCorreo} sin correo se omiten.)`:''}`)) return
     let ok=0
-    for(const d of dest){ try{ const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(d.b.id),value:at},{onConflict:'kind,key'}) }catch(_){}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(_){} }
+    for(const d of dest){ try{ const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(d.b.id),at) }catch(_){}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(_){} }
     appAlert(`${ok} de ${dest.length} recordatorio${dest.length!==1?'s':''} enviado${ok!==1?'s':''}.`)
   }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
@@ -23890,8 +23890,7 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
   },[grupos,sortBy])
   // Contexto: "Por cobrar total" (todo lo emitido sin pagar, vencido + al día) para explicar la diferencia con Facturación. Cobranza actúa solo sobre lo vencido.
   const _cobr=b=>!b.deleted_at && b.invoice_no && !['reembolso','nota_credito'].includes(b.billing_type) && ['Pendiente','Vencido'].includes(b.status) && saldoBill(b)>0
-  const porPagarTotal=(billing||[]).filter(_cobr).reduce((s,b)=>s+saldoBill(b),0)
-  const nAlDia=(billing||[]).filter(b=>_cobr(b)&&!(b.due&&b.due<hoy)).length
+  const nAlDia=(billing||[]).filter(b=>_cobr(b)&&!esVencidaB(b)).length   // "al día" por la FUENTE ÚNICA (emisión+30), no el due crudo → consistente con la lista
 
   async function enviarCliente(g, skipConfirm){
     const cl=clients.find(c=>String(c.id)===String(g.cid)); const to=(cl?.email||'').trim()
@@ -23902,8 +23901,8 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
     setSending(g.cid)
     if(DEMO){ await new Promise(r=>setTimeout(r,400)); const now=new Date().toISOString(); setRecMap(m=>{ const n={...m}; toRem.forEach(({b})=>n[String(b.id)]=now); return n }); setOkCount(o=>({...o,[g.cid]:(o[g.cid]||0)+1})); setSending(null); appAlert('En demo no se envía; se registró la cadencia.'); return }
     let ok=0
-    for(const {b} of toRem){ try{ const r=recordatorioCobro(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}) }catch(_){}; setRecMap(m=>({...m,[String(b.id)]:at})) } }catch(_){} }
-    if(ok){ const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); try{ await supabase.from('learnings').upsert({kind:'cobranza_ok',key:String(g.cid),value:String(nc)},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio enviado a ${cn(g.cid)} (${ok} factura${ok!==1?'s':''}).`) }
+    for(const {b} of toRem){ try{ const r=recordatorioCobro(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at) }catch(_){}; setRecMap(m=>({...m,[String(b.id)]:at})) } }catch(_){} }
+    if(ok){ const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); try{ await setLearningKV('cobranza_ok',String(g.cid),String(nc)) }catch(_){}; appAlert(`Recordatorio enviado a ${cn(g.cid)} (${ok} factura${ok!==1?'s':''}).`) }
     setSending(null)
   }
   async function enviarTodos(){
@@ -23917,7 +23916,7 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
   async function liberar(cid){
     if(!(await appConfirm(`¿Liberar la cobranza de ${cn(cid)} a automático? La app enviará sola los recordatorios que correspondan (siempre puedes pausarlo y queda en bitácora).`))) return
     setAutoCli(a=>({...a,[cid]:true})); if(DEMO) return
-    try{ await supabase.from('learnings').upsert({kind:'fd_auto',key:'cobranza:'+cid,value:'1'},{onConflict:'kind,key'}) }catch(e){ setAutoCli(a=>{const n={...a};delete n[cid];return n}); appAlert('No se pudo liberar: '+e.message) }
+    try{ await setLearningKV('fd_auto','cobranza:'+cid,'1') }catch(e){ setAutoCli(a=>{const n={...a};delete n[cid];return n}); appAlert('No se pudo liberar: '+e.message) }
   }
   async function pausar(cid){
     setAutoCli(a=>{const n={...a};delete n[cid];return n}); if(DEMO) return
@@ -23962,22 +23961,21 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
     <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?1040:560,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Cobranza</div>
-        {onClose&&<span onClick={onClose} style={{fontSize:12,color:C.done,cursor:'pointer'}}>Cerrar</span>}
+        {onClose&&<span onClick={onClose} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer'}}>← Volver</span>}
       </div>
-      <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:14,color:'#fff'}}>
-        <div style={{display:'flex',gap:14}}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Deuda vencida</div>
-            <div style={{fontSize:22,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(vencidoTotal)}</div>
-            <div style={{fontSize:10,opacity:.8}}>{gruposAccion.length} cliente{gruposAccion.length!==1?'s':''} · {nVencidas} factura{nVencidas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
-          </div>
-          <div style={{width:1,background:'rgba(255,255,255,.18)'}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Deuda total</div>
-            <div style={{fontSize:22,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(deudaTotal)}</div>
-            <div style={{fontSize:10,opacity:.8}}>{grupos.length} cliente{grupos.length!==1?'s':''}{nAlDia>0?` · ${nAlDia} al día`:''}</div>
-          </div>
+      {/* Canon de la foto: un protagonista (deuda por cobrar) con su parte accionable (vencido) ANIDADA, no en paralelo. Ambas cifras clickeables (ordenan la lista). */}
+      <div style={{background:C.accent,borderRadius:12,padding:'14px 16px',marginBottom:14,color:'#fff'}}>
+        <div onClick={()=>setSortBy({col:'total',dir:'desc'})} style={{cursor:'pointer'}}>
+          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',color:C.onNavyLabel,fontWeight:700}}>Deuda por cobrar</div>
+          <div style={{fontSize:26,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.6px',fontVariantNumeric:'tabular-nums'}}>{f0(deudaTotal)}</div>
+          <div style={{fontSize:10.5,color:C.onNavyLabel}}>{grupos.length} cliente{grupos.length!==1?'s':''}{nAlDia>0?` · ${nAlDia} al día`:''}</div>
         </div>
+        {vencidoTotal>0 && <div onClick={()=>setSortBy({col:'vencido',dir:'desc'})} style={{display:'flex',alignItems:'center',gap:9,marginTop:11,paddingTop:11,borderTop:'1px solid rgba(255,255,255,.16)',cursor:'pointer'}}>
+          <span style={{width:8,height:8,borderRadius:'50%',background:C.onNavyRed,flexShrink:0}}/>
+          <span style={{fontSize:11.5,color:'#fff',fontWeight:700}}>Vencido</span>
+          <span style={{fontSize:15,fontWeight:800,color:C.onNavyRed,fontVariantNumeric:'tabular-nums'}}>{f0(vencidoTotal)}</span>
+          <span style={{marginLeft:'auto',fontSize:10.5,color:C.onNavyLabel}}>{gruposAccion.length} cliente{gruposAccion.length!==1?'s':''} · {nVencidas} factura{nVencidas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</span>
+        </div>}
       </div>
       {grupos.length===0 && <div style={{fontSize:12.5,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
       {grupos.length>0 && (()=>{ const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]; return (
@@ -23990,8 +23988,8 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
           </div>
         </div>) })()}
       {isDesktop ? (()=>{
-        const thS={fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:'#fff',background:'#003C50',padding:'9px 12px',textAlign:'left',whiteSpace:'nowrap'}
-        const th=(col,lbl,r)=>(<th onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{...thS,textAlign:r?'right':'left',cursor:'pointer',userSelect:'none'}}>{lbl}{sortBy.col===col?<span style={{color:'#cfe0ef'}}> {sortBy.dir==='desc'?'▾':'▴'}</span>:''}</th>)
+        const thS={fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:'#fff',background:C.accent,padding:'9px 12px',textAlign:'left',whiteSpace:'nowrap'}
+        const th=(col,lbl,r)=>(<th onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{...thS,textAlign:r?'right':'left',cursor:'pointer',userSelect:'none'}}>{lbl}{sortBy.col===col?<span style={{color:C.onNavyLabel}}> {sortBy.dir==='desc'?'▾':'▴'}</span>:''}</th>)
         const gapDe=g=>{ const l=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; return l?`hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(l).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar' }
         return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
@@ -24050,7 +24048,7 @@ function CobranzaView({ billing=[], clients=[], clientEntities=[], currentUserNa
           </div>}
         </div>
       )})}
-      <div style={{fontSize:10,color:C.done,marginTop:12,lineHeight:1.5}}>Escala sola: amable antes de vencer, firme hasta 30 días, final después. No reenvía antes de {COBRANZA_GAP} días. Al confirmar {LIBERAR_UMBRAL} veces un cliente, puedes liberarlo a automático.</div>
+      <div style={{fontSize:10,color:C.done,marginTop:12}}>Escala sola: amable → firme → final. Al confirmar {LIBERAR_UMBRAL} envíos de un cliente puedes liberarlo a automático.</div>
     </div>
   )
 }
