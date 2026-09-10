@@ -6138,7 +6138,8 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
   const fmtDue = due => { try{ return new Date(String(due)+'T00:00:00').toLocaleDateString('es-CL',{day:'numeric',month:'long'}) }catch(e){ return String(due||'') } }
   const miEmail = EMAIL_BY_NAME[user?.name] || user?.email || null
   // Regla: la 1ª tarea de toda venta nueva es pedir el fondo por rendir para gastos, asignable a una persona de la oficina.
-  const fondoItem = () => ({titulo:'Pedir fondo por rendir para gastos', due:addDays(2), nota:'Provisión inicial para gastos del encargo (notariales, inscripciones, etc.).', incluir:true, esFondo:true, asignado: sale?.responsible||user?.name||''})
+  // Se enlaza con el módulo "Solicitar fondos" (correo al cliente): la tarea lo nombra para que se use esa herramienta.
+  const fondoItem = () => ({titulo:'Solicitar fondos al cliente (provisión para gastos)', due:addDays(2), nota:'Usa la herramienta "Solicitar fondos" (Gastos) para enviar el correo al cliente con los datos de transferencia. Provisión inicial para gastos del encargo (notariales, inscripciones, etc.).', incluir:true, esFondo:true, asignado: sale?.responsible||user?.name||''})
   const [loading,setLoading]=useState(true)
   const [items,setItems]=useState([])   // {titulo, due, nota, incluir}
   const [responsable,setResponsable]=useState(sale?.responsible||user?.name||'')
@@ -14251,6 +14252,9 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     }catch(_){}
     setOrfBusy(false); setOrfRan(true)
   }
+  // Proactivo: al abrir "Sin cliente · por asignar", el asistente sugiere SOLO (una vez), listo para confirmar —
+  // así el usuario no tiene que acordarse de correrlo. Auto-asigna lo de alta confianza y deja lo dudoso a un toque.
+  useEffect(()=>{ if(showOrphans && !DEMO && orphans.length>0 && !orfRan && !orfBusy) runOrfAsistente() }, [showOrphans])   // eslint-disable-line
   // Revisión de carga: gastos pegados a un cliente NO activo (Terminado/Prospecto) o a un ocasional → para revisar/corregir.
   const clientById = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{m[String(c.id)]=c}); return m },[clients])
   const revGroup = items => { const g={}; items.forEach(e=>{ const k=String(e.client_id); (g[k]=g[k]||{c:clientById[k],gastos:[]}).gastos.push(e) }); return Object.values(g).filter(x=>x.c).sort((a,b)=>b.gastos.length-a.gastos.length) }
@@ -18033,7 +18037,12 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     {pend&&<ActBtn variant='softNavy' onClick={(ev)=>{ev.stopPropagation();recordarCobro(b)}} style={{marginTop:5}}>Recordar</ActBtn>}
                   </div>
                 </div>
-                {(b.anulada_por||'').startsWith('Nota de crédito')&&<div style={{marginTop:6,marginLeft:49,fontSize:9.5,color:C.muted,lineHeight:1.4}}>{b.anulada_por}{b.reemplazada_por_billing_id&&(()=>{ const rp=(billing||[]).find(x=>x.id===b.reemplazada_por_billing_id); return rp?<> · reemplazada por <b style={{color:C.accent,fontWeight:600}}>Factura N°{folioN(rp.invoice_no)}</b>{String(rp.client_id)!==String(client.id)&&(rsShort(rp)||rp.receptor_name)?` · ${rsShort(rp)||rp.receptor_name}`:''}</>:null })()}</div>}
+                {(b.anulada_por||'').startsWith('Nota de crédito')&&<div style={{marginTop:6,marginLeft:49,fontSize:10,lineHeight:1.4,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',background:'#FFFBF4',border:'1px solid #EAD9B8',borderRadius:8,padding:'6px 9px'}}>
+                  <span style={{fontSize:8.5,fontWeight:800,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,flexShrink:0}}>NC</span>
+                  <span style={{color:C.text,minWidth:0}}>{b.anulada_por} anula esta factura{b.reemplazada_por_billing_id&&(()=>{ const rp=(billing||[]).find(x=>x.id===b.reemplazada_por_billing_id); return rp?<> · reemplazada por <b style={{color:C.accent,fontWeight:700}}>Factura N°{folioN(rp.invoice_no)}</b>{String(rp.client_id)!==String(client.id)&&(rsShort(rp)||rp.receptor_name)?` · ${rsShort(rp)||rp.receptor_name}`:''}</>:null })()}</span>
+                  <span style={{marginLeft:'auto',fontWeight:800,color:C.overdueText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>− {fmt(b.amount)}</span>
+                  <span style={{fontSize:9.5,color:C.greenText,fontWeight:700,flexShrink:0}}>saldo $0</span>
+                </div>}
                 {(()=>{ const orig=(billing||[]).find(x=>x.reemplazada_por_billing_id===b.id); return orig?<div style={{marginTop:6,marginLeft:49,fontSize:9.5,color:C.muted,lineHeight:1.4}}>Reemplaza a <b style={{color:C.accent,fontWeight:600}}>Factura N°{folioN(orig.invoice_no)}</b>{String(orig.client_id)!==String(client.id)&&(rsShort(orig)||orig.receptor_name)?` · ${rsShort(orig)||orig.receptor_name}`:''}</div>:null })()}
                 {e&&<div style={{marginTop:6,marginLeft:49}}><EstadoFacturaChip b={b} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} chevron={conciliada}/></div>}
                 {conciliada&&detOpen&&(()=>{ const cs=fConcByFac[b.id]||[]; const mv=fMovById[cs[0]?.movimiento_id]; return (
