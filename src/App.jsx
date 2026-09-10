@@ -12806,9 +12806,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Gasto INTERNO de la oficina (lo asume la firma): lo asigna al cliente interno.
   const marcarOficinaRow = (rowId) => { const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi){ appAlert('No encuentro el cliente interno de la oficina.'); return } setRows(p=>p.map(r=> r.id===rowId ? {...r, client_id:ofi.id, clientName:ofi.name, personal_de:null, entity_id:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:'oficina'} : r)); setPersPick(null); flash('Marcado como gasto de la oficina · se guarda al Cargar') }
   const quitarInternoRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, personal_de:null, client_id:(r.client_id&&esOficinaCli(r.client_id))?null:r.client_id, clientName:(r.client_id&&esOficinaCli(r.client_id))?null:r.clientName, matchMethod:undefined} : r)); flash('Devuelto a «Falta el cliente»') }
-  // Marca una OT como "no es nuestra / cargada por error desde la notaría": sale del total y NO se importa (va a Anuladas). Reversible.
-  const marcarNoNuestra = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, anuladaManual:true, client_id:null, clientName:null, entity_id:null, personal_de:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:undefined} : r)); setPersPick(null); flash('Marcada como no reconocida por la oficina · no se carga') }
-  const reactivarRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, anuladaManual:false} : r)); flash('Reactivada · vuelve a la revisión') }
+  // Marca una OT como "no es nuestra": la OT es correcta pero NO la paga la oficina → NO se carga (nadie la paga), solo se registra y se avisa a la notaría. Reversible.
+  const marcarNoNuestra = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, noNuestra:true, client_id:null, clientName:null, entity_id:null, personal_de:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:undefined} : r)); setPersPick(null); flash('Marcada como no nuestra · no se carga, se registra') }
+  const reactivarRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, noNuestra:false} : r)); flash('Reactivada · vuelve a la revisión') }
   // Consulta a la notaría por las OT que no reconocemos (marcadas "No es nuestra"): se seleccionan y se les pide detalle.
   const NOTA_DEST_DEFAULT='sdelgado@notarialascar.cl, sdanotaria@gmail.com'
   const [notaDest,setNotaDest] = useState(NOTA_DEST_DEFAULT)
@@ -12980,10 +12980,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Reparte las filas en 6 categorías accionables. Cada una es una tarjeta plegable; adentro, filas
   // que muestran compareciente + trámite + fecha (lo que identifica de quién es).
   const notaCats = (flt) => {
-    const c={falta:[],confirma:[],listas:[],personal:[],oficina:[],yacargadas:[],sinefecto:[],errores:[]}
+    const c={falta:[],confirma:[],listas:[],personal:[],oficina:[],yacargadas:[],nonuestra:[],sinefecto:[],errores:[]}
     flt.forEach(r=>{
       if(r.error){ if(/sin efecto/i.test(r.error)) c.sinefecto.push(r); else c.errores.push(r); return }   // 'Sin efecto (anulada)' aparte de errores reales (ej. 'OT no detectada')
-      if(r.anuladaManual){ c.sinefecto.push(r); return }   // marcada a mano "no es nuestra / cargada por error" → Anuladas (no se carga, reversible)
+      if(r.noNuestra){ c.nonuestra.push(r); return }   // "No es nuestra": OT correcta pero no la paga la oficina → no se carga, solo se registra + avisa a la notaría (reversible)
       if(dupInfo[r.id]?.otState){ c.yacargadas.push(r); return }
       if(r.personal_de){ c.personal.push(r); return }   // gasto personal de un miembro (Cristóbal/Erasmo/…)
       if(r.isInternal || (r.client_id && esOficinaCli(r.client_id))){ c.oficina.push(r); return }
@@ -13000,11 +13000,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     personal:{t:'Personal · de un miembro', s:'de un abogado/miembro, no de un cliente', col:C.grisText, bg:C.bgWarm},
     oficina:{t:'De la oficina', s:'no van a un cliente', col:C.tealText, bg:C.tealBg},
     yacargadas:{t:'Ya cargadas', s:'están en la app · se omiten', col:C.muted, bg:C.bgSoft},
+    nonuestra:{t:'No son nuestras · avisar a la notaría', s:'OT correctas pero no las paga la oficina · no se cargan, se registran', col:C.overdueText, bg:C.overdueBg},
     sinefecto:{t:'Sin efecto', s:'anuladas · excluidas del total', col:C.grisText, bg:C.bgWarm},
     errores:{t:'Con error · no se cargan', s:'revísalas (ej. OT no detectada en el archivo)', col:C.overdueText, bg:C.overdueBg},
   }
-  const catSvg = (k,col) => { const p={falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],personal:['M5 20c0-4 3.5-6 7-6s7 2 7 6'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],sinefecto:['M6 6l12 12'],errores:['M12 9v4','M12 17v.01']}[k]||[]
-    const base = k==='falta'?<circle cx='9' cy='8' r='3'/>:k==='confirma'?<circle cx='12' cy='12' r='3.5'/>:k==='personal'?<circle cx='12' cy='8' r='3.5'/>:k==='oficina'?<rect x='4' y='3' width='12' height='18' rx='1'/>:k==='yacargadas'?<path d='M3 12a9 9 0 1 0 3-6.7L3 8'/>:k==='sinefecto'?<circle cx='12' cy='12' r='9'/>:null
+  const catSvg = (k,col) => { const p={falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],personal:['M5 20c0-4 3.5-6 7-6s7 2 7 6'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],nonuestra:['M15 9l-6 6M9 9l6 6'],sinefecto:['M6 6l12 12'],errores:['M12 9v4','M12 17v.01']}[k]||[]
+    const base = k==='falta'?<circle cx='9' cy='8' r='3'/>:k==='confirma'?<circle cx='12' cy='12' r='3.5'/>:k==='personal'?<circle cx='12' cy='8' r='3.5'/>:k==='oficina'?<rect x='4' y='3' width='12' height='18' rx='1'/>:k==='yacargadas'?<path d='M3 12a9 9 0 1 0 3-6.7L3 8'/>:(k==='sinefecto'||k==='nonuestra')?<circle cx='12' cy='12' r='9'/>:null
     return <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth={k==='listas'?2.4:2} strokeLinecap='round' strokeLinejoin='round'>{base}{p.map((d,i)=><path key={i} d={d}/>)}</svg> }
   const tramDe = r => ((r.materia||'').trim().toLowerCase().replace(/^./,ch=>ch.toUpperCase()))||'Trámite notarial'
   const nomDe = r => r.nombre||r.requirente||'—'
@@ -13017,13 +13018,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const noName = !String(r.nombre||r.requirente||'').replace(/^\s*n\/?a\.?\s*$/i,'').trim()   // sin compareciente utilizable
     const fy = r.fecha ? new Date(r.fecha).getFullYear() : null
     const oldY = fy && !isNaN(fy) && fy < new Date().getFullYear()   // OT de un año anterior
-    const info = kind==='yacargadas'||kind==='sinefecto'||kind==='errores'   // solo lectura
+    const info = kind==='yacargadas'||kind==='sinefecto'||kind==='errores'||kind==='nonuestra'   // solo lectura
     const st = dupInfo[r.id]?.otState
-    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='sinefecto' ? (r.anuladaManual?'No la reconoce la oficina — no se carga':'Anulada — no se carga') : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
+    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='nonuestra' ? 'No es nuestra — no se carga, se avisa a la notaría' : kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
     const prot = (kind==='listas'||kind==='personal') ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
     const sub  = kind==='listas' ? (cn||'') : kind==='personal' ? (noName?'':nomDe(r)) : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
-    const consChk = kind==='sinefecto' && r.anuladaManual, consOn = consChk && notaConsultaSel.has(r.id)   // "No es nuestra": seleccionable para consultar a la notaría
+    const consChk = kind==='nonuestra', consOn = consChk && notaConsultaSel.has(r.id)   // "No es nuestra": seleccionable para consultar a la notaría
     return (
       <div key={r.id} style={{padding:'10px 0',borderTop:`.5px solid #EEF1F3`,display:'flex',gap:10,opacity:info&&!consChk?.8:1}}>
         {chk&&<span onClick={()=>setConfDesel(p=>{ const n=new Set(p); n.has(r.id)?n.delete(r.id):n.add(r.id); return n })} title={on?'Marcada — se confirma':'Marca para confirmar'} style={{cursor:'pointer',flexShrink:0,marginTop:2}}>{on?<svg width='17' height='17' viewBox='0 0 24 24' fill={C.normal} stroke={C.normal}><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M8 12l3 3 5-6' stroke='#fff' strokeWidth='2.4' fill='none' strokeLinecap='round' strokeLinejoin='round'/></svg>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='1.6'><rect x='3' y='3' width='18' height='18' rx='4'/></svg>}</span>}
@@ -13059,7 +13060,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           <button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11.5,fontWeight:700,color:C.tealText,background:C.tealBg,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Gasto interno {persPick===r.id?'▴':'▾'}</button>
         </div>}
         {kind==='listas'&&<div style={{display:'flex',gap:12,marginTop:6,flexWrap:'wrap',alignItems:'center'}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button><button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11,fontWeight:600,color:C.tealText,background:'none',border:'none',cursor:'pointer',padding:0}}>Gasto interno {persPick===r.id?'▴':'▾'}</button><button onClick={()=>marcarNoNuestra(r.id)} title='La notaría la envió pero no es un trabajo de la oficina → no se carga' style={{fontSize:11,fontWeight:600,color:C.overdueText,background:'none',border:'none',cursor:'pointer',padding:0}}>No es nuestra</button></div>}
-        {kind==='sinefecto'&&r.anuladaManual&&<div style={{marginTop:6}}><button onClick={()=>reactivarRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Reactivar · vuelve a la revisión</button></div>}
+        {kind==='nonuestra'&&<div style={{marginTop:6}}><button onClick={()=>reactivarRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Sí es nuestra · volver a la revisión</button></div>}
         {open&&<div style={{marginTop:8,paddingTop:8,borderTop:`.5px solid #EEF1F3`}}>
           {/* Descripción completa para confirmar bien (misma en toda categoría) */}
           <table style={{width:'100%',borderCollapse:'collapse',marginBottom:info?0:9}}><tbody>
@@ -13134,7 +13135,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const filtRows=(rows,k)=>{ const q=(catQ[k]||'').trim().toLowerCase(); if(!q) return rows; const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); const qr=q.replace(/[.\-\s]/g,''); return rows.filter(r=>nrm(nomDe(r)).includes(nrm(q))||nrm(tramDe(r)).includes(nrm(q))||nrm(otDe(r)).includes(nrm(q))||(qr&&String(r.rut||'').replace(/[.\-\s]/g,'').includes(qr))) }
     const buscador=k=><input value={catQ[k]||''} onChange={e=>setCatQ(m=>({...m,[k]:e.target.value}))} placeholder='Buscar por nombre, trámite u OT…' style={{width:'100%',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',margin:'2px 0 4px'}}/>
     const card = k => { const meta=CAT_META[k]; const rws=cats[k]; if(!rws.length) return null   // ocultar TODA categoría vacía (antes solo las informativas → "Falta 0"/"Confirma 0" molestaban)
-      const open=catOpen.has(k); const tot=rws.reduce((a,r)=>a+(r.monto||0),0); const info=(k==='yacargadas'||k==='sinefecto'||k==='oficina')
+      const open=catOpen.has(k); const tot=rws.reduce((a,r)=>a+(r.monto||0),0); const info=(k==='yacargadas'||k==='sinefecto'||k==='oficina'||k==='nonuestra')
       const nSin=cats.falta.filter(r=>!r.client_id&&!r.personal_de&&!r.isInternal&&!r.error&&!r.suggestion).length
       return (
         <div key={k} style={{background:'#fff',border:`1px solid ${k==='falta'&&rws.length?C.overdue:C.border}`,borderRadius:13,overflow:'hidden',marginBottom:9}}>
@@ -13178,13 +13179,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>
             )}) })()}
             {k==='oficina'&&filtRows(rws,k).map(r=>notaCatRow(r,'oficina'))}
-            {k==='sinefecto'&&(()=>{ const noNs=rws.filter(r=>r.anuladaManual); if(!noNs.length) return null; const selRows=noNs.filter(r=>notaConsultaSel.has(r.id)); const allOn=selRows.length===noNs.length; return (
+            {k==='nonuestra'&&(()=>{ const noNs=rws; const selRows=noNs.filter(r=>notaConsultaSel.has(r.id)); const allOn=selRows.length===noNs.length&&noNs.length>0; return (
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:'2px 0 8px',marginBottom:2,borderBottom:`.5px solid #EEF1F3`}}>
-                <button onClick={()=>setNotaConsultaSel(allOn?new Set():new Set(noNs.map(r=>r.id)))} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{allOn?'Ninguna':`Todas las no reconocidas (${noNs.length})`}</button>
+                <button onClick={()=>setNotaConsultaSel(allOn?new Set():new Set(noNs.map(r=>r.id)))} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{allOn?'Ninguna':`Seleccionar todas (${noNs.length})`}</button>
                 <button disabled={consultando||!selRows.length} onClick={()=>consultarNotaria(selRows)} style={{marginLeft:'auto',fontSize:11.5,fontWeight:700,color:'#fff',background:selRows.length?C.overdue:C.done,border:'none',borderRadius:8,padding:'6px 12px',cursor:selRows.length&&!consultando?'pointer':'default',opacity:selRows.length&&!consultando?1:.6,display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>{consultando?'Enviando…':`Consultar a la notaría (${selRows.length})`}</button>
               </div>
             )})()}
-            {(k==='yacargadas'||k==='sinefecto'||k==='errores')&&rws.map(r=>notaCatRow(r,k))}
+            {(k==='yacargadas'||k==='sinefecto'||k==='errores'||k==='nonuestra')&&rws.map(r=>notaCatRow(r,k))}
           </div>}
         </div>
       )
@@ -13193,13 +13194,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Guía de una línea (qué hacer) — baja la curva de la primera vez */}
       {notaria&&(()=>{ const cts=notaCats(rows||[]); const nLeidas=(rows||[]).length; const errs=cts.errores
         // Partición única (suman las filas del archivo): se cargan = con destino (cliente/oficina/miembro); por revisar = falta+confirma; ya en la app; anuladas; con error.
-        const nDest=cts.listas.length+cts.oficina.length+cts.personal.length; const nRev=cts.falta.length+cts.confirma.length; const nYa=cts.yacargadas.length; const nAnul=cts.sinefecto.length; return (
+        const nDest=cts.listas.length+cts.oficina.length+cts.personal.length; const nRev=cts.falta.length+cts.confirma.length; const nYa=cts.yacargadas.length; const nAnul=cts.sinefecto.length; const nNoN=cts.nonuestra.length; return (
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'11px 13px',marginBottom:9}}>
           <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'baseline'}}>
             <div><span style={{fontSize:20,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{nLeidas}</span> <span style={{fontSize:11,color:C.muted}}>filas del archivo</span></div>
             <div><span style={{fontSize:16,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{nDest}</span> <span style={{fontSize:11,color:C.muted}}>se cargan</span></div>
             {nRev>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nRev}</span> <span style={{fontSize:11,color:C.muted}}>por revisar</span></div>}
             {nYa>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.done,fontVariantNumeric:'tabular-nums'}}>{nYa}</span> <span style={{fontSize:11,color:C.muted}}>ya en la app</span></div>}
+            {nNoN>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{nNoN}</span> <span style={{fontSize:11,color:C.muted}}>no son nuestras</span></div>}
             {nAnul>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.grisText,fontVariantNumeric:'tabular-nums'}}>{nAnul}</span> <span style={{fontSize:11,color:C.muted}}>anuladas</span></div>}
             {errs.length>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{errs.length}</span> <span style={{fontSize:11,color:C.muted}}>con error</span></div>}
           </div>
@@ -13216,7 +13218,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {aprendido&&aprendido.name
         ? <div style={{display:'flex',alignItems:'center',gap:7,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.greenText}}>Aprendí que <b>{aprendido.name}</b> es <b>{aprendido.cli}</b> — no te lo vuelvo a preguntar.</span></div>
         : accionMsg&&<div style={{display:'flex',alignItems:'center',gap:7,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 11px',marginBottom:9}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11.5,color:C.text}}>{accionMsg}</span></div>}
-      {['errores','falta','confirma','listas','personal','oficina','yacargadas','sinefecto'].map(card)}
+      {['errores','falta','confirma','listas','personal','oficina','yacargadas','nonuestra','sinefecto'].map(card)}
       {notaReceipt(cats)}
     </div>)
   }
@@ -13228,8 +13230,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     try{
       // Notaría: arma el resumen de estado (cargadas + con error + ya en la app) ANTES de importar, para persistirlo con la carga (nada sin rastro).
       let notaResumen=null
-      if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length
-        notaResumen={ leidas:(rows||[]).length, error:errRows.length, omitidas, erroresDet:errRows.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})) } }
+      if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length; const noNs=(rows||[]).filter(r=>r.noNuestra)
+        notaResumen={ leidas:(rows||[]).length, error:errRows.length, omitidas, erroresDet:errRows.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), noNuestras:noNs.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||''})) } }
       const res = await onBulkImport(target, {tipo, filename:fileName, notaResumen})
       // Notaría: resumen para cerrar el ciclo (lo que queda por pagar a la notaría y a cuántos clientes rendir).
       if(notaria){ const conCli=target.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
@@ -13440,7 +13442,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{fontSize:10.5,color:C.overdueText,marginTop:2}}>{nP>0?`${nP} ya pagada${nP!==1?'s':''} a la notaría`:''}{nP>0&&nR>0?' · ':''}{nR>0?`${nR} ya rendida${nR!==1?'s':''} al cliente`:''}. Aparecen marcadas abajo; no las cargues sin verlas.</div>
             </div>
           )})()}
-          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error&&!r.anuladaManual); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const interno=val.filter(r=>r.personal_de||(r.client_id&&esOficinaCli(r.client_id))).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend-interno; const anul=notaCats(rows||[]).sinefecto.length
+          {notaria&&(()=>{ const val=(rows||[]).filter(r=>!r.error&&!r.noNuestra); const tot=val.reduce((a,r)=>a+(r.monto||0),0); const rend=val.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)).reduce((a,r)=>a+(r.monto||0),0); const interno=val.filter(r=>r.personal_de||(r.client_id&&esOficinaCli(r.client_id))).reduce((a,r)=>a+(r.monto||0),0); const sinAsig=tot-rend-interno; const anul=notaCats(rows||[]).sinefecto.length
             const reconSolas=val.filter(r=>(r.client_id&&r.matchMethod!=='manual')||dupInfo[r.id]?.otState).length; const aprHoy=aprendidasSet.size; return (
             // Hero blanco (canon de la foto): protagonista = Total, con sus partes anidadas (a clientes / sin asignar / interno). Sin azul pleno.
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'13px 15px',marginBottom:12}}>
@@ -15332,7 +15334,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const head=['OT','Concepto','Cliente','Monto','Estado','Error','Carga','Fecha']; const body=[]
           cargas.forEach(c=>{ const fch=c.created_at?new Date(c.created_at).toLocaleDateString('es-CL'):''
             c.gs.forEach(e=>{ const [lbl]=estOf(e); body.push([fmtOt(e.ot_number)||'s/OT', e.concept||'', cnOf(e), e.amount||0, c.status==='undone'?'Deshecha':lbl, '', c.filename||'', fch]) })
-            ;(c.resumen?.erroresDet||[]).forEach(er=> body.push([er.ot||'s/OT', er.nombre||'', '', '', 'Con error · no cargada', er.motivo||'', c.filename||'', fch])) })
+            ;(c.resumen?.erroresDet||[]).forEach(er=> body.push([er.ot||'s/OT', er.nombre||'', '', '', 'Con error · no cargada', er.motivo||'', c.filename||'', fch]))
+            ;(c.resumen?.noNuestras||[]).forEach(nn=> body.push([nn.ot||'s/OT', nn.motivo||nn.nombre||'', '', nn.monto||'', 'No es nuestra · no cargada', 'avisar a la notaría', c.filename||'', fch])) })
           const csv=[head,...body].map(r=>r.map(esc).join(';')).join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`historial_cargas_notaria_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href) }
         return (
           <div style={{padding:D?'8px 20px 60px':'6px 12px 40px',maxWidth:D?820:undefined,margin:'0 auto'}}>
@@ -15353,7 +15356,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>
             {cargas.length===0&&<div style={{color:C.muted,textAlign:'center',padding:28,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Aún no hay cargas. Sube un Excel para empezar.</div>}
             <div style={{display:'flex',flexDirection:'column',gap:8}}>{cargas.map(c=>{ const open=cargaOpen===c.id; const dd=c.created_at?new Date(c.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; const undone=c.status==='undone'
-              const rz=c.resumen; const nErr=undone?0:(rz?.error||0); const nCarg=rz?.cargadas ?? c.gs.length; const nOmit=rz?.omitidas||0
+              const rz=c.resumen; const nErr=undone?0:(rz?.error||0); const nCarg=rz?.cargadas ?? c.gs.length; const nOmit=rz?.omitidas||0; const nNoN=undone?0:((rz?.noNuestras||[]).length)
               const dotCol=undone?C.done:(nErr>0?C.overdue:C.normal); return (
               <div key={c.id} style={{border:`1px solid ${nErr>0?'#F3C9C4':C.border}`,borderRadius:12,overflow:'hidden',opacity:undone?.6:1}}>
                 <div onClick={()=>setCargaOpen(open?null:c.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
@@ -15365,6 +15368,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                         {c.created_by&&<span style={{fontSize:10,color:C.muted}}>{c.created_by}</span>}
                         {nCarg>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'1px 7px'}}>{nCarg} ✓</span>}
                         {nErr>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'1px 7px'}}>{nErr} error</span>}
+                        {nNoN>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'1px 7px'}}>{nNoN} no nuestras</span>}
                         {nOmit>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.done,background:C.bgSoft,borderRadius:20,padding:'1px 7px'}}>{nOmit} ya app</span>}
                       </>}
                     </div></div>
@@ -30105,7 +30109,7 @@ export default function App() {
     }
     if(payloads.length===0) return {imported:0,dupOmit,otDupOmit,sinCliente:0,sinFecha:0,batchId:null,filename}
     // Resumen permanente de la carga (nada sin rastro): cargadas + con error (no entraron) + ya en la app; guarda las filas con error.
-    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:payloads.length, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]).slice(0,80), notaria:true } : null
+    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:payloads.length, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]).slice(0,80), noNuestras:(notaResumen.noNuestras||[]).slice(0,80), notaria:true } : null
     const {error:bErr} = await supabase.from('bulk_imports').insert({id:batchId,created_by:user?.name||null,row_count:payloads.length,filename:filename||null,...(resumen?{resumen}:{})})
     if(bErr) throw bErr
     const inserted=[]
