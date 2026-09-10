@@ -7594,12 +7594,14 @@ function CargaHistRow({b}){
   </div>
 }
 function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
-  const nr = r => (r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
-  const k = nr(rut)
-  if(k){ const ce=clientEntities.find(e=>nr(e.rut)===k); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
-  if(nombre){ const ce=clientEntities.find(e=>e.name&&e.name.toLowerCase()===String(nombre).toLowerCase()); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
-  if(k){ const c=clients.find(c=>nr(c.rut)===k); if(c) return c }
-  if(nombre){ const c=clients.find(c=>c.name&&(c.name||'').toLowerCase()===String(nombre).toLowerCase()); if(c) return c }
+  // Cruce TOTAL por RUT (llave única): el RUT SIEMPRE gana; el nombre es solo fallback si el RUT no resolvió.
+  // Normalizador ÚNICO de la app (crNormRut: mayúscula, solo dígitos+K) → tolera puntos/guión/espacios internos y formatos mixtos.
+  const k = crNormRut(rut)
+  if(k){ const ce=clientEntities.find(e=>crNormRut(e.rut)===k); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }   // RUT ↔ razón social
+  if(k){ const c=clients.find(c=>crNormRut(c.rut)===k); if(c) return c }                                                                             // RUT ↔ cliente
+  const nn=String(nombre||'').trim().toLowerCase()
+  if(nn){ const ce=clientEntities.find(e=>e.name&&e.name.toLowerCase()===nn); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
+  if(nn){ const c=clients.find(c=>c.name&&c.name.toLowerCase()===nn); if(c) return c }
   return null
 }
 
