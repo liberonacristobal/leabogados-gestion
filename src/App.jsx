@@ -3979,7 +3979,7 @@ function ComparativoSocios({socios=[], isDesktop}){
             <div key={s.abo} style={{background:C.surface,border:`1px solid ${col(s.abo)}`,borderRadius:12,padding:'11px 12px',textAlign:'center'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginBottom:5}}><Dot a={s.abo} sz={10}/><span style={{fontSize:13,fontWeight:800,color:col(s.abo)}}>{s.abo}</span></div>
               <div style={{fontSize:26,fontWeight:800,color:col(s.abo),fontVariantNumeric:'tabular-nums',lineHeight:1}}>{w}</div>
-              <div style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginTop:2}}>gana</div>
+              <div style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginTop:2}}>métricas al frente</div>
             </div>
           ))}
         </div>
@@ -4037,6 +4037,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
   const [biSec,setBiSec] = useState(null)       // sección del índice abierta (hub): oport|cartera|servicios|tendencias|ia
   const [openFoco,setOpenFoco] = useState(null) // foco del SII expandido en el héroe
+  const [radarOpen,setRadarOpen] = useState(false) // lista de focos del SII replegada por defecto (evita el muro de novedades)
   const [briefBusy,setBriefBusy] = useState(false)  // generando brief IA del foco
   const [memoBusy,setMemoBusy] = useState(false)    // generando memo de conversación
   const [memoText,setMemoText] = useState(null)     // memo generado (editable)
@@ -4322,23 +4323,25 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         {/* HÉROE — Radar tributario · SII (varios focos + clientes a conversar) */}
         <div style={{background:C.accent,borderRadius:14,padding:'13px 14px 7px',marginBottom:openFoco?9:13}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-            <div style={{display:'flex',alignItems:'center',gap:11,minWidth:0}}>
+            <div onClick={()=>radar.length&&setRadarOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:11,minWidth:0,cursor:radar.length?'pointer':'default'}}>
               <span style={{width:38,height:38,borderRadius:11,background:'rgba(159,196,222,.15)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9FC4DE" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><line x1="12" y1="12" x2="19" y2="6"/></svg>
               </span>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:9.5,fontWeight:700,color:'#9FC4DE',textTransform:'uppercase',letterSpacing:'.07em'}}>Radar tributario · SII</div>
-                <div style={{fontSize:19,fontWeight:700,color:'#fff',lineHeight:1.1}}>{radar.length} foco{radar.length!==1?'s':''} activo{radar.length!==1?'s':''}</div>
+                <div style={{fontSize:19,fontWeight:700,color:'#fff',lineHeight:1.1,display:'flex',alignItems:'center',gap:8}}>{radar.length} foco{radar.length!==1?'s':''} activo{radar.length!==1?'s':''}{radar.length>0&&<span style={{fontSize:12,color:'#6E93A6'}}>{radarOpen?'⌃':'›'}</span>}</div>
               </div>
             </div>
             <div style={{display:'flex',alignItems:'center',gap:13,flexShrink:0}}>
-              <button onClick={actualizarRadar} disabled={radarBusy} title='Actualizar' style={{fontSize:14,color:'#9FC4DE',background:'none',border:'none',cursor:radarBusy?'default':'pointer',padding:0,lineHeight:1}}>{radarBusy?'…':'↻'}</button>
-              <button onClick={()=>setAddOpen(true)} title='Agregar novedad' style={{fontSize:19,color:'#9FC4DE',background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:1}}>+</button>
+              <button onClick={(e)=>{e.stopPropagation();actualizarRadar()}} disabled={radarBusy} title='Actualizar' style={{fontSize:14,color:'#9FC4DE',background:'none',border:'none',cursor:radarBusy?'default':'pointer',padding:0,lineHeight:1}}>{radarBusy?'…':'↻'}</button>
+              <button onClick={(e)=>{e.stopPropagation();setAddOpen(true)}} title='Agregar novedad' style={{fontSize:19,color:'#9FC4DE',background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:1}}>+</button>
             </div>
           </div>
           {radarMsg&&<div style={{fontSize:10,color:radarMsg.startsWith('Error')?'#F3B0AE':'#9FE0C8',marginBottom:6}}>{radarMsg}</div>}
           {radar.length===0
             ? <div style={{fontSize:11.5,color:'#88A6B6',padding:'2px 0 9px',lineHeight:1.5}}>Sin novedades del SII aún · agrégalas con + o la ingesta automática.</div>
+            : !radarOpen
+            ? <div onClick={()=>setRadarOpen(true)} style={{fontSize:11,color:'#88A6B6',padding:'2px 0 9px',lineHeight:1.5,cursor:'pointer'}}>Toca para ver los focos y los clientes expuestos.</div>
             : radar.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; const op=openFoco===n.id; return (
               <div key={n.id} onClick={()=>{setOpenFoco(op?null:n.id);setMemoText(null)}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:'0.5px solid rgba(255,255,255,.13)',cursor:'pointer'}}>
                 <span style={{width:7,height:7,borderRadius:'50%',background:pr,flexShrink:0}}/>
@@ -4385,7 +4388,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Seguimiento',sub:`${cartera.riesgo.length+cartera.dormido.length} sin avanzar · toca empujar`,ct:cartera.riesgo.length+cartera.dormido.length,ctCol:(cartera.riesgo.length+cartera.dormido.length)>0?C.soonText:C.greenText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
             {k:'servicios',bg:C.ambarBg,fg:C.soonText,t:'Servicios y precios',sub:serviciosTot.areas&&servicios[0]?`Top: ${servicios[0].area}`:'',ct:serviciosTot.areas,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3.5 3.5h7l9.5 9.5-7 7L3.5 10.5z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>},
             {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot}%`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
-            {k:'socios',bg:C.azulBg,fg:C.accent,t:'Socios · cara a cara',sub:'todos los KPIs por abogado',ct:socios.length||null,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="8" cy="8" r="3"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 19a4 4 0 0 1 6.5-3.1"/></svg>},
+            {k:'socios',bg:C.azulBg,fg:C.accent,t:'Socios · la foto',sub:'todos los KPIs por abogado',ct:socios.length||null,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="8" cy="8" r="3"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 19a4 4 0 0 1 6.5-3.1"/></svg>},
             {k:'ia',bg:'#EFEAF7',fg:'#5B3E8E',t:'Asesor IA · Foco y Plan',sub:'Pregúntale · Foco semana · Plan del Año',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>},
           ]; return SECS.map((s)=>{ const open=biSec===s.k; return (
             <div key={s.k} onClick={()=>setBiSec(open?null:s.k)} style={{cursor:'pointer',background:open?C.bgSoft:C.surface,border:`1px solid ${open?s.fg:C.border}`,borderRadius:13,padding:'13px 14px'}}>
@@ -4567,7 +4570,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         </div>
         </div>)}
         {biSec==='socios'&&(<div style={{marginTop:12}}>
-          <div style={{fontSize:11,color:C.muted,margin:'0 2px 10px',lineHeight:1.5}}>Todas las métricas financieras por abogado, de fuente única. {isDesktop?'Cada fila resalta al líder.':'Marcador Cristóbal vs Erasmo.'} La rentabilidad (margen por hora) se encenderá cuando se carguen horas.</div>
+          <div style={{fontSize:11,color:C.muted,margin:'0 2px 10px',lineHeight:1.5}}>Todas las métricas financieras por abogado, de fuente única. {isDesktop?'Cada fila resalta a quien lidera.':'Cristóbal y Erasmo, lado a lado.'} La rentabilidad (margen por hora) se encenderá cuando se carguen horas.</div>
           <ComparativoSocios socios={socios} isDesktop={isDesktop}/>
         </div>)}
         {biSec==='ia'&&(<div style={{marginTop:12}}>
