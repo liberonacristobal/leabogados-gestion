@@ -11077,7 +11077,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
   const [fecha,setFecha]=useState((a.fecha||'').slice(0,10))
   const [selFac,setSelFac]=useState(calza?String(calza.id):null)
   const [busy,setBusy]=useState(false)
-  const fmtCLP0=n=>'$'+(n||0).toLocaleString('es-CL')
+  const fmtCLP0=n=>fmt(Number(n)||0)   // unificado al fmt global (signo -$ y redondeo correctos)
   const dispo=a.estado==='disponible'
   const save=(patch)=>{ onSave&&onSave(a,patch) }
   const asignar=async()=>{ if(!selFac||!onAsignarFactura) return; setBusy(true); await onAsignarFactura(a,selFac); setBusy(false); onClose() }
@@ -11145,7 +11145,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
 
 // Detalle comparativo antes de fusionar dos anticipos duplicados — para no fusionar a ciegas.
 function FusionAnticiposModal({bank, manual, clients=[], sales=[], clientEntities=[], onConfirm, onClose}){
-  const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
+  const fmtCLP0 = n => fmt(Number(n)||0)   // unificado al fmt global (signo -$ y redondeo correctos)
   const cliName = clients.find(c=>String(c.id)===String(bank.client_id))?.name||'Cliente'
   const esBanco = a => /conciliaci[oó]n/i.test(a.nota||'')
   const proyDe = a => a.proyecto || sales.find(s=>String(s.id)===String(a.sale_id))?.title || '—'
@@ -11190,7 +11190,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
   const [pickCid,setPickCid] = useState(null)    // cliente cuyo selector de factura está abierto
   const [pickFac,setPickFac] = useState(null)    // factura elegida en el selector
   const [impBusy,setImpBusy] = useState(false)
-  const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
+  const fmtCLP0 = n => fmt(Number(n)||0)   // unificado al fmt global (signo -$ y redondeo correctos)
   const disponibles = anticipos.filter(a=>a.estado==='disponible')
   const consumidos = anticipos.filter(a=>a.estado==='consumido')
   const totalDisp = disponibles.reduce((s,a)=>s+(a.monto||0),0)
