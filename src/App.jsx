@@ -3971,29 +3971,30 @@ function ComparativoSocios({socios=[], isDesktop}){
   const otrosS=socios.filter(s=>s.abo!=='Cristóbal'&&s.abo!=='Erasmo')
   const RING=isDesktop?150:130, RR=isDesktop?62:54, CIRC=2*Math.PI*RR
   const MONO='ui-monospace,Menlo,monospace'
+  // Colores claros para los anillos SOBRE el fondo navy del héroe (el color de persona de Cristóbal es navy = invisible sobre navy).
+  const heroCol = a => ({['Cristóbal']:'#6FB0DE',['Erasmo']:'#E0BC5E',['Martín']:'#8FC57A'}[a]) || '#9FC4DE'
   // Anillo de conversión a caja neta (dentro del héroe navy)
-  const Ring = ({s}) => { const pct=Math.max(0,Math.min(100,s.convCajaNeta||0)); const off=CIRC*(1-pct/100); return (
+  const Ring = ({s}) => { const pct=Math.max(0,Math.min(100,s.convCajaNeta||0)); const off=CIRC*(1-pct/100); const rc=heroCol(s.abo); return (
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:9,minWidth:0}}>
       <div style={{position:'relative',width:RING,height:RING}}>
         <svg width={RING} height={RING} viewBox={`0 0 ${RING} ${RING}`} style={{transform:'rotate(-90deg)'}}>
-          <circle cx={RING/2} cy={RING/2} r={RR} fill='none' stroke='rgba(255,255,255,.13)' strokeWidth={13}/>
-          <circle cx={RING/2} cy={RING/2} r={RR} fill='none' stroke={col(s.abo)} strokeWidth={13} strokeLinecap='round' strokeDasharray={CIRC} strokeDashoffset={off}/>
+          <circle cx={RING/2} cy={RING/2} r={RR} fill='none' stroke='rgba(255,255,255,.15)' strokeWidth={13}/>
+          <circle cx={RING/2} cy={RING/2} r={RR} fill='none' stroke={rc} strokeWidth={13} strokeLinecap='round' strokeDasharray={CIRC} strokeDashoffset={off}/>
         </svg>
         <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
           <div style={{fontSize:isDesktop?36:30,fontWeight:800,lineHeight:1,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{s.convCajaNeta==null?'—':Math.round(s.convCajaNeta)+'%'}</div>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:'#8FB6CC',marginTop:3}}>a caja neta</div>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:'#9FC4DE',marginTop:3}}>a caja neta</div>
         </div>
       </div>
-      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:16,fontWeight:800,color:'#fff'}}><span style={{width:12,height:12,borderRadius:'50%',background:col(s.abo)}}/>{s.abo}</div>
+      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:16,fontWeight:800,color:'#fff'}}><span style={{width:12,height:12,borderRadius:'50%',background:rc}}/>{s.abo}</div>
       <div style={{fontSize:11.5,color:'#B9CEDB',fontFamily:MONO,textAlign:'center'}}>{fmtShort(s.cobradoNeto)} deja · de {fmtShort(s.vendido)}</div>
     </div>
   )}
   const duelHero = (C1&&E1) ? (
     <div style={{background:C.accent,borderRadius:20,padding:isDesktop?'24px 24px 18px':'20px 12px 15px',marginBottom:14}}>
-      <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,textTransform:'uppercase',color:'#8FB6CC',textAlign:'center'}}>La señal que no se maquilla · <span style={{color:'#fff'}}>conversión a caja neta</span></div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:isDesktop?12:2,marginTop:14}}>
+      <div style={{fontSize:10.5,fontWeight:800,letterSpacing:1,textTransform:'uppercase',color:'#fff',textAlign:'center'}}>Conversión a caja neta</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',alignItems:'start',gap:isDesktop?24:8,marginTop:16}}>
         <Ring s={C1}/>
-        <div style={{width:42,height:42,borderRadius:'50%',background:'rgba(255,255,255,.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10.5,fontWeight:800,color:'#CFE0EA'}}>VS</div>
         <Ring s={E1}/>
       </div>
     </div>
@@ -4786,17 +4787,17 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   // Ingreso por año del grupo elegido: distribuye las cuotas (emitidas + programadas) de esas ventas por AÑO de VENCIMIENTO; cobrado vs por cobrar por año. Fuente única montoFactura/cobradoBill. Otro lente que "vendido" (contrato): cuándo entra la plata.
   // Proyección: se muestra hasta el año en que termina la cobranza (todas las cuotas). EXCEPCIÓN — las recurrentes (mensuales activas) se proyectan solo UN año (sus primeras 12 cuotas por vencimiento), para no arrastrar un contrato indefinido a años futuros.
   const ingresoPorAnio = rows => {
-    const m={}; const listByYear={}; let sinFecha=0
+    const m={}; const listByYear={}; let sinFecha=0; const revisar=new Set()   // revisar = cuota con vencimiento ANTES del año de su venta (dato malo, ej. typo de fecha) → se muestra marcada, no se esconde
     ;(rows||[]).forEach(s=>{
       let cuotas = (billing||[]).filter(b=> b && !b.deleted_at && String(b.sale_id)===String(s.id) && b.status!=='Anulada' && !['reembolso','nota_credito'].includes(b.billing_type))
       cuotas = cuotas.sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
       if(esRecurrente(s)) cuotas = cuotas.slice(0,12)   // recurrente = un año (12 cuotas)
-      cuotas.forEach(b=>{ const y=b.due?String(b.due).slice(0,4):null; const monto=montoFactura(b); if(!y){ sinFecha+=monto; return } if(!m[y]) m[y]={monto:0,cobrado:0}; m[y].monto+=monto; m[y].cobrado+=cobradoBill(b); (listByYear[y]=listByYear[y]||[]).push(b) })
+      cuotas.forEach(b=>{ const y=b.due?String(b.due).slice(0,4):null; const monto=montoFactura(b); if(!y){ sinFecha+=monto; return } const anom=s.year&&Number(y)<Number(s.year); if(anom) revisar.add(String(b.id)); if(!m[y]) m[y]={monto:0,cobrado:0,revisar:false}; m[y].monto+=monto; m[y].cobrado+=cobradoBill(b); if(anom) m[y].revisar=true; (listByYear[y]=listByYear[y]||[]).push(b) })
     })
     const years = Object.keys(m).sort()
     const total = years.reduce((a,y)=>a+m[y].monto,0)
     const nCuotas = years.reduce((a,y)=>a+(listByYear[y]?.length||0),0)
-    return {m,years,total,sinFecha,listByYear,nCuotas}
+    return {m,years,total,sinFecha,listByYear,nCuotas,revisar}
   }
   const buscando = q.trim().length>0
   // Lista plana = búsqueda (todas las coincidencias) o vista de Propuestas. El desglose (Vendido) va en 'vendido'.
@@ -4976,7 +4977,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                   {iv.years.map(y=>{ const d=iv.m[y]; const fut=Number(y)>Number(anoNow); const open=openYearV===y; const cuotas=(iv.listByYear[y]||[]).slice().sort((a,b)=>String(a.due||'').localeCompare(String(b.due||''))); return (
                     <div key={y} style={{borderTop:`0.5px solid ${C.border}`}}>
                       <div onClick={()=>setOpenYearV(open?null:y)} style={{display:'grid',gridTemplateColumns:'1fr auto 14px',columnGap:8,alignItems:'baseline',padding:'6px 0',cursor:'pointer'}}>
-                        <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{y}{fut&&<span style={{fontSize:9,fontWeight:600,color:C.done,marginLeft:6,textTransform:'uppercase',letterSpacing:.3}}>programado</span>}<span style={{fontSize:10,color:C.done,fontWeight:500,marginLeft:6}}>· {cuotas.length}</span></span>
+                        <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{y}{fut&&<span style={{fontSize:9,fontWeight:600,color:C.done,marginLeft:6,textTransform:'uppercase',letterSpacing:.3}}>programado</span>}{d.revisar&&<span style={{fontSize:8.5,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:6,padding:'1px 5px',marginLeft:6,textTransform:'uppercase',letterSpacing:.3}} title='Hay cuotas con fecha anterior al año de la venta — revisar'>revisar</span>}<span style={{fontSize:10,color:C.done,fontWeight:500,marginLeft:6}}>· {cuotas.length}</span></span>
                         <span style={{textAlign:'right'}}>
                           <span style={{fontSize:13.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(d.monto)}</span>
                           {d.cobrado>0&&<span style={{display:'block',fontSize:9.5,fontWeight:600,color:C.greenText,marginTop:1}}>{fmtShort(d.cobrado)} cobrado</span>}
@@ -4986,10 +4987,10 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                       {open&&<div style={{paddingBottom:6}}>
                         {cuotas.map(b=>{ const est=b.status==='Programada'?{label:'Programada',text:C.done,bg:C.bgSoft}:estadoCobro(b); const cn=(clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'—'; return (
                           <div key={b.id} onClick={onOpenClientFicha&&b.client_id?(ev)=>{ev.stopPropagation();onOpenClientFicha(b.client_id)}:undefined} style={{display:'grid',gridTemplateColumns:'46px 1fr auto',columnGap:8,alignItems:'center',padding:'4px 0 4px 2px',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>
-                            <span style={{fontSize:10,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{b.due?fmtFechaDMY(b.due).slice(0,5):'—'}</span>
+                            <span style={{fontSize:10,color:iv.revisar.has(String(b.id))?C.soonText:C.muted,fontVariantNumeric:'tabular-nums',fontWeight:iv.revisar.has(String(b.id))?700:400}}>{b.due?fmtFechaDMY(b.due).slice(0,5):'—'}</span>
                             <span style={{minWidth:0,overflow:'hidden'}}>
                               <span style={{fontSize:11.5,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'block'}}>{cn}</span>
-                              <span style={{fontSize:9.5,fontWeight:600,color:est.text}}>{est.label}</span>
+                              {iv.revisar.has(String(b.id))?<span style={{fontSize:9.5,fontWeight:700,color:C.soonText}} title='Fecha anterior al año de la venta — revisar'>⚠ revisar fecha</span>:<span style={{fontSize:9.5,fontWeight:600,color:est.text}}>{est.label}</span>}
                             </span>
                             <span style={{fontSize:11.5,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmtShort(montoFactura(b))}</span>
                           </div>
@@ -9782,13 +9783,13 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
       <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:11}}><span style={{width:10,height:10,borderRadius:'50%',background:col[s],flexShrink:0}}/><span style={{fontSize:13,fontWeight:700,color:col[s]}}>{s}</span></div>
       <div style={{marginBottom:11}}>
         <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,marginBottom:3}}>Facturado</div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:10,color:C.muted}}>bruto</span><span style={{fontSize:15,fontWeight:800,fontVariantNumeric:'tabular-nums'}}>{fmt(a.facB)}</span></div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:1}}><span style={{fontSize:10,color:C.muted}}>neto de comisiones</span><span style={{fontSize:11.5,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(a.facB-a.facCom)}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6}}><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>bruto</span><span style={{fontSize:14,fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(a.facB)}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6,marginTop:2}}><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>neto</span><span style={{fontSize:11.5,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(a.facB-a.facCom)}</span></div>
       </div>
       <div>
         <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,marginBottom:3}}>Entró a caja</div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:10,color:C.muted}}>bruto</span><span style={{fontSize:15,fontWeight:800,fontVariantNumeric:'tabular-nums'}}>{fmt(a.cajaB)}</span></div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:1}}><span style={{fontSize:10,color:C.muted}}>neto de comisiones</span><span style={{fontSize:11.5,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(a.cajaB-a.cajaCom)}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6}}><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>bruto</span><span style={{fontSize:14,fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(a.cajaB)}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6,marginTop:2}}><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>neto</span><span style={{fontSize:11.5,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(a.cajaB-a.cajaCom)}</span></div>
       </div>
     </div>
   )}
