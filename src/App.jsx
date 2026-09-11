@@ -22350,8 +22350,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           const sinLiqNoNotaria = porLiquidar.filter(e=>e.category!=='Notaria').length
           const liqSch = sinLiqNoNotaria>10 ? RED : ORANGE
           return (
-            <>
-              <div style={{background:saldoSch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${saldoSch.bd}`,marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+            <div style={{display:isDesktop?'grid':'block',gridTemplateColumns:isDesktop?'1fr 1fr':undefined,gap:isDesktop?14:0,alignItems:'start'}}>
+              <div style={{background:saldoSch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${saldoSch.bd}`,marginBottom:isDesktop?0:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:10,fontWeight:600,color:saldoSch.label,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Saldo en tu caja{saldo<0?' · te debemos':''}</div>
                   <div style={{fontSize:22,fontWeight:700,color:saldoSch.num,lineHeight:1.1}}>{`${saldo<0?'-':''}${fmtCLP(saldo)}`}</div>
@@ -22359,8 +22359,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                 {totalPorLiquidar>0&&<span style={{flexShrink:0,fontSize:11,fontWeight:600,color:liqSch.num,background:'#fff',border:`0.5px solid ${liqSch.bd}`,padding:'5px 11px',borderRadius:20,whiteSpace:'nowrap'}}>{porLiquidar.length} por liquidar · {fmtCLP(totalPorLiquidar)}</span>}
               </div>
               {ultimos.length>0&&(
-                <>
-                  <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:8,marginTop:4}}>Últimos gastos ingresados</div>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:8,marginTop:0}}>Últimos gastos ingresados</div>
                   {ultimos.map(e=>{
                     const cl=clients.find(c=>c.id===e.client_id)
                     return (
@@ -22377,9 +22377,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                       </div>
                     )
                   })}
-                </>
+                </div>
               )}
-            </>
+            </div>
           )
         })()}
       </div>
@@ -22410,12 +22410,52 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
         </Modal>
       )}
   </>);
+  // Desktop: banda de 4 KPIs (el pulso del día). En escritorio reemplaza al _hero; el móvil sigue con _hero intacto.
+  const _kpiband = (()=>{ const tiles=[
+      {n:kpiVencidas.length,l:kpiVencidas.length===1?'vencida':'vencidas',bg:C.overdueBg,num:C.overdue,lc:C.overdueText,go:()=>goSec(setOpenActivas,'sec-activas')},
+      {n:kpiSemana.length,l:'vencen esta semana',bg:C.ambarBg,num:C.soon,lc:C.soonText,go:()=>goSec(setOpenActivas,'sec-activas')},
+      {n:mias.length,l:'activas en total',bg:C.card,num:C.accent,lc:C.muted,plain:true,go:()=>goSec(setOpenActivas,'sec-activas')},
+      {n:kpiTermMes.length,l:'terminadas este mes',bg:C.greenBg,num:C.greenText,lc:C.greenText,go:()=>goSec(setOpenTerm,'sec-term')} ]
+    return <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:14}}>{tiles.map((t,i)=>(
+      <div key={i} onClick={t.go} style={{background:t.bg,border:`1px solid ${t.plain?C.border:'transparent'}`,borderRadius:12,padding:'13px 14px',cursor:'pointer'}}>
+        <div style={{fontSize:27,fontWeight:700,color:t.num,lineHeight:1}}>{t.n}</div>
+        <div style={{fontSize:11,color:t.lc,marginTop:4,fontWeight:500}}>{t.l}</div>
+      </div>))}</div>
+  })()
+  // Desktop: sugeridas desde Gmail (solo admin) — se conservan como tira bajo la banda, no se pierden al quitar el _hero.
+  const _sugStrip = (isAdmin&&(sugBusy||sugVisibles.length>0)) ? (
+    <div style={{marginBottom:14}}>
+      <div onClick={()=>{ if(!sugBusy) setSugOpen(o=>!o) }} style={{background:C.greenBg,borderRadius:10,padding:'10px 13px',display:'flex',alignItems:'center',gap:10,cursor:sugBusy?'default':'pointer'}}>
+        {sugBusy?<span style={{fontSize:12,color:C.greenText,fontWeight:500}}>Revisando Gmail…</span>:<>
+          <span style={{fontSize:20,fontWeight:700,color:C.greenText,lineHeight:1}}>{sugVisibles.length}</span>
+          <span style={{fontSize:12,color:C.greenText,fontWeight:600,flex:1}}>sugeridas desde Gmail</span>
+          <span style={{fontSize:11,color:C.greenText,fontWeight:700}}>{sugOpen?'Ocultar ▴':'Revisar ›'}</span>
+        </>}
+      </div>
+      {sugOpen&&sugVisibles.length>0&&<div style={{marginTop:8}}>{sugVisibles.map(a=>(
+        <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,marginTop:6,padding:'8px 10px',background:C.bgSoft,borderRadius:8}}>
+          <div onClick={()=>onEdit&&onEdit({title:a.title,client_id:a.client_id,due:a.due,note:a.note})} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.title}</div>
+            <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.fromName}{a.client_id?` · ${clients.find(c=>c.id===a.client_id)?.name||''}`:''}{a.due?` · vence ${fmtVenceShort(a.due)}`:''}</div>
+          </div>
+          <button onClick={()=>descartarSug(a)} title='Descartar' style={{background:'none',border:'none',color:C.done,cursor:'pointer',fontSize:16,lineHeight:1,padding:'0 2px',flexShrink:0}}>×</button>
+        </div>
+      ))}</div>}
+    </div>
+  ) : null
   return (
     <>
       {isDesktop ? (
-        <div style={{maxWidth:1200,margin:'0 auto',padding:'0 16px',display:'grid',gridTemplateColumns:'1fr 330px',gap:16,alignItems:'start'}}>
-          <div style={{minWidth:0}}>{_list}</div>
-          <div style={{display:'flex',flexDirection:'column',minWidth:0}}>{_nudge}{_hero}{_cal}{_fin}</div>
+        <div style={{maxWidth:1200,margin:'0 auto',padding:'0 16px'}}>
+          {_nudge}
+          {_kpiband}
+          {_sugStrip}
+          {/* Calendario protagonista a la izquierda · tareas a la derecha */}
+          <div style={{display:'grid',gridTemplateColumns:'1.35fr 1fr',gap:16,alignItems:'start'}}>
+            <div style={{minWidth:0}}>{_cal}</div>
+            <div style={{minWidth:0}}>{_list}</div>
+          </div>
+          {_fin}
         </div>
       ) : (
         <div>{_nudge}{_hero}{_list}{_cal}{_fin}</div>
