@@ -4003,14 +4003,43 @@ function ComparativoSocios({socios=[], isDesktop}){
       </div>
     </div>
   )
+  // Alternativa A: barras PARTIDAS — una barra por métrica dividida por socio (Cristóbal, Erasmo, otros); cifras a los extremos. Colores del hero (heroCol), DM Sans tabular. Fuente única.
+  const metricTotal = k => socios.reduce((a,s)=>a+(Number(s[k])||0),0)
+  const SplitBar = ({lab,k,note}) => { const tot=metricTotal(k)||1; const cP=(Number(C1[k])||0)/tot*100, eP=(Number(E1[k])||0)/tot*100, oP=Math.max(0,100-cP-eP); return (
+    <div style={{marginTop:15}}>
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:.6,textTransform:'uppercase',color:'#9FC4DE',textAlign:'center',marginBottom:6}}>{lab}{note?<span style={{color:heroCol('Erasmo')}}> · {note}</span>:''}</div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:13.5,fontWeight:800,minWidth:54,textAlign:'right',color:'#fff',fontVariantNumeric:'tabular-nums'}}>{fmtShort(C1[k])}</span>
+        <span style={{flex:1,height:18,borderRadius:6,overflow:'hidden',display:'flex',background:'rgba(255,255,255,.1)'}}><span style={{width:cP+'%',background:heroCol('Cristóbal')}}/><span style={{width:eP+'%',background:heroCol('Erasmo')}}/><span style={{width:oP+'%',background:heroCol('Martín')}}/></span>
+        <span style={{fontSize:13.5,fontWeight:800,minWidth:54,textAlign:'left',color:'#fff',fontVariantNumeric:'tabular-nums'}}>{fmtShort(E1[k])}</span>
+      </div>
+    </div>
+  )}
+  const Rat = ({lab,cv,ev}) => (
+    <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',marginTop:12,paddingTop:11,borderTop:'1px solid rgba(255,255,255,.12)'}}>
+      <span style={{textAlign:'right',fontSize:15,fontWeight:800,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{cv}</span>
+      <span style={{fontSize:11,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:'#9FC4DE',padding:'0 16px'}}>{lab}</span>
+      <span style={{textAlign:'left',fontSize:15,fontWeight:800,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{ev}</span>
+    </div>
+  )
+  const _vTot = metricTotal('vencido')||1
+  const _vTop = (Number(E1?.vencido)||0)>=(Number(C1?.vencido)||0) ? ['Erasmo',(Number(E1?.vencido)||0)/_vTot] : ['Cristóbal',(Number(C1?.vencido)||0)/_vTot]
+  const _vNote = _vTop[1]>=0.6 ? `${_vTop[0]} concentra ${Math.round(_vTop[1]*100)}%` : null
   const duelHero = (C1&&E1) ? (
     <div style={{background:C.accent,borderRadius:20,padding:isDesktop?'20px 24px 18px':'18px 14px 16px',marginBottom:14}}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',marginTop:2}}>
         <span style={{display:'flex',alignItems:'center',gap:7,fontSize:14,fontWeight:800,color:'#fff'}}><span style={{width:11,height:11,borderRadius:'50%',background:heroCol('Cristóbal')}}/>Cristóbal</span>
         <span style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:7,fontSize:14,fontWeight:800,color:'#fff'}}>Erasmo<span style={{width:11,height:11,borderRadius:'50%',background:heroCol('Erasmo')}}/></span>
       </div>
-      <MBar lab='Vendido del año' cPct={shareV(C1)} ePct={shareV(E1)} cTxt={fmtShort(C1.vendido)} eTxt={fmtShort(E1.vendido)}/>
-      <MBar lab='Facturado del año' cPct={shareF(C1)} ePct={shareF(E1)} cTxt={fmtShort(C1.facturado)} eTxt={fmtShort(E1.facturado)}/>
+      <SplitBar lab='Vendido del año' k='vendido'/>
+      <SplitBar lab='Facturado del año' k='facturado'/>
+      <SplitBar lab='Por cobrar' k='porCobrar'/>
+      <SplitBar lab='Vencido' k='vencido' note={_vNote}/>
+      <Rat lab='Ticket promedio' cv={fmtShort(C1.ticket)} ev={fmtShort(E1.ticket)}/>
+      <Rat lab='% recurrente' cv={Math.round(C1.pctRec||0)+'%'} ev={Math.round(E1.pctRec||0)+'%'}/>
+      {otrosS.length>0&&<div style={{marginTop:15,paddingTop:13,borderTop:'1px solid rgba(255,255,255,.12)'}}>{otrosS.map((s,i)=>(
+        <div key={s.abo} style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#8FB6CC',marginTop:i?6:0}}><span style={{width:9,height:9,borderRadius:'50%',background:heroCol(s.abo),flexShrink:0}}/><span style={{color:'#fff',fontWeight:700}}>{s.abo}</span><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>vendido <b style={{color:'#fff',fontWeight:800}}>{fmtShort(s.vendido)}</b> · facturado <b style={{color:'#fff',fontWeight:800}}>{fmtShort(s.facturado)}</b></span></div>
+      ))}</div>}
       <div style={{textAlign:'center',marginTop:15,fontSize:10,color:'#8FB6CC',lineHeight:1.4}}>El cobrado a caja se ve en Inicio y en Facturación · por socio (misma fuente).</div>
     </div>
   ) : (
@@ -4071,8 +4100,6 @@ function ComparativoSocios({socios=[], isDesktop}){
     return (
       <div>
         {duelHero}
-        {duelBars}
-        {martinStrip}
         {exportLink}
       </div>
     )
@@ -4083,8 +4110,6 @@ function ComparativoSocios({socios=[], isDesktop}){
   return (
     <div>
       {duelHero}
-      {duelBars}
-      {martinStrip}
       <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,overflow:'hidden'}}>
         <div style={{display:'grid',gridTemplateColumns:`1.5fr repeat(${socios.length},1fr) 1fr`,columnGap:8,alignItems:'end',padding:'11px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Métrica 2026</span>
