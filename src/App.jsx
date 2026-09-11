@@ -5258,6 +5258,9 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   }
 
   const handleSave = async (extra={}) => {
+    // REGLA: toda venta debe tener abogado responsable. Excepción: el subarriendo (no es venta de cartera; se excluye de Vendido/metas/desglose).
+    const esSub = (f.area==='Subarriendo') || (sale?.cobro_config?.subarriendo===true)
+    if(!esSub && !String(f.responsible||'').trim()){ appAlert('Toda venta debe tener un abogado responsable. Elige el responsable antes de guardar.'); return }
     // Reparto: solo filas con proveedor elegido y monto. Si hay filas con monto pero SIN proveedor y ninguna completa, avisar.
     const repartoLimpio = (reparto||[]).filter(r=>r.proveedor_id && (parseFloat(r.valor)||0)>0)
     const hayIncompleto = (reparto||[]).some(r=>(parseFloat(r.valor)||0)>0 && !r.proveedor_id)
@@ -5611,12 +5614,14 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         {open&&<div style={{padding:'0 12px 12px',borderTop:`1px solid ${C.bgSoft}`}}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'10px 0'}}>
             <Fld label={<>Área<AiBadge field='area'/></>}><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
-            <Fld label={<>Responsable<AiBadge field='responsible'/></>}>
-              <select value={f.responsible||''} onChange={e=>up('responsible',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:14,boxSizing:'border-box'}}>
+            {(()=>{ const faltaResp = f.area!=='Subarriendo' && !String(f.responsible||'').trim(); return (
+            <Fld label={<>Responsable <span style={{color:C.overdue}}>*</span><AiBadge field='responsible'/></>}>
+              <select value={f.responsible||''} onChange={e=>up('responsible',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${faltaResp?C.overdue:C.border}`,background:C.bgSoft,color:C.text,fontSize:14,boxSizing:'border-box'}}>
                 <option value=''>— Seleccionar —</option>
                 {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
               </select>
             </Fld>
+            )})()}
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
             <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado']}/></Fld>
