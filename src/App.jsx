@@ -4457,6 +4457,9 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const ufState = useUF()
   const ufHoy = ufState.uf
   const ufRef = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
+  // Atribución de abogado (FUENTE ÚNICA, igual que Inteligencia/CashflowProjection.respDe): la venta manda; si no tiene, el abogado del cliente. Toda venta debería tener responsible (se exige al guardar), este fallback es el blindaje.
+  const abogDeCliente = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id), c.abogado_responsable||null])),[clients])
+  const respVenta = s => s.responsible || abogDeCliente[String(s.client_id)] || 'Sin abogado'
   // Búsqueda libre: por título de venta o nombre de cliente (respeta año/área). Solo se usa cuando hay texto.
   const filtered = useMemo(()=>{
     if(!q.trim()) return []
@@ -4474,11 +4477,11 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const sumUF = arr=>arr.reduce((a,s)=>a+ventaUF(s,ufRef),0)
   const sumCLP = arr=>Math.round(arr.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
   // "Vendido" = ventas del año/área con estado dentro del filtro multi (por defecto Activo+Terminado) y abogado dentro del filtro (vacío = todos). El desglose suma exacto a este total.
-  const vendSrc = yearSales.filter(s=> estSel.has(s.status) && (abogSel.size===0 || abogSel.has(s.responsible||'Sin abogado')))
+  const vendSrc = yearSales.filter(s=> estSel.has(s.status) && (abogSel.size===0 || abogSel.has(respVenta(s))))
   const vendUF=sumUF(vendSrc), vendCLP=sumCLP(vendSrc)
   const fmtMonto = (uf,clp)=> montoUF ? fmtUFk(uf) : fmtShort(clp)
   const ESTADOS = ['Activo','Terminado','Pausado','Propuesta','Borrador','Rechazada']
-  const abogados = [...new Set(sales.map(s=>s.responsible).filter(Boolean))]
+  const abogados = [...new Set(sales.filter(s=>!esSubarriendo(s)).map(respVenta))].filter(a=>a&&a!=='Sin abogado')
   const years = [...new Set(sales.map(s=>s.year).filter(Boolean))].sort((a,b)=>b-a)
   if(!years.includes(currentYear)) years.unshift(currentYear)
 
@@ -4521,10 +4524,10 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const colorGrupo = k => groupBy==='abogado' ? (k==='Sin abogado'?C.done:personChip(k).color) : (AREA_COL[k]||'#537281')
   const grupos = useMemo(()=>{
     // El desglose desglosa el MISMO universo que "Vendido" (estado en el filtro multi + abogado en el filtro), así suma exacto al total.
-    const src = sales.filter(s=> !esSubarriendo(s) && (!fYear||String(s.year)===fYear) && (!fArea||s.area===fArea) && estSel.has(s.status) && (abogSel.size===0||abogSel.has(s.responsible||'Sin abogado')))
+    const src = sales.filter(s=> !esSubarriendo(s) && (!fYear||String(s.year)===fYear) && (!fArea||s.area===fArea) && estSel.has(s.status) && (abogSel.size===0||abogSel.has(respVenta(s))))
     const m={}
     src.forEach(s=>{
-      const k = groupBy==='abogado' ? (s.responsible||'Sin abogado') : (s.area||'Sin área')
+      const k = groupBy==='abogado' ? respVenta(s) : (s.area||'Sin área')
       if(!m[k]) m[k]={key:k,count:0,uf:0,rows:[]}
       m[k].count++; m[k].uf+=ventaUF(s,ufRef); m[k].rows.push(s)
     })
@@ -4581,7 +4584,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
         </div>
         <div style={{display:'flex',gap:6,alignItems:'center'}}>
           <AreaChip area={s.area}/>
-          {groupBy==='abogado'&&s.responsible&&(()=>{ const pc=personChip(s.responsible); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 8px',fontWeight:600}}>{s.responsible}</span> })()}
+          {groupBy==='abogado'&&(()=>{ const rp=respVenta(s); if(!rp||rp==='Sin abogado') return null; const pc=personChip(rp); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 8px',fontWeight:600}}>{rp}</span> })()}
           <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
           {isPropuesta&&<span style={{fontSize:10,color:tardio?C.soon:C.muted}}>{diasPendiente}d pendiente</span>}
           <span style={{marginLeft:'auto'}}><Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/></span>
