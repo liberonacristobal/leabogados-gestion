@@ -21905,7 +21905,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             return (b.created_at||'')<(a.created_at||'')?-1:1
           }).slice(0,3)
           const fmtCLP = fmtN
-          const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
+          const fmtFecha = fmtFechaDMY   // unificado a DD-MM-AAAA (antes DD-MM sin año)
           const CAT_BG = CAT_COLORS
           const GREEN={num:C.normal,bg:C.greenBg,bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:C.soon,bg:'#FEF6EE',bd:'#F5E2CC',label:C.soon}
@@ -25450,7 +25450,7 @@ function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], curre
     }).sort((a,b)=> (b.dias==null?9999:b.dias)-(a.dias==null?9999:a.dias)), [mis, tasks])
   const nBad = rows.filter(r=>r.sev==='bad').length
   const nPlazoSem = rows.filter(r=>r.dp!=null && r.dp>=0 && r.dp<=7).length
-  const fmtDia = iso => iso ? new Date(iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : '—'
+  const fmtDia = fmtFechaDMY   // unificado a DD-MM-AAAA (antes "10 sept" sin año)
   const plazoTxt = dp => dp==null?'sin plazo':dp<0?`${-dp}d vencido`:dp===0?'hoy':dp<=7?`${dp}d`:fmtDia(rows.find(r=>r.dp===dp)?.p?.plazo)
   const SEV = { bad:{c:C.overdueText,bg:C.overdueBg,u:'días'}, soon:{c:C.soonText,bg:C.soonBg,u:'días'}, ok:{c:C.greenText,bg:C.greenBg,u:'días'} }
   const registrarAvance = async(p)=>{
@@ -25522,7 +25522,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const esAdmin = userRole==='admin'
   const miInicial = INICIALES_RESP[currentUserName] || null
   const cnm = id => { const c=clients.find(x=>String(x.id)===String(id)); return c?.name || '' }
-  const fmtDia = iso => iso ? new Date(iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : ''
+  const fmtDia = iso => iso ? fmtFechaDMY(iso) : ''   // unificado a DD-MM-AAAA (antes "10 sept" sin año)
   const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${d} días` }
   const haceCol = iso => { const d=cartDias(iso); return d==null?C.grisText:d>=21?'#A32D2D':d>=14?'#854F0B':C.muted }
   // Propuesta abierta = proyecto cuya venta vinculada sigue en 'Propuesta' (pipeline no cerrado) → se mantiene visible arriba.
