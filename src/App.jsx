@@ -3915,6 +3915,120 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
 // Solo admin. KPIs sólidos + Oportunidades accionables calculadas con helpers fuente única.
 // El código calcula; el Resumen IA (claudeCall) se suma en una etapa siguiente.
 const IA_SPK = (<svg width='10' height='10' viewBox='0 0 24 24' fill='currentColor' style={{display:'inline-block',verticalAlign:'-1px',marginRight:4}}><path d='M12 2l1.5 5.5L19 9l-5.5 1.5L12 16l-1.5-5.5L5 9l5.5-1.5z'/></svg>)
+
+// Comparativo de socios ("cara a cara"): todas las métricas financieras por abogado, fuente única.
+// Escritorio = cockpit tabla socios×KPIs (líder resaltado + Estudio). Móvil = marcador Cristóbal vs Erasmo (protagonista) + Martín aparte.
+const CMP_ROWS = [
+  {b:'Producción · lo que trae'},
+  {k:'vendido',l:'Vendido',f:'$',mej:'hi'},
+  {k:'nVentas',l:'N.º de ventas',f:'n',mej:'hi'},
+  {k:'ticket',l:'Ticket promedio',f:'$',mej:'hi'},
+  {k:'pctRec',l:'% recurrente',f:'%',mej:'hi'},
+  {k:'conv',l:'Conversión propuestas',f:'%',mej:'hi'},
+  {k:'pipe',l:'Pipeline abierto',f:'n',mej:null},
+  {b:'Clientes · la relación'},
+  {k:'clientes',l:'Clientes activos',f:'n',mej:'hi'},
+  {k:'ventasPorCli',l:'Ventas por cliente',f:'d2',mej:'hi',sub:'expansión'},
+  {k:'cliMulti',l:'Clientes con más de 1 venta',f:'n',mej:'hi'},
+  {k:'concentracion',l:'Concentración cliente top',f:'%',mej:'lo',sub:'menos = diversificado'},
+  {b:'Cobro y liquidez · cómo y cuándo entra'},
+  {k:'facturado',l:'Facturado',f:'$',mej:'hi'},
+  {k:'cobrado',l:'Cobrado',f:'$',mej:'hi'},
+  {k:'eficiencia',l:'Eficiencia de cobro',f:'%',mej:'hi'},
+  {k:'dso',l:'DSO · días en cobrar',f:'d',mej:'lo'},
+  {k:'convCaja',l:'Conversión a caja',f:'%',mej:'hi',sub:'cobrado / vendido'},
+  {k:'porCobrar',l:'Por cobrar',f:'$',mej:null},
+  {k:'vencido',l:'Vencido',f:'$',mej:'lo'},
+  {b:'Futuro y valor · lo comprometido'},
+  {k:'mrr',l:'MRR · recurrente al mes',f:'$',mej:'hi'},
+  {k:'fut',l:'Comprometido 2027+',f:'$',mej:'hi'},
+  {k:'prog',l:'Por facturar',f:'$',mej:'hi',sub:'programado sin emitir'},
+]
+const _cmpFmt = (v,f) => v==null ? '—' : f==='$' ? fmtShort(v) : f==='%' ? Math.round(v)+'%' : f==='d' ? Math.round(v)+' d' : f==='d2' ? (Math.round(v*100)/100).toFixed(2).replace('.',',') : String(Math.round(v))
+const _cmpLider = (rows, k, mej) => { if(!mej) return null; const vals=rows.map(s=>s[k]).filter(v=>v!=null&&!Number.isNaN(v)); if(!vals.length) return null; return mej==='hi'?Math.max(...vals):Math.min(...vals) }
+function ComparativoSocios({socios=[], isDesktop}){
+  const est = useMemo(()=>{ const S=k=>socios.reduce((a,s)=>a+(Number(s[k])||0),0)
+    const vendido=S('vendido'),nVentas=S('nVentas'),clientes=S('clientes'),facturado=S('facturado'),cobrado=S('cobrado'),porCobrar=S('porCobrar'),vencido=S('vencido'),gan=S('_gan'),rech=S('_rech'),recCLP=S('_recCLP'),dsoN=S('_dsoN'),dsoD=S('_dsoD')
+    return {vendido,nVentas,clientes,facturado,cobrado,porCobrar,vencido,pipe:S('pipe'),cliMulti:S('cliMulti'),mrr:S('mrr'),fut:S('fut'),prog:S('prog'),
+      ticket:nVentas?vendido/nVentas:0,pctRec:vendido?recCLP/vendido*100:0,conv:(gan+rech)?gan/(gan+rech)*100:null,
+      ventasPorCli:clientes?nVentas/clientes:0,concentracion:null,eficiencia:facturado?cobrado/facturado*100:null,
+      dso:dsoD?Math.round(dsoN/dsoD):null,convCaja:vendido?cobrado/vendido*100:null,pctVencido:porCobrar?vencido/porCobrar*100:0} },[socios])
+  const exportar = ()=>{ try{
+    const head=['Métrica',...socios.map(s=>s.abo),'Estudio']
+    const rows=[head]
+    CMP_ROWS.forEach(r=>{ if(r.b){ rows.push([r.b]); return } rows.push([r.l, ...socios.map(s=>_cmpFmt(s[r.k],r.f)), _cmpFmt(est[r.k],r.f)]) })
+    const csv=rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\n')
+    const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='comparativo_socios.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+  }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
+  if(!socios.length) return <div style={{color:C.muted,textAlign:'center',padding:30,fontSize:12.5}}>Aún no hay datos de ventas para comparar.</div>
+  const col = a => personChip(a).color
+  const Dot = ({a,sz=9}) => <span style={{width:sz,height:sz,borderRadius:'50%',background:col(a),display:'inline-block',flexShrink:0}}/>
+
+  // ── MÓVIL: marcador Cristóbal vs Erasmo ──
+  if(!isDesktop){
+    const C1=socios.find(s=>s.abo==='Cristóbal'), E1=socios.find(s=>s.abo==='Erasmo')
+    const otros=socios.filter(s=>s.abo!=='Cristóbal'&&s.abo!=='Erasmo')
+    if(!C1||!E1){ /* fallback: si no están los dos, muestra lista simple */ }
+    let winC=0, winE=0
+    if(C1&&E1) CMP_ROWS.forEach(r=>{ if(r.b||!r.mej) return; const a=C1[r.k], b=E1[r.k]; if(a==null||b==null||a===b) return; const cWin=r.mej==='hi'?a>b:a<b; if(cWin)winC++; else winE++ })
+    return (
+      <div>
+        {C1&&E1&&<>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+          {[[C1,winC],[E1,winE]].map(([s,w])=>(
+            <div key={s.abo} style={{background:C.surface,border:`1px solid ${col(s.abo)}`,borderRadius:12,padding:'11px 12px',textAlign:'center'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginBottom:5}}><Dot a={s.abo} sz={10}/><span style={{fontSize:13,fontWeight:800,color:col(s.abo)}}>{s.abo}</span></div>
+              <div style={{fontSize:26,fontWeight:800,color:col(s.abo),fontVariantNumeric:'tabular-nums',lineHeight:1}}>{w}</div>
+              <div style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginTop:2}}>gana</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          {CMP_ROWS.map((r,i)=>{ if(r.b) return <div key={'b'+i} style={{padding:'8px 12px 4px',fontSize:8.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.accent,background:C.bgSoft}}>{r.b}</div>
+            const a=C1[r.k], b=E1[r.k]; const cWin=r.mej&&a!=null&&b!=null&&a!==b&&(r.mej==='hi'?a>b:a<b); const eWin=r.mej&&a!=null&&b!=null&&a!==b&&!cWin&&(r.mej==='hi'?a<b:a>b)
+            return (
+              <div key={r.k} style={{display:'grid',gridTemplateColumns:'1fr 62px 62px',gap:6,alignItems:'center',padding:'7px 12px',borderTop:`0.5px solid ${C.border}`}}>
+                <span style={{fontSize:11,color:C.muted,fontWeight:500,minWidth:0}}>{r.l}</span>
+                <span style={{textAlign:'center',fontSize:12,fontWeight:cWin?800:600,fontVariantNumeric:'tabular-nums',color:cWin?C.greenText:C.text,background:cWin?C.greenBg:'transparent',borderRadius:6,padding:'3px 0'}}>{_cmpFmt(a,r.f)}</span>
+                <span style={{textAlign:'center',fontSize:12,fontWeight:eWin?800:600,fontVariantNumeric:'tabular-nums',color:eWin?C.greenText:C.text,background:eWin?C.greenBg:'transparent',borderRadius:6,padding:'3px 0'}}>{_cmpFmt(b,r.f)}</span>
+              </div>
+            )})}
+        </div></>}
+        {otros.length>0&&<div style={{marginTop:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'9px 12px'}}>
+          {otros.map(s=>(
+            <div key={s.abo} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0',fontSize:11.5}}><Dot a={s.abo}/><span style={{fontWeight:700,color:col(s.abo)}}>{s.abo}</span><span style={{marginLeft:'auto',color:C.muted,fontVariantNumeric:'tabular-nums'}}>vendido {_cmpFmt(s.vendido,'$')} · cobrado {_cmpFmt(s.cobrado,'$')}</span></div>
+          ))}
+        </div>}
+        <div onClick={exportar} style={{textAlign:'center',marginTop:10,fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer'}}>Exportar CSV ↓</div>
+      </div>
+    )
+  }
+
+  // ── ESCRITORIO: cockpit tabla ──
+  const nc={fontVariantNumeric:'tabular-nums',textAlign:'right'}
+  return (
+    <div>
+      <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,overflow:'hidden'}}>
+        <div style={{display:'grid',gridTemplateColumns:`1.5fr repeat(${socios.length},1fr) 1fr`,columnGap:8,alignItems:'end',padding:'11px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
+          <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Métrica 2026</span>
+          {socios.map(s=><span key={s.abo} style={{...nc,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:6,fontSize:13,fontWeight:800,color:col(s.abo)}}><Dot a={s.abo}/>{s.abo}</span>)}
+          <span style={{...nc,fontSize:12,fontWeight:800,color:C.accent}}>Estudio</span>
+        </div>
+        {CMP_ROWS.map((r,i)=>{
+          if(r.b) return <div key={'b'+i} style={{padding:'9px 14px 5px',fontSize:9,fontWeight:800,letterSpacing:.6,textTransform:'uppercase',color:C.accent,background:C.bgSoft,borderTop:`1px solid ${C.border}`}}>{r.b}</div>
+          const lider=_cmpLider(socios,r.k,r.mej)
+          return (
+            <div key={r.k} style={{display:'grid',gridTemplateColumns:`1.5fr repeat(${socios.length},1fr) 1fr`,columnGap:8,alignItems:'baseline',padding:'9px 14px',borderTop:`0.5px solid ${C.border}`}}>
+              <span style={{fontSize:12,fontWeight:600,color:C.text}}>{r.l}{r.sub&&<span style={{display:'block',fontSize:9,color:C.done,fontWeight:600}}>{r.sub}</span>}</span>
+              {socios.map(s=>{ const v=s[r.k]; const es=r.mej&&lider!=null&&v===lider&&v!=null; return <span key={s.abo} style={{...nc,fontSize:13,fontWeight:es?800:500,color:es?col(s.abo):C.text}}>{_cmpFmt(v,r.f)}{es&&<span style={{display:'block',height:2,borderRadius:2,background:col(s.abo),opacity:.35,marginTop:2}}/>}</span> })}
+              <span style={{...nc,fontSize:13,fontWeight:700,color:C.accent}}>{_cmpFmt(est[r.k],r.f)}</span>
+            </div>
+          )})}
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',marginTop:9}}><span onClick={exportar} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 11px'}}>Exportar CSV ↓</span></div>
+    </div>
+  )
+}
 function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha, onOpenSale, navTo, onBack, backLabel}){
   const go = t => navTo ? navTo({tab:t}) : (setTab&&setTab(t))   // salto que apila origen+scroll (navTo) con fallback a setTab
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
@@ -4137,6 +4251,60 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     setMemoBusy(false)
   }
 
+  // Comparativo de socios: KPIs financieros por abogado (fuente única). Atribución respVenta = venta.responsible || abogado del cliente (unificada con Ventas).
+  const socios = useMemo(()=>{
+    const abogCli = Object.fromEntries((clients||[]).map(c=>[String(c.id), c.abogado_responsable||null]))
+    const respSaleId = Object.fromEntries((sales||[]).map(s=>[String(s.id), s.responsible||null]))
+    const rVenta = s => s.responsible || abogCli[String(s.client_id)] || 'Sin abogado'
+    const rBill = b => (b.sale_id&&respSaleId[String(b.sale_id)]) || abogCli[String(b.client_id)] || 'Sin abogado'
+    const anoNow = new Date().getFullYear()
+    const M = {}
+    const g = a => (M[a] = M[a] || {abo:a,vendido:0,nV:0,cli:new Set(),recCLP:0,gan:0,rech:0,pipe:0,cliV:{},cliVend:{},fact:0,cob:0,pc:0,venc:0,prog:0,fut:0,dsoN:0,dsoD:0})
+    ;(sales||[]).forEach(s=>{
+      if(s.deleted_at||esSubarriendo(s)) return
+      const a=rVenta(s); if(a==='Sin abogado') return
+      const m=g(a)
+      if(s.activated_at) m.gan++
+      if(s.status==='Rechazada') m.rech++
+      if(s.status==='Propuesta') m.pipe++
+      if(['Activo','Terminado'].includes(s.status)&&Number(s.year)===yr){
+        const clp=ventaCLP(s,ufRef)
+        m.vendido+=clp; m.nV++; m.cli.add(String(s.client_id))
+        m.cliV[s.client_id]=(m.cliV[s.client_id]||0)+1; m.cliVend[s.client_id]=(m.cliVend[s.client_id]||0)+clp
+        if(esRecurrente(s)) m.recCLP+=clp
+      }
+    })
+    const bySale={}
+    ;(billing||[]).forEach(b=>{
+      if(b.deleted_at||b.status==='Anulada'||['reembolso','nota_credito'].includes(b.billing_type)) return
+      const a=rBill(b); if(a!=='Sin abogado'){ const m=g(a)
+        if(b.invoice_no&&String(b.issued_at||'').slice(0,4)===String(yr)) m.fact+=montoFactura(b)
+        const cob=cobradoBill(b)
+        if(cob>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').slice(0,4)===String(yr)) m.cob+=cob
+        if(['Pendiente','Vencido'].includes(b.status)){ m.pc+=saldoBill(b); if(b.status==='Vencido') m.venc+=saldoBill(b) }
+        if(b.status==='Programada') m.prog+=(montoFactura(b)||b.amount||0)
+        if(b.status==='Pagado'&&b.paid_at&&b.issued_at&&String(b.paid_at).slice(0,4)===String(yr)){ const d=(new Date(b.paid_at)-new Date(b.issued_at))/86400000; if(d>=0&&d<400){ m.dsoN+=d; m.dsoD++ } }
+      }
+      if(b.sale_id) (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b)
+    })
+    ;(sales||[]).forEach(s=>{
+      if(s.deleted_at) return
+      const a=rVenta(s); if(a==='Sin abogado') return
+      let cs=(bySale[String(s.id)]||[]).slice().sort((x,y)=>String(x.due||'').localeCompare(String(y.due||'')))
+      if(esRecurrente(s)) cs=cs.slice(0,12)
+      cs.forEach(b=>{ const y=b.due?Number(String(b.due).slice(0,4)):null; if(y&&y>anoNow) g(a).fut+=(montoFactura(b)||b.amount||0) })
+    })
+    return Object.values(M).map(m=>{
+      const vend=Object.values(m.cliVend); const top=vend.length?Math.max(...vend):0; const tot=vend.reduce((x,v)=>x+v,0)
+      return {abo:m.abo,vendido:m.vendido,nVentas:m.nV,clientes:m.cli.size,ticket:m.nV?m.vendido/m.nV:0,
+        pctRec:m.vendido?m.recCLP/m.vendido*100:0,mrr:m.recCLP/12,conv:(m.gan+m.rech)?m.gan/(m.gan+m.rech)*100:null,pipe:m.pipe,
+        ventasPorCli:m.cli.size?m.nV/m.cli.size:0,cliMulti:Object.values(m.cliV).filter(n=>n>1).length,concentracion:tot?top/tot*100:0,
+        facturado:m.fact,cobrado:m.cob,eficiencia:m.fact?m.cob/m.fact*100:null,dso:m.dsoD?Math.round(m.dsoN/m.dsoD):null,
+        convCaja:m.vendido?m.cob/m.vendido*100:null,porCobrar:m.pc,vencido:m.venc,pctVencido:m.pc?m.venc/m.pc*100:0,
+        fut:m.fut,prog:m.prog,_gan:m.gan,_rech:m.rech,_recCLP:m.recCLP,_dsoN:m.dsoN,_dsoD:m.dsoD}
+    }).sort((a,b)=>b.vendido-a.vendido)
+  },[sales,billing,clients,ufRef,yr])
+
   return (
     <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -4217,6 +4385,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Seguimiento',sub:`${cartera.riesgo.length+cartera.dormido.length} sin avanzar · toca empujar`,ct:cartera.riesgo.length+cartera.dormido.length,ctCol:(cartera.riesgo.length+cartera.dormido.length)>0?C.soonText:C.greenText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
             {k:'servicios',bg:C.ambarBg,fg:C.soonText,t:'Servicios y precios',sub:serviciosTot.areas&&servicios[0]?`Top: ${servicios[0].area}`:'',ct:serviciosTot.areas,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3.5 3.5h7l9.5 9.5-7 7L3.5 10.5z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>},
             {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot}%`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
+            {k:'socios',bg:C.azulBg,fg:C.accent,t:'Socios · cara a cara',sub:'todos los KPIs por abogado',ct:socios.length||null,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="8" cy="8" r="3"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 19a4 4 0 0 1 6.5-3.1"/></svg>},
             {k:'ia',bg:'#EFEAF7',fg:'#5B3E8E',t:'Asesor IA · Foco y Plan',sub:'Pregúntale · Foco semana · Plan del Año',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>},
           ]; return SECS.map((s)=>{ const open=biSec===s.k; return (
             <div key={s.k} onClick={()=>setBiSec(open?null:s.k)} style={{cursor:'pointer',background:open?C.bgSoft:C.surface,border:`1px solid ${open?s.fg:C.border}`,borderRadius:13,padding:'13px 14px'}}>
@@ -4396,6 +4565,10 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         </div>
+        </div>)}
+        {biSec==='socios'&&(<div style={{marginTop:12}}>
+          <div style={{fontSize:11,color:C.muted,margin:'0 2px 10px',lineHeight:1.5}}>Todas las métricas financieras por abogado, de fuente única. {isDesktop?'Cada fila resalta al líder.':'Marcador Cristóbal vs Erasmo.'} La rentabilidad (margen por hora) se encenderá cuando se carguen horas.</div>
+          <ComparativoSocios socios={socios} isDesktop={isDesktop}/>
         </div>)}
         {biSec==='ia'&&(<div style={{marginTop:12}}>
           <div style={{marginBottom:12}}>
