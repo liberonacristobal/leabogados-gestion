@@ -9777,46 +9777,82 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
     const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`por_socio_${ym}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
   }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
   const otrosHay = (mesAcc['Otros'].facB||mesAcc['Otros'].cajaB||ytdAcc['Otros'].facB||ytdAcc['Otros'].cajaB)
-  const Panel=({s,acc})=>{ const a=acc[s]; return (
-    <div style={{padding:'14px 16px',flex:1,minWidth:0}}>
-      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:11}}><span style={{width:10,height:10,borderRadius:'50%',background:col[s],flexShrink:0}}/><span style={{fontSize:13,fontWeight:700,color:col[s]}}>{s}</span></div>
-      <div style={{marginBottom:11}}>
-        <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,marginBottom:3}}>Facturado</div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:10,color:C.muted}}>bruto</span><span style={{fontSize:15,fontWeight:800,fontVariantNumeric:'tabular-nums'}}>{fmt(a.facB)}</span></div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:1}}><span style={{fontSize:10,color:C.muted}}>neto de comisiones</span><span style={{fontSize:11.5,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(a.facB-a.facCom)}</span></div>
+  const MONO='ui-monospace,Menlo,monospace'
+  const pc = a => personChip(a).color
+  const facNeto = x => (x.facB||0)-(x.facCom||0), cajaNeto = x => (x.cajaB||0)-(x.cajaCom||0)
+  const RR=58, CIRC=2*Math.PI*RR
+  const cy=ytdAcc['Cristóbal'], ey=ytdAcc['Erasmo'], cm=mesAcc['Cristóbal'], em=mesAcc['Erasmo']
+  const Ring=({a,x})=>{ const fn=facNeto(x), cn=cajaNeto(x); const eff=fn>0?Math.max(0,Math.min(100,cn/fn*100)):0; const off=CIRC*(1-eff/100); return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,minWidth:0}}>
+      <div style={{position:'relative',width:140,height:140}}>
+        <svg width={140} height={140} viewBox='0 0 140 140' style={{transform:'rotate(-90deg)'}}>
+          <circle cx={70} cy={70} r={RR} fill='none' stroke='rgba(255,255,255,.13)' strokeWidth={12}/>
+          <circle cx={70} cy={70} r={RR} fill='none' stroke={pc(a)} strokeWidth={12} strokeLinecap='round' strokeDasharray={CIRC} strokeDashoffset={off}/>
+        </svg>
+        <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+          <div style={{fontSize:32,fontWeight:800,color:'#fff',lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{Math.round(eff)}%</div>
+          <div style={{fontSize:8.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:'#8FB6CC',marginTop:2}}>a caja</div>
+        </div>
       </div>
-      <div>
-        <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,marginBottom:3}}>Entró a caja</div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:10,color:C.muted}}>bruto</span><span style={{fontSize:15,fontWeight:800,fontVariantNumeric:'tabular-nums'}}>{fmt(a.cajaB)}</span></div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:1}}><span style={{fontSize:10,color:C.muted}}>neto de comisiones</span><span style={{fontSize:11.5,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(a.cajaB-a.cajaCom)}</span></div>
+      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:15,fontWeight:800,color:'#fff'}}><span style={{width:11,height:11,borderRadius:'50%',background:pc(a)}}/>{a}</div>
+      <div style={{fontSize:11,color:'#B9CEDB',fontFamily:MONO,textAlign:'center'}}>{fmtShort(cn)} a caja · de {fmtShort(fn)}</div>
+    </div>
+  )}
+  const Bar2=({lab,ca,ea,strong,cCol,eCol})=>{ const mx=Math.max(ca,ea,1); return (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 118px 1fr',alignItems:'center',gap:10,padding:strong?'11px 16px':'8px 16px'}}>
+      <div style={{display:'flex',flexDirection:'row-reverse',alignItems:'center',gap:9,minWidth:0}}>
+        <span style={{fontFamily:MONO,fontSize:strong?15:13,fontWeight:ca>=ea?800:600,minWidth:56,textAlign:'left',color:C.text}}>{fmtShort(ca)}</span>
+        <span style={{height:strong?14:11,borderRadius:6,flex:1,background:C.bgSoft,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,right:0,width:(ca/mx*100)+'%',background:cCol||pc('Cristóbal'),borderRadius:6}}/></span>
+      </div>
+      <span style={{textAlign:'center',fontSize:10,color:strong?C.text:C.muted,fontWeight:strong?700:600,lineHeight:1.2}} dangerouslySetInnerHTML={{__html:lab}}/>
+      <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
+        <span style={{height:strong?14:11,borderRadius:6,flex:1,background:C.bgSoft,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,left:0,width:(ea/mx*100)+'%',background:eCol||pc('Erasmo'),borderRadius:6}}/></span>
+        <span style={{fontFamily:MONO,fontSize:strong?15:13,fontWeight:ea>ca?800:600,minWidth:56,textAlign:'right',color:C.text}}>{fmtShort(ea)}</span>
       </div>
     </div>
   )}
+  const names = (
+    <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',padding:'11px 16px 4px'}}>
+      <span style={{display:'flex',alignItems:'center',gap:8,fontSize:13,fontWeight:800,color:pc('Cristóbal')}}><span style={{width:11,height:11,borderRadius:'50%',background:pc('Cristóbal')}}/>Cristóbal</span>
+      <span style={{fontSize:9,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.done}}>métrica</span>
+      <span style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,fontSize:13,fontWeight:800,color:pc('Erasmo')}}>Erasmo<span style={{width:11,height:11,borderRadius:'50%',background:pc('Erasmo')}}/></span>
+    </div>
+  )
   return (
-    <Modal fullscreenOnMobile title='Por socio' fsMaxWidth={720} onClose={onClose}>
+    <Modal fullscreen fsMaxWidth={960} title='Por socio' onClose={onClose}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:14,margin:'2px 0 14px'}}>
-        <button onClick={()=>shift(-1)} style={{width:34,height:34,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',fontSize:16}}>‹</button>
+        <button onClick={()=>shift(-1)} style={{width:34,height:34,borderRadius:9,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,cursor:'pointer',fontSize:16}}>‹</button>
         <div style={{textAlign:'center',minWidth:170}}><div style={{fontSize:17,fontWeight:700,color:C.text}}>{mesLbl}</div><div style={{fontSize:10,color:C.muted}}>{ym===curYM?'mes en curso':' '}</div></div>
-        <button disabled={ym===curYM} onClick={()=>shift(1)} style={{width:34,height:34,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:ym===curYM?'default':'pointer',fontSize:16,opacity:ym===curYM?.35:1}}>›</button>
+        <button disabled={ym===curYM} onClick={()=>shift(1)} style={{width:34,height:34,borderRadius:9,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,cursor:ym===curYM?'default':'pointer',fontSize:16,opacity:ym===curYM?.35:1}}>›</button>
       </div>
-      <div style={{border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:12}}>
-        <div style={{display:'flex',alignItems:'baseline',gap:8,padding:'9px 16px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft}}><span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>El mes</span><span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>facturado <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(totMes.fac)}</b> · caja <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(totMes.caja)}</b></span></div>
-        <div style={{display:'flex',flexWrap:'wrap'}}>
-          <Panel s='Cristóbal' acc={mesAcc}/>
-          <div style={{width:1,background:C.border,alignSelf:'stretch'}}/>
-          <Panel s='Erasmo' acc={mesAcc}/>
-        </div>
-        {otrosHay&&<div style={{display:'flex',justifyContent:'space-between',gap:8,padding:'8px 16px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted}}><span>Otros / sin socio</span><span style={{fontVariantNumeric:'tabular-nums'}}>facturado {fmt(mesAcc['Otros'].facB)} · caja {fmt(mesAcc['Otros'].cajaB)}</span></div>}
-      </div>
-      <div style={{border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 16px',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.accent}}>Acumulado {y}</span><span style={{fontSize:10,color:C.muted}}>enero – {MN[mo-1]}</span><button onClick={exportar} style={{marginLeft:'auto',fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 10px',cursor:'pointer'}}>Exportar ↓</button></div>
-        <div style={{display:'flex',flexWrap:'wrap'}}>
-          <Panel s='Cristóbal' acc={ytdAcc}/>
-          <div style={{width:1,background:C.border,alignSelf:'stretch'}}/>
-          <Panel s='Erasmo' acc={ytdAcc}/>
+      {/* HERO — eficiencia de cobro (de lo facturado neto, cuánto entró a caja) del acumulado del año */}
+      <div style={{background:C.accent,borderRadius:20,padding:'22px 20px 16px',marginBottom:14}}>
+        <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,textTransform:'uppercase',color:'#8FB6CC',textAlign:'center'}}>De lo facturado, cuánto entró a caja · <span style={{color:'#fff'}}>eficiencia de cobro {y}</span></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:8,marginTop:14}}>
+          <Ring a='Cristóbal' x={cy}/>
+          <div style={{width:40,height:40,borderRadius:'50%',background:'rgba(255,255,255,.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#CFE0EA'}}>VS</div>
+          <Ring a='Erasmo' x={ey}/>
         </div>
       </div>
-      <div style={{fontSize:10,color:C.muted,marginTop:11,lineHeight:1.5}}>Facturado = emitido (DTE) · Entró a caja = conciliado en banco · Neto = menos comisiones.</div>
+      {/* ACUMULADO — barras enfrentadas: bruto → comisiones → neto (lo que deja) */}
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,paddingBottom:6,marginBottom:12}}>
+        <div style={{display:'flex',alignItems:'baseline',gap:8,padding:'12px 16px 2px'}}><span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:C.accent}}>Acumulado {y}</span><span style={{fontSize:11,color:C.muted}}>enero – {MN[mo-1]}</span><span onClick={exportar} style={{marginLeft:'auto',fontSize:10,fontWeight:700,color:C.accent,border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 10px',cursor:'pointer'}}>Exportar ↓</span></div>
+        {names}
+        <Bar2 lab='Facturado bruto' ca={cy.facB} ea={ey.facB}/>
+        <Bar2 lab='Comisiones' ca={cy.facCom} ea={ey.facCom} cCol={C.soon} eCol={C.soon}/>
+        <Bar2 lab='<b>Neto factura</b><br>lo que deja' ca={facNeto(cy)} ea={facNeto(ey)} strong/>
+        <Bar2 lab='<b>Entró a caja</b><br>neto' ca={cajaNeto(cy)} ea={cajaNeto(ey)} strong/>
+        <div style={{display:'flex',justifyContent:'space-between',padding:'10px 16px 2px',fontSize:11,color:C.muted,borderTop:`1px dashed ${C.border}`,marginTop:4}}><span>Total estudio · neto</span><span style={{fontVariantNumeric:'tabular-nums'}}>facturado {fmtShort(SOCIOS.concat(['Otros']).reduce((a,s)=>a+facNeto(ytdAcc[s]),0))} · caja {fmtShort(SOCIOS.concat(['Otros']).reduce((a,s)=>a+cajaNeto(ytdAcc[s]),0))}</span></div>
+      </div>
+      {/* EL MES — barras enfrentadas netas */}
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,paddingBottom:6}}>
+        <div style={{display:'flex',alignItems:'baseline',gap:8,padding:'12px 16px 2px'}}><span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:C.accent}}>El mes</span><span style={{fontSize:11,color:C.muted}}>{mesLbl.toLowerCase()}</span></div>
+        {names}
+        <Bar2 lab='Facturado neto' ca={facNeto(cm)} ea={facNeto(em)}/>
+        <Bar2 lab='Entró a caja' ca={cajaNeto(cm)} ea={cajaNeto(em)}/>
+        {otrosHay&&<div style={{display:'flex',justifyContent:'space-between',padding:'10px 16px 2px',fontSize:11,color:C.muted,borderTop:`1px dashed ${C.border}`,marginTop:4}}><span>Otros / sin socio</span><span style={{fontVariantNumeric:'tabular-nums'}}>facturado {fmtShort(facNeto(mesAcc['Otros']))} · caja {fmtShort(cajaNeto(mesAcc['Otros']))}</span></div>}
+      </div>
+      <div style={{fontSize:10.5,color:C.muted,marginTop:12,lineHeight:1.5}}>Facturado = emitido (DTE) · Entró a caja = conciliado en banco · <b style={{color:C.text}}>Neto = menos comisiones a colaboradores (lo que deja)</b> · el anillo = caja neta ÷ facturado neto del año.</div>
     </Modal>
   )
 }
