@@ -479,6 +479,7 @@ async function setLearningKV(kind,key,value){
   else await supabase.from('learnings').insert({kind,key:String(key),value:v})
 }
 const logEvent = (area,action,detail,user) => { try{ supabase.from('usage_events').insert({area,action,detail:detail||{},user_name:user||null}).then(()=>{},()=>{}) }catch(e){} }
+const NOTA_DIRIGIDO='Silvana y Mildred'   // contactos en la notaría (saludo de las consultas por OT no reconocidas)
 // Razón social a mostrar en encabezados: si se pasa entityId se usa esa RS; con 1 RS, esa; si hay varias o ninguna,
 // el nombre del cliente (con conteo de RS si aplica). Devuelve {name, rut, multi}.
 const rsLabel = (clientId, clients, clientEntities, entityId) => {
@@ -13174,7 +13175,6 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const reactivarRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, noNuestra:false} : r)); flash('Reactivada · vuelve a la revisión') }
   // Consulta a la notaría por las OT que no reconocemos (marcadas "No es nuestra"): se seleccionan y se les pide detalle.
   const NOTA_DEST_DEFAULT='sdelgado@notarialascar.cl'
-  const NOTA_DIRIGIDO='Silvana y Mildred'   // contactos en la notaría (saludo de la consulta)
   const [notaDest,setNotaDest] = useState(NOTA_DEST_DEFAULT)
   useEffect(()=>{ if(!notaria) return; supabase.from('learnings').select('value').eq('kind','notaria_email').limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaDest(v) },()=>{}) },[notaria])
   const [notaConsultaSel,setNotaConsultaSel] = useState(()=>new Set())
@@ -15269,6 +15269,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [cobrosVista,setCobrosVista] = useState('carga')   // Cobros: 'carga' (por carga masiva) | 'ot' (lista de OT)
   const [cobrosOpen,setCobrosOpen] = useState(null)        // lote de carga masiva expandido en Cobros
   const [cobrosQ,setCobrosQ] = useState('')                // buscador en Cobros (vista por OT)
+  const [noNSel,setNoNSel] = useState(()=>new Set())        // "No son nuestras": OT seleccionadas para consultar a la notaría
+  const [noNEstado,setNoNEstado] = useState({})             // "No son nuestras": estado por OT (learnings notaria_nonuestra) → 'consultada' | 'resuelta'
+  const [noNConsult,setNoNConsult] = useState({})           // fecha de última consulta por OT (para el subtítulo)
+  const [noNSending,setNoNSending] = useState(false)        // envío de consulta en curso
   const [notaCliOpen,setNotaCliOpen] = useState(()=>new Set())   // Deuda: acordeones de cliente/persona expandidos (default todos plegados)
   const [pagosOrd,setPagosOrd] = useState('nuevo')               // Pagos realizados: orden por fecha 'nuevo' | 'antiguo'
   const [showCargaPag,setShowCargaPag] = useState(false)         // Carga masiva como PÁGINA (no modal): landing con Subir + cargas recientes
@@ -15343,6 +15347,54 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     }).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')))
     return { rows, cargas, total: rows.reduce((a,r)=>a+(r.e.amount||0),0), n: rows.length }
   },[expenses,notaLiquidaciones,bulkImports])
+  // "No son nuestras": OT que en la carga marcaste como no reconocidas (OT correctas pero no las paga la oficina).
+  // Ya viven persistidas en el resumen de cada carga (bulk_imports.resumen.noNuestras); acá se agregan para poder
+  // consultarlas a la notaría cuando quieras, no solo durante la carga. El estado (consultada/resuelta) va en learnings.
+  const notaNoNuestras = useMemo(()=>{
+    const items=[]
+    ;(bulkImports||[]).forEach(b=>{ if(b.status==='undone') return; (b.resumen?.noNuestras||[]).forEach((nn,i)=>{
+      const id=`${b.id}#${i}`; const estado=noNEstado[id]||'pendiente'
+      if(estado==='resuelta') return   // resueltas salen de la lista (sí era nuestra / la notaría respondió)
+      items.push({ id, ot:nn.ot||'', nombre:nn.nombre||'', monto:nn.monto||0, motivo:nn.motivo||'', carga:b.filename||'', fecha:b.created_at||null, estado, consultadaAt:noNConsult[id]||null })
+    }) })
+    items.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')))
+    const pend=items.filter(x=>x.estado==='pendiente')
+    return { items, n:items.length, total:items.reduce((a,x)=>a+(x.monto||0),0), nPend:pend.length, nConsult:items.length-pend.length,
+             ultConsulta: items.map(x=>x.consultadaAt).filter(Boolean).sort().slice(-1)[0]||null }
+  },[bulkImports,noNEstado,noNConsult])
+  // Carga el estado persistido de las "no son nuestras" (learnings notaria_nonuestra: value = "estado|fechaISO").
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_nonuestra').then(({data})=>{ const est={},at={}; (data||[]).forEach(r=>{ if(!r.key) return; const [e,d]=String(r.value||'').split('|'); if(e) est[r.key]=e; if(d) at[r.key]=d }); setNoNEstado(est); setNoNConsult(at) },()=>{}) },[])
+  // Envía a la notaría la consulta por las OT no reconocidas seleccionadas (mismo texto que en la carga). Las marca "consultada".
+  const consultarNoNuestras = async(items) => {
+    const dest=String(cleanNotaDest(notaEmail)||NOTARIA_DEFAULT).split(/[,;]/).map(x=>x.trim()).filter(x=>x.includes('@')&&!/@leabogados\.cl$/i.test(x)).join(', ')
+    if(!dest){ appAlert('Falta el correo de la notaría.'); return }
+    if(!items.length){ appAlert('Selecciona al menos una OT para consultar.'); return }
+    if(!(await appConfirm(`¿Enviar a la notaría (${dest}) una consulta por ${items.length} OT que no reconocemos, pidiendo detalle? El estudio va en copia.`))) return
+    setNoNSending(true)
+    try{
+      const ccEstudio='cl@leabogados.cl, ee@leabogados.cl, mc@leabogados.cl, mp@leabogados.cl'
+      const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      const otL=r=>{ const o=String(r.ot||'').trim(); return o?(o.toUpperCase().startsWith('OT')?o.toUpperCase():'OT-'+o):'s/OT' }
+      const filas=items.map(r=>`<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(otL(r))}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(r.motivo||'—')}${r.nombre?` <span style="color:#99ABB4">· ${esc(r.nombre)}</span>`:''}</td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(r.monto||0).toLocaleString('es-CL')}</td></tr>`).join('')
+      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:14px;color:#666;margin:0 0 6px">Estimadas ${NOTA_DIRIGIDO},</div><div style="font-size:14px;color:#666;margin:0 0 16px">Junto con saludar, revisando la liquidación encontramos las siguientes OT que <b>no logramos reconocer</b> como trabajos de nuestra oficina. ¿Nos podrían dar más detalle (compareciente, materia, a qué corresponden) para poder identificarlas?</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle que tenemos</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}</table><div style="font-size:13px;color:#666;margin:16px 0 0">Quedamos atentos.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">${BRAND.nombre}</b></div></div><div style="padding:16px 28px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio} · ${BRAND.nombre}</div></div></body></html>`
+      const texto=`Estimadas ${NOTA_DIRIGIDO},\n\nJunto con saludar, revisando la liquidación encontramos las siguientes OT que no logramos reconocer como trabajos de nuestra oficina. ¿Nos podrían dar más detalle para identificarlas?\n\n`+items.map(r=>`• ${otL(r)} · ${(r.motivo||'—')}${r.nombre?` · ${r.nombre}`:''} · $${(r.monto||0).toLocaleString('es-CL')}`).join('\n')+'\n\nQuedamos atentos.\nSaludos cordiales,\n'+BRAND.nombre
+      const subject=`Consulta sobre OT no reconocidas — ${BRAND.nombre} — ${new Date().toLocaleDateString('es-CL')}`
+      const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject,html,text:texto})
+      if(via===null){ setNoNSending(false); return }   // el usuario canceló la autorización de Gmail
+      const now=new Date().toISOString()
+      const est={...noNEstado}, at={...noNConsult}
+      for(const it of items){ est[it.id]='consultada'; at[it.id]=now; if(!DEMO){ try{ await setLearningKV('notaria_nonuestra',it.id,`consultada|${now}`) }catch(_){} } }
+      setNoNEstado(est); setNoNConsult(at); setNoNSel(new Set())
+      appAlert(`Consulta enviada a la notaría por ${items.length} OT${via==='oficina'?' (desde la cuenta de oficina)':''}.`)
+    }catch(e){ appAlert('No se pudo enviar la consulta: '+(e.message||e)) }
+    setNoNSending(false)
+  }
+  // Marca una OT "no nuestra" como resuelta (sí era nuestra / la notaría respondió) → sale de la lista. Reversible.
+  const resolverNoNuestra = async(id) => {
+    const est={...noNEstado}; est[id]='resuelta'; setNoNEstado(est)
+    setNoNSel(p=>{ const n=new Set(p); n.delete(id); return n })
+    if(!DEMO){ try{ await setLearningKV('notaria_nonuestra',id,`resuelta|${noNConsult[id]||new Date().toISOString()}`) }catch(_){} }
+  }
   const csvDownload = (name, rows2d) => { try{ const csv=rows2d.map(r=>r.map(c=>{ const s=String(c==null?'':c); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }).join(';')).join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href) }catch(err){ appAlert('Error al exportar: '+err.message) } }
   // Parte B (desktop 2-panel): ↑/↓ recorren la lista de clientes (misma que el panel izq), Esc vuelve al dashboard. No dispara si escribes o hay un modal.
   useEffect(()=>{ if(!isDesktop) return
@@ -15949,6 +16001,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <span style={{color:C.done,fontSize:14}}>›</span>
               </div>
             )})()}
+            {notaNoNuestras.n>0&&(
+              <div onClick={()=>{ setNoNSel(new Set(notaNoNuestras.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:C.overdueBg,border:`1px solid #F3C9C4`,borderRadius:12,padding:'11px 13px',marginBottom:12}}>
+                <span style={{width:30,height:30,borderRadius:9,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.overdueText}}>{notaNoNuestras.n} OT que no son nuestras{notaNoNuestras.nPend>0?` · ${notaNoNuestras.nPend} por consultar`:' · ya consultadas'}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>OT correctas pero no las paga la oficina — consúltalas a la notaría</div></div>
+                <span style={{color:C.done,fontSize:14}}>›</span>
+              </div>
+            )}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8}}>
               {cards.map(c=>(
                 <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
@@ -16015,6 +16074,52 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 </div>
               ))}{otFilt.length===0&&<div style={{color:C.muted,textAlign:'center',padding:22,fontSize:12.5}}>Nada calza con la búsqueda.</div>}</div>
             </>}
+          </div>
+        )
+      })()}
+      {/* Vista "No son nuestras": OT no reconocidas acumuladas de las cargas — se consultan a la notaría cuando quieras (no solo en la carga) */}
+      {showNotaria&&notaTab==='nonuestras'&&(()=>{
+        const D=isDesktop
+        const items=notaNoNuestras.items
+        const sel=items.filter(x=>noNSel.has(x.id))
+        const allOn=sel.length===items.length&&items.length>0
+        const otL=r=>{ const o=String(r.ot||'').trim(); return o?(o.toUpperCase().startsWith('OT')?o.toUpperCase():'OT-'+o):'s/OT' }
+        const fmtF=iso=>{ try{ return new Date(iso).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'}) }catch(_){ return '' } }
+        return (
+          <div style={{padding:D?'8px 20px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
+            <button onClick={()=>setNotaTab('hub')} style={{fontSize:12.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'2px 0',marginBottom:8}}>‹ Notaría</button>
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+                <span style={{width:28,height:28,borderRadius:8,background:C.overdueBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg></span>
+                <div style={{minWidth:0,flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:C.text}}>OT que no son nuestras</div><div style={{fontSize:10.5,color:C.muted}}>correctas, pero no las paga la oficina · para consultar a la notaría</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:C.overdueText}}>{fmt(notaNoNuestras.total)}</div><div style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>{items.length} OT</div></div>
+              </div>
+              {items.length>0&&(
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:C.bgSoft,borderBottom:`0.5px solid ${C.border}`,fontSize:11,color:C.muted}}>
+                  <span>{sel.length} seleccionada{sel.length!==1?'s':''}</span>
+                  <button onClick={()=>setNoNSel(allOn?new Set():new Set(items.map(x=>x.id)))} style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>{allOn?'Ninguna':'Todas'}</button>
+                </div>
+              )}
+              {items.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:'26px 16px',fontSize:13}}>Sin OT pendientes · todo consultado o resuelto.</div>}
+              {items.map(r=>{ const on=noNSel.has(r.id); const cons=r.estado==='consultada'; return (
+                <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+                  <span onClick={()=>setNoNSel(p=>{ const n=new Set(p); n.has(r.id)?n.delete(r.id):n.add(r.id); return n })} style={{width:18,height:18,borderRadius:4,border:`1.6px solid ${on?C.overdueText:C.done}`,background:on?C.overdueText:'#fff',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3'><path d='M5 13l4 4L19 7'/></svg>}</span>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{color:C.azulInfo,fontWeight:700}}>{otL(r)}</span>{r.motivo||r.nombre?<span style={{color:C.text}}> · {r.motivo||'—'}{r.nombre?<span style={{color:C.muted}}> · {r.nombre}</span>:''}</span>:''}</div>
+                    <div style={{fontSize:10,color:C.done,marginTop:1}}>{r.carga||'—'}{cons?<span style={{color:C.soonText,fontWeight:600}}> · consultada{r.consultadaAt?` el ${fmtF(r.consultadaAt)}`:''}</span>:''}</div>
+                  </div>
+                  <span style={{fontSize:12.5,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(r.monto)}</span>
+                  <button onClick={()=>resolverNoNuestra(r.id)} title='Sí era nuestra, o la notaría ya respondió → sacar de la lista (reversible)' style={{fontSize:11,fontWeight:600,color:C.greenText,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'2px 0'}}>Resolver</button>
+                </div>
+              )})}
+              {items.length>0&&(
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px'}}>
+                  <span style={{fontSize:10.5,color:C.muted}}>{notaNoNuestras.ultConsulta?`Última consulta: ${fmtF(notaNoNuestras.ultConsulta)}`:'Aún sin consultar'}</span>
+                  <button disabled={noNSending||!sel.length} onClick={()=>consultarNoNuestras(sel)} style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:'#fff',background:sel.length?C.overdue:C.done,border:'none',borderRadius:8,padding:'8px 13px',cursor:sel.length&&!noNSending?'pointer':'default',opacity:sel.length&&!noNSending?1:.6,display:'inline-flex',alignItems:'center',gap:7}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>{noNSending?'Enviando…':`Consultar a la notaría (${sel.length})`}</button>
+                </div>
+              )}
+            </div>
+            <div style={{fontSize:9.5,color:C.done,marginTop:9,textAlign:'center'}}>El correo va a {cleanNotaDest(notaEmail)||NOTARIA_DEFAULT}, dirigido a {NOTA_DIRIGIDO} · el estudio en copia.</div>
           </div>
         )
       })()}
