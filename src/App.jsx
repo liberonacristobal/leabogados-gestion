@@ -3164,7 +3164,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         ]
         const miIni = INICIALES_RESP[user?.name]||null
         const mine = (proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni || (p.responsable||'')===miIni))
-        const hace = iso => { if(!iso) return 'sin mover'; const d=Math.round((Date.now()-new Date(iso+'T00:00').getTime())/86400000); return d<=0?'hoy':d===1?'ayer':`hace ${d} d` }
+        const hace = iso => { if(!iso) return 'sin mover'; const d=Math.round((Date.now()-new Date(iso+'T00:00').getTime())/86400000); return d<=0?'hoy':d===1?'ayer':`hace ${nDias(d)}` }
         const sorted = [...mine].sort((a,b)=>{ const ka=a.ultima_actividad?new Date(a.ultima_actividad).getTime():0, kb=b.ultima_actividad?new Date(b.ultima_actividad).getTime():0; return ka-kb })
         const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
         return (
@@ -3861,7 +3861,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
         const ico=(d,c)=><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={c} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
         const abrir=p=>{ onOpenProyecto?onOpenProyecto(p.id):go('cartera') }
         const groupHd=(icoEl,label,n,col,bg)=><div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 6px',background:C.bgSoft,borderTop:'1px solid #DDE2E6'}}><span style={{width:20,height:20,borderRadius:6,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icoEl}</span><span style={{flex:1,fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:col}}>{label}</span><span style={{fontSize:10,fontWeight:800,color:col}}>{n}</span></div>
-        const rowCurso=p=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?new Date(s.iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):`hace ${dd} d`); const col=CART_DOT[p.estado||'verde']; return (
+        const rowCurso=p=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?new Date(s.iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):`hace ${nDias(dd)}`); const col=CART_DOT[p.estado||'verde']; return (
           <div key={p.id} onClick={()=>abrir(p)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
             <span style={{width:30,height:30,borderRadius:8,background:col+'1A',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span style={{width:9,height:9,borderRadius:'50%',background:col}}/></span>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm(p)}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>{s&&<span style={{width:6,height:6,borderRadius:'50%',background:SEÑAL_COL[s.tipo]||C.muted,flexShrink:0}}/>}{s?s.texto:(p.nota||p.nombre_proyecto||'sin señales')}</div></div>
@@ -11449,7 +11449,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:9,padding:'10px 13px',borderRadius:10,background:porPagarTot>0?C.soonBg:C.greenBg}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:11.5,fontWeight:700,color:porPagarTot>0?C.soonText:C.greenText}}>{porPagarTot>0?'Por pagar a colaboradores':'Al día con los colaboradores'}</div>
-            {porPagarTot>0&&<div style={{fontSize:10,color:C.soonText,opacity:.85}}>cobraste al cliente, falta transferir{porPagarProvs?` · ${porPagarProvs} colaborador${porPagarProvs!==1?'es':''}`:''}{diaMax>0?` · el más antiguo hace ${diaMax} días`:''}</div>}
+            {porPagarTot>0&&<div style={{fontSize:10,color:C.soonText,opacity:.85}}>cobraste al cliente, falta transferir{porPagarProvs?` · ${porPagarProvs} colaborador${porPagarProvs!==1?'es':''}`:''}{diaMax>0?` · el más antiguo hace ${nDias(diaMax)}`:''}</div>}
           </div>
           <span style={{fontSize:15,fontWeight:800,color:porPagarTot>0?C.soonText:C.greenText,flexShrink:0}}>{porPagarTot>0?fmtC(porPagarTot):'$0'}</span>
         </div>
@@ -15313,7 +15313,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                     <div style={{display:'flex',alignItems:'center',gap:7,marginTop:1}}>
                       {rs&&<span style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1,minWidth:0}}>{rs}</span>}
-                      <span style={{fontSize:10,color:inact?C.overdueText:C.done,flexShrink:0}}>{dias==null?'sin movimientos':inact?`· sin mov. ${dias} d`:`· hace ${dias} d`}</span>
+                      <span style={{fontSize:10,color:inact?C.overdueText:C.done,flexShrink:0}}>{dias==null?'sin movimientos':inact?`· sin mov. ${nDias(dias)}`:`· hace ${nDias(dias)}`}</span>
                     </div>
                   </div>
                   {nPR>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{nPR} por rendir</span>}
@@ -24330,7 +24330,7 @@ function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, onCl
                 <span style={chk(on)}>{on&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4"><path d="M5 13l4 4L19 7"/></svg>}</span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12.5,fontWeight:700,color:on?C.accent:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(x.b.invoice_no)||'—'}{x.b.concept?<span style={{fontWeight:500,color:C.muted}}> · {x.b.concept}</span>:''}</div>
-                  <div style={{fontSize:10.5,color:x.venc?C.soonText:C.done}}>{x.venc?`Vencida hace ${x.diasVenc} día${x.diasVenc!==1?'s':''}`:'Al día'}</div>
+                  <div style={{fontSize:10.5,color:x.venc?C.soonText:C.done}}>{x.venc?`Vencida hace ${nDias(x.diasVenc)}`:'Al día'}</div>
                 </div>
                 <div style={{fontSize:12.5,fontWeight:700,color:on?C.text:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{f0(s)}</div>
               </div>) })}
@@ -24626,7 +24626,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
             </div>
           </div>
           <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap',cursor:'pointer'}}>
-            <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} pendiente{g.items.length!==1?'s':''}{g.maxDias>0?` · vencida hace ${g.maxDias} d · ${gapTxt}`:' · al día'}</span>
+            <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} pendiente{g.items.length!==1?'s':''}{g.maxDias>0?` · vencida hace ${nDias(g.maxDias)} · ${gapTxt}`:' · al día'}</span>
             {onOpenClientFicha&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(g.cid)}} style={{fontSize:11,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha ›</span>}
             <span style={{fontSize:11,color:C.accent,fontWeight:600,marginLeft:'auto'}}>{expCli===g.cid?'▾':'▸'}</span>
           </div>
@@ -25525,7 +25525,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const miInicial = INICIALES_RESP[currentUserName] || null
   const cnm = id => { const c=clients.find(x=>String(x.id)===String(id)); return c?.name || '' }
   const fmtDia = iso => iso ? fmtFechaDMY(iso) : ''   // unificado a DD-MM-AAAA (antes "10 sept" sin año)
-  const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${d} días` }
+  const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${nDias(d)}` }
   const haceCol = iso => { const d=cartDias(iso); return d==null?C.grisText:d>=21?'#A32D2D':d>=14?'#854F0B':C.muted }
   // Propuesta abierta = proyecto cuya venta vinculada sigue en 'Propuesta' (pipeline no cerrado) → se mantiene visible arriba.
   const saleDe = p => p.sale_id ? (sales||[]).find(s=>String(s.id)===String(p.sale_id)) : null
