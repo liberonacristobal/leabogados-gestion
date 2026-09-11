@@ -3967,66 +3967,108 @@ function ComparativoSocios({socios=[], isDesktop}){
   const col = a => personChip(a).color
   const Dot = ({a,sz=9}) => <span style={{width:sz,height:sz,borderRadius:'50%',background:col(a),display:'inline-block',flexShrink:0}}/>
   // Héroe: la señal financiera real de las ventas = conversión a caja NETA (cobrado neto de comisiones ÷ vendido). Va arriba de todo.
-  const nHero = isDesktop?Math.min(heroSocios.length,4):2
-  const heroBand = (
-    <div style={{display:'grid',gridTemplateColumns:`repeat(${nHero},1fr)`,gap:8,marginBottom:12}}>
-      {heroSocios.slice(0,nHero).map(s=>(
+  const C1=socios.find(s=>s.abo==='Cristóbal'), E1=socios.find(s=>s.abo==='Erasmo')
+  const otrosS=socios.filter(s=>s.abo!=='Cristóbal'&&s.abo!=='Erasmo')
+  const RING=isDesktop?150:130, RR=isDesktop?62:54, CIRC=2*Math.PI*RR
+  const MONO='ui-monospace,Menlo,monospace'
+  // Anillo de conversión a caja neta (dentro del héroe navy)
+  const Ring = ({s}) => { const pct=Math.max(0,Math.min(100,s.convCajaNeta||0)); const off=CIRC*(1-pct/100); return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:9,minWidth:0}}>
+      <div style={{position:'relative',width:RING,height:RING}}>
+        <svg width={RING} height={RING} viewBox={`0 0 ${RING} ${RING}`} style={{transform:'rotate(-90deg)'}}>
+          <circle cx={RING/2} cy={RING/2} r={RR} fill='none' stroke='rgba(255,255,255,.13)' strokeWidth={13}/>
+          <circle cx={RING/2} cy={RING/2} r={RR} fill='none' stroke={col(s.abo)} strokeWidth={13} strokeLinecap='round' strokeDasharray={CIRC} strokeDashoffset={off}/>
+        </svg>
+        <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+          <div style={{fontSize:isDesktop?36:30,fontWeight:800,lineHeight:1,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{s.convCajaNeta==null?'—':Math.round(s.convCajaNeta)+'%'}</div>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:'#8FB6CC',marginTop:3}}>a caja neta</div>
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:16,fontWeight:800,color:'#fff'}}><span style={{width:12,height:12,borderRadius:'50%',background:col(s.abo)}}/>{s.abo}</div>
+      <div style={{fontSize:11.5,color:'#B9CEDB',fontFamily:MONO,textAlign:'center'}}>{fmtShort(s.cobradoNeto)} deja · de {fmtShort(s.vendido)}</div>
+    </div>
+  )}
+  const duelHero = (C1&&E1) ? (
+    <div style={{background:C.accent,borderRadius:20,padding:isDesktop?'24px 24px 18px':'20px 12px 15px',marginBottom:14}}>
+      <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,textTransform:'uppercase',color:'#8FB6CC',textAlign:'center'}}>La señal que no se maquilla · <span style={{color:'#fff'}}>conversión a caja neta</span></div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:isDesktop?12:2,marginTop:14}}>
+        <Ring s={C1}/>
+        <div style={{width:42,height:42,borderRadius:'50%',background:'rgba(255,255,255,.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10.5,fontWeight:800,color:'#CFE0EA'}}>VS</div>
+        <Ring s={E1}/>
+      </div>
+    </div>
+  ) : (
+    <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(socios.length,3)},1fr)`,gap:8,marginBottom:12}}>
+      {socios.slice(0,3).map(s=>(
         <div key={s.abo} style={{background:C.surface,border:`1px solid ${col(s.abo)}`,borderRadius:12,padding:'11px 13px'}}>
           <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><Dot a={s.abo} sz={10}/><span style={{fontSize:12.5,fontWeight:800,color:col(s.abo)}}>{s.abo}</span></div>
           <div style={{fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>Conversión a caja neta</div>
           <div style={{fontSize:26,fontWeight:800,color:col(s.abo),lineHeight:1.15,fontVariantNumeric:'tabular-nums'}}>{s.convCajaNeta==null?'—':Math.round(s.convCajaNeta)+'%'}</div>
-          <div style={{fontSize:10,color:C.muted,marginTop:1}}>{fmtShort(s.cobradoNeto)} deja · de {fmtShort(s.vendido)} vendido</div>
         </div>
       ))}
     </div>
   )
+  // Barras enfrentadas Cristóbal (izq) vs Erasmo (der): la barra crece hacia el líder; en DSO/Vencido (menos=mejor) verde el mejor, rojo el peor.
+  const DUEL=[
+    {g:'Lo que trae'},{k:'vendido',l:'Vendido',f:'$',mej:'hi'},{k:'ticket',l:'Ticket',f:'$',mej:'hi'},{k:'pctRec',l:'Recurrente',f:'%',mej:'hi'},
+    {g:'Lo que deja'},{k:'cobradoNeto',l:'Cobrado neto',f:'$',mej:'hi'},{k:'dso',l:'DSO · cobro',f:'d',mej:'lo'},{k:'vencido',l:'Vencido',f:'$',mej:'lo'},
+    {g:'Lo comprometido'},{k:'fut',l:'Futuro 2027+',f:'$',mej:'hi'},
+  ]
+  const midW=isDesktop?118:82, valW=isDesktop?54:46
+  const duelBars = (C1&&E1) ? (
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,paddingBottom:6,marginBottom:12}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',padding:'12px 16px 4px'}}>
+        <span style={{display:'flex',alignItems:'center',gap:8,fontSize:13.5,fontWeight:800,color:col('Cristóbal')}}><Dot a='Cristóbal' sz={11}/>Cristóbal</span>
+        <span style={{fontSize:9,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.done}}>métrica</span>
+        <span style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,fontSize:13.5,fontWeight:800,color:col('Erasmo')}}>Erasmo<Dot a='Erasmo' sz={11}/></span>
+      </div>
+      {DUEL.map((r,i)=>{ if(r.g) return <div key={'g'+i} style={{fontSize:8.5,fontWeight:800,letterSpacing:.8,textTransform:'uppercase',color:C.accent,padding:'11px 16px 3px'}}>{r.g}</div>
+        const a=Number(C1[r.k])||0, b=Number(E1[r.k])||0; const mx=Math.max(a,b,1); const wa=Math.max(a/mx*100,a>0?4:0), wb=Math.max(b/mx*100,b>0?4:0)
+        const cBet=r.mej&&a!==b&&(r.mej==='hi'?a>b:a<b), eBet=r.mej&&a!==b&&!cBet
+        const cCol=r.mej==='lo'?(cBet?C.normal:C.overdue):col('Cristóbal'), eCol=r.mej==='lo'?(eBet?C.normal:C.overdue):col('Erasmo')
+        return (
+          <div key={r.k} style={{display:'grid',gridTemplateColumns:`1fr ${midW}px 1fr`,alignItems:'center',gap:10,padding:'8px 16px'}}>
+            <div style={{display:'flex',flexDirection:'row-reverse',alignItems:'center',gap:9,minWidth:0}}>
+              <span style={{fontFamily:MONO,fontSize:12.5,fontWeight:cBet?800:600,minWidth:valW,textAlign:'left',color:C.text}}>{_cmpFmt(C1[r.k],r.f)}</span>
+              <span style={{height:11,borderRadius:6,flex:1,background:C.bgSoft,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,right:0,width:wa+'%',background:cCol,borderRadius:6}}/></span>
+            </div>
+            <span style={{textAlign:'center',fontSize:10,color:C.muted,fontWeight:600}}>{r.l}</span>
+            <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
+              <span style={{height:11,borderRadius:6,flex:1,background:C.bgSoft,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,left:0,width:wb+'%',background:eCol,borderRadius:6}}/></span>
+              <span style={{fontFamily:MONO,fontSize:12.5,fontWeight:eBet?800:600,minWidth:valW,textAlign:'right',color:C.text}}>{_cmpFmt(E1[r.k],r.f)}</span>
+            </div>
+          </div>
+        )})}
+    </div>
+  ) : null
+  const martinStrip = otrosS.length>0 ? (
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'9px 14px',marginBottom:12}}>
+      {otrosS.map(s=>(
+        <div key={s.abo} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',fontSize:11.5}}><Dot a={s.abo}/><span style={{fontWeight:700,color:col(s.abo)}}>{s.abo}</span><span style={{marginLeft:'auto',color:C.muted,fontVariantNumeric:'tabular-nums'}}>vendido {fmtShort(s.vendido)} · deja {fmtShort(s.cobradoNeto)}{s.convCajaNeta!=null?` · ${Math.round(s.convCajaNeta)}% a caja`:''}</span></div>
+      ))}
+    </div>
+  ) : null
+  const exportLink = <div style={{display:'flex',justifyContent:'flex-end',marginTop:9}}><span onClick={exportar} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 11px'}}>Exportar CSV ↓</span></div>
 
-  // ── MÓVIL: marcador Cristóbal vs Erasmo ──
+  // ── MÓVIL: duelo de anillos + barras enfrentadas (la tabla completa queda para escritorio) ──
   if(!isDesktop){
-    const C1=socios.find(s=>s.abo==='Cristóbal'), E1=socios.find(s=>s.abo==='Erasmo')
-    const otros=socios.filter(s=>s.abo!=='Cristóbal'&&s.abo!=='Erasmo')
-    if(!C1||!E1){ /* fallback: si no están los dos, muestra lista simple */ }
-    let winC=0, winE=0
-    if(C1&&E1) CMP_ROWS.forEach(r=>{ if(r.b||!r.mej) return; const a=C1[r.k], b=E1[r.k]; if(a==null||b==null||a===b) return; const cWin=r.mej==='hi'?a>b:a<b; if(cWin)winC++; else winE++ })
     return (
       <div>
-        {heroBand}
-        {C1&&E1&&<>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-          {[[C1,winC],[E1,winE]].map(([s,w])=>(
-            <div key={s.abo} style={{background:C.surface,border:`1px solid ${col(s.abo)}`,borderRadius:12,padding:'11px 12px',textAlign:'center'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginBottom:5}}><Dot a={s.abo} sz={10}/><span style={{fontSize:13,fontWeight:800,color:col(s.abo)}}>{s.abo}</span></div>
-              <div style={{fontSize:26,fontWeight:800,color:col(s.abo),fontVariantNumeric:'tabular-nums',lineHeight:1}}>{w}</div>
-              <div style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginTop:2}}>métricas al frente</div>
-            </div>
-          ))}
-        </div>
-        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-          {CMP_ROWS.map((r,i)=>{ if(r.b) return <div key={'b'+i} style={{padding:'8px 12px 4px',fontSize:8.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.accent,background:C.bgSoft}}>{r.b}</div>
-            const a=C1[r.k], b=E1[r.k]; const cWin=r.mej&&a!=null&&b!=null&&a!==b&&(r.mej==='hi'?a>b:a<b); const eWin=r.mej&&a!=null&&b!=null&&a!==b&&!cWin&&(r.mej==='hi'?a<b:a>b)
-            return (
-              <div key={r.k} style={{display:'grid',gridTemplateColumns:'1fr 62px 62px',gap:6,alignItems:'center',padding:'7px 12px',borderTop:`0.5px solid ${C.border}`}}>
-                <span style={{fontSize:11,color:C.muted,fontWeight:500,minWidth:0}}>{r.l}</span>
-                <span style={{textAlign:'center',fontSize:12,fontWeight:cWin?800:600,fontVariantNumeric:'tabular-nums',color:cWin?C.greenText:C.text,background:cWin?C.greenBg:'transparent',borderRadius:6,padding:'3px 0'}}>{_cmpFmt(a,r.f)}</span>
-                <span style={{textAlign:'center',fontSize:12,fontWeight:eWin?800:600,fontVariantNumeric:'tabular-nums',color:eWin?C.greenText:C.text,background:eWin?C.greenBg:'transparent',borderRadius:6,padding:'3px 0'}}>{_cmpFmt(b,r.f)}</span>
-              </div>
-            )})}
-        </div></>}
-        {otros.length>0&&<div style={{marginTop:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'9px 12px'}}>
-          {otros.map(s=>(
-            <div key={s.abo} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0',fontSize:11.5}}><Dot a={s.abo}/><span style={{fontWeight:700,color:col(s.abo)}}>{s.abo}</span><span style={{marginLeft:'auto',color:C.muted,fontVariantNumeric:'tabular-nums'}}>vendido {_cmpFmt(s.vendido,'$')} · cobrado {_cmpFmt(s.cobrado,'$')}</span></div>
-          ))}
-        </div>}
-        <div onClick={exportar} style={{textAlign:'center',marginTop:10,fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer'}}>Exportar CSV ↓</div>
+        {duelHero}
+        {duelBars}
+        {martinStrip}
+        {exportLink}
       </div>
     )
   }
 
-  // ── ESCRITORIO: cockpit tabla ──
+  // ── ESCRITORIO: duelo + barras + tabla completa ──
   const nc={fontVariantNumeric:'tabular-nums',textAlign:'right'}
   return (
     <div>
-      {heroBand}
+      {duelHero}
+      {duelBars}
+      {martinStrip}
       <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,overflow:'hidden'}}>
         <div style={{display:'grid',gridTemplateColumns:`1.5fr repeat(${socios.length},1fr) 1fr`,columnGap:8,alignItems:'end',padding:'11px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Métrica 2026</span>
