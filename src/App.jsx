@@ -24624,7 +24624,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
             </div>
           </div>
           <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap',cursor:'pointer'}}>
-            <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} pendiente{g.items.length!==1?'s':''}{g.maxDias>0?` · vencida hasta ${g.maxDias} d · ${gapTxt}`:' · al día'}</span>
+            <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} pendiente{g.items.length!==1?'s':''}{g.maxDias>0?` · vencida hace ${g.maxDias} d · ${gapTxt}`:' · al día'}</span>
             {onOpenClientFicha&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(g.cid)}} style={{fontSize:11,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha ›</span>}
             <span style={{fontSize:11,color:C.accent,fontWeight:600,marginLeft:'auto'}}>{expCli===g.cid?'▾':'▸'}</span>
           </div>
