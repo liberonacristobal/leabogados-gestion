@@ -3980,7 +3980,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     const sinRec = reales.filter(c=>(c.status||'Activo')==='Activo'&&!tieneRec(c.id)&&vh(c.id)>=50).map(c=>({c,uf:vh(c.id)})).sort((a,b)=>b.uf-a.uf)
     const winback = reales.filter(c=>c.status==='Terminado'&&vh(c.id)>=30&&mesesDesde(ult(c.id))<=18).map(c=>({c,uf:vh(c.id),meses:mesesDesde(ult(c.id))})).sort((a,b)=>b.uf-a.uf)
 
-    const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&Number(s.year)===yr).reduce((a,s)=>a+ventaUF(s,ufRef),0)
+    const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s)&&Number(s.year)===yr).reduce((a,s)=>a+ventaUF(s,ufRef),0)   // fuente única con Inicio/Ventas: Activo+Terminado, sin subarriendo
     const porCobrar = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
     const cobradoYTD = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').slice(0,4)===String(yr)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única, coincide con fichas/dashboard)
     // Cartera: TODOS los no-internos segmentados por salud (cascada, cada cliente cae en uno). Terminados fuera.
