@@ -3931,16 +3931,11 @@ const CMP_ROWS = [
   {k:'ventasPorCli',l:'Ventas por cliente',f:'d2',mej:'hi',sub:'expansión'},
   {k:'cliMulti',l:'Clientes con más de 1 venta',f:'n',mej:'hi'},
   {k:'concentracion',l:'Concentración cliente top',f:'%',mej:'lo',sub:'menos = diversificado'},
-  {b:'Cobro y liquidez · lo que deja'},
+  {b:'Facturación y cartera'},
   {k:'facturado',l:'Facturado',f:'$',mej:'hi'},
-  {k:'comisiones',l:'Comisiones a colaboradores',f:'$',mej:'lo',sub:'lo que se reparte'},
-  {k:'cobrado',l:'Cobrado bruto',f:'$',mej:'hi'},
-  {k:'cobradoNeto',l:'Cobrado neto',f:'$',mej:'hi',sub:'lo que deja, tras comisiones'},
-  {k:'convCajaNeta',l:'★ Conversión a caja neta',f:'%',mej:'hi',sub:'cobrado neto ÷ vendido — la señal financiera'},
-  {k:'eficiencia',l:'Eficiencia de cobro',f:'%',mej:'hi',sub:'cobrado / facturado'},
-  {k:'dso',l:'DSO · días en cobrar',f:'d',mej:'lo'},
   {k:'porCobrar',l:'Por cobrar',f:'$',mej:null},
   {k:'vencido',l:'Vencido',f:'$',mej:'lo'},
+  // El cobrado / conversión a caja se ven en Inicio y en Facturación · por socio (fuente única banco); no se repiten aquí para no divergir.
   {b:'Futuro y valor · lo comprometido'},
   {k:'mrr',l:'MRR · recurrente al mes',f:'$',mej:'hi'},
   {k:'fut',l:'Comprometido 2027+',f:'$',mej:'hi'},
@@ -3990,18 +3985,20 @@ function ComparativoSocios({socios=[], isDesktop}){
       <div style={{fontSize:11.5,color:'#B9CEDB',fontFamily:MONO,textAlign:'center'}}>{fmtShort(s.cobradoNeto)} deja · de {fmtShort(s.vendido)}</div>
     </div>
   )}
-  // Aporte = cobrado neto de cada socio ÷ cobrado neto total (contribución al estudio).
-  const totalCobNeto = socios.reduce((a,s)=>a+(Number(s.cobradoNeto)||0),0)
-  const aporteDe = s => totalCobNeto>0 ? (Number(s.cobradoNeto)||0)/totalCobNeto*100 : 0
-  // Fila de barras espejo: Cristóbal crece hacia el centro desde la izquierda, Erasmo desde el centro a la derecha.
-  const MBar = ({lab,cPct,ePct}) => (
+  // Barras espejo con FUENTE ÚNICA (vendido/facturado, mismas cifras que Inicio). El "cobrado a caja" se reconectará a la fuente de Inicio (banco/conciliación); NO se calcula aquí para no divergir.
+  const totalVend = socios.reduce((a,s)=>a+(Number(s.vendido)||0),0)
+  const totalFact = socios.reduce((a,s)=>a+(Number(s.facturado)||0),0)
+  const shareV = s => totalVend>0 ? (Number(s.vendido)||0)/totalVend*100 : 0
+  const shareF = s => totalFact>0 ? (Number(s.facturado)||0)/totalFact*100 : 0
+  // Fila de barras espejo: Cristóbal crece hacia el centro desde la izquierda, Erasmo desde el centro a la derecha. cTxt/eTxt = etiqueta (ej. $).
+  const MBar = ({lab,cPct,ePct,cTxt,eTxt}) => (
     <div style={{marginTop:15}}>
       <div style={{fontSize:9,fontWeight:800,letterSpacing:.6,textTransform:'uppercase',color:'#9FC4DE',textAlign:'center',marginBottom:6}}>{lab}</div>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span style={{fontFamily:MONO,fontSize:14,fontWeight:800,minWidth:40,textAlign:'right',color:'#fff'}}>{Math.round(cPct)}%</span>
+        <span style={{fontFamily:MONO,fontSize:13,fontWeight:800,minWidth:54,textAlign:'right',color:'#fff'}}>{cTxt}</span>
         <span style={{flex:1,height:16,background:'rgba(255,255,255,.1)',borderRadius:5,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,right:0,width:cPct+'%',background:heroCol('Cristóbal'),borderRadius:5}}/></span>
         <span style={{flex:1,height:16,background:'rgba(255,255,255,.1)',borderRadius:5,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,left:0,width:ePct+'%',background:heroCol('Erasmo'),borderRadius:5}}/></span>
-        <span style={{fontFamily:MONO,fontSize:14,fontWeight:800,minWidth:40,textAlign:'left',color:'#fff'}}>{Math.round(ePct)}%</span>
+        <span style={{fontFamily:MONO,fontSize:13,fontWeight:800,minWidth:54,textAlign:'left',color:'#fff'}}>{eTxt}</span>
       </div>
     </div>
   )
@@ -4011,12 +4008,9 @@ function ComparativoSocios({socios=[], isDesktop}){
         <span style={{display:'flex',alignItems:'center',gap:7,fontSize:14,fontWeight:800,color:'#fff'}}><span style={{width:11,height:11,borderRadius:'50%',background:heroCol('Cristóbal')}}/>Cristóbal</span>
         <span style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:7,fontSize:14,fontWeight:800,color:'#fff'}}>Erasmo<span style={{width:11,height:11,borderRadius:'50%',background:heroCol('Erasmo')}}/></span>
       </div>
-      <MBar lab='Conversión a caja neta' cPct={Math.max(0,Math.min(100,C1.convCajaNeta||0))} ePct={Math.max(0,Math.min(100,E1.convCajaNeta||0))}/>
-      <MBar lab='Aporte a la caja del estudio' cPct={aporteDe(C1)} ePct={aporteDe(E1)}/>
-      <div style={{display:'flex',justifyContent:'space-between',marginTop:15,fontSize:11,color:'#B9CEDB',fontFamily:MONO}}>
-        <span><span style={{color:'#fff',fontWeight:700}}>{fmtShort(C1.cobradoNeto)}</span> a caja · de {fmtShort(C1.vendido)}</span>
-        <span><span style={{color:'#fff',fontWeight:700}}>{fmtShort(E1.cobradoNeto)}</span> · de {fmtShort(E1.vendido)}</span>
-      </div>
+      <MBar lab='Vendido del año' cPct={shareV(C1)} ePct={shareV(E1)} cTxt={fmtShort(C1.vendido)} eTxt={fmtShort(E1.vendido)}/>
+      <MBar lab='Facturado del año' cPct={shareF(C1)} ePct={shareF(E1)} cTxt={fmtShort(C1.facturado)} eTxt={fmtShort(E1.facturado)}/>
+      <div style={{textAlign:'center',marginTop:15,fontSize:10,color:'#8FB6CC',lineHeight:1.4}}>El cobrado a caja se ve en Inicio y en Facturación · por socio (misma fuente).</div>
     </div>
   ) : (
     <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(socios.length,3)},1fr)`,gap:8,marginBottom:12}}>
@@ -4032,7 +4026,7 @@ function ComparativoSocios({socios=[], isDesktop}){
   // Barras enfrentadas Cristóbal (izq) vs Erasmo (der): la barra crece hacia el líder; en DSO/Vencido (menos=mejor) verde el mejor, rojo el peor.
   const DUEL=[
     {g:'Lo que trae'},{k:'vendido',l:'Vendido',f:'$',mej:'hi'},{k:'ticket',l:'Ticket',f:'$',mej:'hi'},{k:'pctRec',l:'Recurrente',f:'%',mej:'hi'},
-    {g:'Lo que deja'},{k:'cobradoNeto',l:'Cobrado neto',f:'$',mej:'hi'},{k:'dso',l:'DSO · cobro',f:'d',mej:'lo'},{k:'vencido',l:'Vencido',f:'$',mej:'lo'},
+    {g:'Facturación y cartera'},{k:'facturado',l:'Facturado',f:'$',mej:'hi'},{k:'porCobrar',l:'Por cobrar',f:'$',mej:null},{k:'vencido',l:'Vencido',f:'$',mej:'lo'},
     {g:'Lo comprometido'},{k:'fut',l:'Futuro 2027+',f:'$',mej:'hi'},
   ]
   const midW=isDesktop?118:82, valW=isDesktop?54:46
@@ -4065,7 +4059,7 @@ function ComparativoSocios({socios=[], isDesktop}){
   const martinStrip = otrosS.length>0 ? (
     <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'9px 14px',marginBottom:12}}>
       {otrosS.map(s=>(
-        <div key={s.abo} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',fontSize:11.5}}><Dot a={s.abo}/><span style={{fontWeight:700,color:col(s.abo)}}>{s.abo}</span><span style={{marginLeft:'auto',color:C.muted,fontVariantNumeric:'tabular-nums'}}>vendido {fmtShort(s.vendido)} · deja {fmtShort(s.cobradoNeto)}{s.convCajaNeta!=null?` · ${Math.round(s.convCajaNeta)}% a caja`:''}</span></div>
+        <div key={s.abo} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',fontSize:11.5}}><Dot a={s.abo}/><span style={{fontWeight:700,color:col(s.abo)}}>{s.abo}</span><span style={{marginLeft:'auto',color:C.muted,fontVariantNumeric:'tabular-nums'}}>vendido {fmtShort(s.vendido)} · facturado {fmtShort(s.facturado)}</span></div>
       ))}
     </div>
   ) : null
@@ -5000,7 +4994,6 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                         <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{y}{fut&&<span style={{fontSize:9,fontWeight:600,color:C.done,marginLeft:6,textTransform:'uppercase',letterSpacing:.3}}>programado</span>}{d.revisar&&<span style={{fontSize:8.5,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:6,padding:'1px 5px',marginLeft:6,textTransform:'uppercase',letterSpacing:.3}} title='Hay cuotas con fecha anterior al año de la venta — revisar'>revisar</span>}<span style={{fontSize:10,color:C.done,fontWeight:500,marginLeft:6}}>· {cuotas.length}</span></span>
                         <span style={{textAlign:'right'}}>
                           <span style={{fontSize:13.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(d.monto)}</span>
-                          {d.cobrado>0&&<span style={{display:'block',fontSize:9.5,fontWeight:600,color:C.greenText,marginTop:1}}>{fmtShort(d.cobrado)} cobrado</span>}
                         </span>
                         <span style={{alignSelf:'center',color:C.done,transform:open?'rotate(90deg)':'none',transition:'transform .15s',fontSize:12,lineHeight:1}}>›</span>
                       </div>
@@ -5022,7 +5015,6 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                     <span style={{fontSize:12,fontWeight:700,color:C.accent}}>Total ingreso</span>
                     <span style={{textAlign:'right'}}>
                       <span style={{fontSize:13.5,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtShort(iv.total)}</span>
-                      {cobTot>0&&<span style={{display:'block',fontSize:9.5,fontWeight:600,color:C.greenText,marginTop:1}}>{fmtShort(cobTot)} cobrado</span>}
                     </span>
                     <span/>
                   </div>
