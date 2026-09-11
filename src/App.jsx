@@ -4444,7 +4444,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   )
 }
 
-function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha}) {
+function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
@@ -4529,6 +4529,16 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
     })
     return Object.values(m).sort((a,b)=>b.uf-a.uf)
   },[sales,fYear,fArea,groupBy,ufRef,estSel,abogSel])
+  // Ingreso por año del grupo elegido: distribuye las cuotas (emitidas + programadas) de esas ventas por AÑO de vencimiento; cobrado vs por cobrar por año. Fuente única montoFactura/cobradoBill. Otro lente que "vendido" (contrato): cuándo entra la plata.
+  const ingresoPorAnio = rows => {
+    const ids = new Set((rows||[]).map(s=>String(s.id)))
+    const cuotas = (billing||[]).filter(b=> b && !b.deleted_at && b.sale_id && ids.has(String(b.sale_id)) && b.status!=='Anulada' && !['reembolso','nota_credito'].includes(b.billing_type))
+    const m={}; let sinFecha=0
+    cuotas.forEach(b=>{ const y=b.due?String(b.due).slice(0,4):null; const monto=montoFactura(b); if(!y){ sinFecha+=monto; return } if(!m[y]) m[y]={monto:0,cobrado:0}; m[y].monto+=monto; m[y].cobrado+=cobradoBill(b) })
+    const years = Object.keys(m).sort()
+    const total = years.reduce((a,y)=>a+m[y].monto,0)
+    return {m,years,total,sinFecha,nCuotas:cuotas.length}
+  }
   const buscando = q.trim().length>0
   // Lista plana = búsqueda (todas las coincidencias) o vista de Propuestas. El desglose (Vendido) va en 'vendido'.
   const flatView = buscando || hubView==='propuestas'
@@ -4698,6 +4708,30 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
                 <span style={{fontSize:12,fontWeight:600,color:C.accent}}>{selGroup}</span>
                 <span style={{fontSize:11,color:C.muted}}>· {rows.length} venta{rows.length!==1?'s':''} · {fmtUFk(g.uf)}</span>
               </div>
+              {groupBy==='abogado'&&(()=>{ const iv=ingresoPorAnio(rows); if(!iv.years.length) return null; const anoNow=String(new Date().getFullYear()); const cobTot=iv.years.reduce((a,y)=>a+iv.m[y].cobrado,0); return (
+                <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'9px 12px 4px',marginBottom:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                    <span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>Ingreso por año</span>
+                    <span style={{fontSize:9.5,color:C.done}}>cuándo entra la plata</span>
+                  </div>
+                  {iv.years.map(y=>{ const d=iv.m[y]; const fut=Number(y)>Number(anoNow); return (
+                    <div key={y} style={{display:'grid',gridTemplateColumns:'1fr auto',alignItems:'baseline',padding:'6px 0',borderTop:`0.5px solid ${C.border}`}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{y}{fut&&<span style={{fontSize:9,fontWeight:600,color:C.done,marginLeft:6,textTransform:'uppercase',letterSpacing:.3}}>programado</span>}</span>
+                      <span style={{textAlign:'right'}}>
+                        <span style={{fontSize:13.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(d.monto)}</span>
+                        {d.cobrado>0&&<span style={{display:'block',fontSize:9.5,fontWeight:600,color:C.greenText,marginTop:1}}>{fmtShort(d.cobrado)} cobrado</span>}
+                      </span>
+                    </div>
+                  )})}
+                  <div style={{display:'grid',gridTemplateColumns:'1fr auto',alignItems:'baseline',padding:'6px 0 5px',borderTop:`1.5px solid ${C.accent}`,marginTop:1}}>
+                    <span style={{fontSize:12,fontWeight:700,color:C.accent}}>Total ingreso</span>
+                    <span style={{textAlign:'right'}}>
+                      <span style={{fontSize:13.5,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtShort(iv.total)}</span>
+                      {cobTot>0&&<span style={{display:'block',fontSize:9.5,fontWeight:600,color:C.greenText,marginTop:1}}>{fmtShort(cobTot)} cobrado</span>}
+                    </span>
+                  </div>
+                </div>
+              )})()}
               {(verTodasV?rows:rows.slice(0,8)).map(saleRow)}
               {rows.length>8&&<div onClick={()=>setVerTodasV(v=>!v)} style={{textAlign:'center',padding:'7px 0',fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>{verTodasV?'Ver menos':`+ ${rows.length-8} más · ver todas`}</div>}
             </div>
@@ -31763,7 +31797,7 @@ export default function App() {
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
-            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
