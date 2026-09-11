@@ -15277,6 +15277,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [pagosOrd,setPagosOrd] = useState('nuevo')               // Pagos realizados: orden por fecha 'nuevo' | 'antiguo'
   const [showCargaPag,setShowCargaPag] = useState(false)         // Carga masiva como PÁGINA (no modal): landing con Subir + cargas recientes
   const [cargaOpen,setCargaOpen] = useState(null)                // lote expandido en la página de Carga masiva
+  const [cargaGroup,setCargaGroup] = useState('cliente')         // Carga abierta: agrupar OT por 'cliente' | 'responsable' | 'estado' | 'plana'
+  const [cargaQ,setCargaQ] = useState('')                        // Carga abierta: buscador de OT/cliente
   const [cliOrd,setCliOrd] = useState('nombre')                  // orden de la lista de clientes: nombre | saldo | actividad
   // Abogado del cliente — MISMA fuente que la ficha de Clientes: abogado_responsable, y si no, el responsable de su venta más reciente.
   const respByClienteFull = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
@@ -15820,14 +15822,46 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     <div style={{fontSize:10,color:C.overdueText,marginTop:5,lineHeight:1.5}}>La OT es la fuente de la verdad: al re-subir el archivo corregido, las OT ya cargadas se saltan solas y solo entra lo que falta.</div>
                   </div>}
                   {c.gs.length===0&&nErr===0&&<div style={{padding:'12px 13px',fontSize:12,color:C.muted}}>Sin gastos vivos en esta carga.</div>}
-                  {c.gs.slice(0,60).map((e,i)=>{ const [lbl,col,bg]=estOf(e); return (
-                    <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:i?`0.5px solid #EEF1F3`:'none'}}>
-                      <span style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,width:60,flexShrink:0}}>{fmtOt(e.ot_number)||'s/OT'}</span>
-                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{e.client_id&&onOpenClientFicha?<span onClick={()=>onOpenClientFicha(e.client_id)} style={{cursor:'pointer'}}>{cnOf(e)}</span>:cnOf(e)}</div></div>
-                      <span style={{fontSize:9,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{lbl}</span>
-                      <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,minWidth:60,textAlign:'right'}}>{fmt(e.amount)}</span>
+                  {c.gs.length>8&&<div style={{display:'flex',alignItems:'center',gap:7,padding:'8px 12px',borderTop:`0.5px solid ${C.border}`,background:C.bgSoft}}>
+                    <div style={{flex:1,display:'flex',alignItems:'center',gap:6,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 9px',minWidth:0}}>
+                      <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg>
+                      <input value={cargaQ} onChange={ev=>setCargaQ(ev.target.value)} placeholder='Buscar OT o cliente…' style={{border:'none',background:'none',outline:'none',fontSize:11.5,width:'100%',color:C.text}}/>
                     </div>
-                  )})}
+                    <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
+                      {[['cliente','Cliente'],['responsable','Resp.'],['estado','Estado'],['plana','Plana']].map(([k,l])=><button key={k} onClick={()=>setCargaGroup(k)} style={{fontSize:10.5,fontWeight:700,padding:'4px 8px',border:'none',background:cargaGroup===k?C.accent:'#fff',color:cargaGroup===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}
+                    </div>
+                  </div>}
+                  {c.gs.length>0&&(()=>{
+                    const q=cargaQ.trim().toLowerCase()
+                    const rws=c.gs.filter(e=>!q||`${e.ot_number||''} ${e.concept||''} ${cnOf(e)}`.toLowerCase().includes(q))
+                    const OtRow=(e,showCli)=>{ const [lbl,col,bg]=estOf(e); const dd=e.date?fmtFechaDMY(e.date).slice(0,5):'—'; return (
+                      <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 13px',borderTop:`0.5px solid #EEF1F3`,background:'#fff'}}>
+                        <span style={{fontSize:9.5,color:C.done,width:40,flexShrink:0,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{dd}</span>
+                        <span style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,width:54,flexShrink:0}}>{fmtOt(e.ot_number)||'s/OT'}</span>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{showCli?<span style={{color:C.muted}}> · {cnOf(e)}</span>:''}</div></div>
+                        <span style={{fontSize:9,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{lbl}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,minWidth:56,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(e.amount)}</span>
+                      </div>
+                    )}
+                    if(cargaGroup==='plana') return <div>{rws.map(e=>OtRow(e,true))}{rws.length===0&&<div style={{padding:'12px 13px',fontSize:12,color:C.muted,textAlign:'center'}}>Nada calza con la búsqueda.</div>}</div>
+                    const g={}
+                    rws.forEach(e=>{ let key,label,cid=null
+                      if(cargaGroup==='cliente'){ cid=e.client_id||null; key=cid?('c'+cid):(e.personal_de?('p'+e.personal_de):'sin'); label=cnOf(e) }
+                      else if(cargaGroup==='responsable'){ const cc=clients.find(x=>String(x.id)===String(e.client_id)); label=cc?.abogado_responsable||(e.personal_de?('Personal · '+e.personal_de):'Sin responsable'); key='r'+label }
+                      else { label=estOf(e)[0]; key='x'+label }
+                      ;(g[key]=g[key]||{label,cid,rows:[]}).rows.push(e) })
+                    const entries=Object.values(g).sort((a,b)=>b.rows.reduce((s,e)=>s+(e.amount||0),0)-a.rows.reduce((s,e)=>s+(e.amount||0),0))
+                    return <div>{entries.map((gr,gi)=>{ const tot=gr.rows.reduce((s,e)=>s+(e.amount||0),0); return (
+                      <div key={gi}>
+                        <div style={{display:'flex',alignItems:'center',gap:9,padding:'8px 13px',background:C.accent,borderTop:gi?'2px solid #fff':'none'}}>
+                          <span onClick={gr.cid&&onOpenClientFicha?()=>onOpenClientFicha(gr.cid):undefined} style={{fontSize:12.5,fontWeight:700,color:'#fff',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:gr.cid&&onOpenClientFicha?'pointer':'default'}}>{gr.label}</span>
+                          <span style={{fontSize:10,color:'#9FC3D6',flexShrink:0}}>{gr.rows.length} OT</span>
+                          <span style={{fontSize:12.5,fontWeight:800,color:'#fff',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
+                        </div>
+                        {gr.rows.map(e=>OtRow(e,cargaGroup!=='cliente'))}
+                      </div>
+                    )})}{rws.length===0&&<div style={{padding:'12px 13px',fontSize:12,color:C.muted,textAlign:'center'}}>Nada calza con la búsqueda.</div>}</div>
+                  })()}
                   {!undone&&c.gs.length>0&&(()=>{ const bloq=c.gs.some(e=>e.notaria_render_id||e.notaria_liquidado_at||e.client_render_id||e.client_rendered_at||e.render_id||e.rendered_at); return (
                     <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 13px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
                       {bloq
