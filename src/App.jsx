@@ -3462,7 +3462,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                 <div key={pn} style={{marginTop:13}}>
                   <span style={{fontSize:11,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{pn}</span>
                   {arr.map(t=>{ const cl=clients.find(c=>String(c.id)===String(t.client_id)); return (
-                    <div key={t.id} onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 0 8px 9px',borderTop:`1px solid #F2F5F7`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,cursor:'pointer',marginTop:6}}>
+                    <div key={t.id} onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 0 8px 9px',borderTop:`1px solid #F2F5F7`,cursor:'pointer',marginTop:6}}>
                       {bigDate(t.due,urgencyColor(t.due,t.status))}
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
