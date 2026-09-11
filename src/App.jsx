@@ -3990,12 +3990,32 @@ function ComparativoSocios({socios=[], isDesktop}){
       <div style={{fontSize:11.5,color:'#B9CEDB',fontFamily:MONO,textAlign:'center'}}>{fmtShort(s.cobradoNeto)} deja · de {fmtShort(s.vendido)}</div>
     </div>
   )}
+  // Aporte = cobrado neto de cada socio ÷ cobrado neto total (contribución al estudio).
+  const totalCobNeto = socios.reduce((a,s)=>a+(Number(s.cobradoNeto)||0),0)
+  const aporteDe = s => totalCobNeto>0 ? (Number(s.cobradoNeto)||0)/totalCobNeto*100 : 0
+  // Fila de barras espejo: Cristóbal crece hacia el centro desde la izquierda, Erasmo desde el centro a la derecha.
+  const MBar = ({lab,cPct,ePct}) => (
+    <div style={{marginTop:15}}>
+      <div style={{fontSize:9,fontWeight:800,letterSpacing:.6,textTransform:'uppercase',color:'#9FC4DE',textAlign:'center',marginBottom:6}}>{lab}</div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontFamily:MONO,fontSize:14,fontWeight:800,minWidth:40,textAlign:'right',color:'#fff'}}>{Math.round(cPct)}%</span>
+        <span style={{flex:1,height:16,background:'rgba(255,255,255,.1)',borderRadius:5,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,right:0,width:cPct+'%',background:heroCol('Cristóbal'),borderRadius:5}}/></span>
+        <span style={{flex:1,height:16,background:'rgba(255,255,255,.1)',borderRadius:5,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,left:0,width:ePct+'%',background:heroCol('Erasmo'),borderRadius:5}}/></span>
+        <span style={{fontFamily:MONO,fontSize:14,fontWeight:800,minWidth:40,textAlign:'left',color:'#fff'}}>{Math.round(ePct)}%</span>
+      </div>
+    </div>
+  )
   const duelHero = (C1&&E1) ? (
-    <div style={{background:C.accent,borderRadius:20,padding:isDesktop?'24px 24px 18px':'20px 12px 15px',marginBottom:14}}>
-      <div style={{fontSize:10.5,fontWeight:800,letterSpacing:1,textTransform:'uppercase',color:'#fff',textAlign:'center'}}>Conversión a caja neta</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',alignItems:'start',gap:isDesktop?24:8,marginTop:16}}>
-        <Ring s={C1}/>
-        <Ring s={E1}/>
+    <div style={{background:C.accent,borderRadius:20,padding:isDesktop?'20px 24px 18px':'18px 14px 16px',marginBottom:14}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',marginTop:2}}>
+        <span style={{display:'flex',alignItems:'center',gap:7,fontSize:14,fontWeight:800,color:'#fff'}}><span style={{width:11,height:11,borderRadius:'50%',background:heroCol('Cristóbal')}}/>Cristóbal</span>
+        <span style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:7,fontSize:14,fontWeight:800,color:'#fff'}}>Erasmo<span style={{width:11,height:11,borderRadius:'50%',background:heroCol('Erasmo')}}/></span>
+      </div>
+      <MBar lab='Conversión a caja neta' cPct={Math.max(0,Math.min(100,C1.convCajaNeta||0))} ePct={Math.max(0,Math.min(100,E1.convCajaNeta||0))}/>
+      <MBar lab='Aporte a la caja del estudio' cPct={aporteDe(C1)} ePct={aporteDe(E1)}/>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:15,fontSize:11,color:'#B9CEDB',fontFamily:MONO}}>
+        <span><span style={{color:'#fff',fontWeight:700}}>{fmtShort(C1.cobradoNeto)}</span> a caja · de {fmtShort(C1.vendido)}</span>
+        <span><span style={{color:'#fff',fontWeight:700}}>{fmtShort(E1.cobradoNeto)}</span> · de {fmtShort(E1.vendido)}</span>
       </div>
     </div>
   ) : (
