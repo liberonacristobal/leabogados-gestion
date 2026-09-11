@@ -9782,7 +9782,10 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
   const facNeto = x => (x.facB||0)-(x.facCom||0), cajaNeto = x => (x.cajaB||0)-(x.cajaCom||0)
   const RR=58, CIRC=2*Math.PI*RR
   const cy=ytdAcc['Cristóbal'], ey=ytdAcc['Erasmo'], cm=mesAcc['Cristóbal'], em=mesAcc['Erasmo']
-  const Ring=({a,x})=>{ const fn=facNeto(x), cn=cajaNeto(x); const eff=fn>0?Math.max(0,Math.min(100,cn/fn*100)):0; const off=CIRC*(1-eff/100); return (
+  // Vendido del año por socio (para la CONVERSIÓN A CAJA NETA del héroe = misma métrica que Inteligencia · Socios): cobrado neto de comisiones ÷ vendido.
+  const ufRefPS=(readUFCache()?.value)||UF_FALLBACK
+  const vendidoDe=useMemo(()=>{ const m={}; SOCIOS.concat(['Otros']).forEach(s=>m[s]=0); (sales||[]).forEach(s=>{ if(s.deleted_at||esSubarriendo(s)||!['Activo','Terminado'].includes(s.status)||Number(s.year)!==y) return; const r=s.responsible||respByClient[String(s.client_id)]||'Otros'; m[SOCIOS.includes(r)?r:'Otros']+=ventaCLP(s,ufRefPS) }); return m },[sales,y,respByClient])   // eslint-disable-line
+  const Ring=({a,x})=>{ const cn=cajaNeto(x), vd=vendidoDe[a]||0; const conv=vd>0?Math.max(0,Math.min(100,cn/vd*100)):0; const off=CIRC*(1-conv/100); return (
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,minWidth:0}}>
       <div style={{position:'relative',width:140,height:140}}>
         <svg width={140} height={140} viewBox='0 0 140 140' style={{transform:'rotate(-90deg)'}}>
@@ -9790,12 +9793,12 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
           <circle cx={70} cy={70} r={RR} fill='none' stroke={pc(a)} strokeWidth={12} strokeLinecap='round' strokeDasharray={CIRC} strokeDashoffset={off}/>
         </svg>
         <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-          <div style={{fontSize:32,fontWeight:800,color:'#fff',lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{Math.round(eff)}%</div>
-          <div style={{fontSize:8.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:'#8FB6CC',marginTop:2}}>a caja</div>
+          <div style={{fontSize:32,fontWeight:800,color:'#fff',lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{vd>0?Math.round(conv)+'%':'—'}</div>
+          <div style={{fontSize:8.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:'#8FB6CC',marginTop:2}}>a caja neta</div>
         </div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,fontSize:15,fontWeight:800,color:'#fff'}}><span style={{width:11,height:11,borderRadius:'50%',background:pc(a)}}/>{a}</div>
-      <div style={{fontSize:11,color:'#B9CEDB',fontFamily:MONO,textAlign:'center'}}>{fmtShort(cn)} a caja · de {fmtShort(fn)}</div>
+      <div style={{fontSize:11,color:'#B9CEDB',fontFamily:MONO,textAlign:'center'}}>{fmtShort(cn)} deja · de {fmtShort(vd)} vendido</div>
     </div>
   )}
   const Bar2=({lab,ca,ea,strong,cCol,eCol})=>{ const mx=Math.max(ca,ea,1); return (
@@ -9825,9 +9828,9 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
         <div style={{textAlign:'center',minWidth:170}}><div style={{fontSize:17,fontWeight:700,color:C.text}}>{mesLbl}</div><div style={{fontSize:10,color:C.muted}}>{ym===curYM?'mes en curso':' '}</div></div>
         <button disabled={ym===curYM} onClick={()=>shift(1)} style={{width:34,height:34,borderRadius:9,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,cursor:ym===curYM?'default':'pointer',fontSize:16,opacity:ym===curYM?.35:1}}>›</button>
       </div>
-      {/* HERO — eficiencia de cobro (de lo facturado neto, cuánto entró a caja) del acumulado del año */}
+      {/* HERO — conversión a caja neta (cobrado neto de comisiones ÷ vendido), misma métrica que Inteligencia · Socios */}
       <div style={{background:C.accent,borderRadius:20,padding:'22px 20px 16px',marginBottom:14}}>
-        <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,textTransform:'uppercase',color:'#8FB6CC',textAlign:'center'}}>De lo facturado, cuánto entró a caja · <span style={{color:'#fff'}}>eficiencia de cobro {y}</span></div>
+        <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,textTransform:'uppercase',color:'#8FB6CC',textAlign:'center'}}>De lo vendido, cuánto entró a caja limpio · <span style={{color:'#fff'}}>conversión a caja neta {y}</span></div>
         <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:8,marginTop:14}}>
           <Ring a='Cristóbal' x={cy}/>
           <div style={{width:40,height:40,borderRadius:'50%',background:'rgba(255,255,255,.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#CFE0EA'}}>VS</div>
@@ -9852,7 +9855,7 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
         <Bar2 lab='Entró a caja' ca={cajaNeto(cm)} ea={cajaNeto(em)}/>
         {otrosHay&&<div style={{display:'flex',justifyContent:'space-between',padding:'10px 16px 2px',fontSize:11,color:C.muted,borderTop:`1px dashed ${C.border}`,marginTop:4}}><span>Otros / sin socio</span><span style={{fontVariantNumeric:'tabular-nums'}}>facturado {fmtShort(facNeto(mesAcc['Otros']))} · caja {fmtShort(cajaNeto(mesAcc['Otros']))}</span></div>}
       </div>
-      <div style={{fontSize:10.5,color:C.muted,marginTop:12,lineHeight:1.5}}>Facturado = emitido (DTE) · Entró a caja = conciliado en banco · <b style={{color:C.text}}>Neto = menos comisiones a colaboradores (lo que deja)</b> · el anillo = caja neta ÷ facturado neto del año.</div>
+      <div style={{fontSize:10.5,color:C.muted,marginTop:12,lineHeight:1.5}}>Facturado = emitido (DTE) · Entró a caja = conciliado en banco · <b style={{color:C.text}}>Neto = menos comisiones a colaboradores (lo que deja)</b> · el anillo = conversión a caja neta (caja neta ÷ vendido del año), la misma señal que Inteligencia · Socios.</div>
     </Modal>
   )
 }
