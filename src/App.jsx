@@ -4516,6 +4516,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const [groupBy,setGroupBy] = useState('abogado')
   const [selGroup,setSelGroup] = useState(null)
   const [verTodasV,setVerTodasV] = useState(false)   // "ver todas" en el drill del grupo (evita scroll eterno)
+  const [openYearV,setOpenYearV] = useState(null)     // año expandido en la tarjeta "Ingreso por año" (muestra sus cuotas)
   const AREA_COL = {'Tributario':'#BA7517','Corporativo':'#534AB7'}
   const colorGrupo = k => groupBy==='abogado' ? (k==='Sin abogado'?C.done:personChip(k).color) : (AREA_COL[k]||'#537281')
   const grupos = useMemo(()=>{
@@ -4529,15 +4530,20 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
     })
     return Object.values(m).sort((a,b)=>b.uf-a.uf)
   },[sales,fYear,fArea,groupBy,ufRef,estSel,abogSel])
-  // Ingreso por año del grupo elegido: distribuye las cuotas (emitidas + programadas) de esas ventas por AÑO de vencimiento; cobrado vs por cobrar por año. Fuente única montoFactura/cobradoBill. Otro lente que "vendido" (contrato): cuándo entra la plata.
+  // Ingreso por año del grupo elegido: distribuye las cuotas (emitidas + programadas) de esas ventas por AÑO de VENCIMIENTO; cobrado vs por cobrar por año. Fuente única montoFactura/cobradoBill. Otro lente que "vendido" (contrato): cuándo entra la plata.
+  // Proyección: se muestra hasta el año en que termina la cobranza (todas las cuotas). EXCEPCIÓN — las recurrentes (mensuales activas) se proyectan solo UN año (sus primeras 12 cuotas por vencimiento), para no arrastrar un contrato indefinido a años futuros.
   const ingresoPorAnio = rows => {
-    const ids = new Set((rows||[]).map(s=>String(s.id)))
-    const cuotas = (billing||[]).filter(b=> b && !b.deleted_at && b.sale_id && ids.has(String(b.sale_id)) && b.status!=='Anulada' && !['reembolso','nota_credito'].includes(b.billing_type))
-    const m={}; let sinFecha=0
-    cuotas.forEach(b=>{ const y=b.due?String(b.due).slice(0,4):null; const monto=montoFactura(b); if(!y){ sinFecha+=monto; return } if(!m[y]) m[y]={monto:0,cobrado:0}; m[y].monto+=monto; m[y].cobrado+=cobradoBill(b) })
+    const m={}; const listByYear={}; let sinFecha=0
+    ;(rows||[]).forEach(s=>{
+      let cuotas = (billing||[]).filter(b=> b && !b.deleted_at && String(b.sale_id)===String(s.id) && b.status!=='Anulada' && !['reembolso','nota_credito'].includes(b.billing_type))
+      cuotas = cuotas.sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
+      if(esRecurrente(s)) cuotas = cuotas.slice(0,12)   // recurrente = un año (12 cuotas)
+      cuotas.forEach(b=>{ const y=b.due?String(b.due).slice(0,4):null; const monto=montoFactura(b); if(!y){ sinFecha+=monto; return } if(!m[y]) m[y]={monto:0,cobrado:0}; m[y].monto+=monto; m[y].cobrado+=cobradoBill(b); (listByYear[y]=listByYear[y]||[]).push(b) })
+    })
     const years = Object.keys(m).sort()
     const total = years.reduce((a,y)=>a+m[y].monto,0)
-    return {m,years,total,sinFecha,nCuotas:cuotas.length}
+    const nCuotas = years.reduce((a,y)=>a+(listByYear[y]?.length||0),0)
+    return {m,years,total,sinFecha,listByYear,nCuotas}
   }
   const buscando = q.trim().length>0
   // Lista plana = búsqueda (todas las coincidencias) o vista de Propuestas. El desglose (Vendido) va en 'vendido'.
@@ -4686,7 +4692,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                 <span style={hc}>Ventas</span><span style={hc}>UF</span><span style={hc}>$</span><span style={{...hc,textAlign:'center'}}>%</span>
               </div>
               {grupos.map(g=>{ const col=colorGrupo(g.key); const chip=groupBy==='abogado'?personChip(g.key):{bg:(col||C.muted)+'1A',color:col}; const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; const pct=vendUF>0?g.uf/vendUF*100:0; const pctTxt=(pct>0&&pct<1)?pct.toFixed(1).replace('.',','):Math.round(pct); const gclp=Math.round(g.rows.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); return (
-                <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false)}} style={{display:'grid',gridTemplateColumns:GT,columnGap:10,alignItems:'center',padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.bgSoft:(sin?'#FBF7EF':'transparent')}}>
+                <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false);setOpenYearV(null)}} style={{display:'grid',gridTemplateColumns:GT,columnGap:10,alignItems:'center',padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.bgSoft:(sin?'#FBF7EF':'transparent')}}>
                   <span style={{display:'flex',alignItems:'center',gap:7,minWidth:0}}>
                     <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
                     <span style={{fontSize:13.5,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.key}</span>
@@ -4714,21 +4720,37 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                     <span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>Ingreso por año</span>
                     <span style={{fontSize:9.5,color:C.done}}>cuándo entra la plata</span>
                   </div>
-                  {iv.years.map(y=>{ const d=iv.m[y]; const fut=Number(y)>Number(anoNow); return (
-                    <div key={y} style={{display:'grid',gridTemplateColumns:'1fr auto',alignItems:'baseline',padding:'6px 0',borderTop:`0.5px solid ${C.border}`}}>
-                      <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{y}{fut&&<span style={{fontSize:9,fontWeight:600,color:C.done,marginLeft:6,textTransform:'uppercase',letterSpacing:.3}}>programado</span>}</span>
-                      <span style={{textAlign:'right'}}>
-                        <span style={{fontSize:13.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(d.monto)}</span>
-                        {d.cobrado>0&&<span style={{display:'block',fontSize:9.5,fontWeight:600,color:C.greenText,marginTop:1}}>{fmtShort(d.cobrado)} cobrado</span>}
-                      </span>
+                  {iv.years.map(y=>{ const d=iv.m[y]; const fut=Number(y)>Number(anoNow); const open=openYearV===y; const cuotas=(iv.listByYear[y]||[]).slice().sort((a,b)=>String(a.due||'').localeCompare(String(b.due||''))); return (
+                    <div key={y} style={{borderTop:`0.5px solid ${C.border}`}}>
+                      <div onClick={()=>setOpenYearV(open?null:y)} style={{display:'grid',gridTemplateColumns:'1fr auto 14px',columnGap:8,alignItems:'baseline',padding:'6px 0',cursor:'pointer'}}>
+                        <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{y}{fut&&<span style={{fontSize:9,fontWeight:600,color:C.done,marginLeft:6,textTransform:'uppercase',letterSpacing:.3}}>programado</span>}<span style={{fontSize:10,color:C.done,fontWeight:500,marginLeft:6}}>· {cuotas.length}</span></span>
+                        <span style={{textAlign:'right'}}>
+                          <span style={{fontSize:13.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(d.monto)}</span>
+                          {d.cobrado>0&&<span style={{display:'block',fontSize:9.5,fontWeight:600,color:C.greenText,marginTop:1}}>{fmtShort(d.cobrado)} cobrado</span>}
+                        </span>
+                        <span style={{alignSelf:'center',color:C.done,transform:open?'rotate(90deg)':'none',transition:'transform .15s',fontSize:12,lineHeight:1}}>›</span>
+                      </div>
+                      {open&&<div style={{paddingBottom:6}}>
+                        {cuotas.map(b=>{ const est=b.status==='Programada'?{label:'Programada',text:C.done,bg:C.bgSoft}:estadoCobro(b); const cn=(clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'—'; return (
+                          <div key={b.id} onClick={onOpenClientFicha&&b.client_id?(ev)=>{ev.stopPropagation();onOpenClientFicha(b.client_id)}:undefined} style={{display:'grid',gridTemplateColumns:'46px 1fr auto',columnGap:8,alignItems:'center',padding:'4px 0 4px 2px',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>
+                            <span style={{fontSize:10,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{b.due?fmtFechaDMY(b.due).slice(0,5):'—'}</span>
+                            <span style={{minWidth:0,overflow:'hidden'}}>
+                              <span style={{fontSize:11.5,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'block'}}>{cn}</span>
+                              <span style={{fontSize:9.5,fontWeight:600,color:est.text}}>{est.label}</span>
+                            </span>
+                            <span style={{fontSize:11.5,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmtShort(montoFactura(b))}</span>
+                          </div>
+                        )})}
+                      </div>}
                     </div>
                   )})}
-                  <div style={{display:'grid',gridTemplateColumns:'1fr auto',alignItems:'baseline',padding:'6px 0 5px',borderTop:`1.5px solid ${C.accent}`,marginTop:1}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr auto 14px',columnGap:8,alignItems:'baseline',padding:'6px 0 5px',borderTop:`1.5px solid ${C.accent}`,marginTop:1}}>
                     <span style={{fontSize:12,fontWeight:700,color:C.accent}}>Total ingreso</span>
                     <span style={{textAlign:'right'}}>
                       <span style={{fontSize:13.5,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtShort(iv.total)}</span>
                       {cobTot>0&&<span style={{display:'block',fontSize:9.5,fontWeight:600,color:C.greenText,marginTop:1}}>{fmtShort(cobTot)} cobrado</span>}
                     </span>
+                    <span/>
                   </div>
                 </div>
               )})()}
