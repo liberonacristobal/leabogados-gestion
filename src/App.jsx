@@ -3931,12 +3931,14 @@ const CMP_ROWS = [
   {k:'ventasPorCli',l:'Ventas por cliente',f:'d2',mej:'hi',sub:'expansión'},
   {k:'cliMulti',l:'Clientes con más de 1 venta',f:'n',mej:'hi'},
   {k:'concentracion',l:'Concentración cliente top',f:'%',mej:'lo',sub:'menos = diversificado'},
-  {b:'Cobro y liquidez · cómo y cuándo entra'},
+  {b:'Cobro y liquidez · lo que deja'},
   {k:'facturado',l:'Facturado',f:'$',mej:'hi'},
-  {k:'cobrado',l:'Cobrado',f:'$',mej:'hi'},
-  {k:'eficiencia',l:'Eficiencia de cobro',f:'%',mej:'hi'},
+  {k:'comisiones',l:'Comisiones a colaboradores',f:'$',mej:'lo',sub:'lo que se reparte'},
+  {k:'cobrado',l:'Cobrado bruto',f:'$',mej:'hi'},
+  {k:'cobradoNeto',l:'Cobrado neto',f:'$',mej:'hi',sub:'lo que deja, tras comisiones'},
+  {k:'convCajaNeta',l:'★ Conversión a caja neta',f:'%',mej:'hi',sub:'cobrado neto ÷ vendido — la señal financiera'},
+  {k:'eficiencia',l:'Eficiencia de cobro',f:'%',mej:'hi',sub:'cobrado / facturado'},
   {k:'dso',l:'DSO · días en cobrar',f:'d',mej:'lo'},
-  {k:'convCaja',l:'Conversión a caja',f:'%',mej:'hi',sub:'cobrado / vendido'},
   {k:'porCobrar',l:'Por cobrar',f:'$',mej:null},
   {k:'vencido',l:'Vencido',f:'$',mej:'lo'},
   {b:'Futuro y valor · lo comprometido'},
@@ -3948,11 +3950,12 @@ const _cmpFmt = (v,f) => v==null ? '—' : f==='$' ? fmtShort(v) : f==='%' ? Mat
 const _cmpLider = (rows, k, mej) => { if(!mej) return null; const vals=rows.map(s=>s[k]).filter(v=>v!=null&&!Number.isNaN(v)); if(!vals.length) return null; return mej==='hi'?Math.max(...vals):Math.min(...vals) }
 function ComparativoSocios({socios=[], isDesktop}){
   const est = useMemo(()=>{ const S=k=>socios.reduce((a,s)=>a+(Number(s[k])||0),0)
-    const vendido=S('vendido'),nVentas=S('nVentas'),clientes=S('clientes'),facturado=S('facturado'),cobrado=S('cobrado'),porCobrar=S('porCobrar'),vencido=S('vencido'),gan=S('_gan'),rech=S('_rech'),recCLP=S('_recCLP'),dsoN=S('_dsoN'),dsoD=S('_dsoD')
-    return {vendido,nVentas,clientes,facturado,cobrado,porCobrar,vencido,pipe:S('pipe'),cliMulti:S('cliMulti'),mrr:S('mrr'),fut:S('fut'),prog:S('prog'),
+    const vendido=S('vendido'),nVentas=S('nVentas'),clientes=S('clientes'),facturado=S('facturado'),cobrado=S('cobrado'),porCobrar=S('porCobrar'),vencido=S('vencido'),gan=S('_gan'),rech=S('_rech'),recCLP=S('_recCLP'),dsoN=S('_dsoN'),dsoD=S('_dsoD'),comisiones=S('comisiones'),cobradoNeto=S('cobradoNeto')
+    return {vendido,nVentas,clientes,facturado,cobrado,porCobrar,vencido,comisiones,cobradoNeto,pipe:S('pipe'),cliMulti:S('cliMulti'),mrr:S('mrr'),fut:S('fut'),prog:S('prog'),
       ticket:nVentas?vendido/nVentas:0,pctRec:vendido?recCLP/vendido*100:0,conv:(gan+rech)?gan/(gan+rech)*100:null,
       ventasPorCli:clientes?nVentas/clientes:0,concentracion:null,eficiencia:facturado?cobrado/facturado*100:null,
-      dso:dsoD?Math.round(dsoN/dsoD):null,convCaja:vendido?cobrado/vendido*100:null,pctVencido:porCobrar?vencido/porCobrar*100:0} },[socios])
+      dso:dsoD?Math.round(dsoN/dsoD):null,convCaja:vendido?cobrado/vendido*100:null,convCajaNeta:vendido?cobradoNeto/vendido*100:null,pctVencido:porCobrar?vencido/porCobrar*100:0} },[socios])
+  const heroSocios = useMemo(()=>socios.filter(s=>s.abo==='Cristóbal'||s.abo==='Erasmo').concat(socios.filter(s=>s.abo!=='Cristóbal'&&s.abo!=='Erasmo')),[socios])
   const exportar = ()=>{ try{
     const head=['Métrica',...socios.map(s=>s.abo),'Estudio']
     const rows=[head]
@@ -3963,6 +3966,20 @@ function ComparativoSocios({socios=[], isDesktop}){
   if(!socios.length) return <div style={{color:C.muted,textAlign:'center',padding:30,fontSize:12.5}}>Aún no hay datos de ventas para comparar.</div>
   const col = a => personChip(a).color
   const Dot = ({a,sz=9}) => <span style={{width:sz,height:sz,borderRadius:'50%',background:col(a),display:'inline-block',flexShrink:0}}/>
+  // Héroe: la señal financiera real de las ventas = conversión a caja NETA (cobrado neto de comisiones ÷ vendido). Va arriba de todo.
+  const nHero = isDesktop?Math.min(heroSocios.length,4):2
+  const heroBand = (
+    <div style={{display:'grid',gridTemplateColumns:`repeat(${nHero},1fr)`,gap:8,marginBottom:12}}>
+      {heroSocios.slice(0,nHero).map(s=>(
+        <div key={s.abo} style={{background:C.surface,border:`1px solid ${col(s.abo)}`,borderRadius:12,padding:'11px 13px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><Dot a={s.abo} sz={10}/><span style={{fontSize:12.5,fontWeight:800,color:col(s.abo)}}>{s.abo}</span></div>
+          <div style={{fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>Conversión a caja neta</div>
+          <div style={{fontSize:26,fontWeight:800,color:col(s.abo),lineHeight:1.15,fontVariantNumeric:'tabular-nums'}}>{s.convCajaNeta==null?'—':Math.round(s.convCajaNeta)+'%'}</div>
+          <div style={{fontSize:10,color:C.muted,marginTop:1}}>{fmtShort(s.cobradoNeto)} deja · de {fmtShort(s.vendido)} vendido</div>
+        </div>
+      ))}
+    </div>
+  )
 
   // ── MÓVIL: marcador Cristóbal vs Erasmo ──
   if(!isDesktop){
@@ -3973,6 +3990,7 @@ function ComparativoSocios({socios=[], isDesktop}){
     if(C1&&E1) CMP_ROWS.forEach(r=>{ if(r.b||!r.mej) return; const a=C1[r.k], b=E1[r.k]; if(a==null||b==null||a===b) return; const cWin=r.mej==='hi'?a>b:a<b; if(cWin)winC++; else winE++ })
     return (
       <div>
+        {heroBand}
         {C1&&E1&&<>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
           {[[C1,winC],[E1,winE]].map(([s,w])=>(
@@ -4008,6 +4026,7 @@ function ComparativoSocios({socios=[], isDesktop}){
   const nc={fontVariantNumeric:'tabular-nums',textAlign:'right'}
   return (
     <div>
+      {heroBand}
       <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,overflow:'hidden'}}>
         <div style={{display:'grid',gridTemplateColumns:`1.5fr repeat(${socios.length},1fr) 1fr`,columnGap:8,alignItems:'end',padding:'11px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Métrica 2026</span>
@@ -4029,7 +4048,7 @@ function ComparativoSocios({socios=[], isDesktop}){
     </div>
   )
 }
-function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha, onOpenSale, navTo, onBack, backLabel}){
+function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], terceros=[], setTab, onOpenClientFicha, onOpenSale, navTo, onBack, backLabel}){
   const go = t => navTo ? navTo({tab:t}) : (setTab&&setTab(t))   // salto que apila origen+scroll (navTo) con fallback a setTab
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [openOpp,setOpenOpp] = useState(null)
@@ -4260,7 +4279,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     const rBill = b => (b.sale_id&&respSaleId[String(b.sale_id)]) || abogCli[String(b.client_id)] || 'Sin abogado'
     const anoNow = new Date().getFullYear()
     const M = {}
-    const g = a => (M[a] = M[a] || {abo:a,vendido:0,nV:0,cli:new Set(),recCLP:0,gan:0,rech:0,pipe:0,cliV:{},cliVend:{},fact:0,cob:0,pc:0,venc:0,prog:0,fut:0,dsoN:0,dsoD:0})
+    const g = a => (M[a] = M[a] || {abo:a,vendido:0,nV:0,cli:new Set(),recCLP:0,gan:0,rech:0,pipe:0,cliV:{},cliVend:{},fact:0,cob:0,pc:0,venc:0,prog:0,fut:0,dsoN:0,dsoD:0,comCaja:0,comFact:0})
+    const billById = {}
     ;(sales||[]).forEach(s=>{
       if(s.deleted_at||esSubarriendo(s)) return
       const a=rVenta(s); if(a==='Sin abogado') return
@@ -4287,6 +4307,17 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         if(b.status==='Pagado'&&b.paid_at&&b.issued_at&&String(b.paid_at).slice(0,4)===String(yr)){ const d=(new Date(b.paid_at)-new Date(b.issued_at))/86400000; if(d>=0&&d<400){ m.dsoN+=d; m.dsoD++ } }
       }
       if(b.sale_id) (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b)
+      billById[String(b.id)]=b
+    })
+    // Comisiones a colaboradores (terceros): el NETO es lo que deja. cobrado neto = cobrado − comisiones pagadas; facturado neto = facturado − comisiones de facturas emitidas. Atribución por el abogado de la factura o la venta (igual que "Por socio").
+    ;(terceros||[]).forEach(t=>{
+      const monto=Number(t.monto)||0; if(monto<=0) return
+      const b=t.billing_id&&billById[String(t.billing_id)]
+      const a=b?rBill(b):((t.sale_id&&respSaleId[String(t.sale_id)])||'Sin abogado')
+      if(a==='Sin abogado') return
+      const m=g(a)
+      if(t.estado==='pagado'&&String(t.pagado_at||'').slice(0,4)===String(yr)) m.comCaja+=monto
+      if(b&&b.invoice_no&&String(b.issued_at||'').slice(0,4)===String(yr)) m.comFact+=monto
     })
     ;(sales||[]).forEach(s=>{
       if(s.deleted_at) return
@@ -4297,12 +4328,13 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     })
     return Object.values(M).map(m=>{
       const vend=Object.values(m.cliVend); const top=vend.length?Math.max(...vend):0; const tot=vend.reduce((x,v)=>x+v,0)
+      const cobNeto=Math.max(0,m.cob-m.comCaja), factNeto=Math.max(0,m.fact-m.comFact)
       return {abo:m.abo,vendido:m.vendido,nVentas:m.nV,clientes:m.cli.size,ticket:m.nV?m.vendido/m.nV:0,
         pctRec:m.vendido?m.recCLP/m.vendido*100:0,mrr:m.recCLP/12,conv:(m.gan+m.rech)?m.gan/(m.gan+m.rech)*100:null,pipe:m.pipe,
         ventasPorCli:m.cli.size?m.nV/m.cli.size:0,cliMulti:Object.values(m.cliV).filter(n=>n>1).length,concentracion:tot?top/tot*100:0,
-        facturado:m.fact,cobrado:m.cob,eficiencia:m.fact?m.cob/m.fact*100:null,dso:m.dsoD?Math.round(m.dsoN/m.dsoD):null,
-        convCaja:m.vendido?m.cob/m.vendido*100:null,porCobrar:m.pc,vencido:m.venc,pctVencido:m.pc?m.venc/m.pc*100:0,
-        fut:m.fut,prog:m.prog,_gan:m.gan,_rech:m.rech,_recCLP:m.recCLP,_dsoN:m.dsoN,_dsoD:m.dsoD}
+        facturado:m.fact,facturadoNeto:factNeto,comisiones:m.comCaja,cobrado:m.cob,cobradoNeto:cobNeto,eficiencia:m.fact?m.cob/m.fact*100:null,dso:m.dsoD?Math.round(m.dsoN/m.dsoD):null,
+        convCaja:m.vendido?m.cob/m.vendido*100:null,convCajaNeta:m.vendido?cobNeto/m.vendido*100:null,porCobrar:m.pc,vencido:m.venc,pctVencido:m.pc?m.venc/m.pc*100:0,
+        fut:m.fut,prog:m.prog,_gan:m.gan,_rech:m.rech,_recCLP:m.recCLP,_dsoN:m.dsoN,_dsoD:m.dsoD,_comCaja:m.comCaja,_comFact:m.comFact,_cob:m.cob,_fact:m.fact}
     }).sort((a,b)=>b.vendido-a.vendido)
   },[sales,billing,clients,ufRef,yr])
 
@@ -32002,7 +32034,7 @@ export default function App() {
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='mas')setPaletteOpen(true) }}/>}
-            {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
+            {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
