@@ -535,7 +535,7 @@ function Copyable({text, children, title='Copiar', style}){
   return <span onClick={copy} title={title} style={{cursor:'pointer',...style}}>{children}{done&&<span style={{marginLeft:5,fontSize:9,fontWeight:600,color:C.greenText,whiteSpace:'nowrap'}}>copiado ✓</span>}</span>
 }
 // Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
-const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20,fontSize:12,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
+const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:8,fontSize:12,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
   ...({
     soft:{background:C.bgSoft,color:C.muted,border:'0.5px solid #E4E8EB'},
     primary:{background:C.accent,color:'#fff',border:'none'},
@@ -1729,7 +1729,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'2px 14px 8px'}}>
             <span style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase'}}>Mis gastos</span>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
-              {misPendientes.length>0&&<button onClick={runAsistente} style={{height:26,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+              {misPendientes.length>0&&<button onClick={runAsistente} style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>
                 <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.6 4.6L18 9.2l-4.4 1.6L12 15l-1.6-4.2L6 9.2l4.4-1.6z'/><path d='M19 14l.7 2 2 .7-2 .7L19 19.4 18.3 17.4l-2-.7 2-.7z'/></svg>
                 Asistente IA
               </button>}
@@ -1783,7 +1783,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 <div style={{fontSize:10,color:'rgba(255,255,255,.6)',letterSpacing:'.03em'}}>{selected.size} GASTO{selected.size!==1?'S':''} SELECCIONADO{selected.size!==1?'S':''}</div>
                 <div style={{fontSize:16,fontWeight:600,color:'#fff',marginTop:1}}>{fmtCLP(totalSel)}</div>
               </div>
-              <button onClick={()=>{ setEnviarA(''); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{height:34,padding:'0 18px',background:'#fff',color:C.accent,border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Liquidar</button>
+              <button onClick={()=>{ setEnviarA(''); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{height:24,padding:'0 16px',background:'#fff',color:C.accent,border:'none',borderRadius:8,fontSize:12,fontWeight:700,cursor:'pointer'}}>Liquidar</button>
             </div>
           )}
         </div>
@@ -1814,7 +1814,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           <div style={{borderTop:`0.5px solid ${C.bgSoft}`,padding:'11px 14px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
               <span style={secLbl}>Cajas entregadas</span>
-              <button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy('Cristóbal'); setCajaOtra(false); setShowNuevaCaja(true) }} style={{height:26,padding:'0 12px',border:'none',borderRadius:8,background:C.accent,color:'#fff',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Nueva Caja</button>
+              <button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy('Cristóbal'); setCajaOtra(false); setShowNuevaCaja(true) }} style={chipBtn('primary')}>+ Nueva Caja</button>
             </div>
             {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas.</div>}
             {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at; return (
