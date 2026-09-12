@@ -940,6 +940,11 @@ function LoginScreen({loading}) {
         </>}
       </button>
       <div style={{fontSize:12,color:'#95A0A2',marginTop:14}}>Acceso con tu cuenta corporativa</div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:22,color:'#C3CBCA'}}><span style={{height:1,width:34,background:'#E1E5E4'}}/><span style={{fontSize:10.5}}>o</span><span style={{height:1,width:34,background:'#E1E5E4'}}/></div>
+      <button onClick={()=>{ try{ window.location.href='/?demo=1' }catch(_){}}} style={{marginTop:14,display:'inline-flex',alignItems:'center',gap:8,background:'none',border:'none',color:GREY,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={GRN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Ver demo con datos de ejemplo
+      </button>
     </div>
   )
 }
@@ -30615,7 +30620,7 @@ export default function App() {
   useEffect(()=>{
     if(DEMO){
       const d=demoData
-      setPettyCash(d.petty_cash||[]); setRendiciones(d.rendiciones||[]); setClients(d.clients||[]); setSales(d.sales||[]); setProyectosCartera(d.proyectos_cartera||[]); setBilling(d.billing||[]); setExpenses(d.expenses||[]); setTasks(d.tasks||[]); setClientEntities(d.client_entities||[]); setExpenseAttachments([]); setBillingAttachments([]); setAnticipos(d.anticipos||[]); setConciliacion(d.conciliacion||[]); setCartolaHasta(null); setProveedores(d.proveedores||[]); setTerceros(d.terceros_pagos||[]); setBulkImports([]); setImportAliases([]); setLoading(false); setBooted(true)
+      setPettyCash(d.petty_cash||[]); setRendiciones(d.rendiciones||[]); setClients(d.clients||[]); setSales(d.sales||[]); setProyectosCartera(d.proyectos_cartera||[]); setBilling(d.billing||[]); setExpenses(d.expenses||[]); setTasks(d.tasks||[]); setClientEntities(d.client_entities||[]); setExpenseAttachments([]); setBillingAttachments([]); setAnticipos(d.anticipos||[]); setConciliacion(d.conciliacion||[]); setCartolaHasta(null); setProveedores(d.proveedores||[]); setTerceros(d.terceros_pagos||[]); setBulkImports(d.bulk_imports||[]); setImportAliases([]); setLoading(false); setBooted(true)
       return
     }
     if(!session) return
