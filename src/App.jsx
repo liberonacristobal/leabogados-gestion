@@ -1020,7 +1020,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
               <div style={{fontSize:18,fontWeight:700,color:C.text}}>{cl.name}</div>
               <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                 {cl.type&&<span style={{fontSize:11,color:C.muted}}>{cl.type}</span>}
-                {cl.abogado_responsable&&(()=>{ const pc=personChip(cl.abogado_responsable); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 8px',fontWeight:600}}>{cl.abogado_responsable}</span> })()}
+                {cl.abogado_responsable&&(()=>{ const pc=personChip(cl.abogado_responsable); return <span style={{fontSize:10.5,color:pc.color,fontWeight:700}}>{cl.abogado_responsable}</span> })()}
               </div>
             </div>
             <ActBtn variant='ghost' onClick={()=>onEdit(cl)}>Editar</ActBtn>
@@ -1196,7 +1196,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
                   <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:C.soon,background:'#FFF8E1',borderRadius:20,padding:'1px 8px',marginLeft:6}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
                   {sub&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{sub}</div>}
                 </div>
-                {resp&&<span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{resp}</span>}
+                {resp&&<span style={{flexShrink:0,fontSize:10.5,color:pc.color,fontWeight:700,whiteSpace:'nowrap'}}>{resp}</span>}
                 <button onClick={ev=>{ev.stopPropagation();onSaveFields&&onSaveFields(cl.id,{status:ended?'Activo':'Terminado'})}} title={ended?'Reactivar cliente':'Archivar cliente'} style={{flexShrink:0,width:24,height:24,borderRadius:6,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.greenText:C.done,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>{ended?<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>:<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}</button>
               </div>
             )
@@ -4947,7 +4947,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
         </div>
         <div style={{display:'flex',gap:6,alignItems:'center'}}>
           <AreaChip area={s.area}/>
-          {groupBy==='abogado'&&(()=>{ const rp=respVenta(s); if(!rp||rp==='Sin abogado') return null; const pc=personChip(rp); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 8px',fontWeight:600}}>{rp}</span> })()}
+          {groupBy==='abogado'&&(()=>{ const rp=respVenta(s); if(!rp||rp==='Sin abogado') return null; const pc=personChip(rp); return <span style={{fontSize:10.5,color:pc.color,fontWeight:700}}>{rp}</span> })()}
           <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
           {isPropuesta&&<span style={{fontSize:10,color:tardio?C.soon:C.muted}}>{diasPendiente}d pendiente</span>}
           <span style={{marginLeft:'auto'}}><Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/></span>
@@ -20101,7 +20101,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                   <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:C.border,borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4,marginLeft:6}}>Interno</span>}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:C.soon,background:'#FFF8E1',borderRadius:20,padding:'1px 8px',marginLeft:6}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}{esNuevoDrive&&<span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'1px 8px',marginLeft:6,whiteSpace:'nowrap'}}>Nuevo · Drive</span>}</div>
                   {sub&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{sub}</div>}
                 </div>
-                {resp&&<span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{resp}</span>}
+                {resp&&<span style={{flexShrink:0,fontSize:10.5,color:pc.color,fontWeight:700,whiteSpace:'nowrap'}}>{resp}</span>}
                 <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} title={ended?'Reactivar cliente':'Archivar cliente'} style={{flexShrink:0,width:24,height:24,borderRadius:6,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.greenText:C.done,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>{ended?<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>:<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}</button>
               </div>
             )
@@ -22272,7 +22272,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             {(client||t.project||t.subproject||(showWho&&taskAssignees(t).length>0))&&(
               <div style={{fontSize:10,color:C.done,marginTop:3,display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
                 {(client||t.project||t.subproject)&&<span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client&&<span onClick={onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{color:C.muted,fontWeight:600,cursor:onOpenClientFicha?'pointer':'inherit'}}>{client.name}</span>}{t.project&&<span>{client?' · ':''}{t.project}</span>}{t.subproject&&<span>{(client||t.project)?' › ':''}{t.subproject}</span>}</span>}
-                {showWho&&taskAssignees(t).map(w=>{const pc=personChip(w);return <span key={w} style={{flexShrink:0,fontSize:10,padding:'1px 8px',borderRadius:10,background:pc.bg,color:pc.color,fontWeight:600}}>{w}</span>})}
+                {showWho&&taskAssignees(t).map(w=>{const pc=personChip(w);return <span key={w} style={{flexShrink:0,fontSize:10.5,color:pc.color,fontWeight:700}}>{w}</span>})}
               </div>
             )}
             {(t.delegated_to||[]).length>0&&<div style={{fontSize:10,color:C.soonText,background:C.ambarBg,borderRadius:6,padding:'2px 7px',marginTop:4,display:'inline-block'}}>Delegada a {(t.delegated_to||[]).join(', ')}{t.delegated_due?` · vence ${fmtVenceShort(t.delegated_due)}`:''}</div>}
