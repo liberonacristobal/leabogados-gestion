@@ -4209,7 +4209,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [respuesta,setRespuesta] = useState(null)
   const [pregBusy,setPregBusy] = useState(false)
   const [siiNov,setSiiNov] = useState([])           // Radar tributario: novedades del SII (Stage 7)
-  const cargarSii = ()=> supabase.from('sii_novedades').select('*').then(({data})=>setSiiNov(data||[]),()=>{})
+  const cargarSii = ()=> DEMO ? setSiiNov(demoData.sii_novedades||[]) : supabase.from('sii_novedades').select('*').then(({data})=>setSiiNov(data||[]),()=>{})
   const [radarBusy,setRadarBusy] = useState(false)  // llamada a la edge function sii-radar (auto-ingesta)
   const [radarMsg,setRadarMsg] = useState(null)
   const actualizarRadar = async () => {

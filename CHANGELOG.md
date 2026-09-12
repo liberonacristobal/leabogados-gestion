@@ -1,3 +1,4 @@
+2026-09-12 Salud del demo: radar tributario SII poblado (3 novedades ficticias con clientes expuestos; cargarSii ahora tiene rama demo) y facturas de agosto (4, mezcla pagado/por-cobrar/vencida) para que Cierre de mes no caiga vacio en el mes por defecto.
 2026-09-12 Paddings (resto de la app): 105 cards near-duplicate consolidadas a 10x12 (no-boton). Fix crush pre-existente en Cobranza: el stat "% del vencido de la oficina" desbordaba y chocaba con el monto en desktop 2-col -> se agrega overflow:hidden+ellipsis.
 2026-09-12 Paddings (pase por vista): consolidadas cards near-duplicate a 10x12 en Facturacion (14), Gastos (29), Conciliacion (9) y Clientes (3); chips chicos y botones intactos. Verificado 1280+375 sin crushes.
 2026-09-12 Alturas de boton (franja media): 30/32/34->24 en 14 botones de texto (sync/toolbar), con guarda anti-cuadrado (9 botones-icono cuadrados protegidos). Build verde, vistas verificadas.
