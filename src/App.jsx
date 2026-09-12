@@ -7372,7 +7372,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
       {id:'co1',categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000,desde:'2026-03-01',monto_prev:780000},
       {id:'co2',categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000,desde:'2026-03-01',monto_prev:240000},
       {id:'co3',categoria:'Arriendo y espacio',item:'Limpieza',monto:270000},
-      {id:'co4',categoria:'Arriendo y espacio',item:'Subarriendo',monto:900000,es_ingreso:true},
+      {id:'co4',categoria:'Arriendo y espacio',item:'Subarriendo',monto:2000000,es_ingreso:true},
       {id:'co5',categoria:'Servicios y tecnología',item:'Internet',monto:34200},
       {id:'co6',categoria:'Servicios y tecnología',item:'Google Workspace',monto:90000},
       {id:'co7',categoria:'Servicios y tecnología',item:'ChatGPT',monto:20000},
@@ -25551,7 +25551,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const [cargarOverhead,setCargarOverhead] = useState(true)   // por defecto el margen usa el costo CARGADO (real neto); el toggle permite ver solo-sueldo
   const ym0mes = new Date().toISOString().slice(0,7)
   useEffect(()=>{ if(DEMO){ setCostosOfi([
-      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:900000,es_ingreso:true},
+      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:2000000,es_ingreso:true},
       {categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Impuestos y patentes',item:'PPM',monto:800000}]); return }
     supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfi(data||[]),()=>{}) },[])
   const effCosto = r => (r.desde && ym0mes < String(r.desde).slice(0,7)) ? (r.monto_prev??r.monto) : r.monto
@@ -30541,7 +30541,7 @@ export default function App() {
   const loadCostosOfi=useCallback(()=>{ if(DEMO){ setCostosOfiRows([
       {categoria:'Remuneraciones',item:'Cristóbal',monto:2330000},{categoria:'Remuneraciones',item:'Erasmo',monto:2284500},{categoria:'Remuneraciones',item:'Martín',monto:1679268},{categoria:'Remuneraciones',item:'Contadora',monto:65000},{categoria:'Remuneraciones',item:'Procurador',monto:450000},
       {categoria:'Leyes sociales',item:'Cotizaciones',monto:1831000},{categoria:'Impuestos y patentes',item:'PPM',monto:800000},
-      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000},{categoria:'Arriendo y espacio',item:'Limpieza',monto:270000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:900000,es_ingreso:true},
+      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000},{categoria:'Arriendo y espacio',item:'Limpieza',monto:270000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:2000000,es_ingreso:true},
       {categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Servicios y tecnología',item:'Google Workspace',monto:90000},{categoria:'Servicios y tecnología',item:'ChatGPT',monto:20000},
       {categoria:'Insumos de oficina',item:'Insumos',monto:72500},{categoria:'Desarrollo de negocio',item:'Varios',monto:363334}]); return }
     supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfiRows(data||[]),()=>{}) },[])
