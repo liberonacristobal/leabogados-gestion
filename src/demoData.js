@@ -52,6 +52,11 @@ export const demoData = {
     { id:'s14', client_id:'c9',  title:'Constitución y pactos de socios', area:'Corporativo', moneda:'UF',  amount_uf:420, cost_uf:0, uf_value:39000, year:2026, month:7, status:'Activo', cobro_type:'unico',   responsible:'Cristóbal', created_at:'2026-07-06' },
     { id:'s15', client_id:'c10', title:'Contratos de transporte y seguros', area:'Corporativo', moneda:'CLP', amount_clp:28000000, cost_clp:0, year:2026, month:8, status:'Activo', cobro_type:'cuotas', responsible:'Erasmo', created_at:'2026-08-04' },
     { id:'s16', client_id:'c11', title:'Asesoría de gobernanza',           area:'Corporativo', moneda:'UF',  amount_uf:300, cost_uf:0, uf_value:39000, year:2026, month:8, status:'Activo', cobro_type:'mensual', responsible:'Cristóbal', created_at:'2026-08-15' },
+    { id:'s17', client_id:'c5',  title:'Asesoría legal permanente',        area:'Corporativo', moneda:'CLP', amount_clp:800000,  cost_clp:0, year:2026, month:2, status:'Activo', cobro_type:'mensual', responsible:'Cristóbal', created_at:'2026-02-10' },
+    { id:'s18', client_id:'c6',  title:'Asesoría legal permanente',        area:'Corporativo', moneda:'CLP', amount_clp:700000,  cost_clp:0, year:2026, month:3, status:'Activo', cobro_type:'mensual', responsible:'Erasmo',   created_at:'2026-03-05' },
+    { id:'s19', client_id:'c8',  title:'Reestructuración societaria',      area:'Corporativo', moneda:'UF',  amount_uf:480, cost_uf:0, uf_value:39000, year:2026, month:9, status:'Propuesta', cobro_type:'unico', responsible:'Cristóbal', created_at:new Date(Date.now()-3*864e5).toISOString().slice(0,10) },
+    { id:'s20', client_id:'c12', title:'Litigio comercial y cobranza',     area:'Litigios',    moneda:'UF',  amount_uf:360, cost_uf:0, uf_value:39000, year:2026, month:9, status:'Propuesta', cobro_type:'cuotas', responsible:'Erasmo',    created_at:new Date(Date.now()-6*864e5).toISOString().slice(0,10) },
+    { id:'s21', client_id:'c7',  title:'Defensa laboral colectiva',        area:'Laboral',     moneda:'UF',  amount_uf:250, cost_uf:0, uf_value:39000, year:2026, month:9, status:'Propuesta', cobro_type:'unico', responsible:'Martín',    created_at:new Date(Date.now()-1*864e5).toISOString().slice(0,10) },
   ],
   // Facturado 2026 ≈ $271M · Cobrado ≈ $143M · Por cobrar ≈ $128M · Programado ≈ $65M
   billing: [
@@ -207,6 +212,12 @@ export const demoData = {
     { id:'h10', user_name:'Martín', client_id:'c3', sale_id:'s13', fecha:'2026-09-02', horas:8, glosa:'Audiencia y preparación', billable:true, source:'manual' },
     { id:'h11', user_name:'Martín', client_id:'c3', sale_id:'s13', fecha:'2026-09-04', horas:6, glosa:'Escritos y seguimiento', billable:true, source:'manual' },
     { id:'h12', user_name:'Martín', client_id:'c3', sale_id:'s13', fecha:'2026-09-05', horas:4, glosa:'Reuniones con el cliente', billable:true, source:'manual' },
+    { id:'h13', user_name:'Cristóbal', client_id:'c5', sale_id:'s17', fecha:'2026-07-10', horas:8, glosa:'Asesoría societaria del mes', billable:true, source:'manual' },
+    { id:'h14', user_name:'Cristóbal', client_id:'c5', sale_id:'s17', fecha:'2026-08-12', horas:8, glosa:'Revisión de contratos y juntas', billable:true, source:'manual' },
+    { id:'h15', user_name:'Cristóbal', client_id:'c5', sale_id:'s17', fecha:'2026-09-08', horas:8, glosa:'Asesoría continua', billable:true, source:'manual' },
+    { id:'h16', user_name:'Erasmo', client_id:'c6', sale_id:'s18', fecha:'2026-07-14', horas:7, glosa:'Contratos con proveedores', billable:true, source:'manual' },
+    { id:'h17', user_name:'Erasmo', client_id:'c6', sale_id:'s18', fecha:'2026-08-18', horas:7, glosa:'Asesoría permanente del mes', billable:true, source:'manual' },
+    { id:'h18', user_name:'Erasmo', client_id:'c6', sale_id:'s18', fecha:'2026-09-09', horas:7, glosa:'Revisión legal continua', billable:true, source:'manual' },
   ],
   vacaciones: [
     { id:'vac1', user_name:'Demo', desde:new Date(Date.now()+5*864e5).toISOString().slice(0,10), hasta:new Date(Date.now()+9*864e5).toISOString().slice(0,10) },
