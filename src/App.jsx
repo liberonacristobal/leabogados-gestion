@@ -22470,20 +22470,20 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                 {/* Encabezado B+D: etiqueta destacada + conteo + puntos de urgencia */}
                 <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:7}}>
                   <span style={{fontSize:12,fontWeight:800,borderRadius:7,padding:'3px 10px',background:semIdx===0?C.accent:'transparent',color:semIdx===0?'#fff':C.muted,border:semIdx===0?'none':`0.5px solid ${C.border}`}}>{semIdx===0?'Esta semana':'Próxima'}</span>
-                  <span style={{fontSize:10.5,color:C.muted}}><b style={{color:C.text,fontWeight:700}}>{semTs.length} tarea{semTs.length!==1?'s':''}</b> · {rango}</span>
+                  <span style={{fontSize:11,color:C.muted}}><b style={{color:C.text,fontWeight:700}}>{semTs.length} tarea{semTs.length!==1?'s':''}</b> · {rango}</span>
                   {semTs.length>0&&<span style={{marginLeft:'auto',display:'flex',gap:3}}>{semTs.slice(0,8).map((t,j)=><span key={j} style={{width:7,height:7,borderRadius:'50%',background:_urgCal(t.due).dot}}/>)}</span>}
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:5}}>
                   {byDay.map(({iso,dia,ts},i)=>{ const esHoy=iso===fmtISO(hoy); const sel=iso===selDay; return (
                     <div key={i} onClick={()=>ts.length?setSelDay(sel?null:iso):onAddTask(iso)} title={ts.length?'Ver tareas del día':'Nueva tarea este día'} style={{height:cellH,overflow:'hidden',background:sel?C.azulBg:'#fff',borderRadius:8,padding:'6px 7px',border:`1px solid ${sel||esHoy?C.accent:C.border}`,cursor:'pointer',display:'flex',flexDirection:'column'}}>
-                      <div style={{display:'flex',alignItems:'baseline',gap:4}}><span style={{fontSize:8.5,fontWeight:700,color:esHoy?C.accent:C.done,textTransform:'uppercase'}}>{DIAS[i]}</span><span style={{fontSize:12.5,fontWeight:800,color:esHoy?C.accent:C.text}}>{String(dia.getDate()).padStart(2,'0')}</span></div>
+                      <div style={{display:'flex',alignItems:'baseline',gap:4}}><span style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.done,textTransform:'uppercase'}}>{DIAS[i]}</span><span style={{fontSize:13,fontWeight:800,color:esHoy?C.accent:C.text}}>{String(dia.getDate()).padStart(2,'0')}</span></div>
                       <div style={{marginTop:5,display:'flex',flexDirection:'column',gap:3,minHeight:0}}>
                         {ts.slice(0,maxChips).map(t=>{ const u=_urgCal(t.due); const cl=clients.find(x=>x.id===t.client_id); const lbl=cl?cl.name:t.title
                           return isDesktop
-                            ? <div key={t.id} style={{fontSize:9.5,fontWeight:700,borderRadius:5,padding:'2px 6px',background:u.bg,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:5}}><span style={{width:5,height:5,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
-                            : <div key={t.id} style={{fontSize:8.5,fontWeight:700,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:4}}><span style={{width:6,height:6,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
+                            ? <div key={t.id} style={{fontSize:10,fontWeight:700,borderRadius:5,padding:'2px 6px',background:u.bg,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:5}}><span style={{width:5,height:5,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
+                            : <div key={t.id} style={{fontSize:9,fontWeight:700,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:4}}><span style={{width:6,height:6,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
                         })}
-                        {ts.length>maxChips&&<div style={{fontSize:8.5,color:C.done,fontWeight:700}}>+{ts.length-maxChips} más</div>}
+                        {ts.length>maxChips&&<div style={{fontSize:9,color:C.done,fontWeight:700}}>+{ts.length-maxChips} más</div>}
                       </div>
                     </div>
                   )})}
@@ -22497,13 +22497,13 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           <div style={{background:'#fff',border:`1px solid ${C.accent}`,borderRadius:11,padding:'11px 13px',marginTop:2,marginBottom:10}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:ts.length?7:0}}>
               <span style={{fontSize:12,fontWeight:800,color:C.accent}}>{lbl}</span>
-              <span style={{fontSize:10.5,color:C.muted}}>{ts.length} tarea{ts.length!==1?'s':''}</span>
+              <span style={{fontSize:11,color:C.muted}}>{ts.length} tarea{ts.length!==1?'s':''}</span>
               <button onClick={()=>setSelDay(null)} style={{marginLeft:'auto',background:'none',border:'none',color:C.done,cursor:'pointer',fontSize:16,lineHeight:1,padding:0}}>×</button>
             </div>
             {ts.map(t=>{ const u=_urgCal(t.due); const cl=clients.find(x=>x.id===t.client_id); return (
               <div key={t.id} onClick={()=>setPreview(t)} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
                 <span style={{width:7,height:7,borderRadius:'50%',background:u.dot,flexShrink:0,marginTop:4}}/>
-                <div style={{minWidth:0,flex:1}}><div style={{fontSize:12.5,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div><div style={{fontSize:10.5,color:C.muted}}>{cl?cl.name:'Sin cliente'}{taskAssignees(t).length?` · ${taskAssignees(t).join(', ')}`:''}</div></div>
+                <div style={{minWidth:0,flex:1}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div><div style={{fontSize:11,color:C.muted}}>{cl?cl.name:'Sin cliente'}{taskAssignees(t).length?` · ${taskAssignees(t).join(', ')}`:''}</div></div>
               </div>
             )})}
             <button onClick={()=>onAddTask(selDay)} style={{marginTop:8,fontSize:11,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Nueva tarea este día</button>
