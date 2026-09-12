@@ -7917,9 +7917,11 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo}){
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const [fixing,setFixing]=useState(null)   // id de la factura cuyo vencimiento se está corrigiendo
+  const [ctBusy,setCtBusy]=useState(null)   // sale_id de la cuota↔tramo que se está resolviendo
+  const [ctDone,setCtDone]=useState(()=>new Set())  // sale_id ya resueltos/ignorados en esta sesión
   const rutMulti=useMemo(()=>{ const m={}; (clientEntities||[]).forEach(e=>{ const r=crNormRut(e.rut); if(!r) return; if(!m[r]) m[r]={ids:new Set(),rs:e.name}; m[r].ids.add(String(e.client_id)) }); return Object.entries(m).filter(([r,v])=>v.ids.size>1).map(([r,v])=>({rut:r, rs:v.rs, clientIds:[...v.ids]})) },[clientEntities])
   const folioDup=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||!b.invoice_no) return; const f=folioN(b.invoice_no); if(!/^\d+$/.test(f)) return; (m[f]=m[f]||[]).push(b) }); return Object.entries(m).filter(([f,a])=>a.length>1).map(([f,a])=>({folio:f, rows:a})) },[billing])
   // Facturas posiblemente duplicadas: cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, EXCLUYENDO las anuladas por nota de crédito (status Anulada / NC). Dos entidades distintas con el mismo monto (ej. Tarragona a 3 RS, o folios de RUT distinto) NO se marcan; solo la MISMA entidad con la misma cuota repetida. La NC deja la factura fuera automáticamente.
@@ -8000,11 +8002,15 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         {arr.map(s=><div key={s.id} style={{fontSize:11,color:C.muted,marginTop:2,paddingLeft:10}}>{s.title||'—'} · {s.amount_uf?`${s.amount_uf} UF`:fmt(s.amount_clp||0)} · {s.year}</div>)}
       </div>)}
     </div>}
-    {cuotaTramo.length>0&&<div style={{marginTop:14}}>{sh('Cuota programada + tramo ya emitido',C.overdueText,cuotaTramo.length)}
+    {cuotaTramo.filter(x=>!ctDone.has(x.s.id)).length>0&&<div style={{marginTop:14}}>{sh('Cuota programada + tramo ya emitido',C.overdueText,cuotaTramo.filter(x=>!ctDone.has(x.s.id)).length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>la programada no se redujo al emitir el tramo → se cuenta dos veces (excluye ventas recurrentes)</div>
-      {cuotaTramo.map(({s,venta,prog,emit,exceso})=><div key={s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+      {cuotaTramo.filter(x=>!ctDone.has(x.s.id)).map(({s,venta,prog,emit,exceso})=><div key={s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'}</span></div>
         <div style={{fontSize:11,color:C.muted,marginTop:2}}>Venta {fmt(venta)} · programado {fmt(prog)} + emitido {fmt(emit)} → <span style={{color:C.overdueText,fontWeight:700}}>se cuenta de más {fmt(exceso)}</span></div>
+        {onResolverCuotaTramo&&<div style={{display:'flex',gap:8,marginTop:8}}>
+          <button disabled={ctBusy===s.id} onClick={async()=>{ if(!(await appConfirm(`Voy a reducir la cuota programada de ${cName(s.client_id)} en ${fmt(exceso)}, para que el tramo ya emitido no se cuente dos veces. Es reversible. ¿Confirmas?`))) return; setCtBusy(s.id); try{ await onResolverCuotaTramo(s,'reducir',exceso); setCtDone(d=>new Set([...d,s.id])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) }; setCtBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:ctBusy===s.id?'default':'pointer',opacity:ctBusy===s.id?.6:1}}>{ctBusy===s.id?'Aplicando…':'Reducir la programada'}</button>
+          <button disabled={ctBusy===s.id} onClick={async()=>{ setCtDone(d=>new Set([...d,s.id])); try{ await onResolverCuotaTramo(s,'ignorar') }catch(_){}}} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>No es doble conteo</button>
+        </div>}
       </div>)}
     </div>}
     {huerfanas.length>0&&<div style={{marginTop:14}}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
@@ -32577,7 +32583,17 @@ export default function App() {
             supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
-        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }}/></Modal>}
+        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
+          if(mode==='ignorar'){ if(!DEMO){ try{ await supabase.from('learnings').upsert({kind:'data_health',key:'cuotatramo:'+s.id,value:'distintos',updated_at:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){} } return }
+          // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
+          const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
+          let rem=Math.round(exceso||0); const changes=[]
+          for(const b of progs){ if(rem<=0) break; const cur=Math.round(montoFactura(b)); const cut=Math.min(rem,cur); const na=cur-cut; rem-=cut; changes.push({id:b.id, from:cur, to:na, del:na<=0}) }
+          if(!changes.length) return
+          if(!DEMO){ for(const c of changes){ await supabase.from('billing').update(c.del?{deleted_at:new Date().toISOString()}:{amount:c.to,updated_at:new Date().toISOString()}).eq('id',c.id) }
+            try{ await supabase.from('learnings').upsert({kind:'data_health',key:'cuotatramo_undo:'+s.id,value:JSON.stringify(changes),updated_at:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){} }
+          setBilling(p=>p.map(x=>{ const c=changes.find(cc=>String(cc.id)===String(x.id)); return c?(c.del?{...x,deleted_at:new Date().toISOString()}:{...x,amount:c.to}):x }))
+        }}/></Modal>}
         {modal?.type==='fusionarClientes'&&<Modal fullscreenOnMobile title={modal.pending?'Confirmar fusión':'Fusionar clientes'} maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={modal.pending||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
