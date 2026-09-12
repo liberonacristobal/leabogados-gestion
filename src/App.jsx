@@ -7931,6 +7931,19 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   },[billing])
   const montoNeDte=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.dte_xml&&b.amount!=null).map(b=>({b, dte:dteMontoTotal(b.dte_xml)})).filter(x=>x.dte!=null&&Math.round(x.dte)!==Math.round(x.b.amount)),[billing])
   const ventasDup=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s.deleted_at||!['Activo','Terminado'].includes(s.status)) return; const k=`${s.client_id}|${s.amount_uf||s.amount_clp||0}|${s.year}|${s.month}`; (m[k]=m[k]||[]).push(s) }); return Object.values(m).filter(a=>a.length>1) },[sales])
+  // Doble conteo cuota↔tramo: venta NO recurrente donde la suma de cuotas Programadas + facturas Emitidas SUPERA la venta → al emitir el tramo la programada no se redujo, se cuenta dos veces. Excluye recurrentes (mensuales), donde prog+emit>venta es normal (meses futuros+pasados).
+  const cuotaTramo=useMemo(()=>{ const bySale={}; (billing||[]).forEach(b=>{ if(b.deleted_at||!b.sale_id) return; (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
+    const out=[]
+    ;(sales||[]).forEach(s=>{ if(s.deleted_at||!['Activo','Terminado'].includes(s.status)||s.cobro_type==='mensual') return
+      const bs=bySale[String(s.id)]||[]; if(!bs.length) return
+      const prog=bs.filter(b=>b.status==='Programada').reduce((a,b)=>a+montoFactura(b),0)
+      const emit=bs.filter(b=>b.invoice_no&&b.status!=='Anulada').reduce((a,b)=>a+montoFactura(b),0)
+      if(prog<=0||emit<=0) return
+      const venta=Math.round((Number(s.amount_uf)||0)*(Number(s.uf_value)||40000)+(Number(s.amount_clp)||0))
+      const exceso=prog+emit-venta
+      if(venta>0 && exceso>venta*0.08 && exceso>100000) out.push({s, venta, prog, emit, exceso}) })
+    return out.sort((a,b)=>b.exceso-a.exceso)
+  },[billing,sales])
   // Facturas huérfanas: emitidas (con folio, no anuladas/borradas, no reembolso/NC) SIN cliente asignado → hay que vincularlas para que cuenten en el por-cobrar del cliente.
   const huerfanas=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&String(b.invoice_no||'').trim()&&!b.client_id&&!['reembolso','nota_credito'].includes(b.billing_type||'')),[billing])
   // Vencimiento incoherente: factura emitida cuyo due quedó ANTERIOR a su emisión (típico de emitir tarde por match de DTE sin recalcular el plazo) → se ve "vencida" recién emitida. Auto-corregible (due = emisión + plazo).
@@ -7952,7 +7965,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     })
     return out
   },[anticipos,conciliacion])
-  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length
+  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -7985,6 +7998,13 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       {ventasDup.map((arr,i)=><div key={i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(arr[0].client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer'}}>{cName(arr[0].client_id)}</div>
         {arr.map(s=><div key={s.id} style={{fontSize:11,color:C.muted,marginTop:2,paddingLeft:10}}>{s.title||'—'} · {s.amount_uf?`${s.amount_uf} UF`:fmt(s.amount_clp||0)} · {s.year}</div>)}
+      </div>)}
+    </div>}
+    {cuotaTramo.length>0&&<div style={{marginTop:14}}>{sh('Cuota programada + tramo ya emitido',C.overdueText,cuotaTramo.length)}
+      <div style={{fontSize:10,color:C.done,marginBottom:2}}>la programada no se redujo al emitir el tramo → se cuenta dos veces (excluye ventas recurrentes)</div>
+      {cuotaTramo.map(({s,venta,prog,emit,exceso})=><div key={s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'}</span></div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>Venta {fmt(venta)} · programado {fmt(prog)} + emitido {fmt(emit)} → <span style={{color:C.overdueText,fontWeight:700}}>se cuenta de más {fmt(exceso)}</span></div>
       </div>)}
     </div>}
     {huerfanas.length>0&&<div style={{marginTop:14}}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
