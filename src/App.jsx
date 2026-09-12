@@ -30540,7 +30540,8 @@ export default function App() {
   const [costosOfiRows,setCostosOfiRows]=useState([])  // presupuesto de oficina (para el total del mes en Gastos e Inicio)
   const loadCostosOfi=useCallback(()=>{ if(DEMO){ setCostosOfiRows([
       {categoria:'Remuneraciones',item:'Cristóbal',monto:2330000},{categoria:'Remuneraciones',item:'Erasmo',monto:2284500},{categoria:'Remuneraciones',item:'Martín',monto:1679268},{categoria:'Remuneraciones',item:'Contadora',monto:65000},{categoria:'Remuneraciones',item:'Procurador',monto:450000},
-      {categoria:'Leyes sociales',item:'Cotizaciones',monto:1831000},{categoria:'Impuestos y patentes',item:'PPM',monto:800000},
+      {categoria:'Remuneraciones',item:'Asociada senior · Javiera',monto:2100000},{categoria:'Remuneraciones',item:'Asociado senior · Tomás',monto:2000000},{categoria:'Remuneraciones',item:'Asociada · Fernanda',monto:1450000},{categoria:'Remuneraciones',item:'Paralegal · Camila',monto:900000},
+      {categoria:'Leyes sociales',item:'Cotizaciones',monto:2760000},{categoria:'Impuestos y patentes',item:'PPM',monto:800000},
       {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000},{categoria:'Arriendo y espacio',item:'Limpieza',monto:270000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:2000000,es_ingreso:true},
       {categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Servicios y tecnología',item:'Google Workspace',monto:90000},{categoria:'Servicios y tecnología',item:'ChatGPT',monto:20000},
       {categoria:'Insumos de oficina',item:'Insumos',monto:72500},{categoria:'Desarrollo de negocio',item:'Varios',monto:363334}]); return }
