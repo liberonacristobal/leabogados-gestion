@@ -1063,7 +1063,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
                     <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Saldo{sNeg?' · por reembolsar':saldo>0?' · a favor':''}</div>
                     <div style={{fontSize:21,fontWeight:700,color:col,marginTop:1}}>${saldo.toLocaleString('es-CL')}</div>
                   </div>
-                  {saldo>0&&onAddFondo&&<button onClick={()=>onAddFondo(cl,true)} aria-label='Devolver saldo a favor' title='Devolver saldo a favor' style={{flexShrink:0,height:28,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.normal}`,background:'#fff',color:C.greenText,fontSize:11,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}>Devolver<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='13 6 19 12 13 18'/></svg></button>}
+                  {saldo>0&&onAddFondo&&<button onClick={()=>onAddFondo(cl,true)} aria-label='Devolver saldo a favor' title='Devolver saldo a favor' style={{flexShrink:0,height:24,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.normal}`,background:'#fff',color:C.greenText,fontSize:11,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}>Devolver<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='13 6 19 12 13 18'/></svg></button>}
                 </div>
                 <div style={{display:'flex',gap:18,marginTop:9,paddingTop:9,borderTop:`0.5px solid ${line}`,flexWrap:'wrap'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:C.muted}}>Fondos</span><span style={{fontSize:12,fontWeight:600,color:C.normal}}>+${fondos.toLocaleString('es-CL')}</span>{plus(()=>onAddFondo(cl),C.normal,'Agregar fondo')}</div>
@@ -1642,7 +1642,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       )}
       {/* ── Asistente IA de liquidación (modal centrado; no cierra al tocar fuera) ── */}
       {asistOpen&&(
-        <Modal title='Asistente de liquidación' fullscreenOnMobile closeOnBackdrop={false} onClose={()=>setAsistOpen(false)} footer={<button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:40,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:500,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button>}>
+        <Modal title='Asistente de liquidación' fullscreenOnMobile closeOnBackdrop={false} onClose={()=>setAsistOpen(false)} footer={<button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:44,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:500,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button>}>
             <div style={{margin:'-14px -16px'}}>
               {asistBusy&&(
                 <div style={{padding:'40px 20px',textAlign:'center',color:C.muted,fontSize:13}}>Revisando tus gastos pendientes…</div>
@@ -1992,10 +1992,10 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               </div>
 
               <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>{setShowNuevaCaja(false);setEditCajaId(null)}} disabled={saving} style={{flex:1,height:38,borderRadius:10,border:'0.5px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                <button onClick={()=>{setShowNuevaCaja(false);setEditCajaId(null)}} disabled={saving} style={{flex:1,height:44,borderRadius:10,border:'0.5px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                 <button onClick={handleNuevaCaja} disabled={saving||!newMonto} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:newMonto?'pointer':'not-allowed',opacity:(saving||!newMonto)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{saving?<Spin/>:null}{saving?'Guardando...':(editCajaId?'Guardar cambios':'Registrar caja')}</button>
               </div>
-              {editCajaId&&<button onClick={handleBorrarCaja} disabled={saving} style={{width:'100%',marginTop:10,height:38,borderRadius:10,border:'none',background:'none',color:C.overdue,fontSize:12,fontWeight:600,cursor:'pointer'}}>Eliminar esta caja</button>}
+              {editCajaId&&<button onClick={handleBorrarCaja} disabled={saving} style={{width:'100%',marginTop:10,height:44,borderRadius:10,border:'none',background:'none',color:C.overdue,fontSize:12,fontWeight:600,cursor:'pointer'}}>Eliminar esta caja</button>}
             </div>
           </div>
         )
@@ -3730,7 +3730,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                   <div style={{fontSize:15,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(prov)}</div>
                   {subtit&&<div style={{fontSize:12,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subtit}</div>}
                 </div>
-                <button onClick={()=>setPayTercero(null)} style={{marginLeft:'auto',width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                <button onClick={()=>setPayTercero(null)} style={{marginLeft:'auto',width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
                   <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
                 </button>
               </div>
@@ -3763,7 +3763,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                   <div><span style={fl}>Fecha documento</span><input type='date' value={payDocF} onChange={e=>setPayDocF(e.target.value)} style={inp}/></div>
                 </div>
                 <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setPayTercero(null)} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={()=>setPayTercero(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                   <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':'Marcar pagado'}</button>
                 </div>
               </div>
@@ -3791,7 +3791,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                   <div style={{fontSize:15,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(prov)}</div>
                   {subtit&&<div style={{fontSize:12,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subtit}</div>}
                 </div>
-                <button onClick={()=>setPayGroup(null)} style={{marginLeft:'auto',width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                <button onClick={()=>setPayGroup(null)} style={{marginLeft:'auto',width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
                   <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
                 </button>
               </div>
@@ -3833,7 +3833,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                   <div><span style={fl}>Fecha documento</span><input type='date' value={payDocF} onChange={e=>setPayDocF(e.target.value)} style={inp}/></div>
                 </div>
                 <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setPayGroup(null)} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={()=>setPayGroup(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                   <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':`Marcar ${payGroup.cuentas.length} pagadas`}</button>
                 </div>
               </div>
@@ -4615,7 +4615,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
           )})}
         </div></div>)}
         {addOpen&&(
-          <Modal title='Agregar novedad SII' fullscreenOnMobile onClose={()=>!addBusy&&setAddOpen(false)} footer={<button onClick={guardarNovedad} disabled={addBusy||!addForm.titulo.trim()} style={{width:'100%',height:40,borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:(addBusy||!addForm.titulo.trim())?'default':'pointer',opacity:(addBusy||!addForm.titulo.trim())?.5:1}}>{addBusy?'Guardando…':'Guardar novedad'}</button>}>
+          <Modal title='Agregar novedad SII' fullscreenOnMobile onClose={()=>!addBusy&&setAddOpen(false)} footer={<button onClick={guardarNovedad} disabled={addBusy||!addForm.titulo.trim()} style={{width:'100%',height:44,borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:(addBusy||!addForm.titulo.trim())?'default':'pointer',opacity:(addBusy||!addForm.titulo.trim())?.5:1}}>{addBusy?'Guardando…':'Guardar novedad'}</button>}>
               {(()=>{ const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',background:'#fff',fontFamily:'inherit'}; const lab={fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',display:'block',marginBottom:4}; return (<>
                 <div style={{marginBottom:10}}><label style={lab}>Título *</label><input value={addForm.titulo} onChange={e=>setAddForm(f=>({...f,titulo:e.target.value}))} style={inp} placeholder='Ej: Fiscalización IVA servicios digitales'/></div>
                 <div style={{marginBottom:10}}><label style={lab}>Resumen</label><textarea value={addForm.resumen} onChange={e=>setAddForm(f=>({...f,resumen:e.target.value}))} rows={2} style={{...inp,resize:'vertical'}} placeholder='Qué dice, en una frase'/></div>
@@ -7423,12 +7423,12 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
       <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:12}}>El presupuesto de la firma. Toca un monto para ajustarlo (si subió a mitad de año, marca <b>“rige desde”</b> y guarda el valor anterior). Agrega ítems o categorías cuando aparezca un costo nuevo.</div>
       <div style={{background:C.accent,borderRadius:12,padding:'12px 14px',marginBottom:12,color:'#fff'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-          <button onClick={()=>shiftYm(-1)} title='Mes anterior' style={{background:'rgba(255,255,255,.14)',border:'none',color:'#fff',width:28,height:28,borderRadius:8,cursor:'pointer',fontSize:17,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>‹</button>
+          <button onClick={()=>shiftYm(-1)} title='Mes anterior' style={{background:'rgba(255,255,255,.14)',border:'none',color:'#fff',width:28,height:24,borderRadius:8,cursor:'pointer',fontSize:17,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>‹</button>
           <div style={{textAlign:'center',minWidth:0}}>
             <div style={{fontSize:9,textTransform:'uppercase',letterSpacing:'.06em',opacity:.8,fontWeight:700}}>Presupuesto del mes{ym===ym0?' · actual':''}</div>
             <div style={{fontSize:14,fontWeight:700,marginTop:1}}>{MESES[+ym.slice(5,7)-1]?.charAt(0).toUpperCase()+MESES[+ym.slice(5,7)-1]?.slice(1)} {ym.slice(0,4)}</div>
           </div>
-          <button onClick={()=>shiftYm(1)} title='Mes siguiente' style={{background:'rgba(255,255,255,.14)',border:'none',color:'#fff',width:28,height:28,borderRadius:8,cursor:'pointer',fontSize:17,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>›</button>
+          <button onClick={()=>shiftYm(1)} title='Mes siguiente' style={{background:'rgba(255,255,255,.14)',border:'none',color:'#fff',width:28,height:24,borderRadius:8,cursor:'pointer',fontSize:17,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>›</button>
         </div>
         <div style={{fontSize:26,fontWeight:800,marginTop:6,fontVariantNumeric:'tabular-nums',textAlign:'center'}}>{fmt(totalMes)}</div>
         {ym!==ym0&&<div onClick={()=>setYm(ym0)} style={{fontSize:10,opacity:.9,textAlign:'center',marginTop:3,cursor:'pointer',textDecoration:'underline'}}>Volver al mes actual</div>}
@@ -7710,9 +7710,9 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
     <div style={{padding:'2px 0 4px'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <button onClick={()=>nav(-1)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,width:28,height:28,cursor:'pointer',color:C.muted,fontSize:14}}>‹</button>
+          <button onClick={()=>nav(-1)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,width:28,height:24,cursor:'pointer',color:C.muted,fontSize:14}}>‹</button>
           <span style={{fontSize:14,fontWeight:800,color:C.accent}}>{mesLbl(ym)}</span>
-          <button onClick={()=>nav(1)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,width:28,height:28,cursor:'pointer',color:C.muted,fontSize:14}}>›</button>
+          <button onClick={()=>nav(1)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,width:28,height:24,cursor:'pointer',color:C.muted,fontSize:14}}>›</button>
         </div>
         <button onClick={exportar} style={{fontSize:11,fontWeight:700,color:C.azulInfo,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>Exportar</button>
       </div>
@@ -8395,7 +8395,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                 return <>
                 {/* 1. Confirma el cliente — reconocidas por RUT: ves a quién va antes de asignar */}
                 {reco.length>0&&<>
-                  <Hdr label='Confirma el cliente' color={C.greenText} bg='#E1F5EE' border='#9FE1CB' right={nReco>1&&<button onClick={async()=>{ if(await appConfirm(`Cargar ${nReco} facturas del SII a tu facturación (cliente reconocido por RUT). ¿Seguir?`)) ingresarTodas() }} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Cargar las {nReco}</button>}/>
+                  <Hdr label='Confirma el cliente' color={C.greenText} bg='#E1F5EE' border='#9FE1CB' right={nReco>1&&<button onClick={async()=>{ if(await appConfirm(`Cargar ${nReco} facturas del SII a tu facturación (cliente reconocido por RUT). ¿Seguir?`)) ingresarTodas() }} style={{height:24,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Cargar las {nReco}</button>}/>
                   {reco.map((it,i)=>{ const ya=ingresadas[it.folio]; const cli=ya?null:resolverCliente(it.rut,it.receptor); const exp=recoExp.has(it.folio); return (
                     <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
                       <div onClick={()=>!ya&&setRecoExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:ya?'default':'pointer'}}>
@@ -8478,7 +8478,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                           <div style={{padding:'7px 0 2px',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{fontSize:11,color:C.soonText,marginBottom:6}}>Las coincidencias ya están emitidas con su folio. Cárgala como factura nueva:</div>
                             {c
-                              ? <button onClick={async()=>{ await ingresarHuerfana(it); setAmbDone(p=>({...p,[it.folio]:c.name})) }} disabled={ambBusy===it.folio||ingresando===it.folio} style={{height:28,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',opacity:(ingresando===it.folio)?.5:1}}>Cargar a {c.name}</button>
+                              ? <button onClick={async()=>{ await ingresarHuerfana(it); setAmbDone(p=>({...p,[it.folio]:c.name})) }} disabled={ambBusy===it.folio||ingresando===it.folio} style={{height:24,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',opacity:(ingresando===it.folio)?.5:1}}>Cargar a {c.name}</button>
                               : <AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={async(_,cid)=>{ await ingresarHuerfana(it,cid); const cc=clients.find(x=>String(x.id)===String(cid)); setAmbDone(p=>({...p,[it.folio]:cc?.name||'—'})) }} label='Elegir cliente' placeholder='Buscar cliente…'/>}
                           </div>
                         ) })()}
@@ -8494,7 +8494,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                               <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
                               {primera&&<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>Más antigua sin pagar</div>}
                             </div>
-                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:26,padding:'0 13px',borderRadius:8,background:primera?C.accent:'#fff',color:primera?'#fff':C.accent,border:primera?'none':`1px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
+                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:24,padding:'0 13px',borderRadius:8,background:primera?C.accent:'#fff',color:primera?'#fff':C.accent,border:primera?'none':`1px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
                           </div>
                           )})}
                           {cands.length>1&&<button onClick={()=>setAmbShowAll(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:'6px 0',textDecoration:'underline'}}>{showAll?'Ver solo la más antigua':`Ver todas las cuotas (${cands.length})`}</button>}
@@ -10379,7 +10379,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           <div style={{background:'#fff',borderRadius:16,width:'min(90vw, 340px)',overflow:'hidden'}}>
             <div style={{padding:'18px 20px 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <span style={{fontSize:14,fontWeight:600}}><span style={{color:C.accent}}>Registrar pago</span>{_cl&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted}}>{_cl.name}</span></>}{(()=>{ const rs=rsLabel(pb.client_id,clients,clientEntities,pb.entity_id); return (rs.name&&rs.name!==_cl?.name)||rs.rut ? <span style={{color:C.muted,fontWeight:400,fontSize:11}}> · {rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</span> : null })()}</span>
-              <button onClick={()=>setPayingId(null)} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+              <button onClick={()=>setPayingId(null)} style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
                 <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
               </button>
             </div>
@@ -10420,8 +10420,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               )
             })()}
             <div style={{padding:'14px 20px 20px',display:'flex',gap:8}}>
-              <button onClick={()=>setPayingId(null)} style={{flex:1,height:38,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={confirmPago} disabled={pagando} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:pagando?'default':'pointer',opacity:pagando?.6:1}}>{pagando?'Guardando…':(()=>{ const total=pb.amount||0, ya=pb.paid_amount||0; const monto=parseInt(String(payMonto).replace(/[^\d]/g,''))||0; return (monto>0&&ya+monto<total)?'Confirmar abono':'Confirmar pago' })()}</button>
+              <button onClick={()=>setPayingId(null)} style={{flex:1,height:44,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={confirmPago} disabled={pagando} style={{flex:2,height:44,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:pagando?'default':'pointer',opacity:pagando?.6:1}}>{pagando?'Guardando…':(()=>{ const total=pb.amount||0, ya=pb.paid_amount||0; const monto=parseInt(String(payMonto).replace(/[^\d]/g,''))||0; return (monto>0&&ya+monto<total)?'Confirmar abono':'Confirmar pago' })()}</button>
             </div>
           </div>
         </div>
@@ -11082,7 +11082,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
             {f.client_id&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span></>}
           </span>
         </div>
-        <button className='qt-close' onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+        <button className='qt-close' onClick={onClose} style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
@@ -11134,7 +11134,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
                 )})}
                 <div style={{background:C.bgSoft,padding:'9px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
                   <span style={{fontSize:11,color:C.muted}}>Imputar: <b style={{color:C.text}}>{fmt(totalSel)}</b>{totalSel>0&&!cubre&&montoFac>0&&<span style={{color:C.soon}}> · abono, queda {fmt(montoFac-totalSel)}</span>}</span>
-                  <button onClick={aplicar} disabled={totalSel<=0} style={{height:26,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:11,fontWeight:500,padding:'0 12px',cursor:totalSel>0?'pointer':'not-allowed',opacity:totalSel>0?1:.6}}>{cubre?'Marcar como pagado':'Imputar abono'}</button>
+                  <button onClick={aplicar} disabled={totalSel<=0} style={{height:24,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:11,fontWeight:500,padding:'0 12px',cursor:totalSel>0?'pointer':'not-allowed',opacity:totalSel>0?1:.6}}>{cubre?'Marcar como pagado':'Imputar abono'}</button>
                 </div>
               </div>
             </div>
@@ -11262,8 +11262,8 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
             <label style={flabel}>Observaciones (opcional)</label>
             <input value={obsBaja} onChange={e=>setObsBaja(e.target.value)} placeholder='Detalle adicional...' style={{...inp,marginBottom:14}}/>
             <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>setAnularOpen(false)} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button disabled={!motivoBaja} onClick={async()=>{ await onAnular(bill,motivoBaja,obsBaja); setAnularOpen(false); onClose() }} style={{flex:2,height:40,borderRadius:10,border:'none',background:motivoBaja?C.overdue:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>{bill?.dte_track_id?'Anular y emitir NC':'Confirmar baja'}</button>
+              <button onClick={()=>setAnularOpen(false)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button disabled={!motivoBaja} onClick={async()=>{ await onAnular(bill,motivoBaja,obsBaja); setAnularOpen(false); onClose() }} style={{flex:2,height:44,borderRadius:10,border:'none',background:motivoBaja?C.overdue:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>{bill?.dte_track_id?'Anular y emitir NC':'Confirmar baja'}</button>
             </div>
           </div>
         </div>
@@ -11293,7 +11293,7 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
     <>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
         <span style={{fontSize:16,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Nuevo anticipo{cliente&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cliente.name}</span></>}</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+        <button onClick={onClose} style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
@@ -11346,7 +11346,7 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
         </div>
 
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar anticipo'}</button>
         </div>
       </div>
@@ -11378,8 +11378,8 @@ function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,
         </div>
         <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.4}}>Crea <strong style={{color:C.text}}>1 factura Pagada</strong> por el total con el anticipo; las cuotas quedan de referencia.</div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-          <button disabled={busy} onClick={async()=>{ setBusy(true); const r=await onConfirm({invoice_no:invoiceNo.trim()||null,issued_at:issued}); setBusy(false); if(r) onClose() }} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?.6:1}}>{busy?'Emitiendo...':'Emitir factura'}</button>
+          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button disabled={busy} onClick={async()=>{ setBusy(true); const r=await onConfirm({invoice_no:invoiceNo.trim()||null,issued_at:issued}); setBusy(false); if(r) onClose() }} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?.6:1}}>{busy?'Emitiendo...':'Emitir factura'}</button>
         </div>
       </div>
     </div>
@@ -11405,7 +11405,7 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
             <div style={{fontSize:16,fontWeight:600,color:C.text}}>Cubrir cuotas con anticipo</div>
             <div style={{fontSize:12,color:C.done}}>{cliente?.name||'Cliente'}{venta?.title?` · ${venta.title}`:''} · anticipo {fmt(anticipo.monto)}</div>
           </div>
-          <button onClick={onClose} style={{marginLeft:'auto',width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+          <button onClick={onClose} style={{marginLeft:'auto',width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
           </button>
         </div>
@@ -11433,8 +11433,8 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
             )})()}
           </>)}
           <div style={{display:'flex',gap:8}}>
-            <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-            <button disabled={sel.size===0||sumSel>(anticipo.monto||0)} onClick={()=>onConfirm([...sel])} style={{flex:2,height:42,borderRadius:10,border:'none',background:(sel.size&&sumSel<=(anticipo.monto||0))?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&sumSel<=(anticipo.monto||0))?'pointer':'default'}}>Cubrir {sel.size>0?`${sel.size} cuota${sel.size!==1?'s':''}`:''}</button>
+            <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+            <button disabled={sel.size===0||sumSel>(anticipo.monto||0)} onClick={()=>onConfirm([...sel])} style={{flex:2,height:44,borderRadius:10,border:'none',background:(sel.size&&sumSel<=(anticipo.monto||0))?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&sumSel<=(anticipo.monto||0))?'pointer':'default'}}>Cubrir {sel.size>0?`${sel.size} cuota${sel.size!==1?'s':''}`:''}</button>
           </div>
         </div>
       </div>
@@ -11479,8 +11479,8 @@ function AsignarConsolidadoModal({anticipo,billing=[],sales=[],clients=[],onConf
         </div>
         <div style={{background:C.ambarBg,borderRadius:8,padding:'9px 11px',fontSize:11,color:C.soonText,lineHeight:1.45,marginBottom:14}}>Registra <strong>1 factura Pagada</strong> por {fmt(total)} (la que emitiste en el SII), <strong>anula</strong> las cuotas seleccionadas y aplica los anticipos disponibles del cliente.</div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-          <button disabled={busy||!sel.size} onClick={confirmar} style={{flex:2,height:42,borderRadius:10,border:'none',background:(sel.size&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&!busy)?'pointer':'default'}}>{busy?'Asignando…':'Asignar y anular programadas'}</button>
+          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button disabled={busy||!sel.size} onClick={confirmar} style={{flex:2,height:44,borderRadius:10,border:'none',background:(sel.size&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&!busy)?'pointer':'default'}}>{busy?'Asignando…':'Asignar y anular programadas'}</button>
         </div>
       </>)}
     </Modal>
@@ -11564,7 +11564,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
           {onCubrir&&<div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:11,color:C.done}}>Marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>}
           {programadasCli.length>0&&onConsolidar&&<div onClick={()=>onConsolidar(a)} style={{border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Asignar a 1 factura</div><div style={{fontSize:11,color:C.done}}>1 factura por el total · anula las programadas</div></div><span style={{color:C.done}}>→</span></div>}
         </div>
-        {facturasAbiertas.length>0&&<button disabled={!selFac||busy} onClick={asignar} style={{width:'100%',height:40,borderRadius:10,border:'none',background:(selFac&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(selFac&&!busy)?'pointer':'default',marginTop:10}}>{busy?'Asignando…':'Guardar asignación'}</button>}
+        {facturasAbiertas.length>0&&<button disabled={!selFac||busy} onClick={asignar} style={{width:'100%',height:44,borderRadius:10,border:'none',background:(selFac&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(selFac&&!busy)?'pointer':'default',marginTop:10}}>{busy?'Asignando…':'Guardar asignación'}</button>}
         {onReclasificar&&<div style={{marginTop:12,paddingTop:9,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>¿Era un gasto? <span onClick={()=>onReclasificar(a)} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>Reclasificar a Fondo por rendir</span></div>}
       </>}
     </Modal>
@@ -11603,8 +11603,8 @@ function FusionAnticiposModal({bank, manual, clients=[], sales=[], clientEntitie
         <div style={{fontSize:11,color:C.muted,marginTop:6,lineHeight:1.55}}>Proyecto: {resProyTxt} · RS: {resRSTxt}</div>
       </div>
       <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button onClick={()=>{onConfirm();onClose()}} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Fusionar</button>
+        <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={()=>{onConfirm();onClose()}} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Fusionar</button>
       </div>
     </Modal>
   )
@@ -11825,7 +11825,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'calc(env(safe-area-inset-top,0px) + 16px) 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
       <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
         {onBack
-          ? <button onClick={onBack} aria-label='Atrás' style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+          ? <button onClick={onBack} aria-label='Atrás' style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
               <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>
             </button>
           : <button onClick={onClose} aria-label='Volver' style={{display:'inline-flex',alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'6px 8px 6px 0',marginLeft:-2,flexShrink:0}}>
@@ -11833,7 +11833,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
             </button>}
         <span style={{fontSize:16,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleTxt}</span>
       </div>
-      {onBack&&<button onClick={onClose} aria-label='Cerrar' style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+      {onBack&&<button onClick={onClose} aria-label='Cerrar' style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
         <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
       </button>}
     </div>
@@ -11882,7 +11882,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
 
         <div style={{display:'flex',gap:8,margin:'15px 0 12px'}}>
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar colaborador, razón social, RUT...' style={{...inp,flex:1}}/>
-          <button onClick={abrirNuevo} style={{height:38,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Nuevo</button>
+          <button onClick={abrirNuevo} style={{height:44,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Nuevo</button>
         </div>
         {filtrados.length===0?(
           <div style={{textAlign:'center',padding:'40px 20px',color:C.done,fontSize:13}}>{q.trim()?'Sin resultados':'Aún no hay colaboradores. Agrega el primero.'}</div>
@@ -11997,7 +11997,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           <textarea value={f.datos_pago} onChange={e=>up('datos_pago',e.target.value)} placeholder='Banco, tipo de cuenta, N° cuenta, RUT, correo…' style={{width:'100%',minHeight:74,border:`0.5px solid ${C.border}`,borderRadius:10,fontSize:13,padding:'10px 11px',color:C.text,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>setView(f.id?'ficha':'list')} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={()=>setView(f.id?'ficha':'list')} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}</button>
         </div>
       </div>
@@ -15031,7 +15031,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       ? <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title={`${n} adjunto(s)`} style={{display:'flex',alignItems:'center',gap:3,padding:'3px 8px',borderRadius:6,border:'1px solid #003C50',background:C.azulBg,color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0}}>
           <span style={{width:8,height:11,border:'1.5px solid #003C50',borderRadius:4,display:'inline-block',transform:'rotate(35deg)'}}/>{n}
         </button>
-      : <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title='Adjuntar comprobante' style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer',flexShrink:0,fontSize:13,lineHeight:1}}>↑</button>
+      : <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title='Adjuntar comprobante' style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:24,borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer',flexShrink:0,fontSize:13,lineHeight:1}}>↑</button>
   }
 
   // Fila de movimiento (sin línea de razón social): badge + concepto + fecha; ícono de adjunto solo en gastos
@@ -16353,8 +16353,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <div style={{fontSize:11,marginTop:2}}><span style={{color:C.greenText,fontWeight:600}}>Con fondo {fmt(conFondo)}</span>{adelanto>0&&<span style={{color:C.overdueText,fontWeight:700}}> · adelanto {fmt(adelanto)}</span>}</div>
                 </div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  <button onClick={async()=>{ if(adelanto>0&&!await appConfirm(`Liquidas ${fmt(notaTotal)}: ${fmt(conFondo)} con fondo y adelantas ${fmt(adelanto)}.\n\n¿Pagar igual?`)) return; setNotaConfirm(true) }} style={{height:26,padding:'0 10px',borderRadius:8,border:'none',background:adelanto>0?C.overdueText:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>Liquidar</button>
-                  <button onClick={marcarPagadoNotaria} style={{height:26,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Marcar pagado</button>
+                  <button onClick={async()=>{ if(adelanto>0&&!await appConfirm(`Liquidas ${fmt(notaTotal)}: ${fmt(conFondo)} con fondo y adelantas ${fmt(adelanto)}.\n\n¿Pagar igual?`)) return; setNotaConfirm(true) }} style={{height:24,padding:'0 10px',borderRadius:8,border:'none',background:adelanto>0?C.overdueText:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>Liquidar</button>
+                  <button onClick={marcarPagadoNotaria} style={{height:24,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Marcar pagado</button>
                 </div>
               </div>
               {abgs.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:`0.5px solid rgba(83,114,129,.22)`,alignItems:'center'}}>
@@ -16476,8 +16476,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <div style={{fontSize:12,color:C.muted,marginBottom:notaSinFondosSel.length?8:14,lineHeight:1.4}}>{selNota.size} gasto{selNota.size!==1?'s':''} · <b style={{color:C.text}}>{fmt(notaTotal)}</b>. Se <b>Guarda</b> la liquidación como <b style={{color:C.soonText}}>Por enviar</b>. El correo a la notaría lo mandas después, cuando hagas la transferencia.</div>
                 {notaSinFondosSel.length>0&&<div style={{fontSize:12,color:C.overdueText,background:C.overdueBg,border:'1px solid #F0997B',borderRadius:8,padding:'8px 10px',marginBottom:14,lineHeight:1.4}}><b>Atención:</b> incluyes {notaSinFondosSel.length} gasto{notaSinFondosSel.length!==1?'s':''} de cliente(s) <b>Sin fondos</b> ({fmt(notaSinFondosSel.reduce((a,e)=>a+(e.amount||0),0))}) — estarías adelantando plata de la oficina.</div>}
                 <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setNotaConfirm(false)} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                  <button disabled={notaSending} onClick={liquidarNotaria} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:notaSending?'default':'pointer',opacity:notaSending?.6:1}}>{notaSending?'Guardando…':'Liquidar'}</button>
+                  <button onClick={()=>setNotaConfirm(false)} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button disabled={notaSending} onClick={liquidarNotaria} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:notaSending?'default':'pointer',opacity:notaSending?.6:1}}>{notaSending?'Guardando…':'Liquidar'}</button>
                 </div>
               </div>
             </div>
@@ -16501,8 +16501,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Correo de la notaría</label>
               <input value={notaEmail} onChange={e=>setNotaEmail(e.target.value)} placeholder='notaria@...' style={{width:'100%',height:36,marginBottom:16,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:13,background:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none'}}/>
               <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>!notaSending&&setNotaSend(null)} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                <button disabled={notaSending||!compFile||!(notaEmail||'').trim()} onClick={()=>enviarNotaria(notaSend)} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(notaSending||!compFile||!(notaEmail||'').trim())?'default':'pointer',opacity:(notaSending||!compFile||!(notaEmail||'').trim())?.5:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{notaSending?<Spin/>:<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>}{notaSending?'Enviando…':'Enviar detalle + comprobante'}</button>
+                <button onClick={()=>!notaSending&&setNotaSend(null)} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                <button disabled={notaSending||!compFile||!(notaEmail||'').trim()} onClick={()=>enviarNotaria(notaSend)} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(notaSending||!compFile||!(notaEmail||'').trim())?'default':'pointer',opacity:(notaSending||!compFile||!(notaEmail||'').trim())?.5:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{notaSending?<Spin/>:<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>}{notaSending?'Enviando…':'Enviar detalle + comprobante'}</button>
               </div>
             </Modal>
           )})()}
@@ -16533,7 +16533,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     <div style={{fontSize:12,fontWeight:600,color:alta?C.greenText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
                     <div style={{fontSize:10,color:alta?'#3E7A66':C.muted,marginTop:1}}>{s.via} · {s.conf}%</div>
                   </div>
-                  <button onClick={()=>aplicarOrf(e,s.client_id)} title='Asignar' style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:30,height:28,background:alta?C.greenText:C.accent,border:'none',borderRadius:8,cursor:'pointer',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg></button>
+                  <button onClick={()=>aplicarOrf(e,s.client_id)} title='Asignar' style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:30,height:24,background:alta?C.greenText:C.accent,border:'none',borderRadius:8,cursor:'pointer',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg></button>
                   <button onClick={()=>setOrfPickFor(e.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'0 4px',flexShrink:0}}>otro</button>
                 </div>
               ):(
@@ -16908,7 +16908,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
           <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
           <span style={{fontSize:16,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{esDev?'Registrar devolución':'Registrar fondo'}{selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}</span>
         </div>
-        <button className='qt-close' onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+        <button className='qt-close' onClick={onClose} style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
@@ -16974,7 +16974,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 
         {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.45,background:C.greenBg,borderRadius:8,padding:'9px 11px'}}>Al guardar, se abre el <b style={{color:C.accent}}>Correo de devolución</b> con el formato de la rendición y los destinatarios — solo adjuntas el comprobante y envías.</div>}
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':(esDev?'Guardar devolución':'Guardar fondo')}</button>
         </div>
       </div>
@@ -17051,7 +17051,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
             <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
           </div>
         </div>
-        <button className='qt-close' onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:4,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center'}}>x</button>
+        <button className='qt-close' onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:4,width:40,height:44,display:'flex',alignItems:'center',justifyContent:'center'}}>x</button>
       </div>
       {!selectedClient&&(
         <Fld label='Cliente'>
@@ -17435,7 +17435,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
             {selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>{setSelectedClient(null);setQ('')}} title='Cambiar cliente' style={{color:C.muted,fontWeight:600,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{selectedClient.name}</span></>}
           </span>
         </div>
-        <button className='qt-close' onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-8}}>x</button>
+        <button className='qt-close' onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,width:40,height:44,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-8}}>x</button>
       </div>
 
       <div className='qt-body'>
@@ -18154,7 +18154,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
           <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
           <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span>{(()=>{ const rs=rsLabel(clientId,clients,clientEntities); return (rs.name&&rs.name!==cName(clientId))||rs.rut||rs.multi ? <span style={{color:C.muted,fontWeight:400,fontSize:12}}> · {rs.multi?`${rs.multi} RS`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</span> : null })()}</>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
         </div>
-        <button className='qt-close' onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+        <button className='qt-close' onClick={onClose} style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
@@ -18733,7 +18733,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                 {antDisp.length>0
                   ? <span style={{fontSize:11,fontWeight:600,color:C.soonText,background:C.soonBg,padding:'2px 9px',borderRadius:20}}>{antDisp.length} por facturar</span>
                   : <span/>}
-                <button onClick={()=>onNuevoAnticipo&&onNuevoAnticipo()} style={{height:26,padding:'0 12px',borderRadius:8,background:'#fff',color:C.accent,border:`0.5px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Registrar</button>
+                <button onClick={()=>onNuevoAnticipo&&onNuevoAnticipo()} style={{height:24,padding:'0 12px',borderRadius:8,background:'#fff',color:C.accent,border:`0.5px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Registrar</button>
               </div>
               {antSorted.length===0
                 ? <div style={{fontSize:12,color:C.done,padding:'4px 0 2px'}}>Sin anticipos aún.</div>
@@ -18833,7 +18833,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     <Modal hideHeader onClose={onClose} closeOnBackdrop={false}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
         <span style={{fontSize:16,fontWeight:600,color:C.accent}}>Enviar devolución{client&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{client.name}</span></>}</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></button>
+        <button onClick={onClose} style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></button>
       </div>
       <div style={{padding:'16px 20px 20px'}}>
         {!rend&&<div style={{fontSize:11,color:C.soonText,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:12}}>No encontré la rendición de este cliente para sacar el destinatario — agrégalo a mano abajo.</div>}
@@ -18870,7 +18870,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
         </div>
         <details style={{marginBottom:14}}><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildHtml(body,false)}}/></details>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={sending||!para.trim()} onClick={enviar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:para.trim()?'pointer':'not-allowed',opacity:(sending||!para.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{sending?<Spin/>:null}{sending?'Enviando...':'Enviar devolución'}</button>
         </div>
       </div>
@@ -19708,7 +19708,7 @@ Saludos cordiales,`
           <div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
             {['es','en'].map(l=><button key={l} onClick={()=>setLang(l)} style={{fontSize:10,fontWeight:600,padding:'4px 10px',border:'none',cursor:'pointer',background:lang===l?C.accent:'transparent',color:lang===l?'#fff':C.muted}}>{l.toUpperCase()}</button>)}
           </div>
-          <button onClick={redactarIA} disabled={aiBusy} style={{...chipBtn('soft'),height:26,opacity:aiBusy?.6:1}}>{aiBusy?(lang==='en'?'Writing…':'Redactando…'):(lang==='en'?'Draft with AI':'Redactar con IA')}</button>
+          <button onClick={redactarIA} disabled={aiBusy} style={{...chipBtn('soft'),height:24,opacity:aiBusy?.6:1}}>{aiBusy?(lang==='en'?'Writing…':'Redactando…'):(lang==='en'?'Draft with AI':'Redactar con IA')}</button>
         </div>
       </div>
       <textarea value={body} onChange={e=>setBody(e.target.value)} rows={8} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:6}}/>
@@ -20018,7 +20018,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
             <button key={v} onClick={()=>{setSFilter(v==='Activo'?null:v);setRespSel(new Set())}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
           )})}
         </div>
-        {sFilter&&responsables.length>0&&<div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>{responsables.map(r=>{ const on=respSel.has(r); return <button key={r} onClick={()=>toggleResp(r)} style={{height:26,padding:'0 10px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontSize:10,fontWeight:on?600:500,cursor:'pointer'}}>{r}</button> })}</div>}
+        {sFilter&&responsables.length>0&&<div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>{responsables.map(r=>{ const on=respSel.has(r); return <button key={r} onClick={()=>toggleResp(r)} style={{height:24,padding:'0 10px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontSize:10,fontWeight:on?600:500,cursor:'pointer'}}>{r}</button> })}</div>}
         {cl.length===0
           ? <div style={{color:C.muted,textAlign:'center',padding:40,fontSize:13}}>Sin clientes</div>
           : <div style={{columns:'250px',columnGap:26}}>
@@ -20064,7 +20064,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
             <button onClick={()=>{setSFilter(null);setRespSel(new Set())}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]}</button>
             {responsables.map(r=>{ const on=respSel.has(r); return (
-              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{height:26,padding:'0 10px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontSize:10,fontWeight:on?600:500,cursor:'pointer',whiteSpace:'nowrap'}}>{r}</button>
+              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{height:24,padding:'0 10px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontSize:10,fontWeight:on?600:500,cursor:'pointer',whiteSpace:'nowrap'}}>{r}</button>
             )})}
           </div>
         ) : (
@@ -21022,7 +21022,7 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
       <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Archivos {items.length>0&&`(${items.length})`}</div>
       {items.map(fileRow)}
       <input ref={inputRef} type='file' onChange={onPick} style={{display:'none'}}/>
-      <button onClick={()=>inputRef.current?.click()} disabled={busy} aria-label='Adjuntar archivo' title='Adjuntar archivo · máx. 15 MB · se guarda en Drive' style={{marginTop:8,width:40,height:40,borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
+      <button onClick={()=>inputRef.current?.click()} disabled={busy} aria-label='Adjuntar archivo' title='Adjuntar archivo · máx. 15 MB · se guarda en Drive' style={{marginTop:8,width:40,height:44,borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
         {icon}
       </button>
     </div>
@@ -22911,7 +22911,7 @@ ${muestra}`
         <button onClick={()=>{setRows(null);setFileName('');setIaReport(null)}} style={{fontSize:11,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'4px 9px',cursor:'pointer'}}>Otro archivo</button>
       </div>
       {/* Revisión con IA (Opus 4.8) — solo audita, no modifica */}
-      <button onClick={revisarIA} disabled={iaBusy} style={{width:'100%',marginBottom:10,height:38,borderRadius:10,border:`1px solid ${C.accent}`,background:iaBusy?C.bgSoft:C.azulBg,color:C.accent,fontSize:12,fontWeight:600,cursor:iaBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{iaBusy?<Spin/>:null}{iaBusy?'Analizando con Opus 4.8…':(iaReport?'Volver a revisar con IA':'Revisar con IA (Opus 4.8)')}</button>
+      <button onClick={revisarIA} disabled={iaBusy} style={{width:'100%',marginBottom:10,height:44,borderRadius:10,border:`1px solid ${C.accent}`,background:iaBusy?C.bgSoft:C.azulBg,color:C.accent,fontSize:12,fontWeight:600,cursor:iaBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{iaBusy?<Spin/>:null}{iaBusy?'Analizando con Opus 4.8…':(iaReport?'Volver a revisar con IA':'Revisar con IA (Opus 4.8)')}</button>
       {iaReport&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 13px',marginBottom:12,background:C.bgSoft}}>
           <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Revisión IA · Opus 4.8</div>
@@ -22967,8 +22967,8 @@ ${muestra}`
         )})}
       </div>
       <div style={{display:'flex',gap:8,marginTop:12}}>
-        <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={importando||validas.length===0} onClick={importar} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(importando||validas.length===0)?'default':'pointer',opacity:(importando||validas.length===0)?.6:1}}>{importando?'Importando…':`Importar ${validas.length}`}</button>
+        <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={importando||validas.length===0} onClick={importar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(importando||validas.length===0)?'default':'pointer',opacity:(importando||validas.length===0)?.6:1}}>{importando?'Importando…':`Importar ${validas.length}`}</button>
       </div>
     </div>
   )
@@ -23649,7 +23649,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
           {precSel&&precTxt&&clauMode==='usar'&&<div style={{fontSize:11,color:C.normal,marginTop:6}}>Redactando sobre: <b>{precSel.name}</b></div>}
         </div>
       )}
-      <button onClick={generar} disabled={loading||!datos.trim()} style={{width:'100%',height:40,background:(loading||!datos.trim())?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(loading||!datos.trim())?'default':'pointer'}}>{loading?'Redactando…':<><Sparkle/> Generar borrador</>}</button>
+      <button onClick={generar} disabled={loading||!datos.trim()} style={{width:'100%',height:44,background:(loading||!datos.trim())?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(loading||!datos.trim())?'default':'pointer'}}>{loading?'Redactando…':<><Sparkle/> Generar borrador</>}</button>
       {err&&<div style={{fontSize:11,color:C.overdueText,marginTop:8}}>{err}</div>}
       {draft&&<div style={{marginTop:14}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
@@ -24024,8 +24024,8 @@ function RedProfesionalModal({preset=null, onClose, onSaved}){
             <input value={f.origen} onChange={e=>up('origen',e.target.value)} placeholder='Dónde lo conocí (origen)' style={inp}/>
             <input value={f.descripcion} onChange={e=>up('descripcion',e.target.value)} placeholder='Descripción breve' style={inp}/>
             <div style={{display:'flex',gap:8,marginTop:2}}>
-              <button onClick={preset?onClose:resetF} disabled={saving} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={guardar} disabled={saving||!f.nombre.trim()} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(saving||!f.nombre.trim())?.6:1}}>{saving?'Guardando…':(edit?'Guardar':'Agregar a la red')}</button>
+              <button onClick={preset?onClose:resetF} disabled={saving} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={guardar} disabled={saving||!f.nombre.trim()} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(saving||!f.nombre.trim())?.6:1}}>{saving?'Guardando…':(edit?'Guardar':'Agregar a la red')}</button>
             </div>
           </div>
         </div>
@@ -24299,7 +24299,7 @@ function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
             <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:700,color:C.accent}}>Tareas desde Gmail</div><div style={{fontSize:11,color:C.muted}}>Reviso tus correos no leídos y te propongo tareas</div></div>
           </div>
           <div style={{fontSize:11,color:C.done,marginBottom:12,lineHeight:1.5}}>La IA lee solo el asunto y la vista previa (no el cuerpo completo). Nada se crea solo: tú apruebas, editas o descartas.</div>
-          <button onClick={escanear} style={{width:'100%',height:46,borderRadius:12,border:'none',background:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>Revisar no leídos</button>
+          <button onClick={escanear} style={{width:'100%',height:44,borderRadius:12,border:'none',background:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>Revisar no leídos</button>
         </div>
       )}
       {phase==='scanning'&&(()=>{ const pct=prog.total?Math.round(prog.done/prog.total*100):8; return (
@@ -24332,14 +24332,14 @@ function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
                     <span style={{fontSize:10,color:C.done}}>IA <Sparkle/></span>
                   </div>
                   <div style={{display:'flex',gap:6,marginTop:9}}>
-                    <button disabled={busy===a.id} onClick={()=>crear(a)} style={{height:28,padding:'0 12px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:busy===a.id?.6:1}}>Crear tarea</button>
-                    <button onClick={()=>{onEditar&&onEditar({title:a.title,client_id:a.client_id,due:a.due,note:a.note});onClose&&onClose()}} style={{height:28,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.muted}`,background:'#fff',color:C.accent,fontSize:12,cursor:'pointer'}}>Editar</button>
-                    <button onClick={()=>descartar(a)} style={{height:28,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,cursor:'pointer'}}>Descartar</button>
+                    <button disabled={busy===a.id} onClick={()=>crear(a)} style={{height:24,padding:'0 12px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:busy===a.id?.6:1}}>Crear tarea</button>
+                    <button onClick={()=>{onEditar&&onEditar({title:a.title,client_id:a.client_id,due:a.due,note:a.note});onClose&&onClose()}} style={{height:24,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.muted}`,background:'#fff',color:C.accent,fontSize:12,cursor:'pointer'}}>Editar</button>
+                    <button onClick={()=>descartar(a)} style={{height:24,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,cursor:'pointer'}}>Descartar</button>
                   </div>
                 </div>
               )})}
             </>}
-          <button onClick={()=>setPhase('idle')} style={{width:'100%',height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',marginTop:4}}>Volver</button>
+          <button onClick={()=>setPhase('idle')} style={{width:'100%',height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',marginTop:4}}>Volver</button>
         </div>
       )}
     </div>
@@ -24524,7 +24524,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
               <span style={{fontSize:10,fontWeight:700,color:C.accent,background:C.azulBg,padding:'3px 9px',borderRadius:20}}>Agregar</span>
             </div>
           </div>
-          <button onClick={()=>escanear('global')} style={{width:'100%',height:46,borderRadius:12,border:'none',background:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:9}}>Revisión global · últimos 12 meses</button>
+          <button onClick={()=>escanear('global')} style={{width:'100%',height:44,borderRadius:12,border:'none',background:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:9}}>Revisión global · últimos 12 meses</button>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
             <span style={{fontSize:10,color:C.done,display:'flex',alignItems:'center',gap:5}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.normal} strokeWidth='2.4'><path d='M20 6L9 17l-5-5'/></svg>Solo encabezados a la IA · nunca el cuerpo</span>
             {lastScan&&<button onClick={()=>escanear('nuevos')} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Solo nuevos · desde {lastScan}</button>}
@@ -24583,10 +24583,10 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
                   <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
                     {sinCliente.slice(0,sinShow).map(a=>fila(a,true))}
                   </div>
-                  {sinCliente.length>sinShow&&<button onClick={()=>setSinShow(n=>n+50)} style={{width:'100%',height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:10}}>Ver más ({sinCliente.length-sinShow} restantes)</button>}
+                  {sinCliente.length>sinShow&&<button onClick={()=>setSinShow(n=>n+50)} style={{width:'100%',height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:10}}>Ver más ({sinCliente.length-sinShow} restantes)</button>}
                 </>)}
             </>}
-          <button onClick={()=>setPhase('idle')} style={{width:'100%',height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver al inicio</button>
+          <button onClick={()=>setPhase('idle')} style={{width:'100%',height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver al inicio</button>
         </div>
         )
       })()}
@@ -30026,7 +30026,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         </>}
       </div>
       {revSugOpen&&(
-        <Modal title='Identificar por nombre' fullscreenOnMobile onClose={()=>setRevSugOpen(false)} footer={<div style={{display:'flex',gap:8}}><button onClick={()=>setRevSugOpen(false)} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button><button disabled={revSugBusy||revSugSel.size===0} onClick={identificarLote} style={{flex:2,height:38,borderRadius:10,border:'none',background:revSugSel.size===0?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:revSugSel.size===0?'default':'pointer'}}>{revSugBusy?'Identificando…':`Identificar ${revSugSel.size}`}</button></div>}>
+        <Modal title='Identificar por nombre' fullscreenOnMobile onClose={()=>setRevSugOpen(false)} footer={<div style={{display:'flex',gap:8}}><button onClick={()=>setRevSugOpen(false)} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button><button disabled={revSugBusy||revSugSel.size===0} onClick={identificarLote} style={{flex:2,height:44,borderRadius:10,border:'none',background:revSugSel.size===0?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:revSugSel.size===0?'default':'pointer'}}>{revSugBusy?'Identificando…':`Identificar ${revSugSel.size}`}</button></div>}>
             <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Abonos con un cliente sugerido por nombre único — confirma los correctos.</div>
               {sugeridosId.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:24}}>Sin sugerencias pendientes.</div>}
               {sugeridosId.map(s=>{ const on=revSugSel.has(s.mov.id); return (
@@ -32337,19 +32337,19 @@ export default function App() {
                   const hoy=act.filter(t=>{const d=daysLeft(t.due);return d===0}).length
                   const alert=venc>0
                   return (
-                  <button onClick={()=>setTareasOpen(true)} title='Tareas' style={{position:'relative',width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:alert?C.overdue:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <button onClick={()=>setTareasOpen(true)} title='Tareas' style={{position:'relative',width:28,height:24,borderRadius:6,background:'none',border:'none',padding:0,color:alert?C.overdue:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                     <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='5' y='4' width='14' height='17' rx='2'/><rect x='9' y='2.5' width='6' height='3.5' rx='1'/><path d='M8.5 11.5l1.5 1.5 3-3'/><line x1='8.5' y1='16' x2='15.5' y2='16'/></svg>
                     {(venc>0||hoy>0)&&<span style={{position:'absolute',top:-2,right:-2,minWidth:14,height:14,padding:'0 3px',borderRadius:8,background:venc>0?C.overdue:C.soon,color:'#fff',fontSize:8,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{venc>0?venc:hoy}</span>}
                   </button>
                   )
                 })()}
-                <button onClick={e=>{e.stopPropagation();setCopilotoOpen(true)}} title='Counsel AI' aria-label='Counsel AI' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <button onClick={e=>{e.stopPropagation();setCopilotoOpen(true)}} title='Counsel AI' aria-label='Counsel AI' style={{width:28,height:24,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='currentColor'><path d='M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z'/></svg>
                 </button>
-                <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:24,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
                 </button>
-                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} title='Menú' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} title='Menú' style={{width:28,height:24,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
                 </button>
               </div>
