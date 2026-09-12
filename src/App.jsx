@@ -3465,7 +3465,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
               const pc=personChip(pn)
               return (
                 <div key={pn} style={{marginTop:13}}>
-                  <span style={{fontSize:11,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{pn}</span>
+                  <span style={{fontSize:12.5,fontWeight:800,color:pc.color}}>{pn}</span>
                   {arr.map(t=>{ const cl=clients.find(c=>String(c.id)===String(t.client_id)); return (
                     <div key={t.id} onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 0 8px 9px',borderTop:`1px solid #F2F5F7`,cursor:'pointer',marginTop:6}}>
                       {bigDate(t.due,urgencyColor(t.due,t.status))}
@@ -10883,7 +10883,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl&&onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(cl.id)}} style={{color:C.accent,cursor:'pointer'}}>{cl.name}</span>:(cl?.name||b.receptor_name||'Sin cliente')}{cl&&rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}{!cl&&b.receptor_name?<span style={{marginLeft:6,fontSize:9,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:9,padding:'1px 7px'}}>Sin vincular</span>:''}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}{porConciliar&&<span style={{color:C.soonText,fontWeight:700}}> · Por conciliar</span>}</div>
                 </div>
-                {isDesktop&&(()=>{ const rp=cl?.abogado_responsable; if(!rp) return <div style={{fontSize:11,color:C.done}}>—</div>; const pc=personChip(rp); return <div style={{minWidth:0,overflow:'hidden'}}><span style={{fontSize:10,fontWeight:600,background:pc.bg,color:pc.color,borderRadius:9,padding:'2px 8px',whiteSpace:'nowrap',display:'inline-block',maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis'}}>{rp}</span></div> })()}
+                {isDesktop&&(()=>{ const rp=cl?.abogado_responsable; if(!rp) return <div style={{fontSize:11,color:C.done}}>—</div>; const pc=personChip(rp); return <div style={{minWidth:0,overflow:'hidden'}}><span style={{fontSize:10.5,fontWeight:700,color:pc.color,whiteSpace:'nowrap',display:'inline-block',maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis'}}>{rp}</span></div> })()}
                 {isDesktop&&(()=>{ const v=venceDe(b); if(['Pagado','Anticipada','Anulada'].includes(b.status)||!v) return <div style={{textAlign:'right',fontSize:11,color:C.done}}>—</div>; const d=new Date(v+'T00:00:00'); return <div style={{textAlign:'right'}}><div style={{fontSize:11,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{d.getDate()} {MESES_ABR[d.getMonth()].toLowerCase()}</div>{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div> })()}
                 <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ const hayAb=saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status); return <><div style={{fontSize:13,fontWeight:600,color:hayAb?(er==='Vencido'?C.overdueText:C.accent):C.text}}>{fmt(hayAb?saldoBill(b):(b.status==='Programada'?(ui?ui.clpHoy:b.amount):montoFactura(b)))}</div>{hayAb&&<div style={{fontSize:9,color:C.muted}}>de {fmt(b.status==='Programada'?(ui?ui.clpHoy:b.amount):montoFactura(b))}</div>}</> })()}{!isDesktop&&diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
@@ -13551,9 +13551,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <div style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,padding:'8px 12px 4px',background:C.bgSoft,borderTop:`.5px solid #EEF1F3`}}>De un miembro</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr'}}>
               {MIEMBROS_NOTA.map((m,mi)=>{ const pc=personChip(m); const on=r.personal_de===m; return (
-                <div key={m} onClick={()=>marcarPersonalRow(r.id,m)} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:`.5px solid #EEF1F3`,borderRight:mi%2===0?`.5px solid #EEF1F3`:'none',cursor:'pointer',background:on?pc.bg:'transparent'}}>
-                  <span style={{width:26,height:26,borderRadius:8,background:pc.bg,color:pc.color,fontSize:11,fontWeight:800,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{(INICIALES_RESP&&INICIALES_RESP[m])||String(m)[0]}</span>
-                  <span style={{fontSize:12,fontWeight:700,color:on?pc.color:C.text}}>{m}</span>
+                <div key={m} onClick={()=>marcarPersonalRow(r.id,m)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:`.5px solid #EEF1F3`,borderRight:mi%2===0?`.5px solid #EEF1F3`:'none',cursor:'pointer',background:on?pc.bg:'transparent'}}>
+                  <span style={{width:7,height:7,borderRadius:'50%',background:pc.color,flexShrink:0}}/>
+                  <span style={{fontSize:12.5,fontWeight:700,color:on?pc.color:C.text}}>{m}</span>
                 </div>
               )})}
             </div>
@@ -13640,7 +13640,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             </>)})()}
             {k==='personal'&&(()=>{ const fr=filtRows(rws,k); const by={}; fr.forEach(r=>{ (by[r.personal_de||'—']=by[r.personal_de||'—']||[]).push(r) }); return Object.entries(by).sort((a,b)=>b[1].reduce((s,r)=>s+(r.monto||0),0)-a[1].reduce((s,r)=>s+(r.monto||0),0)).map(([pers,rs])=>{ const pc=personChip(pers); const tt=rs.reduce((a,r)=>a+(r.monto||0),0); return (
               <div key={pers}>
-                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0 4px'}}><span style={{width:18,height:18,borderRadius:20,background:pc.bg,color:pc.color,fontSize:9,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{(INICIALES_RESP&&INICIALES_RESP[pers])||String(pers)[0]}</span><span style={{flex:1,fontSize:12,fontWeight:700,color:pc.color}}>{pers}</span><span style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{rs.length} OT · {fmt(tt)}</span></div>
+                <div style={{display:'flex',alignItems:'center',gap:7,padding:'8px 0 4px'}}><span style={{width:7,height:7,borderRadius:'50%',background:pc.color,flexShrink:0}}/><span style={{flex:1,fontSize:12.5,fontWeight:800,color:pc.color}}>{pers}</span><span style={{fontSize:10.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{rs.length} OT · {fmt(tt)}</span></div>
                 {rs.map(r=>notaCatRow(r,'personal'))}
               </div>
             )}) })()}
@@ -14223,7 +14223,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     )}
                     {bucket==='auto'&&!r.isInternal&&!r.personal_de&&(
                       <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end',flexWrap:'wrap'}}>
-                        <span style={{fontSize:12,color:C.normal,fontWeight:600,marginRight:'auto',display:'inline-flex',alignItems:'center',gap:6}}>{r.clientName}{(()=>{ const resp=clients.find(c=>c.id===r.client_id)?.abogado_responsable; if(!resp) return null; const pc=personChip(resp); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px',fontWeight:600}}>{resp}</span> })()}</span>
+                        <span style={{fontSize:12,color:C.normal,fontWeight:600,marginRight:'auto',display:'inline-flex',alignItems:'center',gap:6}}>{r.clientName}{(()=>{ const resp=clients.find(c=>c.id===r.client_id)?.abogado_responsable; if(!resp) return null; const pc=personChip(resp); return <span style={{fontSize:10.5,color:pc.color,fontWeight:700}}>{resp}</span> })()}</span>
                         {ents.length>1&&(
                           <select value={r.entity_id||''} onChange={e=>editarCampo(r.id,'entity_id',e.target.value||null)} style={{padding:'5px 7px',borderRadius:6,border:`1px solid ${r.entity_id?C.border:C.soon}`,fontSize:11,background:'#fff',color:C.text,outline:'none',maxWidth:170}}>
                             <option value=''>Elegir razón social…</option>
@@ -15075,7 +15075,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
                   ? <button onClick={ev=>{ev.stopPropagation();marcarEstado(e,null)}} title='Pagado · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:e.no_descuenta_saldo?C.bgWarm:C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>
                   : <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:e.no_descuenta_saldo?C.bgWarm:C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado</span>)
                 : !isFondo&&e.no_descuenta_saldo&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:C.bgWarm,color:C.grisText,fontWeight:600}}>Gasto histórico</span>}
-              {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:10,padding:'1px 8px',borderRadius:20,background:pc.bg,color:pc.color,fontWeight:700}}>Personal · {e.personal_de}</span>})()}
+              {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:10.5,fontWeight:700,color:C.muted}}>Personal · <b style={{color:pc.color,fontWeight:700}}>{e.personal_de}</b></span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
             {!isFondo&&!e.personal_de&&!esOficina(e.client_id)&&<div style={{fontSize:10,marginTop:2}}>{e.client_id?<span style={{color:C.muted,fontWeight:600}}>{rsDisplay(rsLabel(e.client_id,clients,clientEntities,e.entity_id).name)}</span>:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>}</div>}
@@ -16426,7 +16426,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
               <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:'#fff',cursor:'pointer'}}>
                 <span style={{fontSize:14,color:C.muted,transform:notaCliOpen.has(k)?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent}}>Personal · <span style={{fontSize:11,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px'}}>{persona}</span></div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Sin fondo de cliente · {gs.length} OT</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent}}>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Sin fondo de cliente · {gs.length} OT</div></div>
                 <div style={{fontSize:13.5,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(tot)}</div>
               </div>
               {notaCliOpen.has(k)&&<div>{gs.map(notaRow)}</div>}
@@ -22430,7 +22430,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                 return (
                   <div key={pn}>
                     <div onClick={()=>setAsigPersOpen(o=>({...o,[pn]:!o[pn]}))} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px',cursor:'pointer'}}>
-                      <span style={{fontSize:11,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{pn}</span>
+                      <span style={{fontSize:12.5,fontWeight:800,color:pc.color}}>{pn}</span>
                       <span style={{fontSize:11,color:C.muted}}>{arr.length} tarea{arr.length!==1?'s':''}</span>
                       {vn>0&&<span style={{fontSize:10,fontWeight:600,color:C.overdueText}}>· {vn} vencida{vn!==1?'s':''}</span>}
                       <span style={{marginLeft:'auto',color:C.done,fontSize:12}}>{open?'▴':'▾'}</span>
