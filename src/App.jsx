@@ -939,11 +939,8 @@ function LoginScreen({loading}) {
           Continuar con Google
         </>}
       </button>
-      <div style={{fontSize:12,color:'#95A0A2',marginTop:14}}>Acceso con tu cuenta corporativa</div>
-      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:22,color:'#C3CBCA'}}><span style={{height:1,width:34,background:'#E1E5E4'}}/><span style={{fontSize:10.5}}>o</span><span style={{height:1,width:34,background:'#E1E5E4'}}/></div>
-      <button onClick={()=>{ try{ window.location.href='/?demo=1' }catch(_){}}} style={{marginTop:14,display:'inline-flex',alignItems:'center',gap:8,background:'none',border:'none',color:GREY,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={GRN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Ver demo con datos de ejemplo
+      <button onClick={()=>{ try{ window.location.href='/?demo=1' }catch(_){}}} title="Ver demo" aria-label="Ver demo" style={{marginTop:26,display:'inline-flex',alignItems:'center',justifyContent:'center',background:'none',border:'none',cursor:'pointer',padding:10}}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={GRN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       </button>
     </div>
   )
