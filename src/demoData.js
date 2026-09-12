@@ -15,6 +15,10 @@ export const demoData = {
     { id:'c6', name:'Clínica San Rafael SpA',      rut:'77.444.555-6', status:'Activo',    type:'Empresa', abogado_responsable:'Erasmo',    is_internal:false },
     { id:'c7', name:'Transportes Volcán SpA',      rut:'76.888.999-0', status:'Activo',    type:'Empresa', abogado_responsable:'Cristóbal', is_internal:false },
     { id:'c8', name:'Agrícola Las Vertientes Ltda',rut:'77.121.314-5', status:'Prospecto', type:'Empresa', abogado_responsable:'Erasmo',    is_internal:false },
+    { id:'c9',  name:'Estudio Dental Norte SpA',   rut:'76.909.101-2', status:'Activo',    type:'Empresa', abogado_responsable:'Cristóbal', is_internal:false },
+    { id:'c10', name:'Logística Biobío Ltda',      rut:'77.202.303-4', status:'Activo',    type:'Empresa', abogado_responsable:'Erasmo',    is_internal:false },
+    { id:'c11', name:'Fundación Aprender',         rut:'65.404.505-6', status:'Activo',    type:'Institución', abogado_responsable:'Cristóbal', is_internal:false },
+    { id:'c12', name:'Import Export Pacífico SpA', rut:'76.606.707-8', status:'Prospecto', type:'Empresa', abogado_responsable:'Erasmo',    is_internal:false },
   ],
   proyectos_cartera: [
     { id:'p1', cliente_id:'c1', sale_id:'s1', nombre_proyecto:'Reestructuración societaria', estado:'rojo',  etapa_idx:2, responsable:'CL', nota:'Esperando poderes del segundo socio para firmar', plazo_label:'Firma de escritura ante notario', plazo:new Date(Date.now()-4*864e5).toISOString().slice(0,10),  ultima_actividad:new Date(Date.now()-18*864e5).toISOString().slice(0,10), origen:'venta', activo:true },
@@ -45,6 +49,9 @@ export const demoData = {
     // 2025 (para el selector de año)
     { id:'s9',  client_id:'c1',               title:'Asesoría corporativa 2025',          area:'Corporativo', moneda:'UF',  amount_uf:1200, cost_uf:0,  uf_value:37500, year:2025, month:6, status:'Activo', cobro_type:'cuotas',        responsible:'Cristóbal', created_at:'2025-06-01' },
     { id:'s10', client_id:'c3',               title:'Litigio civil 2025',                 area:'Litigios',    moneda:'CLP', amount_clp:60000000, cost_clp:0, year:2025, month:9, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2025-09-10' },
+    { id:'s14', client_id:'c9',  title:'Constitución y pactos de socios', area:'Corporativo', moneda:'UF',  amount_uf:420, cost_uf:0, uf_value:39000, year:2026, month:7, status:'Activo', cobro_type:'unico',   responsible:'Cristóbal', created_at:'2026-07-06' },
+    { id:'s15', client_id:'c10', title:'Contratos de transporte y seguros', area:'Corporativo', moneda:'CLP', amount_clp:28000000, cost_clp:0, year:2026, month:8, status:'Activo', cobro_type:'cuotas', responsible:'Erasmo', created_at:'2026-08-04' },
+    { id:'s16', client_id:'c11', title:'Asesoría de gobernanza',           area:'Corporativo', moneda:'UF',  amount_uf:300, cost_uf:0, uf_value:39000, year:2026, month:8, status:'Activo', cobro_type:'mensual', responsible:'Cristóbal', created_at:'2026-08-15' },
   ],
   // Facturado 2026 ≈ $271M · Cobrado ≈ $143M · Por cobrar ≈ $128M · Programado ≈ $65M
   billing: [
@@ -91,10 +98,41 @@ export const demoData = {
     { id:'x8',  client_id:'c3', type:'gasto', amount:90000,  concept:'Fotocopias y trámites',        category:'Otro',           date:'2026-06-05', created_by:'Martín',  rendered_at:null },
     { id:'x9',  client_id:'c7', type:'gasto', amount:75000,  concept:'Notaría — poder',              category:'Notaria',        date:'2026-06-08', created_by:'Martín',  rendered_at:null },
     { id:'x10', client_id:'c5', type:'gasto', amount:40000,  concept:'Estacionamiento y traslados',  category:'Otro',           date:'2026-06-10', created_by:'Martina', rendered_at:null },
+    // Notaría — carga masiva "bi1" (por pagar): alimenta Notaría (Deuda / Cobros / Carga masiva).
+    { id:'n1',  bulk_import_id:'bi1', client_id:'c1', type:'gasto', amount:80000,  ot_number:'48301', concept:'Gastos notariales — Compraventa',            category:'Notaria', date:'2026-08-18', created_by:'Martina', paid_by_client:false },
+    { id:'n2',  bulk_import_id:'bi1', client_id:'c1', type:'gasto', amount:40000,  ot_number:'48305', concept:'Gastos notariales — Alzamiento de prenda',    category:'Notaria', date:'2026-08-18', created_by:'Martina', paid_by_client:false },
+    { id:'n3',  bulk_import_id:'bi1', client_id:'c2', type:'gasto', amount:60000,  ot_number:'48310', concept:'Gastos notariales — Mutuo',                  category:'Notaria', date:'2026-08-18', created_by:'Martina', paid_by_client:false },
+    { id:'n4',  bulk_import_id:'bi1', client_id:'c3', type:'gasto', amount:20000,  ot_number:'48312', concept:'Gastos notariales — Poder especial',         category:'Notaria', date:'2026-08-19', created_by:'Martina', paid_by_client:false },
+    { id:'n5',  bulk_import_id:'bi1', client_id:'c3', type:'gasto', amount:20000,  ot_number:'48318', concept:'Gastos notariales — Declaración jurada',      category:'Notaria', date:'2026-08-19', created_by:'Martina', paid_by_client:false },
+    { id:'n6',  bulk_import_id:'bi1', client_id:'c4', type:'gasto', amount:90000,  ot_number:'48320', concept:'Gastos notariales — Constitución de sociedad',category:'Notaria', date:'2026-08-19', created_by:'Martina', paid_by_client:false },
+    { id:'n7',  bulk_import_id:'bi1', client_id:'c5', type:'gasto', amount:15000,  ot_number:'48325', concept:'Gastos notariales — Protocolización',         category:'Notaria', date:'2026-08-20', created_by:'Martina', paid_by_client:false },
+    { id:'n8',  bulk_import_id:'bi1', client_id:'c6', type:'gasto', amount:110000, ot_number:'48330', concept:'Gastos notariales — Compraventa',            category:'Notaria', date:'2026-08-20', created_by:'Martina', paid_by_client:false },
+    { id:'n9',  bulk_import_id:'bi1', client_id:'c2', type:'gasto', amount:25000,  ot_number:'48340', concept:'Gastos notariales — Reconocimiento de deuda', category:'Notaria', date:'2026-08-20', created_by:'Martina', paid_by_client:false },
+    { id:'n10', bulk_import_id:'bi1', client_id:'c8', type:'gasto', amount:20000,  ot_number:'48345', concept:'Gastos notariales — Poder',                  category:'Notaria', date:'2026-08-21', created_by:'Martina', paid_by_client:false },
+    { id:'n11', bulk_import_id:'bi1', client_id:null, personal_de:'Cristóbal', type:'gasto', amount:35000, ot_number:'48333', concept:'Gastos notariales — Mandato especial', category:'Notaria', date:'2026-08-21', created_by:'Martina', paid_by_client:false },
+    { id:'n12', bulk_import_id:'bi1', client_id:null, personal_de:'Erasmo',    type:'gasto', amount:45000, ot_number:'48350', concept:'Gastos notariales — Autorización de domicilio', category:'Notaria', date:'2026-08-21', created_by:'Martina', paid_by_client:false },
+    // Notaría — carga "bi2" YA liquidada (Pagos realizados / Cobros pagados): notaria_render_id → rn1.
+    { id:'q1', bulk_import_id:'bi2', client_id:'c1', type:'gasto', amount:60000,  ot_number:'48210', concept:'Gastos notariales — Escritura',      category:'Notaria', date:'2026-07-14', created_by:'Martina', notaria_render_id:'rn1', notaria_liquidado_at:'2026-07-25', paid_by_client:false },
+    { id:'q2', bulk_import_id:'bi2', client_id:'c3', type:'gasto', amount:20000,  ot_number:'48215', concept:'Gastos notariales — Poder',          category:'Notaria', date:'2026-07-14', created_by:'Martina', notaria_render_id:'rn1', notaria_liquidado_at:'2026-07-25', paid_by_client:false },
+    { id:'q3', bulk_import_id:'bi2', client_id:'c4', type:'gasto', amount:100000, ot_number:'48220', concept:'Gastos notariales — Constitución',   category:'Notaria', date:'2026-07-15', created_by:'Martina', notaria_render_id:'rn1', notaria_liquidado_at:'2026-07-25', paid_by_client:false },
+  ],
+  // Cargas masivas de notaría (Carga masiva / historial). El resumen guarda las "no son nuestras" para el panel dedicado.
+  bulk_imports: [
+    { id:'bi1', created_at:'2026-08-21', created_by:'Martina', filename:'Notaría Lascar — agosto.xlsx', row_count:12, status:'active',
+      resumen:{ leidas:16, cargadas:12, pendientes:0, error:1, omitidas:0, notaria:true,
+        erroresDet:[{ ot:'48360', nombre:'—', motivo:'Sin monto en la planilla' }],
+        noNuestras:[
+          { ot:'48213', nombre:'Inmobiliaria del Sur', monto:120000, motivo:'Compraventa' },
+          { ot:'48227', nombre:'J. Fuentes',           monto:45000,  motivo:'Poder' },
+          { ot:'48231', nombre:'',                      monto:35000,  motivo:'Protocolización' },
+        ] } },
+    { id:'bi2', created_at:'2026-07-16', created_by:'Martina', filename:'Notaría Lascar — julio.xlsx', row_count:3, status:'active',
+      resumen:{ leidas:3, cargadas:3, pendientes:0, error:0, omitidas:0, notaria:true, noNuestras:[] } },
   ],
   petty_cash: [
     { id:'pc1', user_name:'Martín',  amount:300000, delivered_at:'2026-06-01', delivered_by:'Cristóbal', notes:'Caja del mes' },
     { id:'pc2', user_name:'Martina', amount:250000, delivered_at:'2026-06-01', delivered_by:'Cristóbal', notes:'Caja del mes' },
+    { id:'pc3', user_name:'Demo',    amount:200000, delivered_at:'2026-09-01', delivered_by:'Cristóbal', notes:'Caja del mes' },
   ],
   tasks: [
     { id:'t1', title:'Redactar contrato de prestación de servicios', client_id:'c1', project:'Asesoría permanente', status:'Activo', due:'2026-06-12', assignees:['Martín'],   assigned_by:'Cristóbal', created_at:'2026-06-05' },
@@ -107,6 +145,14 @@ export const demoData = {
     { id:'t8', title:'Liquidar gastos del mes',                      client_id:null, project:null,                  status:'Activo', due:'2026-06-18', assignees:['Martín'],   assigned_by:'Cristóbal', created_at:'2026-06-09' },
     { id:'t9', title:'Cotizar perito contable',                      client_id:'c3', project:'Litigio laboral',     status:'Activo', due:null,         assignees:['Rodrigo'],  assigned_by:'Cristóbal', created_at:'2026-06-07' },
     { id:'t10',title:'Cierre escritura reorganización',              client_id:'c2', project:'Reorganización',      status:'Terminado', due:'2026-05-28', completed_at:'2026-05-29', assignees:['Erasmo'], assigned_by:'Cristóbal', created_at:'2026-05-20' },
+    // Tareas del usuario demo ("Demo") → el Inicio del equipo muestra KPIs y agenda con contenido.
+    { id:'td1', title:'Revisar escritura de compraventa',   client_id:'c1', project:'Asesoría permanente', status:'Activo', due:'2026-09-10', assignees:['Demo'], assigned_by:'Demo', created_at:'2026-09-05' },
+    { id:'td2', title:'Enviar poder a la firma',            client_id:'c2', project:null,                  status:'Activo', due:'2026-09-15', assignees:['Demo'], assigned_by:'Cristóbal', created_at:'2026-09-08' },
+    { id:'td3', title:'Preparar minuta de constitución',    client_id:'c6', project:'Constitución',        status:'Activo', due:'2026-09-16', assignees:['Demo'], assigned_by:'Demo', created_at:'2026-09-09' },
+    { id:'td4', title:'Coordinar firma ante notario',       client_id:'c4', project:'Due diligence',       status:'Activo', due:'2026-09-25', assignees:['Demo'], assigned_by:'Demo', created_at:'2026-09-10' },
+    { id:'td5', title:'Cotizar perito para el litigio',     client_id:'c3', project:'Litigio laboral',     status:'Activo', due:null,         assignees:['Demo'], assigned_by:'Demo', created_at:'2026-09-09' },
+    { id:'td6', title:'Cerrar contrato de distribución',    client_id:'c5', project:null,                  status:'Terminado', due:'2026-09-05', completed_at:'2026-09-08', assignees:['Demo'], assigned_by:'Demo', created_at:'2026-08-28' },
+    { id:'td7', title:'Revisar borrador de demanda',        client_id:'c3', project:'Litigio laboral',     status:'Activo', due:'2026-09-18', assignees:['Demo','Martín'], assigned_by:'Demo', created_at:'2026-09-10' },
   ],
   proveedores: [
     { id:'pv1', nombre:'Notaría Edwards',     razon_social:'Notaría Edwards y Cía.', rut:'77.900.100-2' },
@@ -137,7 +183,9 @@ export const demoData = {
     { id:'con1', movimiento_id:'mov1', tipo_destino:'factura', factura_id:'b10', anticipo_id:null, monto_aplicado:40000000, origen:'demo', marco_pago:true },
     { id:'con2', movimiento_id:'mov2', tipo_destino:'factura', factura_id:'b11', anticipo_id:null, monto_aplicado:23400000, origen:'demo', marco_pago:true },
   ],
-  rendiciones: [],
+  rendiciones: [
+    { id:'rn1', tipo:'notaria', periodo:'julio 2026', total:180000, n_gastos:3, ot_numbers:'48210, 48215, 48220', estado_envio:'enviada', sent_at:'2026-07-25', created_at:'2026-07-25', user_name:'Martina' },
+  ],
   retainers: [
     { id:'r1', client_id:'c1', sale_id:'s1', horas_estimadas:20, tarifa_mensual:2000000, valor_hora_excedente_uf:2 },
     { id:'r2', client_id:'c4', sale_id:'s4', horas_estimadas:8,  tarifa_mensual:1500000, valor_hora_excedente_uf:2 },
