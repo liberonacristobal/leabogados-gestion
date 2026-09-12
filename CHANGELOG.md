@@ -1,3 +1,4 @@
+2026-09-12 Alturas de boton (franja media): 30/32/34->24 en 14 botones de texto (sync/toolbar), con guarda anti-cuadrado (9 botones-icono cuadrados protegidos). Build verde, vistas verificadas.
 2026-09-12 Alturas de boton (extremos, scoped a <button>): pequenos 26/28->24 y CTA 38/40/42/46->44 (79 botones). Footers de modal ahora parejos. La franja media 30/32/34 queda para revision por vista (accion vs alineado a input).
 2026-09-12 Radios (mecanico global): colapsados 560 radios no-canon al escalon vecino (2/3->4, 5->6, 7->8, 9->10, 11->12, 13->12, 15->16). Quedan 8/10/12/16/20 + circulo; 14 y 18 se dejan para revision por vista (ambiguos card/modal/pill).
 2026-09-12 Formas de boton (inicio de rollout): chipBtn helper pasa a rectangular r8 (acciones), propaga a sus 39 usos; filterPill sigue pill r20 (filtros). Normalizados los inline ad-hoc de Caja Chica del team (Asistente IA, Liquidar, + Nueva Caja) a altura 24 / r8.

@@ -1663,7 +1663,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                         <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:.4,color:C.greenText,fontWeight:600}}>Listos para liquidar</div>
                         <div style={{fontSize:16,fontWeight:500,color:C.greenText,marginTop:2}}>{listos.length} gasto{listos.length!==1?'s':''} · {fmtCLP(totListos)}</div>
                       </div>
-                      <button onClick={()=>seleccionarListos(false)} style={{height:32,padding:'0 14px',background:C.normal,color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Seleccionar</button>
+                      <button onClick={()=>seleccionarListos(false)} style={{height:24,padding:'0 14px',background:C.normal,color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Seleccionar</button>
                     </div>
                   )}
                   {revisar.length>0&&<div style={{padding:'11px 16px 4px',fontSize:10,textTransform:'uppercase',letterSpacing:.4,color:C.done,fontWeight:600}}>Revisar antes · {revisar.length}</div>}
@@ -1746,7 +1746,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           {misPendientes.length>=6&&(
             <div style={{display:'flex',gap:8,alignItems:'center',padding:'0 14px 10px'}}>
               <input value={pettyQ} onChange={e=>setPettyQ(e.target.value)} placeholder='Buscar concepto o monto…' style={{flex:1,height:32,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:13,background:C.bgSoft,color:C.text,outline:'none'}}/>
-              <button onClick={()=>setPettyOrd(o=>o==='nuevo'?'antiguo':'nuevo')} title='Orden por fecha' style={{height:32,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{pettyOrd==='nuevo'?'Nuevo → antiguo':'Antiguo → nuevo'}</button>
+              <button onClick={()=>setPettyOrd(o=>o==='nuevo'?'antiguo':'nuevo')} title='Orden por fecha' style={{height:24,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{pettyOrd==='nuevo'?'Nuevo → antiguo':'Antiguo → nuevo'}</button>
             </div>
           )}
           {/* Filas de gasto */}
@@ -3627,7 +3627,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                       <span style={{fontSize:11,color:C.done,flexShrink:0}}>{provOpen?'▴':'▾'}</span>
                     </div>
                     {provOpen&&ppCuentas.length>=2&&(
-                      <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{margin:'8px 12px 0',height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
+                      <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{margin:'8px 12px 0',height:24,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
                     )}
                     {provOpen&&ordCuentas(g.cuentas).map(t=>{
                       const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
@@ -3653,7 +3653,7 @@ function Dashboard({sales,billing,anticipos=[],clients,clientEntities=[],expense
                             <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(t.monto)}</span>
                             <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:pi.bg,color:pi.c,flexShrink:0,whiteSpace:'nowrap'}}>{pi.l}</span>
                             {pp
-                              ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc(t.factura_numero||'');setPayDocF(t.factura_fecha||'')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
+                              ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc(t.factura_numero||'');setPayDocF(t.factura_fecha||'')}} style={{height:24,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
                               : <span title='Esperando que el cliente pague su factura' style={{fontSize:11,color:C.done,flexShrink:0,whiteSpace:'nowrap'}}>Espera cobro</span>}
                           </div>
                           {on&&(
@@ -6778,7 +6778,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], an
             </div>
           </div>
           <div style={{fontSize:11,color:dif>0?C.soonText:C.done,marginBottom:8}}>{dif>0?`Diferencia ${fmt(dif)} — variación de UF entre programación y emisión`:'Mismo monto'}</div>
-          <button onClick={()=>{ setEmitExp(s=>{const n=new Set(s);n.delete(b.id);return n}); onReplaceProgramada(b.id,tw.id) }} style={{height:30,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>Conciliar · retirar la programada</button>
+          <button onClick={()=>{ setEmitExp(s=>{const n=new Set(s);n.delete(b.id);return n}); onReplaceProgramada(b.id,tw.id) }} style={{height:24,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>Conciliar · retirar la programada</button>
         </div>
       )})()}
     </div>
@@ -8375,7 +8375,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
             <div style={{width:46,height:46,borderRadius:'50%',background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:11}}><CheckVerde/></div>
             <div style={{fontSize:15,fontWeight:700,color:C.greenText}}>Cuadrado con el SII</div>
             <div style={{fontSize:12,color:C.muted,marginTop:5}}>{emitidasMes} factura{emitidasMes!==1?'s':''} de {mesLabel} cargada{emitidasMes!==1?'s':''}{porEmitir>0?` · ${porEmitir} por emitir`:''}</div>
-            <button onClick={sincronizar} style={{marginTop:14,height:34,padding:'0 16px',background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:10,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver a cotejar</button>
+            <button onClick={sincronizar} style={{marginTop:14,height:24,padding:'0 16px',background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:10,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver a cotejar</button>
           </div>) })()}
         {result&&!loading&&<>
           {vacio
@@ -8422,7 +8422,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                             <div style={{fontSize:11,color:C.greenText}}>✓ mismo RUT</div>
                           </div>
                         </div>
-                        <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:30,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'Cargando…':`Cargar a ${cli?.name}`}</button>
+                        <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:24,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'Cargando…':`Cargar a ${cli?.name}`}</button>
                       </div>}
                     </div>
                   )})}
@@ -8531,7 +8531,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                             {it.concepto&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.concepto}</div>}
                           </div>
                         </div>
-                        <button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} style={{height:30,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:corrigiendo===it.billingId?.5:1}}>{corrigiendo===it.billingId?'…':(it.folioActual?`Cambiar el folio a N° ${it.folio}`:`Poner el folio N° ${it.folio} a tu factura`)}</button>
+                        <button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} style={{height:24,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:corrigiendo===it.billingId?.5:1}}>{corrigiendo===it.billingId?'…':(it.folioActual?`Cambiar el folio a N° ${it.folio}`:`Poner el folio N° ${it.folio} a tu factura`)}</button>
                       </div>}
                     </div>
                   ) })}
@@ -12151,7 +12151,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
                   <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)} · `:''}{b.concept||'—'} · {fmt0(b.amount)}</div>
                 </div>
                 <input type='number' value={montos[b.id]||''} onChange={e=>setMontos(p=>({...p,[b.id]:e.target.value}))} placeholder='Su parte $' style={{width:96,height:30,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:12,padding:'0 8px',background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',flexShrink:0}}/>
-                <button onClick={()=>asignarFac(b.id)} disabled={asgBusy===b.id||!(parseInt(montos[b.id])||0)} style={{...chipBtn('primary'),height:30,opacity:(asgBusy===b.id||!(parseInt(montos[b.id])||0))?.5:1}}>{asgBusy===b.id?'…':'Asignar'}</button>
+                <button onClick={()=>asignarFac(b.id)} disabled={asgBusy===b.id||!(parseInt(montos[b.id])||0)} style={{...chipBtn('primary'),height:24,opacity:(asgBusy===b.id||!(parseInt(montos[b.id])||0))?.5:1}}>{asgBusy===b.id?'…':'Asignar'}</button>
               </div>
             )})}
           </div>
@@ -20058,7 +20058,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
           <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={{flex:1}}/>
-          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:32,color:C.accent}}>Colaboradores</button>
+          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:24,color:C.accent}}>Colaboradores</button>
         </div>
         {sFilter ? (
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
@@ -21172,7 +21172,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
           </div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <button onClick={syncNow} disabled={syncing} style={{height:34,padding:'0 16px',background:syncing?C.done:C.accent,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:syncing?'default':'pointer',flexShrink:0}}>{syncing?'Sincronizando…':'Sincronizar ahora'}</button>
+          <button onClick={syncNow} disabled={syncing} style={{height:24,padding:'0 16px',background:syncing?C.done:C.accent,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:syncing?'default':'pointer',flexShrink:0}}>{syncing?'Sincronizando…':'Sincronizar ahora'}</button>
           <div style={{flex:1,fontSize:11,color:syncMsg&&syncMsg.startsWith('Error')?C.overdue:C.muted}}>
             {syncMsg ? syncMsg : lastSync ? `Última: ${new Date(lastSync.at).toLocaleString('es-CL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} · +${lastSync.addedN||0} nuevos${lastSync.terminatedN?`, ${lastSync.terminatedN} archivados`:''}` : 'Aún no se ha sincronizado.'}
           </div>
@@ -23945,7 +23945,7 @@ function PapeleraModal({clients=[],onClose,onChanged}){
             <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label(r)}</div>
             <div style={{fontSize:11,color:C.done}}>Eliminado {fmtD(r.deleted_at)}</div>
           </div>
-          <button onClick={()=>restaurar(tipo,r)} disabled={busy} style={{flexShrink:0,height:30,padding:'0 11px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Restaurar</button>
+          <button onClick={()=>restaurar(tipo,r)} disabled={busy} style={{flexShrink:0,height:24,padding:'0 11px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Restaurar</button>
           <button onClick={()=>purgar(tipo,r)} disabled={busy} title='Eliminar definitivo' style={{flexShrink:0,width:30,height:30,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.overdue,fontSize:14,cursor:'pointer'}}>×</button>
         </div>
       ))}
@@ -24943,8 +24943,8 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
           <div style={{display:'flex',alignItems:'center',gap:10,marginTop:12,padding:'11px 0 13px',borderTop:`1px solid ${C.border}`}}>
             {decid[r.cid]==='enviado' && <span style={{fontSize:11,fontWeight:700,color:C.greenText,display:'inline-flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.greenText}}/>Propuesta enviada</span>}
             <button onClick={()=>descartar(r)} style={{marginRight:'auto',background:'none',border:'none',color:C.muted,fontSize:12,fontWeight:500,cursor:'pointer',padding:0}}>Descartar</button>
-            <button onClick={()=>verCarta(r)} style={{height:34,padding:'0 15px',display:'inline-flex',alignItems:'center',justifyContent:'center',background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:10,fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Ver carta</button>
-            <button onClick={()=>enviarCarta(r)} disabled={sendingCid===r.cid} style={{height:34,padding:'0 15px',display:'inline-flex',alignItems:'center',justifyContent:'center',background:C.accent,color:'#fff',border:`1px solid ${C.accent}`,borderRadius:10,fontSize:13,fontWeight:600,cursor:sendingCid===r.cid?'default':'pointer',whiteSpace:'nowrap'}}>{sendingCid===r.cid?'Enviando…':'Enviar'}</button>
+            <button onClick={()=>verCarta(r)} style={{height:24,padding:'0 15px',display:'inline-flex',alignItems:'center',justifyContent:'center',background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:10,fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Ver carta</button>
+            <button onClick={()=>enviarCarta(r)} disabled={sendingCid===r.cid} style={{height:24,padding:'0 15px',display:'inline-flex',alignItems:'center',justifyContent:'center',background:C.accent,color:'#fff',border:`1px solid ${C.accent}`,borderRadius:10,fontSize:13,fontWeight:600,cursor:sendingCid===r.cid?'default':'pointer',whiteSpace:'nowrap'}}>{sendingCid===r.cid?'Enviando…':'Enviar'}</button>
           </div>
         </div>
       )})}
