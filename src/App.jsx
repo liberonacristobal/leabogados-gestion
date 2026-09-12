@@ -3946,7 +3946,9 @@ const CMP_ROWS = [
 ]
 const _cmpFmt = (v,f) => v==null ? '—' : f==='$' ? fmtShort(v) : f==='%' ? Math.round(v)+'%' : f==='d' ? Math.round(v)+' d' : f==='d2' ? (Math.round(v*100)/100).toFixed(2).replace('.',',') : String(Math.round(v))
 const _cmpLider = (rows, k, mej) => { if(!mej) return null; const vals=rows.map(s=>s[k]).filter(v=>v!=null&&!Number.isNaN(v)); if(!vals.length) return null; return mej==='hi'?Math.max(...vals):Math.min(...vals) }
-function ComparativoSocios({socios=[], isDesktop}){
+function ComparativoSocios({socios=[], heroData=null, year=new Date().getFullYear(), isDesktop}){
+  const [cockFrame,setCockFrame]=useState('anio')          // cockpit: marco temporal 'anio' | 'total'
+  const [cockSel,setCockSel]=useState(()=>new Set())        // cockpit: abogados marcados (vacío = Todos)
   const est = useMemo(()=>{ const S=k=>socios.reduce((a,s)=>a+(Number(s[k])||0),0)
     const vendido=S('vendido'),nVentas=S('nVentas'),clientes=S('clientes'),facturado=S('facturado'),cobrado=S('cobrado'),porCobrar=S('porCobrar'),vencido=S('vencido'),gan=S('_gan'),rech=S('_rech'),recCLP=S('_recCLP'),dsoN=S('_dsoN'),dsoD=S('_dsoD'),comisiones=S('comisiones'),cobradoNeto=S('cobradoNeto')
     return {vendido,nVentas,clientes,facturado,cobrado,porCobrar,vencido,comisiones,cobradoNeto,pipe:S('pipe'),cliMulti:S('cliMulti'),mrr:S('mrr'),fut:S('fut'),prog:S('prog'),
@@ -4097,11 +4099,65 @@ function ComparativoSocios({socios=[], isDesktop}){
   ) : null
   const exportLink = <div style={{display:'flex',justifyContent:'flex-end',marginTop:9}}><span onClick={exportar} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 11px'}}>Exportar CSV ↓</span></div>
 
-  // ── MÓVIL: duelo de anillos + barras enfrentadas (la tabla completa queda para escritorio) ──
+  // ── COCKPIT "la foto del estudio": barras = total del estudio segmentado por abogado; toggle año/histórico; chips por socio (multi-selección → suma). GENÉRICO: dibuja los abogados que traiga heroData, colores desde heroCol/config (nada cableado). Cobrado = de conversión (encadena: Facturado = Cobrado + Por cobrar), misma fuente única.
+  const cockpit = (()=>{
+    const rows = (heroData && heroData[cockFrame]) || []
+    if(!rows.length) return null
+    const heroColL = a => a==='Sin socio' ? '#5B7686' : heroCol(a)
+    const sum = (arr,k)=>arr.reduce((a,s)=>a+(Number(s[k])||0),0)
+    const T = { vendido:sum(rows,'vendido'), fact:sum(rows,'fact'), cob:sum(rows,'cob'), pc:sum(rows,'pc'), venc:sum(rows,'venc'), nV:sum(rows,'nV'), recCLP:sum(rows,'recCLP') }
+    const isSel = cockSel.size>0
+    const selArr = isSel ? rows.filter(s=>cockSel.has(s.abo)) : rows
+    const ctx = { vendido:sum(selArr,'vendido'), fact:sum(selArr,'fact'), cob:sum(selArr,'cob'), pc:sum(selArr,'pc'), venc:sum(selArr,'venc'), nV:sum(selArr,'nV'), recCLP:sum(selArr,'recCLP') }
+    const conv = ctx.fact>0 ? Math.round(ctx.cob/ctx.fact*100) : null
+    const ticket = ctx.nV>0 ? ctx.vendido/ctx.nV : 0
+    const rec = ctx.vendido>0 ? Math.round(ctx.recCLP/ctx.vendido*100) : 0
+    const ctxLbl = !isSel ? 'del estudio' : (cockSel.size===1 ? [...cockSel][0] : `${cockSel.size} socios`)
+    const seg = k => { const tot=T[k]||1; return rows.map(s=>{ const w=(Number(s[k])||0)/tot*100; const on=!isSel||cockSel.has(s.abo); return <i key={s.abo} title={`${s.abo}: ${fmtShort(s[k])}`} style={{width:w+'%',height:'100%',display:'block',background:on?heroColL(s.abo):'rgba(255,255,255,.13)'}}/> }) }
+    const bar = (lab,k) => (
+      <div style={{marginTop:9}}>
+        <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:5}}>
+          <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:'#fff'}}>{lab}</span>
+          <span style={{fontSize:12.5,fontWeight:800,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{fmtShort(ctx[k])}{isSel&&T[k]>0&&<span style={{color:'#8FB6CC',fontWeight:600,fontSize:10.5,marginLeft:5}}>{Math.round(ctx[k]/T[k]*100)}%</span>}</span>
+        </div>
+        <div style={{height:16,borderRadius:5,overflow:'hidden',display:'flex',background:'rgba(255,255,255,.10)'}}>{seg(k)}</div>
+      </div>
+    )
+    const chipBtn = (abo,lbl,todos) => { const on=todos?!cockSel.size:cockSel.has(abo); const c=todos?'#fff':heroColL(abo); return (
+      <button key={lbl} onClick={()=>{ if(todos){ setCockSel(new Set()) } else setCockSel(p=>{const n=new Set(p);n.has(abo)?n.delete(abo):n.add(abo);return n}) }} style={{fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20,border:`1px solid ${on?c:'rgba(255,255,255,.20)'}`,background:on?c:'none',color:on?C.accent:'#fff',cursor:'pointer',borderStyle:abo==='Sin socio'&&!on?'dashed':'solid'}}>{lbl}</button>
+    )}
+    const secHd = t => <div style={{fontSize:8.5,fontWeight:800,letterSpacing:.1,textTransform:'uppercase',color:'#8FB6CC',margin:'14px 0 4px',paddingTop:11,borderTop:'1px solid rgba(255,255,255,.12)'}}>{t}</div>
+    const qCol = (k,v) => <div><div style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:'#8FB6CC'}}>{k}</div><div style={{fontSize:15,fontWeight:800,color:'#fff',marginTop:2}}>{v}</div></div>
+    return (
+      <div style={{background:C.accent,borderRadius:20,padding:isDesktop?'18px 20px 16px':'16px 15px 15px',marginBottom:14}}>
+        <div style={{display:'inline-flex',background:'rgba(255,255,255,.08)',borderRadius:9,padding:2}}>
+          {[['anio',String(year)],['total','Histórico']].map(([k,l])=><button key={k} onClick={()=>setCockFrame(k)} style={{fontSize:10,fontWeight:700,padding:'4px 12px',borderRadius:7,border:'none',background:cockFrame===k?'#fff':'none',color:cockFrame===k?C.accent:'#8FB6CC',cursor:'pointer'}}>{l}</button>)}
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:9}}>
+          {chipBtn(null,'Todos',true)}
+          {rows.map(s=>chipBtn(s.abo,s.abo,false))}
+        </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:13,background:'rgba(255,255,255,.06)',borderRadius:12,padding:'11px 14px'}}>
+          <span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'#9FC4DE'}}>Conversión a caja<span style={{display:'block',fontSize:9,fontWeight:600,color:'#8FB6CC',letterSpacing:0,textTransform:'none',marginTop:2}}>{ctxLbl} · {cockFrame==='anio'?year:'histórico'}</span></span>
+          <span style={{fontSize:30,fontWeight:800,color:'#fff',lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{conv==null?'—':conv+'%'}</span>
+        </div>
+        {secHd('Contrato')}
+        {bar('Vendido','vendido')}
+        <div style={{display:'flex',gap:22,marginTop:9}}>{qCol('Ticket prom.',fmtShort(ticket))}{qCol('% recurrente',rec+'%')}</div>
+        {secHd('Facturación → caja')}
+        {bar('Facturado','fact')}
+        {bar('Cobrado','cob')}
+        {bar('Por cobrar','pc')}
+        <div style={{fontSize:10,color:'#8FB6CC',marginTop:4}}>de eso, vencido <b style={{color:'#fff',fontWeight:800}}>{fmtShort(ctx.venc)}</b></div>
+      </div>
+    )
+  })()
+
+  // ── MÓVIL: cockpit (la tabla completa queda para escritorio) ──
   if(!isDesktop){
     return (
       <div>
-        {duelHero}
+        {cockpit}
         {exportLink}
       </div>
     )
@@ -4111,7 +4167,7 @@ function ComparativoSocios({socios=[], isDesktop}){
   const nc={fontVariantNumeric:'tabular-nums',textAlign:'right'}
   return (
     <div>
-      {duelHero}
+      {cockpit}
       <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,overflow:'hidden'}}>
         <div style={{display:'grid',gridTemplateColumns:`1.5fr repeat(${socios.length},1fr) 1fr`,columnGap:8,alignItems:'end',padding:'11px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done}}>Métrica 2026</span>
@@ -4422,6 +4478,20 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         fut:m.fut,prog:m.prog,_gan:m.gan,_rech:m.rech,_recCLP:m.recCLP,_dsoN:m.dsoN,_dsoD:m.dsoD,_comCaja:m.comCaja,_comFact:m.comFact,_cob:m.cob,_fact:m.fact}
     }).sort((a,b)=>b.vendido-a.vendido)
   },[sales,billing,clients,ufRef,yr])
+  // Datos del cockpit "la foto del estudio" en DOS marcos (año en curso / histórico). Todo se escala al MISMO conjunto de facturas del marco → encadena: Facturado = Cobrado + Por cobrar. Cobrado = conversión (cobradoBill), misma fuente única que Facturación.
+  const heroData = useMemo(()=>{
+    const abogCli = Object.fromEntries((clients||[]).map(c=>[String(c.id), c.abogado_responsable||null]))
+    const respSaleId = Object.fromEntries((sales||[]).map(s=>[String(s.id), s.responsible||null]))
+    const rVenta = s => s.responsible || abogCli[String(s.client_id)] || 'Sin socio'
+    const rBill = b => (b.sale_id&&respSaleId[String(b.sale_id)]) || abogCli[String(b.client_id)] || 'Sin socio'
+    const build = (anio) => {
+      const M={}; const g=a=>(M[a]=M[a]||{abo:a,vendido:0,nV:0,recCLP:0,fact:0,cob:0,pc:0,venc:0})
+      ;(sales||[]).forEach(s=>{ if(s.deleted_at||esSubarriendo(s)) return; if(!['Activo','Terminado'].includes(s.status)) return; if(anio && Number(s.year)!==yr) return; const m=g(rVenta(s)); const clp=ventaCLP(s,ufRef); m.vendido+=clp; m.nV++; if(esRecurrente(s)) m.recCLP+=clp })
+      ;(billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||b.status==='Programada'||['reembolso','nota_credito'].includes(b.billing_type)||!b.invoice_no) return; if(anio && String(b.issued_at||'').slice(0,4)!==String(yr)) return; const m=g(rBill(b)); m.fact+=montoFactura(b); m.cob+=cobradoBill(b); if(['Pendiente','Vencido'].includes(b.status)){ const sal=saldoBill(b); m.pc+=sal; if(esVencidaB(b)) m.venc+=sal } })
+      return Object.values(M).filter(m=>m.vendido>0||m.fact>0).sort((a,b)=>b.vendido-a.vendido)
+    }
+    return { anio:build(true), total:build(false) }
+  },[sales,billing,clients,ufRef,yr])
 
   return (
     <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
@@ -4687,8 +4757,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         </div>
         </div>)}
         {biSec==='socios'&&(<div style={{marginTop:12}}>
-          <div style={{fontSize:11,color:C.muted,margin:'0 2px 10px',lineHeight:1.5}}>Todas las métricas financieras por abogado, de fuente única. {isDesktop?'Cada fila resalta a quien lidera.':'Cristóbal y Erasmo, lado a lado.'} La rentabilidad (margen por hora) se encenderá cuando se carguen horas.</div>
-          <ComparativoSocios socios={socios} isDesktop={isDesktop}/>
+          <div style={{fontSize:11,color:C.muted,margin:'0 2px 10px',lineHeight:1.5}}>La foto del estudio, de fuente única. Cada barra es el total, segmentado por abogado; toca un socio para ver lo suyo. La rentabilidad (margen por hora) se encenderá cuando se carguen horas.</div>
+          <ComparativoSocios socios={socios} heroData={heroData} year={yr} isDesktop={isDesktop}/>
         </div>)}
         {biSec==='ia'&&(<div style={{marginTop:12}}>
           <div style={{marginBottom:12}}>
