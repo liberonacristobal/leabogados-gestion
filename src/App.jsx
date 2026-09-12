@@ -568,7 +568,7 @@ const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignee
 // Color de pill por persona = FUENTE ÚNICA del color por integrante (CART_AV deriva de acá). Canon 2026-06-27:
 // Cristóbal navy · Erasmo oro/mostaza · Martín verde · Martina rojo/rosa · Rodrigo terracota (Erasmo NO azul, para no confundirse con el navy de Cristóbal).
 const PERSON_CHIP = {
-  'Cristóbal':{bg:C.azulBg,color:C.accent}, 'Erasmo':{bg:'#F3EFD8',color:'#8A7012'},
+  'Cristóbal':{bg:C.azulBg,color:C.accent}, 'Erasmo':{bg:'#F3EFD8',color:'#74600E'},
   'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:C.overdueBg,color:C.overdueText}, 'Rodrigo':{bg:'#F7E7E1',color:'#A8472A'},
 }
 const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:C.bgWarm,color:C.grisText}
@@ -4103,7 +4103,7 @@ function ComparativoSocios({socios=[], heroData=null, year=new Date().getFullYea
   const cockpit = (()=>{
     const rows = (heroData && heroData[cockFrame]) || []
     if(!rows.length) return null
-    const heroColL = a => a==='Sin socio' ? '#5B7686' : heroCol(a)
+    const heroColL = a => a==='Sin socio' ? '#93ABBB' : heroCol(a)
     const sum = (arr,k)=>arr.reduce((a,s)=>a+(Number(s[k])||0),0)
     const T = { vendido:sum(rows,'vendido'), fact:sum(rows,'fact'), cob:sum(rows,'cob'), pc:sum(rows,'pc'), venc:sum(rows,'venc'), nV:sum(rows,'nV'), recCLP:sum(rows,'recCLP') }
     const isSel = cockSel.size>0
