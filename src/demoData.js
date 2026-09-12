@@ -280,6 +280,11 @@ export const demoData = {
   vacaciones: [
     { id:'vac1', user_name:'Demo', desde:new Date(Date.now()+5*864e5).toISOString().slice(0,10), hasta:new Date(Date.now()+9*864e5).toISOString().slice(0,10) },
   ],
+  // Diccionario de costo de oficina (kind costo_oficina): filas key→value. Una clave con >1 categoría = conflicto (Retiro vs Sueldo).
+  learnings_co: [
+    {key:'1944894 cuenta internet terceros transf', value:'Retiros'},{key:'1944894 cuenta internet terceros transf', value:'Retiros'},{key:'1944894 cuenta internet terceros transf', value:'Retiros'},{key:'1944894 cuenta internet terceros transf', value:'Sueldos'},{key:'1944894 cuenta internet terceros transf', value:'Sueldos'},
+    {key:'63485500 gira mensual', value:'Sueldos'},{key:'63485500 gira mensual', value:'Sueldos'},
+  ],
   sii_novedades: [
     { id:'sn1', tipo:'circular', numero:'47', titulo:'Nuevas instrucciones sobre reorganizaciones empresariales y facultad de tasación', url:'https://www.sii.cl', areas:['Corporativo','Tributario'], prioridad:'alta', resumen:'El SII precisa cuándo una fusión o división queda exenta de tasación y qué antecedentes exigirá. Impacta reestructuraciones societarias en curso.', brief:'', fecha:new Date(Date.now()-3*864e5).toISOString().slice(0,10), vigente:true },
     { id:'sn2', tipo:'oficio', numero:'1892', titulo:'Tratamiento tributario de indemnizaciones por término de contrato', url:'https://www.sii.cl', areas:['Laboral','Tributario'], prioridad:'media', resumen:'Aclara la tributación de pagos por años de servicio sobre el tope legal. Relevante para clientes con desvinculaciones recientes.', brief:'', fecha:new Date(Date.now()-11*864e5).toISOString().slice(0,10), vigente:true },

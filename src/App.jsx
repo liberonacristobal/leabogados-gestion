@@ -7917,11 +7917,16 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa}){
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const [fixing,setFixing]=useState(null)   // id de la factura cuyo vencimiento se está corrigiendo
   const [ctBusy,setCtBusy]=useState(null)   // sale_id de la cuota↔tramo que se está resolviendo
   const [ctDone,setCtDone]=useState(()=>new Set())  // sale_id ya resueltos/ignorados en esta sesión
+  const [coRows,setCoRows]=useState([])     // diccionario costo_oficina (key→value) para detectar glosas en conflicto
+  const [glDone,setGlDone]=useState(()=>new Set())  // claves de glosa ya definidas en esta sesión
+  const [glPick,setGlPick]=useState({})     // key → categoría elegida en la compuerta
+  const [glBusy,setGlBusy]=useState(null)
+  useEffect(()=>{ if(DEMO){ setCoRows(demoData.learnings_co||[]); return } supabase.from('learnings').select('key,value').eq('kind','costo_oficina').then(({data})=>{ if(data) setCoRows(data) },()=>{}) },[])
   const rutMulti=useMemo(()=>{ const m={}; (clientEntities||[]).forEach(e=>{ const r=crNormRut(e.rut); if(!r) return; if(!m[r]) m[r]={ids:new Set(),rs:e.name}; m[r].ids.add(String(e.client_id)) }); return Object.entries(m).filter(([r,v])=>v.ids.size>1).map(([r,v])=>({rut:r, rs:v.rs, clientIds:[...v.ids]})) },[clientEntities])
   const folioDup=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||!b.invoice_no) return; const f=folioN(b.invoice_no); if(!/^\d+$/.test(f)) return; (m[f]=m[f]||[]).push(b) }); return Object.entries(m).filter(([f,a])=>a.length>1).map(([f,a])=>({folio:f, rows:a})) },[billing])
   // Facturas posiblemente duplicadas: cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, EXCLUYENDO las anuladas por nota de crédito (status Anulada / NC). Dos entidades distintas con el mismo monto (ej. Tarragona a 3 RS, o folios de RUT distinto) NO se marcan; solo la MISMA entidad con la misma cuota repetida. La NC deja la factura fuera automáticamente.
@@ -7946,6 +7951,10 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       if(venta>0 && exceso>venta*0.08 && exceso>100000) out.push({s, venta, prog, emit, exceso}) })
     return out.sort((a,b)=>b.exceso-a.exceso)
   },[billing,sales])
+  // Glosa en conflicto: clave del diccionario costo_oficina que guardó >1 categoría (Retiro vs Sueldo) → la sugerencia sale no determinista.
+  const glosaConflict=useMemo(()=>{ const m={}; (coRows||[]).forEach(r=>{ if(!r.key) return; const cat=String(r.value||'').trim(); if(!cat) return; (m[r.key]=m[r.key]||{})[cat]=(m[r.key][cat]||0)+1 })
+    return Object.entries(m).filter(([k,v])=>Object.keys(v).length>1).map(([k,v])=>({key:k, votos:Object.entries(v).sort((a,b)=>b[1]-a[1]).map(([cat,n])=>({cat,n}))}))
+  },[coRows])
   // Facturas huérfanas: emitidas (con folio, no anuladas/borradas, no reembolso/NC) SIN cliente asignado → hay que vincularlas para que cuenten en el por-cobrar del cliente.
   const huerfanas=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&String(b.invoice_no||'').trim()&&!b.client_id&&!['reembolso','nota_credito'].includes(b.billing_type||'')),[billing])
   // Vencimiento incoherente: factura emitida cuyo due quedó ANTERIOR a su emisión (típico de emitir tarde por match de DTE sin recalcular el plazo) → se ve "vencida" recién emitida. Auto-corregible (due = emisión + plazo).
@@ -7967,7 +7976,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     })
     return out
   },[anticipos,conciliacion])
-  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length
+  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -8012,6 +8021,15 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
           <button disabled={ctBusy===s.id} onClick={async()=>{ setCtDone(d=>new Set([...d,s.id])); try{ await onResolverCuotaTramo(s,'ignorar') }catch(_){}}} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>No es doble conteo</button>
         </div>}
       </div>)}
+    </div>}
+    {glosaConflict.filter(x=>!glDone.has(x.key)).length>0&&<div style={{marginTop:14}}>{sh('Glosa con dos categorías (Retiro/Sueldo)',C.overdueText,glosaConflict.filter(x=>!glDone.has(x.key)).length)}
+      <div style={{fontSize:10,color:C.done,marginBottom:2}}>la misma glosa enseñó categorías distintas → la sugerencia sale no determinista · define cuál es</div>
+      {glosaConflict.filter(x=>!glDone.has(x.key)).map(({key,votos})=>{ const sel=glPick[key]||votos[0].cat; return <div key={key} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>«{key}»</div>
+        <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{votos.map(v=>`${v.cat} ${v.n}×`).join(' · ')}</div>
+        {onResolverGlosa&&<><div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>{['Retiros','Sueldos','Otros'].map(cat=><button key={cat} onClick={()=>setGlPick(p=>({...p,[key]:cat}))} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 12px',cursor:'pointer',border:`1px solid ${sel===cat?C.accent:C.border}`,background:sel===cat?C.azulBg:'#fff',color:sel===cat?C.accent:C.muted}}>{cat}</button>)}</div>
+        <button disabled={glBusy===key} onClick={async()=>{ if(!(await appConfirm(`Definir esta glosa como ${sel}. Cambia cómo se clasifican los próximos movimientos (y con eso el margen y las comisiones). ¿Confirmas?`))) return; setGlBusy(key); try{ await onResolverGlosa(key,sel); setGlDone(d=>new Set([...d,key])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) }; setGlBusy(null) }} style={{marginTop:8,padding:'8px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:glBusy===key?'default':'pointer',opacity:glBusy===key?.6:1}}>{glBusy===key?'Guardando…':`Definir como ${sel}`}</button></>}
+      </div> })}
     </div>}
     {huerfanas.length>0&&<div style={{marginTop:14}}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
       {huerfanas.slice(0,30).map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(b.invoice_no)} · {b.receptor_name||b.concept||'—'} · {fmt(b.amount||0)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
@@ -32593,6 +32611,9 @@ export default function App() {
           if(!DEMO){ for(const c of changes){ await supabase.from('billing').update(c.del?{deleted_at:new Date().toISOString()}:{amount:c.to,updated_at:new Date().toISOString()}).eq('id',c.id) }
             try{ await supabase.from('learnings').upsert({kind:'data_health',key:'cuotatramo_undo:'+s.id,value:JSON.stringify(changes),updated_at:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){} }
           setBilling(p=>p.map(x=>{ const c=changes.find(cc=>String(cc.id)===String(x.id)); return c?(c.del?{...x,deleted_at:new Date().toISOString()}:{...x,amount:c.to}):x }))
+        }} onResolverGlosa={async(key,categoria)=>{ if(DEMO) return
+          // deja la clave con UN solo valor canónico: borra las filas en conflicto e inserta la elegida. No toca gastos ya clasificados; corrige la sugerencia futura.
+          try{ await supabase.from('learnings').delete().eq('kind','costo_oficina').eq('key',key); await supabase.from('learnings').insert({kind:'costo_oficina',key,value:categoria,updated_at:new Date().toISOString()}) }catch(_){}
         }}/></Modal>}
         {modal?.type==='fusionarClientes'&&<Modal fullscreenOnMobile title={modal.pending?'Confirmar fusión':'Fusionar clientes'} maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={modal.pending||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
