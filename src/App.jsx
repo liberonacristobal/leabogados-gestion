@@ -15535,7 +15535,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>
         )})}
         {sin&&sin.clientes.length>0&&(
-          <div style={{border:`1px dashed ${C.border}`,borderRadius:12,padding:'11px 13px',marginBottom:10,background:C.bgWarm}}>
+          <div style={{border:`1px dashed ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:10,background:C.bgWarm}}>
             <div style={{fontSize:12,fontWeight:700,color:C.grisText,marginBottom:3}}>{sin.clientes.length} cliente{sin.clientes.length!==1?'s':''} sin abogado — {fmt(sin.total)}</div>
             <div style={{fontSize:11,color:C.muted,lineHeight:1.45}}>Asígnales un abogado a cargo (en la ficha del cliente) para poder avisarle.</div>
           </div>
@@ -15619,7 +15619,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {/* Vista cliente seleccionado: KPIs (totales de todas las RS). Oficina = la firma: NO es cliente (sin saldo, sin Rendir/Por pagar) — estado de costos con lente Estructural ⇄ Gestión */}
         {selectedClient&&rb&&(()=>{
           if(esOficina(selectedClient.id)){
-            if(!isAdmin) return <div style={{fontSize:12,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 12px',marginBottom:8,lineHeight:1.5}}>Gastos de oficina que <b style={{color:C.text}}>cargaste tú</b>. No incluye sueldos, arriendo ni gastos de otras personas.</div>   // limited: ficha simple, sin costos de oficina
+            if(!isAdmin) return <div style={{fontSize:12,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:8,lineHeight:1.5}}>Gastos de oficina que <b style={{color:C.text}}>cargaste tú</b>. No incluye sueldos, arriendo ni gastos de otras personas.</div>   // limited: ficha simple, sin costos de oficina
             return (<div onClick={()=>onOpenCostosOfi&&onOpenCostosOfi()} style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 14px',marginBottom:10,cursor:onOpenCostosOfi?'pointer':'default'}}>
               <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={16} c={C.accent}/></span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Costos de oficina · presupuesto vs real</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Ahora en el módulo Oficina — costos, retiros, nómina y resultado</div></div>
@@ -15650,13 +15650,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.4}}>La oficina adelantó más de lo que hay en fondos. Registra el fondo por reembolsar (o confírmalo).</div>
                 {(()=>{ const ord=[...negL].sort((a,b)=>saldoDe(a)-saldoDe(b)); const tot=ord.reduce((a,c)=>a+saldoDe(c),0); if(ord.length===0) return <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:18,textAlign:'center',fontSize:13,color:C.greenText}}>Sin descuadres · todo cuadra.</div>; return (<>
                   <div style={{display:'flex',gap:8,marginBottom:10}}>
-                    <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,padding:'9px 12px'}}><div style={{fontSize:18,fontWeight:700,color:C.overdueText}}>{ord.length}</div><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.04em'}}>Clientes</div></div>
-                    <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,padding:'9px 12px'}}><div style={{fontSize:18,fontWeight:700,color:C.overdueText}}>{fmtShort(tot)}</div><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.04em'}}>Por revisar</div></div>
+                    <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px'}}><div style={{fontSize:18,fontWeight:700,color:C.overdueText}}>{ord.length}</div><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.04em'}}>Clientes</div></div>
+                    <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px'}}><div style={{fontSize:18,fontWeight:700,color:C.overdueText}}>{fmtShort(tot)}</div><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.04em'}}>Por revisar</div></div>
                   </div>
                   <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                     {ord.map((c,i)=>{ const b=balances[c.id]||{}; const op=descOpen===c.id; const gs=(expenses||[]).filter(e=>String(e.client_id)===String(c.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo); return (
                       <div key={c.id} style={{borderTop:i?`0.5px solid ${C.border}`:'none'}}>
-                        <div onClick={()=>setDescOpen(op?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',cursor:'pointer',background:op?C.bgSoft:'#fff'}}>
+                        <div onClick={()=>setDescOpen(op?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer',background:op?C.bgSoft:'#fff'}}>
                           <SIcon n='alert' s={16} c={C.overdueText}/>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
@@ -15689,7 +15689,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               // Pie común "Mover a…" (aparece al seleccionar gastos en una categoría)
               const footer = revSel.size>0 ? (
                 <div style={{marginTop:8}}>
-                  <div style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'9px 12px',flexWrap:'wrap'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',flexWrap:'wrap'}}>
                     <span style={{fontSize:12,fontWeight:600,color:C.accent,flex:1,minWidth:70}}>{revSel.size} seleccionado{revSel.size!==1?'s':''}</span>
                     <AsignarClienteInline bill={{}} clients={clients} onAssign={(_,cid)=>revMoverA(cid)} label='Mover a…' placeholder='Buscar cliente…'/>
                     <span onClick={()=>{setRevSel(new Set());setRevDupConfirm(null)}} style={{fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',flexShrink:0}}>Quitar</span>
@@ -15744,7 +15744,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {/* ── Reasignar gastos (herramienta: elegir cliente origen → mover sus gastos a otro) ── */}
             {showReasignar&&(
               <div style={{marginBottom:10}}>
-                <div style={{background:C.azulBg,border:`1px solid #CFE3F7`,borderRadius:12,padding:'9px 12px',fontSize:12,color:C.azulInfo,marginBottom:11}}>Elige el cliente de origen y marca los gastos a mover a otro cliente.</div>
+                <div style={{background:C.azulBg,border:`1px solid #CFE3F7`,borderRadius:12,padding:'10px 12px',fontSize:12,color:C.azulInfo,marginBottom:11}}>Elige el cliente de origen y marca los gastos a mover a otro cliente.</div>
                 {!reasignFrom
                   ? <AsignarClienteInline bill={{}} clients={clientsWithMovs} onAssign={(_,cid)=>{ const c=clients.find(x=>String(x.id)===String(cid)); setReasignFrom(c||null); setRevSel(new Set()) }} label='Elegir cliente de origen' placeholder='Buscar cliente…'/>
                   : (()=>{ const gs=(expenses||[]).filter(e=>String(e.client_id)===String(reasignFrom.id)&&e.type==='gasto'&&!e.deleted_at).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)); const selTot=gs.filter(e=>revSel.has(e.id)).reduce((a,e)=>a+(e.amount||0),0); return (<>
@@ -15758,7 +15758,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                               <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
                             </label>
                           )})}</div>}
-                      {revSel.size>0&&<div style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'9px 12px',marginTop:8,flexWrap:'wrap'}}>
+                      {revSel.size>0&&<div style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginTop:8,flexWrap:'wrap'}}>
                         <span style={{fontSize:12,fontWeight:600,color:C.accent,flex:1,minWidth:70}}>{revSel.size} gasto{revSel.size!==1?'s':''} · {fmt(selTot)}</span>
                         <AsignarClienteInline bill={{}} clients={clients.filter(c=>String(c.id)!==String(reasignFrom.id))} onAssign={(_,cid)=>doMove([...revSel],cid)} label='Mover a…' placeholder='Buscar cliente…'/>
                         <span onClick={()=>setRevSel(new Set())} style={{fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',flexShrink:0}}>Quitar</span>
@@ -15789,7 +15789,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const diasDe = c=>{ const d=lastAct[String(c.id)]; if(!d) return null; return Math.floor((Date.now()-new Date(d))/86400000) }
               const sortCli = arr => [...arr].sort((a,b)=> cliOrd==='saldo' ? (Math.abs(saldoDe(b))-Math.abs(saldoDe(a))) : cliOrd==='actividad' ? ((lastAct[String(a.id)]||'')<(lastAct[String(b.id)]||'')?-1:1) : (a.name||'').localeCompare(b.name||'','es'))
               const row = c => { const sal=saldoDe(c); const col=sal<0?C.overdue:(sal>0?C.normal:C.done); const ents=(clientEntities||[]).filter(x=>String(x.client_id)===String(c.id)); const rs=ents.length>1?`${ents.length} razones sociales`:(ents[0]?rsDisplay(ents[0].name):''); const nPR=gastosPorRendir(c.id).length; const dias=diasDe(c); const inact=dias!=null&&dias>=45; return (
-                <div key={c.id} data-cid={String(c.id)} onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',borderTop:`1px solid #EEF1F3`,cursor:'pointer'}}>
+                <div key={c.id} data-cid={String(c.id)} onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid #EEF1F3`,cursor:'pointer'}}>
                   <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
@@ -15895,7 +15895,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const rz=c.resumen; const nErr=undone?0:(rz?.error||0); const nCarg=rz?.cargadas ?? c.gs.length; const nOmit=rz?.omitidas||0; const nNoN=undone?0:((rz?.noNuestras||[]).length)
               const dotCol=undone?C.done:(nErr>0?C.overdue:C.normal); return (
               <div key={c.id} style={{border:`1px solid ${nErr>0?'#F3C9C4':C.border}`,borderRadius:12,overflow:'hidden',opacity:undone?.6:1}}>
-                <div onClick={()=>setCargaOpen(open?null:c.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
+                <div onClick={()=>setCargaOpen(open?null:c.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
                   <span title={undone?'Deshecha':nErr>0?'Con errores sin resolver':'Cargada'} style={{width:9,height:9,borderRadius:'50%',background:dotCol,flexShrink:0}}/>
                   <div style={{textAlign:'center',width:34,flexShrink:0}}><div style={{fontSize:18,fontWeight:700,color:C.text,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{dnum}</div><div style={{fontSize:10,color:C.muted,textTransform:'uppercase'}}>{dmon}</div></div>
                   <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:11}}><div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.filename||'Carga sin nombre'}</div>
@@ -15912,7 +15912,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
                 </div>
                 {open&&<div style={{borderTop:`1px solid ${C.border}`}}>
-                  {nErr>0&&(c.resumen?.erroresDet?.length>0)&&<div style={{background:C.overdueBg,borderBottom:`1px solid #F3C9C4`,padding:'10px 13px'}}>
+                  {nErr>0&&(c.resumen?.erroresDet?.length>0)&&<div style={{background:C.overdueBg,borderBottom:`1px solid #F3C9C4`,padding:'10px 12px'}}>
                     <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.overdueText,marginBottom:6}}>{nErr} con error · no se cargaron (quedan registradas)</div>
                     <div style={{border:`1px solid #F3C9C4`,borderRadius:8,overflow:'hidden',background:'#fff'}}>
                       {c.resumen.erroresDet.slice(0,40).map((er,ei)=><div key={ei} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 9px',fontSize:11,borderTop:ei?`0.5px solid ${C.bgSoft}`:'none'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{er.ot&&er.ot!=='s/OT'?`${er.ot} · `:''}{er.nombre||'—'}</span><span style={{color:C.overdueText,flexShrink:0,fontWeight:600}}>{er.motivo}</span></div>)}
@@ -15962,7 +15962,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     )})}{rws.length===0&&<div style={{padding:'12px 13px',fontSize:12,color:C.muted,textAlign:'center'}}>Nada calza con la búsqueda.</div>}</div>
                   })()}
                   {!undone&&c.gs.length>0&&(()=>{ const bloq=c.gs.some(e=>e.notaria_render_id||e.notaria_liquidado_at||e.client_render_id||e.client_rendered_at||e.render_id||e.rendered_at); return (
-                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 13px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
                       {bloq
                         ? <span style={{fontSize:11,color:C.soonText}}>No se puede deshacer: tiene OT ya liquidadas o rendidas.</span>
                         : <span style={{fontSize:11,color:C.muted}}>Borra los {c.gs.length} gastos de esta carga. Sin descuadres (los saldos se recalculan).</span>}
@@ -15987,9 +15987,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const q2=q.trim().toLowerCase(); const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
           const lista=(clientsWithMovs||[]).filter(c=>c.status!=='Terminado'&&!esOficina(c.id)).filter(c=>!q2||nrm(c.name).includes(nrm(q2))).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))
           return wrap(<>
-            <div style={{display:'flex',alignItems:'center',gap:8,background:'#F1F4F6',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 12px',marginBottom:11}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg><input value={q} onChange={e=>setQ(e.target.value)} autoFocus placeholder='Buscar cliente para rendir…' style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%'}}/></div>
+            <div style={{display:'flex',alignItems:'center',gap:8,background:'#F1F4F6',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:11}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg><input value={q} onChange={e=>setQ(e.target.value)} autoFocus placeholder='Buscar cliente para rendir…' style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%'}}/></div>
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{lista.slice(0,60).map((c,i)=>{ const por=gastosPorRendir(c.id); const n=por.length, mon=por.reduce((a,e)=>a+(e.amount||0),0); return (
-              <div key={c.id} onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(c)}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',borderTop:i?`1px solid #EEF1F3`:'none',cursor:'pointer'}}>
+              <div key={c.id} onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(c)}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:i?`1px solid #EEF1F3`:'none',cursor:'pointer'}}>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div></div>
                 {n>0?<span style={{fontSize:11,fontWeight:600,color:C.soonText,flexShrink:0}}>{n} por rendir · {fmt(mon)}</span>:<span style={{fontSize:11,color:C.done,flexShrink:0}}>al día</span>}
                 <span style={{color:C.done,marginLeft:4}}>›</span>
@@ -16003,7 +16003,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {pend90.length===0
               ? <div style={{color:C.greenText,textAlign:'center',padding:24,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Nada pendiente hace +90 días.</div>
               : <div style={{display:'flex',flexDirection:'column',gap:8}}>{pend90.map(r=>(
-                  <div key={r.client.id} onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(r.client)}} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 13px',cursor:'pointer'}}>
+                  <div key={r.client.id} onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(r.client)}} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',cursor:'pointer'}}>
                     <SIcon n='alert' s={17} c={C.soonText}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(r.client.id)}} style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha?'pointer':'default'}}>{r.client.name}</div>
@@ -16128,14 +16128,14 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
             <div style={{textAlign:'right',fontSize:12,color:C.muted,marginBottom:12,marginTop:-2}}>{fmtShort(notaPendTotal)} pendiente</div>
             {(()=>{ const sinCli=notaGroups.sin||[]; if(!sinCli.length) return null; const diasDe=e=>e.created_at?Math.floor((Date.now()-new Date(e.created_at).getTime())/86400000):0; const venc=sinCli.filter(e=>diasDe(e)>=3); const alerta=venc.length>0; return (
-              <div onClick={()=>setNotaTab('pend')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:alerta?C.overdueBg:C.soonBg,border:`1px solid ${alerta?'#F3C9C4':'#F0D88A'}`,borderRadius:12,padding:'11px 13px',marginBottom:12}}>
+              <div onClick={()=>setNotaTab('pend')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:alerta?C.overdueBg:C.soonBg,border:`1px solid ${alerta?'#F3C9C4':'#F0D88A'}`,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
                 <span style={{width:30,height:30,borderRadius:10,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='clock' s={16} c={alerta?C.overdueText:C.soonText}/></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:alerta?C.overdueText:C.soonText}}>{sinCli.length} OT sin identificar{alerta?` · ${venc.length} llevan +3 días`:''}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Asígnales cliente para cargarlas a quien las paga{alerta?' — ya deberían estar resueltas':''}</div></div>
                 <span style={{color:C.done,fontSize:14}}>›</span>
               </div>
             )})()}
             {notaNoNuestras.n>0&&(
-              <div onClick={()=>{ setNoNSel(new Set(notaNoNuestras.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:C.overdueBg,border:`1px solid #F3C9C4`,borderRadius:12,padding:'11px 13px',marginBottom:12}}>
+              <div onClick={()=>{ setNoNSel(new Set(notaNoNuestras.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:C.overdueBg,border:`1px solid #F3C9C4`,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
                 <span style={{width:30,height:30,borderRadius:10,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.overdueText}}>{notaNoNuestras.n} OT que no son nuestras{notaNoNuestras.nPend>0?` · ${notaNoNuestras.nPend} por consultar`:' · ya consultadas'}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>OT correctas pero no las paga la oficina — consúltalas a la notaría</div></div>
                 <span style={{color:C.done,fontSize:14}}>›</span>
@@ -16187,7 +16187,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {notaLedger.n===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Sin cobros de notaría cargados.</div>}
             {notaLedger.n>0&&cobrosVista==='carga'&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{notaLedger.cargas.map((c,i)=>{ const open=cobrosOpen===c.key; return (
               <div key={c.key} style={{borderTop:i?`1px solid ${C.border}`:'none'}}>
-                <div onClick={()=>setCobrosOpen(open?null:c.key)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
+                <div onClick={()=>setCobrosOpen(open?null:c.key)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
                   <span style={{fontSize:13,color:C.done,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.filename}</div><div style={{fontSize:11,color:C.muted}}>{c.fecha?fmtFechaDMY(c.fecha):'—'}{c.who?` · ${c.who}`:''} · {c.rows.length} OT</div></div>
                   {c.nErr>0&&<span style={{fontSize:9,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{c.nErr} con error</span>}
@@ -16268,7 +16268,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         const csvRows=()=>{ const head=['Fecha','Periodo','Total','Estado','N gastos','OT','Quién']; const body=list.map(r=>{ const est=notaEstado(r); return [fmtFechaDMY(r.created_at)||'', r.periodo||'', r.total||0, est==='pagado'?'Pagada':est==='enviada'?'Enviada':'Por enviar', r.n_gastos||0, r.ot_numbers||'', r.user_name||''] }); return [head,...body] }
         const liqCard = r => { const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; const est=notaEstado(r); const dd=r.created_at?new Date(r.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; const eb=est==='por_enviar'?['Por enviar',C.soonText,C.soonBg]:est==='enviada'?['Enviada',C.azulInfo,C.azulBg]:['Pagada',C.greenText,C.greenBg]; return (
           <div key={r.id} style={{border:`1px solid ${est==='por_enviar'?'#FAC775':C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
-            <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 13px',cursor:'pointer'}}>
+            <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',cursor:'pointer'}}>
               <div style={{textAlign:'center',flexShrink:0,width:38}}><div style={{fontSize:19,fontWeight:700,color:C.text,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{dnum}</div><div style={{fontSize:10,color:C.muted,textTransform:'uppercase'}}>{dmon}</div></div>
               <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>Notaría Lascar</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>{r.user_name?`${r.user_name} · `:''}{r.n_gastos} OT{r.ot_numbers?` · ${String(r.ot_numbers).length>28?String(r.ot_numbers).slice(0,28)+'…':r.ot_numbers}`:''}</div></div>
               <span style={{fontSize:10,fontWeight:700,color:eb[1],background:eb[2],borderRadius:20,padding:'2px 9px',flexShrink:0,whiteSpace:'nowrap'}}>{eb[0]}</span>
@@ -16276,7 +16276,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
             </div>
             {est==='por_enviar'&&!open&&<div style={{display:'flex',justifyContent:'flex-end',padding:'0 13px 10px'}}><button onClick={ev=>{ev.stopPropagation();setCompFile(null);setNotaSend(r)}} style={{background:C.accent,color:'#fff',fontSize:12,fontWeight:700,borderRadius:8,padding:'6px 14px',border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>Enviar</button></div>}
-            {open&&<div style={{padding:'10px 13px',borderTop:`1px solid ${C.border}`}}>
+            {open&&<div style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
               {gs.map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
                 <div key={e.id} style={{display:'flex',alignItems:'baseline',gap:8,padding:'4px 0',fontSize:12}}>
                   <span style={{fontSize:10,color:C.azulInfo,fontWeight:700,width:62,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
@@ -16346,7 +16346,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             Object.entries(selByCli).forEach(([cid,sel])=>{ const d=dispCliente(cid).disp; const con=Math.min(sel,d), ade=Math.max(0,sel-d); conFondo+=con; adelanto+=ade; const resp=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'; const o=porAbg[resp]=porAbg[resp]||{con:0,ade:0}; o.con+=con; o.ade+=ade })
             const abgs=Object.entries(porAbg).sort((a,b)=>(b[1].con+b[1].ade)-(a[1].con+a[1].ade))
             return (
-            <div style={{background:adelanto>0?C.overdueBg:C.azulBg,border:`1px solid ${adelanto>0?'#F0997B':C.accent}`,borderRadius:10,padding:'10px 13px',marginBottom:10}}>
+            <div style={{background:adelanto>0?C.overdueBg:C.azulBg,border:`1px solid ${adelanto>0?'#F0997B':C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:10}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12,color:adelanto>0?C.overdueText:C.accent,fontWeight:600}}>{selNota.size} seleccionado{selNota.size!==1?'s':''} · {fmt(notaTotal)}</div>
@@ -16376,7 +16376,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const rojo = exc||sinF
               return (
               <div key={cid} style={{border:`1px solid ${rojo?'#F0997B':C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
-                <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:rojo?C.overdueBg:'#fff',cursor:'pointer'}}>
+                <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:rojo?C.overdueBg:'#fff',cursor:'pointer'}}>
                   <span style={{fontSize:14,color:C.muted,transform:notaCliOpen.has(cid)?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:rojo?C.overdueText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn}</div><div style={{fontSize:11,color:rojo?C.overdueText:C.muted,marginTop:1}}>{esOf?<>Oficina · <b>se cubre sola</b></>:<>Disponible <b style={{color:rojo?C.overdueText:C.text}}>{fmt(disp)}</b> de {fmt(fondosC)}</>}</div></div>
                   <span style={{fontSize:10,borderRadius:20,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
@@ -16424,7 +16424,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           {/* Personales (se ocultan al filtrar por responsable: no son clientes) */}
           {!notaResp&&Object.entries(notaGroups.personal).map(([persona,gs])=>{ const pc=personChip(persona); const k='p:'+persona; const tot=gs.reduce((a,e)=>a+(e.amount||0),0); return (
             <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
-              <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:'#fff',cursor:'pointer'}}>
+              <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'#fff',cursor:'pointer'}}>
                 <span style={{fontSize:14,color:C.muted,transform:notaCliOpen.has(k)?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Sin fondo de cliente · {gs.length} OT</div></div>
                 <div style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(tot)}</div>
@@ -16435,13 +16435,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           {/* Sin asignar: marcar como personal de una persona (oculto al filtrar por responsable) */}
           {!notaResp&&notaGroups.sin.length>0&&(()=>{ const k='__sinasignar__'; const open=notaCliOpen.has(k); const tot=notaGroups.sin.reduce((a,e)=>a+(e.amount||0),0); return (
             <div style={{border:`1px dashed ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
-              <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:'#fff',cursor:'pointer'}}>
+              <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'#fff',cursor:'pointer'}}>
                 <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>›</span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Sin cliente ni persona</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Márcalos como personal o asígnales cliente · {notaGroups.sin.length} OT</div></div>
                 <div style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(tot)}</div>
               </div>
               {open&&<div>{notaGroups.sin.map(e=>(
-                <div key={e.id} style={{padding:'9px 12px',borderTop:`0.5px solid ${C.border}`}}>
+                <div key={e.id} style={{padding:'10px 12px',borderTop:`0.5px solid ${C.border}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',gap:8}}><div style={{minWidth:0}}><div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div><div style={{fontSize:11,color:C.muted}}>{e.date?fmtFechaDMY(e.date):'sin fecha'}</div></div><span style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(e.amount)}</span></div>
                   <div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                     <span style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase'}}>Personal</span>
@@ -16519,7 +16519,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const s=orfSug[e.id]
           const alta=s&&s.conf>=90
           return (
-            <div key={e.id} style={{background:C.card,borderRadius:12,padding:'11px 13px',marginBottom:8,border:`1px solid ${C.border}`}}>
+            <div key={e.id} style={{background:C.card,borderRadius:12,padding:'10px 12px',marginBottom:8,border:`1px solid ${C.border}`}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:s||orfPickFor===e.id?8:9}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
@@ -17090,7 +17090,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
               {showRS&&(
                 <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
                   {rsList.map(e=>(
-                    <div key={e.id} onMouseDown={()=>{setEntityId(e.id);setShowRS(false)}} style={{padding:'9px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,background:e.id===entityId?C.azulBg:'#fff',color:e.id===entityId?C.accent:C.text,fontWeight:e.id===entityId?600:400}}>{e.name}</div>
+                    <div key={e.id} onMouseDown={()=>{setEntityId(e.id);setShowRS(false)}} style={{padding:'10px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,background:e.id===entityId?C.azulBg:'#fff',color:e.id===entityId?C.accent:C.text,fontWeight:e.id===entityId?600:400}}>{e.name}</div>
                   ))}
                 </div>
               )}
@@ -17110,9 +17110,9 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
                 {showProjects&&(
                   <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
                     {clientProjects.map((p,i)=>(
-                      <div key={i} onMouseDown={()=>{setProject(p);setShowProjects(false)}} style={{padding:'9px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,background:p===project?C.azulBg:'#fff',color:p===project?C.accent:C.text,fontWeight:p===project?600:400}}>{p}</div>
+                      <div key={i} onMouseDown={()=>{setProject(p);setShowProjects(false)}} style={{padding:'10px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,background:p===project?C.azulBg:'#fff',color:p===project?C.accent:C.text,fontWeight:p===project?600:400}}>{p}</div>
                     ))}
-                    <div onMouseDown={()=>{setNewProject(true);setProject('');setShowProjects(false)}} style={{padding:'9px 12px',cursor:'pointer',fontSize:13,fontWeight:600,color:C.normal}}>+ Nuevo proyecto...</div>
+                    <div onMouseDown={()=>{setNewProject(true);setProject('');setShowProjects(false)}} style={{padding:'10px 12px',cursor:'pointer',fontSize:13,fontWeight:600,color:C.normal}}>+ Nuevo proyecto...</div>
                   </div>
                 )}
               </div>
@@ -20372,7 +20372,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
         {sec('Contactos',showCon,setShowCon)}
         {showCon&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
       </>):(
-        <div style={{marginBottom:8,padding:'11px 12px',borderRadius:10,border:`1px solid ${C.border}`,background:C.bgSoft}}>
+        <div style={{marginBottom:8,padding:'10px 12px',borderRadius:10,border:`1px solid ${C.border}`,background:C.bgSoft}}>
           <Lbl>Razón social <span style={{textTransform:'none',letterSpacing:0,color:C.muted}}>· opcional</span></Lbl>
           <div style={{display:'grid',gridTemplateColumns:'1fr 130px',gap:8}}>
             <Inp value={rsIni.name} onChange={e=>setRsIni(r=>({...r,name:e.target.value}))} placeholder={f.name?.trim()||'Razón social'}/>
@@ -21908,11 +21908,11 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
           ))}
         </div>
         <div style={{display:'grid',gridTemplateColumns:period==='month'?'1fr 1fr':'1fr',gap:8}}>
-          <select value={selYear} onChange={e=>setSelYear(e.target.value)} style={{padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:13}}>
+          <select value={selYear} onChange={e=>setSelYear(e.target.value)} style={{padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:13}}>
             {years.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
           {period==='month'&&(
-            <select value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={{padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:13}}>
+            <select value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={{padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:13}}>
               {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
             </select>
           )}
@@ -29106,7 +29106,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {/* Cartolas: una sola línea (detalle a la izquierda · cargar a la derecha) — oculta dentro de un foco (Cargar cartola es su propia tarjeta) */}
         {!focused && (cartolas.length>0
           ? <div style={{marginBottom:12,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgSoft}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:C.bgSoft}}>
                 <span onClick={()=>setVerCartolas(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer'}}>
                   <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Cartolas</span>
                   <span style={{fontSize:11,color:C.muted}}>{movs.length} mov</span>
@@ -29115,7 +29115,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 <button onClick={()=>setVerCarga(v=>!v)} style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>+ Cargar</button>
               </div>
               {verCartolas&&cartolas.map((c,i)=>{ const pc=c.rol==='honorarios'?C.accent:'#EF9F27'; const mesLbl=(()=>{const[y,mo]=c.mes.split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${M[+mo-1]||mo} ${y}`})(); return (
-                <div key={i} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`}}>
+                <div key={i} style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
                     <span style={{fontSize:13,fontWeight:600,color:C.text}}>{c.rol==='honorarios'?'Cta. Honorarios':'Cta. Gastos'} · {mesLbl}</span>
                     <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmtFechaDMY?fmtFechaDMY(c.fMin):c.fMin} → {fmtFechaDMY?fmtFechaDMY(c.fMax):c.fMax} · {c.n} mov.</span>
@@ -29213,7 +29213,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             {reportes.map((r,i)=>{
               const okA=r.verA&&r.verA.diff===0, okC=r.verC&&r.verC.diff===0
               return (
-                <div key={i} style={{padding:'9px 12px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:12}}>
+                <div key={i} style={{padding:'10px 12px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:12}}>
                   <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.file}</span><span style={{flexShrink:0,color:C.muted}}>{r.cuenta||'—'}</span></div>
                   {r.error
                     ? <div style={{color:C.overdue,marginTop:3}}>Error: {r.error}</div>
@@ -29362,7 +29362,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           return (
             <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:11}}>
               {rows.map((r,i)=>(
-                <div key={r.k} onClick={r.on} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:'pointer'}}>
+                <div key={r.k} onClick={r.on} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:'pointer'}}>
                   <span style={{width:30,height:30,borderRadius:8,background:r.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:15,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums'}}>{r.n}</span>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.t}</div><div style={{fontSize:10,color:C.muted}}>{r.s}</div></div>
                   <span style={{fontSize:11,fontWeight:700,color:r.col,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',whiteSpace:'nowrap',flexShrink:0}}>{r.act} ›</span>
@@ -29426,7 +29426,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           if(!exactos.length) return null   // solo se muestra cuando hay calces exactos para conciliar de una; el resto (por revisar / sin factura) ya vive en los tiles "Por resolver"
           return (
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:11}}>
-              <div onClick={()=>setLoteOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:C.greenText,cursor:'pointer'}}>
+              <div onClick={()=>setLoteOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:C.greenText,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:'rgba(255,255,255,.18)',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={15} c='#fff'/></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:'#fff'}}>Listos para conciliar</div><div style={{fontSize:10,color:'rgba(255,255,255,.85)'}}>{exactos.length} {exactos.length===1?'calza':'calzan'} exacto con su factura{revisar.length?` · ${revisar.length} por revisar`:''}</div></div>
                 {exactos.length>0&&!loteOpen&&<button onClick={e=>{e.stopPropagation();setLoteConfirm(exactos)}} disabled={loteBusy} style={{fontSize:12,fontWeight:700,color:C.greenText,background:'#fff',border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',flexShrink:0,opacity:loteBusy?.6:1}}>{loteBusy?`${loteProg}/${exactos.length}…`:`Conciliar ${exactos.length}`}</button>}
@@ -29517,13 +29517,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 </div>
                 {m.descripcion&&<div style={{fontSize:10,color:C.muted,marginTop:8,lineHeight:1.4}}><b>Glosa:</b> {(m.descripcion||'').slice(0,90)}{(m.descripcion||'').length>90?'…':''}</div>}
                 {sc
-                  ? <div style={{background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:12,padding:'11px 12px',marginTop:12}}>
+                  ? <div style={{background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:12,padding:'10px 12px',marginTop:12}}>
                       <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}><span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span><span style={{fontSize:9,fontWeight:700,color:sc.via==='nombre'?C.greenText:C.accent,background:sc.via==='nombre'?C.greenBg:C.azulBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{sc.via==='nombre'?'por el nombre':sc.via==='glosa'?`la glosa: N° ${folioN(sc.f?.invoice_no)||'—'}`:`calza N° ${folioN(sc.f?.invoice_no)||'—'}`}</span></div>
                       {(sc.via==='monto'||sc.via==='glosa')&&sc.f&&<div style={{fontSize:11,color:C.greenText,marginTop:3}}>Factura N°{folioN(sc.f.invoice_no)||'—'}{sc.f.issued_at?` · emitida ${fmtFechaDMY(sc.f.issued_at)}`:''} · {sc.via==='glosa'?'la glosa del banco nombra el folio':'monto exacto'}</div>}
                       {sc.via==='nombre'&&<div style={{fontSize:11,color:C.greenText,marginTop:3}}>Coincide por el nombre de la transferencia</div>}
                       <button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={{marginTop:10,width:'100%',fontSize:13,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:10,padding:'10px',cursor:busy===m.id?'default':'pointer'}}>Es {sc.nombre} ✓</button>
                     </div>
-                  : <div style={{background:C.soonBg,borderRadius:12,padding:'11px 12px',marginTop:12}}>
+                  : <div style={{background:C.soonBg,borderRadius:12,padding:'10px 12px',marginTop:12}}>
                       <div style={{fontSize:13,fontWeight:700,color:C.soonText}}>Sin factura que calce</div>
                       <div style={{fontSize:11,color:C.soonText,marginTop:2}}>No está en la app — puede ser una factura antigua.</div>
                       {onCotejarSII&&<button onClick={()=>onCotejarSII(mesPago)} style={{marginTop:10,width:'100%',fontSize:13,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:10,padding:'10px',cursor:'pointer'}}>Buscar en el SII</button>}
@@ -29588,7 +29588,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 </div>
               )})()}
               {_yOpen&&_mOpen&&(
-              <div id={'mov-'+m.id} style={{padding:'9px 12px',background:'#fff',borderTop:`1px solid #D7DEE3`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
+              <div id={'mov-'+m.id} style={{padding:'10px 12px',background:'#fff',borderTop:`1px solid #D7DEE3`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
                 <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer',display:'flex',gap:10,alignItems:'center'}}>
                   <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}>{(()=>{const dp=String(m.fecha||'').slice(0,10).split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return <><div style={{fontSize:18,fontWeight:700,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:C.muted,fontWeight:600}}>{dp.length>=3?`${M[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></>})()}</div>
                   <div style={{flex:1,minWidth:0}}>
@@ -29650,7 +29650,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         const fMon = sc.f ? montoFactura(sc.f) : 0
                         return (
                         <div onClick={e=>e.stopPropagation()} style={{marginTop:5}}>
-                        <div style={{border:'1px solid #CFE9DD',background:'#F1FAF6',borderRadius:12,padding:'11px 12px'}}>
+                        <div style={{border:'1px solid #CFE9DD',background:'#F1FAF6',borderRadius:12,padding:'10px 12px'}}>
                           <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}>
                             <span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span>
                             <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{sc.via==='nombre'?'Por el nombre':sc.via==='glosa'?'La glosa nombra el folio':'Monto exacto'}</span>
