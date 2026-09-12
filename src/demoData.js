@@ -57,6 +57,10 @@ export const demoData = {
   billing: [
     // Pagadas (cobrado 2026)
     { id:'b1',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios enero',        amount:3510000,  status:'Pagado',     invoice_no:'1201', issued_at:'2026-01-31', due:'2026-02-15', paid_at:'2026-02-10', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bag1', client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios agosto',        amount:3200000, status:'Pagado',    invoice_no:'1250', issued_at:'2026-08-05', due:'2026-08-20', paid_at:'2026-08-18', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bag2', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Asesoría permanente agosto', amount:1800000, status:'Pagado',    invoice_no:'1251', issued_at:'2026-08-06', due:'2026-08-21', paid_at:'2026-08-25', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bag3', client_id:'c3', sale_id:'s3', entity_id:null, concept:'Honorarios agosto',        amount:2500000, status:'Pendiente', invoice_no:'1252', issued_at:'2026-08-12', due:'2026-09-11', paid_at:null,          billing_type:'honorarios', monto_terceros:0 },
+    { id:'bag4', client_id:'c6', sale_id:'s6', entity_id:null, concept:'Honorarios agosto',        amount:1400000, status:'Vencido',   invoice_no:'1253', issued_at:'2026-08-14', due:'2026-08-29', paid_at:null,          billing_type:'honorarios', monto_terceros:0 },
     { id:'b2',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios febrero',      amount:3510000,  status:'Pagado',     invoice_no:'1230', issued_at:'2026-02-28', due:'2026-03-15', paid_at:'2026-03-12', billing_type:'honorarios', monto_terceros:0 },
     { id:'b3',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios marzo',        amount:3510000,  status:'Pagado',     invoice_no:'1255', issued_at:'2026-03-31', due:'2026-04-15', paid_at:'2026-04-11', billing_type:'honorarios', monto_terceros:0 },
     { id:'b4',  client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 1/3',          amount:26000000, status:'Pagado',     invoice_no:'1245', issued_at:'2026-03-05', due:'2026-03-25', paid_at:'2026-03-22', billing_type:'honorarios', monto_terceros:4000000 },
@@ -206,5 +210,10 @@ export const demoData = {
   ],
   vacaciones: [
     { id:'vac1', user_name:'Demo', desde:new Date(Date.now()+5*864e5).toISOString().slice(0,10), hasta:new Date(Date.now()+9*864e5).toISOString().slice(0,10) },
+  ],
+  sii_novedades: [
+    { id:'sn1', tipo:'circular', numero:'47', titulo:'Nuevas instrucciones sobre reorganizaciones empresariales y facultad de tasación', url:'https://www.sii.cl', areas:['Corporativo','Tributario'], prioridad:'alta', resumen:'El SII precisa cuándo una fusión o división queda exenta de tasación y qué antecedentes exigirá. Impacta reestructuraciones societarias en curso.', brief:'', fecha:new Date(Date.now()-3*864e5).toISOString().slice(0,10), vigente:true },
+    { id:'sn2', tipo:'oficio', numero:'1892', titulo:'Tratamiento tributario de indemnizaciones por término de contrato', url:'https://www.sii.cl', areas:['Laboral','Tributario'], prioridad:'media', resumen:'Aclara la tributación de pagos por años de servicio sobre el tope legal. Relevante para clientes con desvinculaciones recientes.', brief:'', fecha:new Date(Date.now()-11*864e5).toISOString().slice(0,10), vigente:true },
+    { id:'sn3', tipo:'resolucion', numero:'112', titulo:'Obligación de informar contratos con partes relacionadas', url:'https://www.sii.cl', areas:['Corporativo'], prioridad:'media', resumen:'Nueva declaración jurada anual para operaciones entre empresas relacionadas. Puede requerir revisar la estructura de holdings de los clientes.', brief:'', fecha:new Date(Date.now()-20*864e5).toISOString().slice(0,10), vigente:true },
   ],
 }
