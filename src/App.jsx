@@ -28979,8 +28979,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   })() : null
   // OJO Reglas de Hooks: el `return concHub` va MÁS ABAJO, después de TODOS los hooks (ccAutoRef/traspasosAuto/useEffect),
   // para que esos hooks se llamen SIEMPRE (antes estaba aquí y saltaba 3 hooks en el hub → crash "más hooks que antes" al entrar al detalle).
-  // "Conciliar cobradas · cartola" es PÁGINA (no modal): cuando está abierta reemplaza la vista (móvil y escritorio), con "← volver".
-  if(cobradasOpen) return <CobradasSinRespaldoPage billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onOpenClientFicha={onOpenClientFicha} onClose={()=>setCobradasOpen(false)}/>
+  // "Conciliar cobradas · cartola" es PÁGINA (no modal): su return va MÁS ABAJO, después de TODOS los hooks (igual que hubOpen) — NUNCA aquí, saltaría los 3 hooks siguientes ("fewer hooks").
   // Opción A — el interior se enfoca en la tarjeta que abriste: el header ES el contexto (icono + nombre + conteo),
   // y NO se repiten los tiles "Por resolver" (eso ya lo dijo la tarjeta). Cambiar de foco = una línea de texto.
   // El overview (tarjeta "Abonos", concView==='todos') queda idéntico → el móvil no se rompe.
@@ -29057,6 +29056,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const ccAutoRef = useRef(new Set())
   const traspasosAuto = useMemo(()=> (movs||[]).filter(m=>{ const s=traspasoSweep(m); return s && s.gap<=7 }), [movs,concByMov])   // eslint-disable-line
   useEffect(()=>{ if(DEMO) return; traspasosAuto.forEach(m=>{ if(!ccAutoRef.current.has(m.id)){ ccAutoRef.current.add(m.id); marcarTraspasoInterno(m) } }) }, [traspasosAuto])   // eslint-disable-line
+  if(cobradasOpen) return <CobradasSinRespaldoPage billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onOpenClientFicha={onOpenClientFicha} onClose={()=>setCobradasOpen(false)}/>   // ← movido aquí: después de TODOS los hooks (igual que hubOpen); evita "fewer hooks"
   if(hubOpen) return concHub   // ← movido aquí: recién después de TODOS los hooks (ver nota arriba). Nunca poner un return entre hooks.
   // "Por resolver" accionable: acción por fila en el abono CERRADO según su etapa (sin cliente → Es X ✓ / Asignar; por confirmar → Conciliar N°X; sin factura → Imputar). Reusa sugMov/identificar/crearFondoPersonal/reconciliar/mejorCandidato. El buscador vive detrás de "Asignar"/"Otro" (abre la fila).
   const abonoInlineAcc = (m) => {
