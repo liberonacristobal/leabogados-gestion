@@ -72,17 +72,8 @@ export const getSession = () => supabase.auth.getSession()
 
 export const onAuthChange = (cb) => supabase.auth.onAuthStateChange(cb)
 
-// ─── ROLES POR EMAIL ──────────────────────────────────────────────────────────
-const ROLES = {
-  'cl@leabogados.cl':      { name: 'Cristóbal', role: 'admin' },
-  'martin@leabogados.cl':  { name: 'Martín',    role: 'abogado' },
-  'erasmo@leabogados.cl':  { name: 'Erasmo',    role: 'abogado' },
-  'martina@leabogados.cl': { name: 'Martina',   role: 'asistente' },
-  'rodrigo@leabogados.cl': { name: 'Rodrigo',   role: 'abogado' },
-}
-
-export const getUserInfo = (email) =>
-  ROLES[email] || { name: email?.split('@')[0] || 'Usuario', role: 'viewer' }
+// El rol/nombre de cada persona sale de la DB (tabla `miembros`, con fallback a `user_roles`),
+// no de un mapa cableado. El antiguo ROLES/getUserInfo (código muerto, nunca se llamaba) se eliminó.
 
 // ─── CLIENTES ─────────────────────────────────────────────────────────────────
 export const getClients = async () => {

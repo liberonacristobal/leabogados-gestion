@@ -6,7 +6,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 import {
-  supabase, signInWithGoogle, signOut, onAuthChange, getSession, getUserInfo,
+  supabase, signInWithGoogle, signOut, onAuthChange, getSession,
   getClients, getBilling,
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
   getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh,
@@ -22731,6 +22731,8 @@ function UsersView({onClose}) {
 
   const saveRole = async(id,role) => {
     await supabase.from('user_roles').update({role}).eq('id',id)
+    const em=users.find(u=>u.id===id)?.email   // doble escritura: `miembros` es la fuente tenant-aware que lee el login
+    if(em) try{ await supabase.from('miembros').update({rol:role}).eq('email',em.toLowerCase()) }catch(_){}
     setUsers(p=>p.map(u=>u.id===id?{...u,role}:u))
   }
 
@@ -22745,7 +22747,9 @@ function UsersView({onClose}) {
 
   const removeUser = async(id) => {
     if(!await appConfirm('¿Eliminar este usuario?')) return
+    const em=users.find(u=>u.id===id)?.email
     await supabase.from('user_roles').delete().eq('id',id)
+    if(em) try{ await supabase.from('miembros').delete().eq('email',em.toLowerCase()) }catch(_){}
     setUsers(p=>p.filter(u=>u.id!==id))
   }
 
@@ -30686,6 +30690,16 @@ export default function App() {
   const saleDriveRef = useRef(null)
   const saleReasignRef = useRef(null)
   const loadUserRole = async(email) => {
+    // Fuente tenant-aware: `miembros` (email→estudio_id→rol+nombre). Si hay fila, manda.
+    // Si no hay fila o falla, cae al comportamiento actual (user_roles) → nunca deja al usuario sin rol.
+    try{
+      const rm=await supabase.from('miembros').select('estudio_id,rol,nombre').eq('email',(email||'').toLowerCase()).maybeSingle()
+      if(!rm.error && rm.data && rm.data.rol){
+        setActualRole(rm.data.rol); setUserRole(rm.data.rol)
+        if(rm.data.rol==='limited') setTab('tasks')
+        return { role:rm.data.rol, name:rm.data.nombre || (email||'').split('@')[0], estudio_id:rm.data.estudio_id }
+      }
+    }catch(_){}
     // Robusto: si la query falla (red/RLS) devolvemos null SIN asignar rol → el render muestra spinner y un efecto reintenta
     // (nunca dejamos userRole en null-permanente, que dejaba el área de contenido en blanco / "pantalla negra").
     let data=null, ok=false
