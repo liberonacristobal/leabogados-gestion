@@ -30500,6 +30500,9 @@ export function PortalApp(){
 }
 
 export default function App() {
+  // Título de la pestaña/PWA: fuente ÚNICA = BRAND (no cablear el nombre del estudio en index.html).
+  // En demo va neutro ('FirmDesk', marca del producto) para no exponer el nombre del estudio a un prospecto.
+  useEffect(()=>{ try{ document.title = DEMO ? 'FirmDesk' : `${BRAND.nombre} · Gestión` }catch(_){} },[])
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
   const [bootSlow,setBootSlow]=useState(false)   // arranque tarda >10s (sesión o rol sin resolver) → ofrecer Recargar, nunca dejar al usuario atrapado
