@@ -73,6 +73,22 @@ const BRAND = {
   },
 }
 BRAND.logoUrl = 'https://' + BRAND.dominio         // base ABSOLUTA para logos en correos (deriva del dominio, no se cablea)
+
+// ── Multi-tenant (Fase 3): la identidad del estudio puede venir de la tabla `estudios` (DB); este BRAND es el fallback.
+// Muta el objeto BRAND en su lugar (misma referencia) → los ~80 usos ven los valores del estudio sin tocarlos uno por uno.
+// El `dominio` (host de la app) NO se sobrescribe: es infra del producto, no identidad del estudio.
+function applyEstudioToBrand(e){
+  if(!e || typeof e!=='object') return
+  const put=(k,v)=>{ if(v!=null && v!=='') BRAND[k]=v }
+  put('nombre', e.nombre);            put('nombreLegal', e.nombre_legal);   put('nombreLegalCorto', e.nombre_legal_corto)
+  put('rut', e.rut);                  put('web', e.sitio);                  put('portal', e.portal);          put('telefono', e.telefono)
+  put('direccion', e.direccion);      put('direccionCalle', e.direccion_calle); put('direccionFirma', e.direccion_firma); put('ciudad', e.ciudad)
+  if(e.logos && typeof e.logos==='object' && !Array.isArray(e.logos)) BRAND.logo = { ...BRAND.logo, ...e.logos }   // logos vacíos ('') → el header cae al monograma
+  if(e.pago && typeof e.pago==='object') BRAND.pago = e.pago
+}
+// En demo, la identidad viene de un estudio DEMO neutro (no expone al tenant real). Aplica al cargar el módulo, antes del 1er render.
+if(DEMO && demoData && demoData.estudio) applyEstudioToBrand(demoData.estudio)
+
 // ── MÓDULOS (catálogo) + entitlements por estudio. Habilitador de la venta por módulos.
 // HOY: todo habilitado para LEA → cero cambio. FUTURO (Fase 3): habilitados por estudio_id.
 const MODULOS = [
@@ -30500,13 +30516,18 @@ export function PortalApp(){
 }
 
 export default function App() {
+  const [brandV,setBrandV]=useState(0)   // bump al cargar la identidad del estudio desde la DB (Etapa 2 multi-tenant) → re-render de la chrome
   // Título de la pestaña/PWA: fuente ÚNICA = BRAND (no cablear el nombre del estudio en index.html).
   // En demo va neutro ('FirmDesk', marca del producto) para no exponer el nombre del estudio a un prospecto.
-  useEffect(()=>{ try{ document.title = DEMO ? 'FirmDesk' : `${BRAND.nombre} · Gestión` }catch(_){} },[])
+  useEffect(()=>{ try{ document.title = DEMO ? 'FirmDesk' : `${BRAND.nombre} · Gestión` }catch(_){} },[brandV])
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
   const [bootSlow,setBootSlow]=useState(false)   // arranque tarda >10s (sesión o rol sin resolver) → ofrecer Recargar, nunca dejar al usuario atrapado
   const [user,setUser]=useState(null)
+  // Etapa 2 multi-tenant: al resolver la sesión, cargar la identidad del estudio del usuario desde la tabla `estudios` (la RLS la filtra a la suya) → BRAND desde la DB, con la constante de fallback. Para LEA los valores son idénticos (cero cambio visible).
+  useEffect(()=>{ if(DEMO || !user?.email) return; let alive=true
+    supabase.from('estudios').select('*').maybeSingle().then(({data})=>{ if(alive && data){ applyEstudioToBrand(data); setBrandV(v=>v+1) } }).catch(()=>{})
+    return ()=>{ alive=false } },[user?.email])
   const [userRole,setUserRole]=useState(null)   // vista actual: 'admin' | 'limited' | null (admin puede previsualizar 'limited')
   const [actualRole,setActualRole]=useState(null) // rol REAL e inmutable de la DB — fuente de verdad para permisos
   const [clients,setClients]=useState([])

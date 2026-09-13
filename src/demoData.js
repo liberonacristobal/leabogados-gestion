@@ -2,6 +2,19 @@
 // Empresas, RUTs, montos y personas inventados. El modo demo nunca toca la base real.
 
 export const demoData = {
+  // Identidad del estudio en modo demo: un estudio FICTICIO neutro (no expone al tenant real en una demo a prospectos).
+  // Mismo shape que la tabla `estudios`; se aplica sobre BRAND al cargar (applyEstudioToBrand). logos vacíos → header con monograma.
+  estudio: {
+    id:'demo', nombre:'Estudio Demo', nombre_legal:'Estudio Demo SpA', nombre_legal_corto:'Estudio Demo SpA',
+    rut:'76.543.210-8', sitio:'estudiodemo.cl', portal:'portal.estudiodemo.cl', telefono:'+56 2 2000 0000',
+    direccion:'Av. Providencia 1234, Of. 500, Providencia · Santiago',
+    direccion_calle:'Av. Providencia 1234, Of. 500, Providencia',
+    direccion_firma:'Av. Providencia 1234, Of. 500, Providencia',
+    ciudad:'Santiago',
+    logos:{ blanco:'', color:'', full:'' },
+    pago:{ honorarios:{ banco:'Banco Demo', cuenta:'00112233', email:'pagos@estudiodemo.cl' },
+           gastos:{ banco:'Banco Demo', cuenta:'00445566', cuentaFmt:'004455-6', email:'gastos@estudiodemo.cl' } },
+  },
   annual_targets: [
     { year:2026, target_amount:800000000, currency:'CLP' },
     { year:2025, target_amount:600000000, currency:'CLP' },
