@@ -27205,7 +27205,11 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   const [cargoCliLearn,setCargoCliLearn] = useState({})  // glosaKey → client_id aprendido (cargo por cuenta de cliente)
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
   const [costoOfiLearn,setCostoOfiLearn] = useState({})  // glosaKey → {category, subcategory} aprendido (costo de oficina recurrente: arriendo/sueldos/servicios vienen del banco cada mes)
-  useEffect(()=>{ supabase.from('learnings').select('key,value,meta').eq('kind','costo_oficina').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]={category:r.value,subcategory:(r.meta&&r.meta.subcategory)||null} }); setCostoOfiLearn(m) },()=>{}) },[])
+  // Lectura DETERMINISTA por voto de mayoría (antes: sin order-by + overwrite → la sugerencia salía al azar entre Retiro/Sueldo). Si el reparto NO tiene mayoría clara (≥62%), la clave queda AMBIGUA → no se auto-sugiere, va a la compuerta (Revisión de datos · glosa en conflicto).
+  useEffect(()=>{ supabase.from('learnings').select('key,value,meta').eq('kind','costo_oficina').then(({data})=>{
+    const agg={}; (data||[]).forEach(r=>{ if(!r.key||!r.value) return; (agg[r.key]=agg[r.key]||{})[r.value]=agg[r.key][r.value]||{n:0,sub:null}; agg[r.key][r.value].n++; if(r.meta&&r.meta.subcategory) agg[r.key][r.value].sub=r.meta.subcategory })
+    const m={}; Object.entries(agg).forEach(([k,vals])=>{ const arr=Object.entries(vals).sort((a,b)=>b[1].n-a[1].n); const tot=arr.reduce((a,x)=>a+x[1].n,0); const top=arr[0]; const ambiguo=arr.length>1 && top[1].n/tot<0.62; m[k]={category:top[0],subcategory:top[1].sub,ambiguo} })
+    setCostoOfiLearn(m) },()=>{}) },[])
   // Cargo v2 — clasificador combo (Gasto Oficina / Gasto Cliente → categoría → subcategoría). Estado por movimiento.
   const [ccFam,setCcFam] = useState({})   // movId → 'oficina' | 'cliente' (familia elegida)
   const [ccCat,setCcCat] = useState({})   // movId → categoría de oficina en drill de subcategoría
@@ -27244,7 +27248,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   // Sugerencia de categoría aprendida (cartola_tipo) para un abono sin identificar: mismo RUT o mismo nombre.
   const tipoSugerido = m => { if(m.es_interno||m.categoria) return null; const k=crNormRut(m.rut_contraparte); if(k&&tipoAprendido[k]) return tipoAprendido[k]; const nk=m.nombre_contraparte?'n:'+_stripNom(m.nombre_contraparte):null; if(nk&&tipoAprendido[nk]) return tipoAprendido[nk]; return null }
   // Costo de oficina aprendido por glosa (el mismo arriendo/sueldo/servicio que vuelve cada mes) → categoría + subcategoría sugeridas.
-  const costoOfiSugerido = m => { if(m.tipo!=='cargo'||m.es_interno||(concByMov[m.id]?.length)) return null; const gk=glosaKey(m.descripcion); return (gk&&costoOfiLearn[gk])||null }
+  const costoOfiSugerido = m => { if(m.tipo!=='cargo'||m.es_interno||(concByMov[m.id]?.length)) return null; const gk=glosaKey(m.descripcion); const l=gk&&costoOfiLearn[gk]; return (l&&!l.ambiguo)?l:null }
   // Nombres de pila comunes: no alcanzan para identificar (dos "José Miguel" distintos no son el mismo cliente).
   const _NOM_COMUN = new Set(['jose','juan','maria','luis','carlos','miguel','francisco','pedro','pablo','jorge','manuel','andres','felipe','cristobal','catalina','daniel','ignacio','antonio','rodrigo','sebastian','alejandro','fernando','gonzalo','ricardo','roberto','eduardo','patricio','claudio','marcelo','rafael','victor','angel','mario','raul','sergio','hernan','ramon'])
   const nombreIdx = useMemo(()=>{ const idx=[]
@@ -28291,7 +28295,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
       if(provByRut[k]) return {fam:'oficina',category:'Proveedores',sub:provByRut[k],via:'RUT'}
     }
     const gk=glosaKey(m.descripcion)
-    if(gk&&costoOfiLearn[gk]) return {fam:'oficina',category:costoOfiLearn[gk].category,sub:costoOfiLearn[gk].subcategory||null,via:'glosa'}
+    if(gk&&costoOfiLearn[gk]&&!costoOfiLearn[gk].ambiguo) return {fam:'oficina',category:costoOfiLearn[gk].category,sub:costoOfiLearn[gk].subcategory||null,via:'glosa'}
     if(gk&&cargoCliLearn[gk]) return {fam:'cliente',clientId:cargoCliLearn[gk],via:'glosa'}
     const bm=matchPresupuesto(m); if(bm) return bm   // cruce con el presupuesto de oficina: monto exacto (+ glosa)
     return null
