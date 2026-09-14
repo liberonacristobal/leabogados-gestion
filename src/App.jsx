@@ -56,7 +56,9 @@ const BRAND = {
   nombreLegal: 'Liberona Escala Abogados Limitada',
   nombreLegalCorto: 'Liberona Escala Abogados Ltda.',
   rut: '77.700.387-9',
-  dominio: 'gestion.leabogados.cl',                 // dominio de la app (links en correos)
+  // Host de la app (links/logos absolutos en correos). Runtime: cada dominio se auto-describe (gestion.leabogados.cl o firmdesk.legal),
+  // porque el MISMO deploy sirve ambos → una env var no serviría. Fallback a gestion en localhost / previews de Vercel. LEA queda idéntico.
+  dominio: (typeof window!=='undefined' && window.location && window.location.host && !/^localhost|^127\.|\.vercel\.app$/i.test(window.location.host)) ? window.location.host : 'gestion.leabogados.cl',
   web: 'leabogados.cl',
   portal: 'portal.leabogados.cl',                   // dominio del portal del cliente
   direccion: 'Av. Kennedy 7900, Of. 905, Vitacura · Santiago',
