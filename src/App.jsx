@@ -6,7 +6,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 import {
-  supabase, signInWithGoogle, signOut, onAuthChange, getSession,
+  supabase, signInWithGoogle, signInWithMagicLink, signOut, onAuthChange, getSession,
   getClients, getBilling,
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
   getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh,
@@ -945,6 +945,13 @@ function LoginScreen({loading, denied, onRetry}) {
   // Colores propios de FirmDesk (fuera de la paleta C del tenant, a propósito). El ingreso sigue siendo Google corporativo, sin cambios.
   const sm = typeof window!=='undefined' && window.innerWidth < 600
   const INK='#101418', GRN='#12A150', GREY='#5B6570', MONO="'Space Mono',ui-monospace,SFMono-Regular,Menlo,monospace"
+  const [mlEmail,setMlEmail]=useState(''); const [mlSent,setMlSent]=useState(false); const [mlBusy,setMlBusy]=useState(false); const [mlErr,setMlErr]=useState('')
+  const enviarLink=async()=>{ const em=mlEmail.trim().toLowerCase()
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ setMlErr('Ingresa un correo válido'); return }
+    setMlBusy(true); setMlErr(''); onRetry&&onRetry()
+    try{ const {error}=await signInWithMagicLink(em); if(error) throw error; setMlSent(true) }
+    catch(e){ setMlErr(e?.message||'No se pudo enviar. Reintenta.') }
+    setMlBusy(false) }
   return (
     <div style={{height:'100dvh',minHeight:'100svh',background:C.bg,position:'relative',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',boxSizing:'border-box',overflow:'hidden',padding:'20px 32px'}}>
       <div style={{width:sm?54:60,height:sm?54:60,borderRadius:'22%',background:INK,display:'flex',flexDirection:'column',justifyContent:'center',gap:'14%',padding:sm?14:16,marginBottom:16}}>
@@ -961,6 +968,14 @@ function LoginScreen({loading, denied, onRetry}) {
           Continuar con Google
         </>}
       </button>
+      <div style={{display:'flex',alignItems:'center',gap:10,margin:'22px 0 14px',width:sm?260:280,color:'#95A0A2',fontSize:11,fontFamily:MONO}}><span style={{flex:1,height:1,background:'#E1E5E4'}}/>o con tu correo<span style={{flex:1,height:1,background:'#E1E5E4'}}/></div>
+      {mlSent
+        ? <div style={{maxWidth:300,textAlign:'center',fontSize:13,color:GRN,lineHeight:1.5}}>Te enviamos un enlace de acceso a <b style={{color:INK}}>{mlEmail.trim()}</b>. Ábrelo desde este dispositivo para entrar.</div>
+        : <div style={{display:'flex',flexDirection:'column',gap:8,width:sm?260:280}}>
+            <input type="email" value={mlEmail} onChange={e=>{setMlEmail(e.target.value); if(mlErr)setMlErr('')}} onKeyDown={e=>{if(e.key==='Enter')enviarLink()}} placeholder="nombre@tuestudio.cl" autoComplete="email" style={{border:'1px solid #DADFDE',borderRadius:10,padding:'12px 14px',fontSize:14,color:INK,outline:'none',boxSizing:'border-box'}}/>
+            <button onClick={enviarLink} disabled={mlBusy} style={{background:INK,color:'#fff',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:600,cursor:mlBusy?'default':'pointer'}}>{mlBusy?'Enviando…':'Enviar enlace de acceso'}</button>
+            {mlErr&&<div style={{fontSize:12,color:'#C0362C',textAlign:'center'}}>{mlErr}</div>}
+          </div>}
       <button onClick={()=>{ try{ window.location.href='/?demo=1' }catch(_){}}} title="Ver demo" aria-label="Ver demo" style={{marginTop:26,display:'inline-flex',alignItems:'center',justifyContent:'center',background:'none',border:'none',cursor:'pointer',padding:10}}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={GRN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       </button>
