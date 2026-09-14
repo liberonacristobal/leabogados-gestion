@@ -969,12 +969,12 @@ function LoginScreen({loading, denied, onRetry}) {
         </>}
       </button>
       {/* Acciones discretas al pie: entrar con correo (magic-link) y ver demo. Ambos íconos sobrios; el correo solo despliega su campo al tocar. */}
-      <div style={{marginTop:30,display:'flex',alignItems:'center',gap:24}}>
-        <button onClick={()=>{ setMlSent(false); if(mlErr)setMlErr(''); onRetry&&onRetry(); setMlOpen(o=>!o) }} title="Entrar con tu correo" aria-label="Entrar con tu correo" style={{background:'none',border:'none',cursor:'pointer',padding:8,lineHeight:0}}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={mlOpen?GRN:'#AEB6B4'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7.5 8.5 6 8.5-6"/></svg>
+      <div style={{marginTop:38,display:'flex',alignItems:'center',gap:20,opacity:.9}}>
+        <button onClick={()=>{ setMlSent(false); if(mlErr)setMlErr(''); onRetry&&onRetry(); setMlOpen(o=>!o) }} title="Entrar con tu correo" aria-label="Entrar con tu correo" style={{background:'none',border:'none',cursor:'pointer',padding:7,lineHeight:0}}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={mlOpen?GRN:'#C6CCCB'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7.5 8.5 6 8.5-6"/></svg>
         </button>
-        <button onClick={()=>{ try{ window.location.href='/?demo=1' }catch(_){}}} title="Ver demo" aria-label="Ver demo" style={{background:'none',border:'none',cursor:'pointer',padding:8,lineHeight:0}}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#AEB6B4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+        <button onClick={()=>{ try{ window.location.href='/?demo=1' }catch(_){}}} title="Ver demo" aria-label="Ver demo" style={{background:'none',border:'none',cursor:'pointer',padding:7,lineHeight:0}}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C6CCCB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
         </button>
       </div>
       {mlOpen && !mlSent && <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:8,width:sm?250:270}}>
