@@ -938,7 +938,7 @@ function DialogHost(){
   </Modal>
 }
 
-function LoginScreen({loading}) {
+function LoginScreen({loading, denied, onRetry}) {
   // Pantalla de acceso = marca del PRODUCTO (FirmDesk, dirección "Ledger"), no del estudio.
   // Colores propios de FirmDesk (fuera de la paleta C del tenant, a propósito). El ingreso sigue siendo Google corporativo, sin cambios.
   const sm = typeof window!=='undefined' && window.innerWidth < 600
@@ -951,8 +951,9 @@ function LoginScreen({loading}) {
         <span style={{display:'block',height:'11%',width:'84%',borderRadius:4,background:GREY}}/>
       </div>
       <div style={{fontFamily:MONO,fontWeight:700,fontSize:sm?27:31,letterSpacing:'-.02em',color:INK}}>Firm<span style={{color:GRN}}>Desk</span></div>
-      <div style={{fontFamily:MONO,fontSize:12,color:'#95A0A2',marginTop:8,marginBottom:38}}>Every number, in its place.</div>
-      <button onClick={signInWithGoogle} disabled={loading} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:9,minWidth:sm?220:240,background:'#fff',border:'1px solid #DADFDE',borderRadius:12,padding:'13px 18px',color:INK,fontSize:14,fontWeight:600,cursor:loading?'default':'pointer'}}>
+      <div style={{fontFamily:MONO,fontSize:12,color:'#95A0A2',marginTop:8,marginBottom:denied?20:38}}>Every number, in its place.</div>
+      {denied&&<div style={{maxWidth:320,background:'#FDECEA',border:'1px solid #F3C9C4',borderRadius:12,padding:'11px 15px',fontSize:13,color:'#A3312B',marginBottom:22,lineHeight:1.5,textAlign:'center'}}>Tu cuenta no tiene acceso a FirmDesk. Pídele a tu estudio que te invite y vuelve a entrar.</div>}
+      <button onClick={()=>{ onRetry&&onRetry(); signInWithGoogle() }} disabled={loading} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:9,minWidth:sm?220:240,background:'#fff',border:'1px solid #DADFDE',borderRadius:12,padding:'13px 18px',color:INK,fontSize:14,fontWeight:600,cursor:loading?'default':'pointer'}}>
         {loading?<Spin/>:<>
           <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-3.9H24v7.1h12c-.2 1.9-1.5 4.7-4.3 6.6l6.6 5.1C42.6 41.6 45 33.6 45 24z"/><path fill="#34A853" d="M24 46c5.9 0 10.8-1.9 14.4-5.3l-6.6-5.1c-1.8 1.2-4.2 2-7.8 2-6 0-11-4-12.8-9.5l-6.8 5.3C7.9 40.9 15.3 46 24 46z"/><path fill="#FBBC05" d="M11.2 28.1c-.5-1.4-.7-2.8-.7-4.1s.3-2.8.7-4.1l-6.8-5.3C3 17.4 2 20.6 2 24s1 6.6 2.4 9.4l6.8-5.3z"/><path fill="#EA4335" d="M24 10.5c3.3 0 5.6 1.4 6.9 2.6l5.8-5.7C33.1 4.1 28.9 2 24 2 15.3 2 7.9 7.1 4.4 14.6l6.8 5.3C13 14.5 18 10.5 24 10.5z"/></svg>
           Continuar con Google
@@ -30527,6 +30528,7 @@ export default function App() {
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
   const [bootSlow,setBootSlow]=useState(false)   // arranque tarda >10s (sesión o rol sin resolver) → ofrecer Recargar, nunca dejar al usuario atrapado
+  const [accessDenied,setAccessDenied]=useState(false)   // autenticó pero no está invitado (sin fila en miembros ni user_roles) → cerrar sesión + avisar, no auto-crear
   const [user,setUser]=useState(null)
   // Etapa 2 multi-tenant: al resolver la sesión, cargar la identidad del estudio del usuario desde la tabla `estudios` (la RLS la filtra a la suya) → BRAND desde la DB, con la constante de fallback. Para LEA los valores son idénticos (cero cambio visible).
   useEffect(()=>{ if(DEMO || !user?.email) return; let alive=true
@@ -30711,12 +30713,12 @@ export default function App() {
       if(data.role==='limited') setTab('tasks')
       return data
     }
-    // Sin fila: nuevo miembro → lo damos de alta como limited (mínimo privilegio). Si el insert falla, igual asignamos el rol en memoria.
-    try{ await supabase.from('user_roles').insert({email,role:'limited',name:email.split('@')[0]}) }catch(_){}
-    setActualRole('limited')
-    setUserRole('limited')
-    setTab('tasks')
-    return {role:'limited',name:email.split('@')[0]}
+    // Sin fila en `miembros` NI en `user_roles` (ambas queries OK): DESCONOCIDO → denegar.
+    // Ya NO auto-creamos limited: con el gate `hd` abierto (E4) sería un hoyo. Con el gate puesto, ningún desconocido llega
+    // hasta acá, así que hoy es inerte. LEA siempre tiene fila → nunca cae aquí.
+    setAccessDenied(true)
+    try{ await signOut() }catch(_){}
+    return null
   }
 
   useEffect(()=>{
@@ -30745,7 +30747,7 @@ export default function App() {
 
   // Reintento de rol: si hay sesión pero el rol no resolvió (falla de red/RLS en loadUserRole), reintenta hasta lograrlo.
   // Evita que el usuario quede con userRole=null (área de contenido en blanco / "pantalla negra") esperando un refresh manual.
-  useEffect(()=>{ if(DEMO||!session||userRole) return; let alive=true, tries=0, timer=null
+  useEffect(()=>{ if(DEMO||!session||userRole||accessDenied) return; let alive=true, tries=0, timer=null
     // BUCLE de reintento (antes era de UN solo disparo: si ese reintento fallaba, userRole quedaba null para siempre y la
     // pantalla de carga se quedaba PEGADA hasta recargar a mano). Ahora reintenta con backoff hasta resolver el rol.
     const attempt=async()=>{ if(!alive) return
@@ -30755,14 +30757,14 @@ export default function App() {
       tries++; timer=setTimeout(attempt, Math.min(1500*Math.pow(1.5,tries), 8000)) }
     timer=setTimeout(attempt,1200)
     return ()=>{ alive=false; if(timer) clearTimeout(timer) }
-  },[session,userRole])
+  },[session,userRole,accessDenied])
 
   // Red de seguridad del arranque: si a los 10s seguimos verificando sesión o resolviendo rol, marcamos bootSlow → el loader
   // muestra un botón "Recargar" (por si un reintento externo no basta). Se apaga solo cuando la app ya está lista.
-  useEffect(()=>{ const cargando = !DEMO && (loadingAuth || (session && !userRole))
+  useEffect(()=>{ const cargando = !DEMO && !accessDenied && (loadingAuth || (session && !userRole))
     if(!cargando){ setBootSlow(false); return }
     const t=setTimeout(()=>setBootSlow(true),10000); return ()=>clearTimeout(t)
-  },[loadingAuth,session,userRole])
+  },[loadingAuth,session,userRole,accessDenied])
 
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
@@ -32350,7 +32352,7 @@ export default function App() {
       </div>}
     </div>)
   if(loadingAuth) return bootScreen
-  if(!session) return <LoginScreen loading={loadingAuth}/>
+  if(!session) return <LoginScreen loading={loadingAuth} denied={accessDenied} onRetry={()=>setAccessDenied(false)}/>
   // Sesión OK pero el rol aún no resuelve (o falló y está reintentando): mismo loader, NUNCA el área de contenido en blanco.
   if(!userRole) return bootScreen
 
