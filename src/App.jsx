@@ -945,7 +945,7 @@ function LoginScreen({loading, denied, onRetry}) {
   // Colores propios de FirmDesk (fuera de la paleta C del tenant, a propósito). El ingreso sigue siendo Google corporativo, sin cambios.
   const sm = typeof window!=='undefined' && window.innerWidth < 600
   const INK='#101418', GRN='#12A150', GREY='#5B6570', MONO="'Space Mono',ui-monospace,SFMono-Regular,Menlo,monospace"
-  const [mlEmail,setMlEmail]=useState(''); const [mlSent,setMlSent]=useState(false); const [mlBusy,setMlBusy]=useState(false); const [mlErr,setMlErr]=useState('')
+  const [mlEmail,setMlEmail]=useState(''); const [mlSent,setMlSent]=useState(false); const [mlBusy,setMlBusy]=useState(false); const [mlErr,setMlErr]=useState(''); const [mlOpen,setMlOpen]=useState(false)
   const enviarLink=async()=>{ const em=mlEmail.trim().toLowerCase()
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ setMlErr('Ingresa un correo válido'); return }
     setMlBusy(true); setMlErr(''); onRetry&&onRetry()
@@ -968,17 +968,21 @@ function LoginScreen({loading, denied, onRetry}) {
           Continuar con Google
         </>}
       </button>
-      <div style={{display:'flex',alignItems:'center',gap:10,margin:'22px 0 14px',width:sm?260:280,color:'#95A0A2',fontSize:11,fontFamily:MONO}}><span style={{flex:1,height:1,background:'#E1E5E4'}}/>o con tu correo<span style={{flex:1,height:1,background:'#E1E5E4'}}/></div>
-      {mlSent
-        ? <div style={{maxWidth:300,textAlign:'center',fontSize:13,color:GRN,lineHeight:1.5}}>Te enviamos un enlace de acceso a <b style={{color:INK}}>{mlEmail.trim()}</b>. Ábrelo desde este dispositivo para entrar.</div>
-        : <div style={{display:'flex',flexDirection:'column',gap:8,width:sm?260:280}}>
-            <input type="email" value={mlEmail} onChange={e=>{setMlEmail(e.target.value); if(mlErr)setMlErr('')}} onKeyDown={e=>{if(e.key==='Enter')enviarLink()}} placeholder="nombre@tuestudio.cl" autoComplete="email" style={{border:'1px solid #DADFDE',borderRadius:10,padding:'12px 14px',fontSize:14,color:INK,outline:'none',boxSizing:'border-box'}}/>
-            <button onClick={enviarLink} disabled={mlBusy} style={{background:INK,color:'#fff',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:600,cursor:mlBusy?'default':'pointer'}}>{mlBusy?'Enviando…':'Enviar enlace de acceso'}</button>
-            {mlErr&&<div style={{fontSize:12,color:'#C0362C',textAlign:'center'}}>{mlErr}</div>}
-          </div>}
-      <button onClick={()=>{ try{ window.location.href='/?demo=1' }catch(_){}}} title="Ver demo" aria-label="Ver demo" style={{marginTop:26,display:'inline-flex',alignItems:'center',justifyContent:'center',background:'none',border:'none',cursor:'pointer',padding:10}}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={GRN} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      </button>
+      {/* Acciones discretas al pie: entrar con correo (magic-link) y ver demo. Ambos íconos sobrios; el correo solo despliega su campo al tocar. */}
+      <div style={{marginTop:30,display:'flex',alignItems:'center',gap:24}}>
+        <button onClick={()=>{ setMlSent(false); if(mlErr)setMlErr(''); onRetry&&onRetry(); setMlOpen(o=>!o) }} title="Entrar con tu correo" aria-label="Entrar con tu correo" style={{background:'none',border:'none',cursor:'pointer',padding:8,lineHeight:0}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={mlOpen?GRN:'#AEB6B4'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7.5 8.5 6 8.5-6"/></svg>
+        </button>
+        <button onClick={()=>{ try{ window.location.href='/?demo=1' }catch(_){}}} title="Ver demo" aria-label="Ver demo" style={{background:'none',border:'none',cursor:'pointer',padding:8,lineHeight:0}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#AEB6B4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+        </button>
+      </div>
+      {mlOpen && !mlSent && <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:8,width:sm?250:270}}>
+        <input type="email" autoFocus value={mlEmail} onChange={e=>{setMlEmail(e.target.value); if(mlErr)setMlErr('')}} onKeyDown={e=>{if(e.key==='Enter')enviarLink()}} placeholder="nombre@tuestudio.cl" autoComplete="email" style={{border:'1px solid #DADFDE',borderRadius:10,padding:'11px 13px',fontSize:14,color:INK,outline:'none',boxSizing:'border-box',textAlign:'center'}}/>
+        <button onClick={enviarLink} disabled={mlBusy} style={{background:INK,color:'#fff',border:'none',borderRadius:10,padding:'11px',fontSize:13.5,fontWeight:600,cursor:mlBusy?'default':'pointer'}}>{mlBusy?'Enviando…':'Enviar enlace'}</button>
+        {mlErr&&<div style={{fontSize:12,color:'#C0362C',textAlign:'center'}}>{mlErr}</div>}
+      </div>}
+      {mlSent && <div style={{marginTop:16,maxWidth:280,textAlign:'center',fontSize:13,color:GRN,lineHeight:1.5}}>Te enviamos un enlace a <b style={{color:INK}}>{mlEmail.trim()}</b>. Ábrelo desde este dispositivo.</div>}
     </div>
   )
 }
