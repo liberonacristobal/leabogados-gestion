@@ -459,7 +459,7 @@ async function fetchUFFechas(isos){
 // (no se salta una cuota) → la Programada anterior ya se emitió. Enriquece con anticipos/banco/total y
 // clasifica confianza (alta = además cubierta por anticipo/banco/total · media = solo la secuencia).
 // Sin posterior → queda PENDIENTE (default seguro, nunca se marca). Reemplazará al matchProgEmitidas disperso.
-function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacion=[], ufMap={}){
+function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacion=[], ufMap={}, fantasmaNo=new Set()){
   const act=(billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && (b.billing_type||'')!=='reembolso')
   const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
   const bankFacturaIds=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='factura'&&c.factura_id).map(c=>String(c.factura_id)))
@@ -481,6 +481,7 @@ function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacio
     let acum=0
     progs.forEach(p=>{
       const monto=montoFactura(p)||p.amount||0; acum+=monto
+      if(fantasmaNo.has(String(p.id))) return   // el usuario dijo "es pendiente, no fantasma" → aprendido, nunca re-marcar
       const posterior=emitidas.find(e=>String(e.due||'')>String(p.due||''))
       if(posterior){
         const cubreTotal=settled>0 && settled+1>=acum
@@ -8023,7 +8024,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma}){
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const [fixing,setFixing]=useState(null)   // id de la factura cuyo vencimiento se está corrigiendo
   const [ctBusy,setCtBusy]=useState(null)   // sale_id de la cuota↔tramo que se está resolviendo
@@ -8085,7 +8086,12 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   // Cuotas fantasma: Programadas ya SALDADAS (emitidas) que siguen figurando por facturar — motor de conciliación (read-only, Fase 1).
   const [ufMapFechas,setUfMapFechas]=useState({})   // UF por fecha (mindicador) para el calce por monto de la señal 8
   useEffect(()=>{ if(DEMO) return; const ds=[]; (billing||[]).forEach(b=>{ if(b.issued_at)ds.push(b.issued_at); if(b.due)ds.push(b.due) }); if(!ds.length) return; let alive=true; fetchUFFechas(ds).then(m=>{ if(alive) setUfMapFechas(m||{}) }).catch(()=>{}); return ()=>{alive=false} },[billing])
-  const cuotasFantasma=useMemo(()=>conciliarVentasSaldadas(billing,sales,anticipos,conciliacion,ufMapFechas),[billing,sales,anticipos,conciliacion,ufMapFechas])
+  const [fantasmaNo,setFantasmaNo]=useState(()=>new Set())   // programadas marcadas "es pendiente, no fantasma" (aprendido)
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key').eq('kind','fantasma_no').then(({data})=>{ if(data) setFantasmaNo(new Set(data.map(r=>String(r.key)))) },()=>{}) },[])
+  const [cfRetiradas,setCfRetiradas]=useState(()=>new Set())   // retiradas en esta sesión (para ocultarlas al toque)
+  const [cfBusy,setCfBusy]=useState(false)
+  const cuotasFantasma=useMemo(()=>conciliarVentasSaldadas(billing,sales,anticipos,conciliacion,ufMapFechas,fantasmaNo).filter(x=>!cfRetiradas.has(String(x.prog.id))),[billing,sales,anticipos,conciliacion,ufMapFechas,fantasmaNo,cfRetiradas])
+  const cfAlta=cuotasFantasma.filter(x=>x.conf==='alta')
   const cfTotal=cuotasFantasma.reduce((a,x)=>a+(x.monto||0),0)
   const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
@@ -8134,13 +8140,19 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       </div>)}
     </div>}
     {cuotasFantasma.length>0&&<div style={{marginTop:14}}>{sh('Cuotas ya emitidas que figuran por facturar',C.overdueText,cuotasFantasma.length)}
-      <div style={{fontSize:10,color:C.done,marginBottom:2}}>motor de conciliación · cruza factura + anticipo + banco + secuencia · {fmt(cfTotal)} en total · read-only (Fase 1, aún no se retira nada)</div>
-      {cuotasFantasma.slice(0,40).map(({prog,sale,monto,razones,conf})=><div key={prog.id} onClick={()=>onOpenFactura&&onOpenFactura(prog)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:onOpenFactura?'pointer':'default'}}>
+      <div style={{fontSize:10,color:C.done,marginBottom:6}}>motor de conciliación · cruza factura + anticipo + banco + UF de la fecha · {fmt(cfTotal)} en total</div>
+      {onRetirarFantasmas&&cfAlta.length>0&&<button disabled={cfBusy} onClick={async()=>{ if(!(await appConfirm(`Voy a retirar ${cfAlta.length} cuota(s) programada(s) que ya están emitidas (alta confianza), por ${fmt(cfAlta.reduce((a,x)=>a+(x.monto||0),0))}. Cada una queda enlazada a su factura y es REVERSIBLE (undo). ¿Confirmas?`))) return; setCfBusy(true); try{ await onRetirarFantasmas(cfAlta.map(x=>({progId:x.prog.id, realId:x.posterior?.id||null, monto:x.monto}))); setCfRetiradas(s=>new Set([...s,...cfAlta.map(x=>String(x.prog.id))])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setCfBusy(false) }} style={{width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:cfBusy?'default':'pointer',opacity:cfBusy?.6:1,marginBottom:4}}>{cfBusy?'Retirando…':`Retirar las ${cfAlta.length} de alta confianza · ${fmt(cfAlta.reduce((a,x)=>a+(x.monto||0),0))}`}</button>}
+      {cuotasFantasma.slice(0,40).map(({prog,sale,monto,razones,conf,posterior})=><div key={prog.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
-          <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(prog.client_id)}} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(prog.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {prog.concept||sale?.title||'—'}</span></div>
+          <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(prog.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(prog.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {prog.concept||sale?.title||'—'}</span></div>
           <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(monto)}</span>
         </div>
         <div style={{fontSize:10.5,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:conf==='alta'?C.greenText:C.soonText}}>{conf==='alta'?'✓ alta confianza':'⚠ revisar'}</span> · {razones.join(' · ')}</div>
+        <div style={{display:'flex',gap:12,marginTop:5}}>
+          {onOpenFactura&&<span onClick={()=>onOpenFactura(prog)} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer'}}>Ver ficha ›</span>}
+          {onRetirarFantasmas&&<span onClick={async()=>{ if(!(await appConfirm(`Retirar esta cuota (ya emitida) por ${fmt(monto)}. Reversible. ¿Confirmas?`))) return; try{ await onRetirarFantasmas([{progId:prog.id, realId:posterior?.id||null, monto}]); setCfRetiradas(s=>new Set([...s,String(prog.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } }} style={{fontSize:11,fontWeight:600,color:C.greenText,cursor:'pointer'}}>Retirar</span>}
+          {onDismissFantasma&&<span onClick={async()=>{ try{ await onDismissFantasma(prog.id) }catch(_){}; setFantasmaNo(s=>new Set([...s,String(prog.id)])) }} style={{fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer'}}>No, es pendiente</span>}
+        </div>
       </div>)}
       {cuotasFantasma.length>40&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {cuotasFantasma.length-40} más…</div>}
     </div>}
@@ -32763,7 +32775,7 @@ export default function App() {
         }} onResolverGlosa={async(key,categoria)=>{ if(DEMO) return
           // deja la clave con UN solo valor canónico: borra las filas en conflicto e inserta la elegida. No toca gastos ya clasificados; corrige la sugerencia futura.
           try{ await supabase.from('learnings').delete().eq('kind','costo_oficina').eq('key',key); await supabase.from('learnings').insert({kind:'costo_oficina',key,value:categoria,updated_at:new Date().toISOString()}) }catch(_){}
-        }}/></Modal>}
+        }} onRetirarFantasmas={async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) }} onDismissFantasma={async(progId)=>{ if(DEMO) return; try{ await supabase.from('learnings').upsert({kind:'fantasma_no',key:String(progId),value:'1',updated_at:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){} }}/></Modal>}
         {modal?.type==='fusionarClientes'&&<Modal fullscreenOnMobile title={modal.pending?'Confirmar fusión':'Fusionar clientes'} maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={modal.pending||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
