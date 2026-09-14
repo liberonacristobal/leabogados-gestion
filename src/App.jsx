@@ -439,6 +439,47 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
       out.push({prog:p, real:best.x, razones:raz}) } })
   return out
 }
+
+// ── MOTOR DE CONCILIACIÓN (Fase 1, read-only) ────────────────────────────────────────────────────────
+// Detecta cuotas Programadas ya SALDADAS (fantasma: emitidas pero siguen figurando por facturar) cruzando,
+// por venta: facturas emitidas + anticipos consumidos + pago en el banco + secuencia + cobertura por total.
+// PURO — no muta nada. Señal base (segura): existe una emitida de vencimiento POSTERIOR en la misma venta
+// (no se salta una cuota) → la Programada anterior ya se emitió. Enriquece con anticipos/banco/total y
+// clasifica confianza (alta = además cubierta por anticipo/banco/total · media = solo la secuencia).
+// Sin posterior → queda PENDIENTE (default seguro, nunca se marca). Reemplazará al matchProgEmitidas disperso.
+function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacion=[]){
+  const act=(billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && (b.billing_type||'')!=='reembolso')
+  const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
+  const bankFacturaIds=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='factura'&&c.factura_id).map(c=>String(c.factura_id)))
+  const bySale={}; act.forEach(b=>{ if(b.sale_id) (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
+  const antBySale={}; (anticipos||[]).forEach(a=>{ if(a.estado==='consumido'&&a.sale_id) (antBySale[String(a.sale_id)]=antBySale[String(a.sale_id)]||[]).push(a) })
+  const out=[]
+  Object.entries(bySale).forEach(([sid,rows])=>{
+    const emitidas=rows.filter(b=>b.invoice_no && b.status!=='Programada')
+    const progs=rows.filter(b=>b.status==='Programada').sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
+    if(!progs.length || !emitidas.length) return
+    const emitIds=new Set(emitidas.map(e=>String(e.id)))
+    const antStandalone=(antBySale[sid]||[]).filter(a=>!a.billing_id || !emitIds.has(String(a.billing_id)))   // no doble-contar los consumidos EN una emitida ya sumada
+    const antTotal=antStandalone.reduce((s,a)=>s+(a.monto||0),0)
+    const emitTotal=emitidas.reduce((s,b)=>s+(montoFactura(b)||0),0)
+    const settled=emitTotal+antTotal
+    const bankPaid=emitidas.some(e=>bankFacturaIds.has(String(e.id)))
+    let acum=0
+    progs.forEach(p=>{
+      const monto=montoFactura(p)||p.amount||0; acum+=monto
+      const posterior=emitidas.find(e=>String(e.due||'')>String(p.due||''))
+      if(!posterior) return   // sin una emitida posterior → pendiente genuino (default seguro)
+      const cubreTotal=settled>0 && settled+1>=acum
+      const razones=[`Cuota posterior N°${folioN(posterior.invoice_no)||posterior.invoice_no} ya emitida`]
+      if(antTotal>0) razones.push(`${antStandalone.length} anticipo(s) consumido(s) · ${fmt(antTotal)}`)
+      if(bankPaid) razones.push('venta con pago en el banco')
+      if(cubreTotal) razones.push(`saldado ${fmt(settled)} ≥ acumulado ${fmt(acum)}`)
+      out.push({ prog:p, sale:saleById[sid]||null, monto, posterior, razones, conf:(cubreTotal||antTotal>0||bankPaid)?'alta':'media' })
+    })
+  })
+  return out.sort((a,b)=>(b.monto||0)-(a.monto||0))
+}
+
 // Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
 const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
 
@@ -911,7 +952,7 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
           {!fs&&<button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:22,cursor:'pointer',lineHeight:1,width:44,height:44,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-10}}>×</button>}
         </div>
       </div>}
-      <div style={{flex:flex?1:undefined,minHeight:flex?0:undefined,overflowY:flex?'auto':'visible',overflowX:fs?'hidden':undefined,padding:hideHeader?'0':(fs?(footer?'14px 16px':'14px 16px calc(env(safe-area-inset-bottom,0px) + 32px)'):'18px 20px'),maxWidth:(fs&&!hideHeader)?fsMaxWidth:'none',margin:(fs&&!hideHeader)?'0 auto':'0',width:(fs&&!hideHeader)?'auto':undefined,boxSizing:'border-box'}}>{children}</div>
+      <div style={{flex:flex?1:undefined,minHeight:flex?0:undefined,overflowY:flex?'auto':'visible',overflowX:fs?'hidden':undefined,padding:hideHeader?'0':(fs?(footer?'14px 16px':'14px 16px calc(env(safe-area-inset-bottom,0px) + 32px)'):'18px 20px'),maxWidth:(fs&&!hideHeader)?fsMaxWidth:'none',margin:(fs&&!hideHeader)?'0 auto':'0',width:(fs&&!hideHeader)?'100%':undefined,boxSizing:'border-box'}}>{children}</div>
       {footer&&<div style={{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:fs?'10px 16px calc(env(safe-area-inset-bottom,0px) + 14px)':'12px 16px',maxWidth:fs?fsMaxWidth:'none',margin:fs?'0 auto':'0',width:'100%',boxSizing:'border-box'}}>{footer}</div>}
     </div>
   </div>
@@ -8017,7 +8058,10 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     })
     return out
   },[anticipos,conciliacion])
-  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length
+  // Cuotas fantasma: Programadas ya SALDADAS (emitidas) que siguen figurando por facturar — motor de conciliación (read-only, Fase 1).
+  const cuotasFantasma=useMemo(()=>conciliarVentasSaldadas(billing,sales,anticipos,conciliacion),[billing,sales,anticipos,conciliacion])
+  const cfTotal=cuotasFantasma.reduce((a,x)=>a+(x.monto||0),0)
+  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -8062,6 +8106,17 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
           <button disabled={ctBusy===s.id} onClick={async()=>{ setCtDone(d=>new Set([...d,s.id])); try{ await onResolverCuotaTramo(s,'ignorar') }catch(_){}}} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>No es doble conteo</button>
         </div>}
       </div>)}
+    </div>}
+    {cuotasFantasma.length>0&&<div style={{marginTop:14}}>{sh('Cuotas ya emitidas que figuran por facturar',C.overdueText,cuotasFantasma.length)}
+      <div style={{fontSize:10,color:C.done,marginBottom:2}}>motor de conciliación · cruza factura + anticipo + banco + secuencia · {fmt(cfTotal)} en total · read-only (Fase 1, aún no se retira nada)</div>
+      {cuotasFantasma.slice(0,40).map(({prog,sale,monto,razones,conf})=><div key={prog.id} onClick={()=>onOpenFactura&&onOpenFactura(prog)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:onOpenFactura?'pointer':'default'}}>
+        <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
+          <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(prog.client_id)}} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(prog.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {prog.concept||sale?.title||'—'}</span></div>
+          <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(monto)}</span>
+        </div>
+        <div style={{fontSize:10.5,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:conf==='alta'?C.greenText:C.soonText}}>{conf==='alta'?'✓ alta confianza':'⚠ revisar'}</span> · {razones.join(' · ')}</div>
+      </div>)}
+      {cuotasFantasma.length>40&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {cuotasFantasma.length-40} más…</div>}
     </div>}
     {glosaConflict.filter(x=>!glDone.has(x.key)).length>0&&<div style={{marginTop:14}}>{sh('Glosa con dos categorías (Retiro/Sueldo)',C.overdueText,glosaConflict.filter(x=>!glDone.has(x.key)).length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>la misma glosa enseñó categorías distintas → la sugerencia sale no determinista · define cuál es</div>
