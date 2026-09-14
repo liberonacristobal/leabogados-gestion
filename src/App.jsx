@@ -440,6 +440,18 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
   return out
 }
 
+// UF por FECHA (serie histórica de mindicador, cache persistente) — para calzar montos con la UF del día de emisión.
+// Se baja por AÑO (1 llamada/año trae toda la serie diaria) y se guarda date→uf en localStorage.
+const _UF_FECHA_KEY='fd_uf_fecha'
+const ufFechaCache=()=>{ try{ return JSON.parse(localStorage.getItem(_UF_FECHA_KEY)||'{}') }catch(_){ return {} } }
+async function fetchUFFechas(isos){
+  let m=ufFechaCache(); const done=Array.isArray(m.__anios)?m.__anios:[]
+  const anios=[...new Set((isos||[]).map(d=>String(d||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)))]
+  for(const y of anios){ if(done.includes(y)) continue; try{ const r=await fetch(`https://mindicador.cl/api/uf/${y}`); const j=await r.json(); (j&&j.serie||[]).forEach(s=>{ const d=String(s.fecha||'').slice(0,10); if(d&&s.valor>0) m[d]=s.valor }); done.push(y) }catch(_){} }
+  m.__anios=done; try{ localStorage.setItem(_UF_FECHA_KEY,JSON.stringify(m)) }catch(_){}
+  return m
+}
+
 // ── MOTOR DE CONCILIACIÓN (Fase 1, read-only) ────────────────────────────────────────────────────────
 // Detecta cuotas Programadas ya SALDADAS (fantasma: emitidas pero siguen figurando por facturar) cruzando,
 // por venta: facturas emitidas + anticipos consumidos + pago en el banco + secuencia + cobertura por total.
@@ -447,7 +459,7 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
 // (no se salta una cuota) → la Programada anterior ya se emitió. Enriquece con anticipos/banco/total y
 // clasifica confianza (alta = además cubierta por anticipo/banco/total · media = solo la secuencia).
 // Sin posterior → queda PENDIENTE (default seguro, nunca se marca). Reemplazará al matchProgEmitidas disperso.
-function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacion=[]){
+function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacion=[], ufMap={}){
   const act=(billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && (b.billing_type||'')!=='reembolso')
   const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
   const bankFacturaIds=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='factura'&&c.factura_id).map(c=>String(c.factura_id)))
@@ -464,17 +476,29 @@ function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacio
     const emitTotal=emitidas.reduce((s,b)=>s+(montoFactura(b)||0),0)
     const settled=emitTotal+antTotal
     const bankPaid=emitidas.some(e=>bankFacturaIds.has(String(e.id)))
+    const sale=saleById[sid]||null
+    const esRecurrente=p=> (sale?.cobro_type==='mensual') || !!cuotaNMof(p.concept) || !!concPeriodoOf(p.concept)
     let acum=0
     progs.forEach(p=>{
       const monto=montoFactura(p)||p.amount||0; acum+=monto
       const posterior=emitidas.find(e=>String(e.due||'')>String(p.due||''))
-      if(!posterior) return   // sin una emitida posterior → pendiente genuino (default seguro)
-      const cubreTotal=settled>0 && settled+1>=acum
-      const razones=[`Cuota posterior N°${folioN(posterior.invoice_no)||posterior.invoice_no} ya emitida`]
-      if(antTotal>0) razones.push(`${antStandalone.length} anticipo(s) consumido(s) · ${fmt(antTotal)}`)
-      if(bankPaid) razones.push('venta con pago en el banco')
-      if(cubreTotal) razones.push(`saldado ${fmt(settled)} ≥ acumulado ${fmt(acum)}`)
-      out.push({ prog:p, sale:saleById[sid]||null, monto, posterior, razones, conf:(cubreTotal||antTotal>0||bankPaid)?'alta':'media' })
+      if(posterior){
+        const cubreTotal=settled>0 && settled+1>=acum
+        const razones=[`Cuota posterior N°${folioN(posterior.invoice_no)||posterior.invoice_no} ya emitida`]
+        if(antTotal>0) razones.push(`${antStandalone.length} anticipo(s) consumido(s) · ${fmt(antTotal)}`)
+        if(bankPaid) razones.push('venta con pago en el banco')
+        if(cubreTotal) razones.push(`saldado ${fmt(settled)} ≥ acumulado ${fmt(acum)}`)
+        out.push({ prog:p, sale, monto, posterior, razones, conf:(cubreTotal||antTotal>0||bankPaid)?'alta':'media', via:'secuencia' })
+        return
+      }
+      // Señal 8 — calce por MONTO con la UF de la fecha de emisión (solo NO recurrente y candidata ÚNICA → evita ligar el mes equivocado, caso Daniel Abragan)
+      const uP=ufMap[String(p.due||'').slice(0,10)]
+      if(esRecurrente(p) || !uP) return   // sin posterior y no aplica señal 8 → pendiente genuino (default seguro)
+      const pUF=monto/uP
+      const cand=emitidas.filter(e=>{ const uE=ufMap[String(e.issued_at||'').slice(0,10)]; if(!uE) return false; const eUF=(montoFactura(e)||0)/uE; return pUF>0 && Math.abs(eUF-pUF)/pUF < 0.01 })
+      if(cand.length!==1) return
+      const e=cand[0]
+      out.push({ prog:p, sale, monto, posterior:e, razones:[`Factura N°${folioN(e.invoice_no)||e.invoice_no} calza por monto (${pUF.toFixed(1)} UF · con la UF de la fecha de emisión)`], conf:'alta', via:'uf' })
     })
   })
   return out.sort((a,b)=>(b.monto||0)-(a.monto||0))
@@ -8059,7 +8083,9 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     return out
   },[anticipos,conciliacion])
   // Cuotas fantasma: Programadas ya SALDADAS (emitidas) que siguen figurando por facturar — motor de conciliación (read-only, Fase 1).
-  const cuotasFantasma=useMemo(()=>conciliarVentasSaldadas(billing,sales,anticipos,conciliacion),[billing,sales,anticipos,conciliacion])
+  const [ufMapFechas,setUfMapFechas]=useState({})   // UF por fecha (mindicador) para el calce por monto de la señal 8
+  useEffect(()=>{ if(DEMO) return; const ds=[]; (billing||[]).forEach(b=>{ if(b.issued_at)ds.push(b.issued_at); if(b.due)ds.push(b.due) }); if(!ds.length) return; let alive=true; fetchUFFechas(ds).then(m=>{ if(alive) setUfMapFechas(m||{}) }).catch(()=>{}); return ()=>{alive=false} },[billing])
+  const cuotasFantasma=useMemo(()=>conciliarVentasSaldadas(billing,sales,anticipos,conciliacion,ufMapFechas),[billing,sales,anticipos,conciliacion,ufMapFechas])
   const cfTotal=cuotasFantasma.reduce((a,x)=>a+(x.monto||0),0)
   const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
