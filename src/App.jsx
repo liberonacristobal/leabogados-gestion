@@ -403,7 +403,7 @@ const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.
 //    (b) por RUT/RS + monto ±5% + fecha ±60d (facturas traídas del SII con concepto genérico "Honorarios"). FIFO 1:1.
 const _MESMAP_G = {enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sept:9,sep:9,octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12}
 const cuotaNMof = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
-const concPeriodoOf = c => { const s=(c||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_MESMAP_G)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_MESMAP_G[k]).padStart(2,'0')}` } return null }
+const concPeriodoOf = c => { const s=(c||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); for(const k of Object.keys(_MESMAP_G)){ const mm=s.match(new RegExp('\\b'+k+'\\b\\.?\\s*(20\\d{2}|\\d{2})?')); if(mm){ let y=mm[1]||(ym&&ym[1]); if(!y) continue; if(String(y).length===2) y='20'+y; return `${y}-${String(_MESMAP_G[k]).padStart(2,'0')}` } } return null }
 function rutsDeFactura(b, clients=[], clientEntities=[]){ const nr=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase(); const s=new Set(); const add=r=>{const n=nr(r);if(n)s.add(n)}; add(b.receptor_rut); const e=clientEntities.find(x=>String(x.id)===String(b.entity_id)); if(e)add(e.rut); const c=clients.find(x=>String(x.id)===String(b.client_id)); if(c)add(c.rut); clientEntities.filter(x=>String(x.client_id)===String(b.client_id)).forEach(x=>add(x.rut)); return s }
 function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
   const noSet = opts.noSet||new Set()
@@ -452,54 +452,71 @@ async function fetchUFFechas(isos){
   return m
 }
 
-// ── MOTOR DE CONCILIACIÓN (Fase 1, read-only) ────────────────────────────────────────────────────────
-// Detecta cuotas Programadas ya SALDADAS (fantasma: emitidas pero siguen figurando por facturar) cruzando,
-// por venta: facturas emitidas + anticipos consumidos + pago en el banco + secuencia + cobertura por total.
-// PURO — no muta nada. Señal base (segura): existe una emitida de vencimiento POSTERIOR en la misma venta
-// (no se salta una cuota) → la Programada anterior ya se emitió. Enriquece con anticipos/banco/total y
-// clasifica confianza (alta = además cubierta por anticipo/banco/total · media = solo la secuencia).
-// Sin posterior → queda PENDIENTE (default seguro, nunca se marca). Reemplazará al matchProgEmitidas disperso.
+// ── MOTOR DE CONCILIACIÓN (cruce EXACTO, read-only) ─────────────────────────────────────────────────
+// Detecta cuotas Programadas ya SALDADAS (fantasma: ya emitidas pero siguen figurando por facturar).
+// PURO — no muta nada. Cada emitida cubre UNA sola programada (pool con consumo). Señales, en orden:
+//   1 · MISMO PERÍODO por glosa (exacto): si la cuota declara su mes ("Mensual Mayo", "mayo 26"), SOLO
+//       calza con una emitida del MISMO mes → nunca marca un mes que de verdad se saltó (Eugenia julio,
+//       BM septiembre). alta = automático.
+//   2 · MISMO MES DE VENCIMIENTO + monto ±3% (para glosas sin mes: "Cuota N/M", "Honorarios"): no se
+//       factura dos veces el mismo mes en una venta → el duplicado es fantasma (Luis C2, JPM ago/sep). alta.
+//   3 · COBERTURA por anticipo consolidado: una sola emitida (respaldada por anticipos) cuyo monto ≥ lo que
+//       queda sin calzar → el trato se facturó como una factura única (Agustín: 3 adelantos → 1 factura). alta.
+//   4 · CONTEO/FIFO (media, con COMPUERTA, NO auto): emitida genérica sobrante (sin mes, vencimiento ≥ el de
+//       la cuota) cubre la cuota más antigua sin calzar (Del Sante). En JPM las emitidas de meses ANTERIORES
+//       no califican (vencimiento < cuota) → no repite el falso positivo.
+// Sin señal → PENDIENTE (default seguro, nunca se marca): una cuota que declara su mes y no tiene emitida de
+// ese mes es un hueco real por emitir, no un fantasma. Reemplaza al "existe emitida posterior" (falso +).
 function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacion=[], ufMap={}, fantasmaNo=new Set()){
   const act=(billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && (b.billing_type||'')!=='reembolso')
   const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
   const bankFacturaIds=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='factura'&&c.factura_id).map(c=>String(c.factura_id)))
   const bySale={}; act.forEach(b=>{ if(b.sale_id) (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
-  const antBySale={}; (anticipos||[]).forEach(a=>{ if(a.estado==='consumido'&&a.sale_id) (antBySale[String(a.sale_id)]=antBySale[String(a.sale_id)]||[]).push(a) })
+  const dueM=b=>String(b.due||b.issued_at||'').slice(0,7)
+  const amtOf=b=>montoFactura(b)||b.amount||0
+  const close=(a,b)=>{ const x=amtOf(a),y=amtOf(b); if(!x||!y) return false; return Math.abs(x-y)/Math.max(x,y) < 0.03 }   // ±3% cubre la variación de UF entre programación y emisión
   const out=[]
   Object.entries(bySale).forEach(([sid,rows])=>{
+    const sale=saleById[sid]||null
     const emitidas=rows.filter(b=>b.invoice_no && b.status!=='Programada')
     const progs=rows.filter(b=>b.status==='Programada').sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
     if(!progs.length || !emitidas.length) return
     const emitIds=new Set(emitidas.map(e=>String(e.id)))
-    const antStandalone=(antBySale[sid]||[]).filter(a=>!a.billing_id || !emitIds.has(String(a.billing_id)))   // no doble-contar los consumidos EN una emitida ya sumada
-    const antTotal=antStandalone.reduce((s,a)=>s+(a.monto||0),0)
-    const emitTotal=emitidas.reduce((s,b)=>s+(montoFactura(b)||0),0)
-    const settled=emitTotal+antTotal
-    const bankPaid=emitidas.some(e=>bankFacturaIds.has(String(e.id)))
-    const sale=saleById[sid]||null
-    const esRecurrente=p=> (sale?.cobro_type==='mensual') || !!cuotaNMof(p.concept) || !!concPeriodoOf(p.concept)
-    let acum=0
+    const antIntoEmit=(anticipos||[]).filter(a=>a.estado==='consumido'&&String(a.sale_id||'')===sid&&a.billing_id&&emitIds.has(String(a.billing_id)))
+    const pool=emitidas.map(e=>({e, per:concPeriodoOf(e.concept), used:false}))
+    const take=pred=>{ const c=pool.find(x=>!x.used&&pred(x)); if(c){ c.used=true; return c.e } return null }
+    const matched=[]; const rest=[]
     progs.forEach(p=>{
-      const monto=montoFactura(p)||p.amount||0; acum+=monto
       if(fantasmaNo.has(String(p.id))) return   // el usuario dijo "es pendiente, no fantasma" → aprendido, nunca re-marcar
-      const posterior=emitidas.find(e=>String(e.due||'')>String(p.due||''))
-      if(posterior){
-        const cubreTotal=settled>0 && settled+1>=acum
-        const razones=[`Cuota posterior N°${folioN(posterior.invoice_no)||posterior.invoice_no} ya emitida`]
-        if(antTotal>0) razones.push(`${antStandalone.length} anticipo(s) consumido(s) · ${fmt(antTotal)}`)
-        if(bankPaid) razones.push('venta con pago en el banco')
-        if(cubreTotal) razones.push(`saldado ${fmt(settled)} ≥ acumulado ${fmt(acum)}`)
-        out.push({ prog:p, sale, monto, posterior, razones, conf:(cubreTotal||antTotal>0||bankPaid)?'alta':'media', via:'secuencia' })
-        return
-      }
-      // Señal 8 — calce por MONTO con la UF de la fecha de emisión (solo NO recurrente y candidata ÚNICA → evita ligar el mes equivocado, caso Daniel Abragan)
-      const uP=ufMap[String(p.due||'').slice(0,10)]
-      if(esRecurrente(p) || !uP) return   // sin posterior y no aplica señal 8 → pendiente genuino (default seguro)
-      const pUF=monto/uP
-      const cand=emitidas.filter(e=>{ const uE=ufMap[String(e.issued_at||'').slice(0,10)]; if(!uE) return false; const eUF=(montoFactura(e)||0)/uE; return pUF>0 && Math.abs(eUF-pUF)/pUF < 0.01 })
-      if(cand.length!==1) return
-      const e=cand[0]
-      out.push({ prog:p, sale, monto, posterior:e, razones:[`Factura N°${folioN(e.invoice_no)||e.invoice_no} calza por monto (${pUF.toFixed(1)} UF · con la UF de la fecha de emisión)`], conf:'alta', via:'uf' })
+      const pPer=concPeriodoOf(p.concept)
+      let hit=null, via=null
+      if(pPer){ hit=take(x=>x.per===pPer && close(x.e,p)); if(hit) via='periodo' }
+      else    { hit=take(x=>(x.per||dueM(x.e))===dueM(p) && close(x.e,p)); if(hit) via='vencimiento' }
+      if(hit) matched.push({prog:p, hit, via}); else rest.push({prog:p, pPer})
+    })
+    // 3 · cobertura por anticipo consolidado (una factura grande respaldada por adelantos cubre lo que resta)
+    if(rest.length && antIntoEmit.length){
+      const restSum=rest.reduce((s,r)=>s+(amtOf(r.prog)||0),0)
+      const big=pool.find(x=>!x.used && antIntoEmit.some(a=>String(a.billing_id)===String(x.e.id)) && amtOf(x.e) >= restSum*0.97)
+      if(big){ big.used=true; rest.forEach(r=>matched.push({prog:r.prog, hit:big.e, via:'cobertura'})); rest.length=0 }
+    }
+    // 4 · conteo/FIFO (media): emitida genérica sobrante con vencimiento ≥ el de la cuota más antigua sin calzar
+    const media=[]
+    rest.slice().sort((a,b)=>String(a.prog.due||'').localeCompare(String(b.prog.due||''))).forEach(r=>{
+      if(r.pPer) return   // declara mes y no calzó por período → hueco real, jamás por conteo
+      const c=pool.find(x=>!x.used && !x.per && dueM(x.e)>=dueM(r.prog) && close(x.e,r.prog))
+      if(c){ c.used=true; media.push({prog:r.prog, hit:c.e}) }
+    })
+    matched.forEach(({prog,hit,via})=>{
+      const razones=[]
+      if(via==='periodo') razones.push(`Ya emitida como N°${folioN(hit.invoice_no)||hit.invoice_no} — mismo período (${concPeriodoOf(hit.concept)})`)
+      else if(via==='vencimiento') razones.push(`Ya emitida como N°${folioN(hit.invoice_no)||hit.invoice_no} — mismo mes de vencimiento (${dueM(hit)})`)
+      else if(via==='cobertura') razones.push(`Trato facturado como N°${folioN(hit.invoice_no)||hit.invoice_no} con anticipos consolidados (${fmt(amtOf(hit))})`)
+      if(bankFacturaIds.has(String(hit.id))) razones.push('con pago conciliado en el banco')
+      out.push({ prog, sale, monto:amtOf(prog)||prog.amount||0, posterior:hit, razones, conf:'alta', via })
+    })
+    media.forEach(({prog,hit})=>{
+      out.push({ prog, sale, monto:amtOf(prog)||prog.amount||0, posterior:hit, razones:[`Posible: ${emitidas.length} emitida(s) del mismo trabajo cubren esta cuota por conteo (N°${folioN(hit.invoice_no)||hit.invoice_no}, mismo monto) — revisar`], conf:'media', via:'conteo' })
     })
   })
   return out.sort((a,b)=>(b.monto||0)-(a.monto||0))
@@ -8140,7 +8157,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       </div>)}
     </div>}
     {cuotasFantasma.length>0&&<div style={{marginTop:14}}>{sh('Cuotas ya emitidas que figuran por facturar',C.overdueText,cuotasFantasma.length)}
-      <div style={{fontSize:10,color:C.done,marginBottom:6}}>motor de conciliación · cruza factura + anticipo + banco + UF de la fecha · {fmt(cfTotal)} en total</div>
+      <div style={{fontSize:10,color:C.done,marginBottom:6}}>cruce exacto · mismo período o mes de vencimiento + monto, o cobertura por anticipo · {fmt(cfTotal)} en total</div>
       {onRetirarFantasmas&&cfAlta.length>0&&<button disabled={cfBusy} onClick={async()=>{ if(!(await appConfirm(`Voy a retirar ${cfAlta.length} cuota(s) programada(s) que ya están emitidas (alta confianza), por ${fmt(cfAlta.reduce((a,x)=>a+(x.monto||0),0))}. Cada una queda enlazada a su factura y es REVERSIBLE (undo). ¿Confirmas?`))) return; setCfBusy(true); try{ await onRetirarFantasmas(cfAlta.map(x=>({progId:x.prog.id, realId:x.posterior?.id||null, monto:x.monto}))); setCfRetiradas(s=>new Set([...s,...cfAlta.map(x=>String(x.prog.id))])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setCfBusy(false) }} style={{width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:cfBusy?'default':'pointer',opacity:cfBusy?.6:1,marginBottom:4}}>{cfBusy?'Retirando…':`Retirar las ${cfAlta.length} de alta confianza · ${fmt(cfAlta.reduce((a,x)=>a+(x.monto||0),0))}`}</button>}
       {cuotasFantasma.slice(0,40).map(({prog,sale,monto,razones,conf,posterior})=><div key={prog.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
