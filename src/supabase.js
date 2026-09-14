@@ -41,7 +41,8 @@ export const signInWithGoogle = () =>
   supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'select_account' },
+      // Sin `hd`: cualquier cuenta Google puede AUTENTICAR; el acceso lo decide la membresía (miembros) + deny-unknown, no el dominio del correo.
+      queryParams: { access_type: 'offline', prompt: 'select_account' },
       scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events',
       redirectTo: window.location.origin,
     },
