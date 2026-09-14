@@ -48,6 +48,14 @@ export const signInWithGoogle = () =>
     },
   })
 
+// Login por correo (magic-link / OTP): universal, sin Google. Para estudios que no usan Workspace de Google.
+// El acceso lo sigue decidiendo la membresía (miembros) + deny-unknown; esto solo AUTENTICA.
+export const signInWithMagicLink = (email) =>
+  supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin },
+  })
+
 // Conexión PERMANENTE de Drive: prompt:consent fuerza a Google a emitir un refresh_token,
 // que capturamos en onAuthChange y guardamos en drive_auth. Desde ahí la edge function `drive`
 // renueva el acceso sola, sin reconectar nunca.
