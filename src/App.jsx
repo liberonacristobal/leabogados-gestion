@@ -31169,6 +31169,12 @@ export default function App() {
       else if(ir==='cobros'||ir==='sinasignar') setTab('conciliacion')
     }catch(_){}
   },[user,userRole])
+  // Deep-link a la ficha de un cliente (correo "cuotas sin facturar"): ?cliente=<id> → abre la ficha en Ventas (cotejo).
+  // Espera a que carguen los clientes; recién ahí abre y limpia la URL (handleOpenClientFicha busca el cliente en `clients`).
+  useEffect(()=>{ try{ const cli=new URLSearchParams(window.location.search).get('cliente'); if(!cli||!clients.length) return
+    try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
+    handleOpenClientFicha(cli)
+  }catch(_){} },[clients,handleOpenClientFicha])
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
