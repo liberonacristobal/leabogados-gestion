@@ -576,6 +576,35 @@ function rolledDueMap(billing, refISO){
   return out
 }
 
+// ─── FIFO de cuotas: facturar/asociar SIEMPRE la más antigua, sin dejar huecos ───
+// huecoFIFO: la programada sin emitir de MENOR nº de cuota (o menor vencimiento) de una venta.
+// Fuente única para: la sugerencia del cotejo al asociar una huérfana, y el orden de emisión.
+function huecoFIFO(saleBills=[]){
+  const abiertas=(saleBills||[]).filter(b=> b && !b.deleted_at && b.status==='Programada' && !b.invoice_no && (b.billing_type||'')!=='reembolso')
+  if(!abiertas.length) return null
+  const key=b=>{ const cn=cuotaNMof(b.concept); return cn?cn.n:9999 }
+  return abiertas.slice().sort((a,b)=> (key(a)-key(b)) || String(a.due||'').localeCompare(String(b.due||'')))[0]
+}
+// cuotasOlvidadas: programadas SIN emitir que quedaron ATRÁS de una cuota ya emitida de la misma venta
+// (el caso "cobré la 2ª sin la 1ª" — señal casi segura de un salto). Secundario: sin nº, por mes de devengo
+// anterior a una emitida. Alimenta el aviso en el cotejo y el correo del día 6. PURO, read-only.
+function cuotasOlvidadas(saleBills=[]){
+  const bills=(saleBills||[]).filter(b=> b && !b.deleted_at && (b.billing_type||'')!=='reembolso' && b.status!=='Anulada')
+  const emit=bills.filter(b=> b.invoice_no)
+  if(!emit.length) return []
+  const cn=b=>{ const x=cuotaNMof(b.concept); return x?x.n:null }
+  const emitNs=emit.map(cn).filter(n=>n!=null)
+  const maxEmitN=emitNs.length?Math.max(...emitNs):-1
+  const maxEmitMonth=emit.map(b=>String(b.due||b.issued_at||'').slice(0,7)).filter(Boolean).sort().slice(-1)[0]||''
+  return bills.filter(b=>{
+    if(b.invoice_no || b.status!=='Programada') return false
+    const n=cn(b)
+    if(n!=null && maxEmitN>=0) return n<maxEmitN                 // hay una cuota POSTERIOR ya emitida → ésta quedó atrás
+    const m=String(b.due||'').slice(0,7)
+    return !!(maxEmitMonth && m && m<maxEmitMonth)               // sin nº: mes de devengo anterior a una emitida
+  })
+}
+
 // ─── Conciliación de facturas: motor de cruce + auto-generación de conocimiento ───
 // Normaliza texto (sin tildes/símbolos) y mide similitud por tokens (Jaccard) 0..1, para cruzar glosa↔proyecto.
 const _normTxt = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
@@ -18757,35 +18786,59 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
 // una huérfana a un hueco → reusa onReplaceProgramada (handleReplaceProgramada: soft-delete + replaced_by_id + undo).
 // NO toca los motores de conciliación. Desktop = dos columnas enfrentadas; móvil = par apilado.
 const _MES_AB = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, onOpenFactura, onAssociate}){
+function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=null, entities=[], nested=false, onOpenFactura, onAssociate}){
   const [pickFor,setPickFor] = useState(null)   // orphan.id en modo "elige cuota" (móvil / sin drag)
   const [hover,setHover] = useState(null)        // prog.id resaltada durante el arrastre
+  const [view,setView] = useState(()=>{ try{ return localStorage.getItem('cotejo_view')||'linea' }catch(_){ return 'linea' } })
+  const setViewP = v => { setView(v); try{ localStorage.setItem('cotejo_view',v) }catch(_){} }
+  const useTable = isDesktop && view==='tabla'
+
   const plan = planDeVenta(sale)
+  const hoy = new Date().toISOString().slice(0,10)
+  // Vencimiento EFECTIVO: una programada de un mes ya pasado rodó al mes en curso (fuente única rolledDueMap).
+  const rollMap = rolledDueMap(saleBills, hoy)
+  const effDue = b => rollMap.get(String(b.id)) || b.due || b.issued_at
+  const emit = b => !!b.invoice_no
+  // Orden FIFO: por nº de cuota (1→10); sin nº, por vencimiento efectivo. Arregla el 2,1,4,3 (empates de fecha).
+  const cnN = b => { const cn=cuotaNMof(b.concept); return cn?cn.n:9999 }
   const cuotas = (saleBills||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.billing_type!=='reembolso')
-    .slice().sort((a,b)=> String(a.due||a.issued_at||'').localeCompare(String(b.due||b.issued_at||'')))
+    .slice().sort((a,b)=> (cnN(a)-cnN(b)) || String(effDue(a)||'').localeCompare(String(effDue(b)||'')))
   const huecos = cuotas.filter(b=> !b.invoice_no)   // cuotas por emitir = destinos de asociación
+  const olvidadas = cuotasOlvidadas(saleBills)      // saltadas (una emitida posterior las dejó atrás)
+  const olvidadasSet = new Set(olvidadas.map(b=>String(b.id)))
   const mmm = d => { const s=String(d||''); return s.length>=7 ? `${_MES_AB[+s.slice(5,7)-1]} ${s.slice(2,4)}` : '' }
-  const etiqueta = b => { const cn=cuotaNMof(b.concept); if(cn) return `Cuota ${cn.n}/${cn.tot}`; const per=concPeriodoOf(b.concept); if(per) return mmm(per+'-01'); return mmm(b.due||b.issued_at)||'Cobro' }
+  const etiqueta = b => { const cn=cuotaNMof(b.concept); if(cn) return `Cuota ${cn.n}/${cn.tot}`; const per=concPeriodoOf(b.concept); if(per) return mmm(per+'-01'); return mmm(effDue(b))||'Cobro' }
   const estTxt = b => ({Pagado:'pagada',Pendiente:'pendiente',Vencido:'vencida',Anticipada:'anticipada'}[b.status]||'emitida')
   const estCol = b => ({Pagado:C.greenText,Pendiente:C.soonText,Vencido:C.overdueText,Anticipada:C.accent}[b.status]||C.greenText)
-  const emit = b => !!b.invoice_no
   const doAssoc = async (progId, orphanId) => { setPickFor(null); setHover(null); if(onAssociate) await onAssociate(progId, orphanId) }
   const onDrop = progId => e => { e.preventDefault(); const oid=e.dataTransfer.getData('text/plain'); if(oid) doAssoc(progId, oid) }
 
-  const planN = plan.length
-  const desc = planN ? `${planN} cuota${planN!==1?'s':''} · ${fmtUF((sale.amount_uf||0)*(sale.cobro_type==='mensual'?12:1))}` : `${cuotas.length} cobro${cuotas.length!==1?'s':''}`
-  const nEmit = cuotas.filter(emit).length, nHueco = huecos.length
+  // Razón social + RUT a quien se factura (un cliente puede tener varias RS: se ordenan por RS, no por cliente).
+  const nr = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
+  const entOf = b => { if(b.entity_id){ const e=entities.find(x=>String(x.id)===String(b.entity_id)); if(e) return e } const r=nr(b.receptor_rut); if(r){ const e=entities.find(x=>nr(x.rut)===r); if(e) return e } return null }
+  const rutOf = b => { const e=entOf(b); return (e&&e.rut)?String(e.rut).trim():String(b.receptor_rut||'').trim() }
+  const rsList = []; { const seen=new Set(); cuotas.forEach(b=>{ const e=entOf(b); const key=e?('e'+e.id):('r'+nr(b.receptor_rut)); if((e||b.receptor_rut)&&!seen.has(key)){ seen.add(key); rsList.push({name:e?e.name:(b.receptor_name||'Sin razón social'), rut:e?e.rut:b.receptor_rut}) } }) }
 
-  const celdaCuota = (b) => (
-    <div style={{background:emit(b)?'#fff':(C.soonBg||'#FFFBF0'),border:`1px solid ${emit(b)?C.border:(C.soon||'#EBD9AE')}`,borderRadius:10,padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}>
-      <span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{etiqueta(b)}</span>
-      <span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span>
-    </div>
-  )
+  const planN = plan.length
+  const nTot = planN || cuotas.length
+  const uf = (sale.amount_uf||0)*(sale.cobro_type==='mensual'?12:1)
+  const nEmit = cuotas.filter(emit).length, nHueco = huecos.length
+  const cobrado = cuotas.reduce((a,b)=>a+cobradoBill(b),0)
+  const porEmitir = huecos.reduce((a,b)=>a+(b.amount||0),0)
+
+  const dmy = iso => fmtFechaDMY(iso) || '—'
+  const rutTxt = b => { const r=rutOf(b); return r||'' }
+
+  // ── Celdas de la línea de tiempo ──
+  const celdaCuota = (b) => { const olv=olvidadasSet.has(String(b.id))
+    return (<div style={{background:emit(b)?'#fff':(olv?'#FCEBEB':(C.soonBg||'#FFFBF0')),border:`1px solid ${emit(b)?C.border:(olv?C.overdueText:(C.soon||'#EBD9AE'))}`,borderRadius:10,padding:'8px 10px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{etiqueta(b)}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span></div>
+      <div style={{fontSize:10.5,color:olv?C.overdueText:C.muted,marginTop:2}}>{emit(b)?`Vence ${dmy(b.due)}`:`Vence ${dmy(effDue(b))}`}{olv?' · sin facturar':''}</div>
+    </div>) }
   const celdaFactura = (b) => emit(b) ? (
-    <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${estCol(b)}`,borderRadius:10,padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',cursor:onOpenFactura?'pointer':'default'}}>
-      <span style={{fontSize:12.5,color:C.text}}>N°{folioN(b.invoice_no)||b.invoice_no} · <span style={{color:estCol(b)}}>{estTxt(b)}</span></span>
-      <span style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span>
+    <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${estCol(b)}`,borderRadius:10,padding:'8px 10px',cursor:onOpenFactura?'pointer':'default'}}>
+      <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{fontSize:12.5,color:C.accent,fontWeight:700}}>N° {folioN(b.invoice_no)||b.invoice_no}</span><span style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div>
+      <div style={{fontSize:10.5,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><span style={{color:estCol(b),fontWeight:600}}>{estTxt(b)}</span><span>Emitida {dmy(b.issued_at)}</span>{rutTxt(b)&&<span>· {rutTxt(b)}</span>}<span style={{color:C.azul3,marginLeft:'auto'}}>›</span></div>
     </div>
   ) : (
     <div onDragOver={e=>{e.preventDefault();setHover(b.id)}} onDragLeave={()=>setHover(h=>h===b.id?null:h)} onDrop={onDrop(b.id)}
@@ -18796,55 +18849,95 @@ function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, onOpenFactura, 
   )
 
   return (
-    <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9,background:'#fff'}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:9,flexWrap:'wrap'}}>
-        <div style={{minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{sale.title}</div><div style={{fontSize:11,color:C.muted}}>{desc}{planN&&cuotas.length!==planN?` · ${cuotas.length} filas`:''}</div></div>
-        <div style={{fontSize:11,color:C.muted}}><span style={{color:C.greenText,fontWeight:700}}>{nEmit}</span> emitida{nEmit!==1?'s':''} · <span style={{color:nHueco?C.soonText:C.muted,fontWeight:700}}>{nHueco}</span> por emitir</div>
+    <div style={{border:nested?'none':`1px solid ${C.border}`,borderRadius:nested?0:12,padding:nested?'6px 0 0':'12px 13px',marginBottom:nested?0:9,background:nested?'transparent':'#fff'}}>
+      {/* Encabezado: proyecto + cliente + razón social + RUT + métricas */}
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+        <div style={{minWidth:0}}>
+          {!nested&&<div style={{fontSize:14.5,fontWeight:700,color:C.text}}>{sale.title}</div>}
+          {client&&<div style={{fontSize:11.5,color:C.muted,marginTop:1}}>Cliente <b style={{color:C.text,fontWeight:600}}>{client.name}</b>{rsList.length?' · facturado a':''}</div>}
+          {rsList.length>0&&<div style={{display:'inline-flex',alignItems:'center',gap:6,background:C.azulBg||'#EAF0F3',color:C.accent,borderRadius:8,padding:'3px 9px',fontSize:12,fontWeight:600,marginTop:6}}>{rsDisplay?rsDisplay(rsList[0].name):rsList[0].name}{rsList[0].rut&&<span style={{color:C.muted,fontWeight:500}}>· {rsList[0].rut}</span>}{rsList.length>1&&<span style={{color:C.muted,fontWeight:500}}>+{rsList.length-1}</span>}</div>}
+        </div>
+        {isDesktop&&<div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden',flexShrink:0}}>
+          {[['linea','Línea'],['tabla','Tabla']].map(([v,l])=><button key={v} onClick={()=>setViewP(v)} style={{border:'none',background:view===v?C.accent:'#fff',color:view===v?'#fff':C.muted,fontSize:11.5,fontWeight:600,padding:'6px 13px',cursor:'pointer'}}>{l}</button>)}
+        </div>}
+      </div>
+      <div style={{display:'flex',gap:16,marginTop:10,flexWrap:'wrap'}}>
+        <div style={{fontSize:10.5,color:C.muted}}>Plan<div style={{fontSize:13,fontWeight:700,color:C.text}}>{nTot} cuota{nTot!==1?'s':''}{uf>0?` · ${fmtUF(uf)}`:''}</div></div>
+        <div style={{fontSize:10.5,color:C.muted}}>Cobrado<div style={{fontSize:13,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(cobrado)}</div></div>
+        <div style={{fontSize:10.5,color:C.muted}}>Facturado<div style={{fontSize:13,fontWeight:700,color:C.text}}>{nEmit} de {nTot}</div></div>
+        <div style={{fontSize:10.5,color:C.muted}}>Por emitir<div style={{fontSize:13,fontWeight:700,color:nHueco?C.soonText:C.muted,fontVariantNumeric:'tabular-nums'}}>{nHueco?fmtShort(porEmitir):'$0'}</div></div>
       </div>
 
-      {isDesktop ? (
+      {/* AVISO: cuota(s) que quedaron sin facturar (una cuota posterior las dejó atrás) */}
+      {olvidadas.length>0 && (()=>{ const o=olvidadas.slice().sort((a,b)=>cnN(a)-cnN(b))[0]
+        return (<div onClick={()=>onOpenFactura&&onOpenFactura(o)} style={{marginTop:11,display:'flex',alignItems:'center',gap:9,background:'#FCEBEB',border:`1px solid ${C.overdueText}`,borderRadius:10,padding:'9px 11px',cursor:onOpenFactura?'pointer':'default'}}>
+          <SIcon n='alert' s={16} c={C.overdueText}/>
+          <div style={{flex:1,minWidth:0,fontSize:12,color:'#A32D2D'}}><b style={{fontWeight:700}}>{olvidadas.length} cuota{olvidadas.length!==1?'s':''} sin facturar.</b> Se emitió una posterior y quedó atrás la {etiqueta(o)} (venció {dmy(o.due)}). {onOpenFactura?'Facturar ahora ›':''}</div>
+        </div>) })()}
+
+      <div style={{marginTop:11}}>
+      {useTable ? (
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+          <div style={{display:'grid',gridTemplateColumns:'26px 1.1fr 92px 1.1fr 96px 92px',gap:'0 12px',fontSize:9.5,fontWeight:700,letterSpacing:.3,color:C.muted,background:'#F7F9FA',padding:'8px 10px',textTransform:'uppercase'}}>
+            <span>#</span><span>Cuota / vence</span><span style={{textAlign:'right'}}>Programado</span><span>Factura</span><span>RUT</span><span style={{textAlign:'right'}}>Emitido</span>
+          </div>
+          {cuotas.map((b,i)=>{ const olv=olvidadasSet.has(String(b.id))
+            return (<div key={b.id} onClick={()=>emit(b)&&onOpenFactura&&onOpenFactura(b)} style={{display:'grid',gridTemplateColumns:'26px 1.1fr 92px 1.1fr 96px 92px',gap:'0 12px',alignItems:'center',padding:'9px 10px',borderTop:`1px solid ${C.border}`,background:emit(b)?'#fff':(olv?'#FEF4F4':'#FEFDF9'),cursor:emit(b)&&onOpenFactura?'pointer':'default',fontSize:12}}>
+              <span style={{color:C.muted}}>{cuotaNMof(b.concept)?.n||i+1}</span>
+              <span><span style={{fontWeight:600,color:C.text}}>{etiqueta(b)}</span><span style={{display:'block',fontSize:10.5,color:olv?C.overdueText:C.muted}}>{dmy(emit(b)?b.due:effDue(b))}{olv?' · sin facturar':''}</span></span>
+              <span style={{textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.text}}>{fmt(b.amount||0)}</span>
+              <span>{emit(b)?<><span style={{fontWeight:700,color:C.accent}}>N° {folioN(b.invoice_no)||b.invoice_no}</span> <span style={{color:estCol(b),fontSize:11}}>{estTxt(b)}</span><span style={{display:'block',fontSize:10,color:C.muted}}>Emitida {dmy(b.issued_at)}</span></>:<span style={{color:C.soonText,fontWeight:600}}>Por emitir</span>}</span>
+              <span style={{fontSize:11,color:C.muted}}>{rutTxt(b)||'—'}</span>
+              <span style={{textAlign:'right',fontVariantNumeric:'tabular-nums',color:emit(b)?C.text:C.muted,fontWeight:emit(b)?600:400}}>{emit(b)?fmt(montoFactura(b)||b.amount||0):'—'}</span>
+            </div>) })}
+        </div>
+      ) : isDesktop ? (
         <div style={{display:'grid',gridTemplateColumns:'1fr 24px 1fr',gap:'0 8px',alignItems:'center'}}>
           <div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,padding:'0 2px 4px'}}>PROGRAMADO</div><div/><div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,padding:'0 2px 4px'}}>EMITIDO</div>
           {cuotas.map(b=>(<Fragment key={b.id}>
-            <div style={{marginBottom:6}}>{celdaCuota(b)}</div>
-            <div style={{display:'flex',justifyContent:'center',marginBottom:6,color:emit(b)?C.greenText:(C.soon||'#C9A94A')}}>{emit(b)?<SIcon n='check' s={14} c={C.greenText}/>:<span style={{fontSize:13,color:C.soonText}}>·</span>}</div>
-            <div style={{marginBottom:6}}>{celdaFactura(b)}</div>
+            <div style={{marginBottom:8}}>{celdaCuota(b)}</div>
+            <div style={{display:'flex',justifyContent:'center',marginBottom:8,color:emit(b)?C.greenText:(C.soon||'#C9A94A')}}>{emit(b)?<SIcon n='check' s={14} c={C.greenText}/>:<span style={{fontSize:13,color:C.soonText}}>·</span>}</div>
+            <div style={{marginBottom:8}}>{celdaFactura(b)}</div>
           </Fragment>))}
         </div>
       ) : (
         <div style={{display:'flex',flexDirection:'column',gap:7}}>
-          {cuotas.map(b=>(<div key={b.id} style={{border:`1px solid ${emit(b)?C.border:(C.soon||'#EBD9AE')}`,borderRadius:11,overflow:'hidden'}}>
-            <div style={{padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,background:emit(b)?'#fff':(C.soonBg||'#FFFBF0')}}><span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{etiqueta(b)}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span></div>
+          {cuotas.map(b=>{ const olv=olvidadasSet.has(String(b.id))
+            return (<div key={b.id} style={{border:`1px solid ${emit(b)?C.border:(olv?C.overdueText:(C.soon||'#EBD9AE'))}`,borderRadius:11,overflow:'hidden'}}>
+            <div style={{padding:'8px 10px',background:emit(b)?'#fff':(olv?'#FCEBEB':(C.soonBg||'#FFFBF0'))}}>
+              <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{etiqueta(b)}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span></div>
+              <div style={{fontSize:10.5,color:olv?C.overdueText:C.muted,marginTop:2}}>Vence {dmy(emit(b)?b.due:effDue(b))}{olv?' · sin facturar':''}</div>
+            </div>
             {emit(b)
-              ? <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{padding:'8px 10px 8px 20px',display:'flex',alignItems:'center',gap:7,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:12,color:C.muted}}>↳</span><span style={{flex:1,fontSize:12,color:C.text}}>N°{folioN(b.invoice_no)||b.invoice_no} · <span style={{color:estCol(b)}}>{estTxt(b)}</span></span><span style={{fontSize:12,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div>
-              : <div style={{padding:'8px 10px 8px 20px',display:'flex',alignItems:'center',gap:7,borderTop:`1px dashed ${C.soon||'#EBD9AE'}`}}><span style={{fontSize:12,color:C.soonText}}>↳</span><span style={{flex:1,fontSize:12,color:C.soonText}}>por emitir · hueco</span></div>}
-          </div>))}
+              ? <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{padding:'8px 10px 8px 18px',borderTop:`1px solid ${C.border}`}}><div style={{display:'flex',alignItems:'center',gap:7}}><span style={{fontSize:12,color:C.muted}}>↳</span><span style={{flex:1,fontSize:12,color:C.accent,fontWeight:700}}>N° {folioN(b.invoice_no)||b.invoice_no}</span><span style={{fontSize:12,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div><div style={{fontSize:10.5,color:C.muted,marginTop:2,paddingLeft:19,display:'flex',gap:6,flexWrap:'wrap'}}><span style={{color:estCol(b),fontWeight:600}}>{estTxt(b)}</span><span>Emitida {dmy(b.issued_at)}</span>{rutTxt(b)&&<span>· {rutTxt(b)}</span>}</div></div>
+              : <div style={{padding:'8px 10px 8px 18px',display:'flex',alignItems:'center',gap:7,borderTop:`1px dashed ${C.soon||'#EBD9AE'}`}}><span style={{fontSize:12,color:C.soonText}}>↳</span><span style={{flex:1,fontSize:12,color:C.soonText}}>por emitir · hueco</span></div>}
+          </div>) })}
         </div>
       )}
+      </div>
       {planN>0 && cuotas.length<planN && <div style={{fontSize:10.5,color:C.muted,marginTop:6}}>El plan tiene {planN} cuotas; faltan {planN-cuotas.length} por generar.</div>}
 
-      {orphans.length>0 && (
-        <div style={{marginTop:11,borderTop:`1px solid ${C.border}`,paddingTop:9}}>
+      {orphans.length>0 && (()=>{ const fifo=huecoFIFO(saleBills)
+        return (<div style={{marginTop:11,borderTop:`1px solid ${C.border}`,paddingTop:9}}>
           <div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,marginBottom:6}}>MISMO RUT · SIN ASOCIAR · {orphans.length}</div>
-          {orphans.map(o=>{ const cand=huecos.find(h=>Math.abs((h.amount||0)-(montoFactura(o)||o.amount||0))/Math.max(1,h.amount||1)<0.03)
+          {orphans.map(o=>{ const sug = fifo || huecos.find(h=>Math.abs((h.amount||0)-(montoFactura(o)||o.amount||0))/Math.max(1,h.amount||1)<0.03)
             return (<div key={o.id} draggable={isDesktop&&huecos.length>0} onDragStart={e=>e.dataTransfer.setData('text/plain',o.id)}
               style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',marginBottom:6,background:'#fff',cursor:isDesktop&&huecos.length?'grab':'default'}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 {isDesktop&&huecos.length>0&&<span style={{color:C.muted,fontSize:14}}>⠿</span>}
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>N°{folioN(o.invoice_no)||o.invoice_no}<span style={{fontWeight:400,color:C.muted}}> · {mmm(o.issued_at||o.due)}</span></div>{cand&&<div style={{fontSize:10.5,color:C.accent}}>calza con {etiqueta(cand)} · mismo monto</div>}</div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>N° {folioN(o.invoice_no)||o.invoice_no}<span style={{fontWeight:400,color:C.muted}}> · emitida {dmy(o.issued_at||o.due)}</span></div>{sug&&<div style={{fontSize:10.5,color:C.accent}}>llena el hueco más antiguo · {etiqueta(sug)}</div>}</div>
                 <div style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(o)||o.amount||0)}</div>
-                {huecos.length>0&&!isDesktop&&<button onClick={()=>setPickFor(pickFor===o.id?null:o.id)} style={{fontSize:11.5,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:16,padding:'3px 10px',background:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Asociar →</button>}
+                {huecos.length>0&&!isDesktop&&<button onClick={()=>setPickFor(pickFor===o.id?null:o.id)} style={{fontSize:11.5,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:16,padding:'3px 10px',background:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Asociar</button>}
               </div>
               {pickFor===o.id && (
                 <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
                   <div style={{fontSize:10.5,color:C.muted}}>Asociar a la cuota:</div>
-                  {huecos.map(h=>(<button key={h.id} onClick={()=>doAssoc(h.id,o.id)} style={{textAlign:'left',border:`1px solid ${cand&&cand.id===h.id?C.accent:C.border}`,background:cand&&cand.id===h.id?(C.azulBg||'#EAF0F3'):'#fff',borderRadius:9,padding:'7px 10px',cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12.5,color:C.text}}>{etiqueta(h)}{cand&&cand.id===h.id?' · sugerida':''}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(h.amount||0)}</span></button>))}
+                  {huecos.map(h=>(<button key={h.id} onClick={()=>doAssoc(h.id,o.id)} style={{textAlign:'left',border:`1px solid ${sug&&sug.id===h.id?C.accent:C.border}`,background:sug&&sug.id===h.id?(C.azulBg||'#EAF0F3'):'#fff',borderRadius:9,padding:'7px 10px',cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12.5,color:C.text}}>{etiqueta(h)}{sug&&sug.id===h.id?' · más antigua':''}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(h.amount||0)}</span></button>))}
                 </div>
               )}
             </div>) })}
-          <div style={{fontSize:10,color:C.muted,marginTop:2}}>Facturas de este RUT sin venta. Asociar enlaza la factura a la cuota (reversible) sin tocar la conciliación.</div>
-        </div>
-      )}
+          <div style={{fontSize:10,color:C.muted,marginTop:2}}>Facturas de este RUT sin venta. Asociar enlaza la factura a la cuota más antigua (reversible) sin tocar la conciliación.</div>
+        </div>) })()}
     </div>
   )
 }
@@ -18863,6 +18956,16 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
 
   const clientSales = (sales||[]).filter(s=>String(s.client_id)===String(client.id))
   const saleTitle = id => clientSales.find(s=>String(s.id)===String(id))?.title || null
+  // Cotejo cuota↔factura anidado dentro de cada proyecto (huérfanas del mismo RUT + asociar FIFO reversible).
+  const [cjOpen,setCjOpen] = useState(()=>new Set())
+  const toggleCj = id => setCjOpen(p=>{ const n=new Set(p); n.has(String(id))?n.delete(String(id)):n.add(String(id)); return n })
+  const cotejoSinVenta = all.filter(b=> b.invoice_no && b.status!=='Anulada' && b.billing_type!=='reembolso' && !b.sale_id)
+  const cotejoOrphansFor = s => cotejoSinVenta.filter(b=> !s.entity_id || !b.entity_id || String(b.entity_id)===String(s.entity_id))
+  const cotejoAsociar = async (progId, orphanId) => {
+    const o=(billing||[]).find(b=>String(b.id)===String(orphanId)); const h=(billing||[]).find(b=>String(b.id)===String(progId)); if(!o||!h) return
+    if(!await appConfirm(`¿Asociar la factura N°${folioN(o.invoice_no)||o.invoice_no} (${fmt(montoFactura(o)||o.amount||0)}) a la cuota "${(cuotaNMof(h.concept)?`Cuota ${cuotaNMof(h.concept).n}/${cuotaNMof(h.concept).tot}`:'programada')}"? La cuota queda cubierta y la factura se enlaza a la venta. Reversible.`)) return
+    await onReplaceProgramada(h.id, o.id)
+  }
   const kpiDate = b => b.status==='Programada'?(b.due||b.issued_at):(b.status==='Pagado'?(b.paid_at||b.issued_at):(b.issued_at||b.due))
   const anioDe = b => (kpiDate(b)||'').slice(0,4)
   const aniosList = [...new Set(all.map(anioDe).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
@@ -18935,24 +19038,6 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined}}>
       {/* La foto (Vendido/Facturado/Cobrado/Por cobrar) vive en el embudo del Resumen — no se repite acá. Ventas = proyectos + facturas + anticipos. */}
 
-      {/* COTEJO de cobros: cuota programada ENFRENTADA a su factura emitida + huérfanas del mismo RUT (asociar = admin). */}
-      {(()=>{
-        const sinVenta = all.filter(b=> b.invoice_no && b.status!=='Anulada' && b.billing_type!=='reembolso' && !b.sale_id)
-        const ventasCotejo = clientSales.filter(s=> clientBilling.some(b=>!b.deleted_at && String(b.sale_id)===String(s.id)))
-        if(!ventasCotejo.length) return null
-        const orphansFor = s => sinVenta.filter(b=> !s.entity_id || !b.entity_id || String(b.entity_id)===String(s.entity_id))
-        const asociar = async (progId, orphanId) => {
-          const o=(billing||[]).find(b=>String(b.id)===String(orphanId)); const h=(billing||[]).find(b=>String(b.id)===String(progId)); if(!o||!h) return
-          if(!await appConfirm(`¿Asociar la factura N°${folioN(o.invoice_no)||o.invoice_no} (${fmt(montoFactura(o)||o.amount||0)}) a la cuota "${(cuotaNMof(h.concept)?`Cuota ${cuotaNMof(h.concept).n}/${cuotaNMof(h.concept).tot}`:'programada')}"? La cuota queda cubierta y la factura se enlaza a la venta. Reversible.`)) return
-          await onReplaceProgramada(h.id, o.id)
-        }
-        return (
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:'uppercase',marginBottom:8}}>Cotejo de cobros · cuota ↔ factura</div>
-            {ventasCotejo.map(s=> <CotejoVenta key={s.id} sale={s} saleBills={clientBilling.filter(b=>String(b.sale_id)===String(s.id))} orphans={onReplaceProgramada?orphansFor(s):[]} isDesktop={isDesktop} onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?asociar:undefined}/> )}
-          </div>
-        )
-      })()}
 
       {/* Proyectos (icono-sección colapsada): Vigentes + Terminados, con barra de cobro (facturado→cobrado) */}
       {(()=>{
@@ -18967,14 +19052,22 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           const uf=(s.amount_uf||0)*(s.cobro_type==='mensual'?12:1)
           const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'
           const pct=fac>0?Math.min(100,Math.round(cob/fac*100)):0
-          return (<div key={s.id} onClick={()=>onOpenSale&&onOpenSale(s)} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:7,cursor:onOpenSale?'pointer':'default'}}>
-            <div style={{display:'flex',alignItems:'center',gap:9}}>
-              <SIcon n={ai} s={19} c={C.muted}/>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}</div></div>
-              <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:8,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div><div style={{fontSize:15,fontWeight:800,color:pen>0?C.accent:C.greenText,lineHeight:1,marginTop:1}}>{pen>0?fmtShort(pen):'$0'}</div></div>
+          const hasBills=sb.length>0; const open=cjOpen.has(String(s.id)); const olvN=cuotasOlvidadas(sb).length
+          return (<div key={s.id} style={{background:'#fff',border:`0.5px solid ${olvN?C.overdueText:C.border}`,borderRadius:12,marginBottom:7,overflow:'hidden'}}>
+            <div onClick={()=> hasBills?toggleCj(s.id):(onOpenSale&&onOpenSale(s))} style={{padding:'10px 12px',cursor:'pointer'}}>
+              <div style={{display:'flex',alignItems:'center',gap:9}}>
+                <SIcon n={ai} s={19} c={C.muted}/>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:olvN?C.overdueText:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}{olvN?` · ${olvN} sin facturar`:''}</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:8,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div><div style={{fontSize:15,fontWeight:800,color:pen>0?C.accent:C.greenText,lineHeight:1,marginTop:1}}>{pen>0?fmtShort(pen):'$0'}</div></div>
+                {hasBills&&<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>}
+              </div>
+              {fac>0&&<><div style={{height:5,background:C.border,borderRadius:4,marginTop:8,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:C.normal,borderRadius:4}}/></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:4}}><span>Facturado {fmtShort(fac)}</span><span>Cobrado {fmtShort(cob)}</span></div></>}
             </div>
-            {fac>0&&<><div style={{height:5,background:C.border,borderRadius:4,marginTop:8,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:C.normal,borderRadius:4}}/></div>
-            <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:4}}><span>Facturado {fmtShort(fac)}</span><span>Cobrado {fmtShort(cob)}</span></div></>}
+            {hasBills&&open&&<div style={{padding:'0 11px 11px'}}>
+              <CotejoVenta sale={s} saleBills={sb} orphans={onReplaceProgramada?cotejoOrphansFor(s):[]} isDesktop={isDesktop} client={client} entities={entities} nested onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?cotejoAsociar:undefined}/>
+              {onOpenSale&&<div style={{textAlign:'right',marginTop:2}}><span onClick={(e)=>{e.stopPropagation();onOpenSale(s)}} style={{fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>Abrir venta ›</span></div>}
+            </div>}
           </div>)
         }
         return (<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
