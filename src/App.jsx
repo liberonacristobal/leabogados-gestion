@@ -30926,10 +30926,15 @@ export default function App() {
     setRespaldoCache(m); return m
   },[conciliacion,anticipos])
 
-  // Motor de conciliación como FUENTE ÚNICA: IDs de programadas ya emitidas (fantasma, alta confianza = cruce exacto).
-  // Se excluyen de Por-emitir y de la Proyección para no contar dos veces la cuota y su factura gemela. Solo 'alta'
-  // (mismo período/mes+monto o cobertura por anticipo); las 'media' (conteo/FIFO) NO se ocultan — van a compuerta en Salud de datos.
-  const fantasmaAltaIds = useMemo(()=>{ try{ return new Set(conciliarVentasSaldadas(billing,sales,anticipos,conciliacion).filter(x=>x.conf==='alta').map(x=>String(x.prog.id))) }catch(_){ return new Set() } },[billing,sales,anticipos,conciliacion])
+  // Motor de conciliación como FUENTE ÚNICA. fantasmaNoSet = programadas que el usuario marcó "es pendiente, no fantasma"
+  // (learning fantasma_no) → el motor NUNCA las marca ni el barrido las retira (aprende, no repite).
+  const [fantasmaNoSet,setFantasmaNoSet]=useState(()=>new Set())
+  useEffect(()=>{ if(DEMO) return; let alive=true; supabase.from('learnings').select('key').eq('kind','fantasma_no').then(({data})=>{ if(alive&&data) setFantasmaNoSet(new Set(data.map(r=>String(r.key)))) },()=>{}); return ()=>{alive=false} },[])
+  // Resultados del motor (una sola corrida, reusada por la exclusión visual y el barrido diario).
+  const fantasmaResults = useMemo(()=>{ try{ return conciliarVentasSaldadas(billing,sales,anticipos,conciliacion,{},fantasmaNoSet) }catch(_){ return [] } },[billing,sales,anticipos,conciliacion,fantasmaNoSet])
+  // IDs de programadas ya emitidas (alta confianza = cruce exacto). Se excluyen de Por-emitir y de la Proyección para
+  // no contar dos veces la cuota y su factura gemela. Las 'media' (conteo/FIFO) NO se ocultan — compuerta en Salud de datos.
+  const fantasmaAltaIds = useMemo(()=> new Set(fantasmaResults.filter(x=>x.conf==='alta').map(x=>String(x.prog.id))), [fantasmaResults])
 
   useEffect(()=>{
     if(DEMO){
@@ -32068,6 +32073,38 @@ export default function App() {
       setUndoToast(u)
     }catch(e){ appAlert('Error: '+e.message) }
   },[billing])
+
+  // ── BARRIDO DIARIO: auto-retira las cuotas fantasma de ALTA confianza (cruce exacto) ──────────────────
+  // Autónomo pero seguro (patrón caja chica: la app concilia sola solo el calce único y exacto; lo ambiguo va a
+  // compuerta). Solo 'alta' (mismo período/mes+monto o cobertura por anticipo); las 'media' (conteo) jamás. Corre 1×
+  // por sesión y ≤1× al día (learnings config 'fantasma_barrido_last'), admin real, con datos cargados. Cada retiro es
+  // reversible (replaced_by_id + Undo) y auditable. Respeta fantasma_no. Se apaga con config 'fantasma_barrido' = 'off'.
+  const barridoFantasmaRan = useRef(false)
+  useEffect(()=>{
+    if(DEMO || barridoFantasmaRan.current) return
+    if(actualRole!=='admin') return
+    if(!(billing&&billing.length) || !(sales&&sales.length)) return   // esperar a que cargue la base
+    const alta = (fantasmaResults||[]).filter(x=>x.conf==='alta')
+    if(!alta.length) return
+    barridoFantasmaRan.current = true   // una vez por sesión (aunque billing cambie tras retirar)
+    ;(async()=>{
+      try{
+        const hoyISO = new Date().toISOString().slice(0,10)
+        const [{data:last},{data:off}] = await Promise.all([
+          supabase.from('learnings').select('value').eq('kind','config').eq('key','fantasma_barrido_last').maybeSingle(),
+          supabase.from('learnings').select('value').eq('kind','config').eq('key','fantasma_barrido').maybeSingle(),
+        ])
+        if(off?.value && String(off.value).trim()==='off') return
+        if(last?.value && String(last.value).slice(0,10)===hoyISO) return   // ya corrió hoy
+        const undos=[]
+        for(const x of alta){ try{ const u=await handleReplaceProgramada(x.prog.id, x.posterior?.id||null, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} }
+        await setLearningKV('config','fantasma_barrido_last', new Date().toISOString())
+        if(undos.length){ const tot=alta.reduce((a,x)=>a+(x.monto||0),0)
+          setUndoToast({msg:`Concilié ${undos.length} cuota${undos.length!==1?'s':''} ya emitida${undos.length!==1?'s':''} · ${fmt(tot)} · deshacer`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) }
+      }catch(_){}
+    })()
+  },[fantasmaResults,actualRole,billing.length,sales.length])   // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleDeleteBilling=useCallback(async(id,opts={})=>{
     try{
       const row=billing.find(x=>x.id===id)
