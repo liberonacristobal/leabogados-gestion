@@ -595,13 +595,17 @@ function cuotasOlvidadas(saleBills=[]){
   const cn=b=>{ const x=cuotaNMof(b.concept); return x?x.n:null }
   const emitNs=emit.map(cn).filter(n=>n!=null)
   const maxEmitN=emitNs.length?Math.max(...emitNs):-1
-  const maxEmitMonth=emit.map(b=>String(b.due||b.issued_at||'').slice(0,7)).filter(Boolean).sort().slice(-1)[0]||''
+  // Señal secundaria por el PERÍODO de la GLOSA (concPeriodoOf), no por la fecha de vencimiento del billing:
+  // la glosa distingue "julio" de "agosto" (Eugenia = olvido real), pero un concepto sin mes ("Cobro 8", "Honorarios")
+  // no entra → evita falsos positivos de numeraciones enredadas (Alejandro/Javier).
+  const emitPers=emit.map(b=>concPeriodoOf(b.concept)).filter(Boolean)
+  const maxEmitPer=emitPers.length?emitPers.slice().sort().slice(-1)[0]:''
   return bills.filter(b=>{
     if(b.invoice_no || b.status!=='Programada') return false
     const n=cn(b)
-    if(n!=null && maxEmitN>=0) return n<maxEmitN                 // hay una cuota POSTERIOR ya emitida → ésta quedó atrás
-    const m=String(b.due||'').slice(0,7)
-    return !!(maxEmitMonth && m && m<maxEmitMonth)               // sin nº: mes de devengo anterior a una emitida
+    if(n!=null && maxEmitN>=0) return n<maxEmitN                 // "Cuota N/M": una cuota POSTERIOR ya emitida → ésta quedó atrás
+    const p=concPeriodoOf(b.concept)
+    return !!(p && maxEmitPer && p<maxEmitPer)                   // por glosa: un mes POSTERIOR ya emitido (saltó éste)
   })
 }
 
