@@ -452,29 +452,48 @@ async function fetchUFFechas(isos){
   return m
 }
 
-// ── MOTOR DE CONCILIACIÓN (cruce EXACTO, read-only) ─────────────────────────────────────────────────
-// Detecta cuotas Programadas ya SALDADAS (fantasma: ya emitidas pero siguen figurando por facturar).
-// PURO — no muta nada. Cada emitida cubre UNA sola programada (pool con consumo). Señales, en orden:
-//   1 · MISMO PERÍODO por glosa (exacto): si la cuota declara su mes ("Mensual Mayo", "mayo 26"), SOLO
-//       calza con una emitida del MISMO mes → nunca marca un mes que de verdad se saltó (Eugenia julio,
-//       BM septiembre). alta = automático.
-//   2 · MISMO MES DE VENCIMIENTO + monto ±3% (para glosas sin mes: "Cuota N/M", "Honorarios"): no se
-//       factura dos veces el mismo mes en una venta → el duplicado es fantasma (Luis C2, JPM ago/sep). alta.
-//   3 · COBERTURA por anticipo consolidado: una sola emitida (respaldada por anticipos) cuyo monto ≥ lo que
-//       queda sin calzar → el trato se facturó como una factura única (Agustín: 3 adelantos → 1 factura). alta.
-//   4 · CONTEO/FIFO (media, con COMPUERTA, NO auto): emitida genérica sobrante (sin mes, vencimiento ≥ el de
-//       la cuota) cubre la cuota más antigua sin calzar (Del Sante). En JPM las emitidas de meses ANTERIORES
-//       no califican (vencimiento < cuota) → no repite el falso positivo.
-// Sin señal → PENDIENTE (default seguro, nunca se marca): una cuota que declara su mes y no tiene emitida de
-// ese mes es un hueco real por emitir, no un fantasma. Reemplaza al "existe emitida posterior" (falso +).
+// PLAN de cuotas de una venta desde cobro_config, en UF (verdad de terreno, no intuición). Devuelve
+// [{idx, montoUF, ym}] para planes de nº FIJO de cuotas (cuotas/personalizada/porcentaje); [] para mensual
+// (recurrente, se cruza por período), hora, o config incompleta. Es la fuente del guardarraíl de conteo.
+function planDeVenta(sale){
+  if(!sale) return []
+  const cfg=sale.cobro_config||{}; const totalUF=Number(sale.amount_uf)||0; const t=sale.cobro_type
+  const ymOf=iso=>String(anio4ISO(iso)||'').slice(0,7)
+  const ymAdd=(ini,i)=>{ const m=ymOf(ini).match(/^(\d{4})-(\d{2})$/); if(!m) return null; let y=+m[1], mm=(+m[2]-1)+i; y+=Math.floor(mm/12); mm=((mm%12)+12)%12; return `${y}-${String(mm+1).padStart(2,'0')}` }
+  const out=[]
+  if(t==='personalizada' && Array.isArray(cfg.cuotasCustom)){
+    cfg.cuotasCustom.forEach(c=>{ const uf=parseFloat(String(c.monto).replace(',','.'))||0; const ym=ymOf(c.fecha); if(uf>0 && /^\d{4}-\d{2}$/.test(ym)) out.push({idx:out.length+1, montoUF:uf, ym}) })
+  } else if(t==='cuotas' && cfg.cobroInicio && totalUF>0){
+    const n=Number(cfg.nCuotas)||0; if(n<=0) return []
+    if(cfg.cuotaDist){ const distUF=parseFloat(String(cfg.cuotaDistMonto).replace(',','.'))||0; const restUF=n>1?(totalUF-distUF)/(n-1):totalUF; const pos=cfg.cuotaDistPos==='ultima'?n:1
+      for(let i=1;i<=n;i++){ const ym=ymAdd(cfg.cobroInicio,i-1); if(ym) out.push({idx:i, montoUF: i===pos?distUF:restUF, ym}) } }
+    else { const per=totalUF/n; for(let i=1;i<=n;i++){ const ym=ymAdd(cfg.cobroInicio,i-1); if(ym) out.push({idx:i, montoUF:per, ym}) } }
+  } else if(t==='porcentaje' && Array.isArray(cfg.tramos) && totalUF>0){
+    cfg.tramos.forEach(tr=>{ const pct=Number(tr.pct)||0; const ym=ymOf(tr.fecha); if(pct>0 && /^\d{4}-\d{2}$/.test(ym)) out.push({idx:out.length+1, montoUF:totalUF*pct/100, ym}) })
+  }
+  return out
+}
+
+// ── MOTOR DE CONCILIACIÓN (determinista, read-only) ─────────────────────────────────────────────────
+// Detecta cuotas Programadas ya SALDADAS (fantasma). PURO — no muta nada. Auto-marca SOLO señales
+// INEQUÍVOCAS (análisis, no intuición) — cada emitida cubre UNA sola programada (pool con consumo):
+//   1 · MISMO PERÍODO por glosa: cuota y emitida declaran el MISMO mes ("Mensual Mayo" ↔ "mayo 26").
+//       Nunca marca un mes realmente saltado (Eugenia julio, BM septiembre). alta.
+//   2 · MISMA CUOTA N/M etiquetada: la programada "Cuota k/M" y una emitida "Cuota k/M" (mismo M) → el
+//       calendario re-generó una cuota ya emitida. alta.
+//   3 · COBERTURA por anticipo consolidado (Agustín: 3 adelantos → 1 factura). alta.
+// GUARDARRAÍL DEL PLAN (cobro_config): una venta NUNCA puede tener más fantasmas que (filas vivas − nº de
+// cuotas del plan). Si el conteo no lo permite, no se marca — esto solo habría evitado los 3 sub-facturados
+// (Luis c2, Del Sante oct, JPM sep) que causó la vieja señal de "mismo vencimiento" (ELIMINADA por frágil:
+// una emitida genérica "Honorarios" de una cuota vecina la engañaba). Lo que la deriva de fechas deja
+// ambiguo se queda PENDIENTE — jamás se esconde una cuota real; se retira a mano o con futura alineación.
 function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacion=[], ufMap={}, fantasmaNo=new Set()){
   const act=(billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && (b.billing_type||'')!=='reembolso')
   const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
   const bankFacturaIds=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='factura'&&c.factura_id).map(c=>String(c.factura_id)))
   const bySale={}; act.forEach(b=>{ if(b.sale_id) (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
-  const dueM=b=>String(b.due||b.issued_at||'').slice(0,7)
   const amtOf=b=>montoFactura(b)||b.amount||0
-  const close=(a,b)=>{ const x=amtOf(a),y=amtOf(b); if(!x||!y) return false; return Math.abs(x-y)/Math.max(x,y) < 0.03 }   // ±3% cubre la variación de UF entre programación y emisión
+  const close=(a,b)=>{ const x=amtOf(a),y=amtOf(b); if(!x||!y) return false; return Math.abs(x-y)/Math.max(x,y) < 0.03 }
   const out=[]
   Object.entries(bySale).forEach(([sid,rows])=>{
     const sale=saleById[sid]||null
@@ -483,40 +502,35 @@ function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacio
     if(!progs.length || !emitidas.length) return
     const emitIds=new Set(emitidas.map(e=>String(e.id)))
     const antIntoEmit=(anticipos||[]).filter(a=>a.estado==='consumido'&&String(a.sale_id||'')===sid&&a.billing_id&&emitIds.has(String(a.billing_id)))
-    const pool=emitidas.map(e=>({e, per:concPeriodoOf(e.concept), used:false}))
+    const pool=emitidas.map(e=>({e, per:concPeriodoOf(e.concept), cn:cuotaNMof(e.concept), used:false}))
     const take=pred=>{ const c=pool.find(x=>!x.used&&pred(x)); if(c){ c.used=true; return c.e } return null }
     const matched=[]; const rest=[]
     progs.forEach(p=>{
-      if(fantasmaNo.has(String(p.id))) return   // el usuario dijo "es pendiente, no fantasma" → aprendido, nunca re-marcar
-      const pPer=concPeriodoOf(p.concept)
+      if(fantasmaNo.has(String(p.id))) return   // "es pendiente, no fantasma" → aprendido, nunca re-marcar
+      const pPer=concPeriodoOf(p.concept), pCn=cuotaNMof(p.concept)
       let hit=null, via=null
-      if(pPer){ hit=take(x=>x.per===pPer && close(x.e,p)); if(hit) via='periodo' }
-      else    { hit=take(x=>(x.per||dueM(x.e))===dueM(p) && close(x.e,p)); if(hit) via='vencimiento' }
-      if(hit) matched.push({prog:p, hit, via}); else rest.push({prog:p, pPer})
+      if(pPer){ hit=take(x=>x.per===pPer && close(x.e,p)); if(hit) via='periodo' }               // 1 · mismo mes en la glosa
+      if(!hit && pCn){ hit=take(x=>x.cn && x.cn.n===pCn.n && x.cn.tot===pCn.tot); if(hit) via='cuota' }  // 2 · misma Cuota k/M
+      if(hit) matched.push({prog:p, hit, via}); else rest.push(p)
     })
-    // 3 · cobertura por anticipo consolidado (una factura grande respaldada por adelantos cubre lo que resta)
+    // 3 · cobertura por anticipo consolidado (una factura respaldada por adelantos cubre lo que resta)
     if(rest.length && antIntoEmit.length){
-      const restSum=rest.reduce((s,r)=>s+(amtOf(r.prog)||0),0)
+      const restSum=rest.reduce((s,r)=>s+(amtOf(r)||0),0)
       const big=pool.find(x=>!x.used && antIntoEmit.some(a=>String(a.billing_id)===String(x.e.id)) && amtOf(x.e) >= restSum*0.97)
-      if(big){ big.used=true; rest.forEach(r=>matched.push({prog:r.prog, hit:big.e, via:'cobertura'})); rest.length=0 }
+      if(big){ big.used=true; rest.forEach(r=>matched.push({prog:r, hit:big.e, via:'cobertura'})); rest.length=0 }
     }
-    // 4 · conteo/FIFO (media): emitida genérica sobrante con vencimiento ≥ el de la cuota más antigua sin calzar
-    const media=[]
-    rest.slice().sort((a,b)=>String(a.prog.due||'').localeCompare(String(b.prog.due||''))).forEach(r=>{
-      if(r.pPer) return   // declara mes y no calzó por período → hueco real, jamás por conteo
-      const c=pool.find(x=>!x.used && !x.per && dueM(x.e)>=dueM(r.prog) && close(x.e,r.prog))
-      if(c){ c.used=true; media.push({prog:r.prog, hit:c.e}) }
-    })
-    matched.forEach(({prog,hit,via})=>{
+    // GUARDARRAÍL DEL PLAN: nunca marcar más que el excedente real (filas vivas − nº de cuotas del plan).
+    const planN=planDeVenta(sale).length
+    let cap=matched.length
+    if(planN>0){ const excedente=Math.max(0,(emitidas.length+progs.length)-planN); cap=Math.min(cap,excedente) }
+    const final=matched.slice(0,cap)   // periodo/cuota/cobertura son inequívocos; el cap solo recorta si el plan no da
+    final.forEach(({prog,hit,via})=>{
       const razones=[]
       if(via==='periodo') razones.push(`Ya emitida como N°${folioN(hit.invoice_no)||hit.invoice_no} — mismo período (${concPeriodoOf(hit.concept)})`)
-      else if(via==='vencimiento') razones.push(`Ya emitida como N°${folioN(hit.invoice_no)||hit.invoice_no} — mismo mes de vencimiento (${dueM(hit)})`)
+      else if(via==='cuota') razones.push(`Ya emitida como N°${folioN(hit.invoice_no)||hit.invoice_no} — misma ${(cuotaNMof(prog.concept)||{}).n}/${(cuotaNMof(prog.concept)||{}).tot}`)
       else if(via==='cobertura') razones.push(`Trato facturado como N°${folioN(hit.invoice_no)||hit.invoice_no} con anticipos consolidados (${fmt(amtOf(hit))})`)
       if(bankFacturaIds.has(String(hit.id))) razones.push('con pago conciliado en el banco')
       out.push({ prog, sale, monto:amtOf(prog)||prog.amount||0, posterior:hit, razones, conf:'alta', via })
-    })
-    media.forEach(({prog,hit})=>{
-      out.push({ prog, sale, monto:amtOf(prog)||prog.amount||0, posterior:hit, razones:[`Posible: ${emitidas.length} emitida(s) del mismo trabajo cubren esta cuota por conteo (N°${folioN(hit.invoice_no)||hit.invoice_no}, mismo monto) — revisar`], conf:'media', via:'conteo' })
     })
   })
   return out.sort((a,b)=>(b.monto||0)-(a.monto||0))
