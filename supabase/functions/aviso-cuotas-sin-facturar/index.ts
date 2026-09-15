@@ -109,26 +109,40 @@ Deno.serve(async (req) => {
   const ON = String((cfg[0] && cfg[0].value) || "off").trim().toLowerCase() === "on";
 
   const asunto = olv.length === 1 ? "1 cuota quedo sin facturar" : `${olv.length} cuotas quedaron sin facturar`;
+
+  // ── Shell de correo ESTÁNDAR de la app (mismo maquetado que cartera-semanal: tarjeta + header navy + logo remoto + footer). ──
+  const NV = "#003C50", HAIR = "#EAEEF0", INK = "#1F2A30", MUT = "#66787F", FAINT = "#9DAEB4", RED = "#C0403E", AMB = "#9A6410", REDBG = "#FBECEB", AMBBG = "#FAF0DA";
+  const sec = (label: string, color: string) => `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${toAscii(label)}</span></div>`;
+  const gap = (h: number) => `<div style="height:${h}px;line-height:${h}px;font-size:1px;">&nbsp;</div>`;
   const secciones = Object.entries(byCli).map(([cli, items]) => {
-    const rows = items.slice().sort((a, b) => b.atraso - a.atraso).map((o) =>
-      `<tr><td style="padding:4px 12px 4px 0">${toAscii(o.cuota)}</td><td style="padding:4px 12px 4px 0;color:#537281">${toAscii(o.venta)}</td><td style="padding:4px 12px 4px 0;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums">${fmtCLP(o.monto)}</td><td style="padding:4px 0;white-space:nowrap;color:${o.atraso >= 2 ? "#A32D2D" : "#C77F18"}">${o.atraso} mes${o.atraso !== 1 ? "es" : ""}</td></tr>`).join("");
-    return `<div style="margin:16px 0 4px;font-weight:700;color:#003C50">${toAscii(cli)}</div><table style="border-collapse:collapse;font-size:13px;width:100%">${rows}</table>`;
+    const rows = items.slice().sort((a, b) => b.atraso - a.atraso).map((o, i) => {
+      const col = o.atraso >= 2 ? RED : AMB, bg = o.atraso >= 2 ? REDBG : AMBBG, bt = i === 0 ? "" : `border-top:1px solid ${HAIR};`;
+      return `<tr><td valign="top" style="padding:10px 0;${bt}"><div style="font-size:14.5px;font-weight:600;color:${INK};line-height:1.4;">${toAscii(o.cuota)}</div><div style="font-size:12px;color:${MUT};margin-top:3px;">${toAscii(o.venta)} &middot; ${fmtCLP(o.monto)}</div></td><td valign="top" align="right" style="padding:10px 0 10px 10px;${bt}white-space:nowrap;"><span style="display:inline-block;font-size:10.5px;font-weight:700;color:${col};background:${bg};border-radius:7px;padding:4px 10px;">${o.atraso} mes${o.atraso !== 1 ? "es" : ""}</span></td></tr>`;
+    }).join("");
+    return sec(cli, NV) + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>` + gap(22);
   }).join("");
-  const html = `<div style="font-family:-apple-system,Arial,sans-serif;max-width:580px;color:#3D3D3D;font-size:14px;line-height:1.55">
-    <p>Hola:</p>
-    <p>Hay <b>${olv.length}</b> cuota${olv.length !== 1 ? "s" : ""} programada${olv.length !== 1 ? "s" : ""} que quedaron <b>sin facturar</b> &mdash; se emitio una cuota posterior del mismo trabajo y estas quedaron atras. ${nCli} cliente${nCli !== 1 ? "s" : ""}, <b>${fmtCLP(total)}</b>:</p>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#ECEFF1;margin:0;padding:22px 12px;">
+<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
+  <div style="background:#003C50;padding:20px 28px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div>
+  <div style="padding:26px;">
+    <div style="font-size:18px;color:${INK};font-weight:700;letter-spacing:-.2px;">Cuotas sin facturar</div>
+    <div style="font-size:12.5px;color:${MUT};margin-top:6px;margin-bottom:24px;line-height:1.55;">Se emitio una cuota posterior del mismo trabajo y estas quedaron atras. <b style="color:${INK};font-weight:700;">${olv.length} cuota${olv.length !== 1 ? "s" : ""}</b> en ${nCli} cliente${nCli !== 1 ? "s" : ""} &middot; <b style="color:${INK};font-weight:700;">${fmtCLP(total)}</b>.</div>
     ${secciones}
-    <p style="margin-top:16px">Conviene revisarlas y emitirlas (o correr el calendario) para no dejar huecos en el cobro.</p>
-    <p style="color:#99ABB4;font-size:12px;margin-top:20px">${ESTUDIO} &middot; aviso automatico de facturacion</p>
-  </div>`;
+    <div style="margin-top:2px;"><a href="https://gestion.leabogados.cl" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:8px 15px;border-radius:8px;font-size:11.5px;font-weight:700;letter-spacing:.2px;">Abrir facturacion &rarr;</a></div>
+  </div>
+  <div style="padding:18px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl &middot; Liberona Escala Abogados</div></div>
+</div></body></html>`;
 
-  if (!ON) return json({ ok: true, olvidadas: olv.length, clientes: nCli, monto: total, enviado: false, motivo: "interruptor apagado (learnings config aviso_cuotas != on) - dry-run", debug: { billsN: bills.length, salesN: sales.length, clientsN: clients.length }, detalle: olv });
+  if (body.dryRun) return json({ ok: true, olvidadas: olv.length, clientes: nCli, monto: total, dryRun: true, subject: asunto, html });
+  if (!ON) return json({ ok: true, olvidadas: olv.length, clientes: nCli, monto: total, enviado: false, motivo: "interruptor apagado (learnings config aviso_cuotas != on) - dry-run", detalle: olv });
 
+  const to = body.testTo ? String(body.testTo) : SOCIOS.join(", ");
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-    await client.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: SOCIOS.join(", "), subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
+    await client.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to, subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
     await client.close();
-    return json({ ok: true, olvidadas: olv.length, clientes: nCli, monto: total, enviado: true });
+    return json({ ok: true, olvidadas: olv.length, clientes: nCli, monto: total, enviado: true, to });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
