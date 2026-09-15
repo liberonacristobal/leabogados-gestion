@@ -31202,7 +31202,9 @@ export default function App() {
     setSaving(true)
     try{
       const {cobros, cobroType, _actualizarPago, _regenProg, _activandoPropuesta, _propAmountUF, _propAmountCLP, _thenPrimerasTareas, repartoTerceros, ...saleData} = f
-      const entIdRaw = saleData.entity_id || null
+      let entIdRaw = saleData.entity_id || null
+      // RAÍZ "sin razón social": si no se eligió RS pero el cliente tiene UNA sola, la venta (y sus programadas) la heredan.
+      if(!entIdRaw && saleData.client_id){ const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(saleData.client_id)); if(ents.length===1) entIdRaw=ents[0].id }
       const esCLP = (f.moneda||'UF')==='CLP'
       // Ventas en CLP: congelar la UF del día (la histórica de la fecha de venta) para que su equivalente en UF NO fluctúe. Al editar, se preserva la ya guardada.
       const ufHoyCache = readUFCache()?.value || null
@@ -32533,12 +32535,19 @@ export default function App() {
     const existente=(billing||[]).find(b=>String(b.invoice_no)===String(row.folio)&&!b.deleted_at)   // A1: ya existe en billing → NO duplicar, conciliar con ella
     if(existente) return existente
     const cli = clienteId ? (clients.find(c=>String(c.id)===String(clienteId))||null) : resolverClienteSII(row.rut,row.receptor,clients,clientEntities)   // M4: resolvedor único (mismo que el modal)
+    // RAÍZ "sin razón social": resuelve la RS por el RUT del receptor (y la crea si no existe) → estampa entity_id en la
+    // factura para que la ficha agrupe por razón social, no por la persona. (Antes solo se ponía receptor_rut.)
+    let entId=null
+    if(cli && row.rut){ const nrx=nr(row.rut)
+      let ent=(clientEntities||[]).find(e=>String(e.client_id)===String(cli.id)&&nr(e.rut)===nrx)
+      if(!ent){ try{ const {data:q}=await supabase.from('client_entities').select('id,rut,name,client_id').eq('client_id',cli.id); ent=(q||[]).find(e=>nr(e.rut)===nrx) }catch(_){} }   // no la tiene el estado local → mira la base
+      if(!ent){ try{ const {data:ne}=await supabase.from('client_entities').insert({client_id:cli.id,rut:row.rut,name:row.receptor||null}).select().single(); if(ne) ent=ne }catch(_){} }   // no existe → crearla (sin pisar nombre bueno; RUT único)
+      entId=ent?.id||null }
     let created=null
     try{
       const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(row.fechaEmision)   // DD/MM/YYYY→ISO
       const montoReal = (row.doc?dteMontoTotal(row.doc):null) ?? row.monto   // el monto REAL es el del DTE emitido; row.monto es respaldo
-      created=await upsertBilling({ client_id:cli?.id||null, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:montoReal, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, dte_xml:row.doc||null, sii_synced_at:new Date().toISOString(), notes:null, ...(row.import_batch_id?{import_batch_id:row.import_batch_id}:{}), ...(row.sale_id?{sale_id:row.sale_id}:{}) })
-      if(cli && row.rut){ try{ await supabase.from('client_entities').upsert({client_id:cli.id,rut:row.rut,name:row.receptor||null},{onConflict:'rut',ignoreDuplicates:true}) }catch(_){}}   // M5: no pisar el nombre bueno de la RS
+      created=await upsertBilling({ client_id:cli?.id||null, entity_id:entId, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:montoReal, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, dte_xml:row.doc||null, sii_synced_at:new Date().toISOString(), notes:null, ...(row.import_batch_id?{import_batch_id:row.import_batch_id}:{}), ...(row.sale_id?{sale_id:row.sale_id}:{}) })
     }catch(e){ if(!/duplicate/i.test(e.message||'')) throw e }   // ya estaba: la buscamos abajo para conciliar con ella
     let nb=null; try{ nb=await getBilling(); if(nb)setBilling(nb) }catch(_){}
     const pool=nb||billing||[]
