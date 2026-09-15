@@ -3697,7 +3697,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
               <div onClick={()=>kToggle('estemes')} style={{background:C.greenBg,border:`1px solid ${op?'#9FD6C0':'#C4E4D8'}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minWidth:0,display:'flex',gap:9,alignItems:'flex-start'}}>
                 <span style={{width:26,height:26,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n='chart' s={14} c={C.greenText}/></span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:12}}>Este mes · {_MES_NOM[+_ymNow.slice(5,7)-1].slice(0,3)}</div>
+                  <div style={{fontSize:10,fontWeight:700,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:12}}>{(m=>m.charAt(0).toUpperCase()+m.slice(1))(_MES_NOM[+_ymNow.slice(5,7)-1])}</div>
                   <div style={{fontSize:19,fontWeight:800,color:C.accent,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{fmtShort(emFacTot)}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>emitido{emFacTot>0?<> · <b style={{color:C.greenText,fontWeight:700}}>{emPct}% pagado</b></>:''}</div>
                 </div>
