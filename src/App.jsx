@@ -3333,6 +3333,19 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
     const off=(alertOff&&typeof alertOff==='object')?alertOff:{}
     return raw.filter(a=> off[a.key]==null || (a.monto||0) > off[a.key]*1.2 )
   })()
+
+  // "Este mes": facturado (emitido este mes, monto DTE) vs pagado por clientes (pagos recibidos este mes). Fuente única montoFactura/cobradoBill.
+  const _ymNow = new Date().toISOString().slice(0,7)
+  const _MES_NOM = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const emFacList = (billing||[]).filter(b=> b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && b.status!=='Programada' && b.billing_type!=='reembolso' && String(b.issued_at||'').startsWith(_ymNow))
+    .slice().sort((a,b)=> String(b.issued_at||'').localeCompare(String(a.issued_at||'')))
+  const emPagList = (billing||[]).filter(b=> b && !b.deleted_at && b.status!=='Anulada' && b.billing_type!=='reembolso' && String(b.paid_at||'').startsWith(_ymNow))
+    .slice().sort((a,b)=> String(b.paid_at||'').localeCompare(String(a.paid_at||'')))
+  const emFacTot = emFacList.reduce((a,b)=>a+montoFactura(b),0)
+  const emPagTot = emPagList.reduce((a,b)=>a+cobradoBill(b),0)
+  const emPct = emFacTot>0 ? Math.round(emPagTot/emFacTot*100) : 0
+  const emCliName = b => (clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'—'
+
   return (
     <div className='dash-cols'>
 
@@ -3673,12 +3686,58 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
       <div>
         {lvlLabel('Indicadores')}
         <div style={{padding:'6px 20px 0'}}>
+          {/* "Este mes" — primer indicador, a lo ancho, con tinte verde para diferenciarlo (no es un indicador de saldo). Facturado vs pagado por clientes; abre el detalle al tocar. */}
+          {(()=>{ const op=kOpen('estemes'); return (
+            <div onClick={()=>kToggle('estemes')} style={{background:C.greenBg,border:`1px solid ${op?'#9FD6C0':'#C4E4D8'}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',display:'flex',gap:9,alignItems:'flex-start',marginBottom:8}}>
+              <span style={{width:26,height:26,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n='calendar' s={14} c={C.greenText}/></span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Este mes · {_MES_NOM[+_ymNow.slice(5,7)-1]}</div>
+                <div style={{display:'flex',gap:14,marginTop:5,alignItems:'stretch'}}>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:600,color:C.muted,whiteSpace:'nowrap'}}>Facturado</div><div style={{fontSize:19,fontWeight:800,color:C.accent,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:2}}>{fmtShort(emFacTot)}</div><div style={{fontSize:9,color:C.muted,marginTop:2}}>{emFacList.length} factura{emFacList.length!==1?'s':''}</div></div>
+                  <div style={{width:1,background:'#C4E4D8'}}/>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:600,color:C.muted,whiteSpace:'nowrap'}}>Pagado por clientes</div><div style={{fontSize:19,fontWeight:800,color:C.greenText,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:2}}>{fmtShort(emPagTot)}</div><div style={{fontSize:9,color:C.muted,marginTop:2}}>{emPagList.length} pago{emPagList.length!==1?'s':''}</div></div>
+                </div>
+                {emFacTot>0&&<><div style={{height:6,borderRadius:4,background:'#CDEBE0',overflow:'hidden',marginTop:9}}><div style={{height:'100%',width:`${Math.min(100,emPct)}%`,background:C.verde||C.greenText,borderRadius:4}}/></div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:9.5,color:C.greenText,marginTop:4}}><span>pagado = {emPct}% de lo facturado del mes</span></div></>}
+              </div>
+              <span style={{position:'absolute',top:11,right:11,color:C.done,fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
+            </div>
+          ) })()}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'del año')}
             {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'ingresos · al 31 dic')}
           </div>
         </div>
       </div>
+      {kOpen('estemes')&&(
+      <div style={{padding:'10px 20px 0'}}>
+        <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16}}>
+            {[['Facturas emitidas',emFacList,b=>b.issued_at,C.accent],['Pagos recibidos',emPagList,b=>b.paid_at,C.greenText]].map(([lbl,list,dateOf,col])=>(
+              <div key={lbl}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:7}}>
+                  <span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.05em'}}>{lbl} · {list.length}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:col,fontVariantNumeric:'tabular-nums'}}>{fmtShort(list.reduce((a,b)=>a+(lbl[0]==='F'?montoFactura(b):cobradoBill(b)),0))}</span>
+                </div>
+                {list.length===0
+                  ? <div style={{fontSize:11.5,color:C.muted,padding:'4px 0'}}>Sin movimientos este mes.</div>
+                  : <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+                    {list.slice(0,8).map((b,i)=>(
+                      <div key={b.id} onClick={()=>b.client_id&&onOpenClientFicha&&onOpenClientFicha(b.client_id)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:b.client_id?'pointer':'default'}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emCliName(b)}</div>
+                          <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`N° ${folioN(b.invoice_no)||b.invoice_no} · `:''}{fmtDate(dateOf(b))}</div>
+                        </div>
+                        <div style={{fontSize:12.5,fontWeight:700,color:col,whiteSpace:'nowrap',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtMon(lbl[0]==='F'?montoFactura(b):cobradoBill(b))}</div>
+                      </div>
+                    ))}
+                    {list.length>8&&<div style={{fontSize:10,color:C.muted,padding:'6px 11px',borderTop:`1px solid ${C.border}`}}>+{list.length-8} más</div>}
+                  </div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>)}
       {kOpen('cobranza')&&(
       <div style={{padding:'10px 20px 0'}}>
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
