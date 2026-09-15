@@ -16697,8 +16697,12 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               </div>
             </div>
           )}
+        </div>
+      )}
 
-          {notaSend&&(()=>{ const gsS=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(notaSend.id)); const totS=gsS.reduce((a,e)=>a+(e.amount||0),0); return (
+      {/* Modal "Enviar a notaría": FUERA del bloque notaTab==='pend' para que se monte al setNotaSend desde CUALQUIER
+          pestaña (Pagos realizados / hub). Antes vivía dentro de 'pend' → el botón Enviar de "Pagos realizados" no abría nada. */}
+      {notaSend&&(()=>{ const gsS=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(notaSend.id)); const totS=gsS.reduce((a,e)=>a+(e.amount||0),0); return (
             <Modal title='Enviar a notaría' onClose={()=>!notaSending&&setNotaSend(null)} closeOnBackdrop={false}>
               <div style={{background:C.accent,borderRadius:12,padding:'12px 14px',color:'#fff',textAlign:'center',marginBottom:14}}>
                 <div style={{fontSize:10,color:C.done,textTransform:'uppercase',letterSpacing:.5}}>Total a transferir</div>
@@ -16721,8 +16725,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               </div>
             </Modal>
           )})()}
-        </div>
-      )}
 
       {/* Vista "Sin cliente · por asignar": la app resuelve sola el cliente (aprendido + IA), tú confirmas lo dudoso */}
       {showOrphans&&(()=>{
