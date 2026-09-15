@@ -18673,7 +18673,104 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   </div>)
 }
 
-function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onAddSale, onConciliar, onOpenConciliacion, onAssignSeries, onStatusChange, onOpenSale}) {
+// COTEJO por venta: cuota programada del trabajo ENFRENTADA a la factura emitida asociada, y las facturas al
+// mismo RUT sin asociar (huérfanas). Solo LEE el cruce (planDeVenta + cuota N/M); el único write es asociar a mano
+// una huérfana a un hueco → reusa onReplaceProgramada (handleReplaceProgramada: soft-delete + replaced_by_id + undo).
+// NO toca los motores de conciliación. Desktop = dos columnas enfrentadas; móvil = par apilado.
+const _MES_AB = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, onOpenFactura, onAssociate}){
+  const [pickFor,setPickFor] = useState(null)   // orphan.id en modo "elige cuota" (móvil / sin drag)
+  const [hover,setHover] = useState(null)        // prog.id resaltada durante el arrastre
+  const plan = planDeVenta(sale)
+  const cuotas = (saleBills||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.billing_type!=='reembolso')
+    .slice().sort((a,b)=> String(a.due||a.issued_at||'').localeCompare(String(b.due||b.issued_at||'')))
+  const huecos = cuotas.filter(b=> !b.invoice_no)   // cuotas por emitir = destinos de asociación
+  const mmm = d => { const s=String(d||''); return s.length>=7 ? `${_MES_AB[+s.slice(5,7)-1]} ${s.slice(2,4)}` : '' }
+  const etiqueta = b => { const cn=cuotaNMof(b.concept); if(cn) return `Cuota ${cn.n}/${cn.tot}`; const per=concPeriodoOf(b.concept); if(per) return mmm(per+'-01'); return mmm(b.due||b.issued_at)||'Cobro' }
+  const estTxt = b => ({Pagado:'pagada',Pendiente:'pendiente',Vencido:'vencida',Anticipada:'anticipada'}[b.status]||'emitida')
+  const estCol = b => ({Pagado:C.greenText,Pendiente:C.soonText,Vencido:C.overdueText,Anticipada:C.accent}[b.status]||C.greenText)
+  const emit = b => !!b.invoice_no
+  const doAssoc = async (progId, orphanId) => { setPickFor(null); setHover(null); if(onAssociate) await onAssociate(progId, orphanId) }
+  const onDrop = progId => e => { e.preventDefault(); const oid=e.dataTransfer.getData('text/plain'); if(oid) doAssoc(progId, oid) }
+
+  const planN = plan.length
+  const desc = planN ? `${planN} cuota${planN!==1?'s':''} · ${fmtUF((sale.amount_uf||0)*(sale.cobro_type==='mensual'?12:1))}` : `${cuotas.length} cobro${cuotas.length!==1?'s':''}`
+  const nEmit = cuotas.filter(emit).length, nHueco = huecos.length
+
+  const celdaCuota = (b) => (
+    <div style={{background:emit(b)?'#fff':(C.soonBg||'#FFFBF0'),border:`1px solid ${emit(b)?C.border:(C.soon||'#EBD9AE')}`,borderRadius:10,padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}>
+      <span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{etiqueta(b)}</span>
+      <span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span>
+    </div>
+  )
+  const celdaFactura = (b) => emit(b) ? (
+    <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${estCol(b)}`,borderRadius:10,padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',cursor:onOpenFactura?'pointer':'default'}}>
+      <span style={{fontSize:12.5,color:C.text}}>N°{folioN(b.invoice_no)||b.invoice_no} · <span style={{color:estCol(b)}}>{estTxt(b)}</span></span>
+      <span style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span>
+    </div>
+  ) : (
+    <div onDragOver={e=>{e.preventDefault();setHover(b.id)}} onDragLeave={()=>setHover(h=>h===b.id?null:h)} onDrop={onDrop(b.id)}
+      style={{border:`1.5px dashed ${hover===b.id?C.accent:(C.soon||'#EBD9AE')}`,background:hover===b.id?(C.azulBg||'#EAF0F3'):'transparent',borderRadius:10,padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',transition:'background .1s'}}>
+      <span style={{fontSize:12,color:C.soonText}}>por emitir</span>
+      {orphans.length>0&&<span style={{fontSize:10.5,color:C.muted}}>{isDesktop?'arrastra aquí':''}</span>}
+    </div>
+  )
+
+  return (
+    <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:9,background:'#fff'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:9,flexWrap:'wrap'}}>
+        <div style={{minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{sale.title}</div><div style={{fontSize:11,color:C.muted}}>{desc}{planN&&cuotas.length!==planN?` · ${cuotas.length} filas`:''}</div></div>
+        <div style={{fontSize:11,color:C.muted}}><span style={{color:C.greenText,fontWeight:700}}>{nEmit}</span> emitida{nEmit!==1?'s':''} · <span style={{color:nHueco?C.soonText:C.muted,fontWeight:700}}>{nHueco}</span> por emitir</div>
+      </div>
+
+      {isDesktop ? (
+        <div style={{display:'grid',gridTemplateColumns:'1fr 24px 1fr',gap:'0 8px',alignItems:'center'}}>
+          <div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,padding:'0 2px 4px'}}>PROGRAMADO</div><div/><div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,padding:'0 2px 4px'}}>EMITIDO</div>
+          {cuotas.map(b=>(<Fragment key={b.id}>
+            <div style={{marginBottom:6}}>{celdaCuota(b)}</div>
+            <div style={{display:'flex',justifyContent:'center',marginBottom:6,color:emit(b)?C.greenText:(C.soon||'#C9A94A')}}>{emit(b)?<SIcon n='check' s={14} c={C.greenText}/>:<span style={{fontSize:13,color:C.soonText}}>·</span>}</div>
+            <div style={{marginBottom:6}}>{celdaFactura(b)}</div>
+          </Fragment>))}
+        </div>
+      ) : (
+        <div style={{display:'flex',flexDirection:'column',gap:7}}>
+          {cuotas.map(b=>(<div key={b.id} style={{border:`1px solid ${emit(b)?C.border:(C.soon||'#EBD9AE')}`,borderRadius:11,overflow:'hidden'}}>
+            <div style={{padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,background:emit(b)?'#fff':(C.soonBg||'#FFFBF0')}}><span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{etiqueta(b)}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span></div>
+            {emit(b)
+              ? <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{padding:'8px 10px 8px 20px',display:'flex',alignItems:'center',gap:7,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:12,color:C.muted}}>↳</span><span style={{flex:1,fontSize:12,color:C.text}}>N°{folioN(b.invoice_no)||b.invoice_no} · <span style={{color:estCol(b)}}>{estTxt(b)}</span></span><span style={{fontSize:12,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div>
+              : <div style={{padding:'8px 10px 8px 20px',display:'flex',alignItems:'center',gap:7,borderTop:`1px dashed ${C.soon||'#EBD9AE'}`}}><span style={{fontSize:12,color:C.soonText}}>↳</span><span style={{flex:1,fontSize:12,color:C.soonText}}>por emitir · hueco</span></div>}
+          </div>))}
+        </div>
+      )}
+      {planN>0 && cuotas.length<planN && <div style={{fontSize:10.5,color:C.muted,marginTop:6}}>El plan tiene {planN} cuotas; faltan {planN-cuotas.length} por generar.</div>}
+
+      {orphans.length>0 && (
+        <div style={{marginTop:11,borderTop:`1px solid ${C.border}`,paddingTop:9}}>
+          <div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,marginBottom:6}}>MISMO RUT · SIN ASOCIAR · {orphans.length}</div>
+          {orphans.map(o=>{ const cand=huecos.find(h=>Math.abs((h.amount||0)-(montoFactura(o)||o.amount||0))/Math.max(1,h.amount||1)<0.03)
+            return (<div key={o.id} draggable={isDesktop&&huecos.length>0} onDragStart={e=>e.dataTransfer.setData('text/plain',o.id)}
+              style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',marginBottom:6,background:'#fff',cursor:isDesktop&&huecos.length?'grab':'default'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                {isDesktop&&huecos.length>0&&<span style={{color:C.muted,fontSize:14}}>⠿</span>}
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>N°{folioN(o.invoice_no)||o.invoice_no}<span style={{fontWeight:400,color:C.muted}}> · {mmm(o.issued_at||o.due)}</span></div>{cand&&<div style={{fontSize:10.5,color:C.accent}}>calza con {etiqueta(cand)} · mismo monto</div>}</div>
+                <div style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(o)||o.amount||0)}</div>
+                {huecos.length>0&&!isDesktop&&<button onClick={()=>setPickFor(pickFor===o.id?null:o.id)} style={{fontSize:11.5,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:16,padding:'3px 10px',background:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Asociar →</button>}
+              </div>
+              {pickFor===o.id && (
+                <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{fontSize:10.5,color:C.muted}}>Asociar a la cuota:</div>
+                  {huecos.map(h=>(<button key={h.id} onClick={()=>doAssoc(h.id,o.id)} style={{textAlign:'left',border:`1px solid ${cand&&cand.id===h.id?C.accent:C.border}`,background:cand&&cand.id===h.id?(C.azulBg||'#EAF0F3'):'#fff',borderRadius:9,padding:'7px 10px',cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12.5,color:C.text}}>{etiqueta(h)}{cand&&cand.id===h.id?' · sugerida':''}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(h.amount||0)}</span></button>))}
+                </div>
+              )}
+            </div>) })}
+          <div style={{fontSize:10,color:C.muted,marginTop:2}}>Facturas de este RUT sin venta. Asociar enlaza la factura a la cuota (reversible) sin tocar la conciliación.</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onAddSale, onConciliar, onOpenConciliacion, onAssignSeries, onStatusChange, onReplaceProgramada, onOpenSale}) {
   const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
   // Cockpit de facturas: TODAS las del cliente — buscador + tabs por año + agrupación Proyecto → Razón social → Factura con orden por fecha.
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
@@ -18758,6 +18855,25 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   return (
     <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined}}>
       {/* La foto (Vendido/Facturado/Cobrado/Por cobrar) vive en el embudo del Resumen — no se repite acá. Ventas = proyectos + facturas + anticipos. */}
+
+      {/* COTEJO de cobros: cuota programada ENFRENTADA a su factura emitida + huérfanas del mismo RUT (asociar = admin). */}
+      {(()=>{
+        const sinVenta = all.filter(b=> b.invoice_no && b.status!=='Anulada' && b.billing_type!=='reembolso' && !b.sale_id)
+        const ventasCotejo = clientSales.filter(s=> clientBilling.some(b=>!b.deleted_at && String(b.sale_id)===String(s.id)))
+        if(!ventasCotejo.length) return null
+        const orphansFor = s => sinVenta.filter(b=> !s.entity_id || !b.entity_id || String(b.entity_id)===String(s.entity_id))
+        const asociar = async (progId, orphanId) => {
+          const o=(billing||[]).find(b=>String(b.id)===String(orphanId)); const h=(billing||[]).find(b=>String(b.id)===String(progId)); if(!o||!h) return
+          if(!await appConfirm(`¿Asociar la factura N°${folioN(o.invoice_no)||o.invoice_no} (${fmt(montoFactura(o)||o.amount||0)}) a la cuota "${(cuotaNMof(h.concept)?`Cuota ${cuotaNMof(h.concept).n}/${cuotaNMof(h.concept).tot}`:'programada')}"? La cuota queda cubierta y la factura se enlaza a la venta. Reversible.`)) return
+          await onReplaceProgramada(h.id, o.id)
+        }
+        return (
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:'uppercase',marginBottom:8}}>Cotejo de cobros · cuota ↔ factura</div>
+            {ventasCotejo.map(s=> <CotejoVenta key={s.id} sale={s} saleBills={clientBilling.filter(b=>String(b.sale_id)===String(s.id))} orphans={onReplaceProgramada?orphansFor(s):[]} isDesktop={isDesktop} onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?asociar:undefined}/> )}
+          </div>
+        )
+      })()}
 
       {/* Proyectos (icono-sección colapsada): Vigentes + Terminados, con barra de cobro (facturado→cobrado) */}
       {(()=>{
@@ -19949,7 +20065,7 @@ Saludos cordiales,`
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
   const [emailRend,setEmailRend] = useState(null)
   const [ftab,setFtab] = useState(initialFtab||'resumen')
   const [fichaSii,setFichaSii] = useState([])   // novedades SII (perfil tributario por cliente)
@@ -20098,14 +20214,14 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields} clientBilling={clientBilling} onOpenFinanciero={()=>setFtab('financiero')}/>}
-      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onAddSale={onAddSale} onConciliar={()=>onConciliar&&onConciliar(client)} onOpenConciliacion={onOpenConciliacion} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onOpenSale={onOpenSale}/>}
+      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onAddSale={onAddSale} onConciliar={()=>onConciliar&&onConciliar(client)} onOpenConciliacion={onOpenConciliacion} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onReplaceProgramada={onReplaceProgramada} onOpenSale={onOpenSale}/>}
       {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onAjuste={onAjuste}/>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
 
-function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin}) {
+function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin}) {
   const [verProv,setVerProv] = useState(false)
   // Clientes creados por el último sync de Drive → tag "Nuevo · Drive" unos días.
   const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())
@@ -20197,6 +20313,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         onAddSale={()=>onAddSale(selected)}
         onAddBilling={()=>onAddBilling(selected)}
         onEditBilling={onEditBilling}
+        onReplaceProgramada={onReplaceProgramada}
         onOpenSale={onOpenSale}
         onEditTask={onEditTask}
         onEditExpense={onEditExpense}
@@ -32730,7 +32847,7 @@ export default function App() {
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin}/>}
           </ViewErrorBoundary></div>
         )}
         {!isDesktop&&userRole==='limited'&&tab==='tasks'&&(
