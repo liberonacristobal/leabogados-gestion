@@ -745,7 +745,7 @@ const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
 const enMiLista = (t,name) => isAssignee(t,name) || (!!name && ((t&&t.delegated_to)||[]).includes(name))
 const ADMIN_NAMES = ['Cristóbal','Erasmo']
 // Costos ESTRUCTURALES de la oficina (fijos: sueldos/arriendo/servicios/compras — normalmente vienen de la conciliación bancaria). El resto de categorías = GESTIÓN (operativo: notaría/CBR/movilización/archivo judicial/otros, gralmente de clientes; movilización siempre nuestra).
-const CATS_OFICINA_ESTRUCTURAL = ['Sueldos','Retiros','Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Proveedores','Comisiones','Compras']
+const CATS_OFICINA_ESTRUCTURAL = ['Sueldos','Bono','Retiros','Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Proveedores','Comisiones','Compras']
 // Un gasto de oficina es de GESTIÓN si su categoría NO es estructural (criterio por CATEGORÍA, determinista — no por quién lo cargó).
 const esGestionGasto = g => !CATS_OFICINA_ESTRUCTURAL.includes(String(g?.category||'').trim())
 // CATÁLOGO de Costos de Oficina (presupuesto de la firma): 9 categorías con su desglose. Reconstruido del Presupuesto 2026.
@@ -767,7 +767,7 @@ const SUBCATS_OFICINA = Object.fromEntries(CATS_OFICINA_CAT.map(c=>[c.g,c.subs])
 const OFICINA_INGRESO_ITEMS = new Set(['Subarriendo'])
 // Mapeo de las categorías VIEJAS a las 9 nuevas (para no perder los gastos ya clasificados). Las no listadas quedan igual.
 const CAT_OFICINA_ALIAS = {
-  'Sueldos':'Remuneraciones','Retiros':'Remuneraciones','Contadora':'Remuneraciones',
+  'Sueldos':'Remuneraciones','Bono':'Remuneraciones','Retiros':'Remuneraciones','Contadora':'Remuneraciones',
   'Arriendo':'Arriendo y espacio','Gastos comunes':'Arriendo y espacio',
   'Servicios':'Servicios y tecnología','Software':'Servicios y tecnología',
   'Compras':'Insumos de oficina',
@@ -29070,15 +29070,16 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     const sugBar=()=>{ if(!sug) return null
       // Cargo a alguien del equipo CON caja chica: no asumir "Sueldo" — preguntar y dejar elegir (siempre confirma antes de asignar).
       if(sug.ambiguoCaja){ const per=sug.persona
-        const opt=(bg,bd,col,lbl,sub,onClick,flag)=><button disabled={busy===m.id} onClick={onClick} style={{flex:1,minWidth:0,position:'relative',background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'8px 6px',cursor:busy===m.id?'default':'pointer',textAlign:'center'}}>
+        const opt=(bg,bd,col,lbl,sub,onClick,flag)=><button disabled={busy===m.id} onClick={onClick} style={{minWidth:0,position:'relative',background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'9px 6px',cursor:busy===m.id?'default':'pointer',textAlign:'center'}}>
           {flag&&<span style={{position:'absolute',top:-7,right:-4,fontSize:8,fontWeight:800,color:'#fff',background:C.normal,borderRadius:10,padding:'1px 6px'}}>{flag}</span>}
           <div style={{fontSize:12,fontWeight:700,color:col}}>{lbl}</div><div style={{fontSize:9,color:C.done,marginTop:2}}>{sub}</div></button>
         return <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 11px',marginBottom:8}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Cargo a {per} · ¿qué fue?</div>
-          <div style={{fontSize:10,color:C.done,marginBottom:9}}>Tiene caja chica — puede ser reposición o sueldo. Elige tú.</div>
-          <div style={{display:'flex',gap:7}}>
-            {opt(C.tealBg,'#BFE6E3',C.tealText,'Caja chica','repone su fondo',()=>registrarCargoOficina(m,'Caja chica',per),'probable')}
-            {opt('#F2F7FB','#CFE0EC',C.accent,'Sueldo','costo oficina',()=>registrarCargoOficina(m,'Sueldos',per))}
+          <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Transferencia a {per} · ¿qué fue?</div>
+          <div style={{fontSize:10,color:C.done,marginBottom:9}}>Elígelo para clasificarla bien. Solo la reposición de caja chica descuenta de su fondo.</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}>
+            {opt(C.tealBg,'#BFE6E3',C.tealText,'Caja chica','repone su fondo',()=>registrarCargoOficina(m,'Caja chica',per),'frecuente')}
+            {opt('#F2F7FB','#CFE0EC',C.accent,'Sueldo','remuneración',()=>registrarCargoOficina(m,'Sueldos',per))}
+            {opt(C.greenBg,'#BFE0CF',C.greenText,'Bono','aguinaldo, gratif.',()=>registrarCargoOficina(m,'Bono',per))}
             {opt(C.ambarBg,'#EBD9AE',C.coralText,'Otro…','comisión, retiro',()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:undefined}));setCcQ(p=>({...p,[m.id]:''}))})}
           </div>
         </div> }
