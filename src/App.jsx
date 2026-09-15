@@ -3691,21 +3691,30 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
         {lvlLabel('Indicadores')}
         <div style={{padding:'6px 20px 0'}}>
           {/* "Este mes" — primer indicador, media columna (mismo tamaño), tinte verde para diferenciarlo. Emitido protagonista + pagado (conversión). Abre las categorías al tocar. */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,alignItems:'start'}}>
+          {/* Las 6 tarjetas de Indicadores en UNA grilla 2×3, todas del mismo alto (title/valor/sub). Sus detalles se muestran abajo al desplegar. */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,alignItems:'stretch'}}>
             {(()=>{ const op=kOpen('estemes'); return (
               <div onClick={()=>kToggle('estemes')} style={{background:C.greenBg,border:`1px solid ${op?'#9FD6C0':'#C4E4D8'}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minWidth:0,display:'flex',gap:9,alignItems:'flex-start'}}>
                 <span style={{width:26,height:26,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n='chart' s={14} c={C.greenText}/></span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:12}}>Este mes · {_MES_NOM[+_ymNow.slice(5,7)-1].slice(0,3)}</div>
+                  <div style={{fontSize:10,fontWeight:700,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:12}}>Este mes · {_MES_NOM[+_ymNow.slice(5,7)-1].slice(0,3)}</div>
                   <div style={{fontSize:19,fontWeight:800,color:C.accent,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{fmtShort(emFacTot)}</div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:2}}>emitido · {emFacList.length} factura{emFacList.length!==1?'s':''}</div>
-                  {emFacTot>0&&<div style={{fontSize:10,color:C.greenText,fontWeight:600,marginTop:4}}>{fmtShort(emFacPagTot)} pagado · {emPct}%</div>}
+                  <div style={{fontSize:9,color:C.muted,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>emitido{emFacTot>0?<> · <b style={{color:C.greenText,fontWeight:700}}>{emPct}% pagado</b></>:''}</div>
                 </div>
                 <span style={{position:'absolute',top:11,right:11,color:C.done,fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
               </div>
             ) })()}
             {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'del año')}
             {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'ingresos · al 31 dic')}
+            {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.total, porPagar=cxpTotDash
+              const val=pagado>0?fmtShort(pagado):(porPagar>0?fmtShort(porPagar):'Al día')
+              const col=pagado>0?C.greenText:(porPagar>0?C.soonText:C.greenText)
+              const tint=pagado>0?{fg:C.greenText,bg:C.greenBg}:{fg:C.soonText,bg:C.ambarBg}
+              const sub=pagado>0?('pagado'+(porPagar>0?' · por pagar '+fmtShort(porPagar):'')):(porPagar>0?'por pagar':'sin deudas')
+              return kTile('cxp','Comisiones',val,col,'wallet',tint,sub) })()}
+            {onOpenCostosOfi&&costosOfiMes>0&&kTile('costosofi','Oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'costos · por mes',onOpenCostosOfi)}
+            {(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
+              return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>setMisProyOpen(o=>!o)) })()}
           </div>
         </div>
       </div>
@@ -3800,19 +3809,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
         <CashflowProjection embedded billing={billingProj} moneda={dashMoneda} ufRef={ufRef} clients={clients} sales={sales} onOpenClientFicha={onOpenClientFicha}/>
       </div>)}
 
-      {/* Fila 2: Cuentas por pagar + Costos de oficina (el "Vendido" ya vive en Estado del negocio → sin duplicar). */}
-      <div style={{padding:'8px 20px 0'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.total, porPagar=cxpTotDash
-            // Protagonista = lo PAGADO; lo que falta por pagar va en la línea chica (sub).
-            const val=pagado>0?fmtShort(pagado):(porPagar>0?fmtShort(porPagar):'Al día')
-            const col=pagado>0?C.greenText:(porPagar>0?C.soonText:C.greenText)
-            const tint=pagado>0?{fg:C.greenText,bg:C.greenBg}:{fg:C.soonText,bg:C.ambarBg}
-            const sub=pagado>0?('pagado'+(porPagar>0?' · por pagar '+fmtShort(porPagar):'')):(porPagar>0?'por pagar':'sin deudas')
-            return kTile('cxp','Comisiones',val,col,'wallet',tint,sub) })()}
-          {onOpenCostosOfi&&costosOfiMes>0&&kTile('costosofi','Oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'costos · por mes',onOpenCostosOfi)}
-        </div>
-      </div>
+      {/* Comisiones + Oficina ahora viven en la grilla única de Indicadores (arriba). Aquí solo su detalle desplegable. */}
       {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
         if((terceros||[]).length===0) return null
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
@@ -4084,15 +4081,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
         )
       })()}
 
-      {/* Rótulo unificado en "Indicadores" (arriba) */}
-
-      {/* Mis proyectos — tile de media columna; abre su lista debajo. (El acceso a Oficina ya vive en Indicadores, sin duplicar el gasto del mes acá.) */}
-      <div style={{padding:'6px 20px 0'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
-            return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>setMisProyOpen(o=>!o)) })()}
-        </div>
-      </div>
+      {/* Mis proyectos — su tile vive en la grilla única de Indicadores (arriba). Aquí solo su lista desplegable. */}
       {misProyOpen&&(()=>{
         const miIni=INICIALES_RESP[user?.name]||null; const isMine=p=>!miIni||(p.responsable||'')===miIni
         const enCurso=(proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado && isMine(p))
