@@ -9244,7 +9244,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const cand=(billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && x.status==='Programada' && x.billing_type!=='reembolso' && String(x.client_id)===String(cliId) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=120 })()).map(x=>({x,s:scoreCand(x)})).sort((a,b)=> b.s-a.s || String(a.x.due||a.x.issued_at||'').localeCompare(String(b.x.due||b.x.issued_at||''))).map(o=>o.x)
     const pick = cand.find(c=>!(progUsadas&&progUsadas.has(c.id))) || null
     if(pick&&progUsadas) progUsadas.add(pick.id)
-    const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0, s:scoreCand(c)}))
+    const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0, sale_id:c.sale_id||null, s:scoreCand(c)}))
     return {progId:pick?.id||null, progCand}
   }
   // Marca una carga (staging) como registrada/descartada por folio — al pasar de "sin registrar" a factura real. Silencioso.
@@ -9398,8 +9398,15 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       //  2) Sin cuota que calce → se CREA la factura igual; si el cliente tiene UNA venta activa, se asocia por RUT (si no, factura sin venta, reclasificable a tercero después).
       // Solo queda a mano lo REALMENTE ambiguo: RUT sin resolver, o programada con varias candidatas. Todo reversible desde la factura.
       let autoOk=0
-      for(const it of rows.filter(r=>r.estado==='programada' && r.clienteId && (r.progCand||[]).length<=1)){
-        try{ await registrarProg(it); autoOk++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada',_auto:true}:r)) }catch(_){}
+      // FIFO recurrente: si TODAS las candidatas son la MISMA serie (mismo sale_id), no hay ambigüedad real →
+      // consumir la MÁS ANTIGUA sin facturar (regla "siempre la más antigua, nunca saltarse"), automático.
+      // Solo se mantiene la compuerta cuando las candidatas son de VENTAS distintas (ahí sí: ¿cuál proyecto?).
+      const unaSerie = pc => (pc||[]).length>1 && pc.every(c=>c.sale_id && String(c.sale_id)===String(pc[0].sale_id))
+      for(const it of rows.filter(r=>r.estado==='programada' && r.clienteId && ((r.progCand||[]).length<=1 || unaSerie(r.progCand)))){
+        try{
+          if((it.progCand||[]).length>1){ const old=[...it.progCand].sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))[0]; if(old?.id) it.progId=old.id }   // varias cuotas iguales de la misma serie → la más antigua (FIFO)
+          await registrarProg(it); autoOk++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada',_auto:true}:r))
+        }catch(_){}
       }
       for(const it of rows.filter(r=>r.estado==='nueva' && r.clienteId)){
         try{ const vac=(sales||[]).filter(s=>!s.deleted_at&&String(s.client_id)===String(it.clienteId)&&s.status==='Activo'); const saleId=vac.length===1?vac[0].id:null
