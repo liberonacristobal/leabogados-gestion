@@ -500,19 +500,11 @@ serve(async (req) => {
       const { data: link, error: linkErr } = await sb.rpc('link_sii_billing')
       if (linkErr) return json({ error: `Auto-enlace fallo: ${linkErr.message}`, detalle }, 500)
       const enlace = Array.isArray(link) ? link[0] : link
-      // FACTURAS (34) que quedaron SIN enlazar → 'sin_registrar': entran al motor de auto-registro por RUT del front
-      // (cargarSinRegistrar: calza cuota programada o crea+asocia venta; solo lo ambiguo queda a un toque). El badge sinRegN
-      // ya cuenta este estado, así que aparecen solas. Las NC (61) NO se marcan: van al detector cargarNCResolver → compuerta
-      // anularPorNC (nunca auto-anula, porque anular es destructivo).
-      let sinRegistrar = 0
-      try {
-        const { count } = await sb.from('sii_cargas_docs')
-          .update({ estado: 'sin_registrar', updated_at: new Date().toISOString() }, { count: 'exact' })
-          .eq('tipo_dte', 34).eq('estado', 'rcv_historico').is('billing_id', null)
-        sinRegistrar = count ?? 0
-      } catch (_) { /* no bloquear el cuadre si el marcado falla */ }
-      console.log(`[sii-sync] cron-cuadre-ventas enlazó ${enlace?.facturas_enlazadas ?? 0} facturas, ${enlace?.nc_enlazadas ?? 0} NC; ${sinRegistrar} factura(s) a sin_registrar`)
-      return json({ ok: true, ambiente, periodos, detalle, enlace, sinRegistrar })
+      // Las facturas (34) del RCV que quedan SIN enlazar las marca 'sin_registrar' la propia RPC link_sii_billing
+      // (así el auto-registro por RUT del front aplica igual desde el cron y desde la Sincronización manual, sin
+      // duplicar la lógica en el edge). Las NC (61) siguen a compuerta.
+      console.log(`[sii-sync] cron-cuadre-ventas enlazó ${enlace?.facturas_enlazadas ?? 0} facturas, ${enlace?.nc_enlazadas ?? 0} NC`)
+      return json({ ok: true, ambiente, periodos, detalle, enlace })
     }
 
     const periodo = String(body.periodo || '')
