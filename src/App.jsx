@@ -17580,6 +17580,16 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
     supabase.from('learnings').select('value').eq('kind','gasto_proyecto').eq('key',`${f.client_id}::${gk}`).limit(1).then(({data})=>{ if(alive) setSugProy(data&&data[0]?.value||null) },()=>{})
     return ()=>{alive=false}
   },[f.concept,f.client_id,f.project,isFondo])
+  // Aprendizaje glosa→subcategoría: la misma glosa recurrente (Jumbo, Uber) propone su subcategoría con un toque, sin re-tipear (regla "la app APRENDE").
+  const [sugSub,setSugSub] = useState(null)
+  useEffect(()=>{
+    if(isFondo || f.subcategory || !f.concept){ setSugSub(null); return }
+    if(!(f.category==='Otro'||CATS_OFICINA_ESTRUCTURAL.includes(f.category))){ setSugSub(null); return }
+    const gk=glosaKey(f.concept); if(!gk){ setSugSub(null); return }
+    let alive=true
+    supabase.from('learnings').select('value').eq('kind','gasto_subcategoria').eq('key',gk).order('created_at',{ascending:false}).limit(1).then(({data})=>{ if(alive) setSugSub(data&&data[0]?.value||null) },()=>{})
+    return ()=>{alive=false}
+  },[f.concept,f.subcategory,f.category,isFondo])
   // Proyecto = venta: sugerencias de los títulos de ventas del cliente + proyectos ya usados en otros gastos.
   const projectOpts = useMemo(()=>{
     const set=new Set()
@@ -17639,6 +17649,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
         <FloatFld label='Subcategoría'>
           <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Supermercado, Aseo, Insumos...' style={fInp}/>
           <datalist id='expense-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
+          {sugSub&&!f.subcategory&&<button type='button' onClick={()=>{up('subcategory',sugSub);setSugSub(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugSub}</button>}
         </FloatFld>
       )}
       <FloatFld label='Descripción'><textarea value={f.concept} onChange={e=>up('concept',e.target.value)} rows={2} placeholder='Descripción...' style={{...fInp,height:'auto',resize:'none',fontFamily:'inherit',paddingTop:2}}/></FloatFld>
@@ -31736,6 +31747,8 @@ export default function App() {
       if(p.type==='gasto' && p.project && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_proyecto', `${p.client_id}::${gk}`, p.project, {}) }
       // Aprende glosa→categoría: el Asistente IA de caja chica y la carga masiva la reusan (no repetir la clasificación).
       if(p.type==='gasto' && p.category && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_categoria', gk, p.category) }
+      // Aprende glosa→subcategoría: la misma glosa recurrente propone su subcategoría con un toque, sin re-tipear.
+      if(p.type==='gasto' && p.subcategory && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_subcategoria', gk, p.subcategory) }
       setExpenses(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
       // Si se editó el MONTO de un gasto ya rendido/liquidado, reajusta el total de su rendición (no dejarlo stale).
       const renderId = prev && (prev.client_render_id || prev.render_id)
