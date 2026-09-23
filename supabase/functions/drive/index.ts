@@ -20,7 +20,7 @@ const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 const TEAM = [
   "cl@leabogados.cl", "ee@leabogados.cl", "mc@leabogados.cl",
-  "mp@leabogados.cl", "rd@leabogados.cl", "rodrigo@leabogados.cl",
+  "mp@leabogados.cl", "rd@leabogados.cl",
 ];
 
 const CORS = {
