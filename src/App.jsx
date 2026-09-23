@@ -31468,6 +31468,21 @@ export default function App() {
     if(!error && data) setProyectosCartera(prev=> prev.some(p=>String(p.sale_id)===String(sale.id))?prev:[data,...prev])
   }
 
+  // Carpeta en Drive por cliente ACTIVO (best-effort, idempotente). Se dispara cuando un cliente queda Activo.
+  // Anti-duplicado en dos capas: (a) drive_folder_id ya seteado → no llama; (b) el edge reusa la carpeta si ya existe;
+  // (c) aprende learnings 'cliente_folder' (nombre normalizado → client_id) para que el sync Drive→app NUNCA recree un duplicado.
+  const ensureClientDriveFolder=useCallback(async(cli)=>{
+    try{
+      if(!cli || cli.status!=='Activo' || cli.drive_folder_id || cli.is_occasional || cli.is_internal) return
+      const nm=(cli.name||'').trim(); if(!nm) return
+      const res=await driveCall({action:'createFolder', name:nm})
+      const fid=res?.folderId||res?.id; if(!fid) return
+      await supabase.from('clients').update({drive_folder_id:fid}).eq('id',cli.id)
+      setClients(p=>p.map(c=>c.id===cli.id?{...c,drive_folder_id:fid}:c))
+      const _nn=_normTxt(nm); if(_nn) learnPut('cliente_folder',_nn,String(cli.id))
+    }catch(_){ /* Drive es best-effort: nunca bloquea el guardado del cliente */ }
+  },[])
+
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
@@ -31619,6 +31634,7 @@ export default function App() {
         if(cliente?.status==='Prospecto') {
           await supabase.from('clients').update({status:'Activo',updated_at:new Date().toISOString()}).eq('id',cliente.id)
           setClients(p=>p.map(c=>c.id===cliente.id?{...c,status:'Activo'}:c))
+          ensureClientDriveFolder({...cliente,status:'Activo'})   // recién Activo → su carpeta en Drive
         }
       }
       // Recién activada (o botón "Primeras tareas con IA" en venta activa): guardamos y abrimos la compuerta de tareas.
@@ -32114,10 +32130,11 @@ export default function App() {
           setClientEntities(p=>[...(p||[]),ent])
         }catch(ee){ /* el cliente ya quedó; la RS se puede agregar luego */ }
       }
+      ensureClientDriveFolder(saved)   // cliente Activo → su carpeta en Drive (best-effort, idempotente)
       setModal(null)
     }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
-  },[])
+  },[ensureClientDriveFolder])
 
   // Crear (o reusar) un cliente ocasional liviano, opcionalmente con responsable. Devuelve el cliente. Reusa si ya existe por nombre.
   const handleCreateOccasional=useCallback(async(name,responsable)=>{
