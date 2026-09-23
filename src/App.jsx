@@ -5682,6 +5682,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       const countCommon = (a,b) => { const sb=new Set(tokenize(b)); return tokenize(a).filter(w=>sb.has(w)).length }
       let exactMatch = null
       if(rut) exactMatch = clients.find(c=>(c.rut||'').replace(/[.\-]/g,'')=== rut)
+      // Nunca duplicar (regla de oro): un cliente con el MISMO nombre normalizado (minúsculas+sin acentos+espacios colapsados) YA es su ficha → asociar, no crear otra.
+      if(!exactMatch && nombre){ const _nn=_normTxt(nombre); if(_nn) exactMatch = clients.find(c=>_normTxt(c.name)===_nn) }
       let tokenCandidates = []
       if(!exactMatch && nombre) {
         const scored = clients.map(c=>({c,score:countCommon(nombre,c.name)})).filter(x=>x.score>=2)
@@ -5719,14 +5721,22 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         // Previene el duplicado de ficha en el origen (lo de Eugenia/Saavedra): si el RUT ya está en otra ficha, avisa.
         const _rut=propNewClient.rut.trim()
         if(_rut){ const _n=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const ya=(clients||[]).find(c=>c.rut&&_n(c.rut)===_n(_rut))||(clientEntities||[]).find(e=>e.rut&&_n(e.rut)===_n(_rut)); if(ya && !await appConfirm(`Ya existe una ficha con el RUT ${_rut}${ya.name?` · ${ya.name}`:''}. Un RUT debería estar en una sola ficha. ¿Crear otra de todas formas?`)){ setPropCreating(false); return } }
-        // clients NO tiene columna razon_social: el cliente se crea con nombre/RUT y la razón social va a client_entities.
-        const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null}).select().single()
-        if(error) throw error
-        client = nc
-        setClients(p=>[...p,nc])
-        const rs=propNewClient.razon_social.trim()
-        // Sincroniza la RS al estado local (extraEntities) y selecciónala, si no el SaleForm no la ve y la venta quedaría sin entity_id hasta recargar (mismo patrón que agregarRS).
-        if(rs){ try{ const {data:ne}=await supabase.from('client_entities').insert({client_id:nc.id,name:rs,rut:propNewClient.rut.trim()||null}).select().single(); if(ne){ setExtraEntities(p=>[...p,ne]); up('entity_id',ne.id) } }catch(_){} }
+        // Nunca duplicar (regla de oro): si ya existe la ficha con el MISMO nombre normalizado, REUSA esa en vez de crear otra (evita el "Marcela Bravo" ×2). Compuerta: aceptar = usar la existente; cancelar = crear una nueva a propósito.
+        const _nn=_normTxt(propNewClient.name)
+        const yaNombre = _nn ? (clients||[]).find(c=>_normTxt(c.name)===_nn) : null
+        if(yaNombre && await appConfirm(`Ya existe la ficha «${yaNombre.name}». Para no duplicar, ¿uso esa misma ficha?\n\nAceptar = usar la existente · Cancelar = crear una nueva`)){
+          client = yaNombre
+          const ents=(clientEntities||[]).filter(e=>e.client_id===yaNombre.id); if(ents[0]&&!propEntitySel) setPropEntitySel(ents[0].id)
+        } else {
+          // clients NO tiene columna razon_social: el cliente se crea con nombre/RUT y la razón social va a client_entities.
+          const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null}).select().single()
+          if(error) throw error
+          client = nc
+          setClients(p=>[...p,nc])
+          const rs=propNewClient.razon_social.trim()
+          // Sincroniza la RS al estado local (extraEntities) y selecciónala, si no el SaleForm no la ve y la venta quedaría sin entity_id hasta recargar (mismo patrón que agregarRS).
+          if(rs){ try{ const {data:ne}=await supabase.from('client_entities').insert({client_id:nc.id,name:rs,rut:propNewClient.rut.trim()||null}).select().single(); if(ne){ setExtraEntities(p=>[...p,ne]); up('entity_id',ne.id) } }catch(_){} }
+        }
       }
       setSelectedClient(client)
       up('client_id',client.id)
