@@ -619,6 +619,35 @@ const nrmCliente = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/
 // Levenshtein → similitud 0..1 para pescar typos que el norm no ve ("Migdley" vs "Midgley").
 function _lev(a,b){ a=a||''; b=b||''; const m=a.length,n=b.length; if(!m) return n; if(!n) return m; let prev=Array.from({length:n+1},(_,j)=>j),cur=new Array(n+1); for(let i=1;i<=m;i++){ cur[0]=i; for(let j=1;j<=n;j++){ cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1)) } [prev,cur]=[cur,prev] } return prev[n] }
 const simNombre = (a,b) => { const x=nrmCliente(a),y=nrmCliente(b); if(!x||!y) return 0; if(x===y) return 1; return 1 - _lev(x,y)/Math.max(x.length,y.length) }
+// Detecta grupos de clientes con nombres DUPLICADOS o MUY SIMILARES → alerta para fusionar y evitar fichas/carpetas repetidas.
+// Reglas (regla de oro "nunca duplicar"): (a) mismo nombre normalizado = idéntico; (b) todos los tokens de uno están
+// contenidos en el otro (ej. "Marcela Bravo" ⊂ "Marcela Bravo Puldain") = muy similar; (c) mismo nº de tokens + typo
+// (distancia de edición ≤2) = posible typo ("Midgley"/"Migdley"). Agrupa por componentes (3+ fichas = un solo grupo).
+// Devuelve [{tipo:'exacto'|'contenido'|'typo', clientes:[...] }] ordenado (idénticos primero). Excluye internos/ocasionales.
+function detectarClientesDuplicados(clients=[]){
+  const info = (clients||[]).filter(c=>c&&c.name&&!c.deleted_at&&!c.is_internal&&!c.is_occasional)
+    .map(c=>{ const n=_normTxt(c.name); return {c,n,toks:n.split(' ').filter(w=>w.length>1)} })
+    .filter(x=>x.n)
+  const uf=info.map((_,i)=>i); const find=x=>{ while(uf[x]!==x){ uf[x]=uf[uf[x]]; x=uf[x] } return x }; const union=(a,b)=>{ uf[find(a)]=find(b) }
+  const pares=[]
+  for(let i=0;i<info.length;i++) for(let j=i+1;j<info.length;j++){
+    const A=info[i], B=info[j]; let tipo=null
+    if(A.n===B.n) tipo='exacto'
+    else { const short=A.toks.length<=B.toks.length?A:B, long=A.toks.length<=B.toks.length?B:A
+      if(short.toks.length>=2 && short.toks.every(t=>long.toks.includes(t))) tipo='contenido'
+      else if(A.toks.length===B.toks.length && Math.min(A.n.length,B.n.length)>=6 && _lev(A.n,B.n)<=2) tipo='typo' }
+    if(tipo){ union(i,j); pares.push([i,j,tipo]) }
+  }
+  const comp={}; info.forEach((_,i)=>{ const r=find(i); (comp[r]=comp[r]||[]).push(i) })
+  const rank={exacto:0,contenido:1,typo:2}
+  const grupos=Object.values(comp).filter(g=>g.length>=2).map(idxs=>{
+    const tipos=pares.filter(([a,b])=>idxs.includes(a)&&idxs.includes(b)).map(x=>x[2])
+    const tipo=tipos.includes('exacto')?'exacto':tipos.includes('contenido')?'contenido':'typo'
+    return {tipo, clientes: idxs.map(i=>info[i].c)}
+  })
+  grupos.sort((a,b)=> (rank[a.tipo]-rank[b.tipo]) || (b.clientes.length-a.clientes.length))
+  return grupos
+}
 // La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
@@ -8045,6 +8074,8 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
   const [qa,setQa]=useState(''),[qb,setQb]=useState('')
   const [survId,setSurvId]=useState(pending?pending.survivor_id:null)
   const [busy,setBusy]=useState(false),[res,setRes]=useState(null),[msg,setMsg]=useState(null),[avisado,setAvisado]=useState(false)
+  // Detección proactiva de posibles duplicados (solo en modo elección) → un toque carga el par en los selectores.
+  const dupSug=useMemo(()=>pending?[]:detectarClientesDuplicados(clients),[clients,pending])
   const cli=id=>clients.find(c=>String(c.id)===String(id))
   const rsDe=id=>clientEntities.filter(e=>String(e.client_id)===String(id)).map(e=>e.name).filter(Boolean)
   const rutsDe=id=>{ const c=cli(id); const rs=clientEntities.filter(e=>String(e.client_id)===String(id)); return [c?.rut,...rs.map(e=>e.rut)].map(r=>String(r||'').replace(/[.\-\s]/g,'').toLowerCase()).filter(Boolean) }
@@ -8156,6 +8187,17 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
         ? <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}><b style={{color:C.accent}}>{pending.by||'Un colega'}</b> propone unir estas dos fichas por parecerse. Revisa: ¿son el mismo cliente?</div>
         : <>
           <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}>Une dos fichas del mismo cliente. Se conserva la que tiene datos; a esa se le mueve todo lo de la otra y la otra se elimina. Nada se pierde.</div>
+          {dupSug.length>0&&<div style={{marginBottom:12}}>
+            <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.soonText,marginBottom:6}}>{dupSug.length} posible{dupSug.length!==1?'s':''} duplicado{dupSug.length!==1?'s':''} — elige uno para revisar</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:210,overflowY:'auto'}}>
+              {dupSug.map((g,i)=>{ const tl=g.tipo==='exacto'?'idéntico':g.tipo==='contenido'?'muy similar':'posible typo'; const tc=g.tipo==='exacto'?C.overdueText:g.tipo==='contenido'?C.soonText:C.azulInfo
+                return <div key={i} onClick={()=>{ setAId(g.clientes[0].id); setBId(g.clientes[1].id); setQa(''); setQb('') }} style={{display:'flex',alignItems:'center',gap:8,background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:9,padding:'8px 10px',cursor:'pointer'}}>
+                  <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.clientes.map(c=>c.name).join('  ·  ')}{g.clientes.length>2?` (${g.clientes.length})`:''}</span>
+                  <span style={{fontSize:9,fontWeight:800,color:tc,flexShrink:0,textTransform:'uppercase',letterSpacing:.3}}>{tl}</span>
+                  <span style={{color:C.done,flexShrink:0}}>›</span>
+                </div> })}
+            </div>
+          </div>}
           <div style={{display:'flex',gap:10,marginBottom:12}}>
             {picker(aId,setAId,qa,setQa,bId,'Cliente 1')}
             {picker(bId,setBId,qb,setQb,aId,'Cliente 2')}
@@ -20489,7 +20531,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   )
 }
 
-function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin}) {
+function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
   const [verProv,setVerProv] = useState(false)
   // Clientes creados por el último sync de Drive → tag "Nuevo · Drive" unos días.
   const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())
@@ -20551,6 +20593,8 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   },[expenses])
 
   const isDesktop = useIsDesktop()   // Fase 2: en desktop, lista + ficha lado a lado (2-paneles)
+  // Alerta proactiva de clientes duplicados/similares (evita fichas y carpetas de Drive repetidas). Abre la fusión.
+  const dupGrupos = useMemo(()=>detectarClientesDuplicados(clients),[clients])
   // Proveedores inline (mismo formato que clientes: lista → ficha, pantalla completa)
   if(verProv) return (
     <ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} anticipos={anticipos} onSave={onSaveProveedor} onRevertirPago={onRevertirPagoProveedor} onAsignarFacturas={onAsignarFacturas} onOpenSale={onOpenSale} onClose={()=>setVerProv(false)} saving={provSaving}/>
@@ -20676,6 +20720,15 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         )}
       </div>
       <div style={{padding:'10px 20px 100px'}}>
+        {dupGrupos.length>0&&onOpenFusion&&(()=>{ const nf=dupGrupos.reduce((a,g)=>a+g.clientes.length,0); return (
+          <div onClick={onOpenFusion} title='Revisar y fusionar' style={{display:'flex',alignItems:'center',gap:10,background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:12,padding:'11px 13px',marginBottom:12,cursor:'pointer'}}>
+            <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.soonText}}>{dupGrupos.length} posible{dupGrupos.length!==1?'s':''} cliente{dupGrupos.length!==1?'s':''} duplicado{dupGrupos.length!==1?'s':''}</div>
+              <div style={{fontSize:11,color:C.soonText,opacity:.9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nf} fichas con nombres iguales o muy parecidos — revisa y fusiona para no repetir carpetas</div>
+            </div>
+            <span style={{fontSize:11,fontWeight:700,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'5px 11px',flexShrink:0,whiteSpace:'nowrap'}}>Revisar</span>
+          </div> )})()}
         {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes</div>}
         {cl.length>0&&(()=>{
           // Directorio A-Z: agrupado por inicial, avatar empresa/persona del color del responsable, índice lateral. Sin cifras (vista de navegación).
@@ -33224,7 +33277,7 @@ export default function App() {
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={()=>setModal({type:'fusionarClientes'})}/>}
           </ViewErrorBoundary></div>
         )}
         {!isDesktop&&userRole==='limited'&&tab==='tasks'&&(
