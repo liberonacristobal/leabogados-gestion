@@ -648,6 +648,28 @@ function detectarClientesDuplicados(clients=[]){
   grupos.sort((a,b)=> (rank[a.tipo]-rank[b.tipo]) || (b.clientes.length-a.clientes.length))
   return grupos
 }
+// Clientes EXISTENTES parecidos a un nombre NUEVO (misma regla que el detector) → alarma que BLOQUEA la creación
+// para no duplicar (prevención > fusión). Incluye ocasionales (un dup contra un ocasional también importa); excluye interno y la propia ficha.
+function clientesParecidos(name, clients=[], excludeId=null){
+  const n=_normTxt(name); if(!n) return []
+  const toks=n.split(' ').filter(w=>w.length>1)
+  const out=[]
+  for(const c of (clients||[])){
+    if(!c||!c.name||c.deleted_at||c.is_internal||(excludeId!=null&&String(c.id)===String(excludeId))) continue
+    const cn=_normTxt(c.name); if(!cn) continue
+    const ct=cn.split(' ').filter(w=>w.length>1)
+    let tipo=null
+    if(cn===n) tipo='exacto'
+    else { const short=toks.length<=ct.length?toks:ct, long=toks.length<=ct.length?ct:toks
+      if(short.length>=2 && short.every(t=>long.includes(t))) tipo='contenido'
+      else if(toks.length===ct.length && Math.min(n.length,cn.length)>=6 && _lev(n,cn)<=2) tipo='typo' }
+    if(tipo) out.push({cliente:c, tipo})
+  }
+  const rank={exacto:0,contenido:1,typo:2}
+  out.sort((a,b)=>rank[a.tipo]-rank[b.tipo])
+  return out
+}
+const _tipoDupLbl = t => t==='exacto'?'idéntico':t==='contenido'?'muy similar':'posible typo'
 // La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
@@ -5400,12 +5422,16 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   )
 }
 
-function MiniClientForm({onSave,onCancel,defaultStatus='Activo',defaultName=''}) {
+function MiniClientForm({onSave,onCancel,defaultStatus='Activo',defaultName='',clients=[],onPickExisting}) {
   const [f,setF] = useState({name:defaultName||'',rut:'',type:'Corporativo'})
   const [saving,setSaving] = useState(false)
-  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const [okDistinto,setOkDistinto] = useState(false)
+  const up=(k,v)=>{ setF(p=>({...p,[k]:v})); if(k==='name') setOkDistinto(false) }
+  // Alarma anti-duplicado: clientes existentes iguales o muy parecidos al nombre tipeado. BLOQUEA crear hasta usar el existente o confirmar que es distinto.
+  const parecidos = useMemo(()=>clientesParecidos(f.name, clients), [f.name, clients])
+  const bloqueado = parecidos.length>0 && !okDistinto
   const save = async() => {
-    if(!f.name.trim()) return
+    if(!f.name.trim() || bloqueado) return
     setSaving(true)
     try {
       const {data,error} = await supabase.from('clients').insert({...f,status:defaultStatus}).select().single()
@@ -5418,13 +5444,28 @@ function MiniClientForm({onSave,onCancel,defaultStatus='Activo',defaultName=''})
     <div style={{background:C.bgSoft,borderRadius:10,padding:'12px 14px',marginBottom:12,border:`1px solid ${C.accent}`}}>
       <div style={{fontSize:12,fontWeight:600,color:C.accent,marginBottom:10}}>Nuevo cliente</div>
       <Fld label='Nombre'><Inp value={f.name} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...' autoFocus/></Fld>
+      {parecidos.length>0&&(
+        <div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:9,padding:'9px 11px',margin:'0 0 10px'}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.soonText,marginBottom:6}}>Ya existe {parecidos.length>1?'n fichas parecidas':'una ficha parecida'} — no dupliques:</div>
+          {parecidos.slice(0,4).map(({cliente,tipo})=>(
+            <div key={cliente.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
+              <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliente.name} <span style={{fontSize:9,fontWeight:700,color:C.soonText}}>· {_tipoDupLbl(tipo)}</span></span>
+              {onPickExisting&&<span onClick={()=>onPickExisting(cliente)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,borderRadius:7,padding:'4px 10px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Usar esta</span>}
+            </div>
+          ))}
+          <label style={{display:'flex',alignItems:'center',gap:7,marginTop:7,cursor:'pointer'}}>
+            <input type='checkbox' checked={okDistinto} onChange={e=>setOkDistinto(e.target.checked)} style={{width:15,height:15,accentColor:C.accent,cursor:'pointer'}}/>
+            <span style={{fontSize:11,color:C.text}}>Confirmo que es un cliente <b>distinto</b> — crear igual</span>
+          </label>
+        </div>
+      )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         <Fld label='RUT'><Inp value={f.rut} onChange={e=>up('rut',e.target.value)} placeholder='76.xxx.xxx-x'/></Fld>
         <Fld label='Tipo'><Sel value={f.type} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
       </div>
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={onCancel} style={{flex:1,padding:8,borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.name.trim()} onClick={save} style={{flex:2,padding:8,borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>{saving?'Guardando...':'Crear cliente'}</button>
+        <button disabled={saving||!f.name.trim()||bloqueado} onClick={save} title={bloqueado?'Usa la ficha existente o confirma que es distinto':''} style={{flex:2,padding:8,borderRadius:8,border:'none',background:bloqueado?C.done:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:bloqueado?'default':'pointer'}}>{saving?'Guardando...':'Crear cliente'}</button>
       </div>
     </div>
   )
@@ -5750,13 +5791,19 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         // Previene el duplicado de ficha en el origen (lo de Eugenia/Saavedra): si el RUT ya está en otra ficha, avisa.
         const _rut=propNewClient.rut.trim()
         if(_rut){ const _n=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const ya=(clients||[]).find(c=>c.rut&&_n(c.rut)===_n(_rut))||(clientEntities||[]).find(e=>e.rut&&_n(e.rut)===_n(_rut)); if(ya && !await appConfirm(`Ya existe una ficha con el RUT ${_rut}${ya.name?` · ${ya.name}`:''}. Un RUT debería estar en una sola ficha. ¿Crear otra de todas formas?`)){ setPropCreating(false); return } }
-        // Nunca duplicar (regla de oro): si ya existe la ficha con el MISMO nombre normalizado, REUSA esa en vez de crear otra (evita el "Marcela Bravo" ×2). Compuerta: aceptar = usar la existente; cancelar = crear una nueva a propósito.
-        const _nn=_normTxt(propNewClient.name)
-        const yaNombre = _nn ? (clients||[]).find(c=>_normTxt(c.name)===_nn) : null
-        if(yaNombre && await appConfirm(`Ya existe la ficha «${yaNombre.name}». Para no duplicar, ¿uso esa misma ficha?\n\nAceptar = usar la existente · Cancelar = crear una nueva`)){
-          client = yaNombre
-          const ents=(clientEntities||[]).filter(e=>e.client_id===yaNombre.id); if(ents[0]&&!propEntitySel) setPropEntitySel(ents[0].id)
-        } else {
+        // Nunca duplicar (regla de oro) — ALARMA + BLOQUEO: si ya existe una ficha igual o muy parecida, no crear a ciegas.
+        //  · idéntica (mismo nombre normalizado) → se reusa esa ficha (es la misma).
+        //  · muy parecida (contenido/typo) → compuerta: cancelar = ir a usar la existente; aceptar = crear igual (es otra).
+        const par = clientesParecidos(propNewClient.name, clients)
+        const exacto = par.find(p=>p.tipo==='exacto')
+        if(exacto){
+          client = exacto.cliente
+          const ents=(clientEntities||[]).filter(e=>e.client_id===exacto.cliente.id); if(ents[0]&&!propEntitySel) setPropEntitySel(ents[0].id)
+        } else if(par.length){
+          const nombres = par.slice(0,3).map(p=>`• ${p.cliente.name} (${_tipoDupLbl(p.tipo)})`).join('\n')
+          if(!await appConfirm(`Ojo: ya existe ${par.length>1?'n fichas':'una ficha'} muy parecida${par.length>1?'s':''} — para no duplicar (y no repetir carpetas en Drive), mejor usa la existente con "Buscar otro cliente":\n\n${nombres}\n\n¿Crear una ficha NUEVA de todas formas?`)){ setPropCreating(false); return }
+        }
+        if(!client) {
           // clients NO tiene columna razon_social: el cliente se crea con nombre/RUT y la razón social va a client_entities.
           const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null}).select().single()
           if(error) throw error
@@ -6216,7 +6263,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <span style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:6,padding:'5px 11px',flexShrink:0}}>Cambiar</span>
         </div>
       ))}
-      {showNewClient&&<MiniClientForm defaultName={clientQ} defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false);setClientQ('')}} onCancel={()=>setShowNewClient(false)}/>}
+      {showNewClient&&<MiniClientForm defaultName={clientQ} clients={clients} defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onPickExisting={c=>{setSelectedClient(c);up('client_id',c.id);setShowNewClient(false);setClientQ('')}} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false);setClientQ('')}} onCancel={()=>setShowNewClient(false)}/>}
       {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se crea como Prospecto; al activar la propuesta pasa a Activo.</div>}
 
       <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganización societaria…'/></Fld>
@@ -20725,7 +20772,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
             <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:700,color:C.soonText}}>{dupGrupos.length} posible{dupGrupos.length!==1?'s':''} cliente{dupGrupos.length!==1?'s':''} duplicado{dupGrupos.length!==1?'s':''}</div>
-              <div style={{fontSize:11,color:C.soonText,opacity:.9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nf} fichas con nombres iguales o muy parecidos — revisa y fusiona para no repetir carpetas</div>
+              <div style={{fontSize:11,color:C.soonText,opacity:.9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nf} fichas con nombres iguales o muy parecidos — revísalas para no repetir clientes ni carpetas</div>
             </div>
             <span style={{fontSize:11,fontWeight:700,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'5px 11px',flexShrink:0,whiteSpace:'nowrap'}}>Revisar</span>
           </div> )})()}
@@ -20985,10 +21032,13 @@ function ContactsEditor({clientId,clientName}) {
   )
 }
 
-function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
+function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOpenExisting}) {
   const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,abogado_responsable:'',status:'Activo',ended_at:'',notes:''})
   const [rsIni,setRsIni]=useState({name:'',rut:''})   // razón social inicial (cliente nuevo) — se crea junto con el cliente
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  // Al escribir el nombre de un cliente NUEVO, el campo actúa como buscador: muestra los existentes iguales o muy
+  // parecidos (para no duplicar). Sin coincidencias, escribes el nombre y sigues. Solo aplica al crear (no al editar).
+  const parecidos = useMemo(()=> client?.id ? [] : clientesParecidos(f.name, clients), [f.name, clients, client])
   const [showRS,setShowRS]=useState(false)
   const [showCon,setShowCon]=useState(false)
   const sec=(label,open,setOpen)=>(
@@ -20999,7 +21049,20 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
   )
   return (
     <>
-      <Fld label='Nombre' mb={8}><Inp value={f.name||''} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...'/></Fld>
+      <Fld label='Nombre' mb={parecidos.length?4:8}><Inp value={f.name||''} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...'/></Fld>
+      {parecidos.length>0&&(
+        <div style={{border:`1px solid ${C.soon}`,background:C.soonBg,borderRadius:9,padding:'7px 9px',marginBottom:8}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.soonText,marginBottom:4}}>Ya existe{parecidos.length>1?'n':''} — ¿es alguno de estos? (no dupliques)</div>
+          {parecidos.slice(0,5).map(({cliente,tipo})=>(
+            <div key={cliente.id} onClick={()=>onOpenExisting&&onOpenExisting(cliente)} title='Abrir esta ficha' style={{display:'flex',alignItems:'center',gap:8,padding:'5px 4px',borderTop:`0.5px solid ${C.soon}`,cursor:onOpenExisting?'pointer':'default'}}>
+              <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliente.name}{cliente.rut?<span style={{fontWeight:400,color:C.muted}}> · {cliente.rut}</span>:''}</span>
+              <span style={{fontSize:9,fontWeight:700,color:C.soonText,flexShrink:0,textTransform:'uppercase',letterSpacing:.3}}>{_tipoDupLbl(tipo)}</span>
+              {onOpenExisting&&<span style={{fontSize:11,fontWeight:700,color:C.accent,flexShrink:0}}>Abrir ›</span>}
+            </div>
+          ))}
+          <div style={{fontSize:10,color:C.soonText,marginTop:5,opacity:.9}}>Si es un cliente distinto, sigue escribiendo y guarda.</div>
+        </div>
+      )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         <Fld label='RUT' mb={8}><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.217.569-K'/></Fld>
         <Fld label='Tipo' mb={8}><Sel value={f.type||''} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral']} placeholder='— Seleccionar —'/></Fld>
@@ -31529,6 +31592,8 @@ export default function App() {
       if(!cli || cli.status!=='Activo' || cli.drive_folder_id || cli.is_occasional || cli.is_internal) return
       const nm=(cli.name||'').trim(); if(!nm) return
       const res=await driveCall({action:'createFolder', name:nm})
+      // Carpeta MUY parecida ya en Drive → no creo otra; aviso para que el usuario la revise/ajuste manualmente (evita carpetas duplicadas).
+      if(res?.conflict){ const nombres=(res.similar||[]).map(s=>`• ${s.name}`).join('\n'); appAlert(`Ojo con Drive: ya hay ${(res.similar||[]).length>1?'carpetas parecidas':'una carpeta parecida'} a «${nm}»:\n\n${nombres}\n\nNo creé una nueva para no duplicar. Revisa/ajusta la carpeta en Drive (o renombra) y vuelve a guardar el cliente.`); return }
       const fid=res?.folderId||res?.id; if(!fid) return
       await supabase.from('clients').update({drive_folder_id:fid}).eq('id',cli.id)
       setClients(p=>p.map(c=>c.id===cli.id?{...c,drive_folder_id:fid}:c))
@@ -32174,6 +32239,8 @@ export default function App() {
       const payload={...rest,name:rest.name.trim(),updated_at:new Date().toISOString()}
       if(payload.status!=='Terminado')payload.ended_at=null
       else if(!payload.ended_at)payload.ended_at=new Date().toISOString().slice(0,10)
+      // Nunca duplicar — ALARMA + BLOQUEO al CREAR (no al editar): si el nombre es igual o muy parecido a otra ficha, confirma antes.
+      if(!f.id){ const par=clientesParecidos(payload.name, clients); if(par.length){ const nombres=par.slice(0,3).map(p=>`• ${p.cliente.name} (${_tipoDupLbl(p.tipo)})`).join('\n'); if(!await appConfirm(`Ojo: ya existe ${par.length>1?'n fichas':'una ficha'} muy parecida${par.length>1?'s':''} — para no duplicar (ni repetir carpetas en Drive), revisa si es alguna de estas:\n\n${nombres}\n\n¿Crear una ficha NUEVA de todas formas?`)){ setSaving(false); return } } }
       const saved=await upsertClient(payload)
       setClients(p=>{const next=f.id?p.map(x=>x.id===saved.id?saved:x):[...p,saved];return next.sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))})
       // Razón social inicial: se crea junto con el cliente nuevo (evita el viaje de reabrir).
@@ -32187,7 +32254,7 @@ export default function App() {
       setModal(null)
     }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
-  },[ensureClientDriveFolder])
+  },[ensureClientDriveFolder,clients])
 
   // Crear (o reusar) un cliente ocasional liviano, opcionalmente con responsable. Devuelve el cliente. Reusa si ya existe por nombre.
   const handleCreateOccasional=useCallback(async(name,responsable)=>{
@@ -33412,7 +33479,7 @@ export default function App() {
         {modal?.type==='task'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal fullscreenOnMobile title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
         {modal?.type==='cierreTarea'&&<Modal fullscreenOnMobile title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>{ const t=modal.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/></Modal>}
-        {modal?.type==='client'&&<Modal fullscreenOnMobile title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
+        {modal?.type==='client'&&<Modal fullscreenOnMobile title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales} clients={clients} onOpenExisting={c=>{setModal(null);handleOpenClientFicha(c.id)}}/></Modal>}
       </div>
       {undoToast&&(
         <div style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(20px + env(safe-area-inset-bottom))',zIndex:9999,display:'flex',alignItems:'center',gap:12,background:C.accent,color:'#fff',borderRadius:12,padding:'10px 12px 10px 16px',boxShadow:'0 6px 24px rgba(0,0,0,.22)',maxWidth:'calc(100vw - 32px)'}}>

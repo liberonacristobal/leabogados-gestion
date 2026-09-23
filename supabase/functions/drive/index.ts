@@ -153,6 +153,9 @@ serve(async (req) => {
       const name = String(body.name || "").trim();
       if (!name) return json({ error: "Falta name" }, 400);
       const parent = String(body.parentId || CLIENTES_ROOT);
+      const nrm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+      const nName = nrm(name); const tName = nName.split(" ").filter((w) => w.length > 1);
+      // 1) Idéntica → reusar (no duplicar).
       const q = `'${parent}' in parents and name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
       const sr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`, { headers: H });
       const sd = await sr.json();
@@ -160,6 +163,25 @@ serve(async (req) => {
         const f = sd.files[0];
         return json({ id: f.id, folderId: f.id, url: "https://drive.google.com/drive/folders/" + f.id, reused: true });
       }
+      // 2) MUY PARECIDA (no idéntica) → NO crear; devolver conflicto para que el humano revise/ajuste en Drive (evita carpetas duplicadas).
+      if (body.force !== true) {
+        const tok = tName.find((w) => w.length >= 3);
+        if (tok) {
+          const qs = `'${parent}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false and name contains '${tok.replace(/'/g, "\\'")}'`;
+          const rs = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qs)}&fields=files(id,name)&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`, { headers: H });
+          const rd = await rs.json();
+          if (rs.ok && Array.isArray(rd.files)) {
+            const sim = rd.files.filter((f: { name: string }) => {
+              const cn = nrm(f.name); if (!cn || cn === nName) return false;
+              const ct = cn.split(" ").filter((w) => w.length > 1);
+              const short = tName.length <= ct.length ? tName : ct, long = tName.length <= ct.length ? ct : tName;
+              return short.length >= 2 && short.every((t) => long.includes(t));
+            }).map((f: { id: string; name: string }) => ({ id: f.id, name: f.name }));
+            if (sim.length) return json({ conflict: true, similar: sim });
+          }
+        }
+      }
+      // 3) Crear.
       const meta = { name, mimeType: "application/vnd.google-apps.folder", parents: [parent] };
       const r = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id", {
         method: "POST",
