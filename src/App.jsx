@@ -459,7 +459,8 @@ function planDeVenta(sale){
   if(!sale) return []
   const cfg=sale.cobro_config||{}; const totalUF=Number(sale.amount_uf)||0; const t=sale.cobro_type
   const ymOf=iso=>String(anio4ISO(iso)||'').slice(0,7)
-  const ymAdd=(ini,i)=>{ const m=ymOf(ini).match(/^(\d{4})-(\d{2})$/); if(!m) return null; let y=+m[1], mm=(+m[2]-1)+i; y+=Math.floor(mm/12); mm=((mm%12)+12)%12; return `${y}-${String(mm+1).padStart(2,'0')}` }
+  // 1ª cuota nunca antes del inicio: si el inicio trae día >1 (ej. 30/09) la serie arranca el mes SIGUIENTE (coherente con mesISO del SaleForm).
+  const ymAdd=(ini,i)=>{ const a=String(anio4ISO(ini)||''); const md=a.match(/^(\d{4})-(\d{2})-(\d{2})/); const m=a.match(/^(\d{4})-(\d{2})/); if(!m) return null; const off=(md&&+md[3]>1)?1:0; let y=+m[1], mm=(+m[2]-1)+i+off; y+=Math.floor(mm/12); mm=((mm%12)+12)%12; return `${y}-${String(mm+1).padStart(2,'0')}` }
   const out=[]
   if(t==='personalizada' && Array.isArray(cfg.cuotasCustom)){
     cfg.cuotasCustom.forEach(c=>{ const uf=parseFloat(String(c.monto).replace(',','.'))||0; const ym=ymOf(c.fecha); if(uf>0 && /^\d{4}-\d{2}$/.test(ym)) out.push({idx:out.length+1, montoUF:uf, ym}) })
@@ -5809,10 +5810,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   const generarCobros = () => {
     if(!f.client_id||!totalCLP) return []
     const cobros = []
-    // Vencimiento estándar: día 1 del mes de cada cuota (se emite del 1 al 5). El día del "Inicio cobro" no importa, solo su mes.
-    const mesISO=(inicio,i)=>{ const [yy,mm]=anio4ISO(inicio).split('-').map(Number); let cy=yy, cm=mm+i; while(cm>12){cm-=12;cy++} return `${cy}-${String(cm).padStart(2,'0')}-01` }
+    // Vencimiento estándar: día 1 del mes (se emite del 1 al 5). La 1ª cuota NUNCA cae ANTES del "Inicio cobro":
+    // inicio día 1 → ese mes; inicio en cualquier día posterior (ej. 30/09) → el 1 del mes SIGUIENTE (01/10), nunca el 1 de ESE mes (01/09, anterior al inicio).
+    const mesISO=(inicio,i)=>{ const [yy,mm,dd]=anio4ISO(inicio).split('-').map(Number); let cy=yy, cm=mm+i+((dd>1)?1:0); while(cm>12){cm-=12;cy++} return `${cy}-${String(cm).padStart(2,'0')}-01` }
     if(cobroType==='mensual' && mensualInicio) {
-      const [y,m] = mensualInicio.split('-').map(Number); let cy=y, cm=m
+      const [y,m,d] = anio4ISO(mensualInicio).split('-').map(Number); let cy=y, cm=m+((d>1)?1:0); if(cm>12){cm-=12;cy++}
       // Mes vencido: la cuota se DEVENGA/emite en un mes pero corresponde al servicio del mes ANTERIOR (la que emites en julio es junio). La fecha (devengo) no cambia, solo la etiqueta del mes.
       for(let i=0;i<12;i++){ const lm=cm===1?12:cm-1, ly=cm===1?cy-1:cy; cobros.push({monto:Math.round(totalCLP), fecha:`${cy}-${String(cm).padStart(2,'0')}-01`, label:`Mensual ${MONTHS[lm-1]} ${ly}`}); cm++; if(cm>12){cm=1;cy++} }
     } else if(cobroType==='cuotas' && cobroInicio && cuotaDist) {
