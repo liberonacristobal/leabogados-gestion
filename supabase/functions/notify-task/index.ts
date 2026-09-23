@@ -76,7 +76,7 @@ const EMAILS: Record<string, string> = {
   "Martín": "mc@leabogados.cl",
   "Martin": "mc@leabogados.cl",
   "Martina": "mp@leabogados.cl",
-  "Rodrigo": "rodrigo@leabogados.cl",
+  "Rodrigo": "rd@leabogados.cl",
   "Erasmo": "ee@leabogados.cl",
   "Cristóbal": "cl@leabogados.cl",
   "Cristobal": "cl@leabogados.cl",

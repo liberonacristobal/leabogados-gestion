@@ -21,7 +21,6 @@ const TEAM = [
   "mc@leabogados.cl",
   "mp@leabogados.cl",
   "rd@leabogados.cl",
-  "rodrigo@leabogados.cl",
 ];
 
 // Solo modelos que la app usa hoy; cualquier otro cae al default seguro.

@@ -11,7 +11,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const EMAILS: Record<string, string> = {
   "Martín": "mc@leabogados.cl", "Martin": "mc@leabogados.cl",
   "Martina": "mp@leabogados.cl",
-  "Rodrigo": "rodrigo@leabogados.cl",
+  "Rodrigo": "rd@leabogados.cl",
   "Erasmo": "ee@leabogados.cl",
   "Cristóbal": "cl@leabogados.cl", "Cristobal": "cl@leabogados.cl",
 };
