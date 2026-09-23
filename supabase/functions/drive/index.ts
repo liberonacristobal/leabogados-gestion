@@ -48,6 +48,9 @@ async function getRefreshToken(): Promise<string | null> {
   return (Array.isArray(d) && d[0]?.refresh_token) || null;
 }
 
+// Carpeta raíz de "Clientes" en el Drive del estudio (parametrizable por env → vendible por diseño). Default = LEA.
+const CLIENTES_ROOT = Deno.env.get("DRIVE_CLIENTES_ROOT") || "19JsFeh9icekmXMKyubkbLxfXVujmc3eh";
+
 let _tok = ""; let _exp = 0;
 async function getToken(): Promise<string> {
   if (_tok && _exp > Date.now() + 60000) return _tok;
@@ -142,6 +145,30 @@ serve(async (req) => {
       const d = await r.json();
       if (!r.ok) return json({ error: d?.error?.message || `Drive ${r.status}` }, r.status);
       return json({ id: d.id, url: "https://drive.google.com/open?id=" + d.id });
+    }
+
+    // Crear la carpeta del cliente bajo la raíz "Clientes". Anti-duplicado: si ya existe una carpeta con ese
+    // nombre bajo el padre, la reusa (no crea otra) — coherente con la regla "nunca duplicar".
+    if (body.action === "createFolder") {
+      const name = String(body.name || "").trim();
+      if (!name) return json({ error: "Falta name" }, 400);
+      const parent = String(body.parentId || CLIENTES_ROOT);
+      const q = `'${parent}' in parents and name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+      const sr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`, { headers: H });
+      const sd = await sr.json();
+      if (sr.ok && Array.isArray(sd.files) && sd.files.length) {
+        const f = sd.files[0];
+        return json({ id: f.id, folderId: f.id, url: "https://drive.google.com/drive/folders/" + f.id, reused: true });
+      }
+      const meta = { name, mimeType: "application/vnd.google-apps.folder", parents: [parent] };
+      const r = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id", {
+        method: "POST",
+        headers: { ...H, "Content-Type": "application/json" },
+        body: JSON.stringify(meta),
+      });
+      const d = await r.json();
+      if (!r.ok) return json({ error: d?.error?.message || `Drive ${r.status}` }, r.status);
+      return json({ id: d.id, folderId: d.id, url: "https://drive.google.com/drive/folders/" + d.id, reused: false });
     }
 
     return json({ error: "Acción no soportada" }, 400);
