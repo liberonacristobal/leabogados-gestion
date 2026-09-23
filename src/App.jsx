@@ -5371,8 +5371,8 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   )
 }
 
-function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
-  const [f,setF] = useState({name:'',rut:'',type:'Corporativo'})
+function MiniClientForm({onSave,onCancel,defaultStatus='Activo',defaultName=''}) {
+  const [f,setF] = useState({name:defaultName||'',rut:'',type:'Corporativo'})
   const [saving,setSaving] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const save = async() => {
@@ -6137,7 +6137,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 ? <button onClick={()=>{setReasignCli(false);setClientQ('')}} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>Cancelar</button>
                 : <button onClick={()=>setShowNewClient(true)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>+ Nuevo</button>}
             </div>
-            {clientMatches.length>0&&(
+            {clientQ.trim()&&!showNewClient&&(clientMatches.length>0||!reasignCli)&&(
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
                 {clientMatches.map(c=>(
                   <div key={c.id} onMouseDown={()=>{ const rea=reasignCli; setSelectedClient(c);up('client_id',c.id);
@@ -6154,6 +6154,15 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                     {c.rut&&<div style={{fontSize:11,color:C.muted}}>{c.rut}</div>}
                   </div>
                 ))}
+                {/* Nunca perder el nombre tipeado: si no hay un cliente que calce EXACTO, ofrecer crearlo con ese nombre (abre el mini-form pre-llenado). */}
+                {!reasignCli&&!clientMatches.some(c=>_normTxt(c.name)===_normTxt(clientQ))&&(
+                  <div onMouseDown={()=>setShowNewClient(true)}
+                    style={{padding:'10px 14px',cursor:'pointer',fontSize:13,fontWeight:600,color:C.accent,background:'#FBFCFD',borderTop:clientMatches.length?`1px solid ${C.border}`:'none'}}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft}
+                    onMouseLeave={e=>e.currentTarget.style.background='#FBFCFD'}>
+                    + Crear «{clientQ.trim()}» como {f.status==='Propuesta'?'prospecto':'cliente nuevo'}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -6168,7 +6177,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <span style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:6,padding:'5px 11px',flexShrink:0}}>Cambiar</span>
         </div>
       ))}
-      {showNewClient&&<MiniClientForm defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
+      {showNewClient&&<MiniClientForm defaultName={clientQ} defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false);setClientQ('')}} onCancel={()=>setShowNewClient(false)}/>}
       {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se crea como Prospecto; al activar la propuesta pasa a Activo.</div>}
 
       <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganización societaria…'/></Fld>
