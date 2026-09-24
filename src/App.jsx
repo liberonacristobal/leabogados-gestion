@@ -21039,6 +21039,8 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
   // Al escribir el nombre de un cliente NUEVO, el campo actúa como buscador: muestra los existentes iguales o muy
   // parecidos (para no duplicar). Sin coincidencias, escribes el nombre y sigues. Solo aplica al crear (no al editar).
   const parecidos = useMemo(()=> client?.id ? [] : clientesParecidos(f.name, clients), [f.name, clients, client])
+  const [okDistinto,setOkDistinto] = useState(false)   // BLOQUEO duro: con un parecido, no deja guardar hasta confirmar que es OTRO cliente
+  const bloqueadoDup = !client?.id && parecidos.length>0 && !okDistinto
   const [showRS,setShowRS]=useState(false)
   const [showCon,setShowCon]=useState(false)
   const sec=(label,open,setOpen)=>(
@@ -21049,7 +21051,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
   )
   return (
     <>
-      <Fld label='Nombre' mb={parecidos.length?4:8}><Inp value={f.name||''} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...'/></Fld>
+      <Fld label='Nombre' mb={parecidos.length?4:8}><Inp value={f.name||''} onChange={e=>{up('name',e.target.value);setOkDistinto(false)}} placeholder='Nombre del cliente...'/></Fld>
       {parecidos.length>0&&(
         <div style={{border:`1px solid ${C.soon}`,background:C.soonBg,borderRadius:9,padding:'7px 9px',marginBottom:8}}>
           <div style={{fontSize:10,fontWeight:700,color:C.soonText,marginBottom:4}}>Ya existe{parecidos.length>1?'n':''} — ¿es alguno de estos? (no dupliques)</div>
@@ -21060,7 +21062,10 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
               {onOpenExisting&&<span style={{fontSize:11,fontWeight:700,color:C.accent,flexShrink:0}}>Abrir ›</span>}
             </div>
           ))}
-          <div style={{fontSize:10,color:C.soonText,marginTop:5,opacity:.9}}>Si es un cliente distinto, sigue escribiendo y guarda.</div>
+          <label style={{display:'flex',alignItems:'center',gap:7,marginTop:7,cursor:'pointer'}}>
+            <input type='checkbox' checked={okDistinto} onChange={e=>setOkDistinto(e.target.checked)} style={{width:15,height:15,accentColor:C.accent,cursor:'pointer'}}/>
+            <span style={{fontSize:11,color:C.text}}>No es ninguno — es un cliente <b>distinto</b>, crear igual</span>
+          </label>
         </div>
       )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -21099,7 +21104,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Archivar / eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.name?.trim()} onClick={()=>onSave({...f, _rsIni: client?.id?undefined:(rsIni.name?.trim()||rsIni.rut?.trim()?rsIni:undefined)})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!f.name?.trim()?.6:1}}>
+        <button disabled={saving||!f.name?.trim()||bloqueadoDup} title={bloqueadoDup?'Ya existe una ficha muy parecida — usa esa o marca que es un cliente distinto':''} onClick={()=>onSave({...f, _rsIni: client?.id?undefined:(rsIni.name?.trim()||rsIni.rut?.trim()?rsIni:undefined)})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:bloqueadoDup?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:bloqueadoDup?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.name?.trim()||bloqueadoDup)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -32239,8 +32244,6 @@ export default function App() {
       const payload={...rest,name:rest.name.trim(),updated_at:new Date().toISOString()}
       if(payload.status!=='Terminado')payload.ended_at=null
       else if(!payload.ended_at)payload.ended_at=new Date().toISOString().slice(0,10)
-      // Nunca duplicar — ALARMA + BLOQUEO al CREAR (no al editar): si el nombre es igual o muy parecido a otra ficha, confirma antes.
-      if(!f.id){ const par=clientesParecidos(payload.name, clients); if(par.length){ const nombres=par.slice(0,3).map(p=>`• ${p.cliente.name} (${_tipoDupLbl(p.tipo)})`).join('\n'); if(!await appConfirm(`Ojo: ya existe ${par.length>1?'n fichas':'una ficha'} muy parecida${par.length>1?'s':''} — para no duplicar (ni repetir carpetas en Drive), revisa si es alguna de estas:\n\n${nombres}\n\n¿Crear una ficha NUEVA de todas formas?`)){ setSaving(false); return } } }
       const saved=await upsertClient(payload)
       setClients(p=>{const next=f.id?p.map(x=>x.id===saved.id?saved:x):[...p,saved];return next.sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))})
       // Razón social inicial: se crea junto con el cliente nuevo (evita el viaje de reabrir).
