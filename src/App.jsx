@@ -21159,6 +21159,8 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
   const [showRS,setShowRS]=useState(false)
   const [showCon,setShowCon]=useState(false)
   const [showDrive,setShowDrive]=useState(false)
+  const isDesktop=useIsDesktop()
+  const twoCol=isDesktop && !!client?.id   // en página + escritorio: 2 columnas (datos base | relacionados). Nuevo cliente y móvil = columna única.
   const sec=(label,open,setOpen)=>(
     <button type='button' onClick={()=>setOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 12px',border:`1px solid ${C.border}`,borderRadius:10,background:C.bgSoft,cursor:'pointer',marginBottom:8}}>
       <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>{label}</span>
@@ -21167,6 +21169,8 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
   )
   return (
     <>
+      <div style={twoCol?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:22,alignItems:'start'}:undefined}>
+        <div>
       <Fld label='Nombre' mb={parecidos.length?4:8}><Inp value={f.name||''} onChange={e=>{up('name',e.target.value);setOkDistinto(false)}} placeholder='Nombre del cliente...'/></Fld>
       {parecidos.length>0&&(
         <div style={{border:`1px solid ${C.soon}`,background:C.soonBg,borderRadius:9,padding:'7px 9px',marginBottom:8}}>
@@ -21203,14 +21207,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
         <button type='button' onClick={()=>up('is_internal',!f.is_internal)} style={{width:34,height:20,borderRadius:12,border:'none',background:f.is_internal?C.accent:C.toggleOff,position:'relative',cursor:'pointer',padding:0,flexShrink:0}}><span style={{position:'absolute',top:2,left:f.is_internal?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></button>
       </div>
       <Fld label='Notas' mb={8}><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
-      {client?.id?(<>
-        {sec('Razones sociales',showRS,setShowRS)}
-        {showRS&&<EntitiesEditor clientId={client.id}/>}
-        {sec('Contactos',showCon,setShowCon)}
-        {showCon&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
-        {onLinkDriveFolder&&sec(client.drive_folder_id?'Carpeta de Drive · vinculada':'Carpeta de Drive',showDrive,setShowDrive)}
-        {onLinkDriveFolder&&showDrive&&<DriveFolderLink client={client} onLink={(fid,fname)=>onLinkDriveFolder(client,fid,fname)}/>}
-      </>):(
+      {!client?.id&&(
         <div style={{marginBottom:8,padding:'10px 12px',borderRadius:10,border:`1px solid ${C.border}`,background:C.bgSoft}}>
           <Lbl>Razón social <span style={{textTransform:'none',letterSpacing:0,color:C.muted}}>· opcional</span></Lbl>
           <div style={{display:'grid',gridTemplateColumns:'1fr 130px',gap:8}}>
@@ -21219,6 +21216,19 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
           </div>
         </div>
       )}
+        </div>
+        {client?.id&&(
+        <div>
+          {twoCol&&<div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.5,margin:'2px 2px 8px'}}>Relacionados</div>}
+          {sec('Razones sociales',showRS,setShowRS)}
+          {showRS&&<EntitiesEditor clientId={client.id}/>}
+          {sec('Contactos',showCon,setShowCon)}
+          {showCon&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
+          {onLinkDriveFolder&&sec(client.drive_folder_id?'Carpeta de Drive · vinculada':'Carpeta de Drive',showDrive,setShowDrive)}
+          {onLinkDriveFolder&&showDrive&&<DriveFolderLink client={client} onLink={(fid,fname)=>onLinkDriveFolder(client,fid,fname)}/>}
+        </div>
+        )}
+      </div>
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Archivar / eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -21227,6 +21237,29 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
         </button>
       </div>
     </>
+  )
+}
+
+// Editar/Nuevo cliente como PÁGINA navegable (no modal): header "‹ Volver" + ClientForm centrado.
+// Móvil = columna única (idéntico al form de antes); escritorio = ClientForm en 2 columnas (ancho mayor).
+function EditClientePage({client, sales, clients, saving, onSave, onDelete, onOpenExisting, onLinkDriveFolder, onBack}){
+  const isDesktop=useIsDesktop()
+  const esNuevo=!client?.id
+  return (
+    <div>
+      <div style={{padding:'16px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}><span style={{fontSize:17}}>‹</span> Volver</span>
+          <div style={{minWidth:0}}>
+            <span style={{fontSize:16,fontWeight:800,color:C.accent}}>{esNuevo?'Nuevo cliente':'Editar cliente'}</span>
+            {!esNuevo&&client?.name&&<span style={{fontSize:12,color:C.muted,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis'}}> · {client.name}</span>}
+          </div>
+        </div>
+      </div>
+      <div style={{maxWidth:isDesktop?900:640,margin:'0 auto',padding:'18px 16px 60px'}}>
+        <ClientForm client={client} sales={sales} clients={clients} saving={saving} onSave={onSave} onClose={onBack} onDelete={onDelete} onOpenExisting={onOpenExisting} onLinkDriveFolder={onLinkDriveFolder}/>
+      </div>
+    </div>
   )
 }
 
@@ -31026,7 +31059,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',facturasDelMes:'Facturas del mes'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',facturasDelMes:'Facturas del mes',editCliente:'Editar cliente'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
   admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina']],
@@ -31433,16 +31466,21 @@ export default function App() {
   // goBack() vuelve a la página inmediatamente anterior (restaura pestaña+scroll+ficha), con fallback al Inicio si la pila está vacía.
   // Antes solo "abrir ficha de cliente" apilaba; el resto usaba setTab crudo y los "Volver" iban al dashboard → poca fluidez.
   const navTo=useCallback((dest)=>{ if(!dest||!dest.tab) return
-    setNavStack(s=>[...s,{tab,fichaId:tab==='clients'?openFichaId:null,scroll:getScroll()}])
+    // returnFichaId: al saltar a una página (ej. editCliente) desde una ficha abierta, guardar a qué ficha volver
+    // (openFichaId ya es null porque ClientsView lo consume) → "Volver" reabre la ficha exacta, no la lista.
+    setNavStack(s=>[...s,{tab,fichaId:('returnFichaId' in dest)?dest.returnFichaId:(tab==='clients'?openFichaId:null),scroll:getScroll()}])
     if('conc' in dest) setConcFocus(dest.conc??null)
     if('concBuscar' in dest) setConcBuscar(dest.concBuscar??null)
     if('cartera' in dest) setCarteraFocus(dest.cartera??null)
     if('billingIntent' in dest) setBillingIntent(dest.billingIntent??null)
     if('emitidoSeg' in dest) setEmitidoSeg(dest.emitidoSeg??'pagadas')
+    if('editClientId' in dest) setEditClientId(dest.editClientId??null)
     if(dest.fichaId!=null) setOpenFichaId(dest.fichaId)
     setTab(dest.tab); setTimeout(()=>restoreScroll({w:0,d:0}),0)
   },[tab,openFichaId])
   const goBack=useCallback(()=>{ if(navStack.length) handleBackOrigin(); else setTab(userRole==='admin'?'dashboard':'tasks') },[navStack,userRole,handleBackOrigin])
+  // Cerrar el editor de cliente: si está como PÁGINA (tab editCliente) vuelve al lugar exacto (goBack); si aún fuera un modal, lo cierra.
+  const closeClientEditor=useCallback(()=>{ if(tab==='editCliente') goBack(); else setModal(null) },[tab,goBack])
   const recordRecent=useCallback((item)=>{ if(!item||!item.id||item.type==='view') return; setNavRecents(p=>{ const next=[{type:item.type,id:item.id,label:item.label},...p.filter(x=>!(x.type===item.type&&String(x.id)===String(item.id)))].slice(0,6); try{localStorage.setItem('nav_recents',JSON.stringify(next))}catch(_){} return next }) },[])
   const handlePaletteSelect=(item)=>{
     setPaletteOpen(false); recordRecent(item)
@@ -31467,6 +31505,7 @@ export default function App() {
   const [concBuscar,setConcBuscar]=useState(null)     // abrir Conciliación (Abonos) buscando por un texto (cliente) — desde "Buscar pago" en Cobranza
   const [billingIntent,setBillingIntent]=useState(null) // gatillo: abrir Facturación con un foco puntual (checklist/cierre/cotejo) desde navTo; lo consume BillingView y lo limpia
   const [emitidoSeg,setEmitidoSeg]=useState('pagadas') // segmento (pagadas/porcobrar) con que abre la página "Facturas del mes" (navTo desde el Inicio)
+  const [editClientId,setEditClientId]=useState(null)  // cliente a editar en la página "editCliente" (id, o '__new__' para uno nuevo); null = ninguno
   const handleOpenConciliacion=useCallback((movId)=>{ navTo({tab:'conciliacion',conc:movId||null}) },[navTo])
   const [concPend,setConcPend]=useState(0)            // abonos sin conciliar (burbuja del icono de banco en el landing)
   const [openConcProp,setOpenConcProp]=useState(false) // gatillo: abrir el panel de propuesta al entrar a Conciliación
@@ -31630,9 +31669,9 @@ export default function App() {
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
-    if(userRole==='limited' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
+    if(userRole==='limited' && tab!=='editCliente' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')   // editCliente = página de edición (drill fuera de la barra)
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
-    if(userRole==='admin' && tab!=='facturasDelMes' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes = drill-down del Inicio (válido, fuera de la paleta)
+    if(userRole==='admin' && tab!=='facturasDelMes' && tab!=='editCliente' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente = drill-down válidos, fuera de la paleta
     // Módulo apagado (entitlements): si la vista actual pertenece a un módulo no contratado, redirige. Para LEA (todo ON) es inerte.
     if(VIEW_MODULO[tab] && !moduloOn(VIEW_MODULO[tab])) setTab(userRole==='admin'?'dashboard':'tasks')
   },[userRole,tab,modVer])
@@ -32377,10 +32416,10 @@ export default function App() {
         }catch(ee){ /* el cliente ya quedó; la RS se puede agregar luego */ }
       }
       ensureClientDriveFolder(saved)   // cliente Activo → su carpeta en Drive (best-effort, idempotente)
-      setModal(null)
+      closeClientEditor()
     }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
-  },[ensureClientDriveFolder,clients])
+  },[ensureClientDriveFolder,clients,closeClientEditor])
 
   // Crear (o reusar) un cliente ocasional liviano, opcionalmente con responsable. Devuelve el cliente. Reusa si ya existe por nombre.
   const handleCreateOccasional=useCallback(async(name,responsable)=>{
@@ -32432,9 +32471,9 @@ export default function App() {
         if(error) throw error
         setClients(p=>p.map(x=>String(x.id)===String(id)?{...x,status:'Terminado'}:x))
       }
-      setModal(null)
+      closeClientEditor()
     }catch(e){appAlert('Error: '+e.message)}
-  },[sales,billing,expenses,anticipos])
+  },[sales,billing,expenses,anticipos,closeClientEditor])
 
   const handleSaveBilling=useCallback(async(f)=>{
     setSaving(true)
@@ -33461,6 +33500,7 @@ export default function App() {
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
+            {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
@@ -33480,8 +33520,8 @@ export default function App() {
             </div>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
-            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={()=>setModal({type:'fusionarClientes'})}/>}
+            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={()=>setModal({type:'fusionarClientes'})}/>}
           </ViewErrorBoundary></div>
         )}
         {!isDesktop&&userRole==='limited'&&tab==='tasks'&&(
@@ -33616,7 +33656,7 @@ export default function App() {
         {modal?.type==='task'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal fullscreenOnMobile title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
         {modal?.type==='cierreTarea'&&<Modal fullscreenOnMobile title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>{ const t=modal.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/></Modal>}
-        {modal?.type==='client'&&<Modal fullscreenOnMobile title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales} clients={clients} onOpenExisting={c=>{setModal(null);handleOpenClientFicha(c.id)}} onLinkDriveFolder={handleLinkDriveFolder}/></Modal>}
+        {/* "Editar/Nuevo cliente" ya NO es modal: es la página navegable editCliente (ver render arriba). */}
       </div>
       {undoToast&&(
         <div style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(20px + env(safe-area-inset-bottom))',zIndex:9999,display:'flex',alignItems:'center',gap:12,background:C.accent,color:'#fff',borderRadius:12,padding:'10px 12px 10px 16px',boxShadow:'0 6px 24px rgba(0,0,0,.22)',maxWidth:'calc(100vw - 32px)'}}>
