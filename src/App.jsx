@@ -21102,7 +21102,52 @@ function ContactsEditor({clientId,clientName}) {
   )
 }
 
-function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOpenExisting}) {
+// Vincular la carpeta de Drive del cliente (inline en la ficha, sin modal). Si ya está vinculada → Abrir en Drive.
+// Si no: busca en Drive, eliges la carpeta (o creas una nueva) y la app APRENDE el vínculo (learnings cliente_folder) → el sync no la recrea.
+function DriveFolderLink({client, onLink}){
+  const [linkedId,setLinkedId]=useState(client?.drive_folder_id||null)
+  const [q,setQ]=useState(client?.name||'')
+  const [results,setResults]=useState(null)
+  const [busy,setBusy]=useState(false)
+  const buscar=async()=>{ const t=(q||'').trim(); if(t.length<2) return; setBusy(true); setResults(null)
+    try{ const d=await driveCall({action:'search', q:`mimeType='application/vnd.google-apps.folder' and name contains '${t.replace(/['\\]/g,' ')}' and trashed=false`, pageSize:12}); setResults((d.files||[]).filter(f=>f.mimeType==='application/vnd.google-apps.folder')) }
+    catch(e){ appAlert('No se pudo buscar en Drive: '+(e.message||e)); setResults([]) } setBusy(false) }
+  const vincular=async(folder)=>{ setBusy(true); try{ await onLink(folder.id, folder.name); setLinkedId(folder.id); setResults(null) }catch(e){ appAlert('No se pudo vincular: '+(e.message||e)) } setBusy(false) }
+  const crear=async()=>{ const nm=(client?.name||'').trim(); if(!nm) return; setBusy(true)
+    try{ const r=await driveCall({action:'createFolder', name:nm}); if(r?.conflict){ setResults(r.similar||[]); appAlert('En Drive hay carpetas MUY parecidas — vincula la correcta o renómbrala en Drive antes de crear una nueva.'); setBusy(false); return }
+      const fid=r?.folderId||r?.id; if(fid){ await onLink(fid, nm); setLinkedId(fid); setResults(null) } }catch(e){ appAlert('No se pudo crear la carpeta: '+(e.message||e)) } setBusy(false) }
+  const iconFolder=<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z'/></svg>
+  if(linkedId) return (
+    <div style={{marginBottom:8,display:'flex',alignItems:'center',gap:9,border:`1px solid #BFE0CF`,background:C.greenBg,borderRadius:10,padding:'9px 11px'}}>
+      <span style={{flexShrink:0}}>{iconFolder}</span>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.greenText}}>Carpeta vinculada</div><div style={{fontSize:10,color:C.greenText,opacity:.85}}>el sync no la recreará</div></div>
+      <a href={`https://drive.google.com/drive/folders/${linkedId}`} target='_blank' rel='noreferrer' style={{fontSize:11,fontWeight:700,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',textDecoration:'none',whiteSpace:'nowrap'}}>Abrir en Drive ↗</a>
+      <span onClick={()=>{setLinkedId(null);setResults(null)}} title='Cambiar carpeta' style={{fontSize:11,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>Cambiar</span>
+    </div>
+  )
+  return (
+    <div style={{marginBottom:8,border:`1px dashed ${C.soon}`,background:C.soonBg,borderRadius:10,padding:'10px 11px'}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.soonText,marginBottom:7}}>Sin carpeta vinculada — busca la del cliente en Drive</div>
+      <div style={{display:'flex',gap:6,marginBottom:results?7:0}}>
+        <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();buscar()}}} placeholder='Nombre de la carpeta…' style={{flex:1,minWidth:0,height:34,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:12.5,color:C.text,background:'#fff',outline:'none'}}/>
+        <button type='button' disabled={busy} onClick={buscar} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'0 13px',cursor:busy?'default':'pointer',whiteSpace:'nowrap'}}>{busy?'…':'Buscar'}</button>
+      </div>
+      {results&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
+        {results.length===0&&<div style={{padding:'9px 11px',fontSize:11.5,color:C.muted}}>No encontré carpetas con ese nombre.</div>}
+        {results.map(f=>(
+          <div key={f.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderTop:`1px solid ${C.bgSoft}`}}>
+            <span style={{flexShrink:0}}>{iconFolder}</span>
+            <span style={{flex:1,minWidth:0,fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
+            <button type='button' disabled={busy} onClick={()=>vincular(f)} style={{fontSize:11,fontWeight:700,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 11px',cursor:busy?'default':'pointer',whiteSpace:'nowrap'}}>Vincular</button>
+          </div>
+        ))}
+      </div>}
+      <div style={{marginTop:8,fontSize:10.5,color:C.soonText}}>¿No existe? <span onClick={busy?undefined:crear} style={{fontWeight:700,color:C.accent,cursor:busy?'default':'pointer'}}>Crear la carpeta «{(client?.name||'').trim()}»</span></div>
+    </div>
+  )
+}
+
+function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOpenExisting,onLinkDriveFolder}) {
   const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,abogado_responsable:'',status:'Activo',ended_at:'',notes:''})
   const [rsIni,setRsIni]=useState({name:'',rut:''})   // razón social inicial (cliente nuevo) — se crea junto con el cliente
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -21113,6 +21158,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
   const bloqueadoDup = !client?.id && parecidos.length>0 && !okDistinto
   const [showRS,setShowRS]=useState(false)
   const [showCon,setShowCon]=useState(false)
+  const [showDrive,setShowDrive]=useState(false)
   const sec=(label,open,setOpen)=>(
     <button type='button' onClick={()=>setOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 12px',border:`1px solid ${C.border}`,borderRadius:10,background:C.bgSoft,cursor:'pointer',marginBottom:8}}>
       <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>{label}</span>
@@ -21162,6 +21208,8 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
         {showRS&&<EntitiesEditor clientId={client.id}/>}
         {sec('Contactos',showCon,setShowCon)}
         {showCon&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
+        {onLinkDriveFolder&&sec(client.drive_folder_id?'Carpeta de Drive · vinculada':'Carpeta de Drive',showDrive,setShowDrive)}
+        {onLinkDriveFolder&&showDrive&&<DriveFolderLink client={client} onLink={(fid,fname)=>onLinkDriveFolder(client,fid,fname)}/>}
       </>):(
         <div style={{marginBottom:8,padding:'10px 12px',borderRadius:10,border:`1px solid ${C.border}`,background:C.bgSoft}}>
           <Lbl>Razón social <span style={{textTransform:'none',letterSpacing:0,color:C.muted}}>· opcional</span></Lbl>
@@ -32354,6 +32402,16 @@ export default function App() {
     return data
   },[])
 
+  // Vincular manualmente la carpeta de Drive de un cliente (desde la ficha): guarda drive_folder_id y APRENDE el alias
+  // learnings 'cliente_folder' (nombre de carpeta normalizado → client_id) con el MISMO norm que lee el sync → no la recrea.
+  const handleLinkDriveFolder=useCallback(async(cli, folderId, folderName)=>{
+    if(!cli?.id||!folderId) return
+    const { error } = await supabase.from('clients').update({drive_folder_id:folderId,updated_at:new Date().toISOString()}).eq('id',cli.id)
+    if(error){ appAlert('No se pudo vincular: '+error.message); throw error }
+    setClients(p=>p.map(c=>c.id===cli.id?{...c,drive_folder_id:folderId}:c))
+    const nn=nrmCliente(folderName||cli.name); if(nn) learnPut('cliente_folder', nn, String(cli.id))
+  },[])
+
   // Eliminar = ARCHIVAR si tiene movimientos (reversible, sin huérfanos); borrar de verdad solo si el cliente está vacío.
   const handleDeleteClient=useCallback(async(id)=>{
     const nMov = (sales||[]).filter(s=>String(s.client_id)===String(id)).length
@@ -33555,7 +33613,7 @@ export default function App() {
         {modal?.type==='task'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal fullscreenOnMobile title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
         {modal?.type==='cierreTarea'&&<Modal fullscreenOnMobile title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>{ const t=modal.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/></Modal>}
-        {modal?.type==='client'&&<Modal fullscreenOnMobile title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales} clients={clients} onOpenExisting={c=>{setModal(null);handleOpenClientFicha(c.id)}}/></Modal>}
+        {modal?.type==='client'&&<Modal fullscreenOnMobile title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales} clients={clients} onOpenExisting={c=>{setModal(null);handleOpenClientFicha(c.id)}} onLinkDriveFolder={handleLinkDriveFolder}/></Modal>}
       </div>
       {undoToast&&(
         <div style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(20px + env(safe-area-inset-bottom))',zIndex:9999,display:'flex',alignItems:'center',gap:12,background:C.accent,color:'#fff',borderRadius:12,padding:'10px 12px 10px 16px',boxShadow:'0 6px 24px rgba(0,0,0,.22)',maxWidth:'calc(100vw - 32px)'}}>
