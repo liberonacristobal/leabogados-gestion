@@ -66,6 +66,21 @@ async function getToken(): Promise<string> {
 const norm = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
 // Carpetas que NO son un cliente (plantillas/secciones del Drive). Mantener alineado con el importador de la app.
 const esTemplate = (name: string) => !name || name.toLowerCase().startsWith("1. clientes");
+// Distancia de edición (typos) y similitud [0..1]. Mismo criterio que el front (simNombre) para NO crear
+// a ciegas una carpeta que se parece demasiado a un cliente vivo (ej. "Migdley" vs "Midgley").
+function lev(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  const dp = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]; dp[0] = i;
+    for (let j = 1; j <= n; j++) { const tmp = dp[j]; dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = tmp; }
+  }
+  return dp[n];
+}
+const sim = (a: string, b: string) => { const x = norm(a), y = norm(b); if (!x || !y) return 0; if (x === y) return 1; return 1 - lev(x, y) / Math.max(x.length, y.length); };
+// Umbral alto: solo pescar typos reales (letras cambiadas), no dos clientes distintos con nombre parecido.
+const FUZZY_MIN = 0.86;
 
 // Escribe una fila singleton en learnings SIN depender de un índice único (la tabla admite (kind,key)
 // duplicados a propósito, así que upsert onConflict:'kind,key' falla). Update si existe, insert si no.
@@ -156,8 +171,24 @@ serve(async (req) => {
     const { data: aliasRows } = await sb.from("learnings").select("key,value").eq("kind", "cliente_folder");
     const aliasSet = new Set<string>((aliasRows || []).map((r) => norm(String(r.key))));
 
-    // Candidatos (para dry-run y para aplicar).
-    const wouldAdd = activos.filter((f) => !clientByName.has(norm(f.name)) && !aliasSet.has(norm(f.name))).map((f) => f.name);
+    // Candidatos (para dry-run y para aplicar). Fuzzy contra clientes VIVOS: una carpeta nueva que se
+    // parece demasiado a un cliente existente (typo) NO se crea a ciegas → va a compuerta humana (needsReview),
+    // se resuelve en el importador de la app (Vincular / marcar como nuevo). Regla anti-duplicados del proyecto.
+    const vivos = (clients || []).filter((c) => c.status !== "Terminado");
+    const fuzzyMatch = (name: string) => {
+      let best: { id: any; name: string; ratio: number } | null = null;
+      for (const c of vivos) { const s = sim(name, c.name); if (s >= FUZZY_MIN && s < 1 && (!best || s > best.ratio)) best = { id: c.id, name: c.name, ratio: s }; }
+      return best;
+    };
+    const nuevas = activos.filter((f) => !clientByName.has(norm(f.name)) && !aliasSet.has(norm(f.name)));
+    const wouldAdd: string[] = [];
+    const needsReview: { folder: string; maybe: string; ratio: number }[] = [];
+    for (const f of nuevas) {
+      const mb = fuzzyMatch(f.name);
+      if (mb) needsReview.push({ folder: f.name, maybe: mb.name, ratio: Math.round(mb.ratio * 100) });
+      else wouldAdd.push(f.name);
+    }
+    const safeAdd = new Set(wouldAdd.map(norm));   // norm names que SÍ se pueden crear (sin near-dup)
     const wouldTerminate: string[] = [];
     for (const c of (clients || [])) {
       if (c.status === "Terminado") continue;
@@ -168,14 +199,17 @@ serve(async (req) => {
     if (body.dryRun) {
       return json({ ok: true, dryRun: true, activos: activos.length, terminados: terminadosByName.size,
         wouldAddN: wouldAdd.length, wouldAdd: wouldAdd.slice(0, 80),
+        needsReviewN: needsReview.length, needsReview: needsReview.slice(0, 80),
         wouldTerminateN: wouldTerminate.length, wouldTerminate: wouldTerminate.slice(0, 80) });
     }
 
-    // 1) INCORPORAR nuevos: carpeta activa sin cliente por nombre.
+    // 1) INCORPORAR nuevos: carpeta activa sin cliente por nombre Y que NO sea near-dup de uno vivo (safeAdd).
+    //    Los near-dup quedan en needsReview → compuerta humana en el importador, jamás creados a ciegas.
     const added: string[] = [];
     const addErrors: string[] = [];
     for (const f of activos) {
       if (clientByName.has(norm(f.name)) || aliasSet.has(norm(f.name))) continue;
+      if (!safeAdd.has(norm(f.name))) continue;   // near-duplicate (typo) → no crear, va a revisión
       const { data: nc, error } = await sb.from("clients").insert({ name: f.name, status: "Activo" }).select("id,name").single();
       if (!error && nc) { added.push(f.name); clientByName.set(norm(f.name), nc); }
       else if (error) addErrors.push(`${f.name}: ${error.message || error.code || "?"}`);
@@ -196,7 +230,8 @@ serve(async (req) => {
       if (!error) terminated.push(c.name);
     }
 
-    const summary = { at: new Date().toISOString(), added, addedN: added.length, terminated, terminatedN: terminated.length, activos: activos.length };
+    const summary = { at: new Date().toISOString(), added, addedN: added.length, terminated, terminatedN: terminated.length,
+      needsReview, needsReviewN: needsReview.length, activos: activos.length };
     await setConfig(sb, "clientes_drive_sync_last", JSON.stringify(summary));
     return json({ ok: true, ...summary, addErrors });
   } catch (e) {
