@@ -21898,18 +21898,21 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
       const {data:prev,error:pe}=await supabase.functions.invoke('clientes-drive-sync',{body:{dryRun:true}})
       if(pe) throw pe
       if(prev?.error) throw new Error(prev.error)
-      const addN=prev.wouldAddN||0, termN=prev.wouldTerminateN||0
-      if(!addN && !termN){ setSyncMsg('Todo al día: no hay nada nuevo que incorporar ni archivar.'); setSyncing(false); return }
+      const addN=prev.wouldAddN||0, termN=prev.wouldTerminateN||0, revN=prev.needsReviewN||0
+      if(!addN && !termN && !revN){ setSyncMsg('Todo al día: no hay nada nuevo que incorporar ni archivar.'); setSyncing(false); return }
       const lista=(arr,n)=>{ const a=(arr||[]).slice(0,12); return a.join(', ')+(n>a.length?` y ${n-a.length} más`:'') }
       const partes=[]
       if(addN) partes.push(`Incorporar ${addN} cliente${addN!==1?'s':''} nuevo${addN!==1?'s':''}: ${lista(prev.wouldAdd,addN)}`)
       if(termN) partes.push(`Archivar ${termN} cliente${termN!==1?'s':''} movido${termN!==1?'s':''} a Terminados: ${lista(prev.wouldTerminate,termN)}`)
+      // Near-dup: carpetas que se parecen a un cliente ya existente (typo). NO se crean; se resuelven a mano abajo, en la lista de nuevos.
+      if(revN){ const rl=(prev.needsReview||[]).slice(0,8).map(r=>`"${r.folder}" ≈ ${r.maybe}`).join('; '); partes.push(`OJO · ${revN} carpeta${revN!==1?'s':''} se parece${revN!==1?'n':''} a un cliente existente y NO se crearán (revísalas abajo): ${rl}${revN>8?'…':''}`) }
+      if(!addN && !termN){ setSyncMsg(`Nada que incorporar ni archivar. ${revN} carpeta(s) parecida(s) a un cliente existente quedaron para revisar abajo (no se crean duplicados).`); setSyncing(false); return }
       if(!await appConfirm(`Drive propone:\n\n${partes.join('\n\n')}\n\n¿Confirmar los cambios? Es reversible.`)){ setSyncMsg('Cancelado — no se aplicó nada.'); setSyncing(false); return }
       // 2) Aplicar de verdad.
       const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
       if(error) throw error
       if(data?.error) throw new Error(data.error)
-      setSyncMsg(`Listo: ${data.addedN||0} nuevo(s) incorporado(s), ${data.terminatedN||0} archivado(s).`)
+      setSyncMsg(`Listo: ${data.addedN||0} nuevo(s) incorporado(s), ${data.terminatedN||0} archivado(s).`+((data.needsReviewN||0)?` ${data.needsReviewN} parecida(s) a un cliente existente NO se crearon — revísalas abajo.`:''))
       await cargarSync(); await init(); onChanged&&onChanged()
     }catch(e){ setSyncMsg('Error al sincronizar: '+(e.message||e)) }
     setSyncing(false)
