@@ -2924,55 +2924,71 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-// Detalle enfocado de "Emitido este mes": segmento Pagadas / Por cobrar + la lista real de facturas (cada una abre su factura).
-// Fuente única: mismas facturas y cifras que la foto del Inicio (emitidas del mes por DTE; pagado=cobradoBill, por cobrar=saldoBill).
-function EmitidoMesModal({billing=[], clients=[], onOpenFactura, onClose, initialSeg='pagadas'}){
-  const [seg,setSeg]=useState(initialSeg==='porcobrar'?'porcobrar':'pagadas')
+// PÁGINA navegable "Facturas del mes" (NO modal): segmento Pagadas / Por cobrar + lista real de facturas del mes.
+// Cada fila: cliente (protagonista → su ficha) · razón social · RUT del receptor (casi nunca = nombre del cliente) · Factura N° · vence/cobrada.
+// La fila (y la ›) abren la factura. Fuente única: mismas facturas/cifras que la foto del Inicio (emitidas del mes por DTE; pagado=cobradoBill, por cobrar=saldoBill).
+function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagadas', onOpenFactura, onOpenClientFicha, onBack}){
+  const [tab,setTab]=useState(seg==='porcobrar'?'porcobrar':'pagadas')
+  useEffect(()=>{ setTab(seg==='porcobrar'?'porcobrar':'pagadas') },[seg])
   const ym = new Date().toISOString().slice(0,7)
-  const mesLbl = new Date().toLocaleDateString('es-CL',{month:'long'})
+  const mesLbl = (()=>{ const m=new Date().toLocaleDateString('es-CL',{month:'long'}); return m.charAt(0).toUpperCase()+m.slice(1) })()
   const emFac = (billing||[]).filter(b=> b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && b.status!=='Programada' && b.billing_type!=='reembolso' && String(b.issued_at||'').startsWith(ym))
-  const pagadas = emFac.filter(b=>cobradoBill(b)>0).sort((a,b)=>String(b.issued_at||'').localeCompare(String(a.issued_at||'')))
+  const pagadas = emFac.filter(b=>cobradoBill(b)>0).sort((a,b)=>String(b.paid_at||b.issued_at||'').localeCompare(String(a.paid_at||a.issued_at||'')))
   const porCobrar = emFac.filter(b=>saldoBill(b)>0).sort((a,b)=>String(venceBill(a)||'').localeCompare(String(venceBill(b)||'')))
+  const emTot = emFac.reduce((a,b)=>a+montoFactura(b),0)
   const pagTot = pagadas.reduce((a,b)=>a+cobradoBill(b),0)
   const pcTot = porCobrar.reduce((a,b)=>a+saldoBill(b),0)
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Sin cliente'
-  const ini = s => (s||'—').trim().split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase()||'—'
-  const list = seg==='pagadas'?pagadas:porCobrar, tot = seg==='pagadas'?pagTot:pcTot
-  const segBtn=(k,lbl,val,n,onTint,offOn)=>(
-    <button onClick={()=>setSeg(k)} style={{flex:1,borderRadius:9,padding:'8px 6px',textAlign:'center',cursor:'pointer',border:`1px solid ${seg===k?onTint.bd:C.border}`,background:seg===k?onTint.bg:'#fff'}}>
-      <div style={{fontSize:11,fontWeight:700,color:seg===k?onTint.fg:C.muted}}>{lbl}</div>
-      <div style={{fontSize:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtShort(val)}</div>
-      <div style={{fontSize:9,color:C.muted}}>{n} factura{n!==1?'s':''}</div>
+  const rsDe = b => { const rl=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const name=b.receptor_name||rl.name||''; const rut=b.receptor_rut||rl.rut||''; return {name,rut} }
+  const list = tab==='pagadas'?pagadas:porCobrar, tot = tab==='pagadas'?pagTot:pcTot
+  const segBtn=(k,lbl,val,n,t)=>(
+    <button onClick={()=>setTab(k)} style={{flex:1,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`1px solid ${tab===k?t.bd:C.border}`,background:tab===k?t.bg:'#fff'}}>
+      <div style={{fontSize:12,fontWeight:700,color:tab===k?t.fg:C.muted}}>{lbl}</div>
+      <div style={{fontSize:17,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtShort(val)}</div>
+      <div style={{fontSize:9.5,color:C.muted}}>{n} factura{n!==1?'s':''}</div>
     </button>)
   return (
-    <div style={{display:'flex',flexDirection:'column',minHeight:0}}>
-      <div style={{display:'flex',gap:6,padding:'2px 2px 10px'}}>
-        {segBtn('pagadas','Pagadas',pagTot,pagadas.length,{fg:C.greenText,bg:C.greenBg,bd:'#BFE0CF'})}
-        {segBtn('porcobrar','Por cobrar',pcTot,porCobrar.length,{fg:C.soonText,bg:C.soonBg,bd:'#EAD9A8'})}
+    <div>
+      <div style={{padding:'16px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}><span style={{fontSize:17}}>‹</span> Volver</span>
+          <div style={{minWidth:0}}><span style={{fontSize:16,fontWeight:800,color:C.accent}}>Facturas de {mesLbl}</span><span style={{fontSize:11,color:C.muted,fontWeight:600}}> · emitidas este mes</span></div>
+          <span style={{marginLeft:'auto',fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>emitido {fmtShort(emTot)}</span>
+        </div>
       </div>
-      <div style={{flex:1,overflowY:'auto',minHeight:0}}>
-        {list.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'30px 0'}}>Sin facturas {seg==='pagadas'?'pagadas':'por cobrar'} este mes.</div>}
-        {list.map((b,i)=>{ const parcial=seg==='pagadas'&&saldoBill(b)>0; const est=estadoCobro(b); const monto=seg==='pagadas'?cobradoBill(b):saldoBill(b)
-          const pill = seg==='pagadas'
-            ? (parcial?{t:`Abono · resta ${fmtShort(saldoBill(b))}`,bg:C.soonBg,c:C.soonText}:{t:'Pagada',bg:C.greenBg,c:C.greenText})
-            : {t:est.label,bg:est.bg,c:est.text}
-          return (
-          <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 8px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',cursor:onOpenFactura?'pointer':'default'}}>
-            <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,color:C.accent,fontSize:12,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini(cn(b.client_id))}</span>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(b.client_id)}</div>
-              <div style={{fontSize:10.5,color:C.muted}}>N° {folioN(b.invoice_no)} · {seg==='pagadas'?`emitida ${fmtFechaDMY(b.issued_at)}`:`vence ${fmtFechaDMY(venceBill(b))}`}</div>
-            </div>
-            <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontSize:13,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(monto)}</div>
-              <span style={{fontSize:9,fontWeight:700,borderRadius:20,padding:'2px 8px',display:'inline-block',marginTop:3,background:pill.bg,color:pill.c}}>{pill.t}</span>
-            </div>
-            <span style={{color:C.done,fontSize:14,flexShrink:0}}>›</span>
-          </div>) })}
-      </div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 6px 2px',borderTop:`1px solid ${C.border}`,marginTop:6}}>
-        <span style={{fontSize:11,color:C.muted}}>{list.length} factura{list.length!==1?'s':''} {seg==='pagadas'?'pagadas':'por cobrar'} · {mesLbl}</span>
-        <span style={{fontSize:15,fontWeight:800,color:seg==='pagadas'?C.greenText:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
+      <div style={{maxWidth:760,margin:'0 auto',padding:'14px 16px 24px'}}>
+        <div style={{display:'flex',gap:8,marginBottom:14}}>
+          {segBtn('porcobrar','Por cobrar',pcTot,porCobrar.length,{fg:C.soonText,bg:C.soonBg,bd:'#EAD9A8'})}
+          {segBtn('pagadas','Pagadas',pagTot,pagadas.length,{fg:C.greenText,bg:C.greenBg,bd:'#BFE0CF'})}
+        </div>
+        <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          {list.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'34px 0'}}>Sin facturas {tab==='pagadas'?'pagadas':'por cobrar'} este mes.</div>}
+          {list.map((b,i)=>{ const parcial=tab==='pagadas'&&saldoBill(b)>0; const est=estadoCobro(b)
+            const monto=tab==='pagadas'?cobradoBill(b):saldoBill(b); const rs=rsDe(b); const cl=clients.find(c=>String(c.id)===String(b.client_id))
+            const icon = tab==='pagadas' ? (parcial?{n:'wallet',c:C.soonText}:{n:'check',c:C.greenText}) : {n:est.icon,c:est.color}
+            const pill = tab==='pagadas'
+              ? (parcial?{t:`Abono · resta ${fmtShort(saldoBill(b))}`,bg:C.soonBg,c:C.soonText}:{t:'Pagada',bg:C.greenBg,c:C.greenText})
+              : {t:est.label,bg:est.bg,c:est.text}
+            const fecha = tab==='pagadas' ? (b.paid_at?`cobrada ${fmtFechaDMY(b.paid_at)}`:'pagada') : `vence ${fmtFechaDMY(venceBill(b))}`
+            return (
+            <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'flex-start',gap:11,padding:'12px 13px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',cursor:onOpenFactura?'pointer':'default'}}>
+              <span style={{marginTop:1,flexShrink:0}}><SIcon n={icon.n} s={19} c={icon.c}/></span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl&&onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(cl.id)}} style={{cursor:'pointer'}}>{cn(b.client_id)}</span>:cn(b.client_id)}</div>
+                {rs.name&&<div style={{fontSize:11,color:C.text,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.name}{rs.rut?<span style={{color:C.muted}}> · {rs.rut}</span>:''}</div>}
+                <div style={{fontSize:10,color:C.done,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)} · {fecha}</div>
+              </div>
+              <div style={{textAlign:'right',flexShrink:0}}>
+                <div style={{fontSize:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(monto)}</div>
+                <span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 9px',display:'inline-block',marginTop:3,background:pill.bg,color:pill.c}}>{pill.t}</span>
+              </div>
+              <span style={{color:C.done,fontSize:15,flexShrink:0,marginTop:2}}>›</span>
+            </div>) })}
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'13px 3px 0',marginTop:10,borderTop:`1px solid ${C.border}`}}>
+          <span style={{fontSize:12,color:C.muted}}>{list.length} factura{list.length!==1?'s':''} {tab==='pagadas'?'pagadas':'por cobrar'} · {mesLbl}</span>
+          <span style={{fontSize:16,fontWeight:800,color:tab==='pagadas'?C.greenText:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
+        </div>
       </div>
     </div>
   )
@@ -30959,7 +30975,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',facturasDelMes:'Facturas del mes'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
   admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina']],
@@ -31371,6 +31387,7 @@ export default function App() {
     if('concBuscar' in dest) setConcBuscar(dest.concBuscar??null)
     if('cartera' in dest) setCarteraFocus(dest.cartera??null)
     if('billingIntent' in dest) setBillingIntent(dest.billingIntent??null)
+    if('emitidoSeg' in dest) setEmitidoSeg(dest.emitidoSeg??'pagadas')
     if(dest.fichaId!=null) setOpenFichaId(dest.fichaId)
     setTab(dest.tab); setTimeout(()=>restoreScroll({w:0,d:0}),0)
   },[tab,openFichaId])
@@ -31398,6 +31415,7 @@ export default function App() {
   const [concFocus,setConcFocus]=useState(null)       // saltar a un movimiento puntual en Conciliación desde el Estado de cuenta del cliente
   const [concBuscar,setConcBuscar]=useState(null)     // abrir Conciliación (Abonos) buscando por un texto (cliente) — desde "Buscar pago" en Cobranza
   const [billingIntent,setBillingIntent]=useState(null) // gatillo: abrir Facturación con un foco puntual (checklist/cierre/cotejo) desde navTo; lo consume BillingView y lo limpia
+  const [emitidoSeg,setEmitidoSeg]=useState('pagadas') // segmento (pagadas/porcobrar) con que abre la página "Facturas del mes" (navTo desde el Inicio)
   const handleOpenConciliacion=useCallback((movId)=>{ navTo({tab:'conciliacion',conc:movId||null}) },[navTo])
   const [concPend,setConcPend]=useState(0)            // abonos sin conciliar (burbuja del icono de banco en el landing)
   const [openConcProp,setOpenConcProp]=useState(false) // gatillo: abrir el panel de propuesta al entrar a Conciliación
@@ -31563,7 +31581,7 @@ export default function App() {
   useEffect(()=>{
     if(userRole==='limited' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
-    if(userRole==='admin' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')
+    if(userRole==='admin' && tab!=='facturasDelMes' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes = drill-down del Inicio (válido, fuera de la paleta)
     // Módulo apagado (entitlements): si la vista actual pertenece a un módulo no contratado, redirige. Para LEA (todo ON) es inerte.
     if(VIEW_MODULO[tab] && !moduloOn(VIEW_MODULO[tab])) setTab(userRole==='admin'?'dashboard':'tasks')
   },[userRole,tab,modVer])
@@ -33380,7 +33398,8 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>setModal({type:'emitidoMes',data:{seg}})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
@@ -33530,7 +33549,6 @@ export default function App() {
         {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='estadoResultados'&&<Modal fullscreenOnMobile title='Estado de resultados' maxWidth={480} onClose={()=>setModal(null)}><EstadoResultadosModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros}/></Modal>}
-        {modal?.type==='emitidoMes'&&<Modal fullscreenOnMobile title='Facturas del mes' maxWidth={480} onClose={()=>setModal(null)}><EmitidoMesModal billing={billing} clients={clients} initialSeg={modal.data?.seg} onOpenFactura={b=>setModal({type:'billing',data:b})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} onClose={()=>setModal(null)}/>}
         {modal?.type==='flujoCaja'&&<Modal fullscreenOnMobile title='Flujo de caja proyectado' maxWidth={480} onClose={()=>setModal(null)}><FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros}/></Modal>}
         {modal?.type==='report'&&<Modal fullscreenOnMobile title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
