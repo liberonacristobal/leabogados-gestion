@@ -670,6 +670,39 @@ function clientesParecidos(name, clients=[], excludeId=null){
   return out
 }
 const _tipoDupLbl = t => t==='exacto'?'idéntico':t==='contenido'?'muy similar':'posible typo'
+// Tipo de parecido entre dos textos (nombre o razón social), MISMA regla que clientesParecidos (exacto/contenido/typo).
+function _simTipo(aRaw,bRaw){
+  const a=_normTxt(aRaw), b=_normTxt(bRaw); if(!a||!b) return null
+  if(a===b) return 'exacto'
+  const at=a.split(' ').filter(w=>w.length>1), bt=b.split(' ').filter(w=>w.length>1)
+  const short=at.length<=bt.length?at:bt, long=at.length<=bt.length?bt:at
+  if(short.length>=2 && short.every(t=>long.includes(t))) return 'contenido'
+  if(at.length===bt.length && Math.min(a.length,b.length)>=6 && _lev(a,b)<=2) return 'typo'
+  return null
+}
+// RUT normalizado para comparar (quita puntos/guión/espacios, deja dígitos + K). Un proveedor puede ser PERSONA (cédula)
+// y/o tener SOCIEDAD (RUT de la RS): comparamos ambos identificadores textuales + el RUT.
+const _nrmRut = s => (s||'').toString().toLowerCase().replace(/[^0-9k]/g,'')
+// Proveedores EXISTENTES que colisionan con uno NUEVO. Mira nombre, razón social y RUT (persona natural con RUT y/o
+// sociedad, ej. Andrés Mery / Rodrigo Díaz / Álvaro Awad). RUT igual = 'rut' (señal más fuerte); nombre/RS parecido =
+// exacto/contenido/typo. Bloquea la creación para no duplicar (prevención > fusión).
+function proveedoresParecidos(f, proveedores=[], excludeId=null){
+  const labelsNew=[f?.nombre,f?.razon_social].filter(Boolean)
+  const rutNew=_nrmRut(f?.rut)
+  const rank={rut:0,exacto:1,contenido:2,typo:3}
+  const out=[]
+  for(const p of (proveedores||[])){
+    if(!p||(excludeId!=null&&String(p.id)===String(excludeId))) continue
+    let tipo=null
+    if(rutNew && _nrmRut(p.rut)===rutNew) tipo='rut'
+    else { const labelsP=[p.nombre,p.razon_social].filter(Boolean)
+      for(const ln of labelsNew) for(const lp of labelsP){ const t=_simTipo(ln,lp); if(t && (!tipo||rank[t]<rank[tipo])) tipo=t } }
+    if(tipo) out.push({proveedor:p, tipo})
+  }
+  out.sort((a,b)=>rank[a.tipo]-rank[b.tipo])
+  return out
+}
+const _tipoDupProvLbl = t => t==='rut'?'mismo RUT':t==='exacto'?'idéntico':t==='contenido'?'muy similar':'posible typo'
 // La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
@@ -12251,6 +12284,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const [montos,setMontos] = useState({})        // billing_id → monto a asignar
   const [asgBusy,setAsgBusy] = useState(null)    // billing_id en curso
   const [f,setF] = useState({nombre:'',razon_social:'',rut:'',datos_pago:''})
+  const [okDistinto,setOkDistinto] = useState(false)   // BLOQUEO anti-duplicados: con un proveedor parecido, no deja guardar hasta confirmar que es OTRO
   const [yr,setYr] = useState(()=>String(new Date().getFullYear()))   // filtro de año del ciclo de comisiones
   const {uf:ufHoy} = useUF()
   const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
@@ -12305,10 +12339,13 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const sel = proveedores.find(p=>String(p.id)===String(selId))
 
   const abrirFicha = id => { setSelId(id); setView('ficha') }
-  const abrirNuevo = () => { setF({nombre:'',razon_social:'',rut:'',datos_pago:''}); setView('form') }
-  const abrirEditar = p => { setF({id:p.id,nombre:p.nombre||'',razon_social:p.razon_social||'',rut:p.rut||'',datos_pago:p.datos_pago||''}); setView('form') }
-  const up=(k,v)=>setF(p=>({...p,[k]:v}))
-  const canSave = f.nombre?.trim()
+  const abrirNuevo = () => { setF({nombre:'',razon_social:'',rut:'',datos_pago:''}); setOkDistinto(false); setView('form') }
+  const abrirEditar = p => { setF({id:p.id,nombre:p.nombre||'',razon_social:p.razon_social||'',rut:p.rut||'',datos_pago:p.datos_pago||''}); setOkDistinto(false); setView('form') }
+  const up=(k,v)=>{ setF(p=>({...p,[k]:v})); if(k==='nombre'||k==='razon_social'||k==='rut') setOkDistinto(false) }
+  // Anti-duplicados (nunca duplicar proveedores): al crear uno NUEVO, busca existentes parecidos por nombre/RS/RUT.
+  const provParecidos = f.id ? [] : proveedoresParecidos(f, proveedores)
+  const bloqueadoDup = !f.id && provParecidos.length>0 && !okDistinto
+  const canSave = f.nombre?.trim() && !bloqueadoDup
   const guardar = async () => { const d=await onSave(f); if(d){ setSelId(d.id); setView('ficha') } }
 
   // Facturas que se pueden asignar a este proveedor (excluye anuladas, reembolsos y las ya asignadas a él)
@@ -12499,6 +12536,22 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           <label style={flabel}>Datos de pago <span style={{textTransform:'none',letterSpacing:0,color:C.done}}>· para transferencias</span></label>
           <textarea value={f.datos_pago} onChange={e=>up('datos_pago',e.target.value)} placeholder='Banco, tipo de cuenta, N° cuenta, RUT, correo…' style={{width:'100%',minHeight:74,border:`0.5px solid ${C.border}`,borderRadius:10,fontSize:13,padding:'10px 11px',color:C.text,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
         </div>
+        {provParecidos.length>0&&(
+          <div style={{border:`1px solid ${C.soon}`,background:C.soonBg,borderRadius:9,padding:'8px 10px',marginBottom:16}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:C.soonText,marginBottom:5}}>Ya existe{provParecidos.length>1?'n':''} un proveedor parecido — ¿es alguno? (no dupliques)</div>
+            {provParecidos.slice(0,5).map(({proveedor:p,tipo})=>(
+              <div key={p.id} onClick={()=>abrirFicha(p.id)} title='Abrir esta ficha' style={{display:'flex',alignItems:'center',gap:8,padding:'5px 3px',borderTop:`0.5px solid ${C.soon}`,cursor:'pointer'}}>
+                <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.nombre||p.razon_social}{p.razon_social&&p.nombre?<span style={{fontWeight:400,color:C.muted}}> · {p.razon_social}</span>:''}{p.rut?<span style={{fontWeight:400,color:C.muted}}> · {p.rut}</span>:''}</span>
+                <span style={{fontSize:9,fontWeight:700,color:C.soonText,flexShrink:0,textTransform:'uppercase',letterSpacing:.3}}>{_tipoDupProvLbl(tipo)}</span>
+                <span style={{fontSize:11,fontWeight:700,color:C.accent,flexShrink:0}}>Abrir ›</span>
+              </div>
+            ))}
+            <label style={{display:'flex',alignItems:'center',gap:7,marginTop:8,cursor:'pointer'}}>
+              <input type='checkbox' checked={okDistinto} onChange={e=>setOkDistinto(e.target.checked)} style={{width:15,height:15,accentColor:C.accent,cursor:'pointer'}}/>
+              <span style={{fontSize:11,color:C.text}}>No es ninguno — es un proveedor <b>distinto</b>, crear igual</span>
+            </label>
+          </div>
+        )}
         <div style={{display:'flex',gap:8}}>
           <button onClick={()=>setView(f.id?'ficha':'list')} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}</button>
