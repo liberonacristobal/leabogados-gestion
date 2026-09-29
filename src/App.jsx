@@ -5453,15 +5453,15 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
             <div style={{fontSize:20,fontWeight:800,color:'#fff',letterSpacing:-.4,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
             <div style={{fontSize:10,color:'rgba(255,255,255,.7)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vendSrc.length} · {actYr.length} activas · {termYr.length} terminadas</div>
           </div>
-          {/* Nueva propuesta (izquierda, bajo Propuestas) */}
-          <div onClick={onAddPropuesta} style={{background:'#fff',border:`1px dashed ${C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
-            <span style={{width:30,height:30,borderRadius:8,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg></span>
-            <div style={{fontSize:13,fontWeight:700,color:C.accent}}>Nueva propuesta</div>
+          {/* Nueva propuesta — acción PRINCIPAL (llena, protagonista) */}
+          <div onClick={onAddPropuesta} style={{background:C.accent,border:`1px solid ${C.accent}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
+            <span style={{width:30,height:30,borderRadius:8,background:'rgba(255,255,255,.16)',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg></span>
+            <div style={{fontSize:14,fontWeight:800,color:'#fff'}}>Nueva propuesta</div>
           </div>
-          {/* Nueva venta (derecha) */}
-          <div onClick={onAdd} style={{background:'#fff',border:`1px dashed ${C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
-            <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span>
-            <div style={{fontSize:13,fontWeight:700,color:C.accent}}>Nueva venta</div>
+          {/* Nueva venta — secundaria (ya ganada) */}
+          <div onClick={onAdd} style={{background:'#fff',border:`1px dashed ${C.border}`,borderRadius:12,padding:'10px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,minHeight:74}}>
+            <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
+            <div style={{fontSize:12,fontWeight:600,color:C.muted,lineHeight:1.2}}>Nueva venta<br/><span style={{fontSize:9.5,fontWeight:500,color:C.done}}>ya ganada</span></div>
           </div>
         </div>}
         {/* Filtros — se despliegan al abrir Vendido */}
