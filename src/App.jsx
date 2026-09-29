@@ -5476,35 +5476,36 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
         {!buscando && <div style={{marginBottom:8}}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
           {/* Vendido — protagonista */}
-          <div onClick={()=>setHubView(v=>v==='vendido'?null:'vendido')} style={{background:C.accent,borderRadius:12,padding:'12px',cursor:'pointer',position:'relative',...(hubView==='vendido'?{outline:`2px solid ${C.normal}`,outlineOffset:1}:{})}}>
-            <span style={{position:'absolute',top:10,right:11,color:'rgba(255,255,255,.6)',fontSize:13,transform:hubView==='vendido'?'rotate(90deg)':'none'}}>›</span>
-            <span style={{width:30,height:30,borderRadius:8,background:'rgba(255,255,255,.14)',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M23 6l-9.5 9.5-5-5L1 18'/><path d='M17 6h6v6'/></svg></span>
-            <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:'rgba(255,255,255,.8)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Vendido {fYear||'total'}</div>
-            <div style={{fontSize:20,fontWeight:800,color:'#fff',letterSpacing:-.4,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
-            <div style={{fontSize:10,color:'rgba(255,255,255,.7)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vendSrc.length} · {actYr.length} activas · {termYr.length} terminadas</div>
+          <div onClick={()=>setHubView(v=>v==='vendido'?null:'vendido')} style={{background:'#EAF2FB',border:'1px solid #D5E6F6',borderRadius:12,padding:'12px',cursor:'pointer',position:'relative',...(hubView==='vendido'?{outline:`2px solid ${C.azulInfo}`,outlineOffset:1}:{})}}>
+            <span style={{position:'absolute',top:10,right:11,color:C.done,fontSize:13,transform:hubView==='vendido'?'rotate(90deg)':'none'}}>›</span>
+            <span style={{width:30,height:30,borderRadius:8,background:'#D5E6F6',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M23 6l-9.5 9.5-5-5L1 18'/><path d='M17 6h6v6'/></svg></span>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Vendido {fYear||'total'}</div>
+            <div style={{fontSize:20,fontWeight:800,color:C.accent,letterSpacing:-.4,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
+            <div style={{fontSize:10,color:C.done,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vendSrc.length} · {actYr.length} activas · {termYr.length} terminadas</div>
           </div>
           {/* Propuestas */}
           {(()=>{ const vacio=propuestasFiltradas.length===0; const tard=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}).length; return (
-          <div onClick={vacio?onAddPropuesta:()=>setHubView(v=>v==='propuestas'?null:'propuestas')} title={vacio?'Crear la primera propuesta':'Ver propuestas'} style={{background:'#fff',border:`1px solid ${hubView==='propuestas'?C.accent:C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',position:'relative'}}>
+          <div onClick={vacio?onAddPropuesta:()=>setHubView(v=>v==='propuestas'?null:'propuestas')} title={vacio?'Crear la primera propuesta':'Ver propuestas'} style={{background:C.bgSoft,border:`1px solid ${hubView==='propuestas'?C.accent:C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',position:'relative'}}>
             <span style={{position:'absolute',top:10,right:11,color:C.done,fontSize:13,transform:hubView==='propuestas'?'rotate(90deg)':'none'}}>›</span>
-            <span style={{width:30,height:30,borderRadius:8,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><SIcon n='check' s={16} c={C.muted}/></span>
+            <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><SIcon n='check' s={16} c={C.muted}/></span>
             <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Propuestas</div>
             <div style={{fontSize:19,fontWeight:800,color:C.accent,letterSpacing:-.4,marginTop:3}}>{vacio?'—':fmtUF(pipelineUF)}</div>
             <div style={{fontSize:10,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vacio?'+ Crear la primera':`${propuestasFiltradas.length} en pipeline${tard?` · ${tard} tardía${tard!==1?'s':''}`:''}`}</div>
           </div>
           )})()}
           </div>
-          {/* Fila de acciones: Nueva propuesta 2/3 a la IZQUIERDA (tono suave azul claro, sin borde), Nueva venta 1/3 a la derecha */}
-          <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:8}}>
-          {/* Nueva propuesta — acción PRINCIPAL, tono suave azul claro sin borde */}
-          <div onClick={onAddPropuesta} style={{background:C.azulBg,border:`1px solid ${C.azulBg}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
-            <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg></span>
-            <div style={{fontSize:14,fontWeight:800,color:C.accent}}>Nueva propuesta</div>
+          {/* Fila de acciones estilo tiles del Inicio (tinte suave + círculo blanco + ícono/texto oscuro):
+              Nueva propuesta = tile VERDE (protagonista, ancho), Nueva venta = tile NEUTRO (compacto). */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8}}>
+          {/* Nueva propuesta — tile verde (greenBg) */}
+          <div onClick={onAddPropuesta} style={{background:C.greenBg,borderRadius:12,padding:'13px 16px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,minHeight:54}}>
+            <span style={{width:30,height:30,borderRadius:9,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg></span>
+            <div style={{fontSize:14,fontWeight:800,color:C.greenText}}>Nueva propuesta</div>
           </div>
-          {/* Nueva venta — secundaria (1/3) */}
-          <div onClick={onAdd} style={{background:'#fff',border:`1px dashed ${C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
-            <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span>
-            <div style={{fontSize:13,fontWeight:700,color:C.accent}}>Nueva venta</div>
+          {/* Nueva venta — tile neutro (bgSoft) */}
+          <div onClick={onAdd} style={{background:C.bgSoft,borderRadius:12,padding:'13px 16px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:9,minHeight:54}}>
+            <span style={{width:28,height:28,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span>
+            <div style={{fontSize:12.5,fontWeight:700,color:C.muted}}>Nueva venta</div>
           </div>
           </div>
         </div>}
