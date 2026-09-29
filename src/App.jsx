@@ -703,6 +703,21 @@ function proveedoresParecidos(f, proveedores=[], excludeId=null){
   return out
 }
 const _tipoDupProvLbl = t => t==='rut'?'mismo RUT':t==='exacto'?'idéntico':t==='contenido'?'muy similar':'posible typo'
+// Reconoce a qué cliente EXISTENTE apunta una propuesta (por el nombre del archivo de Drive). SOLO enlaza, NUNCA crea
+// (anti-duplicados / "no inventar datos"). Mira nombres de clientes y razones sociales (client_entities). Match conservador:
+// TODOS los tokens (≥3 letras) del nombre/RS deben aparecer en el archivo, y el nombre ≥5 chars. Sin match claro → null
+// (el borrador queda "cliente por confirmar", nunca se adivina). Prefiere el match más específico (etiqueta más larga).
+function matchClientePropuesta(fileName, clients=[], clientEntities=[]){
+  const f=_normTxt(fileName); if(!f) return null
+  const has=nm=>{ const n=_normTxt(nm); if(n.length<5) return false; const t=n.split(' ').filter(w=>w.length>=3); return t.length>=1 && t.every(w=>f.includes(w)) }
+  let best=null
+  const consider=(client_id,entity_id,label)=>{ if(!client_id||!label||!has(label)) return; const score=_normTxt(label).length; if(!best||score>best.score) best={client_id,entity_id:entity_id||null,via:label,score} }
+  for(const e of (clientEntities||[])) consider(e?.client_id, e?.id, e?.name)        // razón social (más específico)
+  for(const c of (clients||[])){ if(c?.deleted_at||c?.is_internal) continue; consider(c?.id, null, c?.name) }
+  return best?{client_id:best.client_id, entity_id:best.entity_id, via:best.via}:null
+}
+// Motivos de rechazo de una propuesta ("por qué perdimos"): picklist canónico; "Otro" agrega texto libre y se aprende.
+const MOTIVOS_RECHAZO = ['Precio / honorarios','Se fue con otro estudio','Lo resolvió internamente','Sin respuesta / se enfrió','Lo postergó (timing)','Fuera de nuestra área','Conflicto de interés']
 // La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
@@ -5197,7 +5212,33 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   )
 }
 
-function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha}) {
+// Selector de MOTIVO al rechazar una propuesta ("por qué perdimos"). Chips canónicos + "Otro" con texto libre.
+function RechazoMotivoModal({sale,onConfirm,onCancel}){
+  const [sel,setSel]=useState(null)
+  const [otro,setOtro]=useState('')
+  const [saving,setSaving]=useState(false)
+  const motivo = sel==='__otro__' ? otro.trim() : sel
+  const puede = !!motivo
+  const go=async()=>{ if(!puede||saving) return; setSaving(true); await onConfirm(sale, motivo); setSaving(false) }
+  return (
+    <div style={{padding:'4px 2px 2px'}}>
+      <div style={{fontSize:13,color:C.text,marginBottom:4}}>Propuesta: <b style={{color:C.accent}}>{sale?.title||'—'}</b></div>
+      <div style={{fontSize:11.5,color:C.muted,marginBottom:12}}>¿Por qué perdimos? El motivo alimenta la métrica de conversión (por abogado/área) y la app lo recuerda.</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+        {MOTIVOS_RECHAZO.map(m=>{ const on=sel===m; return (
+          <button key={m} type='button' onClick={()=>setSel(on?null:m)} style={{fontSize:12,fontWeight:600,borderRadius:20,padding:'7px 13px',cursor:'pointer',border:`1px solid ${on?'#EBBFBE':C.border}`,background:on?C.overdueBg:'#fff',color:on?C.overdueText:C.text}}>{m}</button>
+        )})}
+        <button type='button' onClick={()=>setSel(sel==='__otro__'?null:'__otro__')} style={{fontSize:12,fontWeight:600,borderRadius:20,padding:'7px 13px',cursor:'pointer',border:`1px dashed ${sel==='__otro__'?C.accent:C.border}`,background:'#fff',color:sel==='__otro__'?C.accent:C.muted}}>+ Otro…</button>
+      </div>
+      {sel==='__otro__'&&<Inp value={otro} onChange={e=>setOtro(e.target.value)} placeholder='Escribe el motivo...' autoFocus/>}
+      <div style={{display:'flex',gap:8,marginTop:14}}>
+        <button onClick={onCancel} style={{flex:1,padding:'10px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={!puede||saving} onClick={go} style={{flex:2,padding:'10px 14px',borderRadius:10,border:'none',background:puede?C.overdue:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:puede?'pointer':'default',opacity:puede?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Marcar rechazada'}</button>
+      </div>
+    </div>
+  )
+}
+function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
@@ -5245,6 +5286,40 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
     if(fArea) r = r.filter(s=>s.area===fArea)
     return r
   },[sales,fYear,fArea])
+  // Borradores = propuestas cargadas desde Drive (por completar). Se muestran junto a las Propuestas en el hub.
+  const borradoresFiltrados = useMemo(()=>{
+    let r = sales.filter(s=>s.status==='Borrador')
+    if(fYear) r = r.filter(s=>String(s.year)===fYear)
+    if(fArea) r = r.filter(s=>s.area===fArea)
+    return r.slice().sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0))
+  },[sales,fYear,fArea])
+  // Ingesta de propuestas desde la carpeta compartida de Drive (solo PDF, último mes). Dedup por learnings propuesta_drive.
+  const [drvLoad,setDrvLoad]=useState(false)
+  const [drvFiles,setDrvFiles]=useState(null)   // null = aún no buscado
+  const [drvErr,setDrvErr]=useState('')
+  const [drvDone,setDrvDone]=useState({})        // file_id → sale_id ya registrados
+  const [drvBusy,setDrvBusy]=useState(null)
+  const cargarDrive=async()=>{
+    setDrvLoad(true); setDrvErr('')
+    try{
+      const token=await driveToken()
+      const PROP='1MQg9_q0l20mjB-LftuYQywTE4T81Kxf3'   // carpeta compartida de propuestas (misma que el formulario)
+      const cutoff=new Date(Date.now()-31*24*60*60*1000).toISOString()
+      const q=encodeURIComponent(`'${PROP}' in parents and modifiedTime>'${cutoff}' and trashed=false and mimeType='application/pdf'`)
+      const data=await driveGet(token,`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime,webViewLink,size)&orderBy=modifiedTime+desc&pageSize=100`)
+      setDrvFiles(data.files||[])
+      try{ const {data:al}=await supabase.from('learnings').select('key,value').eq('kind','propuesta_drive'); const m={}; (al||[]).forEach(r=>{m[r.key]=r.value}); setDrvDone(m) }catch(_){}
+    }catch(e){ const m=String(e?.message||''); setDrvErr(/auth|token|drive_auth|401|conex/i.test(m)?'No pude leer la carpeta de Drive — revisa que Drive esté conectado (menú → Conectar Drive).':('No se pudo leer la carpeta de Drive: '+(m||'error'))) }
+    setDrvLoad(false)
+  }
+  const registrarDrive=async(file)=>{
+    if(drvDone[file.id]||drvBusy) return
+    setDrvBusy(file.id)
+    const match=matchClientePropuesta(file.name, clients, clientEntities)
+    const saved=await onIngestPropuesta?.(file, match)
+    if(saved) setDrvDone(d=>({...d,[file.id]:saved.id}))
+    setDrvBusy(null)
+  }
   const rechazadasFiltradas = useMemo(()=>{
     let r = sales.filter(s=>s.status==='Rechazada')
     if(fYear) r = r.filter(s=>String(s.year)===fYear)
@@ -5428,9 +5503,52 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
       </div>
       <div style={{padding:'4px 20px 100px'}}>
         {flatView ? (
-          flatRows.length===0
-            ? <div style={{color:C.muted,textAlign:'center',padding:40}}>{buscando?'Sin resultados para tu búsqueda':'No hay propuestas'}</div>
-            : <div style={isDesktop?{maxWidth:720}:undefined}>{flatRows.map(saleRow)}</div>
+          buscando ? (
+            flatRows.length===0
+              ? <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin resultados para tu búsqueda</div>
+              : <div style={isDesktop?{maxWidth:720}:undefined}>{flatRows.map(saleRow)}</div>
+          ) : (()=>{
+            const fmtKB=n=>{ const k=Number(n)||0; return k>=1048576?(k/1048576).toFixed(1)+' MB':Math.max(1,Math.round(k/1024))+' KB' }
+            const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+            const fmtDrvDate=iso=>{ try{ const d=new Date(iso); return d.getDate()+' '+M[d.getMonth()] }catch(_){return ''} }
+            const sinReg=(drvFiles||[]).filter(f=>!drvDone[f.id])
+            const secHd=(t,n,sub)=>(<div style={{display:'flex',alignItems:'baseline',gap:8,margin:'18px 2px 8px'}}><span style={{fontSize:12,fontWeight:800,color:C.accent}}>{t}</span><span style={{fontSize:11,fontWeight:700,color:C.muted}}>{n}</span>{sub&&<span style={{fontSize:10.5,color:C.done}}>· {sub}</span>}</div>)
+            return (
+            <div style={isDesktop?{maxWidth:760}:undefined}>
+              <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:drvFiles?`1px solid ${C.border}`:'none'}}>
+                  <span style={{flexShrink:0}}><DriveIcon size={20}/></span>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Propuestas en Drive</div><div style={{fontSize:10.5,color:C.muted}}>PDF del último mes · las carga como borrador</div></div>
+                  <button onClick={cargarDrive} disabled={drvLoad} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 13px',cursor:drvLoad?'default':'pointer',opacity:drvLoad?.7:1,display:'flex',alignItems:'center',gap:6}}>{drvLoad?<Spin/>:null}{drvFiles?'Actualizar':'Buscar'}</button>
+                </div>
+                {drvErr&&<div style={{fontSize:11.5,color:C.overdueText,background:C.overdueBg,padding:'8px 14px'}}>{drvErr}</div>}
+                {drvFiles&&drvFiles.length===0&&!drvErr&&<div style={{fontSize:12,color:C.muted,padding:'14px'}}>No hay PDFs de propuestas del último mes en la carpeta.</div>}
+                {drvFiles&&drvFiles.length>0&&<div>
+                  {drvFiles.map((file,i)=>{ const reg=drvDone[file.id]; const match=reg?null:matchClientePropuesta(file.name,clients,clientEntities); const busy=drvBusy===file.id; const cli=match?clients.find(c=>String(c.id)===String(match.client_id)):null
+                    return (
+                    <div key={file.id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none'}}>
+                      <span style={{width:28,height:34,borderRadius:5,background:C.overdueBg,border:'1px solid #F3CFCE',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:7.5,fontWeight:800,color:C.overdueText}}>PDF</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name}</div>
+                        <div style={{fontSize:10,color:C.done,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtDrvDate(file.modifiedTime)}{file.size?` · ${fmtKB(file.size)}`:''} · {reg?'registrada':cli?`cliente ${cli.name}`:'cliente por confirmar'}</div>
+                      </div>
+                      {reg
+                        ? <span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'3px 10px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap',flexShrink:0}}>Borrador ✓</span>
+                        : <button onClick={()=>registrarDrive(file)} disabled={busy} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:busy?'default':'pointer',opacity:busy?.7:1,display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',flexShrink:0}}>{busy?<Spin/>:null}Registrar</button>}
+                    </div>)})}
+                  {sinReg.length>1&&<div style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}><button onClick={async()=>{ for(const f of sinReg){ await registrarDrive(f) } }} style={{fontSize:11.5,fontWeight:700,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer'}}>Registrar las {sinReg.length} como borrador</button></div>}
+                </div>}
+              </div>
+              {secHd('Borradores', borradoresFiltrados.length, 'por completar')}
+              {borradoresFiltrados.length===0
+                ? <div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin borradores. Usa "Buscar" arriba para traer las propuestas del Drive.</div>
+                : borradoresFiltrados.map(saleRow)}
+              {secHd('Propuestas', propuestasFiltradas.length, 'enviadas · al 100%')}
+              {propuestasFiltradas.length===0
+                ? <div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin propuestas activas.</div>
+                : propuestasFiltradas.slice().sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).map(saleRow)}
+            </div>)
+          })()
         ) : hubView!=='vendido' ? null : grupos.length===0 ? (
           <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas con estos filtros</div>
         ) : (()=>{ const _tbl = (<>
@@ -32009,15 +32127,35 @@ export default function App() {
     setSaving(false)
   },[user])
 
-  const handleRechazarPropuesta=useCallback(async(s)=>{
-    if(!await appConfirm(`¿Marcar como rechazada la propuesta "${s.title}"?`)) return
+  // Rechazar = abrir el selector de MOTIVO (por qué perdimos). El motivo alimenta la métrica y se aprende.
+  const handleRechazarPropuesta=useCallback((s)=>{ setModal({type:'rechazoMotivo',data:s}) },[])
+  const handleConfirmRechazo=useCallback(async(s,motivo)=>{
     const {error}=await supabase.from('sales').update({status:'Rechazada',updated_at:new Date().toISOString()}).eq('id',s.id)
     if(error){appAlert('Error: '+error.message);return}
     setSales(p=>p.map(x=>x.id===s.id?{...x,status:'Rechazada'}:x))
+    if(motivo) learnPut('venta_rechazo', s.id, motivo)   // "por qué perdimos" (métrica de conversión)
+    setModal(null)
   },[])
 
   const handleActivarPropuesta=useCallback((s)=>{
     setModal({type:'sale',data:{...s,_activandoPropuesta:true,_propAmountUF:s.amount_uf??null,_propAmountCLP:s.amount_clp??null}})
+  },[])
+
+  // Ingesta de una propuesta desde Drive → fila `sales` en BORRADOR. NO inventa: cliente/abogado quedan en blanco
+  // si no hay match seguro (matchClientePropuesta solo enlaza a existentes). Aprende propuesta_drive (file_id→venta) = dedup.
+  const handleIngestPropuestaDrive=useCallback(async(file, match)=>{
+    try{
+      const mt = file?.modifiedTime ? new Date(file.modifiedTime) : new Date()
+      const titulo = String(file?.name||'Propuesta').replace(/\.(pdf|docx?|gdoc)$/i,'').replace(/\s+/g,' ').trim()
+      const venta = { title:titulo, status:'Borrador', client_id:match?.client_id||null, entity_id:match?.entity_id||null,
+        responsible:null, area:null, year:mt.getFullYear(), month:mt.getMonth()+1,
+        notes:'Propuesta (Drive): '+String(file?.name||''), cobro_type:'cuotas' }
+      const {data,error}=await supabase.from('sales').insert(venta).select().single()
+      if(error) throw error
+      setSales(p=>[data,...p])
+      if(file?.id) learnPut('propuesta_drive', file.id, data.id, {name:file?.name})
+      return data
+    }catch(e){ appAlert('No se pudo registrar el borrador: '+(e.message||e)); return null }
   },[])
 
   // Nuevo tramo de tarifa de una venta + recálculo de las programadas afectadas.
@@ -33555,7 +33693,7 @@ export default function App() {
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
-            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha} onIngestPropuesta={handleIngestPropuestaDrive}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
@@ -33586,6 +33724,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal fullscreen fsMaxWidth={600} title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} title='Cargar un PDF y leerlo con IA para autocompletar' style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Lectura con IA</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
+        {modal?.type==='rechazoMotivo'&&<Modal fullscreenOnMobile title={<span style={{color:C.accent}}>Rechazar propuesta</span>} onClose={()=>setModal(null)} closeOnBackdrop={false}><RechazoMotivoModal sale={modal.data} onConfirm={handleConfirmRechazo} onCancel={()=>setModal(null)}/></Modal>}
         {modal?.type==='solicitarFondos'&&<SolicitarFondosModal client={modal.data?.client} clients={clients} sale={modal.data?.sale} montoInicial={modal.data?.monto} responsable={modal.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/>}
         {modal?.type==='primerasTareas'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Primeras tareas</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:400}}>{modal.data?.title||'Encargo'}</span></>} onClose={()=>setModal(null)} closeOnBackdrop={false} maxWidth={560}><PrimerasTareasModal sale={modal.data} clients={clients} clientEntities={clientEntities} user={user} onConfirm={handleCrearPrimerasTareas} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='conciliaHub'&&(()=>{ const mesA=new Date().toISOString().slice(0,7)
