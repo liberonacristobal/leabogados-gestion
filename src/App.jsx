@@ -718,6 +718,19 @@ function matchClientePropuesta(fileName, clients=[], clientEntities=[]){
 }
 // Motivos de rechazo de una propuesta ("por qué perdimos"): picklist canónico; "Otro" agrega texto libre y se aprende.
 const MOTIVOS_RECHAZO = ['Precio / honorarios','Se fue con otro estudio','Lo resolvió internamente','Sin respuesta / se enfrió','Lo postergó (timing)','Fuera de nuestra área','Conflicto de interés']
+// Prompt único para leer una propuesta (PDF) con IA y extraer sus datos. NO inventa (usa "" o null). Se usa al
+// ingerir borradores desde Drive; devuelve SOLO JSON.
+const PROMPT_PROPUESTA_IA = `Eres un experto extractor de datos de propuestas y contratos de servicios legales en Chile. Lee TODO el documento y devuelve SOLO un JSON (sin markdown ni backticks) con estos campos. Reglas:
+- Si un dato no está explícito pero se infiere con certeza, infiérelo; si no, usa "" o null. NO inventes.
+- cliente_nombre: cliente/contraparte a quien se dirige la propuesta (persona o empresa).
+- cliente_rut: RUT chileno formato 12.345.678-9 si aparece.
+- razon_social: razón social facturable si difiere del nombre del cliente.
+- area: área legal (Corporativo, Tributario, Laboral, Litigios, Inmobiliario, etc.).
+- proyecto: título o descripción breve del encargo.
+- moneda: "UF" o "CLP" según en qué se expresan los honorarios.
+- honorario_total: monto total SOLO como número (sin símbolos ni separadores de miles; punto decimal si hay decimales).
+- notas: condiciones relevantes (reajuste, vigencia, gastos, IVA, hitos, forma de cobro).
+Devuelve: { cliente_nombre, cliente_rut, razon_social, area, proyecto, moneda, honorario_total, notas }`
 // La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
@@ -5315,8 +5328,35 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const registrarDrive=async(file)=>{
     if(drvDone[file.id]||drvBusy) return
     setDrvBusy(file.id)
-    const match=matchClientePropuesta(file.name, clients, clientEntities)
-    const saved=await onIngestPropuesta?.(file, match)
+    let info=null
+    // Leer el PDF con IA para llenar el borrador (título/área/monto/cliente). NO inventa: cliente solo si ya existe.
+    try{
+      const token=await driveToken()
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&supportsAllDrives=true`,{headers:{Authorization:'Bearer '+token}})
+      if(r.ok){
+        const buf=new Uint8Array(await r.arrayBuffer())
+        const pdf=await pdfjsLib.getDocument({data:buf}).promise
+        let text=''
+        for(let i=1;i<=pdf.numPages;i++){ const pg=await pdf.getPage(i); const c=await pg.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
+        if(text.trim()){
+          const apiData=await claudeCall({model:'claude-sonnet-4-6',max_tokens:2000,system:PROMPT_PROPUESTA_IA,messages:[{role:'user',content:text.slice(0,40000)}]})
+          const raw=(apiData.content?.[0]?.text||'{}').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
+          const p=JSON.parse(raw)
+          // Cliente SOLO si ya existe (nunca crear): por RUT, luego por nombre exacto, luego el matcher por archivo.
+          const rutN=(p.cliente_rut||'').replace(/[.\-]/g,'').trim()
+          let cli=null
+          if(rutN) cli=clients.find(c=>(c.rut||'').replace(/[.\-]/g,'')===rutN)
+          if(!cli && p.cliente_nombre){ const nn=_normTxt(p.cliente_nombre); if(nn) cli=clients.find(c=>_normTxt(c.name)===nn) }
+          const m2 = cli?{client_id:cli.id,entity_id:null} : matchClientePropuesta(p.cliente_nombre||file.name, clients, clientEntities)
+          const num=parseFloat(String(p.honorario_total||'').toString().replace(/[^\d.]/g,''))
+          const esUF=String(p.moneda||'').toUpperCase()==='UF'
+          info={ title:(p.proyecto||'').trim()||undefined, area:p.area||null,
+            amount_uf: esUF&&num?num:null, amount_clp: (!esUF&&num)?Math.round(num):null, moneda: esUF?'UF':(num?'CLP':null),
+            client_id:m2?.client_id||null, entity_id:m2?.entity_id||null, notas:p.notas||null }
+        }
+      }
+    }catch(_){ info=null }   // si la IA/Drive falla, cae al borrador simple (matcher por nombre de archivo)
+    const saved=await onIngestPropuesta?.(file, info || matchClientePropuesta(file.name, clients, clientEntities))
     if(saved) setDrvDone(d=>({...d,[file.id]:saved.id}))
     setDrvBusy(null)
   }
@@ -5433,7 +5473,8 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
         </div>
         <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar venta...' style={{marginTop:10,marginBottom:9}}/>
         {/* Hub en tarjetas (formato Banco): fila 1 Vendido · Propuestas · fila 2 Nueva venta · Nueva propuesta. Al tocar Vendido se despliegan los filtros. META no va acá: vive en el Dashboard "Cómo va el año" (fuente única, neto). */}
-        {!buscando && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        {!buscando && <div style={{marginBottom:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
           {/* Vendido — protagonista */}
           <div onClick={()=>setHubView(v=>v==='vendido'?null:'vendido')} style={{background:C.accent,borderRadius:12,padding:'12px',cursor:'pointer',position:'relative',...(hubView==='vendido'?{outline:`2px solid ${C.normal}`,outlineOffset:1}:{})}}>
             <span style={{position:'absolute',top:10,right:11,color:'rgba(255,255,255,.6)',fontSize:13,transform:hubView==='vendido'?'rotate(90deg)':'none'}}>›</span>
@@ -5452,15 +5493,19 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
             <div style={{fontSize:10,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vacio?'+ Crear la primera':`${propuestasFiltradas.length} en pipeline${tard?` · ${tard} tardía${tard!==1?'s':''}`:''}`}</div>
           </div>
           )})()}
-          {/* Nueva venta — secundaria */}
+          </div>
+          {/* Fila de acciones: Nueva propuesta 2/3 a la IZQUIERDA (tono suave azul claro, sin borde), Nueva venta 1/3 a la derecha */}
+          <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:8}}>
+          {/* Nueva propuesta — acción PRINCIPAL, tono suave azul claro sin borde */}
+          <div onClick={onAddPropuesta} style={{background:C.azulBg,border:`1px solid ${C.azulBg}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
+            <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg></span>
+            <div style={{fontSize:14,fontWeight:800,color:C.accent}}>Nueva propuesta</div>
+          </div>
+          {/* Nueva venta — secundaria (1/3) */}
           <div onClick={onAdd} style={{background:'#fff',border:`1px dashed ${C.border}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
             <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span>
             <div style={{fontSize:13,fontWeight:700,color:C.accent}}>Nueva venta</div>
           </div>
-          {/* Nueva propuesta — acción PRINCIPAL (llena, más preponderancia) */}
-          <div onClick={onAddPropuesta} style={{background:C.accent,border:`1px solid ${C.accent}`,borderRadius:12,padding:'12px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,minHeight:74}}>
-            <span style={{width:30,height:30,borderRadius:8,background:'rgba(255,255,255,.16)',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg></span>
-            <div style={{fontSize:14,fontWeight:800,color:'#fff'}}>Nueva propuesta</div>
           </div>
         </div>}
         {/* Filtros — se despliegan al abrir Vendido */}
@@ -5534,7 +5579,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                       </div>
                       {reg
                         ? <span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'3px 10px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap',flexShrink:0}}>Borrador ✓</span>
-                        : <button onClick={()=>registrarDrive(file)} disabled={busy} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:busy?'default':'pointer',opacity:busy?.7:1,display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',flexShrink:0}}>{busy?<Spin/>:null}Registrar</button>}
+                        : <button onClick={()=>registrarDrive(file)} disabled={busy} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:busy?'default':'pointer',opacity:busy?.7:1,display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',flexShrink:0}}>{busy?<Spin/>:null}{busy?'Leyendo…':'Registrar'}</button>}
                     </div>)})}
                   {sinReg.length>1&&<div style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}><button onClick={async()=>{ for(const f of sinReg){ await registrarDrive(f) } }} style={{fontSize:11.5,fontWeight:700,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer'}}>Registrar las {sinReg.length} como borrador</button></div>}
                 </div>}
@@ -32143,13 +32188,15 @@ export default function App() {
 
   // Ingesta de una propuesta desde Drive → fila `sales` en BORRADOR. NO inventa: cliente/abogado quedan en blanco
   // si no hay match seguro (matchClientePropuesta solo enlaza a existentes). Aprende propuesta_drive (file_id→venta) = dedup.
-  const handleIngestPropuestaDrive=useCallback(async(file, match)=>{
+  const handleIngestPropuestaDrive=useCallback(async(file, info)=>{
     try{
       const mt = file?.modifiedTime ? new Date(file.modifiedTime) : new Date()
-      const titulo = String(file?.name||'Propuesta').replace(/\.(pdf|docx?|gdoc)$/i,'').replace(/\s+/g,' ').trim()
-      const venta = { title:titulo, status:'Borrador', client_id:match?.client_id||null, entity_id:match?.entity_id||null,
-        responsible:null, area:null, year:mt.getFullYear(), month:mt.getMonth()+1,
-        notes:'Propuesta (Drive): '+String(file?.name||''), cobro_type:'cuotas' }
+      const titulo = (info?.title||'').trim() || String(file?.name||'Propuesta').replace(/\.(pdf|docx?|gdoc)$/i,'').replace(/\s+/g,' ').trim()
+      const venta = { title:titulo, status:'Borrador', client_id:info?.client_id||null, entity_id:info?.entity_id||null,
+        responsible:null, area:info?.area||null,
+        amount_uf:(info?.amount_uf??null), amount_clp:(info?.amount_clp??null), moneda:info?.moneda||null,
+        year:mt.getFullYear(), month:mt.getMonth()+1,
+        notes:'Propuesta (Drive): '+String(file?.name||'')+(info?.notas?('\n'+String(info.notas)):''), cobro_type:'cuotas' }
       const {data,error}=await supabase.from('sales').insert(venta).select().single()
       if(error) throw error
       setSales(p=>[data,...p])
