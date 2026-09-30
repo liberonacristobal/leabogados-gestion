@@ -96,19 +96,26 @@ serve(async (req) => {
     // ── HTML helpers (marca LIBERONA ESCALA)
     const A = "#003C50", MUT = "#537281", DONE = "#99ABB4", RED = "#B5433F", AMB = "#9A6B12", GRN = "#177A5A";
     const fmtFecha = (d: string) => { try { return new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" }); } catch { return String(d); } };
-    const sec = (icoBg: string, ico: string, titulo: string, chip: string, chipCol: string, inner: string) =>
-      `<div style="padding:16px 0 4px;border-top:1px solid #F5F7F9;">
-        <div style="display:flex;align-items:center;margin-bottom:10px;">
-          <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:${icoBg};text-align:center;line-height:24px;vertical-align:middle;">${ico}</span>
-          <span style="font-size:13px;font-weight:800;color:${A};margin-left:9px;">${titulo}</span>
-          <span style="margin-left:auto;font-size:11px;font-weight:700;color:${chipCol};">${chip}</span>
-        </div>${inner}
+    // Íconos SVG line (sobrios). En Mail de iPhone/Apple Mail se ven; en clientes que bloquean SVG, la fila queda igual (solo sin ícono).
+    const svgIco = (stroke: string, paths: string) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;">${paths}</svg>`;
+    const ICO_TAREAS = `<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>`;
+    const ICO_PROY = `<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>`;
+    const ICO_CLI = `<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>`;
+    const ICO_FACT = `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/>`;
+    // Header de sección en TABLA (email-safe, sin flex): círculo tinte + ícono + título + conteo.
+    const sec = (circleBg: string, icoSvg: string, titulo: string, chip: string, chipCol: string, inner: string) =>
+      `<div style="padding:15px 0 6px;border-top:1px solid #F5F7F9;">
+        <table style="width:100%;border-collapse:collapse;"><tr>
+          <td style="width:30px;vertical-align:middle;"><span style="display:inline-block;width:30px;height:30px;border-radius:8px;background:${circleBg};text-align:center;line-height:34px;">${icoSvg}</span></td>
+          <td style="padding-left:10px;font-size:12.5px;font-weight:800;color:${A};vertical-align:middle;">${titulo}</td>
+          <td style="text-align:right;font-size:11px;font-weight:700;color:${chipCol};vertical-align:middle;white-space:nowrap;">${chip}</td>
+        </tr></table>
+        <div style="margin-top:6px;">${inner}</div>
       </div>`;
-    const rowT = (dot: string, nm: string, rt: string, rtCol: string) =>
+    const rowT = (nm: string, rt: string, rtCol: string) =>
       `<table style="width:100%;border-collapse:collapse;"><tr>
-        <td style="width:12px;padding:6px 0;vertical-align:top;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dot};"></span></td>
-        <td style="padding:6px 4px;font-size:12.5px;color:#3D3D3D;">${nm}</td>
-        <td style="padding:6px 0;font-size:11px;color:${rtCol};text-align:right;white-space:nowrap;">${rt}</td>
+        <td style="padding:5px 0;font-size:12.5px;color:#3D3D3D;">${nm}</td>
+        <td style="padding:5px 0 5px 8px;font-size:11px;color:${rtCol};text-align:right;white-space:nowrap;vertical-align:top;">${rt}</td>
       </tr></table>`;
     const cta = (txt: string) => `<a href="https://gestion.leabogados.cl" style="display:inline-block;font-size:11px;font-weight:700;color:${A};text-decoration:none;margin-top:6px;">${txt} &rsaquo;</a>`;
 
@@ -134,30 +141,30 @@ serve(async (req) => {
           const cli = cname(t.client_id);
           const isV = t.dd < 0;
           const when = isV ? (t.dd === -1 ? "venció ayer" : `venció hace ${Math.abs(t.dd)}d`) : (t.dd === 0 ? "vence hoy" : t.dd === 1 ? "vence mañana" : `vence en ${t.dd}d`);
-          return rowT(isV ? "#E24B4A" : "#E0C56A", `${esc(t.title || "")}${cli ? ` — <b style="color:${A}">${esc(cli)}</b>` : ""}`, when, isV ? RED : AMB);
+          return rowT(`${esc(t.title || "")}${cli ? ` — <b style="color:${A}">${esc(cli)}</b>` : ""}`, when, isV ? RED : AMB);
         }).join("");
-        bloques.push(sec("#FBEBEA", "&#10003;", "Tus tareas", `${venc.length} vencidas &middot; ${pronto.length} por vencer`, RED, filas + cta("Ver mis tareas")));
+        bloques.push(sec(venc.length ? "#FBEBEA" : "#EAF2FB", svgIco(venc.length ? RED : A, ICO_TAREAS), "Tus tareas", `${venc.length} vencidas &middot; ${pronto.length} por vencer`, venc.length ? RED : MUT, filas + cta("Ver mis tareas")));
       }
 
       // 2) Proyectos (emitidas esta semana)
       if (emitidasSemanaArr.length) {
         // deno-lint-ignore no-explicit-any
-        const filas = emitidasSemanaArr.slice(0, 4).map((b: any) => rowT("#2E6C8A", `<b style="color:${A}">${esc(cname(b.client_id) || "Cliente")}</b> — factura N&deg; ${esc(String(b.invoice_no))}`, fmShort(b.amount || 0), MUT)).join("");
-        bloques.push(sec("#E9F1F5", "&#128202;", "Tus proyectos", `${emitidasSemanaArr.length} emitida${emitidasSemanaArr.length !== 1 ? "s" : ""} esta semana`, "#2E6C8A", filas + cta("Ver proyectos")));
+        const filas = emitidasSemanaArr.slice(0, 4).map((b: any) => rowT(`<b style="color:${A}">${esc(cname(b.client_id) || "Cliente")}</b> — factura N&deg; ${esc(String(b.invoice_no))}`, fmShort(b.amount || 0), MUT)).join("");
+        bloques.push(sec("#EAF2FB", svgIco(A, ICO_PROY), "Tus proyectos", `${emitidasSemanaArr.length} emitida${emitidasSemanaArr.length !== 1 ? "s" : ""} esta semana`, MUT, filas + cta("Ver proyectos")));
       }
 
       // 3) Clientes (abonos por identificar)
       if (abonosSinCli.length) {
         // deno-lint-ignore no-explicit-any
-        const filas = abonosSinCli.slice(0, 3).map((m: any) => rowT("#E0C56A", `Abono <b>${fm(m.monto || 0)}</b> sin identificar — revisa de quién es`, fmtFecha(m.fecha), MUT)).join("");
-        bloques.push(sec("#FBF1DB", "&#128100;", "Tus clientes", `${abonosSinCli.length} cobro${abonosSinCli.length !== 1 ? "s" : ""} por identificar`, AMB, filas + cta("Revisar cobros")));
+        const filas = abonosSinCli.slice(0, 3).map((m: any) => rowT(`Abono <b>${fm(m.monto || 0)}</b> sin identificar — revisa de quién es`, fmtFecha(m.fecha), MUT)).join("");
+        bloques.push(sec("#EAF2FB", svgIco(A, ICO_CLI), "Tus clientes", `${abonosSinCli.length} cobro${abonosSinCli.length !== 1 ? "s" : ""} por identificar`, MUT, filas + cta("Revisar cobros")));
       }
 
       // 4) Facturación (firm-wide)
       {
         const kp = (v: string, k: string, col: string) => `<td style="padding:0 4px;"><div style="background:#F5F7F9;border-radius:9px;padding:9px 6px;text-align:center;"><div style="font-size:15px;font-weight:800;color:${col};">${v}</div><div style="font-size:9px;color:${MUT};text-transform:uppercase;letter-spacing:.3px;">${k}</div></div></td>`;
         const tabla = `<table style="width:100%;border-collapse:separate;border-spacing:0;"><tr>${kp(String(emitidasSemana), "Emitidas", A)}${kp(fmShort(porCobrar), "Por cobrar", RED)}${kp(fmShort(vencido), "Vencido", vencido > 0 ? RED : A)}</tr></table>${porEnviar > 0 ? `<div style="font-size:11px;color:${AMB};margin-top:8px;">${porEnviar} factura${porEnviar !== 1 ? "s" : ""} por enviar por correo</div>` : ""}`;
-        bloques.push(sec("#E6F4EC", "&#128196;", "Facturación", "esta semana", MUT, tabla + cta("Ir a Facturación")));
+        bloques.push(sec("#EAF2FB", svgIco(A, ICO_FACT), "Facturación", "esta semana", MUT, tabla + cta("Ir a Facturación")));
       }
 
       if (!bloques.length) { sent.push({ to: adm.email, skipped: "sin contenido" }); continue; }
