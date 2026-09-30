@@ -5595,7 +5595,50 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                 : propuestasFiltradas.slice().sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).map(saleRow)}
             </div>)
           })()
-        ) : hubView!=='vendido' ? null : grupos.length===0 ? (
+        ) : hubView!=='vendido' ? (
+          // Vista PERSISTENTE debajo del hub (landing): dos columnas — Esperando aprobación (con tramo de tardías en ámbar) y
+          // Borradores + Drive. Reusa saleRow (mismo card, tardía en ámbar, Rechazar/Activar) y el motor de Drive existente.
+          (()=>{
+            const dias = s => s.created_at ? Math.floor((Date.now()-new Date(s.created_at))/86400000) : 0
+            const props = propuestasFiltradas.slice().sort((a,b)=> (Number(dias(b)>14)-Number(dias(a)>14)) || (new Date(b.created_at||0)-new Date(a.created_at||0)))
+            const tard = props.filter(s=>dias(s)>14), alDia = props.filter(s=>dias(s)<=14)
+            const pipeUF = props.reduce((a,s)=>a+ventaUF(s,ufRef),0), pipeCLP = Math.round(props.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
+            const borr = borradoresFiltrados, sinReg = (drvFiles||[]).filter(f=>!drvDone[f.id]), BORR_MAX = 6
+            const colHd = (dotC,t,n,right) => <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px 8px'}}><span style={{width:8,height:8,borderRadius:'50%',background:dotC,flexShrink:0}}/><span style={{fontSize:12,fontWeight:800,color:C.accent}}>{t}</span><span style={{fontSize:11,fontWeight:700,color:C.muted}}>{n}</span><span style={{marginLeft:'auto'}}>{right}</span></div>
+            const subHd = (t,c) => <div style={{fontSize:10,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.4,margin:'2px 2px 5px'}}>{t}</div>
+            return (
+            <div style={{marginTop:6,...(isDesktop?{maxWidth:980}:{})}}>
+              <div style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) minmax(0,1.2fr)':'minmax(0,1fr)',gap:14}}>
+                {/* Esperando aprobación */}
+                <div style={{background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:12,padding:12,minWidth:0}}>
+                  {colHd(C.greenText,'Esperando aprobación',props.length, props.length>0?<span style={{fontSize:12,fontWeight:800,color:C.accent}}>{fmtMonto(pipeUF,pipeCLP)}</span>:null)}
+                  {props.length===0
+                    ? <div onClick={onAddPropuesta} style={{fontSize:12,color:C.muted,padding:'10px 2px',cursor:'pointer'}}>Sin propuestas esperando. <span style={{color:C.greenText,fontWeight:700}}>+ Nueva propuesta</span></div>
+                    : <>{tard.length>0&&<>{subHd(`Tardías · +14 días (${tard.length})`,C.soonText)}{tard.map(saleRow)}</>}{alDia.length>0&&<>{tard.length>0&&subHd('Al día',C.done)}{alDia.map(saleRow)}</>}</>}
+                </div>
+                {/* Borradores + Drive */}
+                <div style={{background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:12,padding:12,minWidth:0}}>
+                  {colHd('#E8CC6A','Borradores · Drive',borr.length,
+                    <button onClick={cargarDrive} disabled={drvLoad} style={{fontSize:11,fontWeight:700,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'5px 11px',cursor:drvLoad?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6}}>{drvLoad?<Spin/>:null}{drvFiles?'Actualizar Drive':'Buscar en Drive'}</button>)}
+                  {drvErr&&<div style={{fontSize:11,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{drvErr}</div>}
+                  {sinReg.length>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,background:'#fff',marginBottom:10,overflow:'hidden'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,padding:'8px 12px 4px'}}>En Drive · {sinReg.length} sin registrar</div>
+                    {sinReg.slice(0,6).map((file,i)=>{ const match=matchClientePropuesta(file.name,clients,clientEntities); const cli=match?clients.find(c=>String(c.id)===String(match.client_id)):null; const busy=drvBusy===file.id; return (
+                      <div key={file.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none'}}>
+                        <span style={{width:24,height:30,borderRadius:5,background:C.overdueBg,border:'1px solid #F3CFCE',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:7,fontWeight:800,color:C.overdueText}}>PDF</span>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name}</div><div style={{fontSize:10,color:C.done}}>{cli?`cliente ${cli.name}`:'cliente por confirmar'}</div></div>
+                        <button onClick={()=>registrarDrive(file)} disabled={busy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 11px',cursor:busy?'default':'pointer',display:'inline-flex',alignItems:'center',gap:5,flexShrink:0}}>{busy?<Spin/>:null}{busy?'Leyendo…':'Registrar'}</button>
+                      </div>)})}
+                    {sinReg.length>1&&<div style={{padding:'8px 12px',borderTop:`1px solid ${C.bgSoft}`}}><button onClick={async()=>{ for(const f of sinReg){ await registrarDrive(f) } }} style={{fontSize:11,fontWeight:700,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Registrar las {sinReg.length} como borrador</button></div>}
+                  </div>}
+                  {borr.length===0
+                    ? <div style={{fontSize:12,color:C.muted,padding:'10px 2px'}}>Sin borradores. Toca <b>Buscar en Drive</b> para traer las propuestas del mes.</div>
+                    : <>{borr.slice(0,BORR_MAX).map(saleRow)}{borr.length>BORR_MAX&&<div onClick={()=>setHubView('propuestas')} style={{fontSize:11,fontWeight:700,color:C.accent,cursor:'pointer',padding:'6px 2px'}}>Ver los {borr.length} borradores ›</div>}</>}
+                </div>
+              </div>
+            </div>)
+          })()
+        ) : grupos.length===0 ? (
           <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas con estos filtros</div>
         ) : (()=>{ const _tbl = (<>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px'}}>
