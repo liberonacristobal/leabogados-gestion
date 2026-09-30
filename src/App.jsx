@@ -5378,6 +5378,17 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const conDesc = activadasFiltradas.filter(s=>s.proposal_amount_uf&&s.amount_uf&&parseFloat(s.proposal_amount_uf)>parseFloat(s.amount_uf))
   const descuentoProm = (()=>{ const v=conDesc.filter(s=>(parseFloat(s.proposal_amount_uf)||0)>0); return v.length? v.reduce((a,s)=>{const p=parseFloat(s.proposal_amount_uf)||0; return a+(p-(parseFloat(s.amount_uf)||0))/p},0)/v.length*100 : 0 })()
   const valorRechazadoUF = rechazadasFiltradas.reduce((a,s)=>a+(parseFloat(s.proposal_amount_uf||s.amount_uf)||0),0)
+  // Conversión por abogado — MISMA fórmula que Inteligencia · Comparativo de socios (ComparativoSocios: conv=gan/(gan+rech), gan=activated_at, rech=Rechazada).
+  // Histórico (no por año), como allá, porque el embudo rastreado es chico; el denominador (cerradas) se muestra para no engañar con muestras chicas.
+  const convPorAbogado = useMemo(()=>{
+    const m={}
+    sales.forEach(s=>{ if(s.deleted_at||esSubarriendo(s)) return; const a=respVenta(s); if(!a||a==='Sin abogado') return
+      if(!m[a]) m[a]={abo:a,gan:0,rech:0,pipe:0}
+      if(s.activated_at) m[a].gan++
+      if(s.status==='Rechazada') m[a].rech++
+      if(s.status==='Propuesta') m[a].pipe++ })
+    return Object.values(m).filter(x=>x.gan+x.rech>0).map(x=>({...x,cerr:x.gan+x.rech,pct:x.gan/(x.gan+x.rech)*100})).sort((a,b)=>b.pct-a.pct||b.cerr-a.cerr)
+  },[sales,clients])
 
   const statusPillBg = st => st==='Activo'?C.accent:st==='Propuesta'?C.muted:st==='Borrador'?'#E8CC6A':st==='Rechazada'?C.overdue:st==='Terminado'?C.done:C.soon
   const statusPillColor = st => st==='Borrador'?'#4A3800':undefined
@@ -5636,6 +5647,22 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                     : <>{borr.slice(0,BORR_MAX).map(saleRow)}{borr.length>BORR_MAX&&<div onClick={()=>setHubView('propuestas')} style={{fontSize:11,fontWeight:700,color:C.accent,cursor:'pointer',padding:'6px 2px'}}>Ver los {borr.length} borradores ›</div>}</>}
                 </div>
               </div>
+              {convPorAbogado.length>0&&<div style={{marginTop:14,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:12,padding:12,minWidth:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px 8px'}}>
+                  <span style={{width:8,height:8,borderRadius:'50%',background:C.azulInfo,flexShrink:0}}/>
+                  <span style={{fontSize:12,fontWeight:800,color:C.accent}}>Conversión de propuestas · por abogado</span>
+                  <span style={{marginLeft:'auto',fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>histórico</span>
+                </div>
+                {convPorAbogado.map(x=>{ const pc=personChip(x.abo); return (
+                  <div key={x.abo} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 2px'}}>
+                    <span style={{width:9,height:9,borderRadius:'50%',background:pc.color,flexShrink:0}}/>
+                    <span style={{fontSize:12.5,fontWeight:700,color:C.text,width:74,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.abo}</span>
+                    <div style={{flex:1,minWidth:36,height:7,background:C.border,borderRadius:4,overflow:'hidden'}}><div style={{height:'100%',width:`${Math.round(x.pct)}%`,background:pc.color,borderRadius:4}}/></div>
+                    <span style={{fontSize:14,fontWeight:800,color:C.accent,width:38,textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{Math.round(x.pct)}%</span>
+                    <span style={{fontSize:11,color:C.muted,width:42,textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{x.gan}/{x.cerr}</span>
+                  </div>) })}
+                <div style={{fontSize:10,color:C.done,margin:'6px 2px 0',lineHeight:1.4}}>Ganadas (activadas) ÷ cerradas (ganadas + rechazadas). El N de cerradas al lado: muestra chica = menos confiable.</div>
+              </div>}
             </div>)
           })()
         ) : grupos.length===0 ? (
