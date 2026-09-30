@@ -28240,6 +28240,11 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   useEffect(()=>{ if(DEMO){ setCostosOfi([{categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000},{categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Impuestos y patentes',item:'PPM',monto:800000},{categoria:'Remuneraciones',item:'Martín Campero',monto:1679268}]); return } supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfi(data||[]),()=>{}) },[])
   const [costosClaudia,setCostosClaudia] = useState([])   // costos EXACTOS del mes leídos del correo "VALORES" de la contadora (alimentan el cruce)
   const [valoresBusy,setValoresBusy] = useState(false); const [valoresInfo,setValoresInfo] = useState(null)
+  // El cron `valores-contadora` deja el último mes en learnings kind='valores_contadora' (key=AAAA-MM) ya en el formato de items.
+  // Lo cargamos SOLO al abrir para que el cruce use los montos exactos del mes sin obligar al clic "Leer valores".
+  useEffect(()=>{ if(DEMO) return
+    supabase.from('learnings').select('key,value').eq('kind','valores_contadora').order('key',{ascending:false}).limit(1)
+      .then(({data})=>{ try{ const v=data&&data[0]&&JSON.parse(data[0].value); if(v&&Array.isArray(v.items)&&v.items.length){ setCostosClaudia(v.items); setValoresInfo({mes:v.mes,n:v.items.length,items:v.items,auto:true}) } }catch{} },()=>{}) },[])
   const leerValores = async()=>{ if(valoresBusy) return; setValoresBusy(true); setValoresInfo(null)
     try{ const r=await leerValoresClaudia()
       if(!r||!r.items.length){ setValoresInfo({err:'No encontré un correo "VALORES" de la contadora, o no pude leer los montos.'}); }
