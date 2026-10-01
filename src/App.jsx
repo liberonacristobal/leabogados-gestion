@@ -7440,9 +7440,19 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
   const porEmitir = items.filter(b=>!esEmitida(b) && b.billing_type!=='reembolso' && !(fantasmaIds&&fantasmaIds.has(String(b.id))) && (!b.sale_id || fifoAllowed.has(String(b.id))))
   const yaEmitidasFantasma = items.filter(b=> b.status==='Programada' && fantasmaIds&&fantasmaIds.has(String(b.id)))
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
-  // "Vienen de meses anteriores": cuotas que rodaron a este mes desde un mes ya pasado (arrastre visible).
-  const vienenAntes = porEmitir.filter(b=> rollMap.has(String(b.id)))
-  const porEmitirMes = porEmitir.filter(b=> !rollMap.has(String(b.id)))
+  // Serie recurrente (mensual, o plan de >1 cuota) vs cobro ÚNICO/hito. Una cuota ATRASADA de una serie "pasa a este mes"
+  // (es la que corresponde emitir ahora, p.ej. Luis Silva Reorg 2/10); un cobro único/hito viejo (Barbara 1/1, personalizada) queda atrasada real.
+  const serieSaleIds = useMemo(()=>{
+    const cnt={}; billing.forEach(b=>{ if(b.deleted_at||!b.sale_id) return; cnt[String(b.sale_id)]=(cnt[String(b.sale_id)]||0)+1 })
+    const s=new Set()
+    ;(sales||[]).forEach(v=>{ const n=Number(v.cobro_config?.nCuotas)||0; const ongoing = v.cobro_type==='cuotas' && (n>1 || (cnt[String(v.id)]||0)>1); if(v.cobro_type==='mensual' || ongoing) s.add(String(v.id)) })
+    return s
+  },[billing,sales])
+  const esSerie = b => !!(b.sale_id && serieSaleIds.has(String(b.sale_id)))
+  // "Atrasadas" = cobros ÚNICOS/hitos de un mes ya pasado (olvidos reales). Las de SERIE recurrente que rodaron NO van aquí:
+  // pasan a "De este mes" (es la cuota que toca emitir ahora). Así no parece que no haya nada que cobrarle este mes al cliente.
+  const vienenAntes = porEmitir.filter(b=> rollMap.has(String(b.id)) && !esSerie(b))
+  const porEmitirMes = porEmitir.filter(b=> !rollMap.has(String(b.id)) || esSerie(b))
   const mmmDe = ym => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const p=String(ym||'').split('-'); return p.length>=2?`${M[+p[1]-1]} ${p[0].slice(2)}`:'' }
   // Fila de "Por emitir" (reusada por "Vienen de meses anteriores" y "De este mes"). moved=cuota rodada → muestra la traza.
   const filaEmitir = b => { const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const tw=onReplaceProgramada?emitidaTwin(b):null; const exp=emitExp.has(b.id); const moved=rollMap.has(String(b.id)); const eff=dueEff(b); return (
@@ -7496,7 +7506,7 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
         <span onClick={()=>{ if(onOpenClientFicha&&g.cid) onOpenClientFicha(g.cid) }} style={{fontSize:12.5,fontWeight:700,color:onOpenClientFicha&&g.cid?C.accent:C.text,cursor:onOpenClientFicha&&g.cid?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}</span>
         {g.rows.length>1&&<span style={{fontSize:10,color:C.muted,flexShrink:0}}>{g.rows.length} cuotas</span>}
         {g.ant>0&&<span style={{fontSize:9,fontWeight:700,color:C.tealText,background:C.tealBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>anticipo {fmt(g.ant)}</span>}
-        <span style={{marginLeft:'auto',fontSize:12.5,fontWeight:700,color:C.accent,flexShrink:0}}>{fmt(g.total)}</span>
+        {g.rows.length>1&&<span style={{marginLeft:'auto',fontSize:12.5,fontWeight:700,color:C.accent,flexShrink:0}}>{fmt(g.total)}</span>}
       </div>
       {g.rows.map(filaEmitir)}
     </div>
