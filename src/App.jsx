@@ -7422,9 +7422,19 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
     .filter(b=> { const d=rollMap.get(String(b.id))||b.due; return d && d.startsWith(mesKey) && (b.status==='Programada'||EMIT.includes(b.status)) })
     .sort((a,b)=>{ const da=rollMap.get(String(a.id))||a.due||'', db=rollMap.get(String(b.id))||b.due||''; return da>db?1:-1 })
   ,[billing,mesKey,rollMap])
+  // FIFO SIN SALTOS: por cada venta, SOLO su cuota más antigua sin emitir (y las hermanas del MISMO devengo, p.ej. 2 tramos 50/50)
+  // puede estar "por emitir". Las cuotas posteriores de la misma venta ESPERAN su turno: no se puede cobrar la cuota 4 si no se
+  // ha emitido la 2 (si hay un hueco, es el hueco el que sale). Las cuotas sin venta (sale_id null) no tienen secuencia → pasan igual.
+  const fifoAllowed = useMemo(()=>{
+    const bySale={}
+    billing.forEach(b=>{ if(b.deleted_at||esEmitida(b)||b.billing_type==='reembolso'||b.status==='Anulada'||!b.sale_id) return; if(fantasmaIds&&fantasmaIds.has(String(b.id))) return; (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
+    const allow=new Set()
+    Object.values(bySale).forEach(arr=>{ arr.sort((a,b)=>String(a.due||'').localeCompare(String(b.due||''))); const first=arr[0].due; arr.forEach(b=>{ if(b.due===first) allow.add(String(b.id)) }) })
+    return allow
+  },[billing,fantasmaIds])
   // Programadas de este mes = las que debo emitir. Excluye las fantasma (ya emitidas, alta confianza del motor de conciliación):
-  // no deben contar como por-emitir; se listan aparte para retirar. Reembolsos NUNCA se facturan.
-  const porEmitir = items.filter(b=>!esEmitida(b) && b.billing_type!=='reembolso' && !(fantasmaIds&&fantasmaIds.has(String(b.id))))
+  // no deben contar como por-emitir; se listan aparte para retirar. Reembolsos NUNCA se facturan. + FIFO (fifoAllowed).
+  const porEmitir = items.filter(b=>!esEmitida(b) && b.billing_type!=='reembolso' && !(fantasmaIds&&fantasmaIds.has(String(b.id))) && (!b.sale_id || fifoAllowed.has(String(b.id))))
   const yaEmitidasFantasma = items.filter(b=> b.status==='Programada' && fantasmaIds&&fantasmaIds.has(String(b.id)))
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
   // "Vienen de meses anteriores": cuotas que rodaron a este mes desde un mes ya pasado (arrastre visible).
