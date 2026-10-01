@@ -7473,6 +7473,30 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
       )})()}
     </div>
   )}
+  // Anticipo disponible por cliente (saldo a favor) — para marcar en el grupo que tiene plata adentro (revisar antes de emitir a ciegas).
+  const antByClient = useMemo(()=>{ const m={}; (anticipos||[]).forEach(a=>{ if(a.estado==='disponible'&&a.client_id) m[String(a.client_id)]=(m[String(a.client_id)]||0)+(a.monto||0) }); return m },[anticipos])
+  // Agrupa una lista de "por emitir" por CLIENTE. orden 'alfa' (de este mes) | 'reciente' (atrasadas: la más nueva arriba).
+  const agrupaCli = (list, orden) => {
+    const m=new Map()
+    list.forEach(b=>{ const k=b.client_id?String(b.client_id):('sin-'+b.id); if(!m.has(k)) m.set(k,{cid:b.client_id, name:(clients.find(c=>String(c.id)===String(b.client_id))?.name)||'Sin cliente', rows:[]}); m.get(k).rows.push(b) })
+    const arr=[...m.values()].map(g=>({...g, total:g.rows.reduce((a,b)=>a+(b.amount||0),0), newest:g.rows.reduce((mx,b)=>{const d=b.due||b.issued_at||'';return d>mx?d:mx},''), ant:antByClient[String(g.cid)]||0 }))
+    arr.forEach(g=>g.rows.sort((a,b)=>String(dueEff(a)||a.due||'').localeCompare(String(dueEff(b)||b.due||''))))
+    if(orden==='alfa') arr.sort((a,b)=>a.name.localeCompare(b.name,'es'))
+    else arr.sort((a,b)=> b.newest>a.newest?1:(b.newest<a.newest?-1:0))
+    return arr
+  }
+  // Render de un grupo-cliente: encabezado (nombre clickeable + nº + badge anticipo + subtotal) y debajo sus cuotas (filaEmitir).
+  const renderGrupos = (list, orden) => agrupaCli(list,orden).map(g=>(
+    <div key={'g'+(g.cid||g.rows[0].id)}>
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px 5px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
+        <span onClick={()=>{ if(onOpenClientFicha&&g.cid) onOpenClientFicha(g.cid) }} style={{fontSize:12.5,fontWeight:700,color:onOpenClientFicha&&g.cid?C.accent:C.text,cursor:onOpenClientFicha&&g.cid?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}</span>
+        {g.rows.length>1&&<span style={{fontSize:10,color:C.muted,flexShrink:0}}>{g.rows.length} cuotas</span>}
+        {g.ant>0&&<span style={{fontSize:9,fontWeight:700,color:C.tealText,background:C.tealBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>anticipo {fmt(g.ant)}</span>}
+        <span style={{marginLeft:'auto',fontSize:12.5,fontWeight:700,color:C.accent,flexShrink:0}}>{fmt(g.total)}</span>
+      </div>
+      {g.rows.map(filaEmitir)}
+    </div>
+  ))
   const cargadasXml = billing.filter(b=>!b.deleted_at && b.dte_xml && String(b.issued_at||'').startsWith(mesKey)).length   // respaldadas por XML este mes (trazabilidad de la carga)
   // Por enviar al cliente: emitidas con respaldo (XML/PDF) que aún no se envían por correo, del mes de emisión seleccionado.
   const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
@@ -7744,18 +7768,13 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
         <span style={{fontSize:10,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4}}>Por emitir · {porEmitir.length}{porEmitir.length?` · ${fmt(porEmitirTotal)}`:''}</span>
         <button onClick={descargarExcel} disabled={desc} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:desc?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{desc?'…':'↓ Descargar mes'}</button>
       </div>
-      {vienenAntes.length>0&&(<>
-        <div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 5px',display:'flex',alignItems:'center',gap:6}}><SIcon n='clock' s={12} c={C.soonText}/>Vienen de meses anteriores · {vienenAntes.length}</div>
-        <div style={{border:`1px solid ${C.soon}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
-          {vienenAntes.map(filaEmitir)}
-        </div>
-      </>)}
-      {vienenAntes.length>0&&<div style={{fontSize:10,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 5px'}}>De este mes · {porEmitirMes.length}</div>}
-      <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
-        {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><SIcon n='check' s={15} c={C.greenText}/>Todo emitido este mes</div>}
-        {vienenAntes.length>0 && porEmitirMes.length===0 && <div style={{color:C.done,textAlign:'center',padding:16,fontSize:12}}>Nada nuevo de este mes</div>}
-        {(vienenAntes.length>0?porEmitirMes:porEmitir).map(filaEmitir)}
-      </div>
+      {/* DE ESTE MES — agrupado por cliente, orden alfabético */}
+      {porEmitirMes.length>0&&<div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 5px',display:'flex',alignItems:'center',gap:6}}><SIcon n='check' s={12} c={C.greenText}/>De este mes · {porEmitirMes.length}</div>}
+      {porEmitirMes.length>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>{renderGrupos(porEmitirMes,'alfa')}</div>}
+      {/* ATRASADAS — vienen de meses anteriores, de la más reciente a la más antigua, agrupado por cliente */}
+      {vienenAntes.length>0&&<div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 5px',display:'flex',alignItems:'center',gap:6}}><SIcon n='clock' s={12} c={C.soonText}/>Atrasadas · {vienenAntes.length}</div>}
+      {vienenAntes.length>0&&<div style={{border:`1px solid ${C.soon}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>{renderGrupos(vienenAntes,'reciente')}</div>}
+      {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6,border:`1px solid ${C.border}`,borderRadius:10,marginBottom:12}}><SIcon n='check' s={15} c={C.greenText}/>Todo emitido este mes</div>}
       {yaEmitidasFantasma.length>0&&<div style={{background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:12,fontSize:11,color:C.muted,lineHeight:1.45}}><b style={{color:C.greenText}}>{yaEmitidasFantasma.length} cuota{yaEmitidasFantasma.length!==1?'s':''} ya emitida{yaEmitidasFantasma.length!==1?'s':''}</b> se excluye{yaEmitidasFantasma.length!==1?'n':''} de este listado (el motor las cruzó con su factura real). Retíralas en <b>Revisión de datos</b>.</div>}
       </>)}
 
