@@ -7407,6 +7407,9 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
   const [factTo,setFactTo] = useState({})                            // client_id → destinatario recordado (learnings factura_to) para saber a quién irá
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
+  const [emitSel,setEmitSel] = useState(()=>new Set())   // cuotas seleccionadas (ids) para facturar/descargar en lote
+  const [emitBulk,setEmitBulk] = useState(false)         // emisión en lote en curso
+  const toggleSel = id => setEmitSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
   const ufState = useUF()
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const EMIT = ['Pendiente','Vencido','Propuesta']
@@ -7445,6 +7448,7 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
   const filaEmitir = b => { const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const tw=onReplaceProgramada?emitidaTwin(b):null; const exp=emitExp.has(b.id); const moved=rollMap.has(String(b.id)); const eff=dueEff(b); return (
     <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
       <div onClick={tw?()=>setEmitExp(s=>{ const n=new Set(s); n.has(b.id)?n.delete(b.id):n.add(b.id); return n }):(onEdit?()=>onEdit(b):undefined)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:(tw||onEdit)?'pointer':'default'}}>
+        <input type='checkbox' checked={emitSel.has(b.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleSel(b.id)} style={{width:16,height:16,accentColor:C.accent,cursor:'pointer',flexShrink:0}} aria-label='Seleccionar cuota'/>
         {bigDate(eff||b.issued_at)}
         <div style={{flex:1,minWidth:0}}>
           <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
@@ -7593,6 +7597,25 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
     setDesc(false)
   }
 
+  // Facturar en lote: emite (marca emitida) las cuotas seleccionadas, con confirmación. Reversible (desmarcar una a una).
+  const facturarSel = async() => {
+    const sel = porEmitir.filter(b=>emitSel.has(b.id)); if(!sel.length) return
+    const tot = sel.reduce((a,b)=>a+(b.amount||0),0)
+    const ok = await appConfirm(`Vas a FACTURAR ${sel.length} cuota${sel.length!==1?'s':''} (${fmt(tot)}). Se marcan como emitidas. ¿Continuar?`); if(!ok) return
+    setEmitBulk(true)
+    try{ for(const b of sel){ try{ await onEmitir(b) }catch(_){} } setEmitSel(new Set()) } finally{ setEmitBulk(false) }
+  }
+  // Descargar en lote: Excel solo con las cuotas seleccionadas (columnas base).
+  const descargarSel = async() => {
+    const sel = porEmitir.filter(b=>emitSel.has(b.id)); if(!sel.length) return
+    try{
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const header=['Cliente','Razón social','RUT','Concepto','Monto ($)','Devengo']
+      const rowOf = b => { const c=clients.find(x=>x.id===b.client_id); const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const rs=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); return [c?.name||'Sin cliente', rs?rs.name:(ents.length>1?'definir razón social':(b.receptor_name||'')), rs?(rs.rut||''):(b.receptor_rut||''), b.concept||'', b.amount||0, dueEff(b)||b.due||''] }
+      const ws=XLSX.utils.aoa_to_sheet([header,...sel.map(rowOf)]); ws['!cols']=[{wch:24},{wch:26},{wch:14},{wch:32},{wch:16},{wch:14}]
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Seleccionadas'); XLSX.writeFile(wb,`Facturar_seleccionadas_${mesKey}.xlsx`)
+    }catch(e){ appAlert('Error al generar Excel: '+e.message) }
+  }
   const years=[...new Set(billing.map(b=>b.due?.slice(0,4)).filter(Boolean))]
   if(!years.includes(String(now.getFullYear()))) years.push(String(now.getFullYear()))
   years.sort((a,b)=>b-a)
@@ -7768,6 +7791,14 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
         <span style={{fontSize:10,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4}}>Por emitir · {porEmitir.length}{porEmitir.length?` · ${fmt(porEmitirTotal)}`:''}</span>
         <button onClick={descargarExcel} disabled={desc} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:desc?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{desc?'…':'↓ Descargar mes'}</button>
       </div>
+      {emitSel.size>0&&(()=>{ const sel=porEmitir.filter(b=>emitSel.has(b.id)); const tot=sel.reduce((a,b)=>a+(b.amount||0),0); return (
+        <div style={{display:'flex',alignItems:'center',gap:9,background:C.accent,borderRadius:10,padding:'9px 12px',marginBottom:11,flexWrap:'wrap'}}>
+          <div style={{color:'#fff',fontSize:12.5,fontWeight:700}}>{sel.length} seleccionada{sel.length!==1?'s':''} · {fmt(tot)}</div>
+          <button onClick={()=>setEmitSel(new Set())} style={{marginLeft:'auto',background:'transparent',border:'none',color:C.done,fontSize:11,cursor:'pointer'}}>Limpiar</button>
+          <button onClick={descargarSel} style={{background:'#fff',color:C.accent,border:'none',borderRadius:8,padding:'6px 13px',fontSize:12,fontWeight:700,cursor:'pointer'}}>Descargar</button>
+          <button onClick={facturarSel} disabled={emitBulk} style={{background:C.greenText,color:'#fff',border:'none',borderRadius:8,padding:'6px 13px',fontSize:12,fontWeight:700,cursor:emitBulk?'default':'pointer'}}>{emitBulk?'Facturando…':'Facturar'}</button>
+        </div>
+      )})()}
       {/* DE ESTE MES — agrupado por cliente, orden alfabético */}
       {porEmitirMes.length>0&&<div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 5px',display:'flex',alignItems:'center',gap:6}}><SIcon n='check' s={12} c={C.greenText}/>De este mes · {porEmitirMes.length}</div>}
       {porEmitirMes.length>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>{renderGrupos(porEmitirMes,'alfa')}</div>}
