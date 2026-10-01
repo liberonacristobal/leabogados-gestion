@@ -6206,17 +6206,19 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
   // Modelo "cuota distinta": el usuario fija el monto RECURRENTE y el de UNA cuota distinta (inicial/final).
   // El N° de cuotas se deriva para cuadrar el total; el último recurrente absorbe el residuo. Devuelve montos en la MONEDA.
+  // Fuente ÚNICA del plan "cuota distinta": se deriva de N° cuotas + monto de la distinta (1ª o última);
+  // el resto se reparte parejo para cuadrar el total. MISMA fórmula que planDeVenta (App.jsx:474-477) para que
+  // el plan y la generación NUNCA divergan (antes: generación derivaba N desde el monto recurrente y nCuotas
+  // quedaba stale=3 → el guardarraíl de conciliación se descalibraba).
   const calcCuotasDist = () => {
     const total = moneda==='CLP'?montoCLP:amountUF
-    const R = parseFloat(cuotaRec)||0, D = parseFloat(cuotaDistMonto)||0
-    if(!total||R<=0) return []
-    const restante = +(total - D).toFixed(2)
-    if(restante<=0) return [{m:total,d:true}]
-    const nRec = Math.max(1, Math.round(restante/R))
-    const recs = Array.from({length:nRec},()=>R)
-    recs[nRec-1] = +(restante - R*(nRec-1)).toFixed(2)
-    const rl = recs.map(m=>({m,d:false}))
-    return cuotaDistPos==='primera' ? [{m:D,d:true},...rl] : [...rl,{m:D,d:true}]
+    const D = parseFloat(cuotaDistMonto)||0
+    const n = Math.max(1, parseInt(nCuotas)||0)
+    if(!total||n<=0) return []
+    if(n===1) return [{m:total,d:true}]
+    const resto = +((total - D)/(n-1)).toFixed(2)
+    const rl = Array.from({length:n-1},()=>({m:resto,d:false}))
+    return cuotaDistPos==='ultima' ? [...rl,{m:D,d:true}] : [{m:D,d:true},...rl]
   }
   const generarCobros = () => {
     if(!f.client_id||!totalCLP) return []
@@ -6738,9 +6740,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           {cobroType==='cuotas'&&(
             <div style={{background:C.bgSoft,borderRadius:8,padding:'12px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
-                {cuotaDist
-                  ? <Fld label={`Monto por cuota (${moneda})`}><Inp type='number' step={moneda==='UF'?'0.01':'1'} value={cuotaRec} onChange={e=>setCuotaRec(e.target.value)} placeholder={moneda==='UF'?'0.00':'0'}/></Fld>
-                  : <Fld label='N° cuotas'><Inp type='number' min='1' max='36' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>}
+                <Fld label='N° cuotas'><Inp type='number' min='1' max='60' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>
                 <Fld label='Inicio cobro'><Inp type='date' value={cobroInicio} onChange={e=>setCobroInicio(anio4ISO(e.target.value))}/></Fld>
               </div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderTop:`1px solid ${C.border}`}}>
