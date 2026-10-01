@@ -5293,13 +5293,13 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const years = [...new Set(sales.map(s=>s.year).filter(Boolean))].sort((a,b)=>b-a)
   if(!years.includes(currentYear)) years.unshift(currentYear)
 
-  // Pipeline KPIs (Propuestas)
+  // Pipeline KPIs (Propuestas) — SIEMPRE todos los años (el pipeline no depende del año seleccionado): tile = total global,
+  // y el panel "Esperando aprobación" agrupa por año. Mantiene el filtro de área si está activo.
   const propuestasFiltradas = useMemo(()=>{
     let r = sales.filter(s=>s.status==='Propuesta')
-    if(fYear) r = r.filter(s=>String(s.year)===fYear)
     if(fArea) r = r.filter(s=>s.area===fArea)
     return r
-  },[sales,fYear,fArea])
+  },[sales,fArea])
   // Borradores = propuestas cargadas desde Drive (por completar). Se muestran junto a las Propuestas en el hub.
   const borradoresFiltrados = useMemo(()=>{
     let r = sales.filter(s=>s.status==='Borrador')
@@ -5604,6 +5604,9 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
             const props = propuestasFiltradas.slice().sort((a,b)=> (Number(dias(b)>14)-Number(dias(a)>14)) || (new Date(b.created_at||0)-new Date(a.created_at||0)))
             const tard = props.filter(s=>dias(s)>14), alDia = props.filter(s=>dias(s)<=14)
             const pipeUF = props.reduce((a,s)=>a+ventaUF(s,ufRef),0), pipeCLP = Math.round(props.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
+            // Agrupación por año (desc): el panel separa las propuestas por año; dentro de cada año, tardías primero.
+            const byYear={}; props.forEach(s=>{ const y=String(s.year||'—'); (byYear[y]=byYear[y]||[]).push(s) })
+            const propYears = Object.keys(byYear).sort((a,b)=>b.localeCompare(a))
             const borr = borradoresFiltrados, sinReg = (drvFiles||[]).filter(f=>!drvDone[f.id]), BORR_MAX = 6
             const colHd = (dotC,t,n,right) => <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px 8px'}}><span style={{width:8,height:8,borderRadius:'50%',background:dotC,flexShrink:0}}/><span style={{fontSize:12,fontWeight:800,color:C.accent}}>{t}</span><span style={{fontSize:11,fontWeight:700,color:C.muted}}>{n}</span><span style={{marginLeft:'auto'}}>{right}</span></div>
             const subHd = (t,c) => <div style={{fontSize:10,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.4,margin:'2px 2px 5px'}}>{t}</div>
@@ -5615,7 +5618,15 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                   {colHd(C.greenText,'Esperando aprobación',props.length, props.length>0?<span style={{fontSize:12,fontWeight:800,color:C.accent}}>{fmtMonto(pipeUF,pipeCLP)}</span>:null)}
                   {props.length===0
                     ? <div onClick={onAddPropuesta} style={{fontSize:12,color:C.muted,padding:'10px 2px',cursor:'pointer'}}>Sin propuestas esperando. <span style={{color:C.greenText,fontWeight:700}}>+ Nueva propuesta</span></div>
-                    : <>{tard.length>0&&<>{subHd(`Tardías · +14 días (${tard.length})`,C.soonText)}{tard.map(saleRow)}</>}{alDia.length>0&&<>{tard.length>0&&subHd('Al día',C.done)}{alDia.map(saleRow)}</>}</>}
+                    : propYears.map(y=>{ const ps=byYear[y].slice().sort((a,b)=> (Number(dias(b)>14)-Number(dias(a)>14)) || (new Date(b.created_at||0)-new Date(a.created_at||0))); const yUF=ps.reduce((a,s)=>a+ventaUF(s,ufRef),0), yCLP=Math.round(ps.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); const nt=ps.filter(s=>dias(s)>14).length; return (
+                        <div key={y}>
+                          <div style={{display:'flex',alignItems:'baseline',gap:8,margin:'8px 2px 5px'}}>
+                            <span style={{fontSize:11,fontWeight:800,color:C.accent}}>{y}</span>
+                            <span style={{fontSize:10,fontWeight:700,color:C.muted}}>{ps.length} propuesta{ps.length!==1?'s':''}{nt?<span style={{color:C.soonText}}> · {nt} tardía{nt!==1?'s':''}</span>:null}</span>
+                            <span style={{marginLeft:'auto',fontSize:11,fontWeight:800,color:C.accent}}>{fmtMonto(yUF,yCLP)}</span>
+                          </div>
+                          {ps.map(saleRow)}
+                        </div>) })}
                 </div>
                 {/* Borradores + Drive */}
                 <div style={{background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:12,padding:12,minWidth:0}}>
