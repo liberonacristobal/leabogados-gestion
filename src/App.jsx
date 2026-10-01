@@ -408,6 +408,9 @@ function rutsDeFactura(b, clients=[], clientEntities=[]){ const nr=r=>(r||'').to
 function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
   const noSet = opts.noSet||new Set()
   const act = (billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada')
+  // Nº de cuotas vivas por venta: dos cuotas DISTINTAS de la misma venta se parecen en monto (hermanas) → el match por RUT/monto
+  // suelto las confunde (ej. la 2ª cuota con la factura de la 1ª). Para una venta de >1 cuota, el monto solo NO identifica cuota.
+  const cuotasPorVenta={}; act.forEach(b=>{ if(b.sale_id) cuotasPorVenta[String(b.sale_id)]=(cuotasPorVenta[String(b.sale_id)]||0)+1 })
   const emisAll = act.filter(b=> b.issued_at && b.status!=='Programada' && (b.billing_type||'')!=='reembolso' && /\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,'')))
     .map(x=>({x,cu:cuotaNMof(x.concept),per:concPeriodoOf(x.concept),ruts:rutsDeFactura(x,clients,clientEntities),t:new Date((x.issued_at||x.due||'')+'T12:00').getTime()}))
   const progs = act.filter(b=>b.status==='Programada'&&b.amount&&(b.billing_type||'')!=='reembolso')
@@ -429,7 +432,10 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
       const sameCli=String(e.x.client_id)===String(p.client_id); const rutMatch=[...e.ruts].some(r=>ruts.has(r)); if(!sameCli&&!rutMatch) continue
       const dMonto=Math.abs((e.x.amount||0)-a)/a; const sameCu=!!(cu&&e.cu&&cu.n===e.cu.n), samePer=!!(per&&e.per&&per===e.per); const dias=(pt&&e.t)?Math.abs(e.t-pt)/86400000:999
       // Solo llegan aquí las NO recurrentes y únicas: cuota N/M (mismo período o ≤75d), período exacto, o RUT/monto con ventana ≤45d.
-      const okCu=sameCu&&dMonto<=0.25&&(samePer||dias<=75), okPer=samePer&&dMonto<=0.06, okRut=(rutMatch||sameCli)&&dMonto<=0.05&&dias<=45
+      // Mismo-venta con plan de >1 cuota: PROHIBIR el match por RUT/monto suelto (son cuotas hermanas de monto parecido).
+      // Solo período o cuota N/M pueden emparejarlas dentro de una misma venta (un verdadero duplicado trae esa etiqueta).
+      const sameSaleMulti = p.sale_id && String(e.x.sale_id)===String(p.sale_id) && (cuotasPorVenta[String(p.sale_id)]||0)>1
+      const okCu=sameCu&&dMonto<=0.25&&(samePer||dias<=75), okPer=samePer&&dMonto<=0.06, okRut=(rutMatch||sameCli)&&dMonto<=0.05&&dias<=45&&!sameSaleMulti
       if(!okCu&&!okPer&&!okRut) continue
       const rank=[okCu?0:1, okPer?0:1, dMonto, dias]
       if(!best||rank[0]<bestRank[0]||(rank[0]===bestRank[0]&&(rank[1]<bestRank[1]||(rank[1]===bestRank[1]&&(rank[2]<bestRank[2]||(rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank } }
@@ -561,17 +567,12 @@ function rolledDueMap(billing, refISO){
   const clampDue = (ym, day) => { const p=ym.split('-'); const last=new Date(+p[0], +p[1], 0).getDate(); return `${ym}-${String(Math.min(day||1,last)).padStart(2,'0')}` }
   for(const [,arr] of bySale){
     const emitida = b => !!(b.invoice_no||b.folio)
-    const occupied = new Set(arr.filter(b=>emitida(b)&&b.status!=='Anulada').map(monthOf).filter(Boolean))
     const progs = arr.filter(b=> b.status==='Programada' && !emitida(b) && monthOf(b))
-      .sort((a,b)=> monthOf(a).localeCompare(monthOf(b)))
-    let minM = ref
     for(const b of progs){
-      const orig = monthOf(b)
-      let m = orig < minM ? minM : orig          // nunca antes del mes de corte
-      while(occupied.has(m)) m = addMonths(m,1)   // no pisar un mes ya ocupado (emitida u otra cuota rodada)
-      occupied.add(m)
-      minM = addMonths(m,1)                       // una por mes: la siguiente va al menos el mes siguiente
-      if(m !== orig) out.set(String(b.id), clampDue(m, dayOf(b)))
+      // SOLO las ATRASADAS (mes de devengo ya pasado) ruedan al mes de corte, para que aparezcan a emitir.
+      // Las de ESTE mes o futuras respetan su fecha pactada — NO se empujan hacia adelante. (La vieja cascada
+      // "una por mes" escondía las 2ª cuotas del mismo mes y las atrasadas, rodándolas a meses futuros.)
+      if(monthOf(b) < ref) out.set(String(b.id), clampDue(ref, dayOf(b)))
     }
   }
   return out
