@@ -6244,9 +6244,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       // La última cuota absorbe el residuo de redondeo para que la suma de cuotas == total exacto.
       for(let i=0;i<nCuotas;i++) { cobros.push({monto: i===nCuotas-1?(totR-mc*(nCuotas-1)):mc, fecha:mesISO(cobroInicio,i), label:`Cuota ${i+1}/${nCuotas}`}) }
     } else if(cobroType==='porcentaje') {
-      tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:t.fecha, label:`${t.pct}%`}) })
+      tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:anio4ISO(t.fecha), label:`${t.pct}%`}) })
+      // Si los tramos suman 100%, el último absorbe el residuo de redondeo para que Σ cuotas == total exacto.
+      if(cobros.length && Math.round(tramos.reduce((a,t)=>a+(parseInt(t.pct)||0),0))===100){ const totR=Math.round(totalCLP), acc=cobros.reduce((a,c)=>a+c.monto,0); cobros[cobros.length-1].monto += (totR-acc) }
     } else if(cobroType==='personalizada') {
-      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha){ const mm=moneda==='CLP'?Math.round(parseFloat(c.monto)||0):Math.round((parseFloat(c.monto)||0)*ufVal); cobros.push({monto:mm, fecha:c.fecha, label:moneda==='CLP'?`Cobro ${i+1}`:`Cobro ${i+1} (${c.monto} UF)`}) } })
+      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha){ const mm=moneda==='CLP'?Math.round(parseFloat(c.monto)||0):Math.round((parseFloat(c.monto)||0)*ufVal); cobros.push({monto:mm, fecha:anio4ISO(c.fecha), label:moneda==='CLP'?`Cobro ${i+1}`:`Cobro ${i+1} (${c.monto} UF)`}) } })
     }
     return cobros
   }
@@ -6296,6 +6298,21 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       saveF.activated_at = new Date().toISOString()
       saveF.status = 'Activo'
     }
+    // GUARD porcentaje: los tramos deben sumar 100% (si no, la venta se sub-facturaría permanentemente).
+    if(cobroType==='porcentaje'){ const sp=(tramos||[]).reduce((a,t)=>a+(parseInt(t.pct)||0),0); if(sp!==100){ appAlert(`Los tramos "por porcentaje" deben sumar 100% (hoy suman ${sp}%).`); return } }
+    // GUARD "venta Activa sin cuotas": una venta que NACE Activa (nueva, o al activar una propuesta) sin cuotas generadas
+    // quedaría contando en "Vendido" pero fuera de cobranza/proyección, en silencio (raíz de Tarragona/Masihy). Se bloquea.
+    const naceActiva = _activandoPropuesta || (!sale?.id && saveF.status==='Activo')
+    if(naceActiva && cobroType!=='hora' && (!cobros || cobros.length===0)){
+      appAlert('Esta venta quedaría ACTIVA pero sin cuotas para facturar. Define el "Inicio de cobro" (y N° de cuotas / montos / fechas) para que se generen las cuotas antes de guardar.'); return
+    }
+    // GUARD integridad honorario = Σ cuotas (personalizada): avisa si las cuotas no cuadran con el honorario.
+    if(cobroType==='personalizada' && cobros && cobros.length && totalCLP>0){
+      const sc=cobros.reduce((a,c)=>a+(c.monto||0),0)
+      if(Math.abs(sc-totalCLP) > Math.max(totalCLP*0.01,1000)){
+        const ok=await appConfirm(`La suma de las cuotas (${fmt(sc)}) no cuadra con el honorario (${fmt(Math.round(totalCLP))}). ¿Guardar igual?`); if(!ok) return
+      }
+    }
     clearDraft()
     // En propuesta/borrador editada se regeneran las cuotas programadas (todas sin emitir) según la forma de cobro actual.
     onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false, _regenProg:propBorr, repartoTerceros:repartoLimpio, ...extra, _thenPrimerasTareas: !!((extra&&extra._thenPrimerasTareas)||(!sale?.id&&!_activandoPropuesta&&saveF.status==='Activo'))})   // venta nueva Activo (o activar propuesta) → arranque de tareas + correo
@@ -6342,10 +6359,13 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         const [y,m]=newVig.split('-').map(Number);let cy=y,cm=m
         for(let i=0;i<12;i++){const lm=cm===1?12:cm-1,ly=cm===1?cy-1:cy;nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:Math.round(totalC),concept:`${sale.title} — Mensual ${MONTHS[lm-1]} ${ly}`});cm++;if(cm>12){cm=1;cy++}}
       } else if(newFmt==='personalizada'){
-        newCuotasCustom.forEach((c,i)=>{if(c.monto&&c.fecha){const mm=moneda==='CLP'?Math.round(parseFloat(c.monto)||0):Math.round((parseFloat(c.monto)||0)*ufVal);nuevasCuotas.push({due:c.fecha,amount:mm,concept:`${sale.title} — Cobro ${i+1}`})}})
+        newCuotasCustom.forEach((c,i)=>{if(c.monto&&c.fecha){const mm=moneda==='CLP'?Math.round(parseFloat(c.monto)||0):Math.round((parseFloat(c.monto)||0)*ufVal);nuevasCuotas.push({due:anio4ISO(c.fecha),amount:mm,concept:`${sale.title} — Cobro ${i+1}`})}})
       } else if(newFmt==='unico'&&newVig&&totalC>0){
         nuevasCuotas.push({due:vigDate,amount:Math.round(totalC),concept:`${sale.title} — Pago único`})
       }
+      // GUARD: "Cambiar formato" BORRA las programadas vigentes antes de recrear. Si con estos datos no se generaría
+      // ninguna cuota (p.ej. falta "Inicio de cobro"), abortar para NO dejar la venta sin cuotas (borrar sin reemplazo).
+      if(newFmt!=='hora' && nuevasCuotas.length===0){ appAlert('Con estos datos no se generaría ninguna cuota (revisa el Inicio de cobro, el N° de cuotas o los montos). No se cambió el formato para no borrar las cuotas actuales sin reemplazo.'); return }
       setSavingTariff(true)
       const rec=await onCambiarFormato(sale,{newFmt,newHon:baseHon||null,newCosto:panelCosto||null,vigDate,motivo:null,nuevasCuotas})
       if(rec){ setTariffs(p=>[...p,rec])
@@ -6768,7 +6788,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               {tramos.map((t,i)=>(
                 <div key={t.id} style={{display:'grid',gridTemplateColumns:'60px 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                   <Fld label={i===0?'%':''}><Inp type='number' min='0' max='100' value={t.pct} onChange={e=>setTramos(p=>p.map(x=>x.id===t.id?{...x,pct:parseInt(e.target.value)||0}:x))}/></Fld>
-                  <Fld label={i===0?'Fecha':''}><Inp type='date' value={t.fecha} onChange={e=>setTramos(p=>p.map(x=>x.id===t.id?{...x,fecha:e.target.value}:x))}/></Fld>
+                  <Fld label={i===0?'Fecha':''}><Inp type='date' value={t.fecha} onChange={e=>setTramos(p=>p.map(x=>x.id===t.id?{...x,fecha:anio4ISO(e.target.value)}:x))}/></Fld>
                   {tramos.length>2&&<button onClick={()=>setTramos(p=>p.filter(x=>x.id!==t.id))} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,paddingBottom:2}}>×</button>}
                 </div>
               ))}
@@ -6785,7 +6805,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   </Fld>
                   <Fld label={i===0?'Fecha':''}>
                     <div>
-                      <Inp type='date' value={c.fecha} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:e.target.value}:x))}/>
+                      <Inp type='date' value={c.fecha} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:anio4ISO(e.target.value)}:x))}/>
                       {moneda==='UF'&&c.monto&&ufVal>0&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{fmt(Math.round(parseFloat(c.monto)*ufVal))}</div>}
                     </div>
                   </Fld>
@@ -7117,7 +7137,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                       {newCuotasCustom.map((c,i)=>(
                         <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 28px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                           <Fld label={i===0?`Monto (${moneda})`:''}><Inp type='number' step={moneda==='CLP'?'1':'0.01'} value={c.monto} onChange={e=>setNewCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))}/></Fld>
-                          <Fld label={i===0?'Fecha':''}><Inp type='date' value={c.fecha} onChange={e=>setNewCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:e.target.value}:x))}/></Fld>
+                          <Fld label={i===0?'Fecha':''}><Inp type='date' value={c.fecha} onChange={e=>setNewCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:anio4ISO(e.target.value)}:x))}/></Fld>
                           {newCuotasCustom.length>1&&<button onClick={()=>setNewCuotasCustom(p=>p.filter(x=>x.id!==c.id))} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,paddingBottom:2}}>×</button>}
                         </div>
                       ))}
