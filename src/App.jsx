@@ -32318,6 +32318,26 @@ export default function App() {
         if(insFmtErr) throw new Error('Error al crear una cuota nueva: '+insFmtErr.message)
       }
       const {data:nb}=await getBilling();if(nb)setBilling(nb)
+      // Mantener el honorario de la venta (amount_*) en línea con sus cobros, así "Vendido"/ventaCLP reflejan el nuevo plan.
+      // Antes NO se actualizaba y quedaba stale → el usuario veía "no se guarda" (y el historial podía quedar con basura).
+      // Regla: honorario = SUMA de los cobros vivos de la venta (emitidos + programados), salvo 'mensual' (recurrente = monto mensual) y 'hora'.
+      if(newFmt!=='hora'){
+        const moneda=sale.moneda||'UF'
+        let upd=null
+        if(newFmt==='mensual'){ const monthly=moneda==='CLP'?Math.round(Number(newHon)||0):(Number(newHon)||0); if(monthly>0) upd=moneda==='CLP'?{amount_clp:monthly}:{amount_uf:monthly} }
+        else {
+          const vivos=(nb||[]).filter(b=>String(b.sale_id)===String(sale.id)&&!b.deleted_at&&b.status!=='Anulada'&&!['reembolso','nota_credito'].includes(b.billing_type))
+          const sumCLP=vivos.reduce((a,b)=>a+(Number(b.amount)||0),0)
+          if(sumCLP>0){ if(moneda==='CLP') upd={amount_clp:sumCLP}
+            else { const uf=sale.uf_value>0?sale.uf_value:0; if(uf>0) upd={amount_uf:Math.round(sumCLP/uf*100)/100} } }   // UF solo si hay uf_value congelado (evita conversión a ciegas)
+        }
+        if(upd){
+          const {error:upErr}=await supabase.from('sales').update(upd).eq('id',sale.id); if(!upErr) setSales(p=>p.map(x=>x.id===sale.id?{...x,...upd}:x))
+          // El historial debe mostrar el MISMO honorario que la venta (no el valor del formulario, que podía venir vacío/erróneo).
+          const honVal=moneda==='CLP'?upd.amount_clp:upd.amount_uf
+          if(honVal!=null && rec?.id){ await supabase.from('sale_tariff_history').update({honorario:honVal}).eq('id',rec.id); rec.honorario=String(honVal) }
+        }
+      }
       return rec
     }catch(e){appAlert('Error: '+e.message);return null}
   },[user])
