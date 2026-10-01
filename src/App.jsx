@@ -5693,8 +5693,11 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                         <span style={{alignSelf:'center',color:C.done,transform:open?'rotate(90deg)':'none',transition:'transform .15s',fontSize:12,lineHeight:1}}>›</span>
                       </div>
                       {open&&<div style={{paddingBottom:6}}>
-                        {cuotas.map(b=>{ const est=b.status==='Programada'?{label:'Programada',text:C.done,bg:C.bgSoft}:estadoCobro(b); const cn=(clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'—'; return (
-                          <div key={b.id} onClick={onOpenClientFicha&&b.client_id?(ev)=>{ev.stopPropagation();onOpenClientFicha(b.client_id)}:undefined} style={{display:'grid',gridTemplateColumns:'46px 1fr auto',columnGap:8,alignItems:'center',padding:'4px 0 4px 2px',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>
+                        {cuotas.map(b=>{ const est=b.status==='Programada'?{label:'Programada',text:C.done,bg:C.bgSoft}:estadoCobro(b); const cn=(clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'—'
+                          // Abre la VENTA (modal, no navega → al cerrar quedas en este mismo drill). Si la cuota no tiene venta, cae a la ficha.
+                          const ventaCuota = b.sale_id ? sales.find(s=>String(s.id)===String(b.sale_id)) : null
+                          const abrirCuota = (ventaCuota&&onEdit) ? (ev)=>{ev.stopPropagation();onEdit(ventaCuota)} : (onOpenClientFicha&&b.client_id ? (ev)=>{ev.stopPropagation();onOpenClientFicha(b.client_id)} : undefined); return (
+                          <div key={b.id} onClick={abrirCuota} title={ventaCuota?'Abrir la venta':(b.client_id?'Ver ficha del cliente':undefined)} style={{display:'grid',gridTemplateColumns:'46px 1fr auto',columnGap:8,alignItems:'center',padding:'4px 0 4px 2px',cursor:abrirCuota?'pointer':'default'}}>
                             <span style={{fontSize:10,color:iv.revisar.has(String(b.id))?C.soonText:C.muted,fontVariantNumeric:'tabular-nums',fontWeight:iv.revisar.has(String(b.id))?700:400}}>{b.due?fmtFechaDMY(b.due).slice(0,5):'—'}</span>
                             <span style={{minWidth:0,overflow:'hidden'}}>
                               <span style={{fontSize:12,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'block'}}>{cn}</span>
