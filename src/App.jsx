@@ -12638,7 +12638,7 @@ function AsignarConsolidadoModal({anticipo,billing=[],sales=[],clients=[],onConf
   )
 }
 
-function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[],onSave,onLiberar,onCubrir,onAsignarFactura,onConsolidar,onReclasificar,onClose}){
+function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[],onSave,onLiberar,onCubrir,onAsignarFactura,onAsignarFacturas,onConsolidar,onReclasificar,onClose}){
   const a=anticipo
   const esBanco=/conciliaci[oó]n/i.test(a.nota||'')
   const cliName=clients.find(c=>String(c.id)===String(a.client_id))?.name||'Cliente'
@@ -12654,12 +12654,20 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
   const [nota,setNota]=useState(a.nota||'')
   const [monto,setMonto]=useState(a.monto||0)
   const [fecha,setFecha]=useState((a.fecha||'').slice(0,10))
-  const [selFac,setSelFac]=useState(calza?String(calza.id):null)
+  const [selFacs,setSelFacs]=useState(()=>calza?new Set([String(calza.id)]):new Set())
   const [busy,setBusy]=useState(false)
   const fmtCLP0=n=>fmt(Number(n)||0)   // unificado al fmt global (signo -$ y redondeo correctos)
   const dispo=a.estado==='disponible'
   const save=(patch)=>{ onSave&&onSave(a,patch) }
-  const asignar=async()=>{ if(!selFac||!onAsignarFactura) return; setBusy(true); await onAsignarFactura(a,selFac); setBusy(false); onClose() }
+  // Multi-asignación: un anticipo puede cubrir VARIAS facturas (se reparte en orden; si sobra, queda disponible).
+  const toggleFac=id=>setSelFacs(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
+  const selBills=facturasAbiertas.filter(b=>selFacs.has(String(b.id)))
+  const sumSel=selBills.reduce((s,b)=>s+saldoBill(b),0)
+  const antMonto=a.monto||0
+  const aplica=Math.min(sumSel,antMonto)        // lo que efectivamente se aplica
+  const queda=Math.max(0,antMonto-sumSel)        // sobrante del anticipo → queda disponible
+  const falta=Math.max(0,sumSel-antMonto)        // lo que el anticipo NO alcanza a cubrir (última parcial)
+  const asignar=async()=>{ if(!selFacs.size) return; const ordered=facturasAbiertas.filter(b=>selFacs.has(String(b.id))).map(b=>String(b.id)); setBusy(true); if(onAsignarFacturas){ await onAsignarFacturas(a,ordered) } else if(onAsignarFactura){ await onAsignarFactura(a,ordered[0]) } setBusy(false); onClose() }
   const inp={flex:1,fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px',outline:'none',background:'#fff',fontFamily:'inherit',minWidth:0,boxSizing:'border-box'}
   const lbl={fontSize:11,color:C.muted,width:62,flexShrink:0}
   const papelera=(dispo&&onLiberar)?<button title='Eliminar anticipo' onClick={async()=>{ if(await appConfirm(esBanco?'¿Eliminar este anticipo? El movimiento bancario vuelve a "por conciliar".':'¿Eliminar este anticipo? Se borra del registro.')){ onLiberar(a); onClose() } }} style={{background:'none',border:'none',cursor:'pointer',color:C.overdue,display:'inline-flex',alignItems:'center',padding:2}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6'/></svg></button>:null
@@ -12701,12 +12709,18 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
         <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'14px 0 8px'}}>Asignar a</div>
         {facturasAbiertas.length>0?(
           <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:8}}>
-            {facturasAbiertas.slice(0,5).map(b=>{ const on=String(selFac)===String(b.id); const cz=calza&&String(calza.id)===String(b.id); return (
-              <div key={b.id} onClick={()=>setSelFac(on?null:String(b.id))} style={{border:on?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,background:on?C.azulBg:'#fff',borderRadius:8,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
+            {facturasAbiertas.slice(0,8).map(b=>{ const on=selFacs.has(String(b.id)); const cz=calza&&String(calza.id)===String(b.id); return (
+              <div key={b.id} onClick={()=>toggleFac(String(b.id))} style={{border:on?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,background:on?C.azulBg:'#fff',borderRadius:8,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
                 <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>Factura N°{folioN(b.invoice_no)}{cz&&<span style={{color:C.azulInfo,fontWeight:600}}> · <Sparkle/> calza</span>}</div><div style={{fontSize:11,color:C.done}}>saldo {fmtCLP0(saldoBill(b))}</div></div>
                 <span style={{width:17,height:17,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:on?`1.5px solid ${C.accent}`:`1.5px solid ${C.border}`,background:on?C.accent:'#fff'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3'><polyline points='20 6 9 17 4 12'/></svg>}</span>
               </div>
             )})}
+            {selFacs.size>0&&<div style={{background:C.bgSoft,borderRadius:8,padding:'9px 11px',display:'flex',flexDirection:'column',gap:3}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12}}><span style={{color:C.muted}}>Aplicas a {selFacs.size} factura{selFacs.size!==1?'s':''}</span><span style={{fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP0(aplica)}</span></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.done}}><span>Anticipo</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmtCLP0(antMonto)}</span></div>
+              {queda>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11}}><span style={{color:C.greenText}}>Sobra · queda disponible</span><span style={{fontWeight:600,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtCLP0(queda)}</span></div>}
+              {falta>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11}}><span style={{color:C.soonText}}>No alcanza · última parcial</span><span style={{fontWeight:600,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>falta {fmtCLP0(falta)}</span></div>}
+            </div>}
           </div>
         ):(
           <div style={{fontSize:11,color:C.done,marginBottom:8}}>Este cliente no tiene facturas emitidas abiertas para asignar.</div>
@@ -12715,7 +12729,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
           {onCubrir&&<div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:11,color:C.done}}>Marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>}
           {programadasCli.length>0&&onConsolidar&&<div onClick={()=>onConsolidar(a)} style={{border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Asignar a 1 factura</div><div style={{fontSize:11,color:C.done}}>1 factura por el total · anula las programadas</div></div><span style={{color:C.done}}>→</span></div>}
         </div>
-        {facturasAbiertas.length>0&&<button disabled={!selFac||busy} onClick={asignar} style={{width:'100%',height:44,borderRadius:10,border:'none',background:(selFac&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(selFac&&!busy)?'pointer':'default',marginTop:10}}>{busy?'Asignando…':'Guardar asignación'}</button>}
+        {facturasAbiertas.length>0&&<button disabled={!selFacs.size||busy} onClick={asignar} style={{width:'100%',height:44,borderRadius:10,border:'none',background:(selFacs.size&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(selFacs.size&&!busy)?'pointer':'default',marginTop:10}}>{busy?'Asignando…':(selFacs.size>1?`Guardar · ${selFacs.size} facturas`:'Guardar asignación')}</button>}
         {onReclasificar&&<div style={{marginTop:12,paddingTop:9,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>¿Era un gasto? <span onClick={()=>onReclasificar(a)} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>Reclasificar a Fondo por rendir</span></div>}
       </>}
     </Modal>
@@ -33461,6 +33475,37 @@ export default function App() {
       }
     }catch(e){appAlert('Error: '+e.message)}
   },[clients,billing,anticipos])
+  // UN anticipo → VARIAS facturas: reparte el monto en el orden dado (min con el saldo de cada una). La 1ª factura reusa la fila
+  // original del anticipo; las demás son filas nuevas (split) ligadas a su factura; el sobrante queda como anticipo disponible.
+  // Cada factura cubierta se marca Pagada por Transferencia con paid_at = fecha del anticipo (la plata ya entró a caja); si una
+  // queda a medias, baja su saldo (abono parcial) sin marcarla pagada. Reversible (deshacer consumo). No re-suma en caja.
+  const handleAsignarAnticipoFacturas=useCallback(async(anticipoId, billingIds)=>{
+    const a=(anticipos||[]).find(x=>String(x.id)===String(anticipoId)); if(!a){ appAlert('Anticipo no encontrado.'); return }
+    const facs=(billingIds||[]).map(id=>(billing||[]).find(b=>String(b.id)===String(id))).filter(Boolean)
+    if(!facs.length){ appAlert('Elige al menos una factura.'); return }
+    try{
+      const now=new Date().toISOString(); const paidAt=a.fecha||null
+      let remaining=a.monto||0; const pieces=[]
+      for(const fac of facs){ if(remaining<=0) break; const saldo=Math.max(0,(fac.amount||0)-(fac.paid_amount||0)); const apply=Math.min(remaining,saldo); if(apply<=0) continue; remaining-=apply; pieces.push({fac,apply,cubre:apply>=saldo}) }
+      if(!pieces.length){ appAlert('Las facturas elegidas no tienen saldo por cubrir.'); return }
+      // Anticipo: 1ª pieza reusa la fila original; resto = filas nuevas; sobrante = disponible.
+      const first=pieces[0]
+      const { error:e0 }=await supabase.from('anticipos').update({monto:first.apply, estado:'consumido', billing_id:first.fac.id}).eq('id',a.id); if(e0) throw e0
+      for(const p of pieces.slice(1)){
+        const { error:ei }=await supabase.from('anticipos').insert({client_id:a.client_id, entity_id:a.entity_id||null, monto:p.apply, fecha:a.fecha, nota:a.nota||'Anticipo', proyecto:a.proyecto||null, sale_id:a.sale_id||null, estado:'consumido', billing_id:p.fac.id, created_by:a.created_by||null}); if(ei) throw ei
+      }
+      if(remaining>0){ await supabase.from('anticipos').insert({client_id:a.client_id, entity_id:a.entity_id||null, monto:remaining, fecha:a.fecha, nota:'Saldo de anticipo', proyecto:a.proyecto||null, sale_id:a.sale_id||null, estado:'disponible', created_by:a.created_by||null}) }
+      for(const p of pieces){ const fac=p.fac
+        if(p.cubre){ const pa=fac.paid_at||paidAt||fac.issued_at||null
+          const { error:be }=await supabase.from('billing').update({status:'Pagado', paid_amount:fac.amount, paid_at:pa, payment_method:'Transferencia', payment_ref:fac.payment_ref||'Anticipo conciliado en banco', reconciled_at:fac.reconciled_at||now, updated_at:now}).eq('id',fac.id); if(be) throw be
+        }else{ const { error:be }=await supabase.from('billing').update({paid_amount:(fac.paid_amount||0)+p.apply, updated_at:now}).eq('id',fac.id); if(be) throw be }
+      }
+      const {data:nb}=await getBilling(); if(nb)setBilling(nb)
+      const {data:na}=await supabase.from('anticipos').select('*').order('fecha',{ascending:false}); if(na)setAnticipos(na)
+      const parcial=pieces.some(p=>!p.cubre)
+      appAlert(`Anticipo aplicado a ${pieces.length} factura${pieces.length!==1?'s':''}${parcial?' (la última quedó parcial)':''}${remaining>0?`. Sobrante de ${fmt(remaining)} quedó como anticipo disponible.`:'.'}`)
+    }catch(e){appAlert('Error al asignar el anticipo: '+(e.message||e))}
+  },[anticipos,billing,clients])
 
   // Cubrir cuotas programadas con un anticipo: esas cuotas pasan a 'Anticipada' (salen del flujo de caja
   // y de "por facturar" porque su plata ya entró como anticipo). El anticipo queda 'consumido'.
@@ -34385,7 +34430,7 @@ export default function App() {
         {modal?.type==='conciliar'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
         {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
-        {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
+        {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onAsignarFacturas={(a,facIds)=>handleAsignarAnticipoFacturas(a.id,facIds)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
         {modal?.type==='billing'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
