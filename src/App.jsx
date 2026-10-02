@@ -20814,8 +20814,20 @@ Quedamos atentos a cualquier consulta.
 
 Saludos cordiales,`
   }
+  const bodyTocadoR=useRef(false); const learnedTplR=useRef({})
+  const _rendSign=()=> saldoCliente<0?'d':saldoCliente>0?'f':'0'   // la base se separa por signo del saldo: el cierre cambia (a cargo / a favor)
+  const keyR=lg=>`${r.client_id}:${_rendSign()}:${lg}`
+  // Tokeniza TODO lo variable (correlativo, proyecto, saldo, fondos, rendido) para reusar tu redacción SIN congelar cifras.
+  const _rendPairs=(lg)=>[['{correlativo}', r.correlativo!=null?(lg==='en'?`No. ${r.correlativo}`:`N° ${r.correlativo}`):''],['{proyecto}', r.project||''],['{subproyecto}', r.subproject?` (${r.subproject})`:''],['{saldo}', fmtN(Math.abs(saldoCliente))],['{fondos}', fmtN(totFondosCli)],['{rendido}', fmtN(_rs.rendido)]]
+  const _tokR=(t,lg)=>{ let s=String(t); for(const [tok,val] of _rendPairs(lg)){ if(val&&String(val).length>=2) s=s.split(val).join(tok) } return s }
+  const _untokR=(t,lg)=>{ let s=String(t); for(const [tok,val] of _rendPairs(lg)){ s=s.split(tok).join(val) } return s }
   const [body,setBody] = useState(()=>cuerpoCorreo('es'))
-  useEffect(()=>{ setBody(cuerpoCorreo(lang)); setAsunto(asuntoFor(lang)) },[lang])  // toggle ES|EN regenera correo + asunto
+  const aplicarBaseR=lg=>{ const tpl=learnedTplR.current[lg]; setBody(tpl?_untokR(tpl,lg):cuerpoCorreo(lg)) }
+  useEffect(()=>{ setAsunto(asuntoFor(lang)); if(!bodyTocadoR.current) aplicarBaseR(lang) },[lang])  // toggle ES|EN: asunto siempre; cuerpo respeta tu edición
+  // Carga tu última redacción (cliente + signo de saldo + idioma) y la aplica con las cifras de ESTA rendición.
+  useEffect(()=>{ if(!r?.client_id) return; let alive=true
+    ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','rendicion_msg').eq('key',keyR(lg)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTplR.current[lg]=data.value; if(lg===lang&&!bodyTocadoR.current) setBody(_untokR(data.value,lg)) },()=>{}) })
+    return ()=>{alive=false} },[r?.client_id])
   const [aiBusy,setAiBusy] = useState(false)
   // La IA redacta el correo, pero las CIFRAS y los DATOS DE CUENTA van fijos (se le pasan y se le prohíbe cambiarlos).
   const redactarIA = async()=>{
@@ -20829,7 +20841,7 @@ Saludos cordiales,`
       const data = await claudeCall({model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})
       const txt = (data.content?.[0]?.text||'').trim()
       if(!txt) throw new Error('respuesta vacía')
-      setBody(txt); logEvent('rendicion','correo_ia',{client_id:r.client_id},user?.name)
+      bodyTocadoR.current=true; setBody(txt); logEvent('rendicion','correo_ia',{client_id:r.client_id},user?.name)
     }catch(e){ appAlert('Error al redactar con IA: '+(e?.message||e)) }
     setAiBusy(false)
   }
@@ -20902,6 +20914,7 @@ Saludos cordiales,`
       try{ if(cc.length){ await supabase.from('learnings').delete().eq('kind','rendicion_cc').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_cc',key:String(r.client_id),value:cc.join(', '),meta:{}}) } }catch(_){}
       // Recordar el destinatario "Para" de la rendición → lo reusa la devolución (que va al mismo).
       try{ if((para||'').trim()){ await supabase.from('learnings').delete().eq('kind','rendicion_para').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_para',key:String(r.client_id),value:para.trim(),meta:{}}) } }catch(_){}
+      try{ if(r.client_id) await setLearningKV('rendicion_msg', keyR(lang), _tokR(body,lang)) }catch(_){}   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
       try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
       appAlert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
       onClose()
@@ -20947,7 +20960,7 @@ Saludos cordiales,`
           <button onClick={redactarIA} disabled={aiBusy} style={{...chipBtn('soft'),height:24,opacity:aiBusy?.6:1}}>{aiBusy?(lang==='en'?'Writing…':'Redactando…'):(lang==='en'?'Draft with AI':'Redactar con IA')}</button>
         </div>
       </div>
-      <textarea value={body} onChange={e=>setBody(e.target.value)} rows={8} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:6}}/>
+      <textarea value={body} onChange={e=>{bodyTocadoR.current=true; setBody(e.target.value)}} rows={8} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:6}}/>
       <div style={{fontSize:10,color:C.done,marginBottom:12}}>Las cifras y los datos de cuenta van fijos; la IA solo redacta. Revisa antes de enviar.</div>
       <div style={{marginBottom:12}}>
         <button onClick={()=>setShowFirma(v=>!v)} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Mi firma {showFirma?'▴':'▾'}</button>
