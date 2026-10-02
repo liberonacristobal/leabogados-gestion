@@ -100,7 +100,8 @@ serve(async (req) => {
       try{
         await sendMail(dest, subject, html);
         const at = new Date().toISOString();
-        for(const it of g.items){ try{ await sb.from("learnings").upsert({kind:"factura_recordado",key:String(it.id),value:at},{onConflict:"kind,key"}); }catch(_){} }
+        // singleton sin índice único (la tabla admite (kind,key) duplicados; upsert onConflict:'kind,key' falla): update si existe, insert si no.
+        for(const it of g.items){ try{ const {data:ex}=await sb.from("learnings").select("id").eq("kind","factura_recordado").eq("key",String(it.id)).limit(1); if(ex&&ex.length) await sb.from("learnings").update({value:at}).eq("id",ex[0].id); else await sb.from("learnings").insert({kind:"factura_recordado",key:String(it.id),value:at}); }catch(_){} }
         enviados.push({ cliente: cl?.name, to:dest, facturas:g.items.length, total });
       }catch(e){ enviados.push({ cliente: cl?.name, to:dest, error:String((e as Error).message) }); }
     }

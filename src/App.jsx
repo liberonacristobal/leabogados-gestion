@@ -18917,8 +18917,8 @@ function DestinatarioFacturasCard({client, contacts=[], embedded=false}){
     supabase.from('learnings').select('kind,value').in('kind',['factura_to','factura_cc']).eq('key',String(client.id)).then(({data})=>{ if(!alive) return; (data||[]).forEach(r=>{ if(r.kind==='factura_to') setTo(String(r.value||'').trim()); if(r.kind==='factura_cc') setCc(String(r.value||'').split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean)) }) },()=>{})
     return ()=>{alive=false} },[client?.id])
   const flash=()=>{ setSaved(true); setTimeout(()=>setSaved(false),1500) }
-  const saveTo=async v=>{ setTo(v); if(!client?.id) return; try{ if(v.trim()) await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:v.trim()},{onConflict:'kind,key'}); else await supabase.from('learnings').delete().eq('kind','factura_to').eq('key',String(client.id)); flash() }catch(_){} }
-  const saveCc=async arr=>{ setCc(arr); if(!client?.id) return; try{ if(arr.length) await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:arr.join(',')},{onConflict:'kind,key'}); else await supabase.from('learnings').delete().eq('kind','factura_cc').eq('key',String(client.id)); flash() }catch(_){} }
+  const saveTo=async v=>{ setTo(v); if(!client?.id) return; try{ if(v.trim()) await setLearningKV('factura_to',String(client.id),v.trim()); else await supabase.from('learnings').delete().eq('kind','factura_to').eq('key',String(client.id)); flash() }catch(_){} }
+  const saveCc=async arr=>{ setCc(arr); if(!client?.id) return; try{ if(arr.length) await setLearningKV('factura_cc',String(client.id),arr.join(',')); else await supabase.from('learnings').delete().eq('kind','factura_cc').eq('key',String(client.id)); flash() }catch(_){} }
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(to||'').toLowerCase()) saveCc([...cc,e]); setCcInput('') }
   const conEmail=(contacts||[]).filter(c=>c.email)
   const inpS={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:'#fff',boxSizing:'border-box'}
@@ -19736,7 +19736,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
     const r=recordatorioCobro(b)
     if(!await appConfirm(`¿Enviar recordatorio de cobro a ${to} por ${r.folio} (${r.monto})? Se adjunta el PDF de la factura.`)) return
-    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
+    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ try{ await setLearningKV('factura_recordado',String(b.id),new Date().toISOString()) }catch(_){}; appAlert(`Recordatorio enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   const borde = b => estadoCobro(b).color
@@ -20053,7 +20053,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
       try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; appAlert('Enviado desde la cuenta de oficina, con el comprobante adjunto.\n(Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)') }catch(e2){ err=e2 }
     }
     setSending(false)
-    if(sent){ try{ if(cc.length) await supabase.from('learnings').upsert({kind:'rendicion_cc',key:String(client.id),value:cc.join(', ')},{onConflict:'kind,key'}) }catch(_){} try{ if((para||'').trim()) await supabase.from('learnings').upsert({kind:'rendicion_para',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}
+    if(sent){ try{ if(cc.length) await setLearningKV('rendicion_cc',String(client.id),cc.join(', ')) }catch(_){} try{ if((para||'').trim()) await setLearningKV('rendicion_para',String(client.id),para.trim()) }catch(_){}
       // Registrar el envío de la devolución en la rendición → chip "Devolución enviada" en el historial.
       try{ if(rend?.id){ const now=new Date().toISOString(); await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',rend.id); setRendiciones&&setRendiciones(p=>p.map(x=>x.id===rend.id?{...x,devolucion_at:now}:x)) } }catch(_){}
       onClose&&onClose() }
@@ -20457,15 +20457,15 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       const baseAdj = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
       const adjuntos = [...baseAdj, ...extras.map(a=>({base64:a.base64,name:a.name,mime:a.mime}))]   // factura(s) + documentos adicionales
       const bodyTxt=cuerpoFull()   // ya incluye las cuentas (segmentos), en el orden correcto
-      if(pedirFondo){ try{ await supabase.from('learnings').upsert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(ctaGastos)},{onConflict:'kind,key'}) }catch(_){} }   // recuerda la cuenta de gastos ingresada
+      if(pedirFondo){ try{ await setLearningKV('cuenta_gastos','estudio',JSON.stringify(ctaGastos)) }catch(_){} }   // recuerda la cuenta de gastos ingresada
       // La factura sale SIEMPRE desde el correo del usuario. Si su Gmail venció, NO cae a la oficina: se le pide reentrar y reintentar (control sobre el remitente).
       const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos, soloUsuario:true})
       if(via==='reauth'){ appAlert('La factura NO se envió.\nTu acceso a Gmail expiró: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl para poder enviarla desde tu correo.'); setSending(false); return }
       if(via===null){ setSending(false); return }
       const viaServer = via==='oficina'
-      if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
-      if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
-      if(bodyTocado.current&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_msg',key:`${client.id}:${multi?'n':'1'}:${lang}`,value:_tok(body,lang)},{onConflict:'kind,key'}) }catch(_){}   // aprende tu redacción (plantilla con tokens {folios}/{total}) para la próxima (una|varias · idioma)
+      if(cc.length) try{ await setLearningKV('factura_cc',String(client.id),cc.join(',')) }catch(_){}
+      if(para.trim()&&client?.id) try{ await setLearningKV('factura_to',String(client.id),para.trim()) }catch(_){}   // aprende el destinatario de facturas de este cliente
+      if(bodyTocado.current&&client?.id) try{ await setLearningKV('factura_msg',`${client.id}:${multi?'n':'1'}:${lang}`,_tok(body,lang)) }catch(_){}   // aprende tu redacción (plantilla con tokens {folios}/{total}) para la próxima (una|varias · idioma)
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
       // (no repetir: la app aprende quién recibe facturas). No pisa contactos existentes.
       if(client?.id){ try{
@@ -26238,7 +26238,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
     return `<div style='max-width:600px;margin:0 auto;padding:26px 30px;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D'><div style='display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #003C50;padding-bottom:14px;margin-bottom:22px'><div style='font-size:16px;font-weight:700;color:#003C50'>${BRAND.nombre}</div>${badge}</div><p style='font-size:13px;line-height:1.65'>Estimados,</p><p style='font-size:13px;line-height:1.65'>Junto con saludar, y en el marco de nuestra asesoría permanente, queremos proponerles una actualización del honorario mensual.</p><p style='font-size:13px;line-height:1.65'>Durante ${anio} la dedicación efectiva a sus asuntos ha promediado <b>${fh(r.avg)} al mes</b>, por sobre las <b>${fh(r.incl)}</b> contempladas en el plan actual de <b>${hoyStr} mensuales</b>. En consideración a ello, proponemos ajustar el honorario a <b>${nuevoStr} mensuales</b>, a partir del próximo período.</p><p style='font-size:13px;line-height:1.65'>Quedamos atentos a comentar los detalles y a cualquier ajuste que estimen pertinente.</p><p style='font-size:13px;line-height:1.65'>Saludos cordiales,<br><b>${BRAND.nombre}</b></p>${footer}</div>`
   }
   const verCarta = r => {
-    setDecid(d=>({...d,[r.cid]:'ver'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'ver'},{onConflict:'kind,key'}) }catch(_){} }
+    setDecid(d=>({...d,[r.cid]:'ver'})); if(!DEMO){ try{ setLearningKV('repricing_decision',String(r.cid),'ver').catch(()=>{}) }catch(_){} }
     const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Propuesta de reajuste — ${cn(r.cid).replace(/</g,'&lt;')}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;background:#fff'>${cartaInner(r,false)}<button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
@@ -26251,11 +26251,11 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
     setSendingCid(r.cid)
     try{
       const via = await enviarComoUsuario({ to:to.trim(), subject:`Propuesta de actualización de honorarios — ${BRAND.nombre}`, html:cartaInner(r,true), text:'Adjuntamos nuestra propuesta de actualización del honorario mensual.' })
-      if(via){ setDecid(d=>({...d,[r.cid]:'enviado'})); if(!DEMO){ try{ await supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'enviado'},{onConflict:'kind,key'}) }catch(_){} }; appAlert('Propuesta enviada'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') }
+      if(via){ setDecid(d=>({...d,[r.cid]:'enviado'})); if(!DEMO){ try{ await setLearningKV('repricing_decision',String(r.cid),'enviado') }catch(_){} }; appAlert('Propuesta enviada'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') }
     }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
     setSendingCid(null)
   }
-  const descartar = r => { setDecid(d=>({...d,[r.cid]:'descartado'})); if(!DEMO){ try{ supabase.from('learnings').upsert({kind:'repricing_decision',key:String(r.cid),value:'descartado'},{onConflict:'kind,key'}) }catch(_){} } }
+  const descartar = r => { setDecid(d=>({...d,[r.cid]:'descartado'})); if(!DEMO){ try{ setLearningKV('repricing_decision',String(r.cid),'descartado').catch(()=>{}) }catch(_){} } }
   const visibles = recos.filter(r=>decid[r.cid]!=='descartado')
 
   return (
@@ -32447,7 +32447,7 @@ export default function App() {
       try{
         const hoy = Date.parse(new Date().toISOString().slice(0,10))
         const learn = items.map(it=>({ titulo:it.titulo, dias: it.due?Math.round((Date.parse(it.due)-hoy)/86400000):null, nota:it.nota||'' }))
-        await supabase.from('learnings').upsert({kind:'propuesta_tareas', key:String(area||'General'), value:JSON.stringify(learn), meta:{}},{onConflict:'kind,key'})
+        await setLearningKV('propuesta_tareas', String(area||'General'), JSON.stringify(learn))
       }catch(_){}
       setModal(null)
       appAlert(`Listo: ${rows.length} tarea${rows.length!==1?'s':''} creada${rows.length!==1?'s':''} para ${responsable}${via?(via==='usuario'?' y correo enviado.':' y correo enviado desde la oficina.'):' (sin correo).'}`)
@@ -34175,19 +34175,19 @@ export default function App() {
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
         {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
-          if(mode==='ignorar'){ if(!DEMO){ try{ await supabase.from('learnings').upsert({kind:'data_health',key:'cuotatramo:'+s.id,value:'distintos',updated_at:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){} } return }
+          if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
           // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
           const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
           let rem=Math.round(exceso||0); const changes=[]
           for(const b of progs){ if(rem<=0) break; const cur=Math.round(montoFactura(b)); const cut=Math.min(rem,cur); const na=cur-cut; rem-=cut; changes.push({id:b.id, from:cur, to:na, del:na<=0}) }
           if(!changes.length) return
           if(!DEMO){ for(const c of changes){ await supabase.from('billing').update(c.del?{deleted_at:new Date().toISOString()}:{amount:c.to,updated_at:new Date().toISOString()}).eq('id',c.id) }
-            try{ await supabase.from('learnings').upsert({kind:'data_health',key:'cuotatramo_undo:'+s.id,value:JSON.stringify(changes),updated_at:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){} }
+            try{ await setLearningKV('data_health','cuotatramo_undo:'+s.id,JSON.stringify(changes)) }catch(_){} }
           setBilling(p=>p.map(x=>{ const c=changes.find(cc=>String(cc.id)===String(x.id)); return c?(c.del?{...x,deleted_at:new Date().toISOString()}:{...x,amount:c.to}):x }))
         }} onResolverGlosa={async(key,categoria)=>{ if(DEMO) return
           // deja la clave con UN solo valor canónico: borra las filas en conflicto e inserta la elegida. No toca gastos ya clasificados; corrige la sugerencia futura.
           try{ await supabase.from('learnings').delete().eq('kind','costo_oficina').eq('key',key); await supabase.from('learnings').insert({kind:'costo_oficina',key,value:categoria,updated_at:new Date().toISOString()}) }catch(_){}
-        }} onRetirarFantasmas={async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) }} onDismissFantasma={async(progId)=>{ if(DEMO) return; try{ await supabase.from('learnings').upsert({kind:'fantasma_no',key:String(progId),value:'1',updated_at:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){} }}/></Modal>}
+        }} onRetirarFantasmas={async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) }} onDismissFantasma={async(progId)=>{ if(DEMO) return; try{ await setLearningKV('fantasma_no',String(progId),'1') }catch(_){} }}/></Modal>}
         {modal?.type==='fusionarClientes'&&<Modal fullscreenOnMobile title={modal.pending?'Confirmar fusión':'Fusionar clientes'} maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={modal.pending||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
