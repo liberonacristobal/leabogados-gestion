@@ -8574,8 +8574,8 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
   const retExtIds = new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id)))
   const billSinExt = (billing||[]).filter(b=>!retExtIds.has(String(b.id)))
   const tercSinExt = (terceros||[]).filter(t=>t&&t.comision_pct==null)
-  // Comisión recibida DEVENGADA (por mes de EMISIÓN, igual que Facturado): monto − parte del externo = lo que retenemos.
-  const comRecibDe=y=>(billing||[]).filter(b=>b&&!b.deleted_at&&retExtIds.has(String(b.id))&&String(b.issued_at||'').startsWith(y)).reduce((a,b)=>a+Math.max(0,(b.amount||0)-(Number(b.monto_terceros)||0)),0)
+  // Comisión recibida AL COBRAR (por mes de PAGO de la factura, base caja, igual que "Otros ingresos"): monto − parte del externo = lo que retenemos. Se reconoce recién cuando la factura se paga.
+  const comRecibDe=y=>(billing||[]).filter(b=>b&&!b.deleted_at&&retExtIds.has(String(b.id))&&b.status==='Pagado'&&String(b.paid_at||'').startsWith(y)).reduce((a,b)=>a+Math.max(0,(b.amount||0)-(Number(b.monto_terceros)||0)),0)
   const ingresosDe=y=>facturadoSiiPeriodo(billSinExt,y)   // DEVENGADO: facturado con DTE real del SII (no el cobrado a caja), sin las facturas de externos
   const costosPorCat=y=>{ const m={}; (costosOfiRows||[]).forEach(r=>{ const eff=(r.desde&&y<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; m[r.categoria]=(m[r.categoria]||0)+(Number(eff)||0)*(r.es_ingreso?-1:1) }); return m }
   // Comisión del mes = comisiones PAGADAS (terceros_pagos) por pagado_at. Fuente ÚNICA y separada de Costos de oficina (que es el presupuesto costos_oficina, sin categoría Comisiones) → no se pisan. Excluye las de facturas-externo (que no están en Facturado).
