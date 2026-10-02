@@ -5883,6 +5883,15 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   )
 }
 
+// Íconos del selector visual de "Forma de cobro" (SaleForm). Trazo heredado (currentColor).
+const _cIc = d => <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
+const COBRO_IC = {
+  cuotas: _cIc(<><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></>),
+  mensual: _cIc(<><path d='M17 1l4 4-4 4'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><path d='M7 23l-4-4 4-4'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></>),
+  porcentaje: _cIc(<><path d='M19 5L5 19'/><circle cx='6.5' cy='6.5' r='2.5'/><circle cx='17.5' cy='17.5' r='2.5'/></>),
+  personalizada: _cIc(<><path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'/></>),
+  hora: _cIc(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>),
+}
 function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onUpdateCuotas,onSave,onClose,onDelete,onPrimerasTareas,saving,user,onExposeUpload,onExposeDrive,onExposeReasign}) {
   const [cubrirAnt,setCubrirAnt] = useState(null)
   const [facturarAntS,setFacturarAntS] = useState(null)
@@ -6642,12 +6651,13 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           {reasignCli&&sale?.id&&<div style={{fontSize:11,color:C.coralText,marginTop:6}}>Mueve esta {f.status==='Propuesta'?'propuesta':'venta'} a otro cliente. Las facturas ya emitidas mantienen su receptor; revisa la razón social a facturar tras cambiar.</div>}
         </Fld>
       ) : (sale?.id ? null : (
-        <div onClick={()=>{setReasignCli(true);setClientQ('')}} title='Cambiar cliente' style={{marginBottom:10,padding:'10px 12px',borderRadius:8,background:C.azulBg,border:`1px solid ${C.accent}`,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+        <div onClick={()=>{setReasignCli(true);setClientQ('')}} title='Cambiar cliente' style={{marginBottom:10,padding:'11px 13px',borderRadius:13,background:C.azulBg,border:`1.5px solid #CFE0EA`,display:'flex',alignItems:'center',gap:11,cursor:'pointer'}}>
+          <span style={{width:34,height:34,borderRadius:10,background:C.accent,color:'#fff',fontSize:13,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{(selectedClient.name||'?').trim().slice(0,2).toUpperCase()}</span>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</div>
             {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.rut}</div>}
           </div>
-          <span style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:6,padding:'5px 11px',flexShrink:0}}>Cambiar</span>
+          <span style={{fontSize:11.5,fontWeight:700,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'6px 12px',flexShrink:0}}>Cambiar</span>
         </div>
       ))}
       {showNewClient&&<MiniClientForm defaultName={clientQ} clients={clients} defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onPickExisting={c=>{setSelectedClient(c);up('client_id',c.id);setShowNewClient(false);setClientQ('')}} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false);setClientQ('')}} onCancel={()=>setShowNewClient(false)}/>}
@@ -6729,28 +6739,30 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             ))}
           </div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:costVal>0?12:14}}>
-          <div>
-            <div style={{fontSize:10,color:C.done,fontWeight:600,marginBottom:3}}>HONORARIOS</div>
-            <input type='number' step={moneda==='UF'?'0.01':'1'} value={moneda==='UF'?f.amount_uf||'':f.amount_clp||''} onChange={e=>up(moneda==='UF'?'amount_uf':'amount_clp',e.target.value)} placeholder={moneda==='UF'?'0.00':'0'} style={{width:'100%',height:40,border:`1px solid ${C.border}`,borderRadius:10,background:'#fff',padding:'0 11px',fontSize:15,color:C.text,outline:'none',boxSizing:'border-box'}}/>
-            {moneda==='UF'&&(
-              <div style={{display:'flex',alignItems:'center',gap:3,marginTop:3}}>
-                <span style={{fontSize:10,color:C.done}}>UF día $</span>
-                <input type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder={ufHoy?String(Math.round(ufHoy)):'—'} style={{width:62,border:'none',background:'transparent',fontSize:11,color:C.muted,outline:'none',padding:0}}/>
-              </div>
-            )}
-          </div>
-          <div>
-            <div style={{fontSize:10,color:C.done,fontWeight:600,marginBottom:3}}>COSTOS PROVEEDORES</div>
-            <div style={{display:'flex',height:40,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff'}}>
-              <input type='number' step={costMode==='pct'?'0.1':'0.01'} value={costMode==='pct'?costPct:(moneda==='UF'?f.cost_uf||'':f.cost_clp||'')} onChange={e=>{ if(costMode==='pct') setCostPct(e.target.value); else up(moneda==='UF'?'cost_uf':'cost_clp',e.target.value) }} placeholder='0' style={{flex:1,minWidth:0,border:'none',background:'transparent',padding:'0 11px',fontSize:15,color:C.text,outline:'none'}}/>
-              <div style={{display:'flex',flexShrink:0}}>
-                {[['fijo',moneda],['pct','%']].map(([v,l])=>(
-                  <button key={v} type='button' onClick={()=>setCostMode(v)} style={{padding:'0 8px',border:'none',borderLeft:`1px solid ${C.border}`,background:costMode===v?C.accent:C.bgSoft,color:costMode===v?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
-                ))}
-              </div>
+        <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10,marginBottom:costVal>0?12:14}}>
+          <div style={{minWidth:0}}>
+            <div style={{height:22,display:'flex',alignItems:'center',marginBottom:6}}><span style={{fontSize:10.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>Honorario</span></div>
+            <div style={{display:'flex',alignItems:'center',height:46,border:`1.5px solid ${C.border}`,borderRadius:12,background:C.bgSoft,padding:'0 12px',boxSizing:'border-box'}}>
+              {moneda!=='UF'&&<span style={{fontSize:14,fontWeight:700,color:C.done,marginRight:6}}>$</span>}
+              <input type='number' step={moneda==='UF'?'0.01':'1'} value={moneda==='UF'?f.amount_uf||'':f.amount_clp||''} onChange={e=>up(moneda==='UF'?'amount_uf':'amount_clp',e.target.value)} placeholder={moneda==='UF'?'0,00':'0'} style={{flex:1,minWidth:0,border:'none',background:'transparent',outline:'none',fontSize:18,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',padding:0}}/>
+              {moneda==='UF'&&<span style={{fontSize:13,fontWeight:700,color:C.done,marginLeft:6}}>UF</span>}
             </div>
-            {costMode==='pct'&&costVal>0&&<div style={{fontSize:10,color:C.done,marginTop:3}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
+            {moneda==='UF'&&<div style={{display:'flex',alignItems:'center',gap:3,marginTop:5}}><span style={{fontSize:10,color:C.done}}>UF día $</span><input type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder={ufHoy?String(Math.round(ufHoy)):'—'} style={{width:62,border:'none',background:'transparent',fontSize:11,color:C.muted,outline:'none',padding:0}}/></div>}
+          </div>
+          <div style={{minWidth:0}}>
+            <div style={{height:22,display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,gap:6}}>
+              <span style={{fontSize:10.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Costo prov.</span>
+              <span style={{display:'inline-flex',background:'#EAEEF0',borderRadius:7,padding:2}}>
+                {[['fijo',moneda==='UF'?'UF':'$'],['pct','%']].map(([v,l])=>(<button key={v} type='button' onClick={()=>setCostMode(v)} style={{padding:'2px 8px',border:'none',borderRadius:5,background:costMode===v?C.accent:'transparent',color:costMode===v?'#fff':C.muted,fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>))}
+              </span>
+            </div>
+            <div style={{display:'flex',alignItems:'center',height:46,border:`1.5px solid ${C.border}`,borderRadius:12,background:C.bgSoft,padding:'0 12px',boxSizing:'border-box'}}>
+              {costMode!=='pct'&&moneda!=='UF'&&<span style={{fontSize:14,fontWeight:700,color:C.done,marginRight:6}}>$</span>}
+              <input type='number' step={costMode==='pct'?'0.1':'0.01'} value={costMode==='pct'?costPct:(moneda==='UF'?f.cost_uf||'':f.cost_clp||'')} onChange={e=>{ if(costMode==='pct') setCostPct(e.target.value); else up(moneda==='UF'?'cost_uf':'cost_clp',e.target.value) }} placeholder='0' style={{flex:1,minWidth:0,border:'none',background:'transparent',outline:'none',fontSize:16,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',padding:0}}/>
+              {costMode==='pct'&&<span style={{fontSize:13,fontWeight:700,color:C.done,marginLeft:6}}>%</span>}
+              {costMode!=='pct'&&moneda==='UF'&&<span style={{fontSize:13,fontWeight:700,color:C.done,marginLeft:6}}>UF</span>}
+            </div>
+            {costMode==='pct'&&costVal>0&&<div style={{fontSize:10,color:C.done,marginTop:5}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
           </div>
         </div>
         {costVal>0&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>}
@@ -6760,11 +6772,13 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {/* 7. Forma de cobro — venta nueva y propuesta/borrador. Por hora: sin presupuesto, se elige aunque no haya honorarios. */}
       {formNuevo&&(totalCLP>0||cobroType==='hora')&&(
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Forma de cobro</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
-            {[['cuotas','Cuotas mensuales'],['mensual','Mensual recurrente'],['porcentaje','Por porcentaje'],['personalizada','Personalizada'],['hora','Por hora']].map(([v,l])=>(
-              <button key={v} onClick={()=>setCobroType(v)} style={{padding:'8px 4px',borderRadius:8,border:`2px solid ${cobroType===v?C.accent:C.border}`,background:cobroType===v?C.azulBg:'transparent',color:cobroType===v?C.accent:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',textAlign:'center'}}>{l}</button>
-            ))}
+          <div style={{fontSize:10,fontWeight:800,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8,display:'flex',alignItems:'center',gap:7}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2'><rect x='2' y='5' width='20' height='14' rx='2'/><path d='M2 10h20'/></svg>Forma de cobro</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+            {[['cuotas','Cuotas mensuales','monto fijo en N pagos'],['mensual','Mensual recurrente','sin fecha de término'],['porcentaje','Por porcentaje','% de éxito'],['personalizada','Personalizada','cuotas a medida'],['hora','Por hora','sin monto fijo · según horas']].map(([v,l,d])=>{ const on=cobroType===v; const wide=v==='hora'; return (
+              <button key={v} type='button' onClick={()=>setCobroType(v)} style={{gridColumn:wide?'1 / -1':'auto',display:'flex',alignItems:'center',gap:9,padding:'10px 11px',borderRadius:12,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',cursor:'pointer',textAlign:'left'}}>
+                <span style={{width:28,height:28,borderRadius:8,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:on?C.accent:C.bgSoft,color:on?'#fff':C.muted}}>{COBRO_IC[v]}</span>
+                <span style={{minWidth:0}}><span style={{display:'block',fontSize:12,fontWeight:700,color:on?C.accent:C.text,lineHeight:1.15}}>{l}</span><span style={{display:'block',fontSize:9.5,color:C.done,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d}</span></span>
+              </button>) })}
           </div>
           {cobroType==='mensual'&&(
             <div style={{background:C.bgSoft,borderRadius:8,padding:'12px 14px'}}>
