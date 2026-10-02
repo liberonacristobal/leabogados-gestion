@@ -6286,6 +6286,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   // (honorarios, costos, forma de cobro, notas). Sus cuotas son todas Programadas sin emitir, así que al guardar se regeneran.
   const propBorr = !!(sale?.id && (sale?.status==='Propuesta'||sale?.status==='Borrador'))
   const formNuevo = !sale?.id || propBorr
+  const isDesktop = useIsDesktop()   // doble presentación: móvil 1 columna, escritorio 2 columnas (datos | dinero/cobro)
 
   // Persiste las ediciones inline de cuotas (fecha/monto) pendientes, para que el "Guardar" principal
   // NO las pierda si el usuario no tocó el botón "Guardar cambios" del acordeón. No aplica en propuesta/borrador
@@ -6627,6 +6628,9 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         )
       })()}
 
+      {/* Escritorio: 2 columnas (izquierda=datos · derecha=dinero/cobro). En móvil estos divs apilan igual que hoy (misma estructura, sin duplicar). */}
+      <div style={isDesktop&&formNuevo?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,alignItems:'start'}:undefined}>
+      <div style={isDesktop&&formNuevo?{paddingRight:22,borderRight:`1px solid ${C.border}`}:undefined}>
       {/* 1. Cliente — reasignable: click en "Cambiar" para mover la venta/propuesta a otro cliente */}
       {(!selectedClient || reasignCli) ? (
         <Fld label={reasignCli?<>Reasignar a otro cliente {selectedClient&&<span style={{fontWeight:400,color:C.muted}}>· hoy: {selectedClient.name}</span>}</>:'Cliente'}>
@@ -6747,6 +6751,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       </div>
       )})()}
 
+      </div>
+      <div style={isDesktop&&formNuevo?{paddingLeft:22}:undefined}>
       {/* 5–8. Honorarios + costos en una línea (toggle UF/CLP compartido), cobro, notas — editable en venta nueva y en propuesta/borrador */}
       {formNuevo&&cobroType!=='hora'&&(<>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
@@ -6799,7 +6805,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               </button>) })}
           </div>
           {cobroType==='mensual'&&(
-            <div style={{background:C.bgSoft,borderRadius:8,padding:'12px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
                 {moneda==='UF'
                   ? <Fld label='Monto mensual UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
@@ -6816,7 +6822,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </div>
           )}
           {cobroType==='hora'&&(
-            <div style={{background:C.bgSoft,borderRadius:8,padding:'12px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <Fld label='Tarifa (UF/hora)'><Inp type='number' step='0.1' value={tarifaHoraUF} onChange={e=>setTarifaHoraUF(e.target.value)} placeholder='3.0 (estudio)'/></Fld>
                 <Fld label='Tope de horas'><Inp type='number' value={topeHoras} onChange={e=>setTopeHoras(e.target.value)} placeholder='Ej: 20'/></Fld>
@@ -6830,7 +6836,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </div>
           )}
           {cobroType==='cuotas'&&(
-            <div style={{background:C.bgSoft,borderRadius:8,padding:'12px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
                 <Fld label='N° cuotas'><Inp type='number' min='1' max='60' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>
                 <Fld label='Inicio cobro'><Inp type='date' value={cobroInicio} onChange={e=>setCobroInicio(anio4ISO(e.target.value))}/></Fld>
@@ -6856,7 +6862,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </div>
           )}
           {cobroType==='porcentaje'&&(
-            <div style={{background:C.bgSoft,borderRadius:8,padding:'12px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
               {tramos.map((t,i)=>(
                 <div key={t.id} style={{display:'grid',gridTemplateColumns:'60px 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                   <Fld label={i===0?'%':''}><Inp type='number' min='0' max='100' value={t.pct} onChange={e=>setTramos(p=>p.map(x=>x.id===t.id?{...x,pct:parseInt(e.target.value)||0}:x))}/></Fld>
@@ -6869,7 +6875,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </div>
           )}
           {cobroType==='personalizada'&&(
-            <div style={{background:C.bgSoft,borderRadius:8,padding:'12px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
               {cuotasCustom.map((c,i)=>(
                 <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                   <Fld label={i===0?'Monto':''}>
@@ -6908,6 +6914,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </div>
       )}
 
+      </div>
+      </div>
       {/* 8. Notas — solo nueva venta */}
       {formNuevo&&(()=>{ const open=!!openSec.notas; return (
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:10,overflow:'hidden'}}>
@@ -34156,7 +34164,7 @@ export default function App() {
         <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)}/>
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal fullscreen fsMaxWidth={600} title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} title='Cargar un PDF y leerlo con IA para autocompletar' style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Lectura con IA</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal fullscreen fsMaxWidth={(!modal.data?.id||['Propuesta','Borrador'].includes(modal.data?.status)||modal.data?._activandoPropuesta)?960:600} title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} title='Cargar un PDF y leerlo con IA para autocompletar' style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Lectura con IA</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
         {modal?.type==='rechazoMotivo'&&<Modal fullscreenOnMobile title={<span style={{color:C.accent}}>Rechazar propuesta</span>} onClose={()=>setModal(null)} closeOnBackdrop={false}><RechazoMotivoModal sale={modal.data} onConfirm={handleConfirmRechazo} onCancel={()=>setModal(null)}/></Modal>}
         {modal?.type==='solicitarFondos'&&<SolicitarFondosModal client={modal.data?.client} clients={clients} sale={modal.data?.sale} montoInicial={modal.data?.monto} responsable={modal.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/>}
         {modal?.type==='primerasTareas'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Primeras tareas</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:400}}>{modal.data?.title||'Encargo'}</span></>} onClose={()=>setModal(null)} closeOnBackdrop={false} maxWidth={560}><PrimerasTareasModal sale={modal.data} clients={clients} clientEntities={clientEntities} user={user} onConfirm={handleCrearPrimerasTareas} onClose={()=>setModal(null)} saving={saving}/></Modal>}
