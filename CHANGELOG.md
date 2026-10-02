@@ -353,3 +353,5 @@
 - 2026-10-01 Facturacion (a emitir): cuota ATRASADA de serie recurrente (mensual o >1 cuota) pasa a "De este mes" (es la que toca emitir ahora); "Atrasadas" queda solo para cobros unicos/hitos viejos (Barbara 1/1, personalizada). Encabezado de cliente no repite el subtotal cuando hay una sola cuota (cero cifras duplicadas).
 
 - 2026-10-01 Facturacion (a emitir) rediseno: foto honesta de 3 grupos con VENCIMIENTO REAL (nunca rodado a oct). (1) A facturar este mes = clientes con algo del mes, se muestran vigente + sus atrasadas juntas para no parar su facturacion; subtotal = solo vigente. (2) Atrasadas = vencidas sin anticipo (plata no entro), orden nueva->vieja. (3) En espera = vencidas de clientes con anticipo (plata ya recibida, solo falta emitir o nunca). 3 KPIs arriba. Revierte la promocion que revivia series 2025. Excel Facturar = solo vigente.
+
+- 2026-10-01 Facturacion landing (jerarquia C): Emitir programadas ($ del mes) y Enviar facturas pasan a dos tarjetas GRANDES arriba (acciones nucleo que mueven plata); Facturar adelantos + Cotejar SII + Cargar XML bajan a una fila "Soporte" de mini-tiles. Antes todo competia con la misma jerarquia.

@@ -7741,15 +7741,39 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
         </select>
       </div>
 
-      {/* Facturar adelantos — protagonista, primero. Al abrir: selección libre por cliente (checkbox) + Confirmar → factura por emitir del mes. */}
-      {onFacturarAdelantos&&adelFact.length>0&&(
-        <button onClick={()=>setChecklistTab(t=>t==='adelantos'?null:'adelantos')} style={{display:'flex',alignItems:'center',gap:11,width:'100%',background:checklistTab==='adelantos'?C.azulBg:'#F5F9FE',border:`1.5px solid ${C.azulInfo}`,borderRadius:12,padding:'11px 13px',cursor:'pointer',textAlign:'left',marginBottom:8}}>
-          <span style={{width:36,height:36,borderRadius:10,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='5' width='20' height='14' rx='2'/><line x1='2' y1='10' x2='22' y2='10'/></svg></span>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Facturar adelantos</div><div style={{fontSize:10,color:C.muted}}>para emitir este mes</div></div>
-          <span style={{fontSize:19,fontWeight:600,color:C.azulInfo,flexShrink:0}}>{adelFact.length}</span>
-          <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:checklistTab==='adelantos'?'rotate(180deg)':'none'}}><polyline points='6 9 12 15 18 9'/></svg>
+      {/* NÚCLEO: Emitir + Enviar (las dos acciones que mueven plata hacia el cobro) */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,marginBottom:11}}>
+        <button onClick={()=>setChecklistTab(t=>t==='emitir'?null:'emitir')} title='Programadas del mes por emitir al SII' style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,background:checklistTab==='emitir'?C.overdueBg:'#fff',border:`1.5px solid ${checklistTab==='emitir'?C.overdueText:C.border}`,borderRadius:14,padding:'13px 14px',cursor:'pointer',textAlign:'left'}}>
+          <span style={{width:34,height:34,borderRadius:9,background:C.overdueBg,display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 18v-6M9 15l3-3 3 3'/></svg></span>
+          <div><div style={{fontSize:13,fontWeight:700,color:C.text}}>Emitir programadas</div><div style={{fontSize:10,color:C.muted}}>para este mes</div></div>
+          <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(totMes)}</span><span style={{fontSize:11,color:C.muted,fontWeight:600}}>{nMes} fact.</span></div>
         </button>
-      )}
+        <button onClick={()=>setChecklistTab(t=>t==='enviar'?null:'enviar')} title='Emitidas con respaldo que aún no envías al cliente' style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,background:checklistTab==='enviar'?C.azulBg:'#fff',border:`1.5px solid ${checklistTab==='enviar'?C.accent:C.border}`,borderRadius:14,padding:'13px 14px',cursor:'pointer',textAlign:'left'}}>
+          <span style={{width:34,height:34,borderRadius:9,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z'/></svg></span>
+          <div><div style={{fontSize:13,fontWeight:700,color:C.text}}>Enviar facturas</div><div style={{fontSize:10,color:C.muted}}>al cliente · para que paguen</div></div>
+          <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:800,color:porEnviar.length?C.accent:C.done,fontVariantNumeric:'tabular-nums'}}>{porEnviar.length}</span><span style={{fontSize:11,color:C.muted,fontWeight:600}}>{porEnviar.length?'listas':'nada por enviar'}</span></div>
+        </button>
+      </div>
+
+      {/* SOPORTE: facturar adelantos · cotejar SII · cargar XML */}
+      <div style={{fontSize:9.5,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:.5,margin:'0 2px 7px'}}>Soporte</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:checklistTab==='adelantos'?8:12}}>
+        {onFacturarAdelantos&&adelFact.length>0&&(
+          <button onClick={()=>setChecklistTab(t=>t==='adelantos'?null:'adelantos')} title='Convierte anticipos ya recibidos en facturas del mes' style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:3,background:checklistTab==='adelantos'?C.azulBg:'#fff',border:`1px solid ${checklistTab==='adelantos'?C.azulInfo:C.border}`,borderRadius:11,padding:'9px 10px',cursor:'pointer',textAlign:'left'}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:C.text}}>Facturar adelantos</div><div style={{fontSize:9,color:C.muted}}>anticipos → factura</div><div style={{fontSize:14,fontWeight:800,color:C.azulInfo,marginTop:2}}>{adelFact.length}</div>
+          </button>
+        )}
+        {onCotejar&&(
+          <button onClick={onCotejar} title='Trae lo emitido del SII y lo calza con las programadas' style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:3,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 10px',cursor:'pointer',textAlign:'left'}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:C.text}}>Cotejar con el SII</div><div style={{fontSize:9,color:C.muted}}>emitidas vs SII</div><div style={{fontSize:14,fontWeight:800,color:C.soonText,marginTop:2}}>›</div>
+          </button>
+        )}
+        {onCargarXML&&(
+          <button onClick={onCargarXML} title='Sube el archivo respaldo → genera el PDF y lo adjunta' style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:3,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 10px',cursor:'pointer',textAlign:'left'}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:C.text}}>Cargar XML</div><div style={{fontSize:9,color:C.muted}}>respaldo → PDF</div><div style={{fontSize:14,fontWeight:800,color:C.tealText,marginTop:2}}>{cargadasXml}</div>
+          </button>
+        )}
+      </div>
       {checklistTab==='adelantos'&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
           <div style={{padding:'2px 13px 6px'}}>
@@ -7788,33 +7812,7 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
         </div>
       )}
 
-      {/* 2x2: Facturas programadas · Cargar XML · Cotejar con el SII · Enviar facturas */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:(checklistTab==='emitir'||checklistTab==='enviar')?8:12}}>
-        <button onClick={()=>setChecklistTab(t=>t==='emitir'?null:'emitir')} title='Programadas del mes por emitir al SII' style={{display:'flex',alignItems:'center',gap:10,background:checklistTab==='emitir'?C.overdueBg:'#fff',border:checklistTab==='emitir'?`1.5px solid ${C.overdueText}`:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
-          <span style={{width:36,height:36,borderRadius:10,background:checklistTab==='emitir'?'#fff':C.overdueBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 18v-6M9 15l3-3 3 3'/></svg></span>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Facturas programadas</div><div style={{fontSize:10,color:C.muted}}>para este mes</div></div>
-          <span style={{fontSize:19,fontWeight:600,color:C.overdueText,flexShrink:0}}>{nMes}</span>
-        </button>
-        {onCargarXML&&(
-          <button onClick={onCargarXML} title='Sube el archivo respaldo de MIPYME → genera el PDF y lo adjunta' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
-            <span style={{width:36,height:36,borderRadius:10,background:C.tealBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.tealText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></svg></span>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cargar XML</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>de facturas del mes</div></div>
-            <span style={{fontSize:19,fontWeight:600,color:C.tealText,flexShrink:0}}>{cargadasXml}</span>
-          </button>
-        )}
-        {onCotejar&&(
-          <button onClick={onCotejar} title='Trae lo emitido del SII y lo calza con las programadas' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
-            <span style={{width:36,height:36,borderRadius:10,background:C.ambarBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></svg></span>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cotejar con el SII</div><div style={{fontSize:10,color:C.muted}}>emitidas vs SII</div></div>
-            <span style={{fontSize:19,fontWeight:600,color:C.soonText,flexShrink:0}}>{nMes}</span>
-          </button>
-        )}
-        <button onClick={()=>setChecklistTab(t=>t==='enviar'?null:'enviar')} title='Emitidas con respaldo que aún no envías al cliente' style={{display:'flex',alignItems:'center',gap:10,background:checklistTab==='enviar'?C.azulBg:'#fff',border:checklistTab==='enviar'?`1.5px solid ${C.accent}`:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
-          <span style={{width:36,height:36,borderRadius:10,background:checklistTab==='enviar'?'#fff':C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z'/></svg></span>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Enviar facturas</div><div style={{fontSize:10,color:C.muted}}>al cliente</div></div>
-          <span style={{fontSize:19,fontWeight:600,color:C.accent,flexShrink:0}}>{porEnviar.length}</span>
-        </button>
-      </div>
+      {/* (acciones núcleo Emitir/Enviar + Soporte movidas arriba — jerarquía C) */}
 
       {/* Acordeón · Por emitir */}
       {checklistTab==='emitir'&&(<>
