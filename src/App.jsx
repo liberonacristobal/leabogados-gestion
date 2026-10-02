@@ -10398,7 +10398,10 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const esVencidaG = esVencidaB  // fuente única de "está vencida"
   // Memoria de recordatorios enviados (sin columna nueva): learnings factura_recordado, key=factura.id → fecha ISO del último recordatorio.
   const [recordadoMap,setRecordadoMap] = useState({})
+  const [recNotaMap,setRecNotaMap] = useState({})   // client_id → nota libre para el recordatorio de cobro (persistente)
+  const [recNota,setRecNota] = useState('')         // nota en edición en la vista previa del recordatorio
   useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','factura_recordado').then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ m[r.key]=r.value }); setRecordadoMap(m) } },()=>{}); return ()=>{alive=false} },[])
+  useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','recordatorio_nota').then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ if(r.value) m[r.key]=r.value }); setRecNotaMap(m) } },()=>{}); return ()=>{alive=false} },[])
   const diasDesde = iso => iso ? Math.floor((Date.now()-new Date(iso).getTime())/86400000) : null
   // "Buscar pago": trae los abonos del banco (cartola) a Facturación para conciliar cada factura desde aquí. Reusa el calce exacto (monto = saldo, TOL=0) + el RUT del receptor; la marca-pagada va por onStatusChange (probada).
   const nrG = crNormRut   // normalizador único de RUT
@@ -10555,18 +10558,19 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
     const to=await resolverCorreoCliente(b.client_id, cl)
     if(!to){ appAlert('El cliente no tiene correo (ni en la ficha, ni aprendido de facturas, ni en contactos). Agrégalo para recordar el cobro.'); return }
-    const r=recordatorioCobro(b)
-    setRecPreview({b, to, r})   // muestra la vista previa del correo antes de enviar
+    setRecNota(recNotaMap[String(b.client_id)]||'')   // precarga la nota guardada de este cliente
+    setRecPreview({b, to})   // la vista previa arma el correo en vivo con la nota (editable)
   }
-  // Envía el recordatorio ya previsualizado (desde el modal de vista previa).
-  const enviarRecordatorio = async({b, to, r})=>{
-    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; setRecPreview(null); appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
+  // Envía el recordatorio ya previsualizado (desde el modal de vista previa). La nota se guarda por cliente.
+  const enviarRecordatorio = async({b, to, nota})=>{
+    const r=recordatorioCobro(b, nota)
+    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; const cid=String(b.client_id||''); if(cid){ try{ await setLearningKV('recordatorio_nota',cid,String(nota||'')); setRecNotaMap(m=>({...m,[cid]:String(nota||'')})) }catch(_){} }; setRecPreview(null); appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Recordatorio de cobro por TANDA (desde el Cierre de mes): una sola compuerta que lista los destinatarios;
   // envía secuencialmente desde tu cuenta (mismo generador que el individual). Correos SIEMPRE desde el usuario.
   const recordarCobroTanda = async(facturas)=>{
-    const dest = (facturas||[]).map(b=>{ const cl=clients.find(c=>String(c.id)===String(b.client_id)); const to=(cl?.email||'').trim(); return to?{b,to,name:cl?.name||'Cliente',r:recordatorioCobro(b)}:null }).filter(Boolean)
+    const dest = (facturas||[]).map(b=>{ const cl=clients.find(c=>String(c.id)===String(b.client_id)); const to=(cl?.email||'').trim(); return to?{b,to,name:cl?.name||'Cliente',r:recordatorioCobro(b, recNotaMap[String(b.client_id)]||'')}:null }).filter(Boolean)
     const sinCorreo = (facturas||[]).length - dest.length
     if(!dest.length){ appAlert('Ninguna de estas facturas tiene correo del cliente en la ficha para recordar.'); return }
     if(!await appConfirm(`¿Enviar ${dest.length} recordatorio${dest.length!==1?'s':''} de cobro desde tu cuenta?\n\n${dest.slice(0,8).map(d=>`· ${d.name} — ${d.r.folio}`).join('\n')}${dest.length>8?`\n… y ${dest.length-8} más`:''}${sinCorreo>0?`\n\n(${sinCorreo} sin correo se omiten.)`:''}`)) return
@@ -10791,7 +10795,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       </div>
     )
   }
-  return { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup }
+  return { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup }
 }
 
 // ─── POR SOCIO ──────────────────────────────────────────────────────────────
@@ -10886,7 +10890,7 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
 }
 
 function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onFacturarAdelantos,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onReprocesarSinAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onCrearVentaRapida,onFacturaTercero,proveedores=[],onSaveProveedor,onIrConciliacion,onOpenPorSocio,onIrCobranza,onConsumeAnticipos,onCrearVentaForm,intent,onIntentDone}) {
-  const { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
+  const { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
   const [tblSort,setTblSort] = usePersisted('fd_bill_tblsort',{col:'fecha',dir:'desc'})   // Desktop "Todas": orden de la tabla, recordado entre sesiones
   const [porRevOpen,setPorRevOpen] = useState(false)   // hub: tarjeta "Por revisar" desplegada
 
@@ -11130,14 +11134,17 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               <div style={{fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:10,padding:'10px 12px',textAlign:'center',lineHeight:1.4}}><b style={{color:'#0B5A46'}}>Lo cargado queda guardado aunque salgas.</b> Lo registras cuando quieras.</div>
             </div> })()}
         </Modal>}
-        {recPreview&&<Modal fullscreenOnMobile fsMaxWidth={640} title='Recordatorio de cobro' onClose={()=>setRecPreview(null)}>
-          <div style={{fontSize:12,color:C.muted,marginBottom:9,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {recPreview.to} · <b style={{color:C.text}}>Nivel:</b> {recPreview.r.nivel} · <b style={{color:C.text}}>Asunto:</b> {recPreview.r.subject}</div>
-          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff',maxHeight:'58vh',overflowY:'auto',marginBottom:13}}><div style={{padding:12}} dangerouslySetInnerHTML={{__html:recPreview.r.html}}/></div>
+        {recPreview&&(()=>{ const rPrev=recordatorioCobro(recPreview.b, recNota); return <Modal fullscreenOnMobile fsMaxWidth={640} title='Recordatorio de cobro' onClose={()=>setRecPreview(null)}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:9,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {recPreview.to} · <b style={{color:C.text}}>Nivel:</b> {rPrev.nivel} · <b style={{color:C.text}}>Asunto:</b> {rPrev.subject}</div>
+          <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,marginBottom:5}}>Nota para este cliente · opcional</div>
+          <textarea value={recNota} onChange={e=>setRecNota(e.target.value)} rows={2} placeholder='Ej. Conforme a lo conversado con Juan, agradeceremos regularizar antes del 15.' style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:12.5,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:5}}/>
+          <div style={{fontSize:10.5,color:C.muted,marginBottom:11}}>Va dentro del correo y se recuerda para este cliente. Las cifras del cobro se arman solas.</div>
+          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff',maxHeight:'48vh',overflowY:'auto',marginBottom:13}}><div style={{padding:12}} dangerouslySetInnerHTML={{__html:rPrev.html}}/></div>
           <div style={{display:'flex',gap:9,justifyContent:'flex-end'}}>
             <button onClick={()=>setRecPreview(null)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 16px',fontSize:13,color:C.muted,cursor:'pointer'}}>Cancelar</button>
-            <button onClick={()=>enviarRecordatorio(recPreview)} style={{background:C.accent,border:'none',borderRadius:10,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:'pointer'}}>Enviar recordatorio</button>
+            <button onClick={()=>enviarRecordatorio({b:recPreview.b, to:recPreview.to, nota:recNota})} style={{background:C.accent,border:'none',borderRadius:10,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:'pointer'}}>Enviar recordatorio</button>
           </div>
-        </Modal>}
+        </Modal> })()}
         {cargasHist!==null&&<Modal title='Cargas del SII' maxWidth={520} onClose={()=>setCargasHist(null)}>
           {cargasHist==='loading'
             ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Cargando…</div>
@@ -19734,7 +19741,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const recordarCobro = async(b)=>{
     const to=(client.email||'').trim()
     if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
-    const r=recordatorioCobro(b)
+    let nota=''; try{ const {data}=await supabase.from('learnings').select('value').eq('kind','recordatorio_nota').eq('key',String(client.id)).maybeSingle(); nota=data?.value||'' }catch(_){}
+    const r=recordatorioCobro(b, nota)   // incluye la nota guardada de este cliente
     if(!await appConfirm(`¿Enviar recordatorio de cobro a ${to} por ${r.folio} (${r.monto})? Se adjunta el PDF de la factura.`)) return
     try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ try{ await setLearningKV('factura_recordado',String(b.id),new Date().toISOString()) }catch(_){}; appAlert(`Recordatorio enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
@@ -20133,7 +20141,7 @@ async function acusePagoEmail(to, {folio, monto, fecha}){
 // Correo de recordatorio de cobro (FUENTE ÚNICA). `bs` = una factura o un arreglo (correo COMBINADO por cliente).
 // Tono ÚNICO y amable (sin rojos), firmado por Administración con logo + pie de firma (mismo cascarón que las facturas).
 // `nivel` se conserva solo para la cadencia y los mensajes del llamador; el TEXTO no escala nunca.
-function recordatorioCobro(bs){
+function recordatorioCobro(bs, nota){
   const arr=(Array.isArray(bs)?bs:[bs]).filter(Boolean)
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const fm=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
@@ -20158,10 +20166,14 @@ function recordatorioCobro(bs){
     : ''
   const cierre='Les agradeceremos gestionar su pago.'
   const despedida='Si ya realizaron el pago, por favor omitan este mensaje. Quedamos atentos a su confirmación. Muchas gracias.'
-  const inner=`<div style="font-size:14px;color:#1a1a1a;margin:0 0 14px">Estimados,</div><div style="font-size:14px;color:#3D3D3D;line-height:1.65;margin:0 0 14px">${aperturaHtml}</div>${tabla}<div style="font-size:14px;color:#3D3D3D;line-height:1.65;margin:0 0 4px">${cierre}</div>${DATOS_PAGO_HTML}<div style="font-size:13px;color:#537281;line-height:1.6;margin:14px 0 0">${despedida}</div><div style="font-size:14px;color:#3D3D3D;margin:16px 0 0">Saludos cordiales,</div>`
+  // Nota libre por cliente (opcional): se antepone a la tabla; las cifras del cobro siguen generándose frescas.
+  const notaTrim=String(nota||'').trim()
+  const notaHtml=notaTrim?`<div style="font-size:14px;color:#3D3D3D;line-height:1.65;margin:0 0 14px">${esc(notaTrim).replace(/\n/g,'<br>')}</div>`:''
+  const notaTxt=notaTrim?`\n\n${notaTrim}`:''
+  const inner=`<div style="font-size:14px;color:#1a1a1a;margin:0 0 14px">Estimados,</div><div style="font-size:14px;color:#3D3D3D;line-height:1.65;margin:0 0 14px">${aperturaHtml}</div>${notaHtml}${tabla}<div style="font-size:14px;color:#3D3D3D;line-height:1.65;margin:0 0 4px">${cierre}</div>${DATOS_PAGO_HTML}<div style="font-size:13px;color:#537281;line-height:1.6;margin:14px 0 0">${despedida}</div><div style="font-size:14px;color:#3D3D3D;margin:16px 0 0">Saludos cordiales,</div>`
   const html=facturaCorreoShell(inner, {nombre:'Administración', cargo:BRAND.nombre}, 'es')
   const tablaTxt=multi ? '\n\n'+items.map(x=>`• N° ${x.folio}${x.concept?` (${x.concept})`:''} · vence ${x.venc||'—'} · ${fm(x.monto)}`).join('\n')+`\nTotal pendiente: ${fm(total)}` : ''
-  const text=`Estimados,\n\n${aperturaTxt}${tablaTxt}\n\n${cierre}\n\n${DATOS_PAGO_TXT}\n\n${despedida}\n\nSaludos cordiales,\nAdministración`
+  const text=`Estimados,\n\n${aperturaTxt}${notaTxt}${tablaTxt}\n\n${cierre}\n\n${DATOS_PAGO_TXT}\n\n${despedida}\n\nSaludos cordiales,\nAdministración`
   const subject=multi?`Recordatorio de pago — Facturas ${folStr}`:`Recordatorio de pago — Factura ${fol[0]}`
   return { nivel, folio:multi?`Facturas ${folStr}`:`Factura ${fol[0]}`, monto:fm(total), subject, html, text, items }
 }
@@ -26327,19 +26339,20 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
 // Vista previa + flexibilidad del recordatorio de cobro: elegir qué facturas incluir (vencidas marcadas por
 // defecto; al día seleccionables), un solo correo con todas o uno por factura, y re-adjuntar el PDF. El preview
 // del correo está SIEMPRE visible (desplegable). El envío efectivo lo hace el padre vía onEnviar (fuente única).
-function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, onClose, onEnviar }){
+function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, nota:notaProp='', onClose, onEnviar }){
   const isDesktop = useIsDesktop()
   const cand = grupo.items   // {b, acc, venc, diasVenc} — vencidas y al día
   const [sel,setSel] = useState(()=> new Set(cand.filter(x=>x.venc).map(x=>String(x.b.id))))
   const [combinado,setCombinado] = useState(true)   // un solo correo con todas (default) vs uno por factura
   const [adjuntar,setAdjuntar] = useState(true)      // re-adjuntar el PDF con timbre de cada factura
   const [verPreview,setVerPreview] = useState(true)  // preview desplegable, abierto por defecto
+  const [nota,setNota] = useState(notaProp)          // nota libre por cliente (opcional), persistente
   const f0 = n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   const toggle = id=>setSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
   const selItems = cand.filter(x=>sel.has(String(x.b.id)))
   const selBs = selItems.map(x=>x.b)
   const totalSel = selItems.reduce((a,x)=>a+(saldoBill(x.b)||x.b.amount||0),0)
-  const preview = selBs.length ? recordatorioCobro(combinado?selBs:selBs[0]) : null
+  const preview = selBs.length ? recordatorioCobro(combinado?selBs:selBs[0], nota) : null
   const nCorreos = combinado?1:selBs.length
   const okDisabled = sending || !selBs.length
   const chk = on=>({width:18,height:18,borderRadius:6,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'})
@@ -26370,6 +26383,9 @@ function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, onCl
           </div>
           {selBs.length>1 && <Row label='Un solo correo con todas' desc={combinado?'Se lista cada factura y el total en un mismo correo.':'Se envía un correo por cada factura seleccionada.'} on={combinado} onToggle={()=>setCombinado(v=>!v)}/>}
           <Row label='Adjuntar la(s) factura(s) en PDF' desc='Se re-genera el PDF con timbre de cada factura incluida.' on={adjuntar} onToggle={()=>setAdjuntar(v=>!v)}/>
+          <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,margin:'12px 0 5px'}}>Nota para este cliente · opcional</div>
+          <textarea value={nota} onChange={e=>setNota(e.target.value)} rows={2} placeholder='Ej. Conforme a lo conversado con Juan, agradeceremos regularizar antes del 15.' style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:12.5,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box'}}/>
+          <div style={{fontSize:10.5,color:C.muted,marginTop:4}}>Va dentro del correo y se recuerda para este cliente. Las cifras del cobro se arman solas.</div>
         </div>
         {/* Columna 2: preview siempre visible, desplegable */}
         <div>
@@ -26388,7 +26404,7 @@ function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, onCl
       <div style={{display:'flex',gap:9,justifyContent:'flex-end',alignItems:'center',marginTop:16,borderTop:`1px solid ${C.border}`,paddingTop:13}}>
         <div style={{marginRight:'auto',fontSize:11,color:C.muted}}>{selBs.length} factura{selBs.length!==1?'s':''} · {f0(totalSel)} · {nCorreos} correo{nCorreos!==1?'s':''}</div>
         <button onClick={onClose} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 16px',fontSize:13,color:C.muted,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={okDisabled} onClick={()=>onEnviar({bs:selBs, combinado:selBs.length>1?combinado:true, adjuntar})} style={{background:okDisabled?C.done:C.accent,border:'none',borderRadius:10,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:okDisabled?'default':'pointer',display:'inline-flex',alignItems:'center',gap:7}}>{sending?<Spin/>:null}{sending?'Enviando…':`Enviar ${nCorreos>1?`(${nCorreos})`:'recordatorio'}`}</button>
+        <button disabled={okDisabled} onClick={()=>onEnviar({bs:selBs, combinado:selBs.length>1?combinado:true, adjuntar, nota})} style={{background:okDisabled?C.done:C.accent,border:'none',borderRadius:10,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:okDisabled?'default':'pointer',display:'inline-flex',alignItems:'center',gap:7}}>{sending?<Spin/>:null}{sending?'Enviando…':`Enviar ${nCorreos>1?`(${nCorreos})`:'recordatorio'}`}</button>
       </div>
     </Modal>
   )
@@ -26405,6 +26421,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   const [autoCli,setAutoCli] = useState({})    // client_id → true si liberado a automático
   const [sending,setSending] = useState(null)  // client_id en envío
   const [recPrev,setRecPrev] = useState(null)  // vista previa del recordatorio antes de enviar
+  const [recNotaMap,setRecNotaMap] = useState({})   // client_id → nota libre del recordatorio (persistente)
   const [autoGlobal,setAutoGlobal] = useState(false)   // interruptor GLOBAL: la app envía sola los recordatorios de los clientes liberados (config cobranza_auto; lo lee el edge fn cobranza-auto). Sin esto, "En automático" queda inerte.
   const [sortBy,setSortBy] = useState({col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
   const [expCli,setExpCli] = useState(null)   // escritorio: cliente con sus facturas desplegadas
@@ -26415,9 +26432,9 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   const fM = n => '$'+((n||0)/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+'M'   // compacto para la foto (hero + anillos); el detalle por factura mantiene el peso exacto
   useEffect(()=>{
     if(DEMO){ setRecMap({}); setOkCount({c4:3}); setAutoCli({}); setAutoGlobal(false); return }
-    supabase.from('learnings').select('kind,key,value').in('kind',['factura_recordado','cobranza_ok','fd_auto','config']).then(({data})=>{
-      const rm={},ok={},au={}; let ag=false; (data||[]).forEach(r=>{ if(r.kind==='factura_recordado') rm[r.key]=r.value; else if(r.kind==='cobranza_ok') ok[r.key]=Number(r.value)||0; else if(r.kind==='fd_auto'&&String(r.key).startsWith('cobranza:')) au[String(r.key).slice(9)]=true; else if(r.kind==='config'&&r.key==='cobranza_auto') ag=(String(r.value||'').trim()==='on') })
-      setRecMap(rm); setOkCount(ok); setAutoCli(au); setAutoGlobal(ag)
+    supabase.from('learnings').select('kind,key,value').in('kind',['factura_recordado','cobranza_ok','fd_auto','config','recordatorio_nota']).then(({data})=>{
+      const rm={},ok={},au={},nm={}; let ag=false; (data||[]).forEach(r=>{ if(r.kind==='factura_recordado') rm[r.key]=r.value; else if(r.kind==='cobranza_ok') ok[r.key]=Number(r.value)||0; else if(r.kind==='fd_auto'&&String(r.key).startsWith('cobranza:')) au[String(r.key).slice(9)]=true; else if(r.kind==='config'&&r.key==='cobranza_auto') ag=(String(r.value||'').trim()==='on'); else if(r.kind==='recordatorio_nota'&&r.value) nm[r.key]=r.value })
+      setRecMap(rm); setOkCount(ok); setAutoCli(au); setAutoGlobal(ag); setRecNotaMap(nm)
     },()=>{})
   },[])
   // Agrupa por cliente TODAS las facturas pendientes de pago (vencidas o NO): el usuario quiere ver toda la deuda
@@ -26477,17 +26494,17 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
     if(!toRem.length){ appAlert('Este cliente no tiene facturas vencidas por recordar.'); return }
     const to=await resolverTo(g)
     if(!to){ appAlert('Ese cliente no tiene correo (ni en la ficha, ni aprendido de facturas, ni en contactos). Agrégalo para recordar.'); return }
-    setRecPrev({g, to, nombre:cn(g.cid)})
+    setRecPrev({g, to, nombre:cn(g.cid), nota:recNotaMap[g.cid]||''})
   }
   // Envío efectivo (fuente única): combinado (un correo con todas) o separado (uno por factura), con/ sin PDF adjunto.
-  async function doEnviar({g, to, bs, combinado, adjuntar}){
+  async function doEnviar({g, to, bs, combinado, adjuntar, nota}){
     if(!bs.length) return
     setSending(g.cid)
     const sentIds=[]
     try{
       if(DEMO){ await new Promise(r=>setTimeout(r,400)); bs.forEach(b=>sentIds.push(String(b.id))) }
       else{
-        const build=async(x)=>{ const r=recordatorioCobro(x); let attachments=null
+        const build=async(x)=>{ const r=recordatorioCobro(x, nota); let attachments=null
           if(adjuntar){ const list=Array.isArray(x)?x:[x]; const a=[]; for(const b of list){ const ad=await facturaPdfAdjunto(b); if(ad) a.push(ad) } if(a.length) attachments=a }
           return {r, attachments} }
         if(combinado){ const {r,attachments}=await build(bs); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments}); if(via) bs.forEach(b=>sentIds.push(String(b.id))) }
@@ -26498,6 +26515,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
       if(!DEMO) for(const id of sentIds){ try{ await setLearningKV('factura_recordado',id,at) }catch(_){} }
       setRecMap(m=>{ const n={...m}; sentIds.forEach(id=>n[id]=at); return n })
       const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); if(!DEMO){ try{ await setLearningKV('cobranza_ok',String(g.cid),String(nc)) }catch(_){} }
+      if(!DEMO&&g.cid){ try{ await setLearningKV('recordatorio_nota',String(g.cid),String(nota||'')) }catch(_){} }; setRecNotaMap(m=>({...m,[g.cid]:String(nota||'')}))
       setRecPrev(null)
       appAlert(`Recordatorio enviado a ${cn(g.cid)}${DEMO?' (demo)':''} — ${combinado?'1 correo':sentIds.length+' correos'}, ${sentIds.length} factura${sentIds.length!==1?'s':''}.`)
     }
@@ -26507,7 +26525,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   async function enviarClienteAuto(g){
     const bs=g.items.filter(x=>x.acc).map(x=>x.b); if(!bs.length) return
     const to=await resolverTo(g); if(!to) return
-    await doEnviar({g, to, bs, combinado:true, adjuntar:true})
+    await doEnviar({g, to, bs, combinado:true, adjuntar:true, nota:recNotaMap[g.cid]||''})
   }
   async function enviarTodos(){
     if(!(await appConfirm(`¿Enviar el recordatorio que corresponde a ${gruposAccion.length} cliente${gruposAccion.length!==1?'s':''} (${nVencidas} factura${nVencidas!==1?'s':''} vencida${nVencidas!==1?'s':''}, ${f0(vencidoTotal)})?\n\nSe envía un correo por cliente (con todas sus facturas y el PDF adjunto).`))) return
@@ -26563,7 +26581,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
 
   return (
     <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?1040:560,margin:'0 auto'}}>
-      {recPrev&&<RecordatorioModal grupo={recPrev.g} to={recPrev.to} nombre={recPrev.nombre} clientEntities={clientEntities} sending={sending===recPrev.g.cid} onClose={()=>setRecPrev(null)} onEnviar={({bs,combinado,adjuntar})=>doEnviar({g:recPrev.g, to:recPrev.to, bs, combinado, adjuntar})}/>}
+      {recPrev&&<RecordatorioModal grupo={recPrev.g} to={recPrev.to} nombre={recPrev.nombre} nota={recPrev.nota} clientEntities={clientEntities} sending={sending===recPrev.g.cid} onClose={()=>setRecPrev(null)} onEnviar={({bs,combinado,adjuntar,nota})=>doEnviar({g:recPrev.g, to:recPrev.to, bs, combinado, adjuntar, nota})}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Cobranza</div>
         {onClose&&<span onClick={onClose} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer'}}>← Volver</span>}
