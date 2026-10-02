@@ -20050,6 +20050,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
 // Correo de DEVOLUCIÓN de fondos: mismo motor/formato que la rendición (logo, firma, destinatarios desde
 // contactos + CC aprendido), pero adjuntando el COMPROBANTE de transferencia en vez del PDF de rendición.
 function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose, setRendiciones}){
+  const isDesktop=useIsDesktop()
   const myEmail=(user?.email||'').toLowerCase()
   const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
   const toEmail=x=>{ if(!x) return null; const s=String(x).trim(); return s.includes('@')?s.toLowerCase():(EMAIL_BY_NAME[s]||null) }
@@ -20114,13 +20115,10 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
   const flabel={fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
   const sugCc=fichaContacts.filter(c=>c.email&&c.email.toLowerCase()!==(para||'').toLowerCase()&&!cc.includes(c.email.toLowerCase()))
   return (
-    <Modal hideHeader onClose={onClose} closeOnBackdrop={false}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-        <span style={{fontSize:16,fontWeight:600,color:C.accent}}>Enviar devolución{client&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{client.name}</span></>}</span>
-        <button onClick={onClose} style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></button>
-      </div>
-      <div style={{padding:'16px 20px 20px'}}>
+    <Modal fullscreen fsMaxWidth={isDesktop?960:720} title={<><span style={{color:C.accent}}>Enviar devolución</span>{client&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>
         {!rend&&<div style={{fontSize:11,color:C.soonText,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:12}}>No encontré la rendición de este cliente para sacar el destinatario — agrégalo a mano abajo.</div>}
+        <div style={isDesktop?{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:20,alignItems:'start'}:undefined}>
+        <div>
         <div style={{marginBottom:12}}>
           <label style={flabel}>Para</label>
           <input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={inp}/>
@@ -20152,12 +20150,14 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
           <label style={flabel}>Mensaje</label>
           <textarea value={body} onChange={e=>setBody(e.target.value)} style={{width:'100%',minHeight:150,border:`0.5px solid ${C.border}`,borderRadius:10,fontSize:13,padding:'10px 11px',color:C.text,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box',lineHeight:1.5}}/>
         </div>
-        <details style={{marginBottom:14}}><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildHtml(body,false)}}/></details>
-        <div style={{display:'flex',gap:8}}>
+        {!isDesktop&&<details style={{marginBottom:14}}><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildHtml(body,false)}}/></details>}
+        </div>
+        {isDesktop&&<div><label style={flabel}>Vista previa del correo</label><div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:12,maxHeight:'62vh',overflowY:'auto',background:'#fff'}} dangerouslySetInnerHTML={{__html:buildHtml(body,false)}}/></div>}
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:14}}>
           <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={sending||!para.trim()} onClick={enviar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:para.trim()?'pointer':'not-allowed',opacity:(sending||!para.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{sending?<Spin/>:null}{sending?'Enviando...':'Enviar devolución'}</button>
         </div>
-      </div>
     </Modal>
   )
 }
@@ -34242,7 +34242,7 @@ export default function App() {
         {modal?.type==='fondo'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null} preDev={!!modal?.dev}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
         {modal?.type==='ajuste'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='expenseEdit'&&<Modal fullscreenOnMobile title={(()=>{ const cn=modal.data?.client_id?(clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||null):null; const tipo=modal.data?.type==='fondo'?'Editar fondo':'Editar gasto'; return <><span style={{color:C.accent}}>{tipo}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='expenseEdit'&&<Modal fullscreen fsMaxWidth={660} title={(()=>{ const cn=modal.data?.client_id?(clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||null):null; const tipo=modal.data?.type==='fondo'?'Editar fondo':'Editar gasto'; return <><span style={{color:C.accent}}>{tipo}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal fullscreenOnMobile title='Sincronización con Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onChanged={async()=>{const c=await getClients();setClients(c)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal fullscreenOnMobile title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal fullscreenOnMobile title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
