@@ -20305,7 +20305,10 @@ function mejorVenta(factura, sales, clientId){
 // Glosa = [proyecto · si el ítem es genérico] + descripción del DTE (NmbItem + DscItem sin la base UF) + [— cuota para trazabilidad].
 // En el peor caso trae de más (editable); nunca menos. El DTE es lo que ve el cliente en el PDF.
 const _RX_CUOTA = /(cuota\s*\d+\s*\/\s*\d+|pago\s+\d+\s+de\s+\d+)/i
-// Descompone la glosa en {relacion, detalle}: relacion = el servicio/proyecto (para "en relación a …"); detalle = la cuota/pago ("Pago 1 de 10").
+// Etiqueta de pago BREVE que calza en "...correspondiente {al/a la} {etiqueta} de nuestros servicios..." (ej. "Pago inicial", "Anticipo").
+// Una DESCRIPCIÓN del servicio ("Asesoría legal permanente...") NO es etiqueta de pago → no se incrusta como detalle (el servicio se describe por el proyecto); así se evita "al Asesoría legal permanente sociedad de nuestros servicios...".
+const _esPagoLabel = s => { const t=(s||'').trim(); return !!t && t.length<=22 && /^(cuota|pago|anticipo|abono|retainer)\b/i.test(t) }
+// Descompone la glosa en {relacion, detalle}: relacion = el servicio/proyecto (para "en relación a …"); detalle = SOLO la cuota/pago ("Pago 1 de 10").
 function facturaGlosaPartes(factura, sale){
   const proyecto=ventaNombre(sale)
   const dte = factura?.dte_xml ? parseDteFactura(factura.dte_xml) : null
@@ -20317,11 +20320,14 @@ function facturaGlosaPartes(factura, sale){
   if(nmb){
     const cn = nmb.match(_RX_CUOTA)
     nombre = nmb.replace(/\s*[—\-·|:]?\s*(cuota\s*\d+\s*\/\s*\d+|pago\s+\d+\s+de\s+\d+)\s*$/i,'').trim()   // ítem sin la cuota inline
-    detalle = dscDet || (cn?cn[0]:'')
+    // detalle = SOLO la cuota/pago (del DscItem, del NmbItem o del concepto), normalizada a "Pago N de M"; nunca una descripción larga del servicio (eso va en relacion/proyecto) → evita "al Asesoría legal permanente sociedad…".
+    const cuotaRaw = (dscDet.match(_RX_CUOTA) || cn || (factura.concept||'').match(_RX_CUOTA) || [])[0] || ''
+    const nm = cuotaRaw.match(/(\d+)\D+(\d+)/)
+    detalle = nm ? `Pago ${nm[1]} de ${nm[2]}` : (_esPagoLabel(dscDet)?dscDet:'')
   } else {
     const concept=(factura.concept||'').trim()
-    const cn = concept.match(_RX_CUOTA)
-    detalle = cn?cn[0]:''
+    const cn = concept.match(_RX_CUOTA); const nm = cn?cn[0].match(/(\d+)\D+(\d+)/):null
+    detalle = nm ? `Pago ${nm[1]} de ${nm[2]}` : ''
     nombre = concept.replace(/\s*[—\-·|:]?\s*(cuota\s*\d+\s*\/\s*\d+|pago\s+\d+\s+de\s+\d+)\s*$/i,'').trim()
   }
   if(detalle) detalle = detalle.charAt(0).toUpperCase()+detalle.slice(1)
