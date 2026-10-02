@@ -20351,8 +20351,11 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const _listJoin=(a,y)=>a.length<=1?(a[0]||''):a.slice(0,-1).join(', ')+` ${y} `+a[a.length-1]
   const _dynFolios=lg=> multi ? 'N° '+_listJoin([...listF].sort((a,b)=> String(a.issued_at||a.due||'').localeCompare(String(b.issued_at||b.due||'')) || String(folioN(a.invoice_no||'')).localeCompare(String(folioN(b.invoice_no||'')),undefined,{numeric:true})).map(f=>folioN(f.invoice_no||'')||f.invoice_no||''), lg==='en'?'and':'y') : ('N° '+folio)
   const _dynTotal=()=> fmtN(listF.reduce((a,f)=>a+amountOf(f),0))
-  const _tok=(t,lg)=>String(t).split(_dynFolios(lg)).join('{folios}').split(_dynTotal()).join('{total}')
-  const _untok=(t,lg)=>String(t).split('{folios}').join(_dynFolios(lg)).split('{total}').join(_dynTotal())
+  const _dynPeriodo=()=> multi ? '' : String((facturaGlosaPartes(factura, saleR)||{}).detalle||'')   // mes/cuota de ESTA factura ("Septiembre 2026", "Pago 7 de 10"): variable, NO se congela
+  // La base se guarda por cliente + PROYECTO (una cuota nueva del mismo proyecto reusa tu última redacción; otro proyecto tiene la suya). Multi queda a nivel cliente.
+  const msgKey=lg=> multi ? `${client?.id}:n:${lg}` : `${client?.id}:p${saleR?.id||'0'}:${lg}`
+  const _tok=(t,lg)=>{ let s=String(t).split(_dynFolios(lg)).join('{folios}').split(_dynTotal()).join('{total}'); const per=_dynPeriodo(); if(per&&per.length>=4) s=s.split(per).join('{periodo}'); return s }
+  const _untok=(t,lg)=>{ let s=String(t).split('{folios}').join(_dynFolios(lg)).split('{total}').join(_dynTotal()); const per=_dynPeriodo(); return s.split('{periodo}').join(per) }
   const applyDefaultBody=lg=>{ const tpl=learnedTpl.current[lg]; setBody(tpl?_untok(tpl,lg):genBody(lg)) }
   // Abre el PDF (base64) en una pestaña para previsualizarlo antes de enviar.
   const verPdf=(base64,nombre)=>{ try{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(_){ appAlert('No se pudo abrir el PDF.') } }
@@ -20398,8 +20401,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   // Cuando llega el monto real del DTE, regenera el cuerpo (salvo que lo hayas editado a mano) para que el correo coincida con el PDF.
   useEffect(()=>{ if(!bodyTocado.current) applyDefaultBody(lang) },[dteTotals])
   // Carga la plantilla aprendida del cliente (una|varias · idioma) y, si no la editaste, la aplica con los folios/total actuales.
-  useEffect(()=>{ if(!client?.id) return; let alive=true; const k=`${client.id}:${multi?'n':'1'}`
-    ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','factura_msg').eq('key',`${k}:${lg}`).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTpl.current[lg]=data.value; if(lg===lang&&!bodyTocado.current) setBody(_untok(data.value,lg)) },()=>{}) })
+  useEffect(()=>{ if(!client?.id) return; let alive=true
+    ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','factura_msg').eq('key',msgKey(lg)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTpl.current[lg]=data.value; if(lg===lang&&!bodyTocado.current) setBody(_untok(data.value,lg)) },()=>{}) })
     return ()=>{alive=false} },[client?.id])
   const [iaBusy,setIaBusy]=useState(false)
   // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
@@ -20465,7 +20468,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       const viaServer = via==='oficina'
       if(cc.length) try{ await setLearningKV('factura_cc',String(client.id),cc.join(',')) }catch(_){}
       if(para.trim()&&client?.id) try{ await setLearningKV('factura_to',String(client.id),para.trim()) }catch(_){}   // aprende el destinatario de facturas de este cliente
-      if(bodyTocado.current&&client?.id) try{ await setLearningKV('factura_msg',`${client.id}:${multi?'n':'1'}:${lang}`,_tok(body,lang)) }catch(_){}   // aprende tu redacción (plantilla con tokens {folios}/{total}) para la próxima (una|varias · idioma)
+      if(client?.id) try{ await setLearningKV('factura_msg',msgKey(lang),_tok(body,lang)) }catch(_){}   // la base del próximo envío = este (último enviado), por cliente+proyecto; tokens {folios}/{total}/{periodo} se refrescan
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
       // (no repetir: la app aprende quién recibe facturas). No pisa contactos existentes.
       if(client?.id){ try{
