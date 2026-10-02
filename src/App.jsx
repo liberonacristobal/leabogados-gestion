@@ -20153,13 +20153,13 @@ function recordatorioCobro(bs, nota){
   const nivel=maxDias<=0?'amable':maxDias<=30?'firme':'final'   // solo cadencia/mensajes; el texto es amable siempre
   const fol=items.map(x=>`N° ${x.folio}`)
   const folStr=fol.length<=1?(fol[0]||'la factura'):fol.slice(0,-1).join(', ')+' y '+fol[fol.length-1]
-  // Apertura (Opción C, aprobada): amable, "hacer seguimiento", "puede tratarse de un olvido".
+  // Apertura amable: "hacer seguimiento" al pago pendiente (sin presumir olvido; frase retirada por pedido del usuario 2026-10-02).
   const aperturaHtml=multi
-    ? `Junto con saludar, nos permitimos hacer seguimiento a los pagos pendientes de las <b>Facturas ${esc(folStr)}</b>, por un total de <b>${fm(total)}</b>, que a la fecha se encuentran pendientes. Entendemos que puede tratarse de un olvido.`
-    : `Junto con saludar, nos permitimos hacer seguimiento al pago de la <b>Factura ${esc(fol[0])}</b> por <b>${fm(total)}</b>, que a la fecha se encuentra pendiente. Entendemos que puede tratarse de un olvido.`
+    ? `Junto con saludar, nos permitimos hacer seguimiento a los pagos pendientes de las <b>Facturas ${esc(folStr)}</b>, por un total de <b>${fm(total)}</b>, que a la fecha se encuentran pendientes.`
+    : `Junto con saludar, nos permitimos hacer seguimiento al pago de la <b>Factura ${esc(fol[0])}</b> por <b>${fm(total)}</b>, que a la fecha se encuentra pendiente.`
   const aperturaTxt=multi
-    ? `Junto con saludar, nos permitimos hacer seguimiento a los pagos pendientes de las Facturas ${folStr}, por un total de ${fm(total)}, que a la fecha se encuentran pendientes. Entendemos que puede tratarse de un olvido.`
-    : `Junto con saludar, nos permitimos hacer seguimiento al pago de la Factura ${fol[0]} por ${fm(total)}, que a la fecha se encuentra pendiente. Entendemos que puede tratarse de un olvido.`
+    ? `Junto con saludar, nos permitimos hacer seguimiento a los pagos pendientes de las Facturas ${folStr}, por un total de ${fm(total)}, que a la fecha se encuentran pendientes.`
+    : `Junto con saludar, nos permitimos hacer seguimiento al pago de la Factura ${fol[0]} por ${fm(total)}, que a la fecha se encuentra pendiente.`
   // Tabla de facturas SOLO en combinado (folio · concepto · vence · monto). Sin rojos: paleta navy/gris.
   const tabla=multi
     ? `<table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0"><thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50;color:#537281;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px">Factura</th><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50;color:#537281;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px">Vence</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #003C50;color:#537281;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px">Monto</th></tr></thead><tbody>${items.map(x=>`<tr><td style="padding:7px 8px;border-bottom:1px solid #E4E8EB">N° ${esc(x.folio)}${x.concept?`<div style="font-size:11px;color:#537281">${esc(x.concept)}</div>`:''}</td><td style="padding:7px 8px;border-bottom:1px solid #E4E8EB;color:#537281">${x.venc||'—'}</td><td style="padding:7px 8px;border-bottom:1px solid #E4E8EB;text-align:right;font-variant-numeric:tabular-nums">${fm(x.monto)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="2" style="padding:8px;font-weight:700">Total pendiente</td><td style="padding:8px;text-align:right;font-weight:700;color:#003C50;font-variant-numeric:tabular-nums">${fm(total)}</td></tr></tfoot></table>`
