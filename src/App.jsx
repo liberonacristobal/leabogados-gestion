@@ -727,7 +727,7 @@ const PROMPT_PROPUESTA_IA = `Eres un experto extractor de datos de propuestas y 
 - cliente_rut: RUT chileno formato 12.345.678-9 si aparece.
 - razon_social: razón social facturable si difiere del nombre del cliente.
 - area: área legal (Corporativo, Tributario, Laboral, Litigios, Inmobiliario, etc.).
-- proyecto: título o descripción breve del encargo.
+- proyecto: nombre CORTO y general del encargo, 2 a 5 palabras (ej. "Recuperación de IVA exportador", "Reorganización societaria", "Juicio laboral", "Asesoría tributaria permanente"). NO una descripción larga ni una frase: solo el asunto, como lo llamaría el estudio internamente.
 - moneda: "UF" o "CLP" según en qué se expresan los honorarios.
 - honorario_total: monto total SOLO como número (sin símbolos ni separadores de miles; punto decimal si hay decimales).
 - notas: condiciones relevantes (reajuste, vigencia, gastos, IVA, hitos, forma de cobro).
@@ -6060,7 +6060,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],p
 - razon_social: razón social facturable si difiere del nombre del cliente.
 - contactos: nombres, cargos y/o emails de contactos mencionados (texto).
 - area: área legal (Corporativo, Tributario, Laboral, Litigios, Inmobiliario, etc.).
-- proyecto: título o descripción breve del encargo.
+- proyecto: nombre CORTO y general del encargo, 2 a 5 palabras (ej. "Recuperación de IVA exportador", "Reorganización societaria", "Juicio laboral", "Asesoría tributaria permanente"). NO una descripción larga ni una frase: solo el asunto, como lo llamaría el estudio internamente.
 - moneda: "UF" o "CLP" según en qué se expresan los honorarios.
 - honorario_total: monto total SOLO como número (sin símbolos ni separadores de miles; usa punto decimal si hay decimales).
 - forma_cobro: cómo se cobra (único, mensual, por cuotas, por etapas, éxito, mixto, etc.).
