@@ -717,6 +717,9 @@ function matchClientePropuesta(fileName, clients=[], clientEntities=[]){
   for(const c of (clients||[])){ if(c?.deleted_at||c?.is_internal) continue; consider(c?.id, null, c?.name) }
   return best?{client_id:best.client_id, entity_id:best.entity_id, via:best.via}:null
 }
+// Tokens distintivos del nombre de archivo de una propuesta (para aprender/consultar alias cliente). Excluye palabras genéricas, fechas y versiones.
+const _PROP_STOP = new Set(['propuesta','propuestas','honorarios','honorario','final','finales','borrador','draft','version','pdf','para','con','del','los','las','una','uno','nuevo','nueva'])
+const _propTokens = s => _normTxt(String(s).replace(/\.[a-z0-9]{2,5}$/i,'').replace(/\bv\d+\b/ig,' ')).split(/[\s_\-]+/).filter(w=>w.length>=3 && w.length<=12 && !/^\d+$/.test(w) && !w.includes('.') && !_PROP_STOP.has(w))
 // Motivos de rechazo de una propuesta ("por qué perdimos"): picklist canónico; "Otro" agrega texto libre y se aprende.
 const MOTIVOS_RECHAZO = ['Precio / honorarios','Se fue con otro estudio','Lo resolvió internamente','Sin respuesta / se enfrió','Lo postergó (timing)','Fuera de nuestra área','Conflicto de interés']
 // Prompt único para leer una propuesta (PDF) con IA y extraer sus datos. NO inventa (usa "" o null). Se usa al
@@ -5312,11 +5315,14 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const [drvFiles,setDrvFiles]=useState(null)   // null = aún no buscado
   const [drvErr,setDrvErr]=useState('')
   const [drvDone,setDrvDone]=useState({})        // file_id → sale_id ya registrados
+  const [drvAlias,setDrvAlias]=useState({})      // token normalizado del archivo → client_id (aprendido: learnings propuesta_alias). Ej: "vkh" → Luis Silva.
   const [drvBusy,setDrvBusy]=useState(null)
+  // Match del PDF a cliente: primero por nombre/razón social (matchClientePropuesta); si no, por alias aprendido (un token del archivo → cliente).
+  const matchCli = (fileName)=>{ const direct=matchClientePropuesta(fileName, clients, clientEntities); if(direct) return direct; for(const t of _propTokens(fileName)){ const cid=drvAlias[t]; if(cid&&clients.some(c=>String(c.id)===String(cid))) return {client_id:cid, entity_id:null, via:t} } return null }
   // Dedup fuerte: no re-ofrecer un PDF de Drive cuyo cliente YA tiene una propuesta o venta cargada (no rechazada ni borrador).
   // Así no se proponen propuestas ya cargadas como propuesta ni ya aceptadas (activas/terminadas).
   const clientesConPropuestaOVenta = useMemo(()=> new Set((sales||[]).filter(s=>s.client_id&&!['Rechazada','Borrador'].includes(s.status)).map(s=>String(s.client_id))), [sales])
-  const propuestaYaCargada = (file)=>{ const m=matchClientePropuesta(file?.name||'', clients, clientEntities); return !!(m && clientesConPropuestaOVenta.has(String(m.client_id))) }
+  const propuestaYaCargada = (file)=>{ const m=matchCli(file?.name||''); return !!(m && clientesConPropuestaOVenta.has(String(m.client_id))) }
   const cargarDrive=async()=>{
     setDrvLoad(true); setDrvErr('')
     try{
@@ -5327,6 +5333,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
       const data=await driveGet(token,`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime,webViewLink,size)&orderBy=modifiedTime+desc&pageSize=100`)
       setDrvFiles(data.files||[])
       try{ const {data:al}=await supabase.from('learnings').select('key,value').eq('kind','propuesta_drive'); const m={}; (al||[]).forEach(r=>{m[r.key]=r.value}); setDrvDone(m) }catch(_){}
+      try{ const {data:aa}=await supabase.from('learnings').select('key,value').eq('kind','propuesta_alias'); const am={}; (aa||[]).forEach(r=>{ if(r.key&&r.value) am[r.key]=r.value }); setDrvAlias(am) }catch(_){}
     }catch(e){ const m=String(e?.message||''); setDrvErr(/auth|token|drive_auth|401|conex/i.test(m)?'No pude leer la carpeta de Drive — revisa que Drive esté conectado (menú → Conectar Drive).':('No se pudo leer la carpeta de Drive: '+(m||'error'))) }
     setDrvLoad(false)
   }
@@ -5361,8 +5368,15 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
         }
       }
     }catch(_){ info=null }   // si la IA/Drive falla, cae al borrador simple (matcher por nombre de archivo)
-    const saved=await onIngestPropuesta?.(file, info || matchClientePropuesta(file.name, clients, clientEntities))
-    if(saved) setDrvDone(d=>({...d,[file.id]:saved.id}))
+    const m0 = info || matchClientePropuesta(file.name, clients, clientEntities)
+    const saved=await onIngestPropuesta?.(file, m0)
+    if(saved){ setDrvDone(d=>({...d,[file.id]:saved.id}))
+      // Aprende alias: si el PDF se resolvió a un cliente que el NOMBRE DEL ARCHIVO solo no reconocía, guarda sus tokens cortos → cliente (ej. "vkh" → Luis Silva), para no volver a mostrarlo ni pedir confirmar.
+      const cid = m0?.client_id || saved?.client_id
+      if(cid){ const direct=matchClientePropuesta(file.name, clients, clientEntities)
+        if(!direct || String(direct.client_id)!==String(cid)){ const toks=_propTokens(file.name).filter(t=>t.length<=6)
+          for(const t of toks){ try{ const {data:ex}=await supabase.from('learnings').select('id').eq('kind','propuesta_alias').eq('key',t).limit(1); if(!(ex&&ex.length)) await supabase.from('learnings').insert({kind:'propuesta_alias',key:t,value:String(cid)}) }catch(_){} }
+          if(toks.length) setDrvAlias(a=>{ const n={...a}; toks.forEach(t=>{ if(!n[t]) n[t]=String(cid) }); return n }) } } }
     setDrvBusy(null)
   }
   const rechazadasFiltradas = useMemo(()=>{
@@ -5575,7 +5589,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                 {drvErr&&<div style={{fontSize:11.5,color:C.overdueText,background:C.overdueBg,padding:'8px 14px'}}>{drvErr}</div>}
                 {drvFiles&&drvFiles.length===0&&!drvErr&&<div style={{fontSize:12,color:C.muted,padding:'14px'}}>No hay PDFs de propuestas del último mes en la carpeta.</div>}
                 {drvFiles&&drvFiles.length>0&&<div>
-                  {drvFiles.map((file,i)=>{ const reg=drvDone[file.id]; const match=reg?null:matchClientePropuesta(file.name,clients,clientEntities); const busy=drvBusy===file.id; const cli=match?clients.find(c=>String(c.id)===String(match.client_id)):null
+                  {drvFiles.map((file,i)=>{ const reg=drvDone[file.id]; const match=reg?null:matchCli(file.name); const busy=drvBusy===file.id; const cli=match?clients.find(c=>String(c.id)===String(match.client_id)):null
                     return (
                     <div key={file.id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none'}}>
                       <span style={{width:28,height:34,borderRadius:5,background:C.overdueBg,border:'1px solid #F3CFCE',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:7.5,fontWeight:800,color:C.overdueText}}>PDF</span>
@@ -5639,7 +5653,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                   {drvErr&&<div style={{fontSize:11,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{drvErr}</div>}
                   {sinReg.length>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,background:'#fff',marginBottom:10,overflow:'hidden'}}>
                     <div style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,padding:'8px 12px 4px'}}>En Drive · {sinReg.length} sin registrar{sinRegOcultas>0?<span style={{fontWeight:600,textTransform:'none',letterSpacing:0}}> · {sinRegOcultas} ya en el sistema</span>:''}</div>
-                    {sinReg.slice(0,6).map((file,i)=>{ const match=matchClientePropuesta(file.name,clients,clientEntities); const cli=match?clients.find(c=>String(c.id)===String(match.client_id)):null; const busy=drvBusy===file.id; return (
+                    {sinReg.slice(0,6).map((file,i)=>{ const match=matchCli(file.name); const cli=match?clients.find(c=>String(c.id)===String(match.client_id)):null; const busy=drvBusy===file.id; return (
                       <div key={file.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none'}}>
                         <span style={{width:24,height:30,borderRadius:5,background:C.overdueBg,border:'1px solid #F3CFCE',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:7,fontWeight:800,color:C.overdueText}}>PDF</span>
                         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name}</div><div style={{fontSize:10,color:C.done}}>{cli?`cliente ${cli.name}`:'cliente por confirmar'}</div></div>
