@@ -128,6 +128,18 @@ Antes de entregar cualquier análisis, diagnóstico, causa-raíz o afirmación s
 - **Escucha la corrección del usuario como señal.** Si el usuario dice "puede que estés analizando mal", asume que probablemente lo estás; re-levanta TODO el dato desde cero, no defiendas la lectura anterior.
 - Esto refuerza (no reemplaza) "Cifras auditables" y la pausa de seguridad en cambios de cifras: primero dudar, verificar y recién ahí afirmar.
 
+## REGLA DE ORO: ningún hallazgo sin PRUEBA POSITIVA contra la verdad completa
+
+La falla recurrente (día entero 2026-10-01): tomé un número derivado —una vista, un flag, un resumen, la memoria, UNA sola columna— y lo presenté como verdad sin abrir el dato real ni mirar su ciclo completo. Resultado: puros falsos positivos ("21 series sin cuotas" = default `nCuotas=3` en personalizadas; "$54M sin enviar" = 26 de 38 **ya pagadas**; "$154M sin XML" = histórico **previo a la app**; "duplicado Survías" = dos tramos 50% **legítimos**, uno lo borré). Antes de afirmar **cualquier** número, hallazgo, duplicado, descuadre o diagnóstico:
+
+1. **Abre filas reales, no cuentas.** Una cifra de una vista/flag/`count()`/resumen es una **hipótesis**, no un hallazgo. Baja a las filas y míralas una por una antes de decir que existe un problema.
+2. **Revisa el CICLO COMPLETO, no una foto.** El significado de una fila depende de todo su contexto, no de un campo: ¿pagada (`paid_at`/status)? ¿emitida? ¿gestionada/enviada **fuera de la app**? ¿anulada? ¿cubierta por anticipo? ¿**dentro de la vida de la app**? (conoce las fechas de inicio: billing desde **2026-06-06**, XML desde **2026-06-09**; lo anterior es histórico importado y no tiene por qué tener XML/envío). Un solo flag (`email_sent_at`, `dte_xml`, `nCuotas`) casi nunca dice la verdad solo.
+3. **Separa el DEFECTO de lo ESPERABLE.** Distingue un error real de: (a) falso positivo por valor por defecto (`nCuotas=3` en personalizada/único), (b) diferencia estructural legítima (dos tramos de 50%, planos distintos), (c) artefacto histórico (datos previos a la app/feature). Si es (a)/(b)/(c), NO es hallazgo; y si el radar los produce, el radar está mal y se arregla el radar.
+4. **Reporta solo lo que SOBREVIVE, con la prueba que lo confirma.** Si sobrevive, cita la evidencia exacta (`archivo:línea`/la consulta). Si no la puedes confirmar con una consulta o el código que dé un **resultado positivo**, es "candidato a revisar (con compuerta)", **nunca** un problema afirmado. Tono calibrado a la evidencia: cero alarma de $/riesgo hasta agotar las explicaciones benignas.
+5. **Ante la duda: verifica o calla.** No trasladar al usuario el trabajo de cacharme el falso positivo. Si no alcancé a confirmarlo en esta vuelta, lo digo como pendiente de verificar, no como hallazgo.
+
+Refuerza con dientes "cuestionar el propio análisis" y "nunca de memoria". Mnemotecnia: **filas, no cuentas · ciclo, no foto · esperable, no defecto · prueba, no corazonada.**
+
 ## Economía de espacio en formularios
 
 - Formularios y paneles deben ser densos pero legibles. Eliminar padding decorativo, márgenes inflados y secciones que obligan a scroll innecesario.
