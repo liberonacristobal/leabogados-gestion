@@ -11211,7 +11211,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
         </Modal>}
         {depurarRows&&<Modal title='Marcar como pagadas' onClose={()=>setDepurarRows(null)} closeOnBackdrop={false}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></Modal>}
         {cierreOpen&&<Modal title='Cierre de mes' fullscreen fsMaxWidth={1160} onClose={()=>setCierreOpen(false)}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>{setCierreOpen(false);onEdit&&onEdit(b)}} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></Modal>}
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='rechazadas'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='rechazadas'&&filter!=='porcompletar'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:10,padding:'7px 9px',border:`1px solid ${on?C.accent:C.border}`,cursor:'pointer',minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n='file' s={12} c={C.accent}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap'}}>Por cobrar</span></div>
@@ -11226,7 +11226,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             </button>
           )})}
         </div>}
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&filter!=='rechazadas'&&(()=>{
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&filter!=='rechazadas'&&filter!=='porcompletar'&&(()=>{
           const lista=bb.filter(b=>!b.deleted_at&&esEmitida(b)&&b.email_sent_at&&saldoBill(b)>0&&!['Pagado','Anulada','Anticipada'].includes(b.status))
             .map(b=>({b,dias:Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000),venc:esVencidaG(b)}))
             .sort((a,z)=>((z.venc?1:0)-(a.venc?1:0))||(z.dias-a.dias))   // vencidas primero (lo urgente), luego por días desde el envío
@@ -11248,7 +11248,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             </div>}
           </div>)
         })()}
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&filter!=='rechazadas'&&(calcesSugeridos.clean.length>0||calcesSugeridos.revisar.length>0)&&(
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&filter!=='rechazadas'&&filter!=='porcompletar'&&(calcesSugeridos.clean.length>0||calcesSugeridos.revisar.length>0)&&(
           <div style={{background:C.greenBg,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:9}}>
             <div onClick={()=>setCalcesOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
               <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.normal} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>
@@ -33302,15 +33302,18 @@ export default function App() {
           if(montoT>0 && _terceroProv){
             const prov=(proveedores||[]).find(p=>String(p.id)===String(_terceroProv))
             const estado=saved.status==='Pagado'?'por_pagar':'pendiente'
+            // monto_terceros = parte del externo; nuestra comisión = amount − monto_terceros; % para aprender por externo.
+            const amt=Number(saved.amount)||0; const comM=Math.max(0,amt-montoT); const comP=amt>0?Math.round(comM/amt*100):null
             const fields={sale_id:saved.sale_id||null, billing_id:saved.id, proveedor_id:_terceroProv,
               proveedor:prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null,
-              monto:montoT, estado}
+              monto:montoT, comision_pct: comP||null, comision_monto: comM||null, estado}
             if(previas.length){
               await supabase.from('terceros_pagos').update(fields).eq('id',previas[0].id)
               if(previas.length>1) await supabase.from('terceros_pagos').delete().in('id',previas.slice(1).map(t=>t.id))
             }else{
               await supabase.from('terceros_pagos').insert({...fields,created_by:user?.name||null})
             }
+            if(comP>0){ try{ await setLearningKV('tercero_comision_pct', String(_terceroProv), String(comP)) }catch(_){} }   // aprende el % por externo
           }else if(previas.length){
             await supabase.from('terceros_pagos').delete().in('id',previas.map(t=>t.id))
           }
@@ -34008,6 +34011,8 @@ export default function App() {
         tipo_costo:'clp', valor:payable, monto:payable, comision_pct: pct||null, comision_monto: comision||null, estado: fac.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null }
       const {error}=await supabase.from('terceros_pagos').insert(cp); if(error)throw error
       const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}); if(nt)setTerceros(nt)
+      // Fuente única del monto del externo = billing.monto_terceros (lo que lee/edita el editor de factura). Nuestro ingreso = amount − monto_terceros.
+      try{ await supabase.from('billing').update({monto_terceros:payable, updated_at:new Date().toISOString()}).eq('id',fac.id); setBilling(p=>p.map(b=>b.id===fac.id?{...b,monto_terceros:payable}:b)) }catch(_){}
       if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(_){} }   // aprende el % por externo (ej. Rodrigo = 15)
     }catch(e){ appAlert('La factura se registró, pero no se pudo crear la cuenta por pagar al externo: '+(e.message||e)) }
     return {factura:fac, proveedor:prov}
@@ -34027,6 +34032,7 @@ export default function App() {
         tipo_costo:'clp', valor:payable, monto:payable, comision_pct: pct||null, comision_monto: comision||null, estado: bill.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null }
       const {error}=await supabase.from('terceros_pagos').insert(cp); if(error)throw error
       const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}); if(nt)setTerceros(nt)
+      try{ await supabase.from('billing').update({monto_terceros:payable, updated_at:new Date().toISOString()}).eq('id',bill.id); setBilling(p=>p.map(b=>b.id===bill.id?{...b,monto_terceros:payable}:b)) }catch(_){}   // fuente única del monto del externo
       if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(_){} }
     }catch(e){ appAlert('No se pudo asociar la factura al externo: '+(e.message||e)); return null }
     return {proveedor:prov}
