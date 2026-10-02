@@ -20431,14 +20431,23 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   // Texto por defecto del recordatorio de saldo (sin salto inicial). Cita las facturas pendientes por folio.
   const genSaldoMsg=(lg)=>{
     if(!(otroSaldo>0)) return ''
+    const totalDe = b => (b.dte_xml?dteMontoTotal(b.dte_xml):null) ?? (b.amount||0)
+    const esParcial = x => x.saldo < Math.round(totalDe(x.b)) - 1   // el saldo es MENOR al total emitido → pago parcial (no la factura completa)
+    const fol = x => `N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'}`
     const uno = otrasPendientes.length===1
-    const listar = (con) => otrasPendientes.map(x=>con?`N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'} (${fmtN(x.saldo)})`:`N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'}`).join(', ')
-    if(lg==='en') return uno
-      ? `Also, according to our records, a balance corresponding to invoice ${listar(false)} for ${fmtN(otroSaldo)} may still be outstanding.`
-      : `Also, according to our records, balances corresponding to the following invoices may still be outstanding: ${listar(true)} — totaling ${fmtN(otroSaldo)}.`
-    return uno
-      ? `Además, según nuestros registros, quedaría pendiente un saldo correspondiente a la factura ${listar(false)} por ${fmtN(otroSaldo)}.`
-      : `Además, según nuestros registros, quedarían pendientes saldos correspondientes a las facturas ${listar(true)}, por un total de ${fmtN(otroSaldo)}.`
+    if(uno){
+      const x=otrasPendientes[0], parc=esParcial(x), m=fmtN(x.saldo)
+      if(lg==='en') return parc
+        ? `We would also like to note that, according to our records, an outstanding balance of ${m} on invoice ${fol(x)} remains pending. If it has already been paid, please disregard this note.`
+        : `We would also like to note that, according to our records, invoice ${fol(x)} for ${m} remains outstanding. If it has already been paid, please disregard this note.`
+      return parc
+        ? `Aprovechamos de comentarles que, según nuestros registros, aún figura pendiente de pago un saldo de ${m} de la factura ${fol(x)}. Si ya fue pagado, por favor omitan este comentario.`
+        : `Aprovechamos de comentarles que, según nuestros registros, la factura ${fol(x)} por ${m} aún figura pendiente de pago. Si ya fue pagada, por favor omitan este comentario.`
+    }
+    const listaEs = otrasPendientes.map(x=>`${fol(x)} por ${fmtN(x.saldo)}${esParcial(x)?' (saldo)':''}`).join(', ')
+    const listaEn = otrasPendientes.map(x=>`${fol(x)} for ${fmtN(x.saldo)}${esParcial(x)?' (balance)':''}`).join(', ')
+    if(lg==='en') return `We would also like to note that, according to our records, the following remain outstanding: ${listaEn}, totaling ${fmtN(otroSaldo)}. If they have already been paid, please disregard this note.`
+    return `Aprovechamos de comentarles que, según nuestros registros, aún figuran pendientes de pago: ${listaEs}, por un total de ${fmtN(otroSaldo)}. Si ya fueron pagadas, por favor omitan este comentario.`
   }
   const genFondoMsg=(lg)=> lg==='en'
     ? `Additionally, we request an expense fund (fondo por rendir)${fondoMonto?` of ${fmtN(+fondoMonto||0)}`:''}, intended for notarial and other related expenses, which will be duly accounted for. You may transfer to the account below.`
