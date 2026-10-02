@@ -12192,6 +12192,10 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
   const tercerosBill = (terceros||[]).filter(t=>String(t.billing_id)===String(bill?.id))
   const [terceroProv,setTerceroProv] = useState(()=>{ const t=tercerosBill.find(x=>x.estado!=='pagado')||tercerosBill[0]; return t?String(t.proveedor_id):'' })
   const terceroPagado = tercerosBill.some(t=>t.estado==='pagado')
+  // "Retienes %": atajo para fijar monto_terceros = amount × (1 − %). Inicial desde el split guardado o la comisión aprendida del externo.
+  const [retPct,setRetPct] = useState(()=>{ const t=tercerosBill.find(x=>x.comision_pct!=null); if(t) return String(t.comision_pct); const amt=Number(bill?.amount)||0, mt=Number(bill?.monto_terceros)||0; return (amt>0&&mt>0)?String(Math.round((amt-mt)/amt*100)):'' })
+  const [comPctMap,setComPctMap] = useState({})
+  useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key,value').eq('kind','tercero_comision_pct').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ const v=parseFloat(r.value); if(r.key&&!isNaN(v)) m[String(r.key)]=v }); setComPctMap(m) },()=>{}) },[])
   const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
   const provsOrd = [...(proveedores||[])].sort((a,b)=>tituloProv(a).localeCompare(tituloProv(b),'es'))
   const [selAnt,setSelAnt] = useState(new Set())
@@ -12325,8 +12329,16 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
           <div><label style={flabel}>Monto total (CLP)</label><input type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0' style={inp}/></div>
-          <div><label style={flabel}>De terceros (CLP)</label><input type='number' value={f.monto_terceros||''} onChange={e=>up('monto_terceros',e.target.value)} placeholder='0' style={inp}/></div>
+          <div><label style={flabel}>De terceros (CLP)</label><input type='number' value={f.monto_terceros||''} onChange={e=>{ up('monto_terceros',e.target.value); const amt=Number(f.amount)||0, mt=parseInt(e.target.value)||0; setRetPct(amt>0&&mt>0?String(Math.round((amt-mt)/amt*100)):'') }} placeholder='0' style={inp}/></div>
         </div>
+        {(Number(f.amount)||0)>0&&(()=>{ const amt=Number(f.amount)||0; const mt=parseInt(f.monto_terceros)||0; const com=Math.max(0,amt-mt); return (
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,color:C.muted}}>o retienes</span>
+            <input value={retPct} onChange={e=>{ const v=e.target.value.replace(/[^\d.,]/g,''); setRetPct(v); if(v===''){ up('monto_terceros','') } else { const pct=Math.max(0,Math.min(100,parseFloat(String(v).replace(',','.'))||0)); up('monto_terceros',String(Math.round(amt*(1-pct/100)))) } }} inputMode='decimal' placeholder='0' style={{width:54,height:32,textAlign:'right',fontSize:12,fontWeight:700,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'0 9px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}}/>
+            <span style={{fontSize:12,fontWeight:700,color:C.tealText}}>%</span>
+            {mt>0&&com>0&&<span style={{fontSize:11,color:C.greenText,fontWeight:600}}>Tu comisión {fmt(com)}</span>}
+            {mt>0&&<span style={{fontSize:11,color:C.tealText}}>· externo {fmt(mt)}</span>}
+          </div>) })()}
         {(parseInt(f.monto_terceros)||0)>0&&(
           <div>
             <label style={flabel}>¿A quién le pagas?</label>
@@ -12335,7 +12347,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
             ):provsOrd.length===0?(
               <div style={{fontSize:12,color:C.muted,background:C.bgSoft,borderRadius:8,padding:'9px 11px'}}>Crea proveedores en Facturación → Proveedores.</div>
             ):(
-              <select value={terceroProv} onChange={e=>setTerceroProv(e.target.value)} style={sel}>
+              <select value={terceroProv} onChange={e=>{ const pid=e.target.value; setTerceroProv(pid); if(pid&&!retPct&&comPctMap[String(pid)]!=null){ const pct=comPctMap[String(pid)]; setRetPct(String(pct)); const amt=Number(f.amount)||0; up('monto_terceros',String(Math.round(amt*(1-pct/100)))) } }} style={sel}>
                 <option value=''>— Sin asignar —</option>
                 {provsOrd.map(p=><option key={p.id} value={p.id}>{tituloProv(p)}</option>)}
               </select>
