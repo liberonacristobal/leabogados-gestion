@@ -13218,6 +13218,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
 function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling}) {
   const esEdicion = !!editRend
+  const isDesktop = useIsDesktop()
   const [selected, setSelected] = useState(()=> editRend ? new Set((expenses||[]).filter(e=>String(e.client_render_id)===String(editRend.id)).map(e=>e.id)) : new Set())
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
@@ -13441,15 +13442,17 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const fK = fondosDisp>0?{c:C.normal,bg:C.greenBg}:fondosDisp===0?{c:C.soon,bg:'#FEF6EE'}:{c:C.overdue,bg:C.overdueBg}
   const sK = saldoActual>0?{c:C.normal,bg:C.greenBg}:{c:C.overdue,bg:C.overdueBg}
 
-  return (
-    <div>
-      {/* Contexto de continuidad: correlativo que tendrá + rendiciones anteriores + saldo actual */}
+  // ── Cada bloque se define UNA vez (misma lógica/estado); solo cambia el ARREGLO por isDesktop.
+  // Desktop = maestro-detalle: izquierda la lista de gastos (el trabajo), derecha el "documento" que se arma
+  // (continuidad + razón social + proyecto + KPIs + resumen + acciones). Móvil = apilado en el orden de hoy.
+  const bContinuidad = (
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:12,paddingBottom:10,borderBottom:`1px solid ${C.border}`}}>
         <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{esEdicion?<>Editando rendición{editRend.correlativo?` N° ${editRend.correlativo}`:''}<span style={{fontSize:10,fontWeight:500,color:C.done}}> · no la anula</span></>:<>Será la N° {nextCorr}<span style={{fontSize:10,fontWeight:500,color:C.done}}> · se confirma al enviar</span></>}</span>
         <span style={{fontSize:11,color:C.muted,textAlign:'right'}}>{previasN>0?`${previasN} enviada${previasN!==1?'s':''} · saldo actual ${fmtN(saldoActual)}`:'Primera rendición de este cliente'}</span>
       </div>
-      {/* Razón social: 1 → fija; varias → la elige el emisor (acota los gastos) */}
-      {entsCli.length>0&&(()=>{
+  )
+  {/* Razón social: 1 → fija; varias → la elige el emisor (acota los gastos) */}
+  const bRS = entsCli.length>0&&(()=>{
         const flBox = {background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',marginBottom:8}
         const flLbl = {fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.5}
         const flInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.accent,fontWeight:600,padding:0,height:22,appearance:'none'}
@@ -13461,9 +13464,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
             : <select value={selEnt||''} onChange={e=>setSelEnt(e.target.value||null)} style={flInp}>{entsCli.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${en.rut}`:''}</option>)}</select>}
         </div>
         )
-      })()}
-
-      {(()=>{
+      })()
+  {/* Proyecto + Dirigido a + Subproyecto */}
+  const bProyecto = (()=>{
         const flBox = on => ({background:C.bgSoft,border:`0.5px solid ${on?C.accent:C.border}`,borderRadius:8,padding:'6px 11px'})
         const flLbl = {fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.5}
         const flInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}
@@ -13491,9 +13494,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
           <datalist id='rend-subproy'>{[...new Set((rendiciones||[]).filter(r=>String(r.client_id)===String(client.id)&&r.subproject).map(r=>r.subproject))].map(s=><option key={s} value={s}/>)}</datalist>
         </div>}
         </>)
-      })()}
-
-      {/* KPIs (rectángulos redondeados, labels grises) */}
+      })()
+  const bKPIs = (
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
         <div style={{background:fK.bg,borderRadius:10,padding:'10px 12px'}}>
           <div style={lblG}>Fondos</div>
@@ -13508,8 +13510,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
           <div style={{fontSize:13,fontWeight:600,color:sK.c}}>{saldoActual<0?'−':''}{fmtN(saldoActual)}</div>
         </div>
       </div>
-
-      {/* Lista de gastos */}
+  )
+  const bLista = (<>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles</span>
@@ -13531,7 +13533,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
             <button onClick={()=>{setProyecto('');setFDesde('');setFHasta('')}} style={{display:'block',margin:'8px auto 0',fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>Ver todos los proyectos</button>
           </div>
         : <div style={{color:C.muted,textAlign:'center',padding:20,fontSize:12}}>No hay gastos pendientes de rendir</div>)}
-      <div style={{maxHeight:280,overflowY:'auto',marginBottom:12}}>
+      <div style={{maxHeight:isDesktop?'calc(100vh - 320px)':280,overflowY:'auto',marginBottom:12}}>
         {disponibles.map(e=>{
           const isSel=selected.has(e.id)
           const catBg=CATS[e.category]||CATS['Otro']
@@ -13555,9 +13557,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
           )
         })}
       </div>
-
-      {/* Resumen seleccion */}
-      {selected.size>0&&(
+  </>)
+  {/* Resumen seleccion */}
+  const bResumen = selected.size>0&&(
         <div style={{background:'#F4F6F7',borderRadius:8,padding:'10px 12px',marginBottom:12}}>
           <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
             <span style={{fontSize:11,color:C.muted}}>{selected.size} gasto{selected.size!==1?'s':''} seleccionado{selected.size!==1?'s':''}</span>
@@ -13570,11 +13572,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
             </span>
           </div>
         </div>
-      )}
-
-      {/* Mejora de descripciones con IA (solo si hay selección) */}
-      {selected.size>0&&<button onClick={mejorarDescripcionesIA} disabled={limpiandoIA} style={{...chipBtn('soft'),width:'100%',marginBottom:8,opacity:limpiandoIA?.6:1}}>{limpiandoIA?'Mejorando descripciones…':'Mejorar descripciones con IA'}</button>}
-      {/* Botones */}
+      )
+  const bIA = selected.size>0&&<button onClick={mejorarDescripcionesIA} disabled={limpiandoIA} style={{...chipBtn('soft'),width:'100%',marginBottom:8,opacity:limpiandoIA?.6:1}}>{limpiandoIA?'Mejorando descripciones…':'Mejorar descripciones con IA'}</button>
+  const bBotones = (
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         {esEdicion ? (
@@ -13593,6 +13593,19 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         </button>
         </>)}
       </div>
+  )
+
+  // Desktop: maestro-detalle (lista | documento). Móvil: apilado en el orden de hoy. Misma JSX, dos arreglos.
+  return isDesktop ? (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.55fr) minmax(0,1fr)',gap:22,alignItems:'start'}}>
+        <div style={{minWidth:0}}>{bLista}</div>
+        <div style={{minWidth:0}}>{bContinuidad}{bRS}{bProyecto}{bKPIs}{bResumen}{bIA}{bBotones}</div>
+      </div>
+    </div>
+  ) : (
+    <div>
+      {bContinuidad}{bRS}{bProyecto}{bKPIs}{bLista}{bResumen}{bIA}{bBotones}
     </div>
   )
 }
@@ -17897,7 +17910,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <div style={{display:'flex',justifyContent:'space-between',marginTop:10,paddingTop:8,borderTop:`1.5px solid ${C.muted}`}}><span style={{fontSize:13,fontWeight:600,color:C.text}}>TOTAL</span><span style={{fontSize:13,fontWeight:600,color:C.overdue}}>-{fmt(tot)}</span></div>
         </Modal>
       )})()}
-      {rendicionClient&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal fullscreen fsMaxWidth={isDesktop?980:640} title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
       {devEmailRend&&<DevolucionEmailModal client={devEmailRend.client} rend={devEmailRend.rend} rendN={devEmailRend.rend?.correlativo} amount={devEmailRend.amount} fecha={devEmailRend.fecha} user={currentUser} setRendiciones={setRendiciones} onClose={()=>setDevEmailRend(null)}/>}
       {pedirModal}
@@ -21319,7 +21332,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         onRendicionSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))}
       />
   ) : null
-  const rendModal = rendicionClient?(<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>):null
+  const rendModal = rendicionClient?(<Modal fullscreen fsMaxWidth={isDesktop?980:640} title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>):null
 
   // DESKTOP: 2-paneles maestro-detalle — lista (izq) + ficha (der). Reusa cl/balances/ClientFicha; el móvil no cambia.
   // DESKTOP: al elegir un cliente su ficha ocupa toda la pantalla (como Colaboradores); si no, DIRECTORIO alfabético
