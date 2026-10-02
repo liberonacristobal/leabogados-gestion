@@ -11886,16 +11886,17 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             })}
           </>)
         })() : filter==='porcompletar' ? (()=>{
-          // Vista "Facturas sin cliente / venta": listado global mes-por-mes, correlativo por folio, que UNIFICA las 3 poblaciones
-          // que no suman en cifras hasta resolverlas — (1) emitidas sin cliente, (2) con cliente pero sin venta/proyecto (vivas),
-          // (3) emitidas en el SII cargadas sin registrar (entrada arriba, reusa cargarSinRegistrar). Asignación inline (aprende).
+          // Vista "Facturas sin cliente / venta": maestro-detalle. Sin cliente → agrupadas por razón social (asignas una vez para todas,
+          // la app aprende el RUT). Con cliente/sin venta → por cliente, cada factura expande a su detalle + la acción recomendada
+          // (default pre-armado, sin rótulo de IA): si ya pasaste facturas de este cliente a un externo, propone el mismo. Reusa
+          // cargarSinRegistrar (SII sin cargar) y aprende cada asignación.
           const _emitBase=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
           const _fnum=b=>parseInt(String(b.invoice_no||b.folio||'').replace(/\D/g,''),10)||0
           const mesDe=b=>String(b.issued_at||b.date||b.due||'').slice(0,7)
           const _q=(q||'').trim().toLowerCase()
           const _yr=fYear?String(fYear):''
           const nomDe=b=>(clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''
-          const matchQ=b=>!_q||`${b.invoice_no||b.folio||''} ${nomDe(b)}`.toLowerCase().includes(_q)
+          const matchQ=b=>!_q||`${b.invoice_no||b.folio||''} ${nomDe(b)} ${b.receptor_name||''}`.toLowerCase().includes(_q)
           const matchYr=b=>!_yr||mesDe(b).slice(0,4)===_yr
           const sinCli=(billing||[]).filter(b=>_emitBase(b)&&!b.client_id&&matchQ(b)&&matchYr(b))
           const sinVta=(billing||[]).filter(b=>_emitBase(b)&&b.client_id&&!b.sale_id&&!tercerosByBilling.has(b.id)&&['Pendiente','Vencido'].includes(b.status)&&matchQ(b)&&matchYr(b))
@@ -11904,6 +11905,14 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const mesLbl=m=>m==='—'?'Sin fecha':`${MN2[parseInt(m.slice(5),10)-1]||''} ${m.slice(0,4)}`
           const fDMY=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:'' }
           const card={border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}
+          const kLbl={fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done,marginBottom:5}
+          const sectLbl=col=>({fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:col,margin:'4px 2px 7px'})
+          const diasVenc=b=>{ const d=String(b.due||'').slice(0,10); if(!/^\d{4}-\d\d-\d\d$/.test(d)) return null; return Math.floor((Date.now()-new Date(d+'T00:00:00').getTime())/86400000) }
+          const billById={}; (billing||[]).forEach(b=>{ billById[String(b.id)]=b })
+          // Externo recomendado para un cliente: si ya pasaste facturas suyas a un externo con %, propone el más usado (default pre-armado).
+          const sugExterno=clientId=>{ if(!clientId) return null; const cnt={}; (terceros||[]).forEach(t=>{ if(t.comision_pct==null) return; const bb2=billById[String(t.billing_id)]; if(!bb2||String(bb2.client_id)!==String(clientId)) return; const key=String(t.proveedor_id); if(!cnt[key]) cnt[key]={proveedor_id:t.proveedor_id,nombre:t.proveedor||'externo',pct:Number(t.comision_pct),n:0}; cnt[key].n++ }); const arr=Object.values(cnt).sort((a,b)=>b.n-a.n); return arr[0]||null }
+          // Cliente sugerido para una razón social sin cliente (por RUT o nombre; conservador).
+          const sugCliente=(rsName,rut)=>{ const r=resolverClienteSII(rut,rsName,clients,clientEntities); return r||null }
           // Selector de venta, reusado por fila individual y por el lote de un cliente.
           const salePicker=(clientId,onPick)=>{ const cs=(sales||[]).filter(s=>!s.deleted_at&&String(s.client_id)===String(clientId)); const ab=cs.filter(s=>s.status==='Activo'); const base=(verCerradas||!ab.length)?cs:ab; const vq=ventaBusca.trim().toLowerCase(); const list=[...base].filter(s=>!vq||`${s.title||''} ${s.year||''}`.toLowerCase().includes(vq)).sort((a,b)=>(b.year||0)-(a.year||0)); const nCerr=cs.filter(s=>s.status!=='Activo').length; return (
             <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
@@ -11930,29 +11939,51 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               {pct>0&&<div style={{fontSize:11,color:C.muted,marginBottom:8,lineHeight:1.4}}>Tu comisión <b style={{color:C.greenText}}>{fmt(comision)}</b> · para {nombreDest} <b style={{color:C.tealText}}>{fmt(payable)}</b> (de {fmt(total)})</div>}
               <button disabled={!tvProv&&!tvNuevo.trim()} onClick={doExt} style={{width:'100%',background:C.tealText,color:'#fff',border:'none',borderRadius:8,padding:'9px 0',fontSize:12,fontWeight:700,cursor:'pointer',opacity:(!tvProv&&!tvNuevo.trim())?.6:1}}>{pct>0?`Registrar · retienes ${fmt(comision)}`:`Pasar todo a ${nombreDest}`}</button>
             </div>) }
-          // Fila de factura con detalle INLINE (como en la carga): folio/fecha/glosa a la izquierda, CIFRA siempre a la derecha. Toca la fila → abre la factura; el nombre → su ficha.
-          const faRow=(it,i,showClient)=>{ const b=it.b; const cli=(clients||[]).find(c=>String(c.id)===String(b.client_id)); const monto=montoFactura(b); const uf=b.amount_uf?String(+(+b.amount_uf).toFixed(2)).replace('.',','):null; const pOpen=anioPickFor===b.id; return (
-            <div key={b.id} style={{borderTop:i>0?`0.5px solid ${C.border}`:'none',padding:'10px 12px'}}>
-              <div onClick={()=>onEdit&&onEdit(b)} style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer'}}>
+          // Fila MAESTRO-DETALLE: compacta (folio/glosa/fecha/monto); al tocar expande a su detalle completo + "Qué hacer" con la acción recomendada.
+          const faRow=(it,i,showClient)=>{ const b=it.b; const cli=(clients||[]).find(c=>String(c.id)===String(b.client_id)); const monto=montoFactura(b); const uf=b.amount_uf?String(+(+b.amount_uf).toFixed(2)).replace('.',','):null; const exp=String(expandBill)===String(b.id); const pOpen=anioPickFor===b.id; const extOpen=anioPickFor===('ext:'+b.id); const dd=diasVenc(b); const venc=b.status==='Vencido'&&dd>0; const sug=it.tipo==='sinvta'?sugExterno(b.client_id):null; return (
+            <div key={b.id} style={{borderTop:i>0?`0.5px solid ${C.border}`:'none'}}>
+              <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
                 <div style={{flex:1,minWidth:0}}>
-                  {showClient&&(cli
-                    ? <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(b.client_id)}} style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cli.name}</div>
-                    : <div style={{fontSize:13,fontWeight:600,color:C.muted,fontStyle:'italic',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.receptor_name||'Sin cliente'}</div>)}
-                  <div style={{fontSize:10.5,color:C.done,marginTop:showClient?1:0}}>Factura N° {folioN(b.invoice_no||b.folio)}{fDMY(b.issued_at||b.date)?` · ${fDMY(b.issued_at||b.date)}`:''}</div>
-                  {b.concept&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.concept}{uf?` — ${uf} UF`:''}</div>}
+                  {showClient
+                    ? (cli?<div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cli.name}</div>:<div style={{fontSize:13,fontWeight:600,color:C.muted,fontStyle:'italic',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.receptor_name||'Sin cliente'}</div>)
+                    : <div style={{fontSize:12.5,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.accent,fontWeight:700}}>N° {folioN(b.invoice_no||b.folio)}</b>{b.concept?` · ${b.concept}`:''}</div>}
+                  <div style={{fontSize:10.5,color:C.done,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{showClient?`N° ${folioN(b.invoice_no||b.folio)} · `:''}{fDMY(b.issued_at||b.date)}{uf?` · ${uf} UF`:''}{venc?` · vencida ${dd}d`:''}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(monto)}</div>
+                <span style={{color:C.done,fontSize:10,flexShrink:0,transition:'transform .12s',transform:exp?'rotate(180deg)':'none'}}>▾</span>
               </div>
-              <div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>
-                {it.tipo==='sincli'
-                  ? <AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/>
-                  : <>
-                    <button onClick={()=>{setAnioPickFor(pOpen?null:b.id);setVentaBusca('')}} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:pOpen?C.azulBg:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{pOpen?'Cerrar':'Asociar venta'}</button>
-                    {onReclasificarTercero&&<button onClick={()=>{ const k='ext:'+b.id; setAnioPickFor(anioPickFor===k?null:k); setTvProv('');setTvNuevo('');setTvPct('') }} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${C.tealText}`,background:anioPickFor===('ext:'+b.id)?C.tealBg:'transparent',color:C.tealText,fontSize:11,fontWeight:600,cursor:'pointer'}}>{anioPickFor===('ext:'+b.id)?'Cerrar':'Es de un externo'}</button>}
-                  </>}
-              </div>
-              {it.tipo==='sinvta'&&pOpen&&salePicker(b.client_id,(sid)=>{onSetVentaAnio&&onSetVentaAnio(b,{sale_id:sid});setAnioPickFor(null);setVentaBusca('');setVerCerradas(false)})}
-              {it.tipo==='sinvta'&&anioPickFor===('ext:'+b.id)&&extPanel(b)}
+              {exp&&<div style={{borderTop:`0.5px solid ${C.border}`,background:C.bgSoft,padding:12,display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12}}>
+                <div>
+                  <div style={kLbl}>Factura</div>
+                  <div style={{fontSize:11.5,lineHeight:1.85,color:C.text}}>
+                    <b style={{color:C.muted}}>Folio</b> {folioN(b.invoice_no||b.folio)} · <b style={{color:C.muted}}>Emisión</b> {fDMY(b.issued_at||b.date)||'—'}<br/>
+                    {b.receptor_name&&<><b style={{color:C.muted}}>Razón social</b> {b.receptor_name}<br/></>}
+                    {b.receptor_rut&&<><b style={{color:C.muted}}>RUT</b> {b.receptor_rut}<br/></>}
+                    {b.concept&&<><b style={{color:C.muted}}>Glosa</b> {b.concept}<br/></>}
+                    <b style={{color:C.muted}}>Monto</b> {fmt(monto)}{uf?` · ${uf} UF`:''}<br/>
+                    <b style={{color:C.muted}}>Estado</b> {venc?<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:C.overdueBg,color:C.overdueText}}>Vencida {dd}d</span>:b.status}
+                  </div>
+                  <div onClick={e=>{e.stopPropagation();onEdit&&onEdit(b)}} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',marginTop:8}}>Abrir factura ›</div>
+                </div>
+                <div>
+                  <div style={kLbl}>Qué hacer</div>
+                  {it.tipo==='sincli'
+                    ? <AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/>
+                    : <>
+                      {sug&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 10px',marginBottom:8}}>
+                        <div style={{fontSize:11,color:C.muted,marginBottom:7,lineHeight:1.45}}>Lo más probable: es de un externo. {sug.n} factura{sug.n!==1?'s':''} de {cli?.name||'este cliente'} ya {sug.n!==1?'las pasaste':'la pasaste'} a <b style={{color:C.accent}}>{sug.nombre}</b> reteniendo <b style={{color:C.accent}}>{sug.pct}%</b>.</div>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                          <button onClick={async()=>{ const res=onReclasificarTercero&&await onReclasificarTercero(b,{proveedorId:sug.proveedor_id,comisionPct:sug.pct}); if(res){ setExpandBill(null); onRefresh&&onRefresh() } }} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'6px 12px',background:C.greenText,color:'#fff',cursor:'pointer'}}>Es de {sug.nombre} · {sug.pct}%</button>
+                          <button onClick={()=>{ setAnioPickFor(extOpen?null:('ext:'+b.id)); setTvProv('');setTvNuevo('');setTvPct('') }} style={{fontSize:11,fontWeight:600,borderRadius:7,padding:'6px 11px',border:`1px solid ${C.tealText}`,background:extOpen?C.tealBg:'transparent',color:C.tealText,cursor:'pointer'}}>Otro externo</button>
+                        </div>
+                      </div>}
+                      {!sug&&onReclasificarTercero&&<button onClick={()=>{ setAnioPickFor(extOpen?null:('ext:'+b.id)); setTvProv('');setTvNuevo('');setTvPct('') }} style={{width:'100%',fontSize:11,fontWeight:600,borderRadius:7,padding:'7px 11px',border:`1px solid ${C.tealText}`,background:extOpen?C.tealBg:'transparent',color:C.tealText,cursor:'pointer',marginBottom:8}}>{extOpen?'Cerrar externo':'Es de un externo'}</button>}
+                      {extOpen&&extPanel(b)}
+                      <button onClick={()=>{setAnioPickFor(pOpen?null:b.id);setVentaBusca('')}} style={{width:'100%',fontSize:11,fontWeight:600,borderRadius:7,padding:'7px 11px',border:`1px solid ${C.accent}`,background:pOpen?C.azulBg:'transparent',color:C.accent,cursor:'pointer'}}>{pOpen?'Cerrar':'Asociar a una venta'}</button>
+                      {pOpen&&salePicker(b.client_id,(sid)=>{onSetVentaAnio&&onSetVentaAnio(b,{sale_id:sid});setAnioPickFor(null);setVentaBusca('');setVerCerradas(false)})}
+                    </>}
+                </div>
+              </div>}
             </div>) }
           return (
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -11965,16 +11996,30 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             {items.length===0&&sinRegN===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todo al día — no hay facturas sin cliente ni sin venta.</div>}
             {items.length===0&&sinRegN>0&&<div style={{textAlign:'center',padding:'20px 0',color:C.muted,fontSize:12.5}}>No hay facturas sin cliente ni sin venta en el sistema.</div>}
             {items.length>0&&pcOrden==='cliente'&&(()=>{
-              const byCli={}; items.forEach(it=>{ const k=it.b.client_id?('c:'+it.b.client_id):'__none__'; (byCli[k]=byCli[k]||[]).push(it) })
-              const none=byCli['__none__']||[]; none.sort((x,y)=>_fnum(y.b)-_fnum(x.b))
-              const keys=Object.keys(byCli).filter(k=>k!=='__none__').sort((a,b)=>nomDe(byCli[a][0].b).localeCompare(nomDe(byCli[b][0].b),'es'))
+              const sinVtaIt=items.filter(it=>it.tipo==='sinvta')
+              const byCli={}; sinVtaIt.forEach(it=>{ const k='c:'+it.b.client_id; (byCli[k]=byCli[k]||[]).push(it) })
+              const keys=Object.keys(byCli).sort((a,b)=>nomDe(byCli[a][0].b).localeCompare(nomDe(byCli[b][0].b),'es'))
               keys.forEach(k=>byCli[k].sort((x,y)=>_fnum(y.b)-_fnum(x.b)))
+              // Sin cliente → por razón social (RUT): asignas una vez para todas; la app aprende el RUT.
+              const byRS={}; sinCli.forEach(b=>{ const k=String(b.receptor_rut||b.receptor_name||'—'); if(!byRS[k]) byRS[k]={rut:b.receptor_rut||'',name:b.receptor_name||'Sin razón social',facs:[]}; byRS[k].facs.push(b) })
+              const rsList=Object.values(byRS).sort((a,b)=>a.name.localeCompare(b.name,'es')); rsList.forEach(g=>g.facs.sort((x,y)=>_fnum(y)-_fnum(x)))
               return (<>
-                {none.length>0&&<div>
-                  <div style={{fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:C.soonText,margin:'2px 2px 6px'}}>Sin cliente · {none.length}</div>
-                  <div style={card}>{none.map((it,i)=>faRow(it,i,true))}</div>
+                {rsList.length>0&&<div>
+                  <div style={sectLbl(C.soonText)}>Sin cliente · por razón social</div>
+                  {rsList.map((g,gi)=>{ const tot=g.facs.reduce((a,b)=>a+montoFactura(b),0); const sc=sugCliente(g.name,g.rut); return (
+                    <div key={gi} style={{border:`1px solid ${C.soonBg}`,background:'#FFFDF8',borderRadius:12,padding:'11px 12px',marginBottom:9}}>
+                      <div style={{display:'flex',alignItems:'baseline',gap:8}}>
+                        <div style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{fontSize:13.5,fontWeight:700,color:C.soonText}}>{g.name}</span>{g.rut&&<span style={{fontSize:10.5,color:'#B0812F'}}> · {g.rut}</span>}</div>
+                        <span style={{fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(tot)}</span>
+                      </div>
+                      <div style={{fontSize:10.5,color:'#B0812F',margin:'3px 0 9px'}}>{g.facs.length} factura{g.facs.length!==1?'s':''} emitida{g.facs.length!==1?'s':''} a esta razón social, sin cliente</div>
+                      {sc&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',display:'flex',alignItems:'center',gap:9,marginBottom:8}}><div style={{flex:1,fontSize:11.5,color:C.text}}>Se parece a <b style={{color:C.accent}}>{sc.name}</b>. ¿Es ese cliente?</div><button onClick={()=>{ g.facs.forEach(f=>onAssignClient&&onAssignClient(f,sc.id)) }} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'6px 12px',background:C.greenText,color:'#fff',cursor:'pointer',whiteSpace:'nowrap'}}>Sí, es {sc.name}</button></div>}
+                      <div style={{marginBottom:9}}><AsignarClienteInline bill={g.facs[0]} clients={clients} onAssign={(bill,cid)=>{ g.facs.forEach(f=>onAssignClient&&onAssignClient(f,cid)) }} label={g.facs.length>1?`Asignar cliente a las ${g.facs.length}`:'Asignar cliente'} placeholder='Buscar cliente por nombre o RUT…'/></div>
+                      <div style={{fontSize:10.5,color:'#9A7B3A',display:'flex',flexDirection:'column',gap:3}}>{g.facs.map(f=><div key={f.id} onClick={()=>onEdit&&onEdit(f)} style={{display:'flex',justifyContent:'space-between',gap:8,cursor:'pointer'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(f.invoice_no||f.folio)} · {fDMY(f.issued_at||f.date)}{f.concept?` · ${f.concept}`:''}</span><span style={{fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(montoFactura(f))}</span></div>)}</div>
+                    </div>) })}
                 </div>}
-                {keys.map(k=>{ const gi=byCli[k]; const cid=gi[0].b.client_id; const cli=(clients||[]).find(c=>String(c.id)===String(cid)); const tot=gi.reduce((a,it)=>a+montoFactura(it.b),0); const open=openClients.has(cid); const hasSales=(sales||[]).some(s=>!s.deleted_at&&String(s.client_id)===String(cid)); const gOpen=anioPickFor===('grp:'+cid); return (
+                {keys.length>0&&<div style={sectLbl(C.done)}>Con cliente · falta venta</div>}
+                {keys.map(k=>{ const gi=byCli[k]; const cid=gi[0].b.client_id; const cli=(clients||[]).find(c=>String(c.id)===String(cid)); const tot=gi.reduce((a,it)=>a+montoFactura(it.b),0); const open=openClients.has(cid); const hasSales=(sales||[]).some(s=>!s.deleted_at&&String(s.client_id)===String(cid)); const gOpen=anioPickFor===('grp:'+cid); const gsug=sugExterno(cid); return (
                   <div key={k}>
                     <div onClick={()=>toggleClient(cid)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 2px 7px'}}>
                       <span style={{fontSize:10,color:C.done,transform:open?'rotate(90deg)':'none',transition:'transform .12s',flexShrink:0}}>▸</span>
@@ -11984,10 +12029,11 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                     </div>
                     {open&&<div style={card}>
                       {gi.map((it,i)=>faRow(it,i,false))}
-                      {hasSales&&gi.length>1&&<div style={{borderTop:`0.5px solid ${C.border}`,padding:'9px 12px',background:C.bgSoft}}>
-                        <button onClick={()=>{setAnioPickFor(gOpen?null:('grp:'+cid));setVentaBusca('')}} style={{fontSize:11.5,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{gOpen?'Cerrar':`Asociar las ${gi.length} a una venta →`}</button>
-                        {gOpen&&salePicker(cid,(sid)=>{ gi.forEach(it=>onSetVentaAnio&&onSetVentaAnio(it.b,{sale_id:sid})); setAnioPickFor(null);setVentaBusca('');setVerCerradas(false) })}
+                      {gi.length>1&&<div style={{borderTop:`0.5px solid ${C.border}`,padding:'9px 12px',background:C.bgSoft,display:'flex',gap:16,flexWrap:'wrap'}}>
+                        {hasSales&&<button onClick={()=>{setAnioPickFor(gOpen?null:('grp:'+cid));setVentaBusca('')}} style={{fontSize:11.5,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{gOpen?'Cerrar':`Asociar las ${gi.length} a una venta →`}</button>}
+                        {gsug&&onReclasificarTercero&&<button onClick={async()=>{ for(const it of gi){ await onReclasificarTercero(it.b,{proveedorId:gsug.proveedor_id,comisionPct:gsug.pct}) } onRefresh&&onRefresh() }} style={{fontSize:11.5,fontWeight:700,color:C.tealText,background:'none',border:'none',cursor:'pointer',padding:0}}>Pasar las {gi.length} a {gsug.nombre} ({gsug.pct}%) →</button>}
                       </div>}
+                      {gOpen&&<div style={{padding:'0 12px 10px',background:C.bgSoft}}>{salePicker(cid,(sid)=>{ gi.forEach(it=>onSetVentaAnio&&onSetVentaAnio(it.b,{sale_id:sid})); setAnioPickFor(null);setVentaBusca('');setVerCerradas(false) })}</div>}
                     </div>}
                   </div>) })}
               </>)
