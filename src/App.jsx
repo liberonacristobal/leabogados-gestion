@@ -6629,7 +6629,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       })()}
 
       {/* Escritorio: 2 columnas (izquierda=datos · derecha=dinero/cobro). En móvil estos divs apilan igual que hoy (misma estructura, sin duplicar). */}
-      <div style={isDesktop&&formNuevo?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,alignItems:'start'}:undefined}>
+      <div style={isDesktop&&formNuevo?{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:0,alignItems:'start'}:undefined}>
       <div style={isDesktop&&formNuevo?{paddingRight:22,borderRight:`1px solid ${C.border}`}:undefined}>
       {/* 1. Cliente — reasignable: click en "Cambiar" para mover la venta/propuesta a otro cliente */}
       {(!selectedClient || reasignCli) ? (
@@ -6727,7 +6727,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <span style={{color:C.done,fontSize:12,flexShrink:0}}>{open?'▾':'›'}</span>
         </div>
         {open&&<div style={{padding:'0 12px 12px',borderTop:`1px solid ${C.bgSoft}`}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'10px 0'}}>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10,margin:'10px 0'}}>
             <Fld label={<>Área<AiBadge field='area'/></>}><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
             {(()=>{ const faltaResp = f.area!=='Subarriendo' && !String(f.responsible||'').trim(); return (
             <Fld label={<>Responsable <span style={{color:C.overdue}}>*</span><AiBadge field='responsible'/></>}>
@@ -6738,7 +6738,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </Fld>
             )})()}
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',gap:10}}>
             <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado']}/></Fld>
             <Fld label='Año'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
             <Fld label='Mes'>
@@ -6797,7 +6797,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {formNuevo&&(totalCLP>0||cobroType==='hora')&&(
         <div style={{marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:800,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8,display:'flex',alignItems:'center',gap:7}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2'><rect x='2' y='5' width='20' height='14' rx='2'/><path d='M2 10h20'/></svg>Forma de cobro</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:12}}>
             {[['cuotas','Cuotas mensuales','monto fijo en N pagos'],['mensual','Mensual recurrente','sin fecha de término'],['porcentaje','Por porcentaje','% de éxito'],['personalizada','Personalizada','cuotas a medida'],['hora','Por hora','sin monto fijo · según horas']].map(([v,l,d])=>{ const on=cobroType===v; const wide=v==='hora'; return (
               <button key={v} type='button' onClick={()=>setCobroType(v)} style={{gridColumn:wide?'1 / -1':'auto',display:'flex',alignItems:'center',gap:9,padding:'10px 11px',borderRadius:12,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',cursor:'pointer',textAlign:'left'}}>
                 <span style={{width:28,height:28,borderRadius:8,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:on?C.accent:C.bgSoft,color:on?'#fff':C.muted}}>{COBRO_IC[v]}</span>
@@ -6806,7 +6806,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </div>
           {cobroType==='mensual'&&(
             <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
+              <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10,marginBottom:8}}>
                 {moneda==='UF'
                   ? <Fld label='Monto mensual UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
                   : <Fld label='Monto mensual (CLP)'><Inp type='number' value={f.amount_clp||''} onChange={e=>up('amount_clp',e.target.value)} placeholder='Ej: 1500000'/></Fld>}
@@ -6823,7 +6823,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           )}
           {cobroType==='hora'&&(
             <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10}}>
                 <Fld label='Tarifa (UF/hora)'><Inp type='number' step='0.1' value={tarifaHoraUF} onChange={e=>setTarifaHoraUF(e.target.value)} placeholder='3.0 (estudio)'/></Fld>
                 <Fld label='Tope de horas'><Inp type='number' value={topeHoras} onChange={e=>setTopeHoras(e.target.value)} placeholder='Ej: 20'/></Fld>
               </div>
@@ -6837,7 +6837,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           )}
           {cobroType==='cuotas'&&(
             <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
+              <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10,marginBottom:8}}>
                 <Fld label='N° cuotas'><Inp type='number' min='1' max='60' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>
                 <Fld label='Inicio cobro'><Inp type='date' value={cobroInicio} onChange={e=>setCobroInicio(anio4ISO(e.target.value))}/></Fld>
               </div>
@@ -6877,7 +6877,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           {cobroType==='personalizada'&&(
             <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
               {cuotasCustom.map((c,i)=>(
-                <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
+                <div key={c.id} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                   <Fld label={i===0?'Monto':''}>
                     <Inp type='number' step={moneda==='UF'?'0.01':'1'} value={c.monto} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))} placeholder={moneda==='UF'?'0.00':'0'}/>
                   </Fld>
@@ -20792,6 +20792,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
   </Modal>)
 }
 function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSent, onClose}) {
+  const isDesktop = useIsDesktop()
   const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
   const [attachSet,setAttachSet] = useState(new Set())   // gastos de esta rendición con comprobante de respaldo
   useEffect(()=>{ const ids=det.map(e=>e.id); if(!ids.length) return; let alive=true; supabase.from('expense_attachments').select('expense_id').in('expense_id',ids).then(({data})=>{ if(alive) setAttachSet(new Set((data||[]).map(x=>String(x.expense_id)))) },()=>{}); return ()=>{alive=false} },[r.id])
@@ -20991,7 +20992,7 @@ Saludos cordiales,`
     setSending(false)
   }
   return (
-    <Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Enviar rendición</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>
+    <Modal fullscreen fsMaxWidth={isDesktop?780:640} title={<><span style={{color:C.accent}}>Enviar rendición</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>
       {!para.trim() && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:C.soon,fontSize:12,marginBottom:12}}>Falta el destinatario. Escríbelo abajo o complétalo en la ficha del cliente.</div>}
       <div style={{fontSize:11,color:C.done,marginBottom:10}}>De <span style={{color:C.muted}}>{user?.email||''}</span></div>
       {/* Destinatarios: un solo bloque con chips (Para = principal navy, Cc = copias azules). Si Para está vacío, lo que escribes/eliges entra como Para. */}
@@ -22820,11 +22821,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
       if(!clientId) continue
       await supabase.from('billing').update({client_id:clientId}).eq('invoice_no',inv.folio)
       await reconcileProgramada(clientId, inv.amount, inv.issued_at)
-      if(inv.rut){
-        await supabase.from('client_entities').upsert({client_id:clientId,rut:inv.rut,name:inv.cliente||null},{onConflict:'rut'})
-      } else if(inv.cliente){
-        await supabase.from('client_entities').upsert({client_id:clientId,rut:null,name:inv.cliente},{onConflict:'rut'})
-      }
+      if(inv.rut||inv.cliente) await aprenderRS(clientId, inv.rut||null, inv.cliente||null, clientEntities)   // fuente única: dedup por RUT si hay; por nombre dentro del cliente si no (el upsert con rut:null nunca deduplicaba → creaba duplicados)
     }
     setStep('done');onImported([])
   }
@@ -23589,7 +23586,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
   )
 }
 
-function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName,setTab,isAdmin,onOpenClientFicha}) {
+function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName,setTab,navTo,isAdmin,onOpenClientFicha}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const hoy = new Date()
   const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
@@ -23753,7 +23750,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   /* Recordatorio caja chica (solo quien tiene caja activa): sin cargar gastos hace ≥10 días y/o fondo bajo */
   const _nudge = ((nudgeCargar||nudgeLiquidar)&&(
         <div style={{padding:'14px 20px 0'}}>
-          <div onClick={()=>setTab&&setTab('cajachica')} style={{background:'#FFF8E1',border:'1px solid #F0D88A',borderRadius:10,padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
+          <div onClick={()=>navTo?navTo({tab:'cajachica'}):setTab&&setTab('cajachica')} style={{background:'#FFF8E1',border:'1px solid #F0D88A',borderRadius:10,padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
             <span style={{width:8,height:8,borderRadius:'50%',background:C.soon,flexShrink:0}}/>
             <div style={{flex:1,minWidth:0,fontSize:12,color:C.soonText,lineHeight:1.45}}>
               {nudgeLiquidar&&<div><b>Tu caja chica está baja</b> ({fmtN(miSaldo)}) — conviene liquidarla pronto.</div>}
@@ -26420,7 +26417,7 @@ function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, nota
     </div>
   )
   return (
-    <Modal fullscreenOnMobile fsMaxWidth={isDesktop?900:640} title='Recordatorio de cobro' onClose={onClose}>
+    <Modal fullscreen fsMaxWidth={isDesktop?900:640} title='Recordatorio de cobro' onClose={onClose}>
       <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {to} · <b style={{color:C.text}}>{nombre}</b> · firma <b style={{color:C.text}}>Administración</b></div>
       <div style={{display:isDesktop?'grid':'block',gridTemplateColumns:isDesktop?'1fr 1fr':undefined,gap:18}}>
         {/* Columna 1: opciones */}
@@ -34136,7 +34133,7 @@ export default function App() {
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha} onIngestPropuesta={handleIngestPropuestaDrive}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
-            {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
+            {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
             {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
@@ -34201,7 +34198,7 @@ export default function App() {
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setModal(null);navTo({tab:'billing',billingIntent:'cotejo'})}} onClose={()=>setModal(null)}/>}
         {modal?.type==='conciliar'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
-        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else setTab('cajachica') } else if(map[vista]) setTab(map[vista]) }} onClose={()=>setCopilotoOpen(false)}/>}
+        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
