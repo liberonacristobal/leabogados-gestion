@@ -7631,6 +7631,8 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
     if(!name) name = c?.name||''
     return { name: rsDisplay(name)||name||'', rut }
   }
+  // Orden de export: alfabético por cliente (cada cliente con sus facturas juntas), luego por devengo.
+  const byCliente = (a,b) => { const na=(clients.find(c=>c.id===a.client_id)?.name||'zzz').toLowerCase(), nb=(clients.find(c=>c.id===b.client_id)?.name||'zzz').toLowerCase(); return na.localeCompare(nb,'es') || String(a.due||'').localeCompare(String(b.due||'')) }
   const descargarExcel = async() => {
     // Arrastre: Programadas sin folio (no emitidas) con devengo ANTERIOR al mes seleccionado = lo que quedó sin facturar en meses previos.
     const atrasadas = billing
@@ -7659,21 +7661,13 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
         const {name:rsName, rut:rsRut} = rsRutExport(b)
         return [resp, c?.name||'Sin cliente', rsName, rsRut, b.concept||'', cuotaLbl, esCLP?'—':(ufEq?Number(ufEq.toFixed(2)):''), montoHoy??'', b.due||'']
       }
-      const cols=[{wch:16},{wch:24},{wch:26},{wch:14},{wch:30},{wch:8},{wch:10},{wch:18},{wch:16}]
+      const cols=[{wch:16},{wch:26},{wch:30},{wch:14},{wch:34},{wch:8},{wch:10},{wch:20},{wch:16}]
+      // Hoja formateada: ordenada por cliente, header congelado, filtro, y números con miles/decimales (legible al abrir).
+      const fmtSheet = arr => { const rows=[...arr].sort(byCliente).map(rowOf); const ws=XLSX.utils.aoa_to_sheet([header,...rows]); ws['!cols']=cols; ws['!autofilter']={ref:`A1:I${rows.length+1}`}; ws['!views']=[{state:'frozen',ySplit:1}]; const rng=XLSX.utils.decode_range(ws['!ref']); for(let r=1;r<=rng.e.r;r++){ const u=ws[XLSX.utils.encode_cell({r,c:6})]; if(u&&u.t==='n')u.z='0.00'; const m=ws[XLSX.utils.encode_cell({r,c:7})]; if(m&&m.t==='n')m.z='#,##0' } return ws }
       const wb=XLSX.utils.book_new()
       const vigentes = porEmitir.filter(esMesB)   // hoja "Facturar" = solo lo de este mes; lo atrasado va en la 2ª hoja
-      if(vigentes.length){
-        const ws=XLSX.utils.aoa_to_sheet([header,...vigentes.map(rowOf)])
-        ws['!cols']=cols
-        ws['!autofilter']={ref:`A1:I${vigentes.length+1}`}   // filtro de Excel: cada responsable filtra por su nombre
-        XLSX.utils.book_append_sheet(wb,ws,'Facturar')
-      }
-      if(atrasadas.length){
-        const ws2=XLSX.utils.aoa_to_sheet([header,...atrasadas.map(rowOf)])
-        ws2['!cols']=cols
-        ws2['!autofilter']={ref:`A1:I${atrasadas.length+1}`}
-        XLSX.utils.book_append_sheet(wb,ws2,'No facturadas (meses ant.)')
-      }
+      if(vigentes.length) XLSX.utils.book_append_sheet(wb,fmtSheet(vigentes),'Facturar')
+      if(atrasadas.length) XLSX.utils.book_append_sheet(wb,fmtSheet(atrasadas),'No facturadas (meses ant.)')
       XLSX.writeFile(wb,`Facturar_${mesKey}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
     setDesc(false)
@@ -7704,7 +7698,10 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
         const {name:rsName, rut:rsRut} = rsRutExport(b)
         return [c?.name||'Sin cliente', rsName, rsRut, b.concept||'', esCLP?'—':(ufEq?Number(ufEq.toFixed(2)):''), montoHoy??'', b.due||'']
       }
-      const ws=XLSX.utils.aoa_to_sheet([header,...sel.map(rowOf)]); ws['!cols']=[{wch:24},{wch:28},{wch:14},{wch:34},{wch:12},{wch:20},{wch:14}]
+      const rows=[...sel].sort(byCliente).map(rowOf)   // alfabético por cliente, facturas juntas
+      const ws=XLSX.utils.aoa_to_sheet([header,...rows]); ws['!cols']=[{wch:26},{wch:30},{wch:14},{wch:38},{wch:12},{wch:20},{wch:14}]
+      ws['!autofilter']={ref:`A1:G${rows.length+1}`}; ws['!views']=[{state:'frozen',ySplit:1}]
+      { const rng=XLSX.utils.decode_range(ws['!ref']); for(let r=1;r<=rng.e.r;r++){ const u=ws[XLSX.utils.encode_cell({r,c:4})]; if(u&&u.t==='n')u.z='0.00'; const m=ws[XLSX.utils.encode_cell({r,c:5})]; if(m&&m.t==='n')m.z='#,##0' } }
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Seleccionadas'); XLSX.writeFile(wb,`Facturar_seleccionadas_${mesKey}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
   }

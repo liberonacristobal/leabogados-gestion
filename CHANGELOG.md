@@ -359,3 +359,5 @@
 - 2026-10-01 Venta/propuesta (SaleForm): hero visual arriba — materia + honorario GIGANTE (toggle UF/CLP) + chips (area/responsable/estado) + barra de margen (honorario-costo proveedores, %) en vivo. Aditivo: lee el estado, no quita ni cambia ningun campo/logica existente; la edicion sigue abajo. Se muestra cuando hay cliente/materia/monto.
 
 - 2026-10-02 Excel facturar (mes + seleccionadas): resolver unico rsRutExport — RS+RUT por cruce (entidad/ficha + lo YA facturado al cliente, reusa rsDeFactura); Grupo Avanza ahora sale con RS+RUT (de su Factura 231) en vez de en blanco. Excel "seleccionadas" ahora muestra UF original de la cuota + conversion a la UF de hoy (antes solo Monto $).
+
+- 2026-10-02 Excel facturar: orden alfabetico por cliente (facturas de cada cliente juntas) + header congelado + autofiltro + numeros con miles (#,##0) y UF con 2 decimales → legible al abrir. Backfill RUT: 6 entidades creadas desde receptores ya facturados (Grupo Avanza/Electroson/Liberona Escala/Scrigna/TryCloud/Vecchiola) con dedup por RUT normalizado (constraint global client_entities_rut_unique).
