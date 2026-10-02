@@ -357,3 +357,5 @@
 - 2026-10-01 Facturacion landing (jerarquia C): Emitir programadas ($ del mes) y Enviar facturas pasan a dos tarjetas GRANDES arriba (acciones nucleo que mueven plata); Facturar adelantos + Cotejar SII + Cargar XML bajan a una fila "Soporte" de mini-tiles. Antes todo competia con la misma jerarquia.
 
 - 2026-10-01 Venta/propuesta (SaleForm): hero visual arriba — materia + honorario GIGANTE (toggle UF/CLP) + chips (area/responsable/estado) + barra de margen (honorario-costo proveedores, %) en vivo. Aditivo: lee el estado, no quita ni cambia ningun campo/logica existente; la edicion sigue abajo. Se muestra cuando hay cliente/materia/monto.
+
+- 2026-10-02 Excel facturar (mes + seleccionadas): resolver unico rsRutExport — RS+RUT por cruce (entidad/ficha + lo YA facturado al cliente, reusa rsDeFactura); Grupo Avanza ahora sale con RS+RUT (de su Factura 231) en vez de en blanco. Excel "seleccionadas" ahora muestra UF original de la cuota + conversion a la UF de hoy (antes solo Monto $).

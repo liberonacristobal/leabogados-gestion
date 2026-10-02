@@ -7615,6 +7615,22 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
     setBusy(null)
   }
 
+  // RS + RUT para export/listas: reusa rsDeFactura (nombre) y cruza entidad/ficha + lo YA FACTURADO al cliente para el RUT
+  // (la herramienta APRENDE de la historia). Ej.: Grupo Avanza no trae RS en la programada pero sí en su Factura 231.
+  const rsRutExport = b => {
+    const c = clients.find(x=>x.id===b.client_id)
+    const ents = (clientEntities||[]).filter(e=>e.client_id===b.client_id)
+    const entById = b.entity_id ? ents.find(e=>e.id===b.entity_id) : null
+    let name = rsDeFactura(b, clientEntities) || ''
+    let rut = [b.receptor_rut, entById&&entById.rut, ents.length===1&&ents[0].rut, ents.find(e=>e.rut&&String(e.rut).trim())?.rut, c&&c.rut].map(x=>(x||'').toString().trim()).find(Boolean) || ''
+    if(!name || !rut){   // cruce a lo ya facturado al cliente (la factura emitida más reciente con receptor)
+      const prev = (billing||[]).filter(x=>!x.deleted_at && x.client_id===b.client_id && x.invoice_no && (x.receptor_rut||x.receptor_name))
+        .sort((a,d)=>String(d.issued_at||d.due||'').localeCompare(String(a.issued_at||a.due||'')))[0]
+      if(prev){ if(!name) name=prev.receptor_name||''; if(!rut) rut=(prev.receptor_rut||'').toString().trim() }
+    }
+    if(!name) name = c?.name||''
+    return { name: rsDisplay(name)||name||'', rut }
+  }
   const descargarExcel = async() => {
     // Arrastre: Programadas sin folio (no emitidas) con devengo ANTERIOR al mes seleccionado = lo que quedó sin facturar en meses previos.
     const atrasadas = billing
@@ -7640,12 +7656,7 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
         const cuotasSale = b.sale_id ? billing.filter(x=>!x.deleted_at && x.sale_id===b.sale_id && x.billing_type!=='reembolso' && x.status!=='Anulada').sort((x,y)=>String(x.due||x.issued_at||'').localeCompare(String(y.due||y.issued_at||''))) : []
         const cidx = cuotasSale.findIndex(x=>String(x.id)===String(b.id))
         const cuotaLbl = (cuotasSale.length>1 && cidx>=0) ? `${cidx+1}/${cuotasSale.length}` : ''
-        const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id)
-        let rs=null
-        if(b.entity_id) rs=ents.find(e=>e.id===b.entity_id)||null
-        else if(ents.length===1) rs=ents[0]
-        const rsName=rs?rs.name:(ents.length>1?'definir razón social':(b.receptor_name||''))
-        const rsRut=rs?(rs.rut||''):(b.entity_id?'':(ents.length>1?'':(b.receptor_rut||'')))
+        const {name:rsName, rut:rsRut} = rsRutExport(b)
         return [resp, c?.name||'Sin cliente', rsName, rsRut, b.concept||'', cuotaLbl, esCLP?'—':(ufEq?Number(ufEq.toFixed(2)):''), montoHoy??'', b.due||'']
       }
       const cols=[{wch:16},{wch:24},{wch:26},{wch:14},{wch:30},{wch:8},{wch:10},{wch:18},{wch:16}]
@@ -7681,9 +7692,19 @@ function ChecklistFacturacion({billing, fantasmaIds=new Set(), clients, clientEn
     const sel = porEmitir.filter(b=>emitSel.has(b.id)); if(!sel.length) return
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const header=['Cliente','Razón social','RUT','Concepto','Monto ($)','Devengo']
-      const rowOf = b => { const c=clients.find(x=>x.id===b.client_id); const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const rs=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); return [c?.name||'Sin cliente', rs?rs.name:(ents.length>1?'definir razón social':(b.receptor_name||'')), rs?(rs.rut||''):(b.receptor_rut||''), b.concept||'', b.amount||0, b.due||''] }
-      const ws=XLSX.utils.aoa_to_sheet([header,...sel.map(rowOf)]); ws['!cols']=[{wch:24},{wch:26},{wch:14},{wch:32},{wch:16},{wch:14}]
+      const ufHoy = ufState.uf || null
+      const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}` : 'Monto hoy ($)'
+      const header=['Cliente','Razón social','RUT','Concepto','UF (original)',ufNota,'Devengo']
+      const rowOf = b => {
+        const c=clients.find(x=>x.id===b.client_id)
+        const venta=(sales||[]).find(v=>v.id===b.sale_id)
+        const esCLP=venta?.moneda==='CLP'; const ufVal=venta?.uf_value||null
+        const ufEq=(!esCLP&&ufVal)?(b.amount/ufVal):null                                   // UF original de la cuota (congelada al crearla)
+        const montoHoy=esCLP?(b.amount||0):((ufEq&&ufHoy)?Math.round(ufEq*ufHoy):null)       // conversión a la UF de hoy
+        const {name:rsName, rut:rsRut} = rsRutExport(b)
+        return [c?.name||'Sin cliente', rsName, rsRut, b.concept||'', esCLP?'—':(ufEq?Number(ufEq.toFixed(2)):''), montoHoy??'', b.due||'']
+      }
+      const ws=XLSX.utils.aoa_to_sheet([header,...sel.map(rowOf)]); ws['!cols']=[{wch:24},{wch:28},{wch:14},{wch:34},{wch:12},{wch:20},{wch:14}]
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Seleccionadas'); XLSX.writeFile(wb,`Facturar_seleccionadas_${mesKey}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
   }
