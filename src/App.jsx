@@ -10101,7 +10101,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       const fac = await onIngresarSII({...item.row, doc:item.doc, ...(saleId?{sale_id:saleId}:{}), import_batch_id:(await ensureBatch())}, clienteId)   // crea el batch al registrar (no en el preview) + liga la factura (a la venta existente si se pasó saleId)
       if(fac?.id){ try{ const token=await driveToken(); if(token){ const carpeta=await driveCarpetaFacturacion(token, item.row.fechaEmision||''); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const yaEnDrive=await driveBuscarEnCarpeta(token,carpeta,fname); let fileId,url2; if(yaEnDrive.length){fileId=yaEnDrive[0].id;url2=yaEnDrive[0].webViewLink||null}else{const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,carpeta,new File([u8],fname,{type:'application/pdf'}),fname); fileId=up.id;url2=up.webViewLink||null} await supabase.from('billing_attachments').delete().eq('billing_id',fac.id).eq('uploaded_by','Respaldo SII'); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:fileId,name:fname,url:url2,uploaded_by:'Respaldo SII'}) } }catch(_){} }
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
-      setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))   // por IDENTIDAD (no por índice): idx venía del grupo 'nuevas', no del array completo → marcaba la fila equivocada y la registrada se quedaba NUEVA
+      setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id,_fac:fac}:r))   // por IDENTIDAD (no por índice): idx venía del grupo 'nuevas', no del array completo → marcaba la fila equivocada y la registrada se quedaba NUEVA. _fac = la factura creada (para el link "Ver factura")
       if(fac?.id) marcarStaged(item.row.folio,'registrada',fac.id)
     }catch(e){ appAlert('No se pudo crear la factura: '+(e.message||e)) }
     setCreandoFac(null)
@@ -10964,6 +10964,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                         {r.estado==='sin_respaldo'&&<div style={{fontSize:10,color:C.soonText}}>{r.drive?'Se cayó la conexión con Drive al subir el PDF.':'No se pudo subir el PDF-respaldo.'} La factura ya quedó registrada.</div>}
                         {r.estado==='creada'&&r.sinCliente&&<div style={{fontSize:10,color:C.soonText}}>Sin cliente — asígnalo en la factura.</div>}
                       </div>
+                      {r._fac&&onEdit&&<button onClick={()=>onEdit(r._fac)} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:0}}>Ver factura ›</button>}
                       {r.url&&<a href={r.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.accent,textDecoration:'none',flexShrink:0}}>Ver PDF ↗</a>}
                       <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
                     </div>
