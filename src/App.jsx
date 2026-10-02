@@ -9011,9 +9011,11 @@ function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
   const k = crNormRut(rut)
   if(k){ const ce=clientEntities.find(e=>crNormRut(e.rut)===k); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }   // RUT ↔ razón social
   if(k){ const c=clients.find(c=>crNormRut(c.rut)===k); if(c) return c }                                                                             // RUT ↔ cliente
-  const nn=String(nombre||'').trim().toLowerCase()
-  if(nn){ const ce=clientEntities.find(e=>e.name&&e.name.toLowerCase()===nn); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
-  if(nn){ const c=clients.find(c=>c.name&&c.name.toLowerCase()===nn); if(c) return c }
+  // Fallback por NOMBRE con el normalizador robusto (NFD + colapsa espacios + trim), no toLowerCase a secas:
+  // tolera acentos/espacios/mayúsculas ("Comercial  Andes SPA" ↔ "comercial andes spa") → no vuelve a pedir asignar lo ya conocido.
+  const nn=nrmCliente(nombre)
+  if(nn){ const ce=clientEntities.find(e=>e.name&&nrmCliente(e.name)===nn); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
+  if(nn){ const c=clients.find(c=>c.name&&nrmCliente(c.name)===nn); if(c) return c }
   return null
 }
 
