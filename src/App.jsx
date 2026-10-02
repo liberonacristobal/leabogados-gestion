@@ -6560,6 +6560,46 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </div>
       )}
 
+      {/* HERO: resumen visual en vivo — materia + honorario (protagonistas) + margen. Aditivo, lee el estado; no reemplaza la edición de abajo. */}
+      {(selectedClient || (f.title||'').trim() || amountUF>0 || montoCLP>0) && (()=>{
+        const base = moneda==='UF' ? amountUF : montoCLP
+        const hon = base>0 ? (moneda==='UF' ? `${(+amountUF.toFixed(2)).toLocaleString('es-CL')} UF` : fmt(Math.round(montoCLP))) : '—'
+        const honSub = base>0
+          ? (moneda==='UF' ? `≈ ${fmt(Math.round(amountUF*ufVal))}${ufVal>0?` · UF $${Math.round(ufVal).toLocaleString('es-CL')}`:''}` : (ufVal>0?`≈ ${(+(montoCLP/ufVal).toFixed(1)).toLocaleString('es-CL')} UF`:' '))
+          : 'Ingresa el honorario abajo'
+        const margen = base - costVal
+        const pct = base>0 ? Math.max(0,Math.min(100,Math.round(margen/base*100))) : 0
+        const fmtU = v => moneda==='UF' ? `${(+v.toFixed(1)).toLocaleString('es-CL')} UF` : fmt(Math.round(v))
+        return (
+        <div style={{background:'linear-gradient(135deg,#003C50,#0A5168)',color:'#fff',borderRadius:16,padding:'16px 16px 15px',marginBottom:14}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+            <span style={{fontSize:12,fontWeight:700,opacity:.92,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient?.name||'Sin cliente'}</span>
+            {cobroType!=='hora'&&<span style={{display:'inline-flex',border:'1.5px solid rgba(255,255,255,.35)',borderRadius:8,overflow:'hidden',flexShrink:0}}>
+              {['UF','CLP'].map(mo=><span key={mo} onClick={()=>up('moneda',mo)} style={{fontSize:11,fontWeight:700,padding:'4px 11px',cursor:'pointer',background:moneda===mo?'#fff':'transparent',color:moneda===mo?C.accent:'rgba(255,255,255,.7)'}}>{mo}</span>)}
+            </span>}
+          </div>
+          <div style={{fontSize:17,fontWeight:800,letterSpacing:-.3,lineHeight:1.25,margin:'9px 0 11px'}}>{(f.title||'').trim()||'Nueva venta'}</div>
+          <div style={{fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{hon}</div>
+          <div style={{fontSize:12,opacity:.72,fontWeight:600,marginTop:4}}>{honSub}</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
+            {[f.area||'Corporativo', (f.responsible||'sin responsable'), `${f.status||'Activo'} · ${f.year||currentYear}`].map((t,i)=>(
+              <span key={i} style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'3px 10px',whiteSpace:'nowrap'}}>{t}</span>
+            ))}
+          </div>
+          {costVal>0&&base>0&&(
+            <div style={{marginTop:13,paddingTop:12,borderTop:'1px solid rgba(255,255,255,.18)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:10,fontWeight:700,opacity:.8,marginBottom:6}}><span>Margen {pct}%</span><span>Costo {100-pct}%</span></div>
+              <div style={{height:9,borderRadius:5,overflow:'hidden',display:'flex',background:'rgba(255,255,255,.15)'}}><span style={{width:pct+'%',background:'#2BD49E'}}/><span style={{width:(100-pct)+'%',background:'#E8B873'}}/></div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
+                <span style={{fontSize:11,opacity:.85}}>Margen<b style={{fontSize:14,fontWeight:800,display:'block',color:'#8FE3C4'}}>{fmtU(margen)}</b></span>
+                <span style={{fontSize:11,opacity:.85,textAlign:'right'}}>Costo proveedores<b style={{fontSize:14,fontWeight:800,display:'block'}}>{fmtU(costVal)}</b></span>
+              </div>
+            </div>
+          )}
+        </div>
+        )
+      })()}
+
       {/* 1. Cliente — reasignable: click en "Cambiar" para mover la venta/propuesta a otro cliente */}
       {(!selectedClient || reasignCli) ? (
         <Fld label={reasignCli?<>Reasignar a otro cliente {selectedClient&&<span style={{fontWeight:400,color:C.muted}}>· hoy: {selectedClient.name}</span>}</>:'Cliente'}>
