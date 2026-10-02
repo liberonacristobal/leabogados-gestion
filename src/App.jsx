@@ -5313,6 +5313,10 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
   const [drvErr,setDrvErr]=useState('')
   const [drvDone,setDrvDone]=useState({})        // file_id → sale_id ya registrados
   const [drvBusy,setDrvBusy]=useState(null)
+  // Dedup fuerte: no re-ofrecer un PDF de Drive cuyo cliente YA tiene una propuesta o venta cargada (no rechazada ni borrador).
+  // Así no se proponen propuestas ya cargadas como propuesta ni ya aceptadas (activas/terminadas).
+  const clientesConPropuestaOVenta = useMemo(()=> new Set((sales||[]).filter(s=>s.client_id&&!['Rechazada','Borrador'].includes(s.status)).map(s=>String(s.client_id))), [sales])
+  const propuestaYaCargada = (file)=>{ const m=matchClientePropuesta(file?.name||'', clients, clientEntities); return !!(m && clientesConPropuestaOVenta.has(String(m.client_id))) }
   const cargarDrive=async()=>{
     setDrvLoad(true); setDrvErr('')
     try{
@@ -5558,7 +5562,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
             const fmtKB=n=>{ const k=Number(n)||0; return k>=1048576?(k/1048576).toFixed(1)+' MB':Math.max(1,Math.round(k/1024))+' KB' }
             const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
             const fmtDrvDate=iso=>{ try{ const d=new Date(iso); return d.getDate()+' '+M[d.getMonth()] }catch(_){return ''} }
-            const sinReg=(drvFiles||[]).filter(f=>!drvDone[f.id])
+            const sinRegRaw=(drvFiles||[]).filter(f=>!drvDone[f.id]); const sinReg=sinRegRaw.filter(f=>!propuestaYaCargada(f)); const sinRegOcultas=sinRegRaw.length-sinReg.length
             const secHd=(t,n,sub)=>(<div style={{display:'flex',alignItems:'baseline',gap:8,margin:'18px 2px 8px'}}><span style={{fontSize:12,fontWeight:800,color:C.accent}}>{t}</span><span style={{fontSize:11,fontWeight:700,color:C.muted}}>{n}</span>{sub&&<span style={{fontSize:10.5,color:C.done}}>· {sub}</span>}</div>)
             return (
             <div style={isDesktop?{maxWidth:760}:undefined}>
@@ -5607,7 +5611,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
             // Agrupación por año (desc): el panel separa las propuestas por año; dentro de cada año, tardías primero.
             const byYear={}; props.forEach(s=>{ const y=String(s.year||'—'); (byYear[y]=byYear[y]||[]).push(s) })
             const propYears = Object.keys(byYear).sort((a,b)=>b.localeCompare(a))
-            const borr = borradoresFiltrados, sinReg = (drvFiles||[]).filter(f=>!drvDone[f.id]), BORR_MAX = 6
+            const borr = borradoresFiltrados, sinRegRaw = (drvFiles||[]).filter(f=>!drvDone[f.id]), sinReg = sinRegRaw.filter(f=>!propuestaYaCargada(f)), sinRegOcultas = sinRegRaw.length-sinReg.length, BORR_MAX = 6
             const colHd = (dotC,t,n,right) => <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px 8px'}}><span style={{width:8,height:8,borderRadius:'50%',background:dotC,flexShrink:0}}/><span style={{fontSize:12,fontWeight:800,color:C.accent}}>{t}</span><span style={{fontSize:11,fontWeight:700,color:C.muted}}>{n}</span><span style={{marginLeft:'auto'}}>{right}</span></div>
             const subHd = (t,c) => <div style={{fontSize:10,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.4,margin:'2px 2px 5px'}}>{t}</div>
             return (
@@ -5634,7 +5638,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                     <button onClick={cargarDrive} disabled={drvLoad} style={{fontSize:11,fontWeight:700,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'5px 11px',cursor:drvLoad?'default':'pointer',display:'inline-flex',alignItems:'center',gap:6}}>{drvLoad?<Spin/>:null}{drvFiles?'Actualizar Drive':'Buscar en Drive'}</button>)}
                   {drvErr&&<div style={{fontSize:11,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{drvErr}</div>}
                   {sinReg.length>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,background:'#fff',marginBottom:10,overflow:'hidden'}}>
-                    <div style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,padding:'8px 12px 4px'}}>En Drive · {sinReg.length} sin registrar</div>
+                    <div style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,padding:'8px 12px 4px'}}>En Drive · {sinReg.length} sin registrar{sinRegOcultas>0?<span style={{fontWeight:600,textTransform:'none',letterSpacing:0}}> · {sinRegOcultas} ya en el sistema</span>:''}</div>
                     {sinReg.slice(0,6).map((file,i)=>{ const match=matchClientePropuesta(file.name,clients,clientEntities); const cli=match?clients.find(c=>String(c.id)===String(match.client_id)):null; const busy=drvBusy===file.id; return (
                       <div key={file.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none'}}>
                         <span style={{width:24,height:30,borderRadius:5,background:C.overdueBg,border:'1px solid #F3CFCE',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:7,fontWeight:800,color:C.overdueText}}>PDF</span>
