@@ -13058,7 +13058,9 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
     gen: tercAnio.reduce((s,t)=>s+(t.monto||0),0),
     cob: tercAnio.filter(t=>t.estado==='por_pagar'||t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0),
     pag: tercAnio.filter(t=>t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0),
+    comis: tercAnio.reduce((s,t)=>s+(Number(t.comision_monto)||0),0),   // tu comisión: lo que RETIENES de facturas de externos (el % nuestro)
   }
+  const comisDe = id => (terceros||[]).filter(t=>String(t.proveedor_id)===String(id)&&billOk(t.billing_id)&&yearOf(t)===yr).reduce((s,t)=>s+(Number(t.comision_monto)||0),0)
   // "Por pagar a colaboradores" = saldo VIVO (todos los años): el cliente ya pagó, falta transferir la comisión.
   const porPagarRows = (terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id))
   const porPagarTot = porPagarRows.reduce((s,t)=>s+(t.monto||0),0)
@@ -13172,6 +13174,15 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           </div>
           <span style={{fontSize:15,fontWeight:800,color:porPagarTot>0?C.soonText:C.greenText,flexShrink:0}}>{porPagarTot>0?fmtC(porPagarTot):'$0'}</span>
         </div>
+        {foto.comis>0&&(
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:9,padding:'10px 12px',borderRadius:10,background:C.tealBg,border:`0.5px solid ${C.border}`}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.tealText}}>Tu comisión de {yr}</div>
+              <div style={{fontSize:10,color:C.tealText,opacity:.85}}>lo que retienes al facturar por externos · tu parte, no la de ellos</div>
+            </div>
+            <span style={{fontSize:15,fontWeight:800,color:C.tealText,flexShrink:0}}>{fmtC(foto.comis)}</span>
+          </div>
+        )}
 
         <div style={{display:'flex',gap:8,margin:'15px 0 12px'}}>
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar colaborador, razón social, RUT...' style={{...inp,flex:1}}/>
@@ -13182,13 +13193,13 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:1,border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {filtrados.map(p=>{
-              const debe=debeDe(p.id), gen=genDe(p.id)
+              const debe=debeDe(p.id), gen=genDe(p.id), comis=comisDe(p.id)
               return (
                 <div key={p.id} onClick={()=>abrirFicha(p.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',background:'#fff',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
                   <span style={{width:32,height:32,borderRadius:10,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(titulo(p))}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo(p)}</div>
-                    <div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social?.trim()||p.rut||'Sin RUT'}</div>
+                    <div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social?.trim()||p.rut||'Sin RUT'}{comis>0?` · tu comisión ${fmtC(comis)}`:''}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
                     {gen>0&&<span style={{fontSize:13,fontWeight:700,color:C.text}}>{fmtC(gen)}</span>}
