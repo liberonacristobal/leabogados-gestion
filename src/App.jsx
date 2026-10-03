@@ -12049,6 +12049,18 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const sinCli=(billing||[]).filter(b=>_emitBase(b)&&!b.client_id&&matchQ(b)&&matchYr(b))
           const sinVta=(billing||[]).filter(b=>_emitBase(b)&&b.client_id&&!b.sale_id&&!tercerosByBilling.has(b.id)&&['Pendiente','Vencido'].includes(b.status)&&matchQ(b)&&matchYr(b))
           const items=[...sinCli.map(b=>({b,tipo:'sincli'})),...sinVta.map(b=>({b,tipo:'sinvta'}))]
+          // Categorías nuevas (lo que hoy no se veía): pagadas sin proyecto · sin XML del SII (emitidas EN la app) · sin razón social.
+          const APP_XML='2026-06-09'
+          const pagSinVta=(billing||[]).filter(b=>_emitBase(b)&&b.client_id&&!b.sale_id&&!tercerosByBilling.has(b.id)&&b.status==='Pagado'&&matchQ(b)&&matchYr(b))
+          const sinXmlApp=(billing||[]).filter(b=>_emitBase(b)&&!b.dte_xml&&String(b.issued_at||'').slice(0,10)>=APP_XML&&matchQ(b)&&matchYr(b))
+          const sinRS=(billing||[]).filter(b=>_emitBase(b)&&!b.entity_id&&matchQ(b)&&matchYr(b))
+          // Qué le falta a una factura (chips) — una puede tener varias.
+          const faltasDe=b=>{ const f=[]; if(!b.client_id)f.push('cliente'); else if(!b.sale_id&&!tercerosByBilling.has(b.id))f.push(b.status==='Pagado'?'proyecto':'venta'); if(!b.entity_id)f.push('razón social'); if(!b.dte_xml&&String(b.issued_at||'').slice(0,10)>=APP_XML)f.push('XML'); return f }
+          const CHIP={cliente:{bg:C.overdueBg,fg:C.overdueText},venta:{bg:C.azulBg,fg:C.azulInfo},proyecto:{bg:C.bgSoft,fg:C.muted},'razón social':{bg:C.ambarBg,fg:C.coralText},XML:{bg:C.soonBg,fg:C.soonText}}
+          const fmtMon=n=>{ const a=Math.abs(n||0); return a>=1e6?'$'+(n/1e6).toFixed(1).replace('.',',')+'M':fmt(Math.round(n||0)) }
+          const chipsRow=b=>{ const fl=faltasDe(b); return fl.length?<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:4}}>{fl.map((k,ki)=>{ const cc=CHIP[k]||{bg:C.bgSoft,fg:C.muted}; return <span key={ki} style={{fontSize:9,fontWeight:700,borderRadius:5,padding:'2px 6px',background:cc.bg,color:cc.fg}}>{k==='proyecto'?'sin proyecto':'sin '+k}</span> })}</div>:null }
+          const mNoAtrib = siiSinCli.reduce((a,d)=>a+(d.monto||0),0) + sinVta.reduce((a,b)=>a+montoFactura(b),0) + pagSinVta.reduce((a,b)=>a+montoFactura(b),0)
+          const totalCompletar = siiSinCli.length+sinVta.length+pagSinVta.length+sinXmlApp.length+sinRS.length
           const MN2=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
           const mesLbl=m=>m==='—'?'Sin fecha':`${MN2[parseInt(m.slice(5),10)-1]||''} ${m.slice(0,4)}`
           const fDMY=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:'' }
@@ -12151,7 +12163,24 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               // Sin cliente → por razón social (RUT): asignas una vez para todas; la app aprende el RUT.
               const byRS={}; sinCli.forEach(b=>{ const k=String(b.receptor_rut||b.receptor_name||'—'); if(!byRS[k]) byRS[k]={rut:b.receptor_rut||'',name:b.receptor_name||'Sin razón social',facs:[]}; byRS[k].facs.push(b) })
               const rsList=Object.values(byRS).sort((a,b)=>a.name.localeCompare(b.name,'es')); rsList.forEach(g=>g.facs.sort((x,y)=>_fnum(y)-_fnum(x)))
+              // Sección de categoría (pagadas sin proyecto / sin XML / sin RS): agrupa por cliente, cada factura → editor, con chips de qué le falta.
+              const renderCat=(titulo,arr,accent)=> arr.length===0?null:<div>
+                <div style={sectLbl(accent)}>{titulo} · {arr.length}</div>
+                {(()=>{ const byC={}; arr.forEach(b=>{ const k=b.client_id||('rs:'+(b.receptor_rut||b.receptor_name||b.id)); (byC[k]=byC[k]||[]).push(b) })
+                  const ks=Object.keys(byC).sort((a,b)=>nomDe(byC[a][0]).localeCompare(nomDe(byC[b][0]),'es'))
+                  return ks.map((k,ki)=>{ const g=byC[k]; const nm=nomDe(g[0])||g[0].receptor_name||'—'; const tot=g.reduce((a,b)=>a+montoFactura(b),0); return (
+                    <div key={titulo+ki} style={{border:`0.5px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:7}}>
+                      <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}><span style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm}</span><span style={{fontSize:12.5,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span></div>
+                      {g.map(b=><div key={b.id} onClick={()=>onEdit&&onEdit(b)} style={{cursor:'pointer',marginTop:7,paddingTop:7,borderTop:`0.5px solid ${C.bgSoft}`}}><div style={{fontSize:11,color:C.muted,display:'flex',justifyContent:'space-between',gap:8}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(b.invoice_no)} · {fDMY(b.issued_at)}{b.concept?` · ${b.concept}`:''}</span><span style={{flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b))}</span></div>{chipsRow(b)}</div>)}
+                    </div>) }) })()}
+              </div>
               return (<>
+                {totalCompletar>0&&<div style={{background:C.accent,color:'#fff',borderRadius:13,padding:'13px 14px',marginBottom:6}}>
+                  <div style={{fontSize:9.5,fontWeight:700,opacity:.7,textTransform:'uppercase',letterSpacing:'.3px'}}>No atribuido a ventas / proyectos</div>
+                  <div style={{fontSize:25,fontWeight:800,letterSpacing:-.6,marginTop:2}}>{fmtMon(mNoAtrib)}</div>
+                  <div style={{fontSize:11,opacity:.9,marginTop:3}}>{totalCompletar} factura{totalCompletar!==1?'s':''} por completar</div>
+                </div>}
+                {(rsList.length>0||siiSinCli.length>0||keys.length>0||pagSinVta.length>0)&&<div style={{display:'flex',alignItems:'center',gap:7,margin:'8px 2px 2px'}}><span style={{width:7,height:7,borderRadius:'50%',background:C.overdueText}}/><span style={{fontSize:10,fontWeight:800,color:C.overdueText,textTransform:'uppercase',letterSpacing:'.4px'}}>No entra a tus cifras</span></div>}
                 {rsList.length>0&&<div>
                   <div style={sectLbl(C.soonText)}>Sin cliente · por razón social</div>
                   {rsList.map((g,gi)=>{ const tot=g.facs.reduce((a,b)=>a+montoFactura(b),0); const sc=sugCliente(g.name,g.rut); return (
@@ -12204,6 +12233,10 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                       {gOpen&&<div style={{padding:'0 12px 10px',background:C.bgSoft}}>{salePicker(cid,(sid)=>{ gi.forEach(it=>onSetVentaAnio&&onSetVentaAnio(it.b,{sale_id:sid})); setAnioPickFor(null);setVentaBusca('');setVerCerradas(false) })}</div>}
                     </div>}
                   </div>) })}
+                {renderCat('Pagadas sin proyecto',pagSinVta,C.muted)}
+                {(sinXmlApp.length>0||sinRS.length>0)&&<div style={{display:'flex',alignItems:'center',gap:7,margin:'15px 2px 2px'}}><span style={{width:7,height:7,borderRadius:'50%',background:C.soonText}}/><span style={{fontSize:10,fontWeight:800,color:C.soonText,textTransform:'uppercase',letterSpacing:'.4px'}}>Higiene de dato</span></div>}
+                {renderCat('Sin XML del SII',sinXmlApp,C.soonText)}
+                {renderCat('Sin razón social',sinRS,C.coralText)}
               </>)
             })()}
             {items.length>0&&pcOrden==='mes'&&(()=>{
