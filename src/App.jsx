@@ -8889,7 +8889,28 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const cuotasFantasma=useMemo(()=>conciliarVentasSaldadas(billing,sales,anticipos,conciliacion,ufMapFechas,fantasmaNo).filter(x=>!cfRetiradas.has(String(x.prog.id))),[billing,sales,anticipos,conciliacion,ufMapFechas,fantasmaNo,cfRetiradas])
   const cfAlta=cuotasFantasma.filter(x=>x.conf==='alta')
   const cfTotal=cuotasFantasma.reduce((a,x)=>a+(x.monto||0),0)
-  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length
+  // Salud de facturación (read-only, te lleva al dato): vistas v_ventas_salud / v_sii_ventas_sin_enlazar en prod; en demo se computa IGUAL desde los datos cargados (misma lógica que la vista, verificada 6/7/6). Cuotas sin generar y SII sin enlazar solo se ven desde las VENTAS, invisibles al radar de billing.
+  const [saludRows,setSaludRows]=useState([])
+  const [siiRows,setSiiRows]=useState([])
+  useEffect(()=>{
+    if(DEMO){
+      const bySale={}; (billing||[]).forEach(b=>{ if(b.sale_id)(bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
+      const rows=(sales||[]).filter(s=>!s.deleted_at).map(s=>{
+        const vivas=(bySale[String(s.id)]||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&!['reembolso','nota_credito'].includes(b.billing_type||''))
+        const n_cuotas=vivas.length, suma_cuotas=vivas.reduce((a,b)=>a+(Number(b.amount)||0),0)
+        const nplan=parseInt((s.cobro_config&&s.cobro_config.nCuotas)||0,10)||null
+        const faltan_cuotas=s.status==='Activo'&&s.cobro_type==='cuotas'&&nplan>1&&n_cuotas>0&&n_cuotas<nplan
+        const honorario_descuadrado=s.amount_clp!=null&&(s.amount_uf==null||s.amount_uf==='')&&!['mensual','hora'].includes(s.cobro_type)&&n_cuotas>0&&Math.abs(Number(s.amount_clp)-suma_cuotas)>1000
+        return { id:s.id, client_id:s.client_id, title:s.title, status:s.status, cobro_type:s.cobro_type, amount_clp:s.amount_clp, amount_uf:s.amount_uf, nplan, n_cuotas, suma_cuotas, faltan_cuotas, honorario_descuadrado }
+      }).filter(v=>v.faltan_cuotas||v.honorario_descuadrado)
+      setSaludRows(rows); setSiiRows([]); return
+    }
+    supabase.from('v_ventas_salud').select('*').then(({data})=>{ if(data) setSaludRows(data.filter(v=>v.faltan_cuotas||v.honorario_descuadrado)) },()=>{})
+    supabase.from('v_sii_ventas_sin_enlazar').select('*').then(({data})=>{ if(data) setSiiRows(data) },()=>{})
+  },[])
+  const cuotasSinGen=saludRows.filter(v=>v.faltan_cuotas)
+  const honorarioDesc=saludRows.filter(v=>v.honorario_descuadrado)
+  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+honorarioDesc.length+siiRows.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -8986,6 +9007,28 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
           <button onClick={()=>onResolverDupAnticipo&&onResolverDupAnticipo(manual.id,false)} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Son distintos</button>
         </div>
       </div>)}
+    </div>}
+    {cuotasSinGen.length>0&&<div style={{marginTop:14}}>{sh('Cuotas sin generar',C.azulInfo,cuotasSinGen.length)}
+      <div style={{fontSize:10,color:C.done,marginBottom:2}}>ventas Activas a cuotas con menos cuotas que el plan · solo formato "cuotas" (excluye personalizada/mensual)</div>
+      {cuotasSinGen.map(v=><div key={v.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:'pointer'}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}</span></div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>plan {v.nplan} · generadas {Number(v.n_cuotas)} · <span style={{color:C.azulInfo,fontWeight:700}}>faltan {v.nplan-Number(v.n_cuotas)}</span> {lk(()=>onOpenClientFicha&&onOpenClientFicha(v.client_id))}</div>
+      </div>)}
+    </div>}
+    {honorarioDesc.length>0&&<div style={{marginTop:14}}>{sh('Honorario ≠ lo facturado',C.soonText,honorarioDesc.length)}
+      <div style={{fontSize:10,color:C.done,marginBottom:2}}>el honorario registrado no coincide con la suma facturada · higiene de dato (lo facturado es la realidad)</div>
+      {honorarioDesc.map(v=><div key={v.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:'pointer'}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}{v.status!=='Activo'?` · ${v.status}`:''}</span></div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>registrado {fmt(v.amount_clp||0)} · facturado <span style={{fontWeight:700,color:C.text}}>{fmt(Math.round(Number(v.suma_cuotas)||0))}</span> {lk(()=>onOpenClientFicha&&onOpenClientFicha(v.client_id))}</div>
+      </div>)}
+    </div>}
+    {siiRows.length>0&&<div style={{marginTop:14}}>{sh('DTE del SII sin enlazar',C.tealText,siiRows.length)}
+      <div style={{fontSize:10,color:C.done,marginBottom:2}}>facturas emitidas en el SII que la app aún no vinculó a una venta · se cargan en Facturación</div>
+      {siiRows.slice(0,30).map((v,i)=>{ const cl=v.client_id; return <div key={(v.folio||'')+'-'+i} onClick={cl?(()=>onOpenClientFicha&&onOpenClientFicha(cl)):undefined} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:cl?'pointer':'default',display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {v.folio} · {v.receptor_name||'—'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{fmtFechaDMY(v.fecha_emision)} · {cl?'con cliente':'sin cliente'}</div></div>
+        <span style={{fontSize:12,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(Math.round(Number(v.monto)||0))}</span>
+      </div> })}
+      {siiRows.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {siiRows.length-30} más…</div>}
     </div>}
   </div>
 }
