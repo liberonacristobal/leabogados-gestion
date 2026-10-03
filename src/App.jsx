@@ -8820,7 +8820,9 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado}){
+  const [ptBusy,setPtBusy]=useState(null)        // sale_id en proceso de "pasar a Terminado"
+  const [ptDone,setPtDone]=useState(()=>new Set()) // ventas ya pasadas en esta sesión
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const [fixing,setFixing]=useState(null)   // id de la factura cuyo vencimiento se está corrigiendo
   const [ctBusy,setCtBusy]=useState(null)   // sale_id de la cuota↔tramo que se está resolviendo
@@ -9032,13 +9034,17 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         <div style={{fontSize:11,color:C.muted,marginTop:2}}>registrado {fmt(v.amount_clp||0)} · facturado <span style={{fontWeight:700,color:C.text}}>{fmt(Math.round(Number(v.suma_cuotas)||0))}</span> {lk(()=>onOpenClientFicha&&onOpenClientFicha(v.client_id))}</div>
       </div>)}
     </div>}
-    {ventasBorradorCobrado.length>0&&<div style={{marginTop:14}}>{sh('Ventas cobradas en borrador',C.overdueText,ventasBorradorCobrado.length)}
+    {ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))).length>0&&(()=>{ const vbc=ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))); return <div style={{marginTop:14}}>{sh('Ventas cobradas en borrador',C.overdueText,vbc.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>tienen facturas pagadas pero siguen en Borrador/Propuesta → quedan FUERA de "Vendido" (solo cuenta Activo/Terminado) · pásalas a Terminado</div>
-      {ventasBorradorCobrado.map(({s,emitido,pagado,n})=><div key={s.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:'pointer'}}>
-        <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'} · {s.status}</span></div>
-        <div style={{fontSize:11,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:C.overdueText}}>{fmt(pagado)}</span> cobrado{emitido!==pagado?` · ${fmt(emitido)} emitido`:''} · {n} factura{n!==1?'s':''} fuera de Vendido {lk(()=>onOpenClientFicha&&onOpenClientFicha(s.client_id))}</div>
+      {vbc.map(({s,emitido,pagado,n})=><div key={s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'} · {s.status}</span></div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:C.overdueText}}>{fmt(pagado)}</span> cobrado{emitido!==pagado?` · ${fmt(emitido)} emitido`:''} · {n} factura{n!==1?'s':''} fuera de Vendido</div>
+        {onPasarTerminado&&<div style={{display:'flex',gap:8,marginTop:7}}>
+          <button disabled={ptBusy===s.id} onClick={async()=>{ if(!(await appConfirm(`Voy a pasar "${s.title||'—'}" de ${cName(s.client_id)} a Terminado y fijar su honorario en ${fmt(emitido)} (lo facturado). Así suma en Vendido ${s.year}. Es reversible. ¿Confirmas?`))) return; setPtBusy(s.id); try{ await onPasarTerminado(s, emitido); setPtDone(d=>new Set([...d,String(s.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setPtBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:ptBusy===s.id?'default':'pointer',opacity:ptBusy===s.id?.6:1}}>{ptBusy===s.id?'Pasando…':`Pasar a Terminado · honorario ${fmt(emitido)}`}</button>
+          <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Abrir ficha</button>
+        </div>}
       </div>)}
-    </div>}
+    </div> })()}
     {siiRows.length>0&&<div style={{marginTop:14}}>{sh('DTE del SII sin enlazar',C.tealText,siiRows.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>facturas emitidas en el SII que la app aún no vinculó a una venta · se cargan en Facturación</div>
       {siiRows.slice(0,30).map((v,i)=>{ const cl=v.client_id; return <div key={(v.folio||'')+'-'+i} onClick={cl?(()=>onOpenClientFicha&&onOpenClientFicha(cl)):undefined} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:cl?'pointer':'default',display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
@@ -34748,7 +34754,7 @@ export default function App() {
             supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
-        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
+        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onPasarTerminado={async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) }} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
           if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
           // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
           const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
