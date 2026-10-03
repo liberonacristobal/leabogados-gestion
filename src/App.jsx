@@ -11623,7 +11623,11 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               const _saleAct={}; (sales||[]).forEach(s=>{ if(!s.deleted_at) _saleAct[String(s.id)]=s.status })
               const sinEmitirCands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&_saleAct[String(b.sale_id)]==='Activo'&&b.due&&b.due>='2026-06-06'&&b.due<_m1&&!noEmitirSet.has(String(b.id)))
               const sinEmitirN=sinEmitirCands.length
+              const _emitBasePC=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
+              // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
+              const facSinXmlN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.dte_xml&&String(b.issued_at||'').slice(0,10)>='2026-06-09').length
               const revisar=[
+                facSinXmlN>0&&{k:'DTE emitidos sin XML', s:'emitidas en el SII sin el XML firmado · completar', n:facSinXmlN, col:C.soonText, on:()=>go('porcompletar')},
                 sinEmitirN>0&&{k:'Cuotas vencidas sin facturar', s:'programadas de meses cerrados · por revisar', n:sinEmitirN, col:C.soonText, on:()=>go('sinemitir')},
                 rech.length>0&&{k:'DTE rechazadas por el SII', s:'revisar y volver a emitir', n:rech.length, col:C.overdueText, on:()=>go('rechazadas')},
                 dupN>0&&{k:'Ya emitidas · vincular', s:'enlazar emitidas ↔ programadas · en el Cotejo con SII', n:dupN, col:C.soonText, on:()=>setSiiOpen(true)},
@@ -11634,10 +11638,12 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               const revTotal=revisar.reduce((a,r)=>a+(r.n||0),0)
               // "Facturas sin cliente / venta": unifica 3 poblaciones que NO suman en ventas ni ingresos hasta resolverlas.
               // (1) emitidas sin cliente · (2) emitidas con cliente pero sin venta/proyecto (solo las vivas: Pendiente/Vencido, para no inundar con pagos únicos ya cerrados) · (3) sinRegN = emitidas en el SII cargadas sin registrar.
-              const _emitBasePC=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
               const facSinCliN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.client_id).length
               const facSinVtaN=(billing||[]).filter(b=>_emitBasePC(b)&&b.client_id&&!b.sale_id&&['Pendiente','Vencido'].includes(b.status)).length
-              const porCompletarN=facSinCliN+facSinVtaN+(sinRegN||0)
+              // + sin razón social + pagadas sin proyecto (todas las categorías "por completar") en el badge de la tarjeta.
+              const facSinRSN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.entity_id).length
+              const facPagSinVtaN=(billing||[]).filter(b=>_emitBasePC(b)&&b.client_id&&!b.sale_id&&b.status==='Pagado').length
+              const porCompletarN=facSinCliN+facSinVtaN+(sinRegN||0)+facSinXmlN+facSinRSN+facPagSinVtaN
               const mesTop={fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
               const mesN={fontSize:12,fontWeight:500,letterSpacing:.4,textTransform:'uppercase',marginTop:1}
               const money={fontSize:23,fontWeight:800,letterSpacing:-.6,marginTop:6,fontVariantNumeric:'tabular-nums',lineHeight:1}
