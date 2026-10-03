@@ -13047,6 +13047,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const billOk = bid => { if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }
   const debeDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='por_pagar'&&billOk(t.billing_id)).reduce((s,t)=>s+(t.monto||0),0)
   const pagadoDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0)
+  const pendDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='pendiente'&&billOk(t.billing_id)).reduce((s,t)=>s+(t.monto||0),0)  // el cliente aún no paga → su parte está EN CAMINO, todavía no le debes (no es "al día")
   const flabel={fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
@@ -13177,7 +13178,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
         {foto.comis>0&&(
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:9,padding:'10px 12px',borderRadius:10,background:C.tealBg,border:`0.5px solid ${C.border}`}}>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.tealText}}>Tu comisión de {yr}</div>
+              <div style={{fontSize:12,fontWeight:700,color:C.tealText}}>Tu ingreso por comisiones · {yr}</div>
               <div style={{fontSize:10,color:C.tealText,opacity:.85}}>lo que retienes al facturar por externos · tu parte, no la de ellos</div>
             </div>
             <span style={{fontSize:15,fontWeight:800,color:C.tealText,flexShrink:0}}>{fmtC(foto.comis)}</span>
@@ -13193,19 +13194,21 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:1,border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {filtrados.map(p=>{
-              const debe=debeDe(p.id), gen=genDe(p.id), comis=comisDe(p.id)
+              const debe=debeDe(p.id), gen=genDe(p.id), comis=comisDe(p.id), pend=pendDe(p.id)
               return (
                 <div key={p.id} onClick={()=>abrirFicha(p.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',background:'#fff',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
                   <span style={{width:32,height:32,borderRadius:10,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(titulo(p))}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo(p)}</div>
-                    <div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social?.trim()||p.rut||'Sin RUT'}{comis>0?` · tu comisión ${fmtC(comis)}`:''}</div>
+                    <div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social?.trim()||p.rut||'Sin RUT'}{comis>0?` · tu ingreso ${fmtC(comis)}`:''}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
                     {gen>0&&<span style={{fontSize:13,fontWeight:700,color:C.text}}>{fmtC(gen)}</span>}
                     {debe>0
                       ? <span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:6,padding:'2px 7px',whiteSpace:'nowrap'}}>Por pagar {fmtC(debe)}</span>
-                      : <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:6,padding:'2px 7px'}}>al día</span>}
+                      : pend>0
+                        ? <span style={{fontSize:9,fontWeight:700,color:C.azulInfo,background:C.azulBg,borderRadius:6,padding:'2px 7px',whiteSpace:'nowrap'}}>Por cobrar al cliente</span>
+                        : <span style={{fontSize:9,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:6,padding:'2px 7px'}}>al día</span>}
                   </div>
                 </div>
               )
