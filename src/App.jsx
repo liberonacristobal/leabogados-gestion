@@ -8820,9 +8820,11 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario}){
   const [ptBusy,setPtBusy]=useState(null)        // sale_id en proceso de "pasar a Terminado"
   const [ptDone,setPtDone]=useState(()=>new Set()) // ventas ya pasadas en esta sesión
+  const [ahBusy,setAhBusy]=useState(null)        // sale_id en proceso de "actualizar honorario"
+  const [ahDone,setAhDone]=useState(()=>new Set()) // honorarios ya alineados en esta sesión
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const [fixing,setFixing]=useState(null)   // id de la factura cuyo vencimiento se está corrigiendo
   const [ctBusy,setCtBusy]=useState(null)   // sale_id de la cuota↔tramo que se está resolviendo
@@ -9027,13 +9029,17 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         <div style={{fontSize:11,color:C.muted,marginTop:2}}>plan {v.nplan} · generadas {Number(v.n_cuotas)} · <span style={{color:C.azulInfo,fontWeight:700}}>faltan {v.nplan-Number(v.n_cuotas)}</span> {lk(()=>onOpenClientFicha&&onOpenClientFicha(v.client_id))}</div>
       </div>)}
     </div>}
-    {honorarioDesc.length>0&&<div style={{marginTop:14}}>{sh('Honorario ≠ lo facturado',C.soonText,honorarioDesc.length)}
+    {honorarioDesc.filter(v=>!ahDone.has(String(v.id))).length>0&&(()=>{ const hd=honorarioDesc.filter(v=>!ahDone.has(String(v.id))); return <div style={{marginTop:14}}>{sh('Honorario ≠ lo facturado',C.soonText,hd.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>el honorario registrado no coincide con la suma facturada · higiene de dato (lo facturado es la realidad)</div>
-      {honorarioDesc.map(v=><div key={v.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:'pointer'}}>
-        <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}{v.status!=='Activo'?` · ${v.status}`:''}</span></div>
-        <div style={{fontSize:11,color:C.muted,marginTop:2}}>registrado {fmt(v.amount_clp||0)} · facturado <span style={{fontWeight:700,color:C.text}}>{fmt(Math.round(Number(v.suma_cuotas)||0))}</span> {lk(()=>onOpenClientFicha&&onOpenClientFicha(v.client_id))}</div>
-      </div>)}
-    </div>}
+      {hd.map(v=>{ const fact=Math.round(Number(v.suma_cuotas)||0); return <div key={v.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}{v.status!=='Activo'?` · ${v.status}`:''}</span></div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>registrado {fmt(v.amount_clp||0)} · facturado <span style={{fontWeight:700,color:C.text}}>{fmt(fact)}</span></div>
+        {onActualizarHonorario&&<div style={{display:'flex',gap:8,marginTop:7}}>
+          <button disabled={ahBusy===v.id} onClick={async()=>{ if(!(await appConfirm(`Voy a fijar el honorario de "${v.title||'—'}" de ${cName(v.client_id)} en ${fmt(fact)} (lo facturado), en vez de ${fmt(v.amount_clp||0)}. Ajusta "Vendido"${v.year?' '+v.year:''} a la realidad. Es reversible. ¿Confirmas?`))) return; setAhBusy(v.id); try{ await onActualizarHonorario(v.id, fact); setAhDone(d=>new Set([...d,String(v.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setAhBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:ahBusy===v.id?'default':'pointer',opacity:ahBusy===v.id?.6:1}}>{ahBusy===v.id?'Ajustando…':`Honorario = ${fmt(fact)}`}</button>
+          <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Abrir ficha</button>
+        </div>}
+      </div> })}
+    </div> })()}
     {ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))).length>0&&(()=>{ const vbc=ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))); return <div style={{marginTop:14}}>{sh('Ventas cobradas en borrador',C.overdueText,vbc.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>tienen facturas pagadas pero siguen en Borrador/Propuesta → quedan FUERA de "Vendido" (solo cuenta Activo/Terminado) · pásalas a Terminado</div>
       {vbc.map(({s,emitido,pagado,n})=><div key={s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
@@ -34754,7 +34760,7 @@ export default function App() {
             supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
-        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onPasarTerminado={async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) }} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
+        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onPasarTerminado={async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) }} onActualizarHonorario={async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) }} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
           if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
           // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
           const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
