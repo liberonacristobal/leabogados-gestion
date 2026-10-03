@@ -13082,6 +13082,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const [f,setF] = useState({nombre:'',razon_social:'',rut:'',datos_pago:''})
   const [okDistinto,setOkDistinto] = useState(false)   // BLOQUEO anti-duplicados: con un proveedor parecido, no deja guardar hasta confirmar que es OTRO
   const [yr,setYr] = useState(()=>String(new Date().getFullYear()))   // filtro de año del ciclo de comisiones
+  const [showComis,setShowComis] = useState(false)   // drill: facturas que componen "Tu ingreso por comisiones"
   const {uf:ufHoy} = useUF()
   const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const fmt0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
@@ -13105,6 +13106,13 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
     comis: tercAnio.reduce((s,t)=>s+(Number(t.comision_monto)||0),0),   // tu comisión: lo que RETIENES de facturas de externos (el % nuestro)
   }
   const comisDe = id => (terceros||[]).filter(t=>String(t.proveedor_id)===String(id)&&billOk(t.billing_id)&&yearOf(t)===yr).reduce((s,t)=>s+(Number(t.comision_monto)||0),0)
+  // Drill de "Tu ingreso por comisiones": las facturas-externo del año que lo componen (cada retención).
+  const comisRows = tercAnio.filter(t=>Number(t.comision_monto)>0).map(t=>{
+    const p=(proveedores||[]).find(x=>String(x.id)===String(t.proveedor_id))
+    const b=(billing||[]).find(x=>String(x.id)===String(t.billing_id))
+    const cl=(clients||[]).find(c=>String(c.id)===String(b?.client_id))
+    return { id:t.id, prov:titulo(p), folio:b?.invoice_no||null, cliente:cl?.name||b?.receptor_name||'', comis:Number(t.comision_monto)||0, monto:Number(t.monto)||0, pct:Number(t.comision_pct)||null }
+  }).sort((a,b)=>b.comis-a.comis)
   // "Por pagar a colaboradores" = saldo VIVO (todos los años): el cliente ya pagó, falta transferir la comisión.
   const porPagarRows = (terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id))
   const porPagarTot = porPagarRows.reduce((s,t)=>s+(t.monto||0),0)
@@ -13243,15 +13251,31 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           </div>
           <span style={{fontSize:15,fontWeight:800,color:porPagarTot>0?C.soonText:C.greenText,flexShrink:0}}>{porPagarTot>0?fmtC(porPagarTot):'$0'}</span>
         </div>
-        {foto.comis>0&&(
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:9,padding:'10px 12px',borderRadius:10,background:C.tealBg,border:`0.5px solid ${C.border}`}}>
+        {foto.comis>0&&(<>
+          <div onClick={()=>setShowComis(v=>!v)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:9,padding:'10px 12px',borderRadius:showComis?'10px 10px 0 0':10,background:C.tealBg,border:`0.5px solid ${C.border}`,cursor:'pointer'}}>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.tealText}}>Tu ingreso por comisiones · {yr}</div>
-              <div style={{fontSize:10,color:C.tealText,opacity:.85}}>lo que retienes al facturar por externos · tu parte, no la de ellos</div>
+              <div style={{fontSize:12,fontWeight:700,color:C.tealText,display:'flex',alignItems:'center',gap:5}}>Tu ingreso por comisiones · {yr}<span style={{fontSize:10,transform:showComis?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block'}}>›</span></div>
+              <div style={{fontSize:10,color:C.tealText,opacity:.85}}>{showComis?`${comisRows.length} factura${comisRows.length!==1?'s':''} por tu cuenta`:'lo que retienes al facturar por externos · toca para ver el detalle'}</div>
             </div>
             <span style={{fontSize:15,fontWeight:800,color:C.tealText,flexShrink:0}}>{fmtC(foto.comis)}</span>
           </div>
-        )}
+          {showComis&&(
+            <div style={{border:`0.5px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 10px 10px',overflow:'hidden'}}>
+              {comisRows.map(r=>(
+                <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:'#fff',borderTop:`0.5px solid ${C.border}`}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.cliente||r.prov||'—'}</div>
+                    <div style={{fontSize:10.5,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.prov}{r.folio?` · N° ${r.folio}`:''}{r.pct?` · ${r.pct}%`:''}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:C.tealText}}>{fmtC(r.comis)}</div>
+                    <div style={{fontSize:10,color:C.done}}>de {fmtC(r.monto+r.comis)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>)}
 
         <div style={{display:'flex',gap:8,margin:'15px 0 12px'}}>
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar colaborador, razón social, RUT...' style={{...inp,flex:1}}/>
