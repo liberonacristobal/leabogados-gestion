@@ -32540,6 +32540,7 @@ export default function App() {
       if(ir==='duplicados') setModal({type:'conciliar',data:null})
       else if(ir==='cobros'||ir==='sinasignar') setTab('conciliacion')
       else if(ir==='sinemitir'){ setTab('billing'); setBillingIntent('sinemitir') }   // correo día 6 → radar "Cuotas vencidas sin facturar"
+      else if(ir==='cobranza') setTab('cobranza')   // correo del lunes → "Vence esta semana" abre Cobranza
     }catch(_){}
   },[user,userRole])
   // Deep-link a la ficha de un cliente (correo "cuotas sin facturar"): ?cliente=<id> → abre la ficha en Ventas (cotejo).
