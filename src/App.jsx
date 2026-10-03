@@ -13071,6 +13071,28 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const aniosDisp = [...new Set((terceros||[]).map(yearOf).filter(y=>/^\d{4}$/.test(y)))].sort((a,b)=>b.localeCompare(a))
   if(!aniosDisp.includes(yr)) aniosDisp.unshift(yr)
   const genDe = id => (terceros||[]).filter(t=>String(t.proveedor_id)===String(id)&&billOk(t.billing_id)&&yearOf(t)===yr).reduce((s,t)=>s+(t.monto||0),0)
+  // Exportar la Foto a CSV (para el contador): una fila por colaborador con actividad en el año + totales que cuadran con la foto. Cifras exactas en pesos (no abreviadas).
+  const exportarCSV = () => {
+    try{
+      const sumBy = (ts,est) => ts.filter(t=>t.estado===est).reduce((s,t)=>s+(t.monto||0),0)
+      const ids = [...new Set(tercAnio.map(t=>String(t.proveedor_id)))]
+      const rowsP = ids.map(id=>{
+        const p=(proveedores||[]).find(x=>String(x.id)===String(id))
+        const ts=tercAnio.filter(t=>String(t.proveedor_id)===String(id))
+        const g=ts.reduce((s,t)=>s+(t.monto||0),0), porPagar=sumBy(ts,'por_pagar'), pendi=sumBy(ts,'pendiente'), pagado=sumBy(ts,'pagado')
+        const com=ts.reduce((s,t)=>s+(Number(t.comision_monto)||0),0)
+        const estado = porPagar>0?'Por pagar':pendi>0?'Por cobrar al cliente':g>0?'al día':'—'
+        return { nm:titulo(p), rs:(p?.razon_social||'').trim(), rut:(p?.rut||'').trim(), g, cob:porPagar+pagado, pagado, porPagar, pendi, com, estado }
+      }).sort((a,b)=>b.g-a.g)
+      const R = n => Math.round(Number(n)||0)
+      const head = ['Colaborador','Razón social','RUT','Generadas','Cobradas','Pagadas','Por pagar ahora','Por cobrar al cliente','Tu ingreso por comisiones','Estado']
+      const body = rowsP.map(r=>[r.nm,r.rs,r.rut,R(r.g),R(r.cob),R(r.pagado),R(r.porPagar),R(r.pendi),R(r.com),r.estado])
+      const tot = ['TOTAL','','',R(foto.gen),R(foto.cob),R(foto.pag),R(rowsP.reduce((s,r)=>s+r.porPagar,0)),R(rowsP.reduce((s,r)=>s+r.pendi,0)),R(foto.comis),'']
+      const esc = c => { const s=String(c==null?'':c); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }
+      const csv = [[`Externos / colaboradores · ${yr}`],head,...body,tot].map(r=>r.map(esc).join(';')).join('\n')
+      const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`externos_colaboradores_${yr}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+    }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) }
+  }
 
   // ── Subarrendamiento (ingreso por arriendo; NO honorarios). Vive acá, no en Ventas/Clientes.
   // Fuente única: la venta marcada esSubarriendo + sus facturas (billing_type='subarriendo') + sus anticipos (pago sin factura).
@@ -13161,7 +13183,10 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
         {/* Foto del ciclo Generadas → Cobradas → Pagadas + filtro de año */}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>Ciclo de comisiones</span>
-          <select value={yr} onChange={e=>setYr(e.target.value)} style={{fontSize:12,fontWeight:600,color:C.accent,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'3px 7px',background:'#fff',outline:'none',cursor:'pointer'}}>{aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}</select>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {tercAnio.length>0&&<button onClick={exportarCSV} title='Exportar a CSV (para el contador)' style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Exportar ↓</button>}
+            <select value={yr} onChange={e=>setYr(e.target.value)} style={{fontSize:12,fontWeight:600,color:C.accent,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'3px 7px',background:'#fff',outline:'none',cursor:'pointer'}}>{aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}</select>
+          </div>
         </div>
         <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
           <div style={{flex:1,padding:'10px 12px'}}><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>Generadas</div><div style={{fontSize:19,fontWeight:700,color:C.text,letterSpacing:-.4,marginTop:3}}>{fmtC(foto.gen)}</div></div>
