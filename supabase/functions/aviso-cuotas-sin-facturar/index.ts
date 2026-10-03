@@ -148,6 +148,8 @@ Deno.serve(async (req) => {
     <div style="font-size:18px;color:${INK};font-weight:700;letter-spacing:-.2px;">Cuotas sin facturar</div>
     <div style="font-size:12.5px;color:${MUT};margin-top:6px;margin-bottom:22px;line-height:1.55;">Se emitió una cuota posterior del mismo trabajo y estas quedaron atrás. <b style="color:${INK};font-weight:700;">${olv.length} cuota${olv.length !== 1 ? "s" : ""}</b> en ${nCli} cliente${nCli !== 1 ? "s" : ""} &middot; <b style="color:${INK};font-weight:700;">${fmtCLP(total)}</b>.</div>
     ${secciones}
+    <div style="text-align:center;margin-top:22px;"><a href="${APP}/?ir=sinemitir" style="display:inline-block;background:#003C50;color:#ffffff;font-size:13px;font-weight:700;text-decoration:none;padding:11px 24px;border-radius:10px;">Ver todas en el radar &rarr;</a></div>
+    <div style="font-size:11px;color:${MUT};margin-top:10px;text-align:center;line-height:1.5;">Abre Facturación &rarr; Por revisar &rarr; Cuotas vencidas sin facturar: ahí puedes emitir, buscar en el SII o marcar &ldquo;no corresponde&rdquo;.</div>
   </div>
   <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl &middot; Liberona Escala Abogados</div></div>
 </div></body></html>`;
