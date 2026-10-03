@@ -8910,7 +8910,17 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   },[])
   const cuotasSinGen=saludRows.filter(v=>v.faltan_cuotas)
   const honorarioDesc=saludRows.filter(v=>v.honorario_descuadrado)
-  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+honorarioDesc.length+siiRows.length
+  // Ventas COBRADAS en Borrador/Propuesta: tienen facturas emitidas/pagadas pero su estado las deja FUERA de "Vendido" (que cuenta solo Activo+Terminado). Trabajo real invisible → candidato a pasar a Terminado. Client-side desde sales+billing.
+  const ventasBorradorCobrado=useMemo(()=>{
+    const bySale={}; (billing||[]).forEach(b=>{ if(b.sale_id)(bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
+    return (sales||[]).filter(s=>!s.deleted_at&&['Borrador','Propuesta'].includes(s.status)).map(s=>{
+      const bs=(bySale[String(s.id)]||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.invoice_no)
+      const emitido=bs.reduce((a,b)=>a+(Number(b.amount)||0),0)
+      const pagado=bs.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(Number(b.amount)||0),0)
+      return { s, emitido, pagado, n:bs.length }
+    }).filter(x=>x.emitido>0).sort((a,b)=>b.pagado-a.pagado)
+  },[sales,billing])
+  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -9020,6 +9030,13 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       {honorarioDesc.map(v=><div key={v.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:'pointer'}}>
         <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}{v.status!=='Activo'?` · ${v.status}`:''}</span></div>
         <div style={{fontSize:11,color:C.muted,marginTop:2}}>registrado {fmt(v.amount_clp||0)} · facturado <span style={{fontWeight:700,color:C.text}}>{fmt(Math.round(Number(v.suma_cuotas)||0))}</span> {lk(()=>onOpenClientFicha&&onOpenClientFicha(v.client_id))}</div>
+      </div>)}
+    </div>}
+    {ventasBorradorCobrado.length>0&&<div style={{marginTop:14}}>{sh('Ventas cobradas en borrador',C.overdueText,ventasBorradorCobrado.length)}
+      <div style={{fontSize:10,color:C.done,marginBottom:2}}>tienen facturas pagadas pero siguen en Borrador/Propuesta → quedan FUERA de "Vendido" (solo cuenta Activo/Terminado) · pásalas a Terminado</div>
+      {ventasBorradorCobrado.map(({s,emitido,pagado,n})=><div key={s.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:'pointer'}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'} · {s.status}</span></div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:C.overdueText}}>{fmt(pagado)}</span> cobrado{emitido!==pagado?` · ${fmt(emitido)} emitido`:''} · {n} factura{n!==1?'s':''} fuera de Vendido {lk(()=>onOpenClientFicha&&onOpenClientFicha(s.client_id))}</div>
       </div>)}
     </div>}
     {siiRows.length>0&&<div style={{marginTop:14}}>{sh('DTE del SII sin enlazar',C.tealText,siiRows.length)}
