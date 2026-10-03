@@ -62,9 +62,16 @@ serve(async (req) => {
     // ── Datos
     const { data: tasksRaw } = await sb.from("tasks").select("id,title,due,status,client_id,assignees,delegated_to,who");
     const { data: clients } = await sb.from("clients").select("id,name");
-    const { data: billsRaw, error: billsErr } = await sb.from("billing").select("amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").limit(6000);
+    const { data: billsRaw, error: billsErr } = await sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").limit(6000);
     if (billsErr) return json({ error: "No se pudo leer billing: " + billsErr.message }, 500);
     const { data: movs } = await sb.from("cartola_movimientos").select("id,fecha,monto,tipo,cliente_id,estado,n_operacion").eq("tipo", "abono").is("cliente_id", null).limit(4000);
+    // Radar "cuotas vencidas sin facturar": programadas de meses cerrados de ventas Activo, no silenciadas. Mismo criterio que el filter 'sinemitir' de la app.
+    const { data: salesRaw } = await sb.from("sales").select("id,status").limit(6000);
+    const { data: noEmitirRaw } = await sb.from("learnings").select("key").eq("kind", "cuota_no_emitir");
+    // Cobranza a CAJA (plano abono/conciliación, igual que ingresosPorAnioVenta en la app — NO billing.paid_at): conciliación a factura/anticipo × abonos no internos, por fecha del depósito. + meta del año (annual_targets).
+    const { data: concRaw } = await sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).limit(20000);
+    const { data: abRaw } = await sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").limit(20000);
+    const { data: tgtRaw } = await sb.from("annual_targets").select("year,collection_target");
 
     // deno-lint-ignore no-explicit-any
     const cname = (id: unknown) => (clients || []).find((c: any) => String(c.id) === String(id))?.name || "";
@@ -87,6 +94,32 @@ serve(async (req) => {
     const porCobrar = porCobrarB.reduce((s: number, b: Record<string, unknown>) => s + saldo(b), 0);
     const vencido = porCobrarB.filter((b: Record<string, unknown>) => String(b.due || "") && String(b.due || "") < todayCL).reduce((s: number, b: Record<string, unknown>) => s + saldo(b), 0);
     const porEnviar = vivos.filter((b: Record<string, unknown>) => b.dte_track_id && !b.email_sent_at && ["Pendiente", "Vencido"].includes(b.status as string)).length;
+
+    // ── RADAR: cuotas vencidas sin facturar (firm-wide). Programadas de MESES CERRADOS (due < 1º del mes actual, >= vida de la app 2026-06-06) de ventas Activo, no silenciadas (learnings cuota_no_emitir). CANDIDATAS por revisar — el titular es el conteo, nunca "$ perdidos".
+    const APP_START = "2026-06-06";
+    const firstOfMonth = todayCL.slice(0, 7) + "-01";
+    // deno-lint-ignore no-explicit-any
+    const saleById: Record<string, any> = {}; (salesRaw || []).forEach((s: any) => { saleById[String(s.id)] = s; });
+    const noEmitir = new Set((noEmitirRaw || []).map((r: Record<string, unknown>) => String(r.key)));
+    // deno-lint-ignore no-explicit-any
+    const sinEmitirN = vivos.filter((b: any) => b.status === "Programada" && b.sale_id && saleById[String(b.sale_id)]?.status === "Activo" && String(b.due || "") >= APP_START && String(b.due || "") < firstOfMonth && !noEmitir.has(String(b.id))).length;
+
+    // ── COBRANZA a caja del año + semana (plano abono/conciliación) y META (annual_targets).
+    const year = todayCL.slice(0, 4);
+    // deno-lint-ignore no-explicit-any
+    const abById: Record<string, any> = {}; (abRaw || []).forEach((m: any) => { if (m.es_interno !== true) abById[String(m.id)] = m; });
+    let cobradoAno = 0, cobradoSemana = 0;
+    // deno-lint-ignore no-explicit-any
+    (concRaw || []).forEach((c: any) => { const m = abById[String(c.movimiento_id)]; if (!m) return; const f = String(m.fecha || "").slice(0, 10); if (!f) return; const mto = Number(c.monto_aplicado) || 0; if (f.slice(0, 4) === year) cobradoAno += mto; if (f >= hace7) cobradoSemana += mto; });
+    // deno-lint-ignore no-explicit-any
+    const metaCobranza = Number((tgtRaw || []).find((t: any) => String(t.year) === year)?.collection_target) || 0;
+    const cobPct = metaCobranza > 0 ? Math.min(100, Math.round(cobradoAno / metaCobranza * 100)) : 0;
+
+    // ── Cobros que VENCEN esta semana (próximos 7 días): emitidas Pendiente/Vencido con due en [hoy, hoy+7].
+    const in7 = new Date(t0 + 7 * 86400000).toISOString().slice(0, 10);
+    const venceSemArr = porCobrarB.filter((b: Record<string, unknown>) => String(b.due || "") >= todayCL && String(b.due || "") <= in7);
+    const venceSemN = venceSemArr.length;
+    const venceSem = venceSemArr.reduce((s: number, b: Record<string, unknown>) => s + saldo(b), 0);
 
     // ── 3) CLIENTES: abonos por identificar (sin cliente, pendientes)
     // deno-lint-ignore no-explicit-any
@@ -163,8 +196,19 @@ serve(async (req) => {
       // 4) Facturación (firm-wide)
       {
         const kp = (v: string, k: string, col: string) => `<td style="padding:0 4px;"><div style="background:#F5F7F9;border-radius:9px;padding:9px 6px;text-align:center;"><div style="font-size:15px;font-weight:800;color:${col};">${v}</div><div style="font-size:9px;color:${MUT};text-transform:uppercase;letter-spacing:.3px;">${k}</div></div></td>`;
-        const tabla = `<table style="width:100%;border-collapse:separate;border-spacing:0;"><tr>${kp(String(emitidasSemana), "Emitidas", A)}${kp(fmShort(porCobrar), "Por cobrar", RED)}${kp(fmShort(vencido), "Vencido", vencido > 0 ? RED : A)}</tr></table>${porEnviar > 0 ? `<div style="font-size:11px;color:${AMB};margin-top:8px;">${porEnviar} factura${porEnviar !== 1 ? "s" : ""} por enviar por correo</div>` : ""}`;
-        bloques.push(sec("#EAF2FB", svgIco(A, ICO_FACT), "Facturación", "esta semana", MUT, tabla + cta("Ir a Facturación")));
+        // Hero: cobranza a caja del año vs meta (lo que un dueño quiere ver el lunes). Solo si hay meta cargada.
+        const hero = metaCobranza > 0 ? `<div style="background:#F5F7F9;border-radius:11px;padding:12px 13px;margin-bottom:9px;">
+            <div style="font-size:9.5px;font-weight:700;color:${MUT};text-transform:uppercase;letter-spacing:.3px;">Cobranza del a&ntilde;o &middot; meta ${fmShort(metaCobranza)}</div>
+            <div style="font-size:20px;font-weight:800;color:${A};margin-top:3px;">${fmShort(cobradoAno)} <span style="font-size:12px;font-weight:700;color:${MUT};">/ ${fmShort(metaCobranza)} &middot; ${cobPct}%</span></div>
+            <table style="width:100%;border-collapse:collapse;margin-top:9px;"><tr><td style="height:8px;border-radius:5px;background:#E4E8EB;padding:0;"><div style="height:8px;width:${cobPct}%;background:${GRN};border-radius:5px;font-size:0;line-height:0;">&nbsp;</div></td></tr></table>
+            <div style="font-size:10.5px;color:${MUT};margin-top:5px;">${cobPct >= 100 ? `Meta anual <b style="color:${GRN};">cumplida</b>` : `Vas en el <b style="color:${GRN};">${cobPct}%</b> &middot; faltan ${fmShort(Math.max(0, metaCobranza - cobradoAno))}`}</div>
+          </div>` : "";
+        const kpis = `<table style="width:100%;border-collapse:separate;border-spacing:0;"><tr>${kp(fmShort(cobradoSemana), "Cobrado semana", GRN)}${kp(fmShort(porCobrar), "Por cobrar", RED)}${kp(fmShort(vencido), "Vencido", vencido > 0 ? RED : A)}</tr></table>`;
+        const lineaVence = venceSemN > 0 ? `<div style="font-size:11px;color:${AMB};margin-top:8px;"><b>Vence esta semana:</b> ${venceSemN} factura${venceSemN !== 1 ? "s" : ""} &middot; ${fmShort(venceSem)} &middot; <a href="https://gestion.leabogados.cl/?ir=cobranza" style="color:${A};font-weight:700;text-decoration:none;">cobrar &rsaquo;</a></div>` : "";
+        const lineaEnviar = porEnviar > 0 ? `<div style="font-size:11px;color:${AMB};margin-top:4px;">${porEnviar} factura${porEnviar !== 1 ? "s" : ""} por enviar por correo</div>` : "";
+        // Dato menor: cuotas vencidas sin facturar, 1 línea con link al radar. Solo si hay.
+        const lineaRadar = sinEmitirN > 0 ? `<div style="font-size:11px;color:${MUT};margin-top:4px;">${sinEmitirN} cuota${sinEmitirN !== 1 ? "s" : ""} vencida${sinEmitirN !== 1 ? "s" : ""} sin facturar &middot; <a href="https://gestion.leabogados.cl/?ir=sinemitir" style="color:${A};font-weight:700;text-decoration:none;">revisar &rsaquo;</a></div>` : "";
+        bloques.push(sec("#EAF2FB", svgIco(A, ICO_FACT), "Facturación", "esta semana", MUT, hero + kpis + lineaVence + lineaEnviar + lineaRadar + cta("Ir a Facturación")));
       }
 
       if (!bloques.length) { sent.push({ to: adm.email, skipped: "sin contenido" }); continue; }
@@ -181,7 +225,7 @@ serve(async (req) => {
   <div style="background:#F5F7F9;padding:14px 24px;text-align:center;font-size:10px;color:#537281;line-height:1.6;"><b style="color:#003C50;">Liberona Escala Abogados</b> &middot; gestion.leabogados.cl<br/>Resumen semanal autom&aacute;tico &middot; cada lunes</div>
 </div></body></html>`;
 
-      if (dryRun) { sent.push({ to: adm.email, vencidas: venc.length, porVencer: pronto.length, emitidasSemana, abonosSinCli: abonosSinCli.length, bloques: bloques.length, html }); continue; }
+      if (dryRun) { sent.push({ to: adm.email, vencidas: venc.length, porVencer: pronto.length, emitidasSemana, cobradoAno, cobPct, cobradoSemana, venceSem, venceSemN, sinEmitir: sinEmitirN, abonosSinCli: abonosSinCli.length, bloques: bloques.length, html }); continue; }
       const dest = testTo || adm.email;
       await enviar(dest, subject, html);
       sent.push({ to: dest, vencidas: venc.length, porVencer: pronto.length, emitidasSemana, abonosSinCli: abonosSinCli.length });
