@@ -9875,7 +9875,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   // Deep-link desde los accesos directos del Inicio: abre el cotejo SII o el checklist "Facturas del mes"
   const [cotejoMes,setCotejoMes] = useState(null)   // mes con el que abrir el cotejo (para buscar facturas antiguas del mes de un pago)
   const [cierreOpen,setCierreOpen] = useState(false)
-  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='cierre') setCierreOpen(true); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
+  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='sinemitir') setFilter('sinemitir'); else if(intent==='cierre') setCierreOpen(true); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
   useEffect(()=>{ contarSinRegistrar() },[])   // badge del hub: cargas sin registrar // eslint-disable-line
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
@@ -32457,6 +32457,7 @@ export default function App() {
       if(userRole!=='admin') return
       if(ir==='duplicados') setModal({type:'conciliar',data:null})
       else if(ir==='cobros'||ir==='sinasignar') setTab('conciliacion')
+      else if(ir==='sinemitir'){ setTab('billing'); setBillingIntent('sinemitir') }   // correo día 6 → radar "Cuotas vencidas sin facturar"
     }catch(_){}
   },[user,userRole])
   // Deep-link a la ficha de un cliente (correo "cuotas sin facturar"): ?cliente=<id> → abre la ficha en Ventas (cotejo).
