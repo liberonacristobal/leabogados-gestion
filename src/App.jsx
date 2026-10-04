@@ -10414,7 +10414,8 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [openClients,setOpenClients] = useState(()=>new Set())
   const toggleClient = id => setOpenClients(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
   const collapseAll = () => setOpenClients(new Set())
-  const [pcOrden,setPcOrden] = useState('cliente')   // vista "Facturas sin cliente / venta": orden por cliente (batch) o por mes
+  const [pcOrden,setPcOrden] = useState('cliente')   // vista "Facturas sin cliente / venta": orden (cliente A-Z / fecha / folio ↑↓)
+  const [pcConfirm,setPcConfirm] = useState(null)    // confirmación inline antes de aplicar una asignación (no desaparece sin OK)
   // Radar "Cuotas vencidas sin facturar": programadas de meses cerrados que no se emitieron. noEmitirSet = las que el usuario marcó "no corresponde" (aprende y deja de marcarlas).
   const [noEmitirSet,setNoEmitirSet] = useState(()=>new Set())
   useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key').eq('kind','cuota_no_emitir').then(({data})=>{ setNoEmitirSet(new Set((data||[]).map(r=>String(r.key)))) },()=>{}) },[])
@@ -10941,7 +10942,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       </div>
     )
   }
-  return { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, masivoSaldo, setMasivoSaldo, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, noEmitirSet, marcarNoEmitir, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli }
+  return { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, masivoSaldo, setMasivoSaldo, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli }
 }
 
 // ─── POR SOCIO ──────────────────────────────────────────────────────────────
@@ -11036,7 +11037,7 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
 }
 
 function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onFacturarAdelantos,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onReprocesarSinAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onCrearVentaRapida,onFacturaTercero,onReclasificarTercero,onBuscarSII,proveedores=[],onSaveProveedor,onIrConciliacion,onOpenPorSocio,onIrCobranza,onConsumeAnticipos,onCrearVentaForm,intent,onIntentDone}) {
-  const { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, masivoSaldo, setMasivoSaldo, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, noEmitirSet, marcarNoEmitir, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
+  const { siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, masivoSaldo, setMasivoSaldo, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
   const [tblSort,setTblSort] = usePersisted('fd_bill_tblsort',{col:'fecha',dir:'desc'})   // Desktop "Todas": orden de la tabla, recordado entre sesiones
   const [porRevOpen,setPorRevOpen] = useState(false)   // hub: tarjeta "Por revisar" desplegada
 
@@ -11452,9 +11453,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             : filter==='sinemitir'
             ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.soonBg,color:C.soonText,flexShrink:0}}>Cuotas vencidas sin facturar</span>
             : filter==='porcompletar'
-            ? <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
-            {[['cliente','Por cliente'],['mes','Por mes']].map(([v,l])=><span key={v} onClick={()=>setPcOrden(v)} style={{fontSize:11,fontWeight:600,padding:'5px 13px',cursor:'pointer',background:pcOrden===v?C.accent:'transparent',color:pcOrden===v?'#fff':C.muted}}>{l}</span>)}
-          </div>
+            ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.overdueBg,color:C.overdueText,flexShrink:0}}>Por completar</span>
             : <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
             {[['clientes','Por cliente'],['all','Todas']].map(([v,l])=><span key={v} onClick={()=>{setFilter(v);clearSel();setSoloSinEnviar(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 13px',cursor:'pointer',background:filter===v?C.accent:'transparent',color:filter===v?'#fff':C.muted}}>{l}</span>)}
           </div>}
@@ -11463,7 +11462,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             {years.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
           <div style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:10,flexShrink:0}}>
-            <button onClick={()=>setShowBuscar(s=>!s)} title='Buscar' style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',cursor:'pointer',color:(q||showBuscar)?C.accent:C.muted,padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg></button>
+            {filter!=='porcompletar'&&<button onClick={()=>setShowBuscar(s=>!s)} title='Buscar' style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',cursor:'pointer',color:(q||showBuscar)?C.accent:C.muted,padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg></button>}
             <div style={{position:'relative'}}>
               <span onClick={()=>setMoreOpen(o=>!o)} title='Más' style={{fontSize:20,color:C.muted,cursor:'pointer',letterSpacing:1,lineHeight:1}}>⋯</span>
               {moreOpen&&<><div onClick={()=>setMoreOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/><div style={{position:'absolute',top:26,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:160,overflow:'hidden'}}>
@@ -11476,7 +11475,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&filter!=='sinanio'&&filter!=='resumen'&&<>
-        {showBuscar&&(
+        {showBuscar&&filter!=='porcompletar'&&(
           <div style={{display:'flex',gap:6,marginBottom:6}}>
             <Inp autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura...' style={{flex:1,marginBottom:0,padding:'7px 11px',fontSize:13}}/>
             <button onClick={()=>setShowBuscar(false)} style={{flexShrink:0,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Listo</button>
@@ -12040,40 +12039,38 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               </div>) })}
           </div>)
         })() : filter==='porcompletar' ? (()=>{
-          // Vista "Facturas sin cliente / venta": maestro-detalle. Sin cliente → agrupadas por razón social (asignas una vez para todas,
-          // la app aprende el RUT). Con cliente/sin venta → por cliente, cada factura expande a su detalle + la acción recomendada
-          // (default pre-armado, sin rótulo de IA): si ya pasaste facturas de este cliente a un externo, propone el mismo. Reusa
-          // cargarSinRegistrar (SII sin cargar) y aprende cada asignación.
+          // Vista "Facturas por completar": facturas emitidas con algo pendiente, en 3 categorías (sin cliente · falta venta · datos por completar).
+          // Una tarjeta por factura; orden y buscador arriba; toda asignación se confirma antes de aplicar (no desaparece sin OK). Reusa cargarSinRegistrar y aprende.
           const _emitBase=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
-          const _fnum=b=>parseInt(String(b.invoice_no||b.folio||'').replace(/\D/g,''),10)||0
-          const mesDe=b=>String(b.issued_at||b.date||b.due||'').slice(0,7)
+          const APP_XML='2026-06-09'
           const _q=(q||'').trim().toLowerCase()
           const _yr=fYear?String(fYear):''
           const nomDe=b=>(clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''
-          const matchQ=b=>!_q||`${b.invoice_no||b.folio||''} ${nomDe(b)} ${b.receptor_name||''}`.toLowerCase().includes(_q)
-          const matchYr=b=>!_yr||mesDe(b).slice(0,4)===_yr
-          const sinCli=(billing||[]).filter(b=>_emitBase(b)&&!b.client_id&&matchQ(b)&&matchYr(b))
-          const sinVta=(billing||[]).filter(b=>_emitBase(b)&&b.client_id&&!b.sale_id&&!tercerosByBilling.has(b.id)&&['Pendiente','Vencido'].includes(b.status)&&matchQ(b)&&matchYr(b))
-          const items=[...sinCli.map(b=>({b,tipo:'sincli'})),...sinVta.map(b=>({b,tipo:'sinvta'}))]
-          // Categorías nuevas (lo que hoy no se veía): pagadas sin proyecto · sin XML del SII (emitidas EN la app) · sin razón social.
-          const APP_XML='2026-06-09'
-          const pagSinVta=(billing||[]).filter(b=>_emitBase(b)&&b.client_id&&!b.sale_id&&!tercerosByBilling.has(b.id)&&b.status==='Pagado'&&matchQ(b)&&matchYr(b))
-          const sinXmlApp=(billing||[]).filter(b=>_emitBase(b)&&!b.dte_xml&&String(b.issued_at||'').slice(0,10)>=APP_XML&&matchQ(b)&&matchYr(b))
-          const sinRS=(billing||[]).filter(b=>_emitBase(b)&&!b.entity_id&&matchQ(b)&&matchYr(b))
-          // Qué le falta a una factura (chips) — una puede tener varias.
-          const faltasDe=b=>{ const f=[]; if(!b.client_id)f.push('cliente'); else if(!b.sale_id&&!tercerosByBilling.has(b.id))f.push(b.status==='Pagado'?'proyecto':'venta'); if(!b.entity_id)f.push('razón social'); if(!b.dte_xml&&String(b.issued_at||'').slice(0,10)>=APP_XML)f.push('XML'); return f }
-          const CHIP={cliente:{bg:C.overdueBg,fg:C.overdueText},venta:{bg:C.azulBg,fg:C.azulInfo},proyecto:{bg:C.bgSoft,fg:C.muted},'razón social':{bg:C.ambarBg,fg:C.coralText},XML:{bg:C.soonBg,fg:C.soonText}}
-          const fmtMon=n=>{ const a=Math.abs(n||0); return a>=1e6?'$'+(n/1e6).toFixed(1).replace('.',',')+'M':fmt(Math.round(n||0)) }
-          const chipsRow=b=>{ const fl=faltasDe(b); return fl.length?<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:4}}>{fl.map((k,ki)=>{ const cc=CHIP[k]||{bg:C.bgSoft,fg:C.muted}; return <span key={ki} style={{fontSize:9,fontWeight:700,borderRadius:5,padding:'2px 6px',background:cc.bg,color:cc.fg}}>{k==='proyecto'?'sin proyecto':'sin '+k}</span> })}</div>:null }
-          const mNoAtrib = siiSinCli.reduce((a,d)=>a+(d.monto||0),0) + sinVta.reduce((a,b)=>a+montoFactura(b),0) + pagSinVta.reduce((a,b)=>a+montoFactura(b),0)
-          const totalCompletar = siiSinCli.length+sinVta.length+pagSinVta.length+sinXmlApp.length+sinRS.length
-          const MN2=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-          const mesLbl=m=>m==='—'?'Sin fecha':`${MN2[parseInt(m.slice(5),10)-1]||''} ${m.slice(0,4)}`
+          const fmtRut=r=>{ if(!r) return ''; const [n,dv]=String(r).replace(/\./g,'').split('-'); return n? n.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(dv!==undefined?'-'+dv:'') : String(r) }
           const fDMY=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:'' }
-          const sectLbl=col=>({fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:col,margin:'4px 2px 7px'})
-          // Acciones inline de las categorías nuevas: asignar razón social (set entity_id) y buscar el XML en el SII (sync del período, como el radar).
-          const asignarRS=async(facs,entityId)=>{ const ent=(clientEntities||[]).find(e=>String(e.id)===String(entityId)); if(!ent)return; try{ for(const b of facs){ await supabase.from('billing').update({entity_id:entityId,receptor_name:ent.name,receptor_rut:ent.rut||b.receptor_rut||null,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,entity_id:entityId,receptor_name:ent.name,receptor_rut:ent.rut||x.receptor_rut}:x)) } onRefresh&&onRefresh() }catch(e){ appAlert('No se pudo asignar la razón social: '+(e.message||e)) } }
-          // Adjunta el XML firmado que YA está en la cola del SII (sii_cargas_docs.doc_json.doc) a la factura. El sync del RCV solo trae metadata, NO el XML — por eso NO sirve "buscar en el SII" para esto: hay que copiar el doc de la cola. Las que no están en la cola → hay que bajarlas del SII web.
+          const faltaXml=b=>!b.dte_xml&&String(b.issued_at||'').slice(0,10)>=APP_XML
+          const faltaRS=b=>!b.entity_id
+          const matchTxt=(nm,folio,rut)=>!_q||`${folio||''} ${nm||''} ${rut||''}`.toLowerCase().includes(_q)
+          const matchYrD=d=>!_yr||String(d||'').slice(0,4)===_yr
+          // categoría primaria de una factura (una sola, para no duplicar entre secciones)
+          const catDe=b=>{ if(!_emitBase(b)) return null; if(!b.client_id) return 'cli'; if(!b.sale_id&&!tercerosByBilling.has(b.id)&&['Pendiente','Vencido','Pagado'].includes(b.status)) return 'vta'; if(faltaRS(b)||faltaXml(b)) return 'dat'; return null }
+          // entradas unificadas: billing + docs del SII sin cliente (siiSinCli)
+          const entries=[]
+          ;(billing||[]).forEach(b=>{ const cat=catDe(b); if(!cat) return; const nm=nomDe(b); const rut=b.receptor_rut||''; if(!matchTxt(nm,folioN(b.invoice_no||b.folio),rut)||!matchYrD(b.issued_at||b.due)) return
+            const chips=[]; if(cat==='vta'){ if(b.status==='Pagado')chips.push('pagada'); else if(b.status==='Vencido')chips.push('vencida') } if(cat==='dat'){ if(faltaXml(b))chips.push('falta XML'); if(faltaRS(b))chips.push('falta razón social') }
+            entries.push({id:'b'+b.id, src:'bill', b, cat, nm, rut, folio:folioN(b.invoice_no||b.folio), fecha:b.issued_at||b.date||b.due||'', glosa:b.concept||'', monto:montoFactura(b), chips}) })
+          ;(siiSinCli||[]).forEach(d=>{ const nm=d.receptor_name||''; const rut=d.receptor_rut||''; if(!matchTxt(nm,folioN(d.folio),rut)||!matchYrD(d.fecha)) return
+            entries.push({id:'s'+(d._stageId||d.folio), src:'sii', d, cat:'cli', nm:titleCase(nm), rut, folio:folioN(d.folio), fecha:d.fecha||'', glosa:d.glosa||'', monto:d.monto||0, chips:[]}) })
+          const _num=f=>parseInt(String(f||'').replace(/\D/g,''),10)||0
+          const sortE=arr=>{ const a=[...arr]; if(pcOrden==='cliente')a.sort((x,y)=>(x.nm||'~').localeCompare(y.nm||'~','es')); else if(pcOrden==='foliodesc')a.sort((x,y)=>_num(y.folio)-_num(x.folio)); else if(pcOrden==='folioasc')a.sort((x,y)=>_num(x.folio)-_num(y.folio)); else a.sort((x,y)=>String(y.fecha||'').localeCompare(String(x.fecha||''))); return a }
+          const cliE=sortE(entries.filter(e=>e.cat==='cli'))
+          const vtaE=sortE(entries.filter(e=>e.cat==='vta'))
+          const datE=sortE(entries.filter(e=>e.cat==='dat'))
+          const totMonto=entries.reduce((a,e)=>a+(e.monto||0),0)
+          const fmtMon=n=>{ const a=Math.abs(n||0); return a>=1e6?'$'+(n/1e6).toFixed(1).replace('.',',')+'M':fmt(Math.round(n||0)) }
+          const TINT={cli:{bg:C.overdueBg,dot:C.overdueText},vta:{bg:C.azulBg,dot:C.azulInfo},dat:{bg:C.soonBg,dot:C.soonText}}
+          const sugCliente=(nm,rut)=>resolverClienteSII(rut,nm,clients,clientEntities)||null
+          // Adjunta el XML firmado que YA está en la cola del SII (sii_cargas_docs.doc_json.doc) a la factura. El sync del RCV solo trae metadata, NO el XML.
           const adjuntarXmlCola=async(facs)=>{
             try{
               const folios=[...new Set(facs.map(b=>folioN(b.invoice_no||b.folio)).filter(Boolean))]
@@ -12088,46 +12085,17 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               appAlert(`${ok} XML adjuntado${ok!==1?'s':''} desde la cola del SII.${faltan.length?`\n\n${faltan.length} no está${faltan.length!==1?'n':''} en la cola — hay que bajarla${faltan.length!==1?'s':''} del SII: N° ${faltan.join(', ')}.`:''}`)
             }catch(e){ appAlert('No se pudo adjuntar el XML: '+(e.message||e)) }
           }
-          const renderCat=(titulo,arr,accent,extra,desc)=> arr.length===0?null:<div>
-            <div style={sectLbl(accent)}>{titulo} · {arr.length}</div>
-            {desc&&<div style={{fontSize:10,color:C.done,margin:'-3px 2px 7px',lineHeight:1.4}}>{desc}</div>}
-            {(()=>{ const byC={}; arr.forEach(b=>{ const k=b.client_id||('rs:'+(b.receptor_rut||b.receptor_name||b.id)); (byC[k]=byC[k]||[]).push(b) })
-              const ks=Object.keys(byC).sort((a,b)=>nomDe(byC[a][0]).localeCompare(nomDe(byC[b][0]),'es'))
-              return ks.map((k,ki)=>{ const g=byC[k]; const nm=nomDe(g[0])||g[0].receptor_name||'—'; const tot=g.reduce((a,b)=>a+montoFactura(b),0); return (
-                <div key={titulo+ki} style={{border:`0.5px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:7}}>
-                  <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}><span style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm}</span><span style={{fontSize:12.5,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span></div>
-                  {g.map(b=><div key={b.id} onClick={()=>onEdit&&onEdit(b)} style={{cursor:'pointer',marginTop:7,paddingTop:7,borderTop:`0.5px solid ${C.bgSoft}`}}><div style={{fontSize:11,color:C.muted,display:'flex',justifyContent:'space-between',gap:8}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(b.invoice_no)} · {fDMY(b.issued_at)}{b.concept?` · ${b.concept}`:''}</span><span style={{flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b))}</span></div>{chipsRow(b)}</div>)}
-                  {extra&&extra(g)}
-                </div>) }) })()}
-          </div>
-          const extraRS=(g)=>{ const cid=g[0].client_id; if(!cid) return <div style={{fontSize:10.5,color:C.muted,marginTop:8}}>Primero asígnale cliente.</div>; const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(cid)); if(!ents.length) return <div style={{fontSize:10.5,color:C.muted,marginTop:8}}>Sin razones sociales en la ficha · <span onClick={()=>onEdit&&onEdit(g[0])} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>abrir factura</span></div>; return <div style={{marginTop:8}}><select defaultValue='' onChange={e=>{ if(e.target.value) asignarRS(g,e.target.value) }} style={{width:'100%',fontSize:11,padding:'6px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text}}><option value=''>Asignar razón social{g.length>1?` a las ${g.length}`:''}…</option>{ents.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${en.rut}`:''}</option>)}</select></div> }
-          const extraXml=(g)=><div style={{marginTop:8}}><button onClick={()=>adjuntarXmlCola(g)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Adjuntar el XML (el que esté en la cola) →</button></div>
-          const heroEl=totalCompletar>0?<div style={{background:C.accent,color:'#fff',borderRadius:13,padding:'13px 14px',marginBottom:6}}><div style={{fontSize:9.5,fontWeight:700,opacity:.7,textTransform:'uppercase',letterSpacing:'.3px'}}>No atribuido a ventas / proyectos</div><div style={{fontSize:25,fontWeight:800,letterSpacing:-.6,marginTop:2}}>{fmtMon(mNoAtrib)}</div><div style={{fontSize:11,opacity:.9,marginTop:3}}>{totalCompletar} factura{totalCompletar!==1?'s':''} por completar</div></div>:null
-          const nuevasEl=<>
-            {renderCat('Pagadas sin proyecto',pagSinVta,C.muted)}
-            {(sinXmlApp.length>0||sinRS.length>0)&&<div style={{display:'flex',alignItems:'center',gap:7,margin:'15px 2px 2px'}}><span style={{width:7,height:7,borderRadius:'50%',background:C.soonText}}/><span style={{fontSize:10,fontWeight:800,color:C.soonText,textTransform:'uppercase',letterSpacing:'.4px'}}>Higiene de dato</span></div>}
-            {renderCat('Sin XML del SII',sinXmlApp,C.soonText,extraXml,'Emitidas fuera de la app (en el portal del SII) → el sync trae la metadata pero no el XML firmado. Adjunta el que ya esté en la cola; el resto se baja del SII.')}
-            {renderCat('Sin razón social',sinRS,C.coralText,extraRS)}
-          </>
-          const card={border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}
-          const kLbl={fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done,marginBottom:5}
-          const diasVenc=b=>{ const d=String(b.due||'').slice(0,10); if(!/^\d{4}-\d\d-\d\d$/.test(d)) return null; return Math.floor((Date.now()-new Date(d+'T00:00:00').getTime())/86400000) }
-          const billById={}; (billing||[]).forEach(b=>{ billById[String(b.id)]=b })
-          // Externo recomendado para un cliente: si ya pasaste facturas suyas a un externo con %, propone el más usado (default pre-armado).
-          const sugExterno=clientId=>{ if(!clientId) return null; const cnt={}; (terceros||[]).forEach(t=>{ if(t.comision_pct==null) return; const bb2=billById[String(t.billing_id)]; if(!bb2||String(bb2.client_id)!==String(clientId)) return; const key=String(t.proveedor_id); if(!cnt[key]) cnt[key]={proveedor_id:t.proveedor_id,nombre:t.proveedor||'externo',pct:Number(t.comision_pct),n:0}; cnt[key].n++ }); const arr=Object.values(cnt).sort((a,b)=>b.n-a.n); return arr[0]||null }
-          // Cliente sugerido para una razón social sin cliente (por RUT o nombre; conservador).
-          const sugCliente=(rsName,rut)=>{ const r=resolverClienteSII(rut,rsName,clients,clientEntities); return r||null }
-          // Selector de venta, reusado por fila individual y por el lote de un cliente.
+          // Selector de venta, reusado por fila individual.
           const salePicker=(clientId,onPick)=>{ const cs=(sales||[]).filter(s=>!s.deleted_at&&String(s.client_id)===String(clientId)); const ab=cs.filter(s=>s.status==='Activo'); const base=(verCerradas||!ab.length)?cs:ab; const vq=ventaBusca.trim().toLowerCase(); const list=[...base].filter(s=>!vq||`${s.title||''} ${s.year||''}`.toLowerCase().includes(vq)).sort((a,b)=>(b.year||0)-(a.year||0)); const nCerr=cs.filter(s=>s.status!=='Activo').length; return (
-            <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
+            <div style={{marginTop:10,display:'flex',flexDirection:'column',gap:5}}>
               {cs.length===0&&<div style={{fontSize:11.5,color:C.muted}}>Este cliente no tiene ventas. Abre su ficha para crear una.</div>}
               {cs.length>4&&<input value={ventaBusca} onChange={e=>setVentaBusca(e.target.value)} placeholder='Buscar proyecto…' style={{padding:'6px 9px',borderRadius:8,border:`0.5px solid ${C.border}`,fontSize:12,outline:'none'}}/>}
-              {list.map(s=><button key={s.id} onClick={()=>onPick(s.id)} style={{textAlign:'left',padding:'7px 10px',borderRadius:8,border:`0.5px solid ${C.border}`,background:C.bgSoft,fontSize:12,color:C.text,cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'Venta'}</span><span style={{color:C.done,flexShrink:0}}>{s.year}{s.status!=='Activo'?' · cerrada':''}</span></button>)}
+              {list.map(s=><button key={s.id} onClick={()=>onPick(s.id)} style={{textAlign:'left',padding:'7px 10px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',fontSize:12,color:C.text,cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'Venta'}</span><span style={{color:C.done,flexShrink:0}}>{s.year}{s.status!=='Activo'?' · cerrada':''}</span></button>)}
               {!verCerradas&&ab.length>0&&nCerr>0&&<button onClick={()=>setVerCerradas(true)} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 0'}}>Ver también cerradas ({nCerr}) →</button>}
             </div>) }
-          // Panel "De un externo" (reclasifica una factura YA registrada): elige el externo + % que retienes; el resto es cuenta por pagar. Aprende el % por externo.
+          // Panel "De un externo" (reclasifica una factura YA registrada): elige el externo + % que retienes; el resto es cuenta por pagar.
           const extPanel=(b)=>{ const provs=[...(proveedores||[])].sort((a,z)=>((a.razon_social||a.nombre||'')).localeCompare(z.razon_social||z.nombre||'','es')); const provEl=provs.find(p=>String(p.id)===String(tvProv)); const nombreDest=provEl?(provEl.razon_social||provEl.nombre):(tvNuevo.trim()||'el externo'); const total=montoFactura(b); const pct=Math.max(0,Math.min(100,parseFloat(String(tvPct).replace(',','.'))||0)); const comision=pct>0?Math.round(total*pct/100):0; const payable=total-comision; const aprendido=tvProv&&comisionTercMap[String(tvProv)]!=null; const doExt=async()=>{ let pid=tvProv; if(!pid&&tvNuevo.trim()&&onSaveProveedor){ const np=await onSaveProveedor({nombre:tvNuevo.trim()}); if(np) pid=np.id } if(!pid){ appAlert('Elige el externo o escribe su nombre.'); return } const res=onReclasificarTercero&&await onReclasificarTercero(b,{proveedorId:pid,comisionPct:pct}); if(res){ if(pct>0)setComisionTercMap(m=>({...m,[String(pid)]:pct})); setAnioPickFor(null); onRefresh&&onRefresh() } }; return (
-            <div style={{marginTop:8,background:C.tealBg,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
+            <div style={{marginTop:10,background:C.tealBg,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
               <div style={{fontSize:10,fontWeight:700,color:C.tealText,textTransform:'uppercase',letterSpacing:.3,marginBottom:5}}>De un externo · la cobras tú, la plata es de otro</div>
               <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7,flexWrap:'wrap'}}>
                 <span style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Externo</span>
@@ -12143,144 +12111,90 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               {pct>0&&<div style={{fontSize:11,color:C.muted,marginBottom:8,lineHeight:1.4}}>Tu comisión <b style={{color:C.greenText}}>{fmt(comision)}</b> · para {nombreDest} <b style={{color:C.tealText}}>{fmt(payable)}</b> (de {fmt(total)})</div>}
               <button disabled={!tvProv&&!tvNuevo.trim()} onClick={doExt} style={{width:'100%',background:C.tealText,color:'#fff',border:'none',borderRadius:8,padding:'9px 0',fontSize:12,fontWeight:700,cursor:'pointer',opacity:(!tvProv&&!tvNuevo.trim())?.6:1}}>{pct>0?`Registrar · retienes ${fmt(comision)}`:`Pasar todo a ${nombreDest}`}</button>
             </div>) }
-          // Fila MAESTRO-DETALLE: compacta (folio/glosa/fecha/monto); al tocar expande a su detalle completo + "Qué hacer" con la acción recomendada.
-          const faRow=(it,i,showClient)=>{ const b=it.b; const cli=(clients||[]).find(c=>String(c.id)===String(b.client_id)); const monto=montoFactura(b); const uf=b.amount_uf?String(+(+b.amount_uf).toFixed(2)).replace('.',','):null; const exp=String(expandBill)===String(b.id); const pOpen=anioPickFor===b.id; const extOpen=anioPickFor===('ext:'+b.id); const dd=diasVenc(b); const venc=b.status==='Vencido'&&dd>0; const sug=it.tipo==='sinvta'?sugExterno(b.client_id):null; return (
-            <div key={b.id} style={{borderTop:i>0?`0.5px solid ${C.border}`:'none'}}>
-              <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
+          // Confirmación inline + acciones (toda asignación pasa por aquí antes de aplicarse)
+          const limpiar=()=>{ setPcConfirm(null); setAnioPickFor(null); setVentaBusca(''); setVerCerradas(false) }
+          const pedir=(e,label,run)=>{ setAnioPickFor(null); setPcConfirm({_eid:e.id,label,run}) }
+          const doAssignCli=(e,cid)=>{ const nm=(clients||[]).find(c=>String(c.id)===String(cid))?.name||'ese cliente'; pedir(e,`Asignar a ${nm}${e.src==='sii'?' — se crea la factura':''}.`,async()=>{ if(e.src==='sii'){ await crearDesdeXML({...e.d,clienteId:cid},0); setRespaldoRes&&setRespaldoRes(p=>Array.isArray(p)&&!p.length?null:p); contarSinRegistrar() } else { onAssignClient&&await onAssignClient(e.b,cid) } limpiar(); onRefresh&&onRefresh() }) }
+          const doSinCli=(e)=>pedir(e,'Agregar sin cliente — se crea la factura sin asignar.',async()=>{ await crearDesdeXML({...e.d,clienteId:null},0); setRespaldoRes&&setRespaldoRes(p=>Array.isArray(p)&&!p.length?null:p); contarSinRegistrar(); limpiar() })
+          const doVenta=(e,sid)=>{ const s=(sales||[]).find(x=>String(x.id)===String(sid)); pedir(e,`Asociar a ${s?.title||'la venta'}${s?.year?` · ${s.year}`:''}.`,async()=>{ onSetVentaAnio&&await onSetVentaAnio(e.b,{sale_id:sid}); limpiar(); onRefresh&&onRefresh() }) }
+          const doRS=(e,entId)=>{ const ent=(clientEntities||[]).find(x=>String(x.id)===String(entId)); pedir(e,`Asignar razón social ${ent?.name||''}.`,async()=>{ if(ent){ await supabase.from('billing').update({entity_id:entId,receptor_name:ent.name,receptor_rut:ent.rut||e.b.receptor_rut||null,updated_at:new Date().toISOString()}).eq('id',e.b.id); setBilling&&setBilling(p=>p.map(x=>x.id===e.b.id?{...x,entity_id:entId,receptor_name:ent.name,receptor_rut:ent.rut||x.receptor_rut}:x)) } limpiar(); onRefresh&&onRefresh() }) }
+          const doXml=(e)=>pedir(e,'Adjuntar el XML firmado que está en la cola del SII.',async()=>{ await adjuntarXmlCola([e.b]); limpiar() })
+          const sub={fontSize:10,fontWeight:600,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}
+          const entryCard=(e)=>{ const t=TINT[e.cat]; const b=e.b; const cid=b?b.client_id:null
+            const assignOpen=anioPickFor===('cli:'+e.id); const ventaOpen=b&&anioPickFor===b.id; const extOpen=b&&anioPickFor===('ext:'+b.id); const rsOpen=anioPickFor===('rs:'+e.id)
+            const confirming=pcConfirm&&pcConfirm._eid===e.id
+            const sc=e.cat==='cli'?sugCliente(e.nm,e.rut):null
+            const ents=(e.cat==='dat'&&cid)?(clientEntities||[]).filter(x=>String(x.client_id)===String(cid)):[]
+            let primLabel='', primAction=null, subEl=null
+            if(e.cat==='cli'){ primLabel='Asignar cliente'; primAction=()=>setAnioPickFor(assignOpen?null:('cli:'+e.id)); if(e.src==='sii') subEl=<span onClick={()=>doSinCli(e)} style={sub}>o sin cliente</span> }
+            else if(e.cat==='vta'){ primLabel='Asociar venta'; primAction=()=>{setAnioPickFor(ventaOpen?null:b.id);setVentaBusca('')}; if(onReclasificarTercero) subEl=<span onClick={()=>{setAnioPickFor(extOpen?null:('ext:'+b.id));setTvProv('');setTvNuevo('');setTvPct('')}} style={sub}>de un externo</span> }
+            else { if(faltaXml(b)){ primLabel='Adjuntar XML'; primAction=()=>doXml(e) } else { primLabel='Asignar RS'; primAction=()=>setAnioPickFor(rsOpen?null:('rs:'+e.id)) } }
+            return <div key={e.id} style={{background:t.bg,border:`1px solid ${C.border}`,borderRadius:13,padding:'12px 13px',marginBottom:9}}>
+              <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
                 <div style={{flex:1,minWidth:0}}>
-                  {showClient
-                    ? (cli?<div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cli.name}</div>:<div style={{fontSize:13,fontWeight:600,color:C.muted,fontStyle:'italic',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.receptor_name||'Sin cliente'}</div>)
-                    : <div style={{fontSize:12.5,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.accent,fontWeight:700}}>N° {folioN(b.invoice_no||b.folio)}</b>{b.concept?` · ${b.concept}`:''}</div>}
-                  <div style={{fontSize:10.5,color:C.done,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{showClient?`N° ${folioN(b.invoice_no||b.folio)} · `:''}{fDMY(b.issued_at||b.date)}{uf?` · ${uf} UF`:''}{venc?` · vencida ${dd}d`:''}</div>
-                </div>
-                <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(monto)}</div>
-                <span style={{color:C.done,fontSize:10,flexShrink:0,transition:'transform .12s',transform:exp?'rotate(180deg)':'none'}}>▾</span>
-              </div>
-              {exp&&<div style={{borderTop:`0.5px solid ${C.border}`,background:C.bgSoft,padding:12,display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12}}>
-                <div>
-                  <div style={kLbl}>Factura</div>
-                  <div style={{fontSize:11.5,lineHeight:1.85,color:C.text}}>
-                    <b style={{color:C.muted}}>Folio</b> {folioN(b.invoice_no||b.folio)} · <b style={{color:C.muted}}>Emisión</b> {fDMY(b.issued_at||b.date)||'—'}<br/>
-                    {b.receptor_name&&<><b style={{color:C.muted}}>Razón social</b> {b.receptor_name}<br/></>}
-                    {b.receptor_rut&&<><b style={{color:C.muted}}>RUT</b> {b.receptor_rut}<br/></>}
-                    {b.concept&&<><b style={{color:C.muted}}>Glosa</b> {b.concept}<br/></>}
-                    <b style={{color:C.muted}}>Monto</b> {fmt(monto)}{uf?` · ${uf} UF`:''}<br/>
-                    <b style={{color:C.muted}}>Estado</b> {venc?<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:C.overdueBg,color:C.overdueText}}>Vencida {dd}d</span>:b.status}
+                  <div onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,lineHeight:1.25,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:cid?'pointer':'default'}}>{e.nm||'Sin razón social'}</div>
+                  {e.rut&&<div style={{fontSize:10.5,color:C.muted,marginTop:3}}><b style={{color:C.done,fontWeight:700}}>RUT</b> {fmtRut(e.rut)}</div>}
+                  <div style={{fontSize:10.5,color:C.muted,marginTop:7,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
+                    <span style={{fontVariantNumeric:'tabular-nums'}}>N° {e.folio}{e.fecha?` · ${fDMY(e.fecha)}`:''}</span>
+                    {e.chips.map((ch,ci)=><span key={ci} style={{fontSize:8.5,fontWeight:700,letterSpacing:.2,textTransform:'uppercase',borderRadius:5,padding:'2px 6px',background:'#fff',color:C.muted}}>{ch}</span>)}
                   </div>
-                  <div onClick={e=>{e.stopPropagation();onEdit&&onEdit(b)}} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',marginTop:8}}>Abrir factura ›</div>
+                  {e.glosa&&<div onClick={()=>b&&onEdit&&onEdit(b)} style={{fontSize:11.5,color:C.text,marginTop:4,lineHeight:1.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b?'pointer':'default'}}>{e.glosa}</div>}
                 </div>
-                <div>
-                  <div style={kLbl}>Qué hacer</div>
-                  {it.tipo==='sincli'
-                    ? <AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/>
-                    : <>
-                      {sug&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 10px',marginBottom:8}}>
-                        <div style={{fontSize:11,color:C.muted,marginBottom:7,lineHeight:1.45}}>Lo más probable: es de un externo. {sug.n} factura{sug.n!==1?'s':''} de {cli?.name||'este cliente'} ya {sug.n!==1?'las pasaste':'la pasaste'} a <b style={{color:C.accent}}>{sug.nombre}</b> reteniendo <b style={{color:C.accent}}>{sug.pct}%</b>.</div>
-                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                          <button onClick={async()=>{ const res=onReclasificarTercero&&await onReclasificarTercero(b,{proveedorId:sug.proveedor_id,comisionPct:sug.pct}); if(res){ setExpandBill(null); onRefresh&&onRefresh() } }} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'6px 12px',background:C.greenText,color:'#fff',cursor:'pointer'}}>Es de {sug.nombre} · {sug.pct}%</button>
-                          <button onClick={()=>{ setAnioPickFor(extOpen?null:('ext:'+b.id)); setTvProv('');setTvNuevo('');setTvPct('') }} style={{fontSize:11,fontWeight:600,borderRadius:7,padding:'6px 11px',border:`1px solid ${C.tealText}`,background:extOpen?C.tealBg:'transparent',color:C.tealText,cursor:'pointer'}}>Otro externo</button>
-                        </div>
-                      </div>}
-                      {!sug&&onReclasificarTercero&&<button onClick={()=>{ setAnioPickFor(extOpen?null:('ext:'+b.id)); setTvProv('');setTvNuevo('');setTvPct('') }} style={{width:'100%',fontSize:11,fontWeight:600,borderRadius:7,padding:'7px 11px',border:`1px solid ${C.tealText}`,background:extOpen?C.tealBg:'transparent',color:C.tealText,cursor:'pointer',marginBottom:8}}>{extOpen?'Cerrar externo':'Es de un externo'}</button>}
-                      {extOpen&&extPanel(b)}
-                      <button onClick={()=>{setAnioPickFor(pOpen?null:b.id);setVentaBusca('')}} style={{width:'100%',fontSize:11,fontWeight:600,borderRadius:7,padding:'7px 11px',border:`1px solid ${C.accent}`,background:pOpen?C.azulBg:'transparent',color:C.accent,cursor:'pointer'}}>{pOpen?'Cerrar':'Asociar a una venta'}</button>
-                      {pOpen&&salePicker(b.client_id,(sid)=>{onSetVentaAnio&&onSetVentaAnio(b,{sale_id:sid});setAnioPickFor(null);setVentaBusca('');setVerCerradas(false)})}
-                    </>}
+                <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:9,minWidth:84}}>
+                  <div style={{fontSize:13.5,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(e.monto)}</div>
+                  <button onClick={primAction} style={{fontSize:10.5,fontWeight:700,border:`1px solid ${C.accent}`,color:C.accent,background:'transparent',borderRadius:8,padding:'6px 11px',whiteSpace:'nowrap',cursor:'pointer'}}>{primLabel}</button>
+                  {subEl}
+                </div>
+              </div>
+              {sc&&!confirming&&<div style={{fontSize:11,color:C.muted,marginTop:10}}>Se parece a <b style={{color:C.accent}}>{sc.name}</b> <span onClick={()=>doAssignCli(e,sc.id)} style={{color:C.accent,fontWeight:700,cursor:'pointer',marginLeft:3,whiteSpace:'nowrap'}}>· Sí, es ›</span></div>}
+              {assignOpen&&<div style={{marginTop:10}}><AsignarClienteInline bill={e.src==='sii'?{receptor_rut:e.rut,receptor_name:e.nm}:e.b} clients={clients} onAssign={(_,cid2)=>doAssignCli(e,cid2)} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/></div>}
+              {ventaOpen&&salePicker(cid,(sid)=>doVenta(e,sid))}
+              {extOpen&&extPanel(b)}
+              {rsOpen&&<div style={{marginTop:10}}>{ents.length?<select defaultValue='' onChange={ev=>{ if(ev.target.value) doRS(e,ev.target.value) }} style={{width:'100%',fontSize:11.5,padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text}}><option value=''>Asignar razón social…</option>{ents.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${fmtRut(en.rut)}`:''}</option>)}</select>:<div style={{fontSize:10.5,color:C.muted}}>Sin razones sociales en la ficha · <span onClick={()=>onEdit&&onEdit(b)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>abrir factura</span></div>}</div>}
+              {confirming&&<div style={{marginTop:11,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:10,padding:'11px 13px',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+                <div style={{flex:'1 1 150px',minWidth:0,fontSize:12,color:C.text,lineHeight:1.4}}>{pcConfirm.label}</div>
+                <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0,marginLeft:'auto'}}>
+                  <button onClick={()=>setPcConfirm(null)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={()=>{ const r=pcConfirm.run; r&&r() }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer'}}>Confirmar</button>
                 </div>
               </div>}
+            </div>
+          }
+          const catSection=(cat,label,arr)=>{ if(!arr.length) return null; const t=TINT[cat]; const tot=arr.reduce((a,e)=>a+(e.monto||0),0); return (
+            <div style={{marginTop:6}}>
+              <div style={{display:'flex',alignItems:'center',gap:7,margin:'0 2px 9px'}}>
+                <span style={{width:6,height:6,borderRadius:'50%',background:t.dot,flexShrink:0}}/>
+                <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:C.muted}}>{label}</span>
+                <span style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.done}}>{arr.length} · {fmtMon(tot)}</span>
+              </div>
+              {arr.map(entryCard)}
             </div>) }
           return (
-          <div style={{display:'flex',flexDirection:'column',gap:10}}>
-            <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'0 2px'}}>Facturas emitidas que todavía no entran a tus cifras. Asígnales cliente o venta para que cuenten en ventas e ingresos.</div>
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <div style={{flex:1,display:'flex',alignItems:'center',gap:8,border:`1px solid ${C.border}`,borderRadius:11,padding:'8px 11px',background:C.bgSoft,minWidth:0}}>
+                <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.4' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
+                <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura, RUT…' style={{border:'none',background:'transparent',outline:'none',fontSize:12.5,color:C.text,width:'100%'}}/>
+              </div>
+              <select value={pcOrden} onChange={e=>setPcOrden(e.target.value)} style={{fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:11,padding:'8px 10px',background:C.bgSoft,color:C.accent,cursor:'pointer',flexShrink:0}}>
+                <option value='cliente'>Cliente (A–Z)</option>
+                <option value='fecha'>Fecha · nuevas</option>
+                <option value='foliodesc'>Folio ↓</option>
+                <option value='folioasc'>Folio ↑</option>
+              </select>
+            </div>
+            <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'-4px 2px 0'}}>{entries.length} factura{entries.length!==1?'s':''} sin cliente, sin venta o con un dato pendiente · <b style={{color:C.accent}}>{fmtMon(totMonto)}</b></div>
             {sinRegN>0&&<div onClick={()=>cargarSinRegistrar()} style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
               <span style={{width:30,height:30,borderRadius:9,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg></span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{sinRegN} emitida{sinRegN!==1?'s':''} en el SII sin cargar</div><div style={{fontSize:11,color:C.muted}}>Cárgalas para registrarlas en el sistema</div></div>
               <span style={{color:C.accent,fontSize:16,flexShrink:0}}>›</span>
             </div>}
-            {items.length===0&&siiSinCli.length===0&&sinRegN===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todo al día — no hay facturas sin cliente ni sin venta.</div>}
-            {items.length===0&&siiSinCli.length===0&&sinRegN>0&&<div style={{textAlign:'center',padding:'20px 0',color:C.muted,fontSize:12.5}}>No hay facturas sin cliente ni sin venta en el sistema.</div>}
-            {(items.length>0||siiSinCli.length>0)&&pcOrden==='cliente'&&(()=>{
-              const sinVtaIt=items.filter(it=>it.tipo==='sinvta')
-              const byCli={}; sinVtaIt.forEach(it=>{ const k='c:'+it.b.client_id; (byCli[k]=byCli[k]||[]).push(it) })
-              const keys=Object.keys(byCli).sort((a,b)=>nomDe(byCli[a][0].b).localeCompare(nomDe(byCli[b][0].b),'es'))
-              keys.forEach(k=>byCli[k].sort((x,y)=>_fnum(y.b)-_fnum(x.b)))
-              // Sin cliente → por razón social (RUT): asignas una vez para todas; la app aprende el RUT.
-              const byRS={}; sinCli.forEach(b=>{ const k=String(b.receptor_rut||b.receptor_name||'—'); if(!byRS[k]) byRS[k]={rut:b.receptor_rut||'',name:b.receptor_name||'Sin razón social',facs:[]}; byRS[k].facs.push(b) })
-              const rsList=Object.values(byRS).sort((a,b)=>a.name.localeCompare(b.name,'es')); rsList.forEach(g=>g.facs.sort((x,y)=>_fnum(y)-_fnum(x)))
-              return (<>
-                {heroEl}
-                {(rsList.length>0||siiSinCli.length>0||keys.length>0||pagSinVta.length>0)&&<div style={{display:'flex',alignItems:'center',gap:7,margin:'8px 2px 2px'}}><span style={{width:7,height:7,borderRadius:'50%',background:C.overdueText}}/><span style={{fontSize:10,fontWeight:800,color:C.overdueText,textTransform:'uppercase',letterSpacing:'.4px'}}>No entra a tus cifras</span></div>}
-                {rsList.length>0&&<div>
-                  <div style={sectLbl(C.soonText)}>Sin cliente · por razón social</div>
-                  {rsList.map((g,gi)=>{ const tot=g.facs.reduce((a,b)=>a+montoFactura(b),0); const sc=sugCliente(g.name,g.rut); return (
-                    <div key={gi} style={{border:`1px solid ${C.soonBg}`,background:'#FFFDF8',borderRadius:12,padding:'11px 12px',marginBottom:9}}>
-                      <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-                        <div style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{fontSize:13.5,fontWeight:700,color:C.soonText}}>{g.name}</span>{g.rut&&<span style={{fontSize:10.5,color:'#B0812F'}}> · {g.rut}</span>}</div>
-                        <span style={{fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(tot)}</span>
-                      </div>
-                      <div style={{fontSize:10.5,color:'#B0812F',margin:'3px 0 9px'}}>{g.facs.length} factura{g.facs.length!==1?'s':''} emitida{g.facs.length!==1?'s':''} a esta razón social, sin cliente</div>
-                      {sc&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',display:'flex',alignItems:'center',gap:9,marginBottom:8}}><div style={{flex:1,fontSize:11.5,color:C.text}}>Se parece a <b style={{color:C.accent}}>{sc.name}</b>. ¿Es ese cliente?</div><button onClick={()=>{ g.facs.forEach(f=>onAssignClient&&onAssignClient(f,sc.id)) }} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'6px 12px',background:C.greenText,color:'#fff',cursor:'pointer',whiteSpace:'nowrap'}}>Sí, es {sc.name}</button></div>}
-                      <div style={{marginBottom:9}}><AsignarClienteInline bill={g.facs[0]} clients={clients} onAssign={(bill,cid)=>{ g.facs.forEach(f=>onAssignClient&&onAssignClient(f,cid)) }} label={g.facs.length>1?`Asignar cliente a las ${g.facs.length}`:'Asignar cliente'} placeholder='Buscar cliente por nombre o RUT…'/></div>
-                      <div style={{fontSize:10.5,color:'#9A7B3A',display:'flex',flexDirection:'column',gap:3}}>{g.facs.map(f=><div key={f.id} onClick={()=>onEdit&&onEdit(f)} style={{display:'flex',justifyContent:'space-between',gap:8,cursor:'pointer'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(f.invoice_no||f.folio)} · {fDMY(f.issued_at||f.date)}{f.concept?` · ${f.concept}`:''}</span><span style={{fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(montoFactura(f))}</span></div>)}</div>
-                    </div>) })}
-                </div>}
-                {siiSinCli.length>0&&(()=>{
-                  const byS={}; siiSinCli.forEach(d=>{ const k=String(d.receptor_rut||d.receptor_name||'—'); if(!byS[k])byS[k]={rut:d.receptor_rut||'',name:d.receptor_name||'Sin razón social',docs:[]}; byS[k].docs.push(d) })
-                  const sList=Object.values(byS).sort((a,b)=>a.name.localeCompare(b.name,'es')); sList.forEach(g=>g.docs.sort((x,y)=>_fnum(y)-_fnum(x)))
-                  const limpiarStage=()=>{ setRespaldoRes&&setRespaldoRes(p=>Array.isArray(p)&&!p.length?null:p) }
-                  const asignar=async(docs,cid)=>{ for(const d of docs){ await crearDesdeXML({...d,clienteId:cid},0) } limpiarStage(); contarSinRegistrar() }
-                  return <div>
-                    <div style={sectLbl(C.soonText)}>Sin cliente · emitidas en el SII</div>
-                    {sList.map((g,gi)=>{ const tot=g.docs.reduce((a,d)=>a+(d.monto||0),0); const sc=sugCliente(g.name,g.rut); return (
-                      <div key={'sii'+gi} style={{border:`1px solid ${C.soonBg}`,background:'#FFFDF8',borderRadius:12,padding:'11px 12px',marginBottom:9}}>
-                        <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-                          <div style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{fontSize:13.5,fontWeight:700,color:C.soonText}}>{titleCase(g.name)}</span>{g.rut&&<span style={{fontSize:10.5,color:'#B0812F'}}> · {g.rut}</span>}</div>
-                          <span style={{fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(tot)}</span>
-                        </div>
-                        <div style={{fontSize:10.5,color:'#B0812F',margin:'3px 0 9px'}}>{g.docs.length} emitida{g.docs.length!==1?'s':''} en el SII a esta razón social, sin cliente — al asignar se crea la factura</div>
-                        {sc&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',display:'flex',alignItems:'center',gap:9,marginBottom:8}}><div style={{flex:1,fontSize:11.5,color:C.text}}>Se parece a <b style={{color:C.accent}}>{sc.name}</b>. ¿Es ese cliente?</div><button onClick={()=>asignar(g.docs,sc.id)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'6px 12px',background:C.greenText,color:'#fff',cursor:'pointer',whiteSpace:'nowrap'}}>Sí, es {sc.name}</button></div>}
-                        <div style={{marginBottom:9}}><AsignarClienteInline bill={{receptor_rut:g.rut,receptor_name:g.name}} clients={clients} onAssign={(bill,cid)=>asignar(g.docs,cid)} label={g.docs.length>1?`Asignar cliente a las ${g.docs.length}`:'Asignar cliente'} placeholder='Buscar cliente por nombre o RUT…'/></div>
-                        <div style={{fontSize:10.5,color:'#9A7B3A',display:'flex',flexDirection:'column',gap:6}}>{g.docs.map(d=><div key={d._stageId} style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(d.folio)} · {fDMY(d.fecha)}{d.glosa?` · ${d.glosa}`:''}</span><div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(d.monto||0)}</span><button onClick={async()=>{ await crearDesdeXML({...d,clienteId:null},0); limpiarStage(); contarSinRegistrar() }} disabled={creandoFac===d.folio} style={{fontSize:10,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',background:'#fff',color:C.muted,cursor:creandoFac===d.folio?'default':'pointer',whiteSpace:'nowrap'}}>{creandoFac===d.folio?'…':'Agregar sin cliente'}</button></div></div>)}</div>
-                      </div>) })}
-                  </div>
-                })()}
-                {keys.length>0&&<div style={sectLbl(C.done)}>Con cliente · falta venta</div>}
-                {keys.map(k=>{ const gi=byCli[k]; const cid=gi[0].b.client_id; const cli=(clients||[]).find(c=>String(c.id)===String(cid)); const tot=gi.reduce((a,it)=>a+montoFactura(it.b),0); const open=openClients.has(cid); const hasSales=(sales||[]).some(s=>!s.deleted_at&&String(s.client_id)===String(cid)); const gOpen=anioPickFor===('grp:'+cid); const gsug=sugExterno(cid); return (
-                  <div key={k}>
-                    <div onClick={()=>toggleClient(cid)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 2px 7px'}}>
-                      <span style={{fontSize:10,color:C.done,transform:open?'rotate(90deg)':'none',transition:'transform .12s',flexShrink:0}}>▸</span>
-                      <span style={{fontSize:14,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{cli?.name||nomDe(gi[0].b)}</span>
-                      <span style={{fontSize:11,color:C.done,flexShrink:0}}>· {gi.length}</span>
-                      <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(tot)}</span>
-                    </div>
-                    {open&&<div style={card}>
-                      {gi.map((it,i)=>faRow(it,i,false))}
-                      {gi.length>1&&<div style={{borderTop:`0.5px solid ${C.border}`,padding:'9px 12px',background:C.bgSoft,display:'flex',gap:16,flexWrap:'wrap'}}>
-                        {hasSales&&<button onClick={()=>{setAnioPickFor(gOpen?null:('grp:'+cid));setVentaBusca('')}} style={{fontSize:11.5,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{gOpen?'Cerrar':`Asociar las ${gi.length} a una venta →`}</button>}
-                        {gsug&&onReclasificarTercero&&<button onClick={async()=>{ for(const it of gi){ await onReclasificarTercero(it.b,{proveedorId:gsug.proveedor_id,comisionPct:gsug.pct}) } onRefresh&&onRefresh() }} style={{fontSize:11.5,fontWeight:700,color:C.tealText,background:'none',border:'none',cursor:'pointer',padding:0}}>Pasar las {gi.length} a {gsug.nombre} ({gsug.pct}%) →</button>}
-                      </div>}
-                      {gOpen&&<div style={{padding:'0 12px 10px',background:C.bgSoft}}>{salePicker(cid,(sid)=>{ gi.forEach(it=>onSetVentaAnio&&onSetVentaAnio(it.b,{sale_id:sid})); setAnioPickFor(null);setVentaBusca('');setVerCerradas(false) })}</div>}
-                    </div>}
-                  </div>) })}
-                {nuevasEl}
-              </>)
-            })()}
-            {(items.length>0||totalCompletar>0)&&pcOrden==='mes'&&(()=>{
-              const byMes={}; items.forEach(it=>{ const m=mesDe(it.b)||'—'; (byMes[m]=byMes[m]||[]).push(it) })
-              const meses=Object.keys(byMes).sort((a,b)=>b.localeCompare(a)); meses.forEach(m=>byMes[m].sort((x,y)=>_fnum(x.b)-_fnum(y.b)))
-              return <>
-                {heroEl}
-                {items.length>0&&<div style={{display:'flex',alignItems:'center',gap:7,margin:'8px 2px 2px'}}><span style={{width:7,height:7,borderRadius:'50%',background:C.overdueText}}/><span style={{fontSize:10,fontWeight:800,color:C.overdueText,textTransform:'uppercase',letterSpacing:'.4px'}}>No entra a tus cifras · por mes</span></div>}
-                {meses.map(m=>(
-                  <div key={m}>
-                    <div style={{fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:C.done,margin:'2px 2px 6px'}}>{mesLbl(m)} · {byMes[m].length}</div>
-                    <div style={card}>{byMes[m].map((it,i)=>faRow(it,i,true))}</div>
-                  </div>))}
-                {nuevasEl}
-              </>
-            })()}
+            {entries.length===0&&sinRegN===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todo al día — no hay facturas por completar.</div>}
+            {catSection('cli','Sin cliente',cliE)}
+            {catSection('vta','Falta venta',vtaE)}
+            {catSection('dat','Datos por completar',datE)}
           </div>)
-        })() : filter==='all' ? (()=>{
+})() : filter==='all' ? (()=>{
           const hoy=new Date().toISOString().slice(0,10)
           const addDays=(d,n)=>{ if(!d) return ''; const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10) }
           const venceDe=b=> b.due || (b.issued_at?addDays(b.issued_at,30):'')
