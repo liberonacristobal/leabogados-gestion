@@ -8603,7 +8603,7 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
   const _dmyS=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
   const _mc=d=>{ const s=String(d||'').slice(0,10); const n=parseInt(s.slice(5,7),10); return n?`${s.slice(8,10)} ${MC[n]}`:'' }
   const fechaLbl=(d0,d1)=>{ if(d0===d1) return _mc(d0); const a=String(d0).slice(0,10),b=String(d1).slice(0,10); if(a.slice(5,7)===b.slice(5,7)) return `${a.slice(8,10)}–${b.slice(8,10)} ${MC[parseInt(a.slice(5,7),10)]}`; return `${_mc(d0)} – ${_mc(d1)}` }
-  const fmtM=n=>{ const m=(n||0)/1e6; const s=(m%1===0?m.toFixed(0):m.toFixed(2)); return '$'+s.replace('.',',')+' M' }
+  const fmtM=n=>'$'+(Math.abs(Number(n)||0)/1e6).toFixed(1).replace('.',',')+' M'   // millones, 1 decimal (consistente con Oficina/ResultadoAnioView)
   const yrs=(()=>{ const s=new Set([curY]); (expenses||[]).forEach(e=>{ const y=parseInt(String(e.date||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
   const inOfi=e=>ofi&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,4)===String(yr)
   const movs=(expenses||[]).filter(e=>inOfi(e)&&String(e.category||'').trim().toLowerCase()==='retiros').map(e=>({e,socio:_SOCIO_RET(e),amt:Number(e.amount)||0,date:String(e.date||'').slice(0,10)}))
@@ -8894,7 +8894,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
       <>{row('Meses con subarriendo',String(months.filter(m=>cmBy[m]&&Number(cmBy[m].subarriendo)>0).length))}{row('Total',fmtMp(subarr),null,C.greenText)}<div style={{fontSize:10.5,color:C.done,paddingTop:7}}>Entra como ingreso; baja el costo neto de oficina.</div></>)}
 
     <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Egresos</div>
-    {sec('cos',C.navyBg||C.azulBg,C.accent,<><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></>,'Costos de operación','sueldos, previsión, oficina',fmtMp(costosBrutos),C.accent,
+    {sec('cos',C.azulBg,C.accent,<><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></>,'Costos de operación','sueldos, previsión, oficina',fmtMp(costosBrutos),C.accent,
       <>{row('Sueldos (líquido)',fmtMp(sueldos))}
         {row('Cotizaciones + PPM',fmtMp(cotiz+ppm),'de Claudia')}
         {row('Contadora',fmt(contadora))}
@@ -8976,7 +8976,6 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
 
 function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros }){
   const [sub,setSub] = useState(null)
-  const [caja,setCaja] = useState(null)
   const [comprasRows,setComprasRows] = useState([])   // DTE de compra del SII (sii_compras_docs): foto IVA crédito + módulo Compras
   useEffect(()=>{ if(DEMO){ setComprasRows([]); return } let v=true; supabase.from('sii_compras_docs').select('id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,neto,exento,iva,monto,glosa,proveedor_id,movimiento_id,periodo').then(({data})=>{ if(v&&data) setComprasRows(data) },()=>{}); return ()=>{v=false} },[])
   const ivaCreditoC = comprasRows.reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
@@ -8986,20 +8985,6 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const extBillIds = useMemo(()=>new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id))),[terceros])
   const facSiiPeriodo = ym => (ventasRows||[]).filter(d=>String(d.fecha_emision||'').startsWith(ym)).reduce((a,d)=>{ const t=Number(d.tipo_dte); if(t===61) return a-(Number(d.monto)||0); if((t===33||t===34)&&!extBillIds.has(String(d.billing_id))) return a+(Number(d.monto)||0); return a },0)
   const ym = new Date().toISOString().slice(0,7), year=new Date().getFullYear()
-  // Caja viva: ancla (config caja_ancla = 'AAAA-MM-DD:monto') + Σ(abonos − cargos) de cartola posteriores a la fecha del ancla, ambas cuentas.
-  useEffect(()=>{ let vivo=true
-    if(DEMO){ setCaja(44148153); return }
-    ;(async()=>{ try{
-      const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','caja_ancla').limit(1)
-      const raw=cfg&&cfg[0]?String(cfg[0].value):''; const i=raw.indexOf(':')
-      const adate=i>0?raw.slice(0,i):null, base=Number(i>0?raw.slice(i+1):raw)||0
-      if(!adate){ if(vivo) setCaja(base||null); return }
-      const {data:mv}=await supabase.from('cartola_movimientos').select('tipo,monto').gt('fecha',adate)
-      const delta=(mv||[]).reduce((a,m)=>a+((m.tipo==='abono'?1:-1)*(Number(m.monto)||0)),0)
-      if(vivo) setCaja(base+delta)
-    }catch(_){ if(vivo) setCaja(null) } })()
-    return ()=>{ vivo=false }
-  },[])
   // Costos REALES desde la planilla editable (oficina_costos_mensual); si falta un mes, cae al presupuesto. Subarriendo y comisiones también salen de la planilla.
   const [rcmRows,setRcmRows]=useState([])
   useEffect(()=>{ if(DEMO){ setRcmRows([]); return } let v=true; supabase.from('oficina_costos_mensual').select('*').eq('anio',year).then(({data})=>{ if(v&&data) setRcmRows(data) },()=>{}); return ()=>{v=false} },[year])
@@ -9012,8 +8997,6 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const comiMes = comMesT(ym)
   const factSiiMes = facSiiPeriodo(ym)                             // DEVENGADO: emitido en el SII (propia, neto NC)
   const resMes = factSiiMes + subMesT(ym) - costoMes - comiMes     // resultado del mes (devengado) — protagonista
-  const cobradoMes = ingresosMesBill(billing, ym)                  // cobrado a caja del mes (contexto)
-  const flujoMes = cobradoMes - costoMes                           // flujo de caja del mes (contexto)
   const ret = retirosOficinaData(expenses, clients, year)
   const retMes = ret.rows.filter(r=>String(r.date||'').slice(0,7)===ym).reduce((a,r)=>a+r.amount,0)
   const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
@@ -9025,9 +9008,8 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   let factSiiYr=0, resYr=0, cobradoYr=0
   for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; cobradoYr+=ingresosMesBill(billing,mm); const f=facSiiPeriodo(mm); factSiiYr+=f; if(m<=_curM) resYr += f + subMesT(mm) - costoBrutoMes(mm) - comMesT(mm) }
   const porCobrar=(billing||[]).filter(b=>b&&!b.deleted_at&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
-  const gridStyle = isDesktop
-    ? {display:'grid',gridTemplateColumns:'2fr 1fr',gridTemplateAreas:'"res caja" "res flujo"',gap:12}
-    : {display:'grid',gridTemplateColumns:'1fr 1fr',gridTemplateAreas:'"res res" "caja flujo"',gap:11}
+  // Formato Oficina: millones con 1 decimal (igual que ResultadoAnioView.fmtMp), NO fmtShort (que da 0 decimales sobre 10M).
+  const fM=n=>'$'+(Math.abs(Number(n)||0)/1e6).toFixed(1).replace('.',',')+' M'
   const puerta = (area,ic,bg,icCol,ti,big,bigC,ctx,on)=>(
     <div style={{gridArea:area,background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'15px 16px',cursor:'pointer',position:'relative'}} onClick={on}>
       <span style={{position:'absolute',top:15,right:14,color:C.done,fontSize:15,fontWeight:700}}>›</span>
@@ -9049,32 +9031,30 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       <div style={{background:C.accent,color:'#fff',borderRadius:16,padding:'18px 20px',cursor:'pointer',position:'relative'}} onClick={()=>onOpenResultadoAnio?onOpenResultadoAnio():(onOpenEstadoResultados&&onOpenEstadoResultados())}>
         <span style={{position:'absolute',top:16,right:16,color:'#85B7EB',fontSize:16,fontWeight:700}}>›</span>
         <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:'#85B7EB'}}>Resultado del mes · devengado</div>
-        <div style={{fontSize:isDesktop?36:29,fontWeight:800,letterSpacing:-1,margin:'6px 0 4px',lineHeight:1,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{resMes>=0?'+':'−'}{fmt(Math.abs(resMes))}</div>
+        <div style={{fontSize:isDesktop?36:29,fontWeight:800,letterSpacing:-1,margin:'6px 0 4px',lineHeight:1,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{resMes>=0?'+':'−'}{fM(resMes)}</div>
         <div style={{fontSize:12,color:'#85B7EB',marginBottom:14}}>facturación − costos − comisiones</div>
         <div style={{display:'flex',borderTop:'1px solid rgba(255,255,255,.22)',paddingTop:12,gap:12}}>
           {[['Facturación',factSiiMes,false],['Costos',costoMes,true],['Comisiones',comiMes,true]].map(([a,v,neg],i)=>(
             <div key={i} style={{flex:1,borderLeft:i?'1px solid rgba(255,255,255,.14)':'none',paddingLeft:i?12:0}}>
               <div style={{fontSize:9,color:'#85B7EB',textTransform:'uppercase',letterSpacing:.3}}>{a}</div>
-              <div style={{fontSize:14,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{neg?'−':''}{fmtShort(Math.abs(v))}</div>
+              <div style={{fontSize:14,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{neg?'−':''}{fM(v)}</div>
             </div>))}
         </div>
       </div>
     </div>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
-      {puerta('','building',C.azulBg,C.accent,'Costos',fmtShort(costoMes),C.accent,'por mes',()=>setSub('costos'))}
-      {puerta('','wallet',C.tealBg,C.tealText,'Retiros',fmtShort(ret.total),C.tealText,'en el año',()=>onOpenRetiros?onOpenRetiros():setSub('retiros'))}
-      {puerta('','receipt',C.bgWarm,C.muted,'Gastos varios',fmtShort(variosMes),C.accent,porCobrarEq>0?`${fmtShort(porCobrarEq)} por cobrar`:'este mes',()=>onOpenVarios&&onOpenVarios())}
-      {puerta('','receipt',C.azulBg,C.azulInfo,'Compras · IVA',fmtShort(ivaCreditoC),C.azulInfo,'IVA crédito',()=>setSub('compras'))}
+      {puerta('','building',C.azulBg,C.accent,'Costos',fM(costoMes),C.accent,'por mes',()=>setSub('costos'))}
+      {puerta('','wallet',C.tealBg,C.tealText,'Retiros',fM(ret.total),C.tealText,'en el año',()=>onOpenRetiros?onOpenRetiros():setSub('retiros'))}
+      {puerta('','receipt',C.bgWarm,C.muted,'Gastos varios',fM(variosMes),C.accent,porCobrarEq>0?`${fM(porCobrarEq)} por cobrar`:'este mes',()=>onOpenVarios&&onOpenVarios())}
+      {puerta('','receipt',C.azulBg,C.azulInfo,'Compras · IVA',fM(ivaCreditoC),C.azulInfo,'IVA crédito',()=>setSub('compras'))}
     </div>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
-      {kpi('Facturación del año',fmtShort(factSiiYr))}
-      {kpi('Cobrado · año',fmtShort(cobradoYr))}
-      {kpi('Por cobrar',fmtShort(porCobrar),C.soonText)}
-      {kpi('Resultado · año',`${resYr>=0?'+':'−'}${fmtShort(Math.abs(resYr))}`,C.greenText)}
+      {kpi('Facturación del año',fM(factSiiYr))}
+      {kpi('Cobrado · año',fM(cobradoYr))}
+      {kpi('Por cobrar',fM(porCobrar),C.soonText)}
+      {kpi('Resultado · año',`${resYr>=0?'+':'−'}${fM(resYr)}`,C.greenText)}
     </div>
     {sub==='costos' && <Modal fullscreenOnMobile title='Costos de Oficina' maxWidth={760} onClose={()=>setSub(null)}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
-    {sub==='retiros' && <Modal fullscreenOnMobile title='Retiros a socios' maxWidth={560} onClose={()=>setSub(null)}><RetirosOficinaModal expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows}/></Modal>}
-    {sub==='flujo' && <Modal fullscreenOnMobile title='Caja y flujo' maxWidth={620} onClose={()=>setSub(null)}><FlujoCajaModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros} saldoInicial={caja||0}/></Modal>}
     {sub==='compras' && <Modal fullscreenOnMobile title='Compras · IVA' maxWidth={620} onClose={()=>setSub(null)}><ComprasModal compras={comprasRows} proveedores={proveedores} onSaveProveedor={onSaveProveedor} isDesktop={isDesktop}/></Modal>}
   </div>)
 }
