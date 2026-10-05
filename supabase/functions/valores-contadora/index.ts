@@ -131,7 +131,27 @@ serve(async (req) => {
       if (contadora) items.push({ item: "Contadora", categoria: "Remuneraciones", monto: contadora, vence: null });
       const valor = { mes, subject, cotizaciones, ppm, contadora, items, leido_at: new Date().toISOString() };
       if (!dryRun) await setLearning(sb, "valores_contadora", mes, JSON.stringify(valor));
-      guardados.push(valor);
+      // ① Escribe la planilla real (oficina_costos_mensual) del mes con los valores de Claudia.
+      // Solo toca cotizaciones/ppm/contadora (no pisa sueldos/arriendo/etc). Si llegan los reales
+      // (cotiz+ppm), quita 'estimado' → el mes se cierra solo (cron oficina-cierre-auto). estudio_id='lea'
+      // (Claudia es la contadora de LEA; config por estudio = deuda vendible).
+      const pm = mes.match(/^(\d{4})-(\d{2})$/);
+      let planilla = false;
+      if (!dryRun && pm) {
+        const yy = Number(pm[1]), mm = Number(pm[2]);
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (cotizaciones) patch.cotizaciones = cotizaciones;
+        if (ppm) patch.ppm = ppm;
+        if (contadora) patch.contadora = contadora;
+        if (cotizaciones && ppm) patch.estimado = false;   // datos reales → deja de ser estimado
+        if (Object.keys(patch).length > 1) {
+          const { data: ex } = await sb.from("oficina_costos_mensual").select("id").eq("estudio_id", "lea").eq("anio", yy).eq("mes", mm).limit(1);
+          if (ex && ex.length) await sb.from("oficina_costos_mensual").update(patch).eq("id", ex[0].id);
+          else await sb.from("oficina_costos_mensual").insert({ estudio_id: "lea", anio: yy, mes: mm, ...patch });
+          planilla = true;
+        }
+      }
+      guardados.push({ ...valor, planilla });
     }
     return json({ ok: true, encontrados: ids.length, guardados, dryRun });
   } catch (e) {
