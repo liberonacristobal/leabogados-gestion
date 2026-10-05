@@ -8835,23 +8835,18 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const mesEstado=m=>{ const r=cmBy[m]; if(r&&r.cerrado) return 'cerrado'; if(r&&r.estimado) return 'estimado'; if(r) return 'abierto'; return 'vacio' }
   const EST_COL={cerrado:C.greenText,estimado:C.soonText,abierto:C.done,vacio:C.border}
   const abrirEditor=m=>{ const r=cmBy[m]||{}; const f={}; CAMPOS.forEach(([k])=>f[k]=r[k]!=null?Number(r[k]):0); f.nota=r.nota||''; f.estimado=!!r.estimado; f.cerrado=!!r.cerrado; setForm(f); setEditM(m) }
-  const guardar=async(setCerrado)=>{ if(DEMO){ setEditM(null); return } setBusy(true); try{
-    const p={estudio_id:'lea',anio:yr,mes:editM,nota:form.nota||null,estimado:setCerrado===true?false:!!form.estimado,updated_at:new Date().toISOString()}
+  // Cierre AUTOMÁTICO por criterio (sin botón): un mes se cierra solo cuando (1) ya es ≥ día 15 del mes siguiente —pasó el 13, cuando se paga la previsión (Previred), el costo que llega más tarde; margen para que cargue la cartola—, (2) tiene datos reales (sueldos+cotizaciones+PPM >0) y (3) no está marcado estimado. Verificado contra las fechas reales de la cartola 2026. El único control humano es el toggle "estimado". Reversible: marcar estimado reabre. Un barrido diario (pg_cron) lo aplica por el paso del tiempo; aquí se decide también al guardar.
+  const cierreDisponible=m=> new Date() >= new Date(yr, m, 15)   // día 15 del mes SIGUIENTE a M (new Date mes es 0-based: índice m = mes m+1)
+  const cumpleCierre=(m,v)=> cierreDisponible(m) && !v.estimado && Number(v.sueldos)>0 && Number(v.cotizaciones)>0 && Number(v.ppm)>0
+  const guardar=async()=>{ if(DEMO){ setEditM(null); return } setBusy(true); try{
+    const auto=cumpleCierre(editM, form)
+    const prev=cmBy[editM]
+    const p={estudio_id:'lea',anio:yr,mes:editM,nota:form.nota||null,estimado:!!form.estimado,updated_at:new Date().toISOString(),
+      cerrado:auto, cerrado_at:auto?((prev&&prev.cerrado_at)||new Date().toISOString()):null, cerrado_por:auto?((prev&&prev.cerrado_por)||'auto'):null}
     CAMPOS.forEach(([k])=>p[k]=Math.round(Number(form[k])||0))
-    if(setCerrado!==undefined){ p.cerrado=!!setCerrado; p.cerrado_at=setCerrado?new Date().toISOString():null; p.cerrado_por=setCerrado?((user&&user.email)||'—'):null }
     const {error}=await supabase.from('oficina_costos_mensual').upsert(p,{onConflict:'estudio_id,anio,mes'}); if(error) throw error
     setEditM(null); setReloadN(n=>n+1)
   }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) } setBusy(false) }
-  // Cierre masivo: meses pasados, completos (con sueldos), no estimados y aún no cerrados. No toca el mes en curso ni los estimados (sep/oct a la espera de Claudia).
-  const cerrables=Array.from({length:maxM},(_,i)=>i+1).filter(m=>{ const r=cmBy[m]; return r && !r.cerrado && !r.estimado && Number(r.sueldos)>0 && (yr<curY || m<curM) })
-  const cerrarLote=async()=>{ if(!cerrables.length||busy) return
-    const lista=cerrables.map(m=>MESES[m-1]).join(', ')
-    if(!await appConfirm(`¿Cerrar ${cerrables.length} ${cerrables.length===1?'mes':'meses'} (${lista})?\nPodrás reabrir cualquiera después desde su editor.`)) return
-    if(DEMO){ return }
-    setBusy(true)
-    try{ const {error}=await supabase.from('oficina_costos_mensual').update({cerrado:true,cerrado_at:new Date().toISOString(),cerrado_por:(user&&user.email)||'—',updated_at:new Date().toISOString()}).eq('estudio_id','lea').eq('anio',yr).in('mes',cerrables); if(error) throw error; setReloadN(n=>n+1) }
-    catch(e){ appAlert('No se pudieron cerrar: '+(e.message||e)) }
-    setBusy(false) }
 
   const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,marginBottom:9,overflow:'hidden'}
   const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:11,fontWeight:700,padding:'7px 14px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
@@ -8920,8 +8915,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
 
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,margin:'22px 4px 10px',flexWrap:'wrap'}}><span style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Resultado mes a mes</span>
       <span style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-        <span style={{fontSize:10.5,color:C.done,fontWeight:600}}>{nCerrados>0?`${nCerrados} ${nCerrados===1?'mes cerrado':'meses cerrados'} · `:''}toca un mes para editar o cerrar</span>
-        {cerrables.length>0&&<button disabled={busy} onClick={cerrarLote} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,fontWeight:800,color:'#fff',background:C.greenText,border:'none',borderRadius:20,padding:'6px 12px',cursor:busy?'default':'pointer',opacity:busy?.6:1}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>Cerrar {cerrables.length} {cerrables.length===1?'mes':'meses'} listo{cerrables.length===1?'':'s'}</button>}
+        <span style={{fontSize:10.5,color:C.done,fontWeight:600}}>{nCerrados>0?`${nCerrados} ${nCerrados===1?'mes cerrado':'meses cerrados'} · `:''}se cierran solos · toca un mes para editar</span>
       </span>
     </div>
     <div style={card}><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -8943,13 +8937,13 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
     {(()=>{
       const allM=Array.from({length:maxM},(_,i)=>i+1)
       const sinEnl=(ventas||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(yr)&&[33,34,61].includes(Number(d.tipo_dte))&&!d.billing_id)
-      const abiertos=allM.filter(m=>mesEstado(m)!=='cerrado'), estM=allM.filter(m=>mesEstado(m)==='estimado')
       const desv=allM.filter(m=>{ const r=cmBy[m]; if(!r) return false; const real=Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos); const bud=costosOficinaMes(costosOfiRows,pad(m)); return bud>0&&Math.abs(real-bud)/bud>0.2 })
       const faltaClaudia=allM.filter(m=>{ const r=cmBy[m]; return r && (Number(r.cotizaciones)===0||Number(r.ppm)===0||r.estimado) })
       const sldFalta=allM.filter(m=>{ const r=cmBy[m]; return !r || Number(r.sueldos)===0 })
+      const pendCierre=allM.filter(m=>cierreDisponible(m)&&mesEstado(m)!=='cerrado')   // ya corresponde cerrar por fecha, pero faltan datos o está estimado
       const checks=[
         [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · tócalo para ver cuáles`:'todas enlazadas a una venta', sinEnl.length?{label:sinEnlOpen?'ocultar':'ver',on:()=>setSinEnlOpen(o=>!o)}:null],
-        [abiertos.length===0,'Cierre de meses',abiertos.length?`${abiertos.length} sin cerrar${estM.length?` · ${estM.length} con datos estimados`:''}`:'todos los meses del período cerrados', abiertos.length?(cerrables.length?{label:`cerrar ${cerrables.length}`,on:cerrarLote}:{label:'editar',on:()=>abrirEditor(abiertos[0])}):null],
+        [pendCierre.length===0,'Cierre de meses',pendCierre.length?`${pendCierre.length} mes${pendCierre.length!==1?'es':''} por cerrar · faltan datos reales (completa abajo)`:`se cierran solos · ${nCerrados} cerrado${nCerrados!==1?'s':''}`, null],
         [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia', faltaClaudia.length?{label:'editar',on:()=>abrirEditor(faltaClaudia[0])}:null],
         [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],
         [desv.length===0,'Costos vs presupuesto',desv.length?`${desv.length} mes${desv.length!==1?'es':''} con desvío mayor a 20% vs el presupuesto`:'en línea con el presupuesto', desv.length?{label:'editar',on:()=>abrirEditor(desv[0])}:null],
@@ -8982,13 +8976,10 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
         </div>)}
         <div style={{padding:'9px 0 4px',borderTop:`1px solid ${C.bgSoft}`}}><textarea placeholder='Nota (opcional)' value={form.nota||''} onChange={e=>setForm(f=>({...f,nota:e.target.value}))} rows={2} style={{width:'100%',fontSize:12.5,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px',resize:'vertical',fontFamily:'inherit',color:C.text,boxSizing:'border-box'}}/></div>
         <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5,color:C.text,fontWeight:600,padding:'4px 0 12px',cursor:'pointer'}}><input type='checkbox' checked={!!form.estimado} onChange={e=>setForm(f=>({...f,estimado:e.target.checked}))}/> Marcar como estimado (datos aún no confirmados)</label>
-        <div style={{display:'flex',gap:9,flexWrap:'wrap'}}>
-          <button disabled={busy} onClick={()=>guardar(undefined)} style={{flex:1,minWidth:120,fontSize:13,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px',background:'#fff',color:C.accent,cursor:'pointer'}}>Guardar</button>
-          {cmBy[editM]&&cmBy[editM].cerrado
-            ? <button disabled={busy} onClick={()=>guardar(false)} style={{flex:1,minWidth:120,fontSize:13,fontWeight:700,border:`1px solid ${C.soonText}`,borderRadius:10,padding:'10px',background:C.soonBg,color:C.soonText,cursor:'pointer'}}>Reabrir mes</button>
-            : <button disabled={busy} onClick={()=>guardar(true)} style={{flex:1,minWidth:120,fontSize:13,fontWeight:700,border:'none',borderRadius:10,padding:'10px',background:C.greenText,color:'#fff',cursor:'pointer'}}>Guardar y cerrar mes</button>}
-        </div>
-        {cmBy[editM]&&cmBy[editM].cerrado_por?<div style={{fontSize:10.5,color:C.done,marginTop:9}}>Cerrado por {cmBy[editM].cerrado_por}{cmBy[editM].cerrado_at?' · '+String(cmBy[editM].cerrado_at).slice(0,10):''}</div>:null}
+        <button disabled={busy} onClick={guardar} style={{width:'100%',fontSize:13,fontWeight:700,border:'none',borderRadius:10,padding:'11px',background:C.accent,color:'#fff',cursor:busy?'default':'pointer',opacity:busy?.6:1}}>Guardar</button>
+        <div style={{fontSize:10.5,color:C.done,marginTop:9,lineHeight:1.5}}>{cmBy[editM]&&cmBy[editM].cerrado
+          ? <>Mes cerrado{cmBy[editM].cerrado_por?` · ${cmBy[editM].cerrado_por==='auto'?'automático':cmBy[editM].cerrado_por}`:''}{cmBy[editM].cerrado_at?' · '+String(cmBy[editM].cerrado_at).slice(0,10):''}. Marca "estimado" para reabrirlo.</>
+          : <>Se cierra solo cuando los datos están completos (sueldos, cotizaciones y PPM) y pasó el 15 del mes siguiente. Marca "estimado" si aún no son definitivos.</>}</div>
       </div>
     </div>}
   </div>)
