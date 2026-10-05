@@ -8872,6 +8872,31 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
     {open===id&&<div style={{padding:'0 16px 14px'}}>{body}</div>}
   </div>
 
+  // Editor de un mes como PÁGINA (no modal): reemplaza la vista con su propio "← Resultado del año".
+  if(editM!=null) return (
+  <div style={{maxWidth:isDesktop?720:'100%',margin:'0 auto',padding:isDesktop?'0 20px 48px':'0 16px 48px'}}>
+    <div style={{display:'flex',alignItems:'center',gap:11,margin:'4px 0 16px',flexWrap:'wrap'}}>
+      <button onClick={()=>!busy&&setEditM(null)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>Resultado del año</button>
+      <h1 style={{fontSize:isDesktop?21:19,fontWeight:800,color:C.accent,letterSpacing:-.5,margin:0}}>Costos de {MESES[editM-1]} {yr}</h1>
+      {cmBy[editM]&&cmBy[editM].cerrado?<span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>Cerrado</span>:null}
+    </div>
+    <div style={card}>
+      <div style={{fontSize:11,color:C.done,padding:'14px 16px 2px'}}>Montos en pesos. El subarriendo es ingreso (baja el costo neto).</div>
+      <div style={{padding:'4px 16px 10px'}}>
+        {CAMPOS.map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+          <span style={{fontSize:13,color:k==='subarriendo'?C.greenText:C.text,fontWeight:600,flex:1}}>{l}</span>
+          <input type='number' value={form[k]==null?0:form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={{width:isDesktop?180:140,fontSize:13.5,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.accent}}/>
+        </div>)}
+        <div style={{padding:'11px 0 4px',borderTop:`1px solid ${C.bgSoft}`}}><textarea placeholder='Nota (opcional)' value={form.nota||''} onChange={e=>setForm(f=>({...f,nota:e.target.value}))} rows={2} style={{width:'100%',fontSize:12.5,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',resize:'vertical',fontFamily:'inherit',color:C.text,boxSizing:'border-box'}}/></div>
+        <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:C.text,fontWeight:600,padding:'8px 0 2px',cursor:'pointer'}}><input type='checkbox' checked={!!form.estimado} onChange={e=>setForm(f=>({...f,estimado:e.target.checked}))}/> Marcar como estimado (datos aún no confirmados)</label>
+      </div>
+    </div>
+    <button disabled={busy} onClick={guardar} style={{width:'100%',fontSize:14,fontWeight:700,border:'none',borderRadius:12,padding:'13px',marginTop:12,background:C.accent,color:'#fff',cursor:busy?'default':'pointer',opacity:busy?.6:1}}>Guardar</button>
+    <div style={{fontSize:11,color:C.done,marginTop:11,lineHeight:1.55,padding:'0 2px'}}>{cmBy[editM]&&cmBy[editM].cerrado
+      ? <>Mes cerrado{cmBy[editM].cerrado_por?` · ${cmBy[editM].cerrado_por==='auto'?'automático':cmBy[editM].cerrado_por}`:''}{cmBy[editM].cerrado_at?' · '+String(cmBy[editM].cerrado_at).slice(0,10):''}. Marca "estimado" para reabrirlo.</>
+      : <>Se cierra solo cuando los datos están completos (sueldos, cotizaciones y PPM) y pasó el 15 del mes siguiente. Marca "estimado" si aún no son definitivos.</>}</div>
+  </div>)
+
   return (
   <div style={{maxWidth:isDesktop?720:'100%',margin:'0 auto',padding:isDesktop?'0 20px 48px':'0 16px 48px'}}>
     <div style={{display:'flex',alignItems:'center',gap:11,margin:'4px 0 14px',flexWrap:'wrap'}}>
@@ -8971,28 +8996,6 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
           if(i===0&&sinEnlOpen&&sinEnl.length>0) out.push(<div key='sinenl' style={{padding:'0 16px 12px'}}><div style={{background:C.overdueBg,borderRadius:10,overflow:'hidden'}}>{sinEnl.slice().sort((a,b)=>String(a.fecha_emision||'').localeCompare(String(b.fecha_emision||''))).map((d,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 12px',fontSize:11.5,color:C.overdueText,fontWeight:600,borderTop:j?'1px solid rgba(163,45,45,.14)':'none'}}><span>{Number(d.tipo_dte)===61?'NC · ':''}N° {d.folio} · {d.receptor_name||'—'}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Number(d.monto)||0)}</span></div>)}</div></div>)
         }); return out })()}</div></>
     })()}
-
-    {editM!=null&&<div onClick={()=>!busy&&setEditM(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:9999,display:'flex',alignItems:isDesktop?'center':'stretch',justifyContent:'center'}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:isDesktop?16:0,width:isDesktop?470:'100%',maxWidth:'100%',height:isDesktop?'auto':'100%',maxHeight:isDesktop?'90vh':'100%',overflow:'auto',padding:'18px 18px 24px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:4}}>
-          <span style={{fontSize:16,fontWeight:800,color:C.accent}}>Costos de {MESES[editM-1]} {yr}</span>
-          {cmBy[editM]&&cmBy[editM].cerrado?<span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>Cerrado</span>:null}
-          <span style={{flex:1}}/>
-          <button onClick={()=>!busy&&setEditM(null)} style={{background:'none',border:'none',color:C.muted,fontSize:22,cursor:'pointer',lineHeight:1,padding:0}}>×</button>
-        </div>
-        <div style={{fontSize:11,color:C.done,marginBottom:8}}>Montos en pesos. El subarriendo es ingreso (baja el costo neto).</div>
-        {CAMPOS.map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
-          <span style={{fontSize:12.5,color:k==='subarriendo'?C.greenText:C.text,fontWeight:600,flex:1}}>{l}</span>
-          <input type='number' value={form[k]==null?0:form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={{width:140,fontSize:13,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px',color:C.accent}}/>
-        </div>)}
-        <div style={{padding:'9px 0 4px',borderTop:`1px solid ${C.bgSoft}`}}><textarea placeholder='Nota (opcional)' value={form.nota||''} onChange={e=>setForm(f=>({...f,nota:e.target.value}))} rows={2} style={{width:'100%',fontSize:12.5,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px',resize:'vertical',fontFamily:'inherit',color:C.text,boxSizing:'border-box'}}/></div>
-        <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5,color:C.text,fontWeight:600,padding:'4px 0 12px',cursor:'pointer'}}><input type='checkbox' checked={!!form.estimado} onChange={e=>setForm(f=>({...f,estimado:e.target.checked}))}/> Marcar como estimado (datos aún no confirmados)</label>
-        <button disabled={busy} onClick={guardar} style={{width:'100%',fontSize:13,fontWeight:700,border:'none',borderRadius:10,padding:'11px',background:C.accent,color:'#fff',cursor:busy?'default':'pointer',opacity:busy?.6:1}}>Guardar</button>
-        <div style={{fontSize:10.5,color:C.done,marginTop:9,lineHeight:1.5}}>{cmBy[editM]&&cmBy[editM].cerrado
-          ? <>Mes cerrado{cmBy[editM].cerrado_por?` · ${cmBy[editM].cerrado_por==='auto'?'automático':cmBy[editM].cerrado_por}`:''}{cmBy[editM].cerrado_at?' · '+String(cmBy[editM].cerrado_at).slice(0,10):''}. Marca "estimado" para reabrirlo.</>
-          : <>Se cierra solo cuando los datos están completos (sueldos, cotizaciones y PPM) y pasó el 15 del mes siguiente. Marca "estimado" si aún no son definitivos.</>}</div>
-      </div>
-    </div>}
   </div>)
 }
 
@@ -9107,7 +9110,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
     {L('Gestión de la oficina')}
     <div style={card}>
       {row(IC.peop,C.azulBg,C.accent,'Costos · planilla',fM(cosPlan),C.accent,()=>setSub('costos'),true)}
-      {row(IC.ret,C.tealBg,C.tealText,'Retiros a socios',fM(ret.total),C.tealText,()=>onOpenRetiros&&onOpenRetiros())}
+      {row(IC.ret,C.tealBg,C.tealText,'Ingresos de socios',fM(ret.total),C.tealText,()=>onOpenRetiros&&onOpenRetiros())}
       {row(IC.doc,C.bgWarm,C.muted,'Gastos varios',fM(gvH),C.accent,()=>onOpenVarios&&onOpenVarios())}
       {row(IC.iva,C.azulBg,C.azulInfo,'Compras · IVA',fM(ivaCreditoC),C.azulInfo,()=>setSub('compras'))}
     </div>
