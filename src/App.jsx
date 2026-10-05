@@ -8571,6 +8571,11 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
   const [movVista,setMovVista]=useState('socio')
   const [expRet,setExpRet]=useState(null)
   const [busy,setBusy]=useState(null)
+  const [ocultarVacios,setOcultarVacios]=useState(false)
+  const [mesAbierto,setMesAbierto]=useState(null)
+  const listaRef=useRef(null), porSocioRef=useRef(null)
+  const scrollA=ref=>ref&&ref.current&&ref.current.scrollIntoView({behavior:'smooth',block:'start'})
+  const verSocio=s=>{ setMovVista('socio'); setTimeout(()=>scrollA(listaRef),60) }
   const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
   const SOC=['Cristóbal','Erasmo']
   const COL={'Cristóbal':C.accent,'Erasmo':'#8A6D12'}
@@ -8603,11 +8608,24 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
   const rondas=(()=>{ const cs=[...retSoc].sort((a,b)=>dnum(a.d0)-dnum(b.d0)); const rd=[]; cs.forEach(c=>{ const last=rd[rd.length-1]; if(last && dnum(c.d0)-dnum(last.d1)<=GAP){ if(dnum(c.d1)>dnum(last.d1)) last.d1=c.d1; last[c.socio]+=c.amt } else { const r={d0:c.d0,d1:c.d1,'Cristóbal':0,'Erasmo':0}; r[c.socio]+=c.amt; rd.push(r) } }); return rd })()
   const difAcum=(retTot['Cristóbal']||0)-(retTot['Erasmo']||0)
   const faltaTxt=d=>d===0?null:(d>0?`falta Erasmo ${fmt(Math.abs(d))}`:`falta Cristóbal ${fmt(Math.abs(d))}`)
+  // período = mes; dentro de un mes puede haber varias rondas de retiro. Muestro todos los meses del año transcurrido; toggle oculta los sin retiros.
+  const mesesDelAnio=yr<curY?12:(yr>curY?0:curM)
+  const rondasByMes={}; rondas.forEach(r=>{ const m=parseInt(String(r.d0).slice(5,7),10); (rondasByMes[m]=rondasByMes[m]||[]).push(r) })
+  const mesTot=m=>{ const rs=rondasByMes[m]||[]; return {C:rs.reduce((a,r)=>a+r['Cristóbal'],0),E:rs.reduce((a,r)=>a+r['Erasmo'],0)} }
   const sugSocio=r=>{ let c=0,e=0; rondas.forEach(x=>{ c+=x['Cristóbal']; e+=x['Erasmo'] }); return c<=e?'Cristóbal':'Erasmo' }
   const asignar=async(r,soc)=>{ if(!(await appConfirm(`Asignar este retiro de ${fmt(r.amt)} (${fechaLbl(r.d0,r.d1)}) a ${soc}. Es reversible. ¿Confirmas?`))) return; setBusy(r.socio+'|'+r.d0); try{ const ids=r.movs.map(x=>x.e.id); await supabase.from('expenses').update({subcategory:soc,updated_at:new Date().toISOString()}).in('id',ids); setExpenses&&setExpenses(p=>p.map(x=>ids.includes(x.id)?{...x,subcategory:soc}:x)) }catch(err){ appAlert('No se pudo asignar: '+(err.message||err)) } setBusy(null) }
   const exportar=()=>{ const H=['Socio','Fecha','Monto','Transferencias']; const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`; const lines=[...retSoc].sort((a,b)=>a.socio.localeCompare(b.socio)||a.d0.localeCompare(b.d0)).map(r=>[r.socio,r.d0,Math.round(r.amt),r.movs.length].map(esc).join(',')); const csv=[H.map(esc).join(','),...lines].join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`retiros_socios_${yr}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }
   const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:10.5,fontWeight:700,padding:'6px 13px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
   const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}
+  const _thB=`1px solid ${C.border}`
+  const thL={fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'left',padding:'4px 18px 10px',borderBottom:_thB}
+  const thR={...thL,textAlign:'right'}
+  const tdMes={fontSize:12,fontWeight:800,padding:'10px 18px',textAlign:'right',background:C.bgSoft,borderTop:_thB,color:C.accent,fontVariantNumeric:'tabular-nums'}
+  const tdMesEmpty={fontSize:11,fontWeight:600,padding:'8px 18px',textAlign:'right',color:C.done,borderTop:`1px solid ${C.bgSoft}`}
+  const tdRet={fontSize:13,padding:'10px 18px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,color:C.text,fontVariantNumeric:'tabular-nums'}
+  const tdTot={fontSize:13,fontWeight:800,padding:'12px 18px',textAlign:'right',background:C.bgSoft,borderTop:`2px solid ${C.border}`,color:C.accent,fontVariantNumeric:'tabular-nums'}
+  const pill={display:'inline-flex',alignItems:'center',fontSize:10.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:6,padding:'3px 9px',whiteSpace:'nowrap'}
+  const dotEl=col=><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:col,marginRight:5,verticalAlign:'middle'}}/>
   const chTi=(t,bg,sv)=><div style={{display:'flex',alignItems:'center',gap:9}}><span style={{width:30,height:30,borderRadius:9,background:bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{sv}</span><span style={{fontSize:13,fontWeight:800,color:C.accent,letterSpacing:-.2}}>{t}</span></div>
   const chv=up=><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d={up?'m18 15-6-6-6 6':'m6 9 6 6 6-6'}/></svg>
   const bankIc=<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M7 7h10v10'/><path d='M7 17 17 7'/></svg>
@@ -8640,7 +8658,8 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
     </div>
 
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.25fr 1fr 1fr':'1fr 1fr',gap:12,marginBottom:12}}>
-      <div style={{background:C.accent,color:'#fff',borderRadius:18,padding:'19px 21px',gridColumn:isDesktop?'auto':'1/-1'}}>
+      <div onClick={()=>scrollA(listaRef)} style={{background:C.accent,color:'#fff',borderRadius:18,padding:'19px 21px',gridColumn:isDesktop?'auto':'1/-1',cursor:'pointer',position:'relative'}}>
+        <span style={{position:'absolute',top:16,right:16,color:'#85B7EB',fontSize:16,fontWeight:700}}>›</span>
         <div style={{display:'flex',alignItems:'center',gap:7,fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'#9FC6D8'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#9FC6D8' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M22 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>A favor de socios · {yr}</div>
         <div style={{fontSize:40,fontWeight:800,letterSpacing:-1.5,lineHeight:1,margin:'11px 0 10px',fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet+sueldoTot)}</div>
         <div style={{display:'flex',gap:10}}>
@@ -8649,7 +8668,8 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
         </div>
       </div>
       {[['Retirado '+yr,fmtM(totalRet),nRet+' retiros · '+fmtM(promRetiro)+' prom.',C.azulBg,'#185FA5',<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>],['Sueldos socios',fmtM(sueldoTot),'Cristóbal + Erasmo',BG['Erasmo'],'#8A6D12',<><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></>]].map((k,i)=>
-        <div key={i} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,padding:'16px 17px'}}>
+        <div key={i} onClick={()=>scrollA(i===0?listaRef:porSocioRef)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,padding:'16px 17px',cursor:'pointer',position:'relative'}}>
+          <span style={{position:'absolute',top:15,right:14,color:C.done,fontSize:15,fontWeight:700}}>›</span>
           <span style={{width:34,height:34,borderRadius:10,background:k[3],display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={k[4]} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'>{k[5]}</svg></span>
           <div style={{fontSize:27,fontWeight:800,color:C.accent,letterSpacing:-.9,fontVariantNumeric:'tabular-nums'}}>{k[1]}</div>
           <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,marginTop:3}}>{k[0]}</div>
@@ -8657,14 +8677,15 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
         </div>)}
     </div>
 
-    <div style={card}>
+    <div ref={porSocioRef} style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
         {chTi('Por socio · total y promedio',C.greenBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></svg>)}
         {seg(eqMode,setEqMode,[['ambos','Retiro + sueldo'],['retiros','Solo retiros']])}
       </div>
       <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12,padding:'2px 16px 16px'}}>
-        {SOC.map(s=>{ const tot=(retTot[s]||0)+(sueldos[s]||0); return <div key={s} style={{background:BG[s],borderRadius:15,padding:'17px 18px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><span style={{width:36,height:36,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14}}>{s[0]}</span><span style={{fontWeight:800,fontSize:16,color:COL[s]}}>{s}</span><span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</span></div>
+        {SOC.map(s=>{ const tot=(retTot[s]||0)+(sueldos[s]||0); return <div key={s} onClick={()=>verSocio(s)} style={{background:BG[s],borderRadius:15,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
+          <span style={{position:'absolute',top:15,right:15,color:COL[s],opacity:.5,fontSize:15,fontWeight:700}}>›</span>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><span style={{width:36,height:36,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14}}>{s[0]}</span><span style={{fontWeight:800,fontSize:16,color:COL[s]}}>{s}</span><span style={{marginLeft:'auto',marginRight:16,fontSize:11,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</span></div>
           <div style={{fontSize:34,fontWeight:800,letterSpacing:-1.1,lineHeight:1,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(tot)}</div>
           <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,marginTop:4}}>total a favor · {yr}</div>
           <div style={{display:'flex',gap:10,marginTop:13}}>
@@ -8681,29 +8702,44 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
 
     <div style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
-        {chTi('Retiros por período',C.soonBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg>)}
-        {seg(tablaMode,setTablaMode,[['monto','Monto'],['dif','Diferencia'],['acum','Acumulado']])}
+        {chTi('Retiros por mes',C.soonBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg>)}
+        <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+          <span onClick={()=>setOcultarVacios(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:10.5,fontWeight:700,color:C.muted,cursor:'pointer'}}>
+            <span style={{width:30,height:17,borderRadius:10,background:ocultarVacios?C.accent:C.border,position:'relative',transition:'.15s',flexShrink:0}}><span style={{position:'absolute',top:2,left:ocultarVacios?15:2,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'.15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/></span>
+            Ocultar meses sin retiros
+          </span>
+          {seg(tablaMode,setTablaMode,[['monto','Monto'],['dif','Diferencia'],['acum','Acumulado']])}
+        </div>
       </div>
-      {rondas.length===0&&<div style={{padding:'20px 18px',textAlign:'center',color:C.done,fontSize:13}}>Sin retiros en {yr}.</div>}
-      {rondas.length>0&&<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+      {mesesDelAnio===0&&<div style={{padding:'20px 18px',textAlign:'center',color:C.done,fontSize:13}}>Sin datos de {yr}.</div>}
+      {mesesDelAnio>0&&<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr>
-          <th style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'left',padding:'4px 18px 10px',borderBottom:`1px solid ${C.border}`}}>Retiro</th>
-          {tablaMode==='monto'&&<><th style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'right',padding:'4px 18px 10px',borderBottom:`1px solid ${C.border}`}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:COL['Cristóbal'],marginRight:5,verticalAlign:'middle'}}/>Cristóbal</th><th style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'right',padding:'4px 18px 10px',borderBottom:`1px solid ${C.border}`}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:COL['Erasmo'],marginRight:5,verticalAlign:'middle'}}/>Erasmo</th></>}
-          <th style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'right',padding:'4px 18px 10px',borderBottom:`1px solid ${C.border}`}}>{tablaMode==='acum'?'Acumulado (C−E)':'Diferencia'}</th>
+          <th style={thL}>Período</th>
+          {tablaMode==='monto'&&<><th style={thR}>{dotEl(COL['Cristóbal'])}Cristóbal</th><th style={thR}>{dotEl(COL['Erasmo'])}Erasmo</th></>}
+          <th style={thR}>{tablaMode==='acum'?'Acumulado (C−E)':'Diferencia'}</th>
         </tr></thead>
         <tbody>
-          {(()=>{ let acum=0; return rondas.map((r,i)=>{ const c=r['Cristóbal'],er=r['Erasmo'],d=c-er; acum+=d; const falta=d!==0; const td={fontSize:13,padding:'11px 18px',borderTop:`1px solid ${C.bgSoft}`,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.text}
-            return <tr key={i} style={falta?{background:'#FFFCF4'}:null}>
-              <td style={{...td,textAlign:'left',fontWeight:700,color:C.accent}}>{fechaLbl(r.d0,r.d1)}</td>
-              {tablaMode==='monto'&&<><td style={td}>{c>0?fmt(c):'—'}</td><td style={td}>{er>0?fmt(er):'—'}</td></>}
-              <td style={td}>{tablaMode==='acum'?(acum===0?<span style={{color:C.done}}>$0</span>:<span style={{color:acum>0?C.accent:'#8A6D12',fontWeight:700}}>{acum>0?'+':'−'}{fmt(Math.abs(acum))}</span>):(d===0?<span style={{color:C.done}}>$0</span>:<span style={{display:'inline-flex',alignItems:'center',fontSize:10.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:6,padding:'3px 9px',whiteSpace:'nowrap'}}>{faltaTxt(d)}</span>)}</td>
-            </tr> }) })()}
-          <tr><td style={{fontSize:13,padding:'12px 18px',borderTop:`2px solid ${C.border}`,textAlign:'left',fontWeight:800,color:C.accent,background:C.bgSoft}}>Total {yr}</td>{tablaMode==='monto'&&<><td style={{fontSize:13,padding:'12px 18px',borderTop:`2px solid ${C.border}`,textAlign:'right',fontWeight:800,background:C.bgSoft,fontVariantNumeric:'tabular-nums',color:COL['Cristóbal']}}>{fmt(retTot['Cristóbal']||0)}</td><td style={{fontSize:13,padding:'12px 18px',borderTop:`2px solid ${C.border}`,textAlign:'right',fontWeight:800,background:C.bgSoft,fontVariantNumeric:'tabular-nums',color:COL['Erasmo']}}>{fmt(retTot['Erasmo']||0)}</td></>}<td style={{fontSize:13,padding:'12px 18px',borderTop:`2px solid ${C.border}`,textAlign:'right',fontWeight:800,background:C.bgSoft,fontVariantNumeric:'tabular-nums'}}>{difAcum===0?<span style={{color:C.done}}>$0</span>:<span style={{fontSize:10.5,color:C.soonText}}>{faltaTxt(difAcum)}</span>}</td></tr>
+          {(()=>{ let acum=0; const out=[]
+            for(let m=1;m<=mesesDelAnio;m++){
+              const rs=(rondasByMes[m]||[]).slice().sort((a,b)=>String(a.d0).localeCompare(String(b.d0)))
+              if(rs.length===0){ if(ocultarVacios) continue; out.push(<tr key={'m'+m}><td style={{...tdMesEmpty,textAlign:'left',fontWeight:700}}>{MESL[m-1]}</td>{tablaMode==='monto'&&<><td style={tdMesEmpty}>—</td><td style={tdMesEmpty}>—</td></>}<td style={tdMesEmpty}>sin retiros</td></tr>); continue }
+              const mt=mesTot(m), md=mt.C-mt.E
+              out.push(<tr key={'m'+m}><td style={{...tdMes,textAlign:'left'}}>{MESL[m-1]}{rs.length>1?` · ${rs.length} retiros`:''}</td>{tablaMode==='monto'&&<><td style={tdMes}>{mt.C>0?fmt(mt.C):'—'}</td><td style={tdMes}>{mt.E>0?fmt(mt.E):'—'}</td></>}<td style={tdMes}>{tablaMode==='acum'?'':(md===0?<span style={{color:C.done,fontWeight:600}}>$0</span>:<span style={pill}>{faltaTxt(md)}</span>)}</td></tr>)
+              rs.forEach((r,ri)=>{ const c=r['Cristóbal'],er=r['Erasmo'],d=c-er; acum+=d; const falta=d!==0
+                out.push(<tr key={'r'+m+'_'+ri} onClick={()=>scrollA(listaRef)} style={{cursor:'pointer',background:falta?'#FFFCF4':'transparent'}}>
+                  <td style={{...tdRet,textAlign:'left',color:C.accent,fontWeight:700}}>{dotEl(C.done)}{fechaLbl(r.d0,r.d1)}</td>
+                  {tablaMode==='monto'&&<><td style={tdRet}>{c>0?fmt(c):'—'}</td><td style={tdRet}>{er>0?fmt(er):'—'}</td></>}
+                  <td style={tdRet}>{tablaMode==='acum'?(acum===0?<span style={{color:C.done}}>$0</span>:<span style={{color:acum>0?C.accent:'#8A6D12',fontWeight:700}}>{acum>0?'+':'−'}{fmt(Math.abs(acum))}</span>):(d===0?<span style={{color:C.done}}>$0</span>:<span style={pill}>{faltaTxt(d)}</span>)}</td>
+                </tr>) })
+            }
+            out.push(<tr key='tot'><td style={{...tdTot,textAlign:'left'}}>Total {yr}</td>{tablaMode==='monto'&&<><td style={{...tdTot,color:COL['Cristóbal']}}>{fmt(retTot['Cristóbal']||0)}</td><td style={{...tdTot,color:COL['Erasmo']}}>{fmt(retTot['Erasmo']||0)}</td></>}<td style={tdTot}>{difAcum===0?<span style={{color:C.done}}>$0</span>:<span style={{fontSize:10.5,color:C.soonText,fontWeight:700}}>{faltaTxt(difAcum)}</span>}</td></tr>)
+            return out
+          })()}
         </tbody>
       </table></div>}
     </div>
 
-    <div style={card}>
+    <div ref={listaRef} style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
         {chTi('Retiros · '+nRet+' en total',BG['Cristóbal'],<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>)}
         {seg(movVista,setMovVista,[['socio','Por socio'],['mes','Por mes'],['crono','Cronológico']])}
