@@ -8776,7 +8776,132 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
   </div>)
 }
 
-function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros }){
+// ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + subarriendo) − egresos (planilla real oficina_costos_mensual + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
+function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBack }){
+  const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
+  const [yr,setYr]=useState(curY)
+  const [scope,setScope]=useState('ytd')
+  const [selM,setSelM]=useState(curM)
+  const [open,setOpen]=useState(null)
+  const [ncOpen,setNcOpen]=useState(false)
+  const [ventas,setVentas]=useState([]); const [cm,setCm]=useState([])
+  useEffect(()=>{ if(DEMO){ setVentas([]); setCm([]); return } let v=true
+    supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').then(({data})=>{ if(v&&data) setVentas(data) },()=>{})
+    supabase.from('oficina_costos_mensual').select('*').eq('anio',yr).then(({data})=>{ if(v&&data) setCm(data) },()=>{})
+    return ()=>{v=false} },[yr])
+  const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const yrs=(()=>{ const s=new Set([curY]); (ventas||[]).forEach(d=>{ const y=parseInt(String(d.fecha_emision||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
+  const pad=m=>`${yr}-${String(m).padStart(2,'0')}`
+  const extBillIds=useMemo(()=>new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id))),[terceros])
+  const maxM=yr<curY?12:curM
+  const months=scope==='mes'?[selM]:Array.from({length:maxM},(_,i)=>i+1)
+  const cmBy=useMemo(()=>{ const m={}; (cm||[]).forEach(r=>{ m[r.mes]=r }); return m },[cm])
+  const vMes=m=>(ventas||[]).filter(d=>String(d.fecha_emision||'').startsWith(pad(m)))
+  // facturación
+  const emitidaMes=m=>vMes(m).filter(d=>[33,34].includes(Number(d.tipo_dte))).reduce((a,d)=>a+(Number(d.monto)||0),0)
+  const ncMes=m=>vMes(m).filter(d=>Number(d.tipo_dte)===61).reduce((a,d)=>a+(Number(d.monto)||0),0)
+  const terMes=m=>vMes(m).filter(d=>[33,34].includes(Number(d.tipo_dte))&&extBillIds.has(String(d.billing_id))).reduce((a,d)=>a+(Number(d.monto)||0),0)
+  const S=(fn)=>months.reduce((a,m)=>a+fn(m),0)
+  const emitida=S(emitidaMes), nc=S(ncMes), terc=S(terMes)
+  const facturacion=emitida-nc-terc
+  const cl=(k)=>months.reduce((a,m)=>{ const r=cmBy[m]; return a+(r?Number(r[k])||0:0) },0)
+  const sueldos=cl('sueldos'), cotiz=cl('cotizaciones'), ppm=cl('ppm'), contadora=cl('contadora'), arriendo=cl('arriendo'), ggcc=cl('gastos_comunes'), honor=cl('honorarios'), otrosC=cl('otros_costos'), subarr=cl('subarriendo'), comis=cl('comisiones')
+  const costosBrutos=sueldos+cotiz+ppm+contadora+arriendo+ggcc+honor+otrosC
+  const ingresos=facturacion+subarr
+  const egresos=costosBrutos+comis
+  const resultado=ingresos-egresos
+  const margen=ingresos>0?Math.round(resultado/ingresos*100):0
+  const ncList=months.flatMap(m=>vMes(m).filter(d=>Number(d.tipo_dte)===61).map(d=>({folio:d.folio,rec:d.receptor_name,monto:Number(d.monto)||0,ext:!d.billing_id})))
+  const estim=months.some(m=>cmBy[m]&&cmBy[m].estimado)
+  const fmtM=n=>{ const s=n<0?'−':'+'; return s+'$'+(Math.abs(n)/1e6).toFixed(1).replace('.',',')+' M' }
+  const fmtMp=n=>'$'+(Math.abs(n)/1e6).toFixed(1).replace('.',',')+' M'
+  const titulo=scope==='mes'?`${MESES[selM-1]} ${yr}`:(yr<curY?`${yr} completo`:`Enero–${MESES[maxM-1]} ${yr}`)
+
+  const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,marginBottom:9,overflow:'hidden'}
+  const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:11,fontWeight:700,padding:'7px 14px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
+  const chev=o=><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round' style={{transform:o?'rotate(90deg)':'none',transition:'.2s'}}><path d='m9 18 6-6-6-6'/></svg>
+  const row=(l,v,s,col)=><div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5}}><span style={{color:C.text,fontWeight:600}}>{l}{s?<span style={{color:C.done,fontSize:10.5,fontWeight:500,marginLeft:6}}>{s}</span>:null}</span><span style={{marginLeft:'auto',fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:col||C.accent}}>{v}</span></div>
+  const sec=(id,icBg,icCol,icPath,ti,sub,amt,amtCol,body)=><div style={card}>
+    <div onClick={()=>setOpen(open===id?null:id)} style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:12,cursor:'pointer'}}>
+      <span style={{width:36,height:36,borderRadius:11,background:icBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={icCol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{icPath}</svg></span>
+      <span style={{minWidth:0}}><span style={{fontSize:13.5,fontWeight:800,color:C.accent,display:'block'}}>{ti}</span><span style={{fontSize:11,color:C.done}}>{sub}</span></span>
+      <span style={{marginLeft:'auto',fontSize:17,fontWeight:800,letterSpacing:-.3,fontVariantNumeric:'tabular-nums',color:amtCol}}>{amt}</span>
+      <span style={{flexShrink:0}}>{chev(open===id)}</span>
+    </div>
+    {open===id&&<div style={{padding:'0 16px 14px'}}>{body}</div>}
+  </div>
+
+  return (
+  <div style={{maxWidth:isDesktop?720:'100%',margin:'0 auto',padding:isDesktop?'0 20px 48px':'0 16px 48px'}}>
+    <div style={{display:'flex',alignItems:'center',gap:11,margin:'4px 0 14px',flexWrap:'wrap'}}>
+      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>Oficina</button>
+      <h1 style={{fontSize:isDesktop?21:19,fontWeight:800,color:C.accent,letterSpacing:-.5,margin:0}}>Resultado del año</h1>
+      <span style={{flex:1}}/>
+      <select value={yr} onChange={e=>setYr(parseInt(e.target.value,10))} style={{fontSize:12,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:20,padding:'6px 10px',background:C.azulBg,color:C.accent,cursor:'pointer'}}>{yrs.map(y=><option key={y} value={y}>{y}</option>)}</select>
+      {seg(scope,setScope,[['ytd','Año'],['mes','Por mes']])}
+    </div>
+
+    {scope==='mes'&&<div style={{display:'flex',gap:6,overflowX:'auto',padding:'1px 1px 11px'}}>{Array.from({length:maxM},(_,i)=>i+1).map(m=><button key={m} onClick={()=>setSelM(m)} style={{flex:'0 0 auto',fontSize:11,fontWeight:700,padding:'6px 12px',borderRadius:20,cursor:'pointer',whiteSpace:'nowrap',border:`1px solid ${selM===m?C.accent:C.border}`,background:selM===m?C.accent:'#fff',color:selM===m?'#fff':C.muted}}>{MESES[m-1]}</button>)}</div>}
+
+    <div style={{background:C.accent,color:'#fff',borderRadius:18,padding:'20px 21px',marginBottom:13}}>
+      <div style={{fontSize:10,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:'#9FC6D8'}}>Resultado · {titulo}{estim?' · incl. estimados':''}</div>
+      <div style={{fontSize:42,fontWeight:800,letterSpacing:-1.6,lineHeight:1,margin:'10px 0 5px',fontVariantNumeric:'tabular-nums'}}>{fmtM(resultado)}</div>
+      <div style={{fontSize:11.5,color:'#9FC6D8'}}>ingresos − egresos</div>
+      <div style={{display:'flex',gap:9,marginTop:15}}>
+        <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Ingresos</div><div style={{fontSize:16,fontWeight:800,marginTop:2,color:'#7FD7A9',fontVariantNumeric:'tabular-nums'}}>{fmtMp(ingresos)}</div></div>
+        <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Egresos</div><div style={{fontSize:16,fontWeight:800,marginTop:2,color:'#F0B9BD',fontVariantNumeric:'tabular-nums'}}>{fmtMp(egresos)}</div></div>
+        <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Margen</div><div style={{fontSize:16,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{margen}%</div></div>
+      </div>
+    </div>
+
+    <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'20px 4px 10px'}}>Ingresos</div>
+    {sec('fac',C.azulBg,C.accent,<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>,'Facturación propia','emitido en el SII, neto',fmtMp(facturacion),C.accent,
+      <>{row('Facturación emitida','$'+(emitida/1e6).toFixed(1).replace('.',',')+' M','SII')}
+        <div>
+          <div onClick={e=>{e.stopPropagation();setNcOpen(!ncOpen)}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5,cursor:'pointer'}}><span style={{color:C.text,fontWeight:600}}>− Notas de crédito <span style={{color:C.done,fontSize:10.5}}>{ncList.length} NC</span></span><span style={{marginLeft:'auto'}}>{chev(ncOpen)}</span><span style={{fontWeight:700,color:C.overdueText,fontVariantNumeric:'tabular-nums',marginLeft:9}}>−{fmtMp(nc)}</span></div>
+          {ncOpen&&ncList.map((n,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 11px',margin:'4px 0',background:C.overdueBg,borderRadius:8,fontSize:11.5,color:C.overdueText,fontWeight:600}}><span>N° {n.folio} · {n.rec||'—'}{n.ext?' · sin enlazar':''}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(n.monto)}</span></div>)}
+        </div>
+        {row('Facturación neta','$'+((emitida-nc)/1e6).toFixed(1).replace('.',',')+' M')}
+        {row('− Por cuenta de terceros','−'+fmtMp(terc),'se traspasa el 85%')}
+        <div style={{display:'flex',padding:'9px 2px',borderTop:`2px solid ${C.border}`,fontSize:13,fontWeight:800,color:C.accent}}><span>Facturación propia</span><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>{fmtMp(facturacion)}</span></div>
+      </>)}
+    {sec('sub',C.greenBg,C.greenText,<><rect x='3' y='4' width='18' height='16' rx='2'/><path d='M3 10h18M8 4v16'/></>,'Subarriendo','Rodrigo Díaz · $1,08 M/mes','+'+fmtMp(subarr),C.greenText,
+      <>{row('Meses con subarriendo',String(months.filter(m=>cmBy[m]&&Number(cmBy[m].subarriendo)>0).length))}{row('Total',fmtMp(subarr),null,C.greenText)}<div style={{fontSize:10.5,color:C.done,paddingTop:7}}>Entra como ingreso; baja el costo neto de oficina.</div></>)}
+
+    <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Egresos</div>
+    {sec('cos',C.navyBg||C.azulBg,C.accent,<><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></>,'Costos de operación','sueldos, previsión, oficina',fmtMp(costosBrutos),C.accent,
+      <>{row('Sueldos (líquido)',fmtMp(sueldos))}
+        {row('Cotizaciones + PPM',fmtMp(cotiz+ppm),'de Claudia')}
+        {row('Contadora',fmt(contadora))}
+        {row('Arriendo',fmtMp(arriendo))}
+        {row('Gastos comunes',fmtMp(ggcc))}
+        {honor>0?row('Honorarios (Martina)',fmtMp(honor)):null}
+        {otrosC>0?row('Otros',fmtMp(otrosC)):null}
+        <div style={{display:'flex',padding:'9px 2px',borderTop:`2px solid ${C.border}`,fontSize:13,fontWeight:800,color:C.accent}}><span>Total costos</span><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>{fmtMp(costosBrutos)}</span></div>
+      </>)}
+    {sec('com',C.soonBg,C.soonText,<><path d='M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7'/></>,'Comisiones a colaboradores','pagadas + por compensación',fmtMp(comis),C.soonText,
+      <>{row('Comisiones del período',fmtMp(comis))}<div style={{fontSize:10.5,color:C.done,paddingTop:7}}>Incluye las saldadas por compensación (ej. Rodrigo, mayo).</div></>)}
+
+    <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Resultado mes a mes</div>
+    <div style={card}><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+      <thead><tr>{['Mes','Facturación','Costos','Comis.','Resultado'].map((h,i)=><th key={h} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,padding:'8px 11px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft,textAlign:i?'right':'left',whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+      <tbody>{Array.from({length:maxM},(_,i)=>i+1).map(m=>{ const fp=emitidaMes(m)-ncMes(m)-terMes(m); const r=cmBy[m]; const cb=r?(Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos)):0; const cmo=r?Number(r.comisiones):0; const sb=r?Number(r.subarriendo):0; const res=fp+sb-cb-cmo; const td={fontSize:12,padding:'8px 11px',textAlign:'right',fontVariantNumeric:'tabular-nums',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap'}; const selR=scope==='mes'&&selM===m
+        return <tr key={m} onClick={()=>{setScope('mes');setSelM(m)}} style={{cursor:'pointer',background:selR?C.azulBg:'transparent'}}>
+          <td style={{...td,textAlign:'left',fontWeight:700,color:C.accent}}>{MESES[m-1]}</td>
+          <td style={td}>{fmtMp(fp)}</td><td style={td}>{fmtMp(cb)}</td><td style={td}>{cmo>0?fmtMp(cmo):'—'}</td>
+          <td style={{...td,fontWeight:800,color:res>=0?C.greenText:C.overdueText}}>{res>=0?'+':'−'}{fmtMp(res)}</td>
+        </tr> })}
+        <tr><td style={{fontSize:12.5,padding:'10px 11px',textAlign:'left',fontWeight:800,color:C.accent,background:C.bgSoft,borderTop:`2px solid ${C.border}`}}>YTD</td>
+          {(()=>{ const allM=Array.from({length:maxM},(_,i)=>i+1); const sfp=allM.reduce((a,m)=>a+emitidaMes(m)-ncMes(m)-terMes(m),0); const scb=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?(Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos)):0)},0); const scm=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?Number(r.comisiones):0)},0); const ssb=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?Number(r.subarriendo):0)},0); const sres=sfp+ssb-scb-scm; const tt={fontSize:12.5,padding:'10px 11px',textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',background:C.bgSoft,borderTop:`2px solid ${C.border}`,whiteSpace:'nowrap'}
+            return <><td style={tt}>{fmtMp(sfp)}</td><td style={tt}>{fmtMp(scb)}</td><td style={tt}>{fmtMp(scm)}</td><td style={{...tt,color:sres>=0?C.greenText:C.overdueText}}>{sres>=0?'+':'−'}{fmtMp(sres)}</td></> })()}
+        </tr>
+      </tbody>
+    </table></div></div>
+    <div style={{fontSize:11,color:C.muted,lineHeight:1.6,margin:'14px 4px 0'}}>Facturación desde el SII (neta de notas de crédito y terceros). Costos desde la planilla real (editable). {estim?'Algunos meses incluyen estimados (cotizaciones/PPM de Claudia aún pendientes).':''}</div>
+  </div>)
+}
+
+function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros }){
   const [sub,setSub] = useState(null)
   const [caja,setCaja] = useState(null)
   const [comprasRows,setComprasRows] = useState([])   // DTE de compra del SII (sii_compras_docs): foto IVA crédito + módulo Compras
@@ -8802,10 +8927,18 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
     }catch(_){ if(vivo) setCaja(null) } })()
     return ()=>{ vivo=false }
   },[])
-  const costoMes = costosOficinaMes(costosOfiRows, ym)
-  const comiMes = comisionMesTerc(terceros, ym)
+  // Costos REALES desde la planilla editable (oficina_costos_mensual); si falta un mes, cae al presupuesto. Subarriendo y comisiones también salen de la planilla.
+  const [rcmRows,setRcmRows]=useState([])
+  useEffect(()=>{ if(DEMO){ setRcmRows([]); return } let v=true; supabase.from('oficina_costos_mensual').select('*').eq('anio',year).then(({data})=>{ if(v&&data) setRcmRows(data) },()=>{}); return ()=>{v=false} },[year])
+  const rcmBy=useMemo(()=>{ const m={}; (rcmRows||[]).forEach(r=>{ m[r.mes]=r }); return m },[rcmRows])
+  const _ym2m=yy=>parseInt(String(yy).slice(5,7),10)
+  const costoBrutoMes=mm=>{ const r=rcmBy[_ym2m(mm)]; if(r) return Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos); return costosOficinaMes(costosOfiRows, mm) }
+  const subMesT=mm=>{ const r=rcmBy[_ym2m(mm)]; return r?Number(r.subarriendo):0 }
+  const comMesT=mm=>{ const r=rcmBy[_ym2m(mm)]; return r?Number(r.comisiones):comisionMesTerc(terceros,mm) }
+  const costoMes = costoBrutoMes(ym)
+  const comiMes = comMesT(ym)
   const factSiiMes = facSiiPeriodo(ym)                             // DEVENGADO: emitido en el SII (propia, neto NC)
-  const resMes = factSiiMes - costoMes - comiMes                   // resultado del mes (devengado) — protagonista
+  const resMes = factSiiMes + subMesT(ym) - costoMes - comiMes     // resultado del mes (devengado) — protagonista
   const cobradoMes = ingresosMesBill(billing, ym)                  // cobrado a caja del mes (contexto)
   const flujoMes = cobradoMes - costoMes                           // flujo de caja del mes (contexto)
   const ret = retirosOficinaData(expenses, clients, year)
@@ -8817,7 +8950,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   // KPIs del año (YTD): facturación propia desde el SII (todo el año) − costos − comisiones; cobrado a caja; por cobrar (saldo vivo).
   const _curM = new Date().getMonth()+1
   let factSiiYr=0, resYr=0, cobradoYr=0
-  for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; cobradoYr+=ingresosMesBill(billing,mm); const f=facSiiPeriodo(mm); factSiiYr+=f; if(m<=_curM) resYr += f - costosOficinaMes(costosOfiRows,mm) - comisionMesTerc(terceros,mm) }
+  for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; cobradoYr+=ingresosMesBill(billing,mm); const f=facSiiPeriodo(mm); factSiiYr+=f; if(m<=_curM) resYr += f + subMesT(mm) - costoBrutoMes(mm) - comMesT(mm) }
   const porCobrar=(billing||[]).filter(b=>b&&!b.deleted_at&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
   const gridStyle = isDesktop
     ? {display:'grid',gridTemplateColumns:'2fr 1fr',gridTemplateAreas:'"res caja" "res flujo"',gap:12}
@@ -8840,7 +8973,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   return (<div>
     <div>
       {/* Protagonista: resultado devengado del mes → abre Estado de resultados */}
-      <div style={{background:C.accent,color:'#fff',borderRadius:16,padding:'18px 20px',cursor:'pointer',position:'relative'}} onClick={()=>onOpenEstadoResultados&&onOpenEstadoResultados()}>
+      <div style={{background:C.accent,color:'#fff',borderRadius:16,padding:'18px 20px',cursor:'pointer',position:'relative'}} onClick={()=>onOpenResultadoAnio?onOpenResultadoAnio():(onOpenEstadoResultados&&onOpenEstadoResultados())}>
         <span style={{position:'absolute',top:16,right:16,color:'#85B7EB',fontSize:16,fontWeight:700}}>›</span>
         <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:'#85B7EB'}}>Resultado del mes · devengado</div>
         <div style={{fontSize:isDesktop?36:29,fontWeight:800,letterSpacing:-1,margin:'6px 0 4px',lineHeight:1,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{resMes>=0?'+':'−'}{fmt(Math.abs(resMes))}</div>
@@ -32454,7 +32587,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',socios:'Socios',facturasDelMes:'Facturas del mes',editCliente:'Editar cliente'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',editCliente:'Editar cliente'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
   admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina']],
@@ -33081,7 +33214,7 @@ export default function App() {
   useEffect(()=>{
     if(userRole==='limited' && tab!=='editCliente' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')   // editCliente = página de edición (drill fuera de la barra)
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
-    if(userRole==='admin' && tab!=='facturasDelMes' && tab!=='editCliente' && tab!=='socios' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
+    if(userRole==='admin' && tab!=='facturasDelMes' && tab!=='editCliente' && tab!=='socios' && tab!=='resultadoAnio' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
     // Módulo apagado (entitlements): si la vista actual pertenece a un módulo no contratado, redirige. Para LEA (todo ON) es inerte.
     if(VIEW_MODULO[tab] && !moduloOn(VIEW_MODULO[tab])) setTab(userRole==='admin'?'dashboard':'tasks')
   },[userRole,tab,modVer])
@@ -35029,9 +35162,10 @@ export default function App() {
                 <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Oficina</span>
               </div>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})}/>
             </div>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
+            {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
