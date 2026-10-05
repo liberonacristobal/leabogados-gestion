@@ -61,9 +61,9 @@ const BRAND = {
   dominio: (typeof window!=='undefined' && window.location && window.location.host && !/^localhost|^127\.|\.vercel\.app$/i.test(window.location.host)) ? window.location.host : 'gestion.leabogados.cl',
   web: 'leabogados.cl',
   portal: 'portal.leabogados.cl',                   // dominio del portal del cliente
-  direccion: 'Av. Kennedy 7900, Of. 905, Vitacura · Santiago',
-  direccionCalle: 'Av. Kennedy 7900, Of. 905, Vitacura',          // variante corta (footers PDF / comprobantes)
-  direccionFirma: 'Av. Kennedy Lateral 7900, Of. 905, Vitacura',  // variante membrete/firma de correo (calle "Lateral")
+  direccion: 'Av. Pdte. Kennedy 7900, Of. 905, Vitacura · Santiago',
+  direccionCalle: 'Av. Pdte. Kennedy 7900, Of. 905, Vitacura',    // variante corta (factura PDF / footers / comprobantes) — texto EXACTO del DTE registrado en el SII
+  direccionFirma: 'Av. Pdte. Kennedy 7900, Of. 905, Vitacura',    // variante membrete/firma de correo
   ciudad: 'Santiago',
   telefono: '+56 2 2405 3800',
   socios: 'Cristóbal Liberona y Erasmo Escala',
@@ -10864,19 +10864,30 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   }
   // Backfill: respalda en Drive TODAS las facturas emitidas (con DTE) que aún no tienen copia guardada. El PDF se regenera del DTE. Idempotente (adjuntarRespaldoDrive dedup contra Drive).
   const [backfillBusy,setBackfillBusy] = useState(false)
+  // Respalda TODAS las facturas emitidas en Drive, en la carpeta del MES FACTURADO (emisión − 1, convención del estudio).
+  // Dos pasadas: (1) sube las que no tienen copia; (2) reubica las ya respaldadas que quedaron en la carpeta del mes de
+  // EMISIÓN (lógica vieja) a la del mes facturado. El fileId/webViewLink no cambian al mover → no hay que tocar billing_attachments.
   const backfillRespaldos = async()=>{
     if(backfillBusy) return
-    let conResp=new Set()
-    try{ const {data}=await supabase.from('billing_attachments').select('billing_id'); conResp=new Set((data||[]).map(a=>String(a.billing_id))) }catch(_){}
-    const faltan=(billing||[]).filter(b=>b&&!b.deleted_at&&b.dte_xml&&b.invoice_no&&!conResp.has(String(b.id)))
-    if(!faltan.length){ appAlert('Todas las facturas emitidas ya tienen su copia en Drive.'); return }
-    if(!await appConfirm(`${faltan.length} factura${faltan.length!==1?'s':''} emitida${faltan.length!==1?'s':''} sin copia en Drive. ¿Generar sus PDF y subirlos ahora? Puede tardar un poco.`)) return
+    let att=[]
+    try{ const {data}=await supabase.from('billing_attachments').select('billing_id,drive_file_id'); att=data||[] }catch(_){}
+    const conResp=new Set(att.map(a=>String(a.billing_id)))
+    const attByBill={}; att.forEach(a=>{ if(a.drive_file_id){ (attByBill[String(a.billing_id)]||(attByBill[String(a.billing_id)]=[])).push(a.drive_file_id) } })
+    const emitidas=(billing||[]).filter(b=>b&&!b.deleted_at&&b.dte_xml&&b.invoice_no)
+    const faltan=emitidas.filter(b=>!conResp.has(String(b.id)))
+    const yaResp=emitidas.filter(b=>attByBill[String(b.id)])   // con archivo real en Drive → revisar/mover de carpeta
+    if(!faltan.length && !yaResp.length){ appAlert('No hay facturas emitidas para respaldar.'); return }
+    const partes=[faltan.length?`${faltan.length} sin copia (se suben)`:'', yaResp.length?`${yaResp.length} por revisar que estén en la carpeta del mes facturado`:''].filter(Boolean).join(' · ')
+    if(!await appConfirm(`${partes}. ¿Continuar? Puede tardar un poco.`)) return
     const token=await driveToken(); if(!token){ if(await appConfirm('Para guardar en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); return }
-    setBackfillBusy(true); let ok=0,err=0
-    for(const b of faltan){ try{ const d=splitSetDTE(b.dte_xml)[0]||b.dte_xml; await adjuntarRespaldoDrive(token,b,d,b.issued_at||null); ok++ }
-      catch(e){ err++; if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive(); break } } }
+    const fEmisDe = b => { if(/^\d{4}-\d{2}/.test(String(b.issued_at||''))) return b.issued_at; const m=String(b.dte_xml||'').match(/<FchEmis>([^<]+)<\/FchEmis>/); return m?m[1]:'' }
+    setBackfillBusy(true); let ok=0,err=0,mov=0
+    for(const b of faltan){ try{ const d=splitSetDTE(b.dte_xml)[0]||b.dte_xml; await adjuntarRespaldoDrive(token,b,d,fEmisDe(b)||null); ok++ }
+      catch(e){ err++; if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive(); setBackfillBusy(false); onRefresh&&onRefresh(); return } } }
+    for(const b of yaResp){ try{ const dest=await driveCarpetaFacturacion(token, fEmisDe(b)||''); for(const fid of attByBill[String(b.id)]){ if(await driveMover(token, fid, dest)) mov++ } }
+      catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive(); break } err++ } }
     setBackfillBusy(false); onRefresh&&onRefresh()
-    appAlert(`${ok} copia${ok!==1?'s':''} subida${ok!==1?'s':''} a Drive${err?` · ${err} con error (reintenta)`:''}.`)
+    appAlert(`${ok} copia${ok!==1?'s':''} nueva${ok!==1?'s':''} · ${mov} reubicada${mov!==1?'s':''} al mes facturado${err?` · ${err} con error (reintenta)`:''}.`)
   }
   const [progPick,setProgPick] = useState(null)     // item cuya selección de programada (alternativas) está abierta
   const [secOpen,setSecOpen] = useState({})         // secciones desplegadas del modal de carga (programadas van replegadas por defecto)
@@ -13241,7 +13252,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
         {bill?.id&&<button onClick={()=>printComprobante(f,clients.find(c=>String(c.id)===String(f.client_id))?.name)} title='Imprimir / Guardar PDF' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:500,cursor:'pointer'}}>Comprobante</button>}
         {bill?.id&&onAnular&&f.status!=='Anulado'&&f.status!=='Anulada'&&<button onClick={()=>{setMotivoBaja('');setObsBaja('');setAnularOpen(true)}} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.soon}`,background:'#fff',color:C.soon,fontSize:13,fontWeight:500,cursor:'pointer'}}>Anular</button>}
         {bill?.id&&onEmitirDTE&&f.status!=='Anulado'&&f.status!=='Anulada'&&!bill.dte_track_id&&<button onClick={()=>onEmitirDTE(bill)} title='Generar y enviar la factura electrónica al SII (con vista previa antes de emitir)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Emitir al SII</button>}
-        {bill?.id&&bill.dte_xml&&<button onClick={async()=>{ try{ const doc=splitSetDTE(bill.dte_xml)[0]||bill.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }} title='Ver el PDF oficial (con timbre) de la factura emitida' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.tealText}`,background:'#fff',color:C.tealText,fontSize:13,fontWeight:600,cursor:'pointer'}}>PDF</button>}
+        {bill?.id&&bill.dte_xml&&<button onClick={async()=>{ try{ const doc=splitSetDTE(bill.dte_xml)[0]||bill.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); descargarPdfU8(u8, facturaNombreArchivo(r)) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }} title='Descargar el PDF oficial (con timbre) de la factura emitida' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.tealText}`,background:'#fff',color:C.tealText,fontSize:13,fontWeight:600,cursor:'pointer'}}>PDF</button>}
         {bill?.id&&bill.dte_track_id&&onActualizarEstado&&(()=>{ const est=String(bill.dte_estado||'enviado'); const rech=/rech/i.test(est); const acep=/acep/i.test(est); return <button onClick={()=>onActualizarEstado(bill)} title='Re-consultar el estado del DTE en el SII (puede tardar en aceptarse o rechazarse)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${rech?C.overdue:acep?C.normal:C.soon}`,background:'#fff',color:rech?C.overdue:acep?C.greenText:C.soonText,fontSize:12,fontWeight:600,cursor:'pointer'}}>SII: {rech?'rechazada':acep?'aceptada':'enviado'} · actualizar</button> })()}
         <button onClick={onClose} style={{height:36,padding:'0 16px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
         <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave({...f,_terceroProv:terceroProv,_terceroPagado:terceroPagado})} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
@@ -20985,7 +20996,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           const rsNameOf=b=>{ const r=rutOf(b); const e=entities.find(x=>String(x.id)===String(b.entity_id))||entities.find(x=>x.rut&&String(x.rut).trim()===r); if(e) return e.name+(e.rut?(' · '+e.rut):''); return b.receptor_name?(b.receptor_name+(r?(' · '+r):'')):'Sin razón social' }
           const rsShort=b=>{ const r=rutOf(b); const e=entities.find(x=>String(x.id)===String(b.entity_id))||entities.find(x=>x.rut&&String(x.rut).trim()===r); if(e?.name) return rsDisplay(e.name); return b.receptor_name?rsDisplay(b.receptor_name):null }
           // Descargar copia PDF (con timbre) de una factura emitida — se regenera del DTE guardado, no depende de Drive. Siempre disponible.
-          const verFacturaPdf = async(b)=>{ try{ const doc=splitSetDTE(b.dte_xml)[0]||b.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }
+          const verFacturaPdf = async(b)=>{ try{ const doc=splitSetDTE(b.dte_xml)[0]||b.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); descargarPdfU8(u8, facturaNombreArchivo(r)) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }
           const renderFactura = (b,assignable)=>{
             const proj=b.sale_id?saleTitle(b.sale_id):null; const rsNm=rsShort(b)
             // Asignable a CUALQUIER proyecto del cliente (un proyecto puede cruzar años y razones sociales).
@@ -21348,13 +21359,17 @@ function parseDteFactura(dteXml){
   }
 }
 // Genera el PDF con timbre de una factura (desde su DTE) y lo abre en una pestaña para revisarlo.
+// Nombre canónico del archivo de factura: IDÉNTICO al que se guarda en Drive (ver subirFacturaADrive/adjuntarRespaldoDrive),
+// para que descargar desde la ficha no obligue a renombrar. "Factura N° - Cliente.pdf".
+function facturaNombreArchivo(r){ const rz=String(r?.rznR||'').replace(/[\/\\:*?"<>|]/g,'').replace(/\s+/g,' ').trim().slice(0,45); return 'Factura '+(r?.folio||'')+(rz?' - '+rz:'')+'.pdf' }
+function descargarPdfU8(u8,nombre){ const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); const a=document.createElement('a'); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000) }
 async function verFacturaPdf(b){
   try{
     const doc=splitSetDTE(b?.dte_xml||'')[0]
     if(!doc){ appAlert('Esta factura no tiene XML del SII para generar el PDF.'); return }
     const r=await facturaDtePdfBase64(doc)
     const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i)
-    const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000)
+    descargarPdfU8(u8, facturaNombreArchivo(r))
   }catch(e){ appAlert('No se pudo abrir el PDF.') }
 }
 // Resuelve la MEJOR venta/proyecto para una factura: la vinculada (sale_id); si no, la única venta del cliente (o su única Activa).
@@ -23041,7 +23056,7 @@ async function facturaDtePdfBase64(docXml){
   let ye=43; p.setFontSize(8.5)
   const inl=(lab,val,vcol)=>{ p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text(lab,M,ye); const w=p.getTextWidth(lab+'  '); p.setFont('helvetica','normal'); p.setTextColor(...(vcol||GRAF)); p.text(val,M+w,ye); ye+=4.7 }
   inl('Giro:','Prestación de servicios y asesorías profesionales')
-  inl('Dirección:','Cam. Las Hualtatas 4901, C. 11, Lo Barnechea, Santiago')
+  inl('Dirección:',BRAND.direccionCalle)
   p.setFontSize(8.5)
   p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Email:',M,ye); let cx=M+p.getTextWidth('Email:  ')
   p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(BRAND.pago.honorarios.email,cx,ye); cx+=p.getTextWidth(BRAND.pago.honorarios.email)
@@ -23433,9 +23448,14 @@ async function driveBuscarEnCarpeta(token, folderId, name){
 // falten y cachea el id por año-mes (evita re-buscar). Reemplaza a la carpeta única "BETA" de pruebas.
 async function driveCarpetaFacturacion(token, isoDate){
   const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const s=String(isoDate||''); const y=/^\d{4}/.test(s)?s.slice(0,4):'Sin fecha'; const mi=+s.slice(5,7); const mes=(mi>=1&&mi<=12)?MES[mi-1]:''
-  const nombreAnio=`Facturación ${y}`                                    // carpeta del año
-  const nombreMes = mes?`${String(mi).padStart(2,'0')}. ${mes} ${y}`:y   // "06. Junio 2026" (con cero → ordena bien)
+  // Convención del estudio: se factura el MES VENCIDO (emito en octubre → período facturado = septiembre; y así todos los meses).
+  // La carpeta usa el MES FACTURADO = emisión − 1 mes (enero → diciembre del año anterior). Así "Factura emitida 15-sep" cae en "08. Agosto".
+  const s=String(isoDate||'')
+  let y='Sin fecha', mi=0
+  if(/^\d{4}-\d{2}/.test(s)){ let yy=+s.slice(0,4), mm=+s.slice(5,7)-1; if(mm<1){ mm=12; yy-=1 } y=String(yy); mi=mm }
+  const mes=(mi>=1&&mi<=12)?MES[mi-1]:''
+  const nombreAnio=`Facturación ${y}`                                    // carpeta del año (del mes facturado)
+  const nombreMes = mes?`${String(mi).padStart(2,'0')}. ${mes} ${y}`:y   // "08. Agosto 2026" (con cero → ordena bien)
   const ckey='drive_fact_v2_'+nombreAnio+'/'+nombreMes
   let cached=null; try{ cached=localStorage.getItem(ckey) }catch(_){}
   if(cached) return cached
@@ -23471,6 +23491,23 @@ async function subirFacturaADrive(billId, dteXml){
     await adjuntar(new File([dteXml], baseName+'.xml', {type:'application/xml'}), baseName+'.xml')
     return {ok:rows.length>0, rows}
   }catch(e){ return {ok:false, err:e.message} }
+}
+// Mueve un archivo de Drive a otra carpeta (quita TODOS sus padres actuales y agrega el destino). Idempotente:
+// si el único padre ya es el destino devuelve false (no hace nada). El fileId y su webViewLink NO cambian al mover.
+async function driveMover(token, fileId, destFolderId){
+  if(!fileId||!destFolderId) return false
+  const g=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=parents&supportsAllDrives=true`,{headers:{Authorization:'Bearer '+token}})
+  if(g.status===401) throw new DriveAuthError()
+  if(!g.ok) throw new Error('Drive leer carpeta '+g.status)
+  const parents=((await g.json()).parents)||[]
+  if(parents.length===1 && parents[0]===destFolderId) return false
+  const rm=parents.join(',')
+  const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${destFolderId}${rm?`&removeParents=${encodeURIComponent(rm)}`:''}&fields=id&supportsAllDrives=true`,{
+    method:'PATCH', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'}, body:'{}'
+  })
+  if(r.status===401) throw new DriveAuthError()
+  if(!r.ok) throw new Error('Drive mover '+r.status)
+  return true
 }
 // Manda un archivo a la papelera de Drive.
 async function driveTrash(token, fileId){
@@ -25782,7 +25819,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
 
 // ─── CENTRO DE APRENDIZAJE: lo que la app aprendió (learnings) — visible y borrable (des-aprender un match errado) ──
 // Asistente de redacción legal con IA (claudeCall). Redacta en el FORMATO del estudio; el usuario valida/edita (compuerta humana).
-const ESTUDIO_BRIEF = `Eres redactor del estudio jurídico chileno ${BRAND.nombre} (práctica corporativa y tributaria). Socios: ${BRAND.socios}. Membrete/firma del estudio: "Avenida Kennedy 7900, of. 905, Vitacura, Santiago", "${BRAND.telefono}", "${BRAND.web}". Escribe en español jurídico chileno, formal, claro y preciso. El estudio factura SIEMPRE exento de IVA; los honorarios se expresan en UF. Usa SOLO los datos que entregue el usuario; si falta un dato clave (honorarios, alcance, nombres), déjalo marcado como [completar] en vez de inventarlo. Devuelve solo el documento, sin comentarios ni explicaciones.`
+const ESTUDIO_BRIEF = `Eres redactor del estudio jurídico chileno ${BRAND.nombre} (práctica corporativa y tributaria). Socios: ${BRAND.socios}. Membrete/firma del estudio: "${BRAND.direccionFirma}, ${BRAND.ciudad}", "${BRAND.telefono}", "${BRAND.web}". Escribe en español jurídico chileno, formal, claro y preciso. El estudio factura SIEMPRE exento de IVA; los honorarios se expresan en UF. Usa SOLO los datos que entregue el usuario; si falta un dato clave (honorarios, alcance, nombres), déjalo marcado como [completar] en vez de inventarlo. Devuelve solo el documento, sin comentarios ni explicaciones.`
 const TIPOS_REDACCION = [
   {k:'propuesta', lbl:'Propuesta de honorarios', max:2600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una PROPUESTA DE SERVICIOS PROFESIONALES con la estructura exacta del estudio:\n· Encabezado: "Propuesta de Servicios Profesionales" + subtítulo con el tipo de asesoría; destinatario(s) y empresa; "PRESENTE"; "Santiago, <fecha>"; "CONFIDENCIAL"; "Ref.: Propuesta de Servicios Legales - <tema>"; "De mi consideración:".\n· Intro: "Liberona Escala Abogados tiene el agrado de someter a su consideración la presente propuesta de servicios profesionales. El objeto de nuestro encargo es...".\n· "I. Alcance de los Servicios" (subsecciones A/B e ítems numerados según corresponda).\n· "II. Honorarios Profesionales" (Honorario Fijo / Retainer en UF; Honorario de Éxito / Success Fee como % si aplica).\n· "III. Forma de Pago" (ej. Retainer 50% a la aceptación y 50% al cierre; "la facturación se realizará mediante factura exenta de IVA").\n· "IV. Condiciones y Exclusiones" (no incluye litigios/arbitrajes salvo indicación expresa; un cambio sustancial de alcance requiere revisión de honorarios; los gastos de terceros —derechos notariales, CBR, certificados— son de cargo del cliente).\n· Cierre cordial + firma de un Socio (Cristóbal Liberona o Erasmo Escala), bajo él "Socio" y "Liberona Escala Abogados".`},
   {k:'memo', lbl:'Memo', max:2200, sys:`${ESTUDIO_BRIEF}\n\nRedacta un MEMORÁNDUM legal: membrete del estudio ("CONFIDENCIAL", fecha, dirección, teléfono, leabogados.cl), una exposición ordenada de los hechos, el análisis jurídico/tributario aplicable y conclusiones/recomendaciones.`},
