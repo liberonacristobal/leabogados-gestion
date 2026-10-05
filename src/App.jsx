@@ -895,6 +895,13 @@ function costosOficinaMes(rows, ym){ ym = ym || new Date().toISOString().slice(0
 // Cobrado del mes (fuente única, = EstadoResultadosModal): facturas con paid_at en el mes, netas de anuladas/reembolsos, vía cobradoBill. Comisión del mes = terceros_pagos pagados en el mes. Ambas reusadas por OficinaHub para no divergir.
 const ingresosMesBill = (billing, ym) => (billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.paid_at||'').startsWith(ym)).reduce((a,b)=>a+cobradoBill(b),0)
 const comisionMesTerc = (terceros, ym) => (terceros||[]).filter(t=>t&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).reduce((a,t)=>a+(Number(t.monto)||0),0)
+// Gastos VARIOS de oficina del mes (fuente única): cargos del cliente interno que NO están en la planilla (sueldos/previsión/arriendo/ggcc/contadora/honorarios), NO son estructurales (retiros/comisiones/proveedores) y NO son trámites rembolsables al cliente (notaría/CBR/registro civil/archivo judicial/diario oficial). Entran al resultado como egreso operativo. Decidido con el usuario 2026-10-05.
+const _GV_EXCL = new Set(['Sueldos','Retiros','Comisiones','Proveedores','Bono','Contadora','Arriendo','Gastos comunes','Honorarios','Arriendo y espacio','Notaria','Notaría','CBR','Registro Civil','Archivo Judicial','Diario Oficial'])
+function gastosVariosOfiMes(expenses, clients, ym){
+  const ofi=(clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')))
+  if(!ofi) return 0
+  return (expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').startsWith(ym)&&!_GV_EXCL.has(String(e.category||''))).reduce((a,e)=>a+(Number(e.amount)||0),0)
+}
 // Facturado SII (DEVENGADO) de un período: SOLO facturas con DTE real (dte_xml not null) — el único facturado que reconoce el SII.
 // ym con 7 chars = un mes (AAAA-MM); con 4 = un año (AAAA). Fuente única del ingreso devengado (protagonista de Oficina · Estado de resultados).
 const facturadoSiiPeriodo = (billing, ym) => (billing||[]).filter(b=> b && !b.deleted_at && b.dte_xml && b.invoice_no && b.status!=='Anulada' && b.billing_type==='honorarios' && String(b.issued_at||'').startsWith(ym)).reduce((a,b)=>a+montoFactura(b),0)
@@ -8786,7 +8793,7 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
 }
 
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + subarriendo) − egresos (planilla real oficina_costos_mensual + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
-function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBack, user }){
+function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBack, user, expenses=[], clients=[] }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [yr,setYr]=useState(curY)
   const [scope,setScope]=useState('ytd')
@@ -8821,8 +8828,11 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const cl=(k)=>months.reduce((a,m)=>{ const r=cmBy[m]; return a+(r?Number(r[k])||0:0) },0)
   const sueldos=cl('sueldos'), cotiz=cl('cotizaciones'), ppm=cl('ppm'), contadora=cl('contadora'), arriendo=cl('arriendo'), ggcc=cl('gastos_comunes'), honor=cl('honorarios'), otrosC=cl('otros_costos'), subarr=cl('subarriendo'), comis=cl('comisiones')
   const costosBrutos=sueldos+cotiz+ppm+contadora+arriendo+ggcc+honor+otrosC
+  const gvarMes=m=>gastosVariosOfiMes(expenses,clients,pad(m))   // gastos varios de oficina del mes (fuente única)
+  const gvar=months.reduce((a,m)=>a+gvarMes(m),0)
+  const costosOper=costosBrutos+gvar                              // costos de operación = planilla + gastos varios
   const ingresos=facturacion+subarr
-  const egresos=costosBrutos+comis
+  const egresos=costosOper+comis
   const resultado=ingresos-egresos
   const margen=ingresos>0?Math.round(resultado/ingresos*100):0
   const ncList=months.flatMap(m=>vMes(m).filter(d=>Number(d.tipo_dte)===61).map(d=>({folio:d.folio,rec:d.receptor_name,monto:Number(d.monto)||0,ext:!d.billing_id})))
@@ -8900,15 +8910,16 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
       <>{row('Meses con subarriendo',String(months.filter(m=>cmBy[m]&&Number(cmBy[m].subarriendo)>0).length))}{row('Total',fmtMp(subarr),null,C.greenText)}<div style={{fontSize:10.5,color:C.done,paddingTop:7}}>Entra como ingreso; baja el costo neto de oficina.</div></>)}
 
     <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Egresos</div>
-    {sec('cos',C.azulBg,C.accent,<><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></>,'Costos de operación','sueldos, previsión, oficina',fmtMp(costosBrutos),C.accent,
+    {sec('cos',C.azulBg,C.accent,<><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></>,'Costos de operación','planilla + gastos varios',fmtMp(costosOper),C.accent,
       <>{row('Sueldos (líquido)',fmtMp(sueldos))}
         {row('Cotizaciones + PPM',fmtMp(cotiz+ppm),'de Claudia')}
         {row('Contadora',fmt(contadora))}
         {row('Arriendo',fmtMp(arriendo))}
         {row('Gastos comunes',fmtMp(ggcc))}
         {honor>0?row('Honorarios (Martina)',fmtMp(honor)):null}
-        {otrosC>0?row('Otros',fmtMp(otrosC)):null}
-        <div style={{display:'flex',padding:'9px 2px',borderTop:`2px solid ${C.border}`,fontSize:13,fontWeight:800,color:C.accent}}><span>Total costos</span><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>{fmtMp(costosBrutos)}</span></div>
+        {otrosC>0?row('Otros (planilla)',fmtMp(otrosC)):null}
+        {gvar>0?row('Gastos varios',fmtMp(gvar),'tarjeta, servicios, misc'):null}
+        <div style={{display:'flex',padding:'9px 2px',borderTop:`2px solid ${C.border}`,fontSize:13,fontWeight:800,color:C.accent}}><span>Total costos</span><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>{fmtMp(costosOper)}</span></div>
       </>)}
     {sec('com',C.soonBg,C.soonText,<><path d='M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7'/></>,'Comisiones a colaboradores','pagadas + por compensación',fmtMp(comis),C.soonText,
       <>{row('Comisiones del período',fmtMp(comis))}<div style={{fontSize:10.5,color:C.done,paddingTop:7}}>Incluye las saldadas por compensación (ej. Rodrigo, mayo).</div></>)}
@@ -8920,14 +8931,14 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
     </div>
     <div style={card}><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
       <thead><tr>{['Mes','Facturación','Costos','Comis.','Resultado'].map((h,i)=><th key={h} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,padding:'8px 11px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft,textAlign:i?'right':'left',whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
-      <tbody>{Array.from({length:maxM},(_,i)=>i+1).map(m=>{ const fp=emitidaMes(m)-ncMes(m)-terMes(m); const r=cmBy[m]; const cb=r?(Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos)):0; const cmo=r?Number(r.comisiones):0; const sb=r?Number(r.subarriendo):0; const res=fp+sb-cb-cmo; const td={fontSize:12,padding:'8px 11px',textAlign:'right',fontVariantNumeric:'tabular-nums',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap'}; const selR=scope==='mes'&&selM===m
+      <tbody>{Array.from({length:maxM},(_,i)=>i+1).map(m=>{ const fp=emitidaMes(m)-ncMes(m)-terMes(m); const r=cmBy[m]; const cb=(r?(Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos)):0)+gvarMes(m); const cmo=r?Number(r.comisiones):0; const sb=r?Number(r.subarriendo):0; const res=fp+sb-cb-cmo; const td={fontSize:12,padding:'8px 11px',textAlign:'right',fontVariantNumeric:'tabular-nums',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap'}; const selR=scope==='mes'&&selM===m
         return <tr key={m} onClick={()=>abrirEditor(m)} style={{cursor:'pointer',background:selR?C.azulBg:'transparent'}}>
           <td style={{...td,textAlign:'left',fontWeight:700,color:C.accent}}><span title={mesEstado(m)} style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:EST_COL[mesEstado(m)],marginRight:7,verticalAlign:'middle'}}/>{MESES[m-1]}</td>
           <td style={td}>{fmtMp(fp)}</td><td style={td}>{fmtMp(cb)}</td><td style={td}>{cmo>0?fmtMp(cmo):'—'}</td>
           <td style={{...td,fontWeight:800,color:res>=0?C.greenText:C.overdueText}}>{res>=0?'+':'−'}{fmtMp(res)}</td>
         </tr> })}
         <tr><td style={{fontSize:12.5,padding:'10px 11px',textAlign:'left',fontWeight:800,color:C.accent,background:C.bgSoft,borderTop:`2px solid ${C.border}`}}>YTD</td>
-          {(()=>{ const allM=Array.from({length:maxM},(_,i)=>i+1); const sfp=allM.reduce((a,m)=>a+emitidaMes(m)-ncMes(m)-terMes(m),0); const scb=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?(Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos)):0)},0); const scm=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?Number(r.comisiones):0)},0); const ssb=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?Number(r.subarriendo):0)},0); const sres=sfp+ssb-scb-scm; const tt={fontSize:12.5,padding:'10px 11px',textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',background:C.bgSoft,borderTop:`2px solid ${C.border}`,whiteSpace:'nowrap'}
+          {(()=>{ const allM=Array.from({length:maxM},(_,i)=>i+1); const sfp=allM.reduce((a,m)=>a+emitidaMes(m)-ncMes(m)-terMes(m),0); const scb=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?(Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos)):0)+gvarMes(m)},0); const scm=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?Number(r.comisiones):0)},0); const ssb=allM.reduce((a,m)=>{const r=cmBy[m];return a+(r?Number(r.subarriendo):0)},0); const sres=sfp+ssb-scb-scm; const tt={fontSize:12.5,padding:'10px 11px',textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',background:C.bgSoft,borderTop:`2px solid ${C.border}`,whiteSpace:'nowrap'}
             return <><td style={tt}>{fmtMp(sfp)}</td><td style={tt}>{fmtMp(scb)}</td><td style={tt}>{fmtMp(scm)}</td><td style={{...tt,color:sres>=0?C.greenText:C.overdueText}}>{sres>=0?'+':'−'}{fmtMp(sres)}</td></> })()}
         </tr>
       </tbody>
@@ -9032,9 +9043,10 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const selMEff=mesesCerrados.includes(selM)?selM:(mesesCerrados.length?mesesCerrados[mesesCerrados.length-1]:_curM)
   const esMes=scope==='mes'&&mesesCerrados.length>0
   const ymSel=`${year}-${String(selMEff).padStart(2,'0')}`
-  let facYTD=0,subYTD=0,cosYTD=0,comYTD=0
-  for(let m=1;m<=_curM;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; facYTD+=facSiiPeriodo(mm); subYTD+=subMesT(mm); cosYTD+=costoBrutoMes(mm); comYTD+=comMesT(mm) }
-  const facH=esMes?facSiiPeriodo(ymSel):facYTD, subH=esMes?subMesT(ymSel):subYTD, cosH=esMes?costoBrutoMes(ymSel):cosYTD, comH=esMes?comMesT(ymSel):comYTD
+  let facYTD=0,subYTD=0,cosYTD=0,comYTD=0,gvYTD=0
+  for(let m=1;m<=_curM;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; facYTD+=facSiiPeriodo(mm); subYTD+=subMesT(mm); cosYTD+=costoBrutoMes(mm); comYTD+=comMesT(mm); gvYTD+=gastosVariosOfiMes(expenses,clients,mm) }
+  const facH=esMes?facSiiPeriodo(ymSel):facYTD, subH=esMes?subMesT(ymSel):subYTD, cosPlan=esMes?costoBrutoMes(ymSel):cosYTD, comH=esMes?comMesT(ymSel):comYTD, gvH=esMes?gastosVariosOfiMes(expenses,clients,ymSel):gvYTD
+  const cosH=cosPlan+gvH                                 // costos de operación = planilla + gastos varios (fuente única con ResultadoAnioView)
   const ingH=facH+subH, egrH=cosH+comH, resH=ingH-egrH, margH=ingH>0?Math.round(resH/ingH*100):0
   // Por resolver: facturas del SII sin enlazar (acción) + meses pasados aún sin cerrar (se cierran solos; estado, no acción).
   const sinEnl=(ventasRows||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(year)&&[33,34,61].includes(Number(d.tipo_dte))&&!d.billing_id).length
@@ -9094,9 +9106,9 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
 
     {L('Gestión de la oficina')}
     <div style={card}>
-      {row(IC.peop,C.azulBg,C.accent,'Costos · planilla',fM(cosH),C.accent,()=>setSub('costos'),true)}
+      {row(IC.peop,C.azulBg,C.accent,'Costos · planilla',fM(cosPlan),C.accent,()=>setSub('costos'),true)}
       {row(IC.ret,C.tealBg,C.tealText,'Retiros a socios',fM(ret.total),C.tealText,()=>onOpenRetiros&&onOpenRetiros())}
-      {row(IC.doc,C.bgWarm,C.muted,'Gastos varios',fM(variosMes),C.accent,()=>onOpenVarios&&onOpenVarios())}
+      {row(IC.doc,C.bgWarm,C.muted,'Gastos varios',fM(gvH),C.accent,()=>onOpenVarios&&onOpenVarios())}
       {row(IC.iva,C.azulBg,C.azulInfo,'Compras · IVA',fM(ivaCreditoC),C.azulInfo,()=>setSub('compras'))}
     </div>
 
@@ -35270,7 +35282,7 @@ export default function App() {
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})}/>
             </div>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
-            {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user}/>}
+            {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
