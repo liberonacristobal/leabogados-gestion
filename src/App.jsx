@@ -8386,19 +8386,27 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
   )
 }
 // ── Retiros a socios: distribución de utilidades (cliente interno, categoría 'Retiros'). Identifica al socio por `subcategory` (la clasificación manual, puesta al conciliar "Retiros › X") y, si no hay, por el RUT/nombre en la glosa. NO es costo de oficina; vive en la página Socios. ──
+// Config de socios TENANT-AWARE: se llena de `miembros` (es_socio=true) del estudio al cargar; fallback = LEA, para no romper nada antes de que llegue la query. Vendible: ningún socio/RUT cableado en la lógica.
+let SOCIOS_CFG = [
+  {nombre:'Cristóbal', rut:'15.621.320-9'},
+  {nombre:'Erasmo',    rut:'15.371.733-8'},
+]
+const _norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim()
+const _rutK = s => String(s||'').replace(/[^0-9kK]/g,'').toLowerCase()
+function setSociosCfg(list){ const c=(list||[]).filter(s=>s&&s.nombre); if(c.length) SOCIOS_CFG=c }
 const _SOCIO_RET = e => {
-  const sc=String(e.subcategory||'').trim()
-  if(/cristóbal|cristobal/i.test(sc)) return 'Cristóbal'
-  if(/erasmo/i.test(sc)) return 'Erasmo'
+  const sc=String(e.subcategory||'').trim(), scN=_norm(sc)
+  for(const s of SOCIOS_CFG){ if(scN && scN===_norm(s.nombre)) return s.nombre }
+  for(const s of SOCIOS_CFG){ if(scN && scN.includes(_norm(s.nombre))) return s.nombre }
   if(sc && !/^retiros?$/i.test(sc)) return sc
-  const g=String(e.personal_de||e.description||e.concept||e.src_name||'').toLowerCase()
-  if(/15\.?621\.?320|cristobal liberona|cristóbal liberona/.test(g)) return 'Cristóbal'
-  if(/15\.?371\.?733|erasmo escala/.test(g)) return 'Erasmo'
+  const g=_norm(e.personal_de||e.description||e.concept||e.src_name), gk=_rutK(e.personal_de||e.description||e.concept||e.src_name)
+  for(const s of SOCIOS_CFG){ const rk=_rutK(s.rut); if(rk && (gk.includes(rk)||gk.includes(rk.slice(0,-1)))) return s.nombre }
+  for(const s of SOCIOS_CFG){ if(_norm(s.nombre) && g.includes(_norm(s.nombre))) return s.nombre }
   return e.personal_de||'Otro'
 }
 // Sueldo de socio: los sueldos/bonos usan `subcategory` = nombre de la persona. Devuelve el socio si lo es, o null.
-const _SOCIO_SUELDO = e => { const sc=String(e.subcategory||'').trim(); if(/cristóbal|cristobal/i.test(sc)) return 'Cristóbal'; if(/erasmo/i.test(sc)) return 'Erasmo'; return null }
-const _SOCIO_RUT_DISP = {'Cristóbal':'15.621.320-9','Erasmo':'15.371.733-8'}
+const _SOCIO_SUELDO = e => { const scN=_norm(e.subcategory); for(const s of SOCIOS_CFG){ if(scN && (scN===_norm(s.nombre)||scN.includes(_norm(s.nombre)))) return s.nombre } return null }
+const _SOCIO_RUT_DISP = new Proxy({}, { get:(_,k)=>{ const s=SOCIOS_CFG.find(x=>x.nombre===k); return s?s.rut:undefined } })
 const _SOCIO_COL = {'Cristóbal':C.accent, 'Erasmo':'#8A7012', 'Martín':'#3B6D11', 'Martina':C.overdueText, 'Rodrigo':'#A8472A'}
 function retirosOficinaData(expenses, clients, year){
   const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
@@ -8562,7 +8570,7 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
   </div>)
 }
 // ── Página "Socios": retiros + sueldos. Socio = _SOCIO_RET (lee subcategory). Un RETIRO = transferencias de un socio dentro de una ventana de ≤ GAP días (consecutivos; una transferencia grande se parte por el límite diario del banco). Un mes puede tener varios retiros. Regla de oro: retiros parejos por retiro (ronda) → chip + auto-sugerencia. Trazable: cada retiro despliega sus transferencias con link a Banco. Página con navStack, responsive. ──
-function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
   const GAP=3   // días: transferencias del mismo socio a ≤3 días = el mismo retiro
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [yr,setYr]=useState(curY)
@@ -8577,9 +8585,12 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
   const scrollA=ref=>ref&&ref.current&&ref.current.scrollIntoView({behavior:'smooth',block:'start'})
   const verSocio=s=>{ setMovVista('socio'); setTimeout(()=>scrollA(listaRef),60) }
   const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
-  const SOC=['Cristóbal','Erasmo']
-  const COL={'Cristóbal':C.accent,'Erasmo':'#8A6D12'}
-  const BG={'Cristóbal':'#EAF1F4','Erasmo':'#F8F1DE'}
+  const SOC_SRC=(socios&&socios.length)?socios:SOCIOS_CFG
+  const SOC=SOC_SRC.map(s=>s.nombre)
+  const _PAL=[[C.accent,'#EAF1F4'],['#8A6D12','#F8F1DE'],['#3B6D11','#EAF3DE'],[C.overdueText,C.overdueBg],['#A8472A','#FAECE7'],[C.tealText,C.tealBg]]
+  const COL=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[0]]))
+  const BG=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[1]]))
+  const A=SOC[0], B=SOC[1]   // paridad entre 2 socios (LEA)
   const MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
   const MC=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const dnum=d=>{ const t=new Date(String(d||'').slice(0,10)+'T12:00').getTime(); return isNaN(t)?0:Math.round(t/86400000) }
@@ -8605,14 +8616,14 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
   const mesesComp=yr<curY?12:(yr>curY?0:Math.max(0,curM-1))
   const promDe=s=>{ const base=(retTot[s]||0)+(eqMode==='ambos'?(sueldos[s]||0):0); return mesesComp>0?Math.round(base/mesesComp):0 }
   // rondas: clusters de ambos socios a ≤GAP días = una ronda de retiro (para comparar paridad)
-  const rondas=(()=>{ const cs=[...retSoc].sort((a,b)=>dnum(a.d0)-dnum(b.d0)); const rd=[]; cs.forEach(c=>{ const last=rd[rd.length-1]; if(last && dnum(c.d0)-dnum(last.d1)<=GAP){ if(dnum(c.d1)>dnum(last.d1)) last.d1=c.d1; last[c.socio]+=c.amt } else { const r={d0:c.d0,d1:c.d1,'Cristóbal':0,'Erasmo':0}; r[c.socio]+=c.amt; rd.push(r) } }); return rd })()
-  const difAcum=(retTot['Cristóbal']||0)-(retTot['Erasmo']||0)
-  const faltaTxt=d=>d===0?null:(d>0?`falta Erasmo ${fmt(Math.abs(d))}`:`falta Cristóbal ${fmt(Math.abs(d))}`)
+  const rondas=(()=>{ const cs=[...retSoc].sort((a,b)=>dnum(a.d0)-dnum(b.d0)); const rd=[]; cs.forEach(c=>{ const last=rd[rd.length-1]; if(last && dnum(c.d0)-dnum(last.d1)<=GAP){ if(dnum(c.d1)>dnum(last.d1)) last.d1=c.d1; last[c.socio]=(last[c.socio]||0)+c.amt } else { const r={d0:c.d0,d1:c.d1}; SOC.forEach(n=>r[n]=0); r[c.socio]=(r[c.socio]||0)+c.amt; rd.push(r) } }); return rd })()
+  const difAcum=(retTot[A]||0)-(retTot[B]||0)
+  const faltaTxt=d=>d===0?null:(d>0?`falta ${B} ${fmt(Math.abs(d))}`:`falta ${A} ${fmt(Math.abs(d))}`)
   // período = mes; dentro de un mes puede haber varias rondas de retiro. Muestro todos los meses del año transcurrido; toggle oculta los sin retiros.
   const mesesDelAnio=yr<curY?12:(yr>curY?0:curM)
   const rondasByMes={}; rondas.forEach(r=>{ const m=parseInt(String(r.d0).slice(5,7),10); (rondasByMes[m]=rondasByMes[m]||[]).push(r) })
-  const mesTot=m=>{ const rs=rondasByMes[m]||[]; return {C:rs.reduce((a,r)=>a+r['Cristóbal'],0),E:rs.reduce((a,r)=>a+r['Erasmo'],0)} }
-  const sugSocio=r=>{ let c=0,e=0; rondas.forEach(x=>{ c+=x['Cristóbal']; e+=x['Erasmo'] }); return c<=e?'Cristóbal':'Erasmo' }
+  const mesTot=m=>{ const rs=rondasByMes[m]||[]; return {a:rs.reduce((x,r)=>x+(r[A]||0),0),b:rs.reduce((x,r)=>x+(r[B]||0),0)} }
+  const sugSocio=r=>{ let a=0,b=0; rondas.forEach(x=>{ a+=(x[A]||0); b+=(x[B]||0) }); return a<=b?A:B }
   const asignar=async(r,soc)=>{ if(!(await appConfirm(`Asignar este retiro de ${fmt(r.amt)} (${fechaLbl(r.d0,r.d1)}) a ${soc}. Es reversible. ¿Confirmas?`))) return; setBusy(r.socio+'|'+r.d0); try{ const ids=r.movs.map(x=>x.e.id); await supabase.from('expenses').update({subcategory:soc,updated_at:new Date().toISOString()}).in('id',ids); setExpenses&&setExpenses(p=>p.map(x=>ids.includes(x.id)?{...x,subcategory:soc}:x)) }catch(err){ appAlert('No se pudo asignar: '+(err.message||err)) } setBusy(null) }
   const exportar=()=>{ const H=['Socio','Fecha','Monto','Transferencias']; const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`; const lines=[...retSoc].sort((a,b)=>a.socio.localeCompare(b.socio)||a.d0.localeCompare(b.d0)).map(r=>[r.socio,r.d0,Math.round(r.amt),r.movs.length].map(esc).join(',')); const csv=[H.map(esc).join(','),...lines].join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`retiros_socios_${yr}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }
   const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:10.5,fontWeight:700,padding:'6px 13px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
@@ -8667,7 +8678,7 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
           <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Sueldos</div><div style={{fontSize:15,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(sueldoTot)}</div></div>
         </div>
       </div>
-      {[['Retirado '+yr,fmtM(totalRet),nRet+' retiros · '+fmtM(promRetiro)+' prom.',C.azulBg,'#185FA5',<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>],['Sueldos socios',fmtM(sueldoTot),'Cristóbal + Erasmo',BG['Erasmo'],'#8A6D12',<><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></>]].map((k,i)=>
+      {[['Retirado '+yr,fmtM(totalRet),nRet+' retiros · '+fmtM(promRetiro)+' prom.',C.azulBg,'#185FA5',<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>],['Sueldos socios',fmtM(sueldoTot),SOC.join(' + '),BG[B]||'#F8F1DE','#8A6D12',<><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></>]].map((k,i)=>
         <div key={i} onClick={()=>scrollA(i===0?listaRef:porSocioRef)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,padding:'16px 17px',cursor:'pointer',position:'relative'}}>
           <span style={{position:'absolute',top:15,right:14,color:C.done,fontSize:15,fontWeight:700}}>›</span>
           <span style={{width:34,height:34,borderRadius:10,background:k[3],display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={k[4]} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'>{k[5]}</svg></span>
@@ -8715,24 +8726,24 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
       {mesesDelAnio>0&&<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr>
           <th style={thL}>Período</th>
-          {tablaMode==='monto'&&<><th style={thR}>{dotEl(COL['Cristóbal'])}Cristóbal</th><th style={thR}>{dotEl(COL['Erasmo'])}Erasmo</th></>}
-          <th style={thR}>{tablaMode==='acum'?'Acumulado (C−E)':'Diferencia'}</th>
+          {tablaMode==='monto'&&<><th style={thR}>{dotEl(COL[A])}{A}</th><th style={thR}>{dotEl(COL[B])}{B}</th></>}
+          <th style={thR}>{tablaMode==='acum'?`Acumulado (${(A||'')[0]}−${(B||'')[0]})`:'Diferencia'}</th>
         </tr></thead>
         <tbody>
           {(()=>{ let acum=0; const out=[]
             for(let m=1;m<=mesesDelAnio;m++){
               const rs=(rondasByMes[m]||[]).slice().sort((a,b)=>String(a.d0).localeCompare(String(b.d0)))
               if(rs.length===0){ if(ocultarVacios) continue; out.push(<tr key={'m'+m}><td style={{...tdMesEmpty,textAlign:'left',fontWeight:700}}>{MESL[m-1]}</td>{tablaMode==='monto'&&<><td style={tdMesEmpty}>—</td><td style={tdMesEmpty}>—</td></>}<td style={tdMesEmpty}>sin retiros</td></tr>); continue }
-              const mt=mesTot(m), md=mt.C-mt.E
-              out.push(<tr key={'m'+m}><td style={{...tdMes,textAlign:'left'}}>{MESL[m-1]}{rs.length>1?` · ${rs.length} retiros`:''}</td>{tablaMode==='monto'&&<><td style={tdMes}>{mt.C>0?fmt(mt.C):'—'}</td><td style={tdMes}>{mt.E>0?fmt(mt.E):'—'}</td></>}<td style={tdMes}>{tablaMode==='acum'?'':(md===0?<span style={{color:C.done,fontWeight:600}}>$0</span>:<span style={pill}>{faltaTxt(md)}</span>)}</td></tr>)
-              rs.forEach((r,ri)=>{ const c=r['Cristóbal'],er=r['Erasmo'],d=c-er; acum+=d; const falta=d!==0
+              const mt=mesTot(m), md=mt.a-mt.b
+              out.push(<tr key={'m'+m}><td style={{...tdMes,textAlign:'left'}}>{MESL[m-1]}{rs.length>1?` · ${rs.length} retiros`:''}</td>{tablaMode==='monto'&&<><td style={tdMes}>{mt.a>0?fmt(mt.a):'—'}</td><td style={tdMes}>{mt.b>0?fmt(mt.b):'—'}</td></>}<td style={tdMes}>{tablaMode==='acum'?'':(md===0?<span style={{color:C.done,fontWeight:600}}>$0</span>:<span style={pill}>{faltaTxt(md)}</span>)}</td></tr>)
+              rs.forEach((r,ri)=>{ const c=r[A]||0,er=r[B]||0,d=c-er; acum+=d; const falta=d!==0
                 out.push(<tr key={'r'+m+'_'+ri} onClick={()=>scrollA(listaRef)} style={{cursor:'pointer',background:falta?'#FFFCF4':'transparent'}}>
                   <td style={{...tdRet,textAlign:'left',color:C.accent,fontWeight:700}}>{dotEl(C.done)}{fechaLbl(r.d0,r.d1)}</td>
                   {tablaMode==='monto'&&<><td style={tdRet}>{c>0?fmt(c):'—'}</td><td style={tdRet}>{er>0?fmt(er):'—'}</td></>}
                   <td style={tdRet}>{tablaMode==='acum'?(acum===0?<span style={{color:C.done}}>$0</span>:<span style={{color:acum>0?C.accent:'#8A6D12',fontWeight:700}}>{acum>0?'+':'−'}{fmt(Math.abs(acum))}</span>):(d===0?<span style={{color:C.done}}>$0</span>:<span style={pill}>{faltaTxt(d)}</span>)}</td>
                 </tr>) })
             }
-            out.push(<tr key='tot'><td style={{...tdTot,textAlign:'left'}}>Total {yr}</td>{tablaMode==='monto'&&<><td style={{...tdTot,color:COL['Cristóbal']}}>{fmt(retTot['Cristóbal']||0)}</td><td style={{...tdTot,color:COL['Erasmo']}}>{fmt(retTot['Erasmo']||0)}</td></>}<td style={tdTot}>{difAcum===0?<span style={{color:C.done}}>$0</span>:<span style={{fontSize:10.5,color:C.soonText,fontWeight:700}}>{faltaTxt(difAcum)}</span>}</td></tr>)
+            out.push(<tr key='tot'><td style={{...tdTot,textAlign:'left'}}>Total {yr}</td>{tablaMode==='monto'&&<><td style={{...tdTot,color:COL[A]}}>{fmt(retTot[A]||0)}</td><td style={{...tdTot,color:COL[B]}}>{fmt(retTot[B]||0)}</td></>}<td style={tdTot}>{difAcum===0?<span style={{color:C.done}}>$0</span>:<span style={{fontSize:10.5,color:C.soonText,fontWeight:700}}>{faltaTxt(difAcum)}</span>}</td></tr>)
             return out
           })()}
         </tbody>
@@ -8741,14 +8752,14 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
 
     <div ref={listaRef} style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
-        {chTi('Retiros · '+nRet+' en total',BG['Cristóbal'],<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>)}
+        {chTi('Retiros · '+nRet+' en total',BG[A],<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>)}
         {seg(movVista,setMovVista,[['socio','Por socio'],['mes','Por mes'],['crono','Cronológico']])}
       </div>
       {nRet===0&&<div style={{padding:'22px 18px',textAlign:'center',color:C.done,fontSize:13}}>Sin retiros registrados en {yr}.</div>}
       {otros.map((r,oi)=>{ const sg=sugSocio(r); return <div key={'o'+oi} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 18px',background:'#FFFCF4',borderTop:`1px solid ${C.bgSoft}`,flexWrap:'wrap'}}>
         <span style={{width:30,height:30,borderRadius:9,background:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3v18'/><path d='m6 8 6-4 6 4'/><path d='M6 8 3 14a3.5 3.5 0 0 0 6 0Z'/><path d='m18 8-3 6a3.5 3.5 0 0 0 6 0Z'/></svg></span>
         <div style={{flex:'1 1 200px',fontSize:12,color:C.text,lineHeight:1.45}}>Retiro de <b style={{color:C.accent}}>{fmt(r.amt)}</b> ({fechaLbl(r.d0,r.d1)}) sin socio. Por la paridad correspondería a <b style={{color:C.accent}}>{sg}</b>.</div>
-        <div style={{display:'flex',gap:8,flexShrink:0}}><button disabled={busy===r.socio+'|'+r.d0} onClick={()=>asignar(r,sg)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'7px 13px',background:C.accent,color:'#fff',cursor:'pointer'}}>Sí, es {sg}</button><button onClick={()=>asignar(r,sg==='Cristóbal'?'Erasmo':'Cristóbal')} style={{fontSize:11,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 11px',background:'#fff',color:C.muted,cursor:'pointer'}}>Otro</button></div>
+        <div style={{display:'flex',gap:8,flexShrink:0}}><button disabled={busy===r.socio+'|'+r.d0} onClick={()=>asignar(r,sg)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'7px 13px',background:C.accent,color:'#fff',cursor:'pointer'}}>Sí, es {sg}</button><button onClick={()=>asignar(r,sg===A?B:A)} style={{fontSize:11,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 11px',background:'#fff',color:C.muted,cursor:'pointer'}}>Otro</button></div>
       </div> })}
       {(()=>{
         if(movVista==='crono'){ return [...retSoc].sort((a,b)=>a.d0.localeCompare(b.d0)).map(retRow) }
@@ -32896,6 +32907,7 @@ export default function App() {
   const [expNav,setExpNav]=useState(null)              // gatillo: navegar a una sub-vista de Gastos (orphans/deuda/rendir) tras cargar notaría
   const cargaDirtyRef = useRef(false)                  // carga masiva: hay asignaciones sin cargar → avisar antes de cerrar
   const [costosOfiRows,setCostosOfiRows]=useState([])  // presupuesto de oficina (para el total del mes en Gastos e Inicio)
+  const [socios,setSocios]=useState(null)   // socios del estudio (miembros es_socio) → fuente única, reemplaza los nombres/RUT cableados
   const loadCostosOfi=useCallback(()=>{ if(DEMO){ setCostosOfiRows([
       {categoria:'Remuneraciones',item:'Cristóbal',monto:2330000},{categoria:'Remuneraciones',item:'Erasmo',monto:2284500},{categoria:'Remuneraciones',item:'Martín',monto:1679268},{categoria:'Remuneraciones',item:'Contadora',monto:65000},{categoria:'Remuneraciones',item:'Procurador',monto:450000},
       {categoria:'Remuneraciones',item:'Asociada senior · Javiera',monto:2100000},{categoria:'Remuneraciones',item:'Asociado senior · Tomás',monto:2000000},{categoria:'Remuneraciones',item:'Asociada · Fernanda',monto:1450000},{categoria:'Remuneraciones',item:'Paralegal · Camila',monto:900000},
@@ -32976,6 +32988,16 @@ export default function App() {
   const saleUploadRef = useRef(null)
   const saleDriveRef = useRef(null)
   const saleReasignRef = useRef(null)
+  const loadSocios = useCallback(async(estudioId) => {
+    try{
+      let q=supabase.from('miembros').select('nombre,rut').eq('es_socio',true).order('nombre',{ascending:true})
+      if(estudioId) q=q.eq('estudio_id',estudioId)
+      const { data } = await q
+      const seen=new Set(), list=[]
+      ;(data||[]).forEach(r=>{ const k=String(r.rut||r.nombre||'').replace(/[.\-\s]/g,'').toLowerCase(); if(k&&!seen.has(k)){ seen.add(k); list.push({nombre:r.nombre, rut:r.rut}) } })
+      if(list.length){ setSocios(list); setSociosCfg(list) }   // fuente única; si falla, queda el fallback LEA
+    }catch(_){}
+  },[])
   const loadUserRole = async(email) => {
     // Fuente tenant-aware: `miembros` (email→estudio_id→rol+nombre). Si hay fila, manda.
     // Si no hay fila o falla, cae al comportamiento actual (user_roles) → nunca deja al usuario sin rol.
@@ -32984,6 +33006,7 @@ export default function App() {
       if(!rm.error && rm.data && rm.data.rol){
         setActualRole(rm.data.rol); setUserRole(rm.data.rol)
         if(rm.data.rol==='limited') setTab('tasks')
+        loadSocios(rm.data.estudio_id)
         return { role:rm.data.rol, name:rm.data.nombre || (email||'').split('@')[0], estudio_id:rm.data.estudio_id }
       }
     }catch(_){}
@@ -35006,7 +35029,7 @@ export default function App() {
               </div>
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})}/>
             </div>}
-            {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
+            {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
