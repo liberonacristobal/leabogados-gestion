@@ -3324,8 +3324,8 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
     try{
       const ingYTD=ingresosPorAnioVenta.total||0, comisYTD=comisPagadasAnioVenta.total||0, costYTD=costosOfiYTD||0
       const resultado=ingYTD-comisYTD-costYTD, posM=resultado>=0
-      const vPct=metaUF>0?Math.min(100,Math.round(m.brutoUF/metaUF*100)):0
-      const cobPct=metaCobranza>0?Math.min(100,Math.round(ingYTD/metaCobranza*100)):0
+      const vPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0            // sin tope (sobrecumplimiento), igual que en pantalla
+      const cobPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0 // sin tope (sobrecumplimiento)
       const uf=n=>fmtUFk(n), pe=n=>(n<0?'−$':'$')+Math.abs(Math.round(n||0)).toLocaleString('es-CL'), pS=n=>fmtShort(n)
       const iv=ingresosPorAnioVenta, ufR=ufRef||1
       const yrsCob=(iv.allYears||[]).slice(0,3)
@@ -3638,7 +3638,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
         const ventaPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%)
         const ventaNetoPct=metaUF>0?Math.round(m.netoUF/metaUF*100):0   // venta NETA (neto de comisiones) vs la MISMA meta
         const factPct=m.bruto>0?Math.min(100,Math.round(facturadoYr/m.bruto*100)):0
-        const cobroPct=metaCobranza>0?Math.min(100,Math.round(ingYTD/metaCobranza*100)):0
+        const cobroPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%), igual que ventaPct
         const bePct=costosOfiAnual>0?Math.min(100,Math.round(ingYTD/costosOfiAnual*100)):0
         const margenPct=ingYTD>0?Math.round(resultado/ingYTD*100):0
         const vencido=agingData?.buckets?.overdue?.monto||0
