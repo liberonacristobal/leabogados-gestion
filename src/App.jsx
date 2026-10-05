@@ -8820,7 +8820,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario, onGuardarClientRut}){
   const [ptBusy,setPtBusy]=useState(null)        // sale_id en proceso de "pasar a Terminado"
   const [ptDone,setPtDone]=useState(()=>new Set()) // ventas ya pasadas en esta sesión
   const [ahBusy,setAhBusy]=useState(null)        // sale_id en proceso de "actualizar honorario"
@@ -8896,6 +8896,11 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   // Salud de facturación (read-only, te lleva al dato): vistas v_ventas_salud / v_sii_ventas_sin_enlazar en prod; en demo se computa IGUAL desde los datos cargados (misma lógica que la vista, verificada 6/7/6). Cuotas sin generar y SII sin enlazar solo se ven desde las VENTAS, invisibles al radar de billing.
   const [saludRows,setSaludRows]=useState([])
   const [siiRows,setSiiRows]=useState([])
+  // Cruce "el banco revela el RUT": movimientos con RUT+nombre, negativos aprendidos ("No es"), y hechos (recién guardados).
+  const [movsRut,setMovsRut]=useState([])
+  const [rutNo,setRutNo]=useState(()=>new Set())
+  const [rutDone,setRutDone]=useState(()=>new Set())
+  const [brBusy,setBrBusy]=useState(null)
   useEffect(()=>{
     if(DEMO){
       const bySale={}; (billing||[]).forEach(b=>{ if(b.sale_id)(bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
@@ -8907,10 +8912,12 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         const honorario_descuadrado=s.amount_clp!=null&&(s.amount_uf==null||s.amount_uf==='')&&!['mensual','hora'].includes(s.cobro_type)&&n_cuotas>0&&Math.abs(Number(s.amount_clp)-suma_cuotas)>1000
         return { id:s.id, client_id:s.client_id, title:s.title, status:s.status, cobro_type:s.cobro_type, amount_clp:s.amount_clp, amount_uf:s.amount_uf, nplan, n_cuotas, suma_cuotas, faltan_cuotas, honorario_descuadrado }
       }).filter(v=>v.faltan_cuotas||v.honorario_descuadrado)
-      setSaludRows(rows); setSiiRows([]); return
+      setSaludRows(rows); setSiiRows([]); setMovsRut([]); return
     }
     supabase.from('v_ventas_salud').select('*').then(({data})=>{ if(data) setSaludRows(data.filter(v=>v.faltan_cuotas||v.honorario_descuadrado)) },()=>{})
     supabase.from('v_sii_ventas_sin_enlazar').select('*').then(({data})=>{ if(data) setSiiRows(data) },()=>{})
+    supabase.from('cartola_movimientos').select('rut_contraparte,nombre_contraparte,monto').not('rut_contraparte','is',null).then(({data})=>{ if(data) setMovsRut(data.filter(m=>m.nombre_contraparte)) },()=>{})
+    supabase.from('learnings').select('key').eq('kind','rut_banco_no').then(({data})=>{ if(data) setRutNo(new Set(data.map(r=>r.key))) },()=>{})
   },[])
   const cuotasSinGen=saludRows.filter(v=>v.faltan_cuotas)
   const honorarioDesc=saludRows.filter(v=>v.honorario_descuadrado)
@@ -8924,7 +8931,35 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       return { s, emitido, pagado, n:bs.length }
     }).filter(x=>x.emitido>0).sort((a,b)=>b.pagado-a.pagado)
   },[sales,billing])
-  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length
+  // Cruce banco→RUT: cliente con actividad y SIN RUT (ni ficha ni RS) cuyo nombre calza, por token completo (sin conectores), con un único RUT en el banco.
+  const bancoRut=useMemo(()=>{
+    if(!movsRut.length) return []
+    const CONN=new Set(['de','del','la','las','los','y','e','da','do','san','santa','von','van','di'])
+    const toks=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean)
+    const cliToks=s=>toks(s).filter(t=>t.length>2&&!CONN.has(t))
+    const bankSet=s=>new Set(toks(s).filter(t=>t.length>2))
+    const entRut=new Set((clientEntities||[]).filter(e=>e.rut&&String(e.rut).trim()).map(e=>String(e.client_id)))
+    const act=new Set(); (billing||[]).forEach(b=>{ if(!b.deleted_at&&b.status!=='Anulada'&&b.client_id) act.add(String(b.client_id)) }); (sales||[]).forEach(s=>{ if(!s.deleted_at&&s.client_id) act.add(String(s.client_id)) })
+    const pre=movsRut.map(m=>({set:bankSet(m.nombre_contraparte), m}))
+    const out=[]
+    ;(clients||[]).forEach(c=>{
+      if(c.is_occasional||c.is_internal) return
+      if(c.rut&&String(c.rut).trim()) return
+      if(entRut.has(String(c.id))) return
+      if(!act.has(String(c.id))) return
+      if(rutDone.has(String(c.id))) return
+      const ct=cliToks(c.name); if(ct.length<2) return
+      const byRut={}
+      pre.forEach(({set,m})=>{ if(!ct.every(t=>set.has(t))) return; const rk=String(m.rut_contraparte||'').replace(/[.\s-]/g,'').toLowerCase(); if(!rk) return; const g=byRut[rk]||(byRut[rk]={rut:m.rut_contraparte,name:m.nombre_contraparte,n:0,total:0}); g.n++; g.total+=Math.abs(Number(m.monto)||0) })
+      const rks=Object.keys(byRut); if(rks.length!==1) return   // match ambiguo (varios RUT) → fuera
+      const rk=rks[0]; if(rutNo.has(String(c.id)+':'+rk)) return
+      const g=byRut[rk]
+      const nf=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&String(b.client_id)===String(c.id)).length
+      out.push({client:c, rut:g.rut, rutKey:rk, bankName:g.name, nMovs:g.n, total:g.total, nFact:nf})
+    })
+    return out.sort((a,b)=>b.nFact-a.nFact)
+  },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
+  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -9058,6 +9093,21 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         <span style={{fontSize:12,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(Math.round(Number(v.monto)||0))}</span>
       </div> })}
       {siiRows.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {siiRows.length-30} más…</div>}
+    </div>}
+    {bancoRut.length>0&&<div style={{marginTop:14}}>{sh('Clientes sin RUT · el banco sugiere uno',C.azulInfo,bancoRut.length)}
+      <div style={{fontSize:10,color:C.done,marginBottom:2}}>el RUT no está en la ficha ni en una razón social, pero aparece en un movimiento del banco con el mismo nombre · revisa la evidencia y confirma</div>
+      {bancoRut.map(p=><div key={p.client.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
+        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.client.id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.client.name} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {p.nFact} factura{p.nFact!==1?'s':''}</span></div>
+        <div style={{display:'flex',gap:8,marginTop:6,background:C.azulBg,borderRadius:9,padding:'8px 10px',alignItems:'flex-start'}}>
+          <SIcon n='bank' s={14} c={C.azulInfo}/>
+          <div style={{fontSize:11,color:C.text,lineHeight:1.4,minWidth:0}}>Banco: <span style={{color:C.muted}}>{p.bankName}</span> · <b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{p.rut}</b><div style={{fontSize:10,color:C.muted,marginTop:2}}>{p.nMovs} movimiento{p.nMovs!==1?'s':''} · {fmt(Math.round(p.total))}</div></div>
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:8}}>
+          <button disabled={brBusy===p.client.id} onClick={async()=>{ if(!(await appConfirm(`Voy a guardar el RUT ${p.rut} en la ficha de ${p.client.name}. Lo tomé del banco (${p.bankName}). Es reversible. ¿Confirmas?`))) return; setBrBusy(p.client.id); try{ onGuardarClientRut&&await onGuardarClientRut(p.client.id,p.rut); setRutDone(d=>new Set([...d,String(p.client.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setBrBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:brBusy===p.client.id?'default':'pointer',opacity:brBusy===p.client.id?.6:1}}>{brBusy===p.client.id?'Guardando…':'Es el mismo · guardar RUT'}</button>
+          <button onClick={()=>{ learnPut('rut_banco_no',String(p.client.id)+':'+p.rutKey,p.rut); setRutNo(s=>new Set([...s,String(p.client.id)+':'+p.rutKey])) }} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>No es</button>
+          <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.client.id)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Ficha</button>
+        </div>
+      </div>)}
     </div>}
   </div>
 }
@@ -34768,7 +34818,7 @@ export default function App() {
             supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
-        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onPasarTerminado={async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) }} onActualizarHonorario={async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) }} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
+        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) }} onPasarTerminado={async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) }} onActualizarHonorario={async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) }} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
           if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
           // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
           const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
