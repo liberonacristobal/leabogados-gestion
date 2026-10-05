@@ -8999,7 +8999,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   </div>)
 }
 
-function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros, onOpenCobranza }){
+function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros, onOpenCobranza, onOpenSiiSinEnlazar }){
   const [sub,setSub] = useState(null)
   const [scope,setScope] = useState('anio')   // filtro Año / Por mes (protagonista)
   const [selM,setSelM] = useState(0)           // mes elegido en "Por mes" (solo meses cerrados)
@@ -9100,7 +9100,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
     </div>
 
     {(sinEnl>0||pend.length>0)&&L('Por resolver')}
-    {sinEnl>0&&<div onClick={()=>onOpenResultadoAnio&&onOpenResultadoAnio()} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',background:C.overdueBg,border:'1px solid #F1D7D7',borderRadius:13,cursor:'pointer'}}>
+    {sinEnl>0&&<div onClick={()=>onOpenSiiSinEnlazar?onOpenSiiSinEnlazar():(onOpenResultadoAnio&&onOpenResultadoAnio())} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',background:C.overdueBg,border:'1px solid #F1D7D7',borderRadius:13,cursor:'pointer'}}>
       <span style={{width:32,height:32,borderRadius:9,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2.3' strokeLinecap='round' strokeLinejoin='round'><path d='M12 9v4M12 17h.01'/><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z'/></svg></span>
       <span style={{flex:1,minWidth:0}}><span style={{display:'block',fontSize:13,fontWeight:700,color:C.accent}}>{sinEnl} factura{sinEnl!==1?'s':''} del SII sin enlazar</span><span style={{display:'block',fontSize:11,color:C.overdueText,marginTop:2}}>{sinEnl!==1?'no están asociadas':'no está asociada'} a una venta</span></span>
       <span style={{fontSize:11.5,fontWeight:800,color:C.overdueText,flexShrink:0}}>revisar ›</span>
@@ -10564,7 +10564,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   // Deep-link desde los accesos directos del Inicio: abre el cotejo SII o el checklist "Facturas del mes"
   const [cotejoMes,setCotejoMes] = useState(null)   // mes con el que abrir el cotejo (para buscar facturas antiguas del mes de un pago)
   const [cierreOpen,setCierreOpen] = useState(false)
-  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='sinemitir') setFilter('sinemitir'); else if(intent==='cierre') setCierreOpen(true); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
+  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='sinemitir') setFilter('sinemitir'); else if(intent==='cierre') setCierreOpen(true); else if(intent==='sii') setSiiPageOpen(true); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
   useEffect(()=>{ contarSinRegistrar() },[])   // badge del hub: cargas sin registrar // eslint-disable-line
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
@@ -10834,6 +10834,8 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       const { data:ins, error:e2 } = await supabase.from('billing').insert(ncRow).select().single()
       if(e2) throw e2
       if(setBilling&&ins) setBilling(p=>[...p, ins])
+      // Enlaza el DTE de la NC (sii_cargas_docs) a su fila recién creada → deja de figurar "sin enlazar".
+      if(item.siiId&&ins?.id){ try{ await supabase.from('sii_cargas_docs').update({billing_id:ins.id}).eq('id',item.siiId) }catch(_){} }
       setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'nc_hecha'}:r))
       setNcConfirm(null); onRefresh&&onRefresh()
     }catch(e){ appAlert('No se pudo anular / registrar la nota de crédito: '+(e.message||e)) }
@@ -10947,19 +10949,25 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [ncResolver,setNcResolver] = useState(null)   // null = sin cargar; [] = ninguna por resolver
   const cargarNCResolver = async()=>{
     try{
-      const { data, error } = await supabase.from('sii_cargas_docs').select('folio,tipo_dte,fecha_emision,receptor_rut,receptor_name,monto,doc_json').eq('tipo_dte','61')
+      const { data, error } = await supabase.from('sii_cargas_docs').select('id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_name,monto,doc_json,billing_id').eq('tipo_dte','61')
       if(error) throw error
       const norm=r=>String(r||'').replace(/\D/g,'')
       const out=[]
       for(const d of (data||[])){
+        if(d.billing_id) continue   // ya enlazada
         const ref = d.doc_json?.detFolioDocRef || (Array.isArray(d.doc_json?.referencias)&&d.doc_json.referencias[0]?.folioRef) || null
-        if(!ref) continue
-        const fn=norm(ref)
-        const fac=(billing||[]).find(b=>!b.deleted_at && b.billing_type!=='nota_credito' && norm(b.invoice_no)===fn)
+        let fac=null, inferido=false
+        if(ref){ const fn=norm(ref); fac=(billing||[]).find(b=>!b.deleted_at && b.billing_type!=='nota_credito' && norm(b.invoice_no)===fn) }
+        if(!fac){
+          // Fallback: el RCV no trae la referencia → calce por RUT + monto EXACTO. Solo si hay UN candidato vivo (nunca ambiguo).
+          const rn=norm(d.receptor_rut), mn=Math.round(Number(d.monto)||0)
+          const cand = (rn&&mn) ? (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='nota_credito' && b.invoice_no && b.status!=='Anulada' && norm(b.receptor_rut)===rn && Math.round(Number(b.amount)||0)===mn) : []
+          if(cand.length===1){ fac=cand[0]; inferido=true }
+        }
         if(!fac || fac.status==='Anulada') continue   // sin factura viva referida → nada que resolver
         if((billing||[]).some(b=>b.billing_type==='nota_credito' && !b.deleted_at && norm(b.invoice_no)===norm(d.folio))) continue   // ya registrada
         const cli=clients.find(c=>String(c.id)===String(fac.client_id))
-        out.push({ ncFolio:d.folio, ncFecha:d.fecha_emision, monto:d.monto, receptor:d.receptor_name, rut:d.receptor_rut,
+        out.push({ ncFolio:d.folio, ncFecha:d.fecha_emision, monto:d.monto, receptor:d.receptor_name, rut:d.receptor_rut, siiId:d.id, inferido,
           facId:fac.id, facFolio:folioN(fac.invoice_no)||fac.invoice_no, facStatus:fac.status, facCliente:cli?.name||fac.receptor_name||null, replId:null, replFolio:null, replCliente:null, doc:null })
       }
       setNcResolver(out)
@@ -12431,7 +12439,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                             {items.map(it=>(
                               <div key={it.ncFolio} style={{border:`0.5px solid ${C.border}`,borderRadius:10,padding:'8px 10px',marginBottom:6}}>
                                 <div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.facCliente||it.receptor||'—'}</div>
-                                <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>NC N°{it.ncFolio}{it.ncFecha?` · ${fmtFechaDMY(it.ncFecha)}`:''} · {fmt(it.monto)} · anula Factura N°{it.facFolio} ({it.facStatus})</div>
+                                <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>NC N°{it.ncFolio}{it.ncFecha?` · ${fmtFechaDMY(it.ncFecha)}`:''} · {fmt(it.monto)} · anula Factura N°{it.facFolio} ({it.facStatus}){it.inferido?' · calce por RUT+monto':''}</div>
                                 <div style={{marginTop:7}}><button onClick={()=>{setNcVincular(!!it.replId);setNcConfirm({item:it})}} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Revisar y anular ›</button></div>
                               </div>
                             ))}
@@ -35302,7 +35310,7 @@ export default function App() {
                 <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Oficina</span>
               </div>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})}/>
             </div>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
