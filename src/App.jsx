@@ -8785,6 +8785,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const [open,setOpen]=useState(null)
   const [ncOpen,setNcOpen]=useState(false)
   const [ventas,setVentas]=useState([]); const [cm,setCm]=useState([])
+  const [bankSal,setBankSal]=useState([])   // cargos de sueldo del banco (Socio/Equipo) para cruzar vs planilla
   const [editM,setEditM]=useState(null)   // mes en edición (1-12) o null
   const [form,setForm]=useState({})
   const [busy,setBusy]=useState(false)
@@ -8792,6 +8793,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   useEffect(()=>{ if(DEMO){ setVentas([]); setCm([]); return } let v=true
     supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').then(({data})=>{ if(v&&data) setVentas(data) },()=>{})
     supabase.from('oficina_costos_mensual').select('*').eq('anio',yr).then(({data})=>{ if(v&&data) setCm(data) },()=>{})
+    supabase.from('cartola_movimientos').select('fecha,tipo,monto,categoria').in('categoria',['Socio','Equipo']).gte('fecha',`${yr}-01-01`).lte('fecha',`${yr}-12-31`).then(({data})=>{ if(v&&data) setBankSal(data) },()=>{})
     return ()=>{v=false} },[yr,reloadN])
   const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const yrs=(()=>{ const s=new Set([curY]); (ventas||[]).forEach(d=>{ const y=parseInt(String(d.fecha_emision||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
@@ -8920,9 +8922,15 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
       const sinEnl=(ventas||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(yr)&&[33,34,61].includes(Number(d.tipo_dte))&&!d.billing_id)
       const abiertos=allM.filter(m=>mesEstado(m)!=='cerrado'), estM=allM.filter(m=>mesEstado(m)==='estimado')
       const desv=allM.filter(m=>{ const r=cmBy[m]; if(!r) return false; const real=Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos); const bud=costosOficinaMes(costosOfiRows,pad(m)); return bud>0&&Math.abs(real-bud)/bud>0.2 })
+      const faltaClaudia=allM.filter(m=>{ const r=cmBy[m]; return r && (Number(r.cotizaciones)===0||Number(r.ppm)===0||r.estimado) })
+      const plSld=allM.reduce((a,m)=>{ const r=cmBy[m]; return a+(r?Number(r.sueldos):0) },0)
+      const bkSld=(bankSal||[]).filter(d=>d.tipo==='cargo'&&( (d.categoria==='Socio'&&Number(d.monto)>=1800000&&Number(d.monto)<=3000000&&Number(d.monto)%100000!==0) || (d.categoria==='Equipo'&&Number(d.monto)>=1000000) )).reduce((a,d)=>a+(Number(d.monto)||0),0)
+      const sldOk=plSld===0||bkSld===0||Math.abs(plSld-bkSld)/plSld<=0.2
       const checks=[
         [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · revísalas en Revisión de datos`:'todas enlazadas a una venta'],
         [abiertos.length===0,'Cierre de meses',abiertos.length?`${abiertos.length} sin cerrar${estM.length?` · ${estM.length} con datos estimados`:''}`:'todos los meses del período cerrados'],
+        [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia'],
+        [sldOk,'Sueldos vs banco',sldOk?'cuadran con las transferencias del banco':`planilla ${fmtMp(plSld)} vs banco ${fmtMp(bkSld)} · revisar contra las liquidaciones`],
         [desv.length===0,'Costos vs presupuesto',desv.length?`${desv.length} mes${desv.length!==1?'es':''} con desvío mayor a 20% vs el presupuesto`:'en línea con el presupuesto'],
       ]
       return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
