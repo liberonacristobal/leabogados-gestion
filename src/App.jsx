@@ -8385,8 +8385,20 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
     </div>
   )
 }
-// ── Retiros a socios: distribución de utilidades (cliente interno, categoría 'Retiros'). Identifica al socio por su RUT/nombre en la glosa. NO es costo de oficina; vive en su propia tarjeta del módulo Oficina. ──
-const _SOCIO_RET = e => { const g=String(e.personal_de||e.description||e.concept||e.src_name||'').toLowerCase(); if(/15\.?621\.?320|cristobal liberona|cristóbal liberona/.test(g)) return 'Cristóbal'; if(/15\.?371\.?733|erasmo escala/.test(g)) return 'Erasmo'; return e.personal_de||'Otro' }
+// ── Retiros a socios: distribución de utilidades (cliente interno, categoría 'Retiros'). Identifica al socio por `subcategory` (la clasificación manual, puesta al conciliar "Retiros › X") y, si no hay, por el RUT/nombre en la glosa. NO es costo de oficina; vive en la página Socios. ──
+const _SOCIO_RET = e => {
+  const sc=String(e.subcategory||'').trim()
+  if(/cristóbal|cristobal/i.test(sc)) return 'Cristóbal'
+  if(/erasmo/i.test(sc)) return 'Erasmo'
+  if(sc && !/^retiros?$/i.test(sc)) return sc
+  const g=String(e.personal_de||e.description||e.concept||e.src_name||'').toLowerCase()
+  if(/15\.?621\.?320|cristobal liberona|cristóbal liberona/.test(g)) return 'Cristóbal'
+  if(/15\.?371\.?733|erasmo escala/.test(g)) return 'Erasmo'
+  return e.personal_de||'Otro'
+}
+// Sueldo de socio: los sueldos/bonos usan `subcategory` = nombre de la persona. Devuelve el socio si lo es, o null.
+const _SOCIO_SUELDO = e => { const sc=String(e.subcategory||'').trim(); if(/cristóbal|cristobal/i.test(sc)) return 'Cristóbal'; if(/erasmo/i.test(sc)) return 'Erasmo'; return null }
+const _SOCIO_RUT_DISP = {'Cristóbal':'15.621.320-9','Erasmo':'15.371.733-8'}
 const _SOCIO_COL = {'Cristóbal':C.accent, 'Erasmo':'#8A7012', 'Martín':'#3B6D11', 'Martina':C.overdueText, 'Rodrigo':'#A8472A'}
 function retirosOficinaData(expenses, clients, year){
   const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
@@ -8549,7 +8561,173 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
     </>}
   </div>)
 }
-function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenVarios, proveedores=[], onSaveProveedor }){
+// ── Página "Socios": retiros + sueldos de socios. Socio = _SOCIO_RET (lee subcategory). Un retiro = suma de un período (puede venir en varias transferencias); se agrupa por (socio, mes). Regla de oro: retiros parejos por período → chip de estado + auto-sugerencia del socio que cuadra la paridad. Trazable: cada retiro despliega sus transferencias con link a Banco. Página con navStack, responsive. ──
+function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+  const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
+  const [yr,setYr]=useState(curY)
+  const [eqMode,setEqMode]=useState('ambos')
+  const [tablaMode,setTablaMode]=useState('monto')
+  const [movVista,setMovVista]=useState('socio')
+  const [verVacios,setVerVacios]=useState(false)
+  const [expRet,setExpRet]=useState(null)
+  const [busy,setBusy]=useState(null)
+  const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
+  const SOC=['Cristóbal','Erasmo']
+  const COL={'Cristóbal':C.accent,'Erasmo':'#8A6D12'}
+  const BG={'Cristóbal':'#EAF1F4','Erasmo':'#F8F1DE'}
+  const MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const _dmyS=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
+  const _mesCorto=d=>{ const n=parseInt(String(d||'').slice(5,7),10); return n?`${String(d).slice(8,10)} ${['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][n]}`:'' }
+  const fmtM=n=>{ const m=(n||0)/1e6; const s=(m%1===0?m.toFixed(0):m.toFixed(2)); return '$'+s.replace('.',',')+' M' }
+  const yrs=(()=>{ const s=new Set([curY]); (expenses||[]).forEach(e=>{ const y=parseInt(String(e.date||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
+  const inOfi=e=>ofi&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,4)===String(yr)
+  // transferencias (movimientos de banco) de categoría Retiros
+  const movs=(expenses||[]).filter(e=>inOfi(e)&&String(e.category||'').trim().toLowerCase()==='retiros').map(e=>({e,socio:_SOCIO_RET(e),amt:Number(e.amount)||0,mes:parseInt(String(e.date||'').slice(5,7),10)||0,date:e.date}))
+  // retiros = por (socio, mes) con sus transferencias
+  const grp={}; movs.forEach(m=>{ const k=m.socio+'|'+m.mes; (grp[k]=grp[k]||{socio:m.socio,mes:m.mes,amt:0,movs:[]}); grp[k].amt+=m.amt; grp[k].movs.push(m) })
+  const retiros=Object.values(grp); retiros.forEach(r=>r.movs.sort((a,b)=>String(a.date).localeCompare(String(b.date))))
+  const retSoc=retiros.filter(r=>SOC.includes(r.socio))
+  const otros=retiros.filter(r=>!SOC.includes(r.socio))
+  const sueldos={}; (expenses||[]).filter(e=>inOfi(e)&&['sueldos','bono'].includes(String(e.category||'').trim().toLowerCase())).forEach(e=>{ const s=_SOCIO_SUELDO(e); if(s) sueldos[s]=(sueldos[s]||0)+(Number(e.amount)||0) })
+  const retTot={}, retN={}; retSoc.forEach(r=>{ retTot[r.socio]=(retTot[r.socio]||0)+r.amt; retN[r.socio]=(retN[r.socio]||0)+1 })
+  const totalRet=movs.reduce((a,m)=>a+m.amt,0)
+  const sueldoTot=SOC.reduce((a,s)=>a+(sueldos[s]||0),0)
+  const nRet=retSoc.length
+  const promRetiro=nRet?Math.round(totalRet/nRet):0
+  const mesesComp=yr<curY?12:(yr>curY?0:Math.max(0,curM-1))
+  const promDe=s=>{ const base=(retTot[s]||0)+(eqMode==='ambos'?(sueldos[s]||0):0); return mesesComp>0?Math.round(base/mesesComp):0 }
+  const byMes={}; for(let m=1;m<=12;m++) byMes[m]={'Cristóbal':0,'Erasmo':0}
+  retSoc.forEach(r=>{ if(r.mes>=1&&r.mes<=12) byMes[r.mes][r.socio]+=r.amt })
+  const hasMes=m=>byMes[m]['Cristóbal']>0||byMes[m]['Erasmo']>0
+  const faltaTxt=d=>d===0?null:(d>0?`falta Erasmo ${fmt(Math.abs(d))}`:`falta Cristóbal ${fmt(Math.abs(d))}`)
+  const difAcum=(retTot['Cristóbal']||0)-(retTot['Erasmo']||0)
+  // filas de la tabla (colapsa rangos sin retiros si verVacios=false)
+  const filas=(()=>{ const out=[]; let g=null; for(let m=1;m<=12;m++){ if(hasMes(m)){ if(g){out.push({gap:g});g=null} out.push({m}) } else if(verVacios){ if(g){out.push({gap:g});g=null} out.push({m,vac:true}) } else { g=g?[g[0],m]:[m,m] } } if(g)out.push({gap:g}); return out })()
+  const rangoLbl=g=>g[0]===g[1]?MESL[g[0]-1]:`${MESL[g[0]-1]} – ${MESL[g[1]-1]}`
+  // auto-sugerencia: para un retiro "Otro", el socio que va detrás en ese mes (regla de oro)
+  const sugSocio=r=>{ const c=byMes[r.mes]['Cristóbal'], e=byMes[r.mes]['Erasmo']; return c<=e?'Cristóbal':'Erasmo' }
+  const asignar=async(r,soc)=>{ if(!(await appConfirm(`Asignar este retiro de ${fmt(r.amt)} a ${soc}. Es reversible. ¿Confirmas?`))) return; setBusy(r.socio+'|'+r.mes); try{ const ids=r.movs.map(x=>x.e.id); await supabase.from('expenses').update({subcategory:soc,updated_at:new Date().toISOString()}).in('id',ids); setExpenses&&setExpenses(p=>p.map(x=>ids.includes(x.id)?{...x,subcategory:soc}:x)) }catch(err){ appAlert('No se pudo asignar: '+(err.message||err)) } setBusy(null) }
+  const exportar=()=>{ const H=['Socio','Mes','Monto','Transferencias']; const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`; const lines=retSoc.sort((a,b)=>a.socio.localeCompare(b.socio)||a.mes-b.mes).map(r=>[r.socio,MESL[r.mes-1],Math.round(r.amt),r.movs.length].map(esc).join(',')); const csv=[H.map(esc).join(','),...lines].join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`retiros_socios_${yr}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }
+  const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:10.5,fontWeight:700,padding:'6px 13px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
+  const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}
+  const chTi=(t,bg,sv)=><div style={{display:'flex',alignItems:'center',gap:9}}><span style={{width:30,height:30,borderRadius:9,background:bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{sv}</span><span style={{fontSize:13,fontWeight:800,color:C.accent,letterSpacing:-.2}}>{t}</span></div>
+  const chv=up=><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d={up?'m18 15-6-6-6 6':'m6 9 6 6 6-6'}/></svg>
+  const bankIc=<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M7 7h10v10'/><path d='M7 17 17 7'/></svg>
+  // render de un grupo de retiros (socio) o lista plana
+  const retRow=(r)=>{ const key=r.socio+'|'+r.mes; const open=expRet===key; return (<div key={key}>
+    <div onClick={()=>setExpRet(open?null:key)} style={{display:'flex',alignItems:'center',gap:13,padding:'12px 18px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:open?'#FBFCFD':'transparent'}}>
+      <span style={{fontWeight:700,color:C.accent,textTransform:'capitalize',fontSize:14,width:isDesktop?130:96}}>{MESL[r.mes-1]}{movVista==='mes'?'':''}</span>
+      <span style={{color:C.muted,fontSize:11.5}}>{r.movs.length} transferencia{r.movs.length!==1?'s':''}</span>
+      <span style={{marginLeft:'auto',fontWeight:800,color:COL[r.socio]||C.text,fontVariantNumeric:'tabular-nums',fontSize:15}}>{fmt(r.amt)}</span>
+      <span style={{flexShrink:0}}>{chv(open)}</span>
+    </div>
+    {open&&<><div style={{padding:'7px 18px 7px 40px',fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done,background:'#FBFCFD',borderTop:`1px solid ${C.bgSoft}`}}>{r.movs.length} transferencia{r.movs.length!==1?'s':''}</div>
+      {r.movs.map((mv,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 18px 9px 40px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5,background:'#FBFCFD'}}>
+        <span style={{color:C.muted,width:58,flexShrink:0}}>{_dmyS(mv.date)}</span>
+        <span style={{color:C.done,fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{mv.e.concept||'Transferencia'}</span>
+        <span style={{fontWeight:700,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(mv.amt)}</span>
+        <span onClick={e=>{e.stopPropagation(); onIrBanco&&onIrBanco(_SOCIO_RUT_DISP[r.socio]||r.socio)}} style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end',fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer',width:72,flexShrink:0}}>Banco {bankIc}</span>
+      </div>)}</>}
+  </div>) }
+  return (
+  <div style={{maxWidth:isDesktop?1060:'100%',margin:'0 auto',padding:isDesktop?'0 20px 44px':'0 16px 44px'}}>
+    <div style={{display:'flex',alignItems:'center',gap:11,margin:'4px 0 18px',flexWrap:'wrap'}}>
+      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>Oficina</button>
+      <h1 style={{fontSize:isDesktop?21:19,fontWeight:800,color:C.accent,letterSpacing:-.5}}>Socios · retiros y sueldos</h1>
+      {difAcum===0
+        ? <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'6px 12px'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>Retiros al día</span>
+        : <span style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'6px 12px'}}>Por igualar · {faltaTxt(difAcum)}</span>}
+      <span style={{flex:1}}/>
+      <select value={yr} onChange={e=>setYr(parseInt(e.target.value,10))} style={{fontSize:12,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:20,padding:'6px 10px',background:C.azulBg,color:C.accent,cursor:'pointer'}}>{yrs.map(y=><option key={y} value={y}>{y}</option>)}</select>
+      {nRet>0&&<button onClick={exportar} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:700,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 13px',cursor:'pointer'}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><path d='m7 10 5 5 5-5'/><path d='M12 15V3'/></svg>Exportar</button>}
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.25fr 1fr 1fr':'1fr 1fr',gap:12,marginBottom:12}}>
+      <div style={{background:C.accent,color:'#fff',borderRadius:18,padding:'19px 21px',gridColumn:isDesktop?'auto':'1/-1'}}>
+        <div style={{display:'flex',alignItems:'center',gap:7,fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'#9FC6D8'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#9FC6D8' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M22 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>A favor de socios · {yr}</div>
+        <div style={{fontSize:40,fontWeight:800,letterSpacing:-1.5,lineHeight:1,margin:'11px 0 10px',fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet+sueldoTot)}</div>
+        <div style={{display:'flex',gap:10}}>
+          <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Retiros</div><div style={{fontSize:15,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet)}</div></div>
+          <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Sueldos</div><div style={{fontSize:15,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(sueldoTot)}</div></div>
+        </div>
+      </div>
+      {[['Retirado '+yr,fmtM(totalRet),nRet+' retiros · '+fmtM(promRetiro)+' prom.',C.azulBg,'#185FA5',<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>],['Sueldos socios',fmtM(sueldoTot),'Cristóbal + Erasmo',BG['Erasmo'],'#8A6D12',<><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></>]].map((k,i)=>
+        <div key={i} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,padding:'16px 17px'}}>
+          <span style={{width:34,height:34,borderRadius:10,background:k[3],display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={k[4]} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'>{k[5]}</svg></span>
+          <div style={{fontSize:27,fontWeight:800,color:C.accent,letterSpacing:-.9,fontVariantNumeric:'tabular-nums'}}>{k[1]}</div>
+          <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,marginTop:3}}>{k[0]}</div>
+          <div style={{fontSize:11,color:C.done,marginTop:5}}>{k[2]}</div>
+        </div>)}
+    </div>
+
+    <div style={card}>
+      <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+        {chTi('Por socio · total y promedio',C.greenBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></svg>)}
+        {seg(eqMode,setEqMode,[['ambos','Retiro + sueldo'],['retiros','Solo retiros']])}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12,padding:'2px 16px 16px'}}>
+        {SOC.map(s=>{ const tot=(retTot[s]||0)+(sueldos[s]||0); return <div key={s} style={{background:BG[s],borderRadius:15,padding:'17px 18px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><span style={{width:36,height:36,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14}}>{s[0]}</span><span style={{fontWeight:800,fontSize:16,color:COL[s]}}>{s}</span></div>
+          <div style={{fontSize:34,fontWeight:800,letterSpacing:-1.1,lineHeight:1,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(tot)}</div>
+          <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,marginTop:4}}>total a favor · {yr}</div>
+          <div style={{display:'flex',gap:10,marginTop:13}}>
+            <div style={{flex:1,background:'rgba(255,255,255,.65)',borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted}}>Retiros</div><div style={{fontSize:14,fontWeight:800,marginTop:2,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmt(retTot[s]||0)}</div></div>
+            <div style={{flex:1,background:'rgba(255,255,255,.65)',borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted}}>Sueldo</div><div style={{fontSize:14,fontWeight:800,marginTop:2,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmt(sueldos[s]||0)}</div></div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:10,background:'rgba(255,255,255,.65)',borderRadius:10,padding:'10px 12px'}}>
+            <div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.muted,lineHeight:1.3}}>Promedio<br/>mensual</div>
+            <div style={{textAlign:'right'}}><div style={{fontSize:18,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(promDe(s))}</div><div style={{fontSize:9.5,color:C.done,fontWeight:600}}>÷ {mesesComp} meses{mesesComp>0?` · ene–${['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Math.min(12,mesesComp)]}`:''}</div></div>
+          </div>
+        </div> })}
+      </div>
+    </div>
+
+    <div style={card}>
+      <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
+        {chTi('Retiros por período',C.soonBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg>)}
+        <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>{seg(tablaMode,setTablaMode,[['monto','Monto'],['dif','Diferencia'],['acum','Acumulado']])}<span onClick={()=>setVerVacios(v=>!v)} style={{fontSize:10.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>{verVacios?'Colapsar meses':'Ver todos los meses'}</span></div>
+      </div>
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr>
+          <th style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'left',padding:'4px 18px 10px',borderBottom:`1px solid ${C.border}`}}>Mes</th>
+          {tablaMode==='monto'&&<><th style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'right',padding:'4px 18px 10px',borderBottom:`1px solid ${C.border}`}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:COL['Cristóbal'],marginRight:5,verticalAlign:'middle'}}/>Cristóbal</th><th style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'right',padding:'4px 18px 10px',borderBottom:`1px solid ${C.border}`}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:COL['Erasmo'],marginRight:5,verticalAlign:'middle'}}/>Erasmo</th></>}
+          <th style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,textAlign:'right',padding:'4px 18px 10px',borderBottom:`1px solid ${C.border}`}}>{tablaMode==='acum'?'Acumulado (C−E)':'Diferencia'}</th>
+        </tr></thead>
+        <tbody>
+          {(()=>{ let acum=0; return filas.map((f,i)=>{ if(f.gap){ return <tr key={'g'+i} style={{background:'#FBFCFD'}}><td style={{padding:'8px 18px',color:C.done,fontWeight:700,fontSize:11,textAlign:'left'}}>{rangoLbl(f.gap)}</td>{tablaMode==='monto'&&<><td style={{padding:'8px 18px',color:C.done,textAlign:'right'}}>—</td><td style={{padding:'8px 18px',color:C.done,textAlign:'right'}}>—</td></>}<td style={{padding:'8px 18px',color:C.done,textAlign:'right',fontSize:11}}>sin retiros</td></tr> }
+            const m=f.m, c=byMes[m]['Cristóbal'], er=byMes[m]['Erasmo'], d=c-er; acum+=d; const vac=f.vac; const falta=d!==0
+            const td={fontSize:13,padding:'11px 18px',borderTop:`1px solid ${C.bgSoft}`,textAlign:'right',fontVariantNumeric:'tabular-nums',color:vac?C.done:C.fg||C.text}
+            return <tr key={m} style={falta?{background:'#FFFCF4'}:null}>
+              <td style={{...td,textAlign:'left',fontWeight:700,color:vac?C.done:C.accent,textTransform:'capitalize'}}>{MESL[m-1]}</td>
+              {tablaMode==='monto'&&<><td style={td}>{c>0?fmt(c):'—'}</td><td style={td}>{er>0?fmt(er):'—'}</td></>}
+              <td style={td}>{tablaMode==='acum'?(acum===0?<span style={{color:C.done}}>$0</span>:<span style={{color:acum>0?C.accent:'#8A6D12',fontWeight:700}}>{acum>0?'+':'−'}{fmt(Math.abs(acum))}</span>):(d===0?(vac?'—':<span style={{color:C.done}}>$0</span>):<span style={{display:'inline-flex',alignItems:'center',fontSize:10.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:6,padding:'3px 9px',whiteSpace:'nowrap'}}>{faltaTxt(d)}</span>)}</td>
+            </tr> }) })()}
+          <tr><td style={{fontSize:13,padding:'12px 18px',borderTop:`2px solid ${C.border}`,textAlign:'left',fontWeight:800,color:C.accent,background:C.bgSoft}}>Total {yr}</td>{tablaMode==='monto'&&<><td style={{fontSize:13,padding:'12px 18px',borderTop:`2px solid ${C.border}`,textAlign:'right',fontWeight:800,background:C.bgSoft,fontVariantNumeric:'tabular-nums',color:COL['Cristóbal']}}>{fmt(retTot['Cristóbal']||0)}</td><td style={{fontSize:13,padding:'12px 18px',borderTop:`2px solid ${C.border}`,textAlign:'right',fontWeight:800,background:C.bgSoft,fontVariantNumeric:'tabular-nums',color:COL['Erasmo']}}>{fmt(retTot['Erasmo']||0)}</td></>}<td style={{fontSize:13,padding:'12px 18px',borderTop:`2px solid ${C.border}`,textAlign:'right',fontWeight:800,background:C.bgSoft,fontVariantNumeric:'tabular-nums'}}>{difAcum===0?<span style={{color:C.done}}>$0</span>:<span style={{fontSize:10.5,color:C.soonText}}>{faltaTxt(difAcum)}</span>}</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div style={card}>
+      <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+        {chTi('Retiros · '+nRet+' en total',BG['Cristóbal'],<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>)}
+        {seg(movVista,setMovVista,[['socio','Por socio'],['mes','Por mes'],['crono','Cronológico']])}
+      </div>
+      {nRet===0&&<div style={{padding:'22px 18px',textAlign:'center',color:C.done,fontSize:13}}>Sin retiros registrados en {yr}.</div>}
+      {otros.map(r=>{ const sg=sugSocio(r); return <div key={'o'+r.mes} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 18px',background:'#FFFCF4',borderTop:`1px solid ${C.bgSoft}`,flexWrap:'wrap'}}>
+        <span style={{width:30,height:30,borderRadius:9,background:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3v18'/><path d='m6 8 6-4 6 4'/><path d='M6 8 3 14a3.5 3.5 0 0 0 6 0Z'/><path d='m18 8-3 6a3.5 3.5 0 0 0 6 0Z'/></svg></span>
+        <div style={{flex:'1 1 200px',fontSize:12,color:C.text,lineHeight:1.45}}>Retiro de <b style={{color:C.accent}}>{fmt(r.amt)}</b> en {MESL[r.mes-1]} sin socio. Por la paridad del período correspondería a <b style={{color:C.accent}}>{sg}</b>.</div>
+        <div style={{display:'flex',gap:8,flexShrink:0}}><button disabled={busy===r.socio+'|'+r.mes} onClick={()=>asignar(r,sg)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'7px 13px',background:C.accent,color:'#fff',cursor:'pointer'}}>Sí, es {sg}</button><button onClick={()=>asignar(r,sg==='Cristóbal'?'Erasmo':'Cristóbal')} style={{fontSize:11,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 11px',background:'#fff',color:C.muted,cursor:'pointer'}}>Otro</button></div>
+      </div> })}
+      {(()=>{
+        if(movVista==='crono'){ const all=[...retSoc].sort((a,b)=>a.mes-b.mes||a.socio.localeCompare(b.socio)); return all.map(retRow) }
+        if(movVista==='mes'){ const by={}; retSoc.forEach(r=>{ (by[r.mes]=by[r.mes]||[]).push(r) }); return Object.keys(by).sort((a,b)=>a-b).map(m=><div key={m}><div style={{padding:'11px 18px',fontSize:10.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,background:C.bgSoft,display:'flex',justifyContent:'space-between'}}><span>{MESL[m-1]}</span><span>{fmt(by[m].reduce((a,r)=>a+r.amt,0))}</span></div>{by[m].sort((a,b)=>a.socio.localeCompare(b.socio)).map(retRow)}</div>) }
+        return SOC.map(s=>{ const rs=retSoc.filter(r=>r.socio===s).sort((a,b)=>a.mes-b.mes); if(!rs.length) return null; return <div key={s}><div style={{padding:'11px 18px',fontSize:10.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,background:BG[s],color:COL[s],display:'flex',justifyContent:'space-between'}}><span>{s} · {rs.length} retiro{rs.length!==1?'s':''}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(retTot[s]||0)}</span></div>{rs.map(retRow)}</div> })
+      })()}
+    </div>
+  </div>)
+}
+
+function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros }){
   const [sub,setSub] = useState(null)
   const [caja,setCaja] = useState(null)
   const [comprasRows,setComprasRows] = useState([])   // DTE de compra del SII (sii_compras_docs): foto IVA crédito + módulo Compras
@@ -8635,7 +8813,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
     </div>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
       {puerta('','building',C.azulBg,C.accent,'Costos',fmtShort(costoMes),C.accent,'por mes',()=>setSub('costos'))}
-      {puerta('','wallet',C.tealBg,C.tealText,'Retiros',fmtShort(ret.total),C.tealText,'en el año',()=>setSub('retiros'))}
+      {puerta('','wallet',C.tealBg,C.tealText,'Retiros',fmtShort(ret.total),C.tealText,'en el año',()=>onOpenRetiros?onOpenRetiros():setSub('retiros'))}
       {puerta('','receipt',C.bgWarm,C.muted,'Gastos varios',fmtShort(variosMes),C.accent,porCobrarEq>0?`${fmtShort(porCobrarEq)} por cobrar`:'este mes',()=>onOpenVarios&&onOpenVarios())}
       {puerta('','receipt',C.azulBg,C.azulInfo,'Compras · IVA',fmtShort(ivaCreditoC),C.azulInfo,'IVA crédito',()=>setSub('compras'))}
     </div>
@@ -32232,7 +32410,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',facturasDelMes:'Facturas del mes',editCliente:'Editar cliente'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',socios:'Socios',facturasDelMes:'Facturas del mes',editCliente:'Editar cliente'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
   admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina']],
@@ -32846,7 +33024,7 @@ export default function App() {
   useEffect(()=>{
     if(userRole==='limited' && tab!=='editCliente' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')   // editCliente = página de edición (drill fuera de la barra)
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
-    if(userRole==='admin' && tab!=='facturasDelMes' && tab!=='editCliente' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente = drill-down válidos, fuera de la paleta
+    if(userRole==='admin' && tab!=='facturasDelMes' && tab!=='editCliente' && tab!=='socios' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
     // Módulo apagado (entitlements): si la vista actual pertenece a un módulo no contratado, redirige. Para LEA (todo ON) es inerte.
     if(VIEW_MODULO[tab] && !moduloOn(VIEW_MODULO[tab])) setTab(userRole==='admin'?'dashboard':'tasks')
   },[userRole,tab,modVer])
@@ -34794,8 +34972,9 @@ export default function App() {
                 <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Oficina</span>
               </div>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})}/>
             </div>}
+            {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
