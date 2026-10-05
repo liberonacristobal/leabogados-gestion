@@ -2352,7 +2352,7 @@ function useIsDesktop(){
 }
 
 // SideNav (escritorio): barra lateral fija que reusa TABS_ADMIN/LIMITED + moduloOn. Oculta bajo 1024px por CSS (.sidenav).
-function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
+function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioActive}){
   const sp = {fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
   const I = {
     grid:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>,
@@ -2368,6 +2368,7 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
     chart:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8"/><rect x="12" y="6" width="3" height="12"/><rect x="17" y="13" width="3" height="5"/></svg>,
     send:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
     tag:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M20.6 13.4 12 22l-9-9V4h9z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>,
+    alert:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   }
   const secciones = userRole==='admin'
     ? [ {cap:null, items:[
@@ -2379,6 +2380,7 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
           {id:'tasks',label:'Tareas',ic:'check',mod:'nucleo'},
         ]},
         {cap:'Finanzas', items:[
+          {id:'prioridades',label:'Prioridades',ic:'alert',mod:'finanzas',onClick:onPrioridades,active:prioActive},
           {id:'conciliacion',label:'Banco',ic:'bank',mod:'finanzas'},
           {id:'cobranza',label:'Cobranza',ic:'send',mod:'finanzas'},
           {id:'horas',label:'Horas',ic:'clock',mod:'horas'},
@@ -2386,11 +2388,11 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette}){
           {id:'repricing',label:'Repricing',ic:'tag',mod:'horas'},
         ]} ]
     : [ {cap:null, items:(TABS_LIMITED.map(t=>({id:t.id,label:t.label,ic:t.icon,mod:t.mod})))} ]
-  const item = t => moduloOn(t.mod) && (
-    <button key={t.id} onClick={()=>setTab(t.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 11px',borderRadius:8,border:'none',background:tab===t.id?'rgba(255,255,255,.12)':'transparent',color:tab===t.id?'#fff':'#a8c2ca',fontSize:13,fontWeight:tab===t.id?700:500,cursor:'pointer',width:'100%',textAlign:'left',fontFamily:'inherit'}}>
-      <span style={{display:'flex',flexShrink:0,opacity:tab===t.id?1:.85}}>{I[t.ic]||I.grid}</span>{t.label}
+  const item = t => moduloOn(t.mod) && (()=>{ const act = t.active||tab===t.id; return (
+    <button key={t.id} onClick={t.onClick||(()=>setTab(t.id))} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 11px',borderRadius:8,border:'none',background:act?'rgba(255,255,255,.12)':'transparent',color:act?'#fff':'#a8c2ca',fontSize:13,fontWeight:act?700:500,cursor:'pointer',width:'100%',textAlign:'left',fontFamily:'inherit'}}>
+      <span style={{display:'flex',flexShrink:0,opacity:act?1:.85}}>{I[t.ic]||I.grid}</span>{t.label}
     </button>
-  )
+  )})()
   return (
     <aside className='sidenav' style={{position:'fixed',left:0,top:0,bottom:0,width:212,background:'#04242F',padding:'16px 12px',display:'none',flexDirection:'column',gap:2,zIndex:40,overflowY:'auto'}}>
       <div style={{padding:'4px 8px 16px'}}>
@@ -3066,7 +3068,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
   )
 }
 
-function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso,onOpenEmitidoMes}) {
+function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
   const go = t => navTo ? navTo({tab:t}) : setTab(t)   // salto que apila origen+scroll (navTo) para que "Volver" regrese al Inicio en su posición exacta
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   const [verTodosProy,setVerTodosProy] = useState(false)   // "Ver todos" en Mis proyectos: carga mis terminados y muestra los 3 grupos
@@ -3083,7 +3085,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
   },[terminadosProy,user])
   // Alertas del dueño ("Requiere atención"): replegado por defecto; descartadas persisten (reaparecen si el monto empeora >20%).
   const [alertExp,setAlertExp] = usePersistedState('dash_alert_exp',false)
-  const [prioOpen,setPrioOpen] = useState(false)   // página "Prioridades financieras" (abre desde el tile de Finanzas·gestión; no persiste → al volver de una alerta cae en Inicio)
+  // prioOpen/setPrioOpen llegan como props (estado en App) → la página "Prioridades financieras" se abre desde el menú Finanzas del sidebar y ⌘K, no desde un tile.
   const [alertOff,setAlertOff] = usePersistedState('dash_alert_off',{})
   const descartarAlerta = a => setAlertOff(p=>({...(p&&typeof p==='object'?p:{}), [a.key]: a.monto||0}))
   // KPIs colapsables: "Cómo va el año" queda fijo (hero); el resto arranca en mini y se abre al tocar (recuerda por usuario).
@@ -3566,8 +3568,8 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
   const _wk7ISO = (()=>{ const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10) })()
   const cargaSemN = (tasks||[]).filter(t=>t&&t.status!=='Terminado'&&t.due&&String(t.due).slice(0,10)<=_wk7ISO).length
 
-  // PÁGINA Prioridades financieras (early-return): abre desde el tile de Finanzas·gestión; cada alerta navega a su fuente (y cierra la página para que el volver caiga en Inicio).
-  if(prioOpen && prioridades.length){
+  // PÁGINA Prioridades financieras (early-return): abre desde el menú Finanzas (sidebar) o ⌘K; cada alerta navega a su fuente (y cierra la página para que el volver caiga en Inicio).
+  if(prioOpen){
     const SEV={r:{bg:C.overdueBg,fg:C.overdueText},a:{bg:C.soonBg,fg:C.soonText},b:{bg:C.azulBg,fg:C.azulInfo}}
     return (
       <div style={{maxWidth:700,margin:'0 auto',padding:'10px 16px 40px'}}>
@@ -3575,7 +3577,9 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
           <button onClick={()=>setPrioOpen(false)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
           <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Prioridades financieras</span>
         </div>
-        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+        {!prioridades.length
+          ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'34px 16px',textAlign:'center',color:C.muted,fontSize:14}}>Todo al día — sin prioridades por resolver.</div>
+          : <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
           {prioridades.map((a,i)=>{ const sv=SEV[a.sev]||SEV.b; const ir=()=>{ setPrioOpen(false); a.go&&a.go() }; return (
             <div key={a.key} style={{display:'flex',alignItems:'center',gap:12,padding:'14px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
               <span style={{width:32,height:32,borderRadius:8,background:sv.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={a.icon} s={17} c={sv.fg}/></span>
@@ -3587,7 +3591,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
               <span onClick={e=>{e.stopPropagation();descartarAlerta(a)}} title='Descartar' style={{color:C.done,cursor:'pointer',flexShrink:0,display:'flex'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></span>
             </div>
           )})}
-        </div>
+        </div>}
       </div>
     )
   }
@@ -3925,7 +3929,6 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
         <div style={{padding:'6px 20px 0'}}>
           {/* Señales financieras — todas clickeables a su fuente. Resultado del mes y Flujo de caja abren su página; el resto navega o despliega. */}
           <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
-            {prioridades.length>0&&kTile('prioridades','Prioridades',String(prioridades.length),prioridades.some(a=>a.sev==='r')?C.overdueText:C.soonText,'wallet',prioridades.some(a=>a.sev==='r')?{fg:C.overdueText,bg:C.overdueBg}:{fg:C.soonText,bg:C.soonBg},'por resolver',()=>setPrioOpen(true))}
             {kTile('resmes','Resultado del mes',fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',{fg:C.greenText,bg:C.greenBg},(resMesDif>=0?'▲ ':'▼ ')+fmtShort(Math.abs(resMesDif))+' vs mes previo',onOpenEstadoResultados)}
             {kTile('flujo','Flujo de caja',fmtShort(flujoNeto8),flujoNeto8>=0?C.accent:C.overdueText,'wallet',{fg:C.tealText,bg:C.tealBg},'neto · 8 semanas',onOpenFlujoCaja)}
             {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'chart',{fg:C.greenText,bg:C.greenBg},'emitido'+(emFacTot>0?' · '+emPct+'% pagado':''),()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
@@ -32829,6 +32832,7 @@ const VIEWS_PALETTE = {
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
+  {id:'prioridades', label:'Prioridades'},
   {id:'redaccion', label:'Redactar con IA'},
   {id:'conciliar', label:'Conciliar facturas'},
   {id:'conciliacion', label:'Conciliación bancaria'},
@@ -33243,10 +33247,14 @@ export default function App() {
   // Cerrar el editor de cliente: si está como PÁGINA (tab editCliente) vuelve al lugar exacto (goBack); si aún fuera un modal, lo cierra.
   const closeClientEditor=useCallback(()=>{ if(tab==='editCliente') goBack(); else setModal(null) },[tab,goBack])
   const recordRecent=useCallback((item)=>{ if(!item||!item.id||item.type==='view') return; setNavRecents(p=>{ const next=[{type:item.type,id:item.id,label:item.label},...p.filter(x=>!(x.type===item.type&&String(x.id)===String(item.id)))].slice(0,6); try{localStorage.setItem('nav_recents',JSON.stringify(next))}catch(_){} return next }) },[])
+  // Página "Prioridades financieras": estado en App (se abre desde el menú Finanzas del sidebar y ⌘K). La página vive dentro del Dashboard (early-return), así que abrir = ir a Inicio + prioOpen.
+  const [prioOpen,setPrioOpen]=useState(false)
+  const abrirPrioridades=useCallback(()=>{ setTab('dashboard'); setPrioOpen(true) },[setTab])
+  useEffect(()=>{ if(tab!=='dashboard'&&prioOpen) setPrioOpen(false) },[tab,prioOpen])   // salir de Inicio por la barra cierra la página (no reaparece al volver)
   const handlePaletteSelect=(item)=>{
     setPaletteOpen(false); recordRecent(item)
     if(item.type==='view'){ navTo({tab:item.id}); return }
-    if(item.type==='action'){ if(item.id==='conciliacion') navTo({tab:'conciliacion'}); else setModal({type:item.id}); return }
+    if(item.type==='action'){ if(item.id==='conciliacion') navTo({tab:'conciliacion'}); else if(item.id==='prioridades') abrirPrioridades(); else setModal({type:item.id}); return }
     if(item.type==='cliente'){ handleOpenClientFicha(item.id); return }
     if(item.type==='factura'){ const b=billing.find(x=>String(x.id)===String(item.id)); if(b) setModal({type:'billing',data:b}); else appAlert('Esa factura ya no está disponible.'); return }
     if(item.type==='venta'){ const v=sales.find(x=>String(x.id)===String(item.id)); if(v) setModal({type:'sale',data:v}); return }
@@ -35379,7 +35387,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
@@ -35433,7 +35441,7 @@ export default function App() {
             <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
           </button>
         )}
-        <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)}/>
+        <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)} onPrioridades={abrirPrioridades} prioActive={tab==='dashboard'&&prioOpen}/>
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal fullscreen fsMaxWidth={(!modal.data?.id||['Propuesta','Borrador'].includes(modal.data?.status)||modal.data?._activandoPropuesta)?960:600} title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} title='Cargar un PDF y leerlo con IA para autocompletar' style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Lectura con IA</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
