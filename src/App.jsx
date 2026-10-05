@@ -8838,32 +8838,20 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       <div style={{fontSize:16,fontWeight:800,marginTop:4,color:c||C.accent,fontVariantNumeric:'tabular-nums'}}>{v}</div>
     </div>)
   return (<div>
-    <div style={gridStyle}>
+    <div>
       {/* Protagonista: resultado devengado del mes → abre Estado de resultados */}
-      <div style={{gridArea:'res',background:C.accent,color:'#fff',borderRadius:16,padding:'18px 20px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:'pointer',position:'relative'}} onClick={()=>onOpenEstadoResultados&&onOpenEstadoResultados()}>
+      <div style={{background:C.accent,color:'#fff',borderRadius:16,padding:'18px 20px',cursor:'pointer',position:'relative'}} onClick={()=>onOpenEstadoResultados&&onOpenEstadoResultados()}>
         <span style={{position:'absolute',top:16,right:16,color:'#85B7EB',fontSize:16,fontWeight:700}}>›</span>
         <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:'#85B7EB'}}>Resultado del mes · devengado</div>
         <div style={{fontSize:isDesktop?36:29,fontWeight:800,letterSpacing:-1,margin:'6px 0 4px',lineHeight:1,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{resMes>=0?'+':'−'}{fmt(Math.abs(resMes))}</div>
-        <div style={{fontSize:12,color:'#85B7EB',marginBottom:14}}>facturado SII − costos − comisiones</div>
+        <div style={{fontSize:12,color:'#85B7EB',marginBottom:14}}>facturación − costos − comisiones</div>
         <div style={{display:'flex',borderTop:'1px solid rgba(255,255,255,.22)',paddingTop:12,gap:12}}>
-          {[['Facturado SII',factSiiMes,false],['Costos',costoMes,true],['Comisiones',comiMes,true]].map(([a,v,neg],i)=>(
+          {[['Facturación',factSiiMes,false],['Costos',costoMes,true],['Comisiones',comiMes,true]].map(([a,v,neg],i)=>(
             <div key={i} style={{flex:1,borderLeft:i?'1px solid rgba(255,255,255,.14)':'none',paddingLeft:i?12:0}}>
               <div style={{fontSize:9,color:'#85B7EB',textTransform:'uppercase',letterSpacing:.3}}>{a}</div>
               <div style={{fontSize:14,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{neg?'−':''}{fmtShort(Math.abs(v))}</div>
             </div>))}
         </div>
-      </div>
-      {/* Caja hoy (viva) → abre Caja y flujo */}
-      <div style={{gridArea:'caja',background:C.tealBg,border:'1px solid #CBE8E5',borderRadius:14,padding:'14px 16px',cursor:'pointer'}} onClick={()=>setSub('flujo')}>
-        <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.tealText}}>Caja hoy</div>
-        <div style={{fontSize:21,fontWeight:800,letterSpacing:-.5,marginTop:3,color:C.tealText,fontVariantNumeric:'tabular-nums'}}>{caja==null?'—':fmt(caja)}</div>
-        <div style={{fontSize:10,color:C.done,marginTop:2}}>en el banco · se mueve con cada cartola</div>
-      </div>
-      {/* Flujo del mes → abre Caja y flujo */}
-      <div style={{gridArea:'flujo',background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'14px 16px',cursor:'pointer'}} onClick={()=>setSub('flujo')}>
-        <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Flujo del mes</div>
-        <div style={{fontSize:21,fontWeight:800,letterSpacing:-.5,marginTop:3,color:flujoMes>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{flujoMes>=0?'+':'−'}{fmt(Math.abs(flujoMes))}</div>
-        <div style={{fontSize:10,color:C.done,marginTop:2}}>cobrado − costos · desfase</div>
       </div>
     </div>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
