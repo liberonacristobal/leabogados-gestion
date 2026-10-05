@@ -3548,6 +3548,23 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
   const emPct = emFacTot>0 ? Math.round(emFacPagTot/emFacTot*100) : 0
   const emCliName = b => (clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'—'
 
+  // Resultado DEVENGADO del mes — FUENTE ÚNICA (estadoResultadosMes), idéntico al que muestra la página Estado de resultados. Carga ingresos_oficina para no divergir.
+  const [ingOfiDash,setIngOfiDash] = useState([])
+  useEffect(()=>{ if(DEMO){ setIngOfiDash([]); return } supabase.from('ingresos_oficina').select('subcategoria,monto,fecha').then(({data})=>setIngOfiDash(data||[]),()=>{}) },[])
+  const resMes = estadoResultadosMes(billing, costosOfiRows, terceros, ingOfiDash, _ymNow).res
+  const _pYmR = (()=>{ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7) })()
+  const resMesDif = resMes - estadoResultadosMes(billing, costosOfiRows, terceros, ingOfiDash, _pYmR).res
+  // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
+  const _fin8ISO = (()=>{ const d=new Date(); d.setDate(d.getDate()+56); return d.toISOString().slice(0,10) })()
+  const flujoNeto8 = (billing||[]).filter(b=>b&&!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido','Programada'].includes(b.status)&&b.due&&String(b.due).slice(0,10)<=_fin8ISO).reduce((a,b)=>a+saldoBill(b),0) - (costosOfiMes*(56/30.4)+cxpTotDash)
+  const vencMes = agingData?.buckets?.overdue?.monto||0
+  // Mi trabajo (operativo del usuario)
+  const _miIniT = INICIALES_RESP[user?.name]||null
+  const mineProyN = (proyectosCartera||[]).filter(p=>p&&p.activo!==false&&(!_miIniT||(p.responsable||'')===_miIniT)).length
+  const tareasPendN = (tasks||[]).filter(t=>t&&t.status!=='Terminado').length
+  const _wk7ISO = (()=>{ const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10) })()
+  const cargaSemN = (tasks||[]).filter(t=>t&&t.status!=='Terminado'&&t.due&&String(t.due).slice(0,10)<=_wk7ISO).length
+
   return (
     <div className='dash-cols'>
 
@@ -3555,14 +3572,11 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
       {onAcceso&&(()=>{
         const ic = (d,col) => <svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={col||C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
         const accesos = [
-          ['tasks','Tareas', ic(<><rect x='5' y='4' width='14' height='17' rx='2'/><path d='M8.5 11.5l1.5 1.5 3-3'/><line x1='8.5' y1='16' x2='15.5' y2='16'/></>,C.azulInfo), C.azulBg],
-          ['inteligencia','Inteligencia', ic(<><path d='M3 3v18h18'/><rect x='7' y='12' width='3' height='6'/><rect x='12' y='8' width='3' height='10'/><rect x='17' y='4' width='3' height='14'/></>,C.tealText), C.tealBg],
           ['conciliacion','Banco', ic(<><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></>,C.greenText), C.greenBg],
-          ['facturasMes','Facturas', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></>,C.accent), C.azulBg],
-          ['micarga','Mi carga', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><rect x='7' y='12' width='2.5' height='6' rx='.5' fill={C.soonText} stroke='none'/><rect x='11' y='14' width='2.5' height='4' rx='.5' fill={C.soonText} stroke='none'/><rect x='15' y='11' width='2.5' height='7' rx='.5' fill={C.soonText} stroke='none'/></>,C.soonText), C.ambarBg],
-          ['cierreMes','Cierre mes', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='10' x2='21' y2='10'/><path d='M8.5 15.5l2.5 2.5 4.5-4.5'/></>,C.greenText), C.greenBg],
           ['cobranza','Cobranza', ic(<><rect x='2' y='6' width='20' height='12' rx='2'/><circle cx='12' cy='12' r='2.5'/><path d='M6 12h.01M18 12h.01'/></>,C.overdueText), C.overdueBg],
-          ['repricing','Repricing', ic(<><path d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z'/><line x1='7' y1='7' x2='7.01' y2='7'/></>,C.greenText), C.greenBg],
+          ['facturasMes','Facturas', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></>,C.accent), C.azulBg],
+          ['cierreMes','Cierre mes', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='10' x2='21' y2='10'/><path d='M8.5 15.5l2.5 2.5 4.5-4.5'/></>,C.greenText), C.greenBg],
+          ['oficina','Oficina', ic(<><path d='M3 21h18'/><path d='M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16'/><path d='M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1'/></>,C.tealText), C.tealBg],
         ]
         const miIni = INICIALES_RESP[user?.name]||null
         const mine = (proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni || (p.responsable||'')===miIni))
@@ -3577,7 +3591,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
                 {['UF','CLP'].map(u=>{ const on=dashMoneda===u; return <span key={u} onClick={()=>setDashMoneda(u)} style={{fontSize:12,fontWeight:700,color:on?'#fff':C.done,background:on?C.accent:'transparent',borderRadius:18,padding:'4px 14px',cursor:'pointer',lineHeight:1}}>{u}</span> })}
               </div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:14}}>
+            <div className='dash-acc' style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:14}}>
               {[...accesos].sort((a,b)=>((accUso.c[b[0]]||0)-(accUso.c[a[0]]||0))).map(([id,label,icon,bg])=>(
                 <button key={id} onClick={()=>{bumpAcceso(id);onAcceso(id)}} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
                   {accUso.last===id&&<span title='Lo último que abriste' style={{position:'absolute',top:7,right:9,width:7,height:7,borderRadius:'50%',background:C.normal}}/>}
@@ -3886,23 +3900,14 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
 
       {/* El rótulo 'Indicadores' viaja pegado a su primera fila de tiles (un solo hijo de .dash-cols) → no se orfana en otra columna del masonry. */}
       <div>
-        {lvlLabel('Indicadores')}
+        {lvlLabel('Finanzas · gestión')}
         <div style={{padding:'6px 20px 0'}}>
-          {/* "Este mes" — primer indicador, media columna (mismo tamaño), tinte verde para diferenciarlo. Emitido protagonista + pagado (conversión). Abre las categorías al tocar. */}
-          {/* Las 6 tarjetas de Indicadores en UNA grilla 2×3, todas del mismo alto (title/valor/sub). Sus detalles se muestran abajo al desplegar. */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,alignItems:'stretch'}}>
-            {(()=>{ const op=kOpen('estemes'); return (
-              <div onClick={()=>kToggle('estemes')} style={{background:C.greenBg,border:`1px solid ${op?'#9FD6C0':'#C4E4D8'}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minWidth:0,display:'flex',gap:9,alignItems:'flex-start'}}>
-                <span style={{width:26,height:26,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n='chart' s={14} c={C.greenText}/></span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:12}}>{(m=>m.charAt(0).toUpperCase()+m.slice(1))(_MES_NOM[+_ymNow.slice(5,7)-1])}</div>
-                  <div style={{fontSize:19,fontWeight:800,color:C.accent,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{fmtShort(emFacTot)}</div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>emitido{emFacTot>0?<> · <b style={{color:C.greenText,fontWeight:700}}>{emPct}% pagado</b></>:''}</div>
-                </div>
-                <span style={{position:'absolute',top:11,right:11,color:C.done,fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
-              </div>
-            ) })()}
-            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'del año')}
+          {/* Señales financieras — todas clickeables a su fuente. Resultado del mes y Flujo de caja abren su página; el resto navega o despliega. */}
+          <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
+            {kTile('resmes','Resultado del mes',fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',{fg:C.greenText,bg:C.greenBg},(resMesDif>=0?'▲ ':'▼ ')+fmtShort(Math.abs(resMesDif))+' vs mes previo',onOpenEstadoResultados)}
+            {kTile('flujo','Flujo de caja',fmtShort(flujoNeto8),flujoNeto8>=0?C.accent:C.overdueText,'wallet',{fg:C.tealText,bg:C.tealBg},'neto · 8 semanas',onOpenFlujoCaja)}
+            {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'chart',{fg:C.greenText,bg:C.greenBg},'emitido'+(emFacTot>0?' · '+emPct+'% pagado':''),()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
+            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},vencMes>0?('vencido '+fmtShort(vencMes)):'del año',()=>go('cobranza'))}
             {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'ingresos · al 31 dic')}
             {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.total, porPagar=cxpTotDash
               const val=pagado>0?fmtShort(pagado):(porPagar>0?fmtShort(porPagar):'Al día')
@@ -3910,9 +3915,16 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
               const tint=pagado>0?{fg:C.greenText,bg:C.greenBg}:{fg:C.soonText,bg:C.ambarBg}
               const sub=pagado>0?('pagado'+(porPagar>0?' · por pagar '+fmtShort(porPagar):'')):(porPagar>0?'por pagar':'sin deudas')
               return kTile('cxp','Comisiones',val,col,'wallet',tint,sub) })()}
-            {onOpenCostosOfi&&costosOfiMes>0&&kTile('costosofi','Oficina',fmtShort(costosOfiMes),C.accent,'building',{fg:C.accent,bg:C.azulBg},'costos · por mes',onOpenCostosOfi)}
-            {(()=>{ const miIni=INICIALES_RESP[user?.name]||null; const mine=(proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni||(p.responsable||'')===miIni)); if(!mine.length) return null
-              return kTile('misproy','Mis proyectos',String(mine.length),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>setMisProyOpen(o=>!o)) })()}
+          </div>
+        </div>
+      </div>
+      <div>
+        {lvlLabel('Mi trabajo')}
+        <div style={{padding:'6px 20px 0'}}>
+          <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
+            {kTile('misproy','Mis proyectos',String(mineProyN),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>go('cartera'))}
+            {kTile('mistareas','Mis tareas',String(tareasPendN),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'pendientes',()=>go('tasks'))}
+            {kTile('micarga','Mi carga',String(cargaSemN),C.soonText,'clock',{fg:C.soonText,bg:C.ambarBg},'esta semana',()=>onAcceso&&onAcceso('micarga'))}
           </div>
         </div>
       </div>
@@ -9126,6 +9138,19 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   </div>)
 }
 // Estado de resultados mensual: ingresos cobrados − costos de oficina = resultado del mes. Navegable, comparable y exportable. Fuente única (cobradoBill, costosOficinaMes).
+// Resultado DEVENGADO del mes — FUENTE ÚNICA, usada por EstadoResultadosModal (página) y por el tile del Inicio, para que no divergan.
+// Facturado (DTE SII, sin externos) + otros ingresos (ingresos_oficina salvo subarriendo) + comisión recibida (externos al cobrar) − costos de oficina − comisiones a colaboradores.
+function estadoResultadosMes(billing, costosOfiRows, terceros, ingOfi, ym){
+  const retExtIds = new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id)))
+  const billSinExt = (billing||[]).filter(b=>!retExtIds.has(String(b.id)))
+  const tercSinExt = (terceros||[]).filter(t=>t&&t.comision_pct==null)
+  const ing = facturadoSiiPeriodo(billSinExt, ym)
+  const otros = (ingOfi||[]).filter(i=>i&&i.subcategoria!=='Subarrendamiento'&&String(i.fecha||'').startsWith(ym)).reduce((a,i)=>a+(Number(i.monto)||0),0)
+  const comRecib = (billing||[]).filter(b=>b&&!b.deleted_at&&retExtIds.has(String(b.id))&&b.status==='Pagado'&&String(b.paid_at||'').startsWith(ym)).reduce((a,b)=>a+Math.max(0,(b.amount||0)-(Number(b.monto_terceros)||0)),0)
+  const costos = costosOficinaMes(costosOfiRows, ym)
+  const comi = comisionMesTerc(tercSinExt, ym)
+  return { ing, otros, comRecib, costos, comi, res: ing+otros+comRecib-costos-comi }
+}
 function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
   const [ym,setYm] = useState(()=>new Date().toISOString().slice(0,7))
   const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -9150,8 +9175,9 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
   const comisPorColab=y=>{ const m={}; (tercSinExt||[]).filter(t=>t&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(y)).forEach(t=>{ const k=t.proveedor||'Colaborador'; m[k]=(m[k]||0)+(Number(t.monto)||0) }); return m }
   const prevYmOf=y=>{ const [Y,M]=y.split('-').map(Number); const d=new Date(Y,M-2,1); return d.toISOString().slice(0,7) }
   const nav=delta=>{ const [Y,M]=ym.split('-').map(Number); const d=new Date(Y,M-1+delta,1); setYm(d.toISOString().slice(0,7)) }
-  const ing=ingresosDe(ym), otrosIng=otrosIngDe(ym), comRecib=comRecibDe(ym), costosTot=costosOficinaMes(costosOfiRows,ym), comi=comisionDe(ym), res=ing+otrosIng+comRecib-costosTot-comi
-  const prevY=prevYmOf(ym), resPrev=ingresosDe(prevY)+otrosIngDe(prevY)+comRecibDe(prevY)-costosOficinaMes(costosOfiRows,prevY)-comisionDe(prevY)
+  const _er=estadoResultadosMes(billing,costosOfiRows,terceros,ingOfi,ym)
+  const ing=_er.ing, otrosIng=_er.otros, comRecib=_er.comRecib, costosTot=_er.costos, comi=_er.comi, res=_er.res
+  const prevY=prevYmOf(ym), resPrev=estadoResultadosMes(billing,costosOfiRows,terceros,ingOfi,prevY).res
   const dif=res-resPrev, tienePrev=(costosOfiRows||[]).length>0
   const catList=Object.entries(costosPorCat(ym)).filter(([,v])=>v!==0).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]))
   const comiList=Object.entries(comisPorColab(ym)).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1])
@@ -9211,16 +9237,10 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], saldoInicia
         <span style={{fontSize:12,color:C.muted}}>Próximas 8 semanas · entra vs sale</span>
         <div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontSize:10,color:C.done}}>Saldo hoy $</span><input type='number' value={saldo0} onChange={e=>setSaldo0(e.target.value)} style={{height:28,width:96,textAlign:'right',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 8px',color:C.text,background:'#fff',outline:'none'}}/></div>
       </div>
-      <div style={{display:'flex',alignItems:'stretch',gap:5,height:130,borderBottom:`1px solid ${C.border}`,marginBottom:6}}>
-        {weeks.map((w,i)=>(<div key={i} style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'flex-end',alignItems:'center',gap:1}}>
-          <div style={{display:'flex',gap:2,alignItems:'flex-end',height:'100%',width:'100%',justifyContent:'center'}}>
-            <span title='entra' style={{width:'40%',height:Math.round(w.entra/maxV*100)+'%',background:C.normal,borderRadius:'3px 3px 0 0',minHeight:w.entra>0?2:0}}/>
-            <span title='sale' style={{width:'40%',height:Math.round(w.sale/maxV*100)+'%',background:'#E9A9A0',borderRadius:'3px 3px 0 0',minHeight:w.sale>0?2:0}}/>
-          </div>
-        </div>))}
+      <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+        <div style={{display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr 1fr',padding:'8px 12px',background:C.accent,color:'#fff',fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.3px'}}><span>Semana</span><span style={{textAlign:'right'}}>Entra</span><span style={{textAlign:'right'}}>Sale</span><span style={{textAlign:'right'}}>Saldo</span></div>
+        {weeks.map((w,i)=>(<div key={i} style={{display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr 1fr',padding:'8px 12px',fontSize:12,fontVariantNumeric:'tabular-nums',borderTop:`1px solid ${C.bgSoft}`,background:i%2?C.bgSoft:'#fff'}}><span style={{color:C.muted}}>{w.lbl}</span><span style={{textAlign:'right',color:w.entra>0?C.greenText:C.done}}>{w.entra>0?'+'+fmt(w.entra):'—'}</span><span style={{textAlign:'right',color:w.sale>0?C.overdueText:C.done}}>{w.sale>0?'−'+fmt(w.sale):'—'}</span><span style={{textAlign:'right',fontWeight:700,color:w.run<0?C.overdueText:C.accent}}>{w.run<0?'−'+fmt(Math.abs(w.run)):fmt(w.run)}</span></div>))}
       </div>
-      <div style={{display:'flex',gap:5,marginBottom:9}}>{weeks.map((w,i)=>(<div key={i} style={{flex:1,textAlign:'center',fontSize:8,color:w.run<0?C.overdueText:C.done,fontWeight:w.run<0?700:400}}>{w.lbl}</div>))}</div>
-      <div style={{display:'flex',gap:14,justifyContent:'center',fontSize:10,color:C.muted,marginBottom:10}}><span style={{display:'inline-flex',alignItems:'center',gap:5}}><i style={{width:9,height:9,borderRadius:4,background:C.normal,display:'inline-block'}}/>entra (cobros)</span><span style={{display:'inline-flex',alignItems:'center',gap:5}}><i style={{width:9,height:9,borderRadius:4,background:'#E9A9A0',display:'inline-block'}}/>sale (costos/pagos)</span></div>
       {apretada
         ? <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.overdueBg,borderRadius:10,padding:'10px 12px'}}><span style={{fontSize:11,fontWeight:700,color:C.overdueText}}>Semana del {apretada.lbl} · saldo proyectado</span><span style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>−{fmt(Math.abs(apretada.run))}</span></div>
         : <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.greenBg,borderRadius:10,padding:'10px 12px'}}><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Saldo proyectado en 8 semanas</span><span style={{fontSize:14,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(weeks[weeks.length-1].run)}</span></div>}
@@ -32778,15 +32798,14 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',editCliente:'Editar cliente'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['miCarga','Mi carga']],
   limited:[['tasks','Tareas'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
-  {id:'miCarga', label:'Mi carga'},
   {id:'redaccion', label:'Redactar con IA'},
   {id:'conciliar', label:'Conciliar facturas'},
   {id:'conciliacion', label:'Conciliación bancaria'},
@@ -35212,7 +35231,9 @@ export default function App() {
              Selector por el estilo inline que React serializa ("font-size: 9px") + !important (gana sobre inline). Solo >=1024 -> movil intacto.
              El resto (11px+) ya quedaba bien con el zoom; esto NO cambia layout global, solo levanta el piso de los mas chicos. */
           [style*="font-size: 8px"],[style*="font-size: 8.5px"],[style*="font-size: 9px"],[style*="font-size: 9.5px"],[style*="font-size: 10px"],[style*="font-size: 10.5px"]{font-size:11px!important}
-          .dash-cols{column-count:2;column-gap:18px;max-width:1280px;margin:0 auto}
+          .dash-cols{column-count:1;max-width:1120px;margin:0 auto}
+          .dash-acc{grid-template-columns:repeat(5,1fr)!important}
+          .dash-fin{grid-template-columns:repeat(3,1fr)!important}
           .dash-cols>*{break-inside:avoid;margin-bottom:2px}
           .dash-cols>:first-child{column-span:all}
         }
@@ -35335,7 +35356,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenFlujoCaja={()=>setModal({type:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
@@ -35353,10 +35374,31 @@ export default function App() {
                 <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Oficina</span>
               </div>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})}/>
             </div>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
+            {tab==='estadoResultados'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:600,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+                <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
+                <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Estado de resultados</span>
+              </div>
+              <EstadoResultadosModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros}/>
+            </div>}
+            {tab==='flujoCaja'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:600,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+                <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
+                <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Flujo de caja</span>
+              </div>
+              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros}/>
+            </div>}
+            {tab==='miCarga'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+                <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
+                <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Mi carga</span>
+              </div>
+              <MiCargaModal tasks={tasks} proyectosCartera={proyectosCartera} setProyectosCartera={setProyectosCartera} clients={clients} user={user} onClose={goBack} onOpenClientFicha={handleOpenClientFicha}/>
+            </div>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
@@ -35461,7 +35503,6 @@ export default function App() {
         {modal?.type==='aprendizaje'&&<Modal fullscreenOnMobile title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redaccion'&&<Modal fullscreenOnMobile title='Redactar con IA' onClose={()=>setModal(null)}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='plazos'&&<Modal fullscreenOnMobile title='Plazos y obligaciones' onClose={()=>setModal(null)}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}}/></Modal>}
-        {modal?.type==='miCarga'&&<Modal fullscreenOnMobile title='Mi carga' onClose={()=>setModal(null)}><MiCargaModal tasks={tasks} proyectosCartera={proyectosCartera} setProyectosCartera={setProyectosCartera} clients={clients} user={user} onClose={()=>setModal(null)} onOpenClientFicha={handleOpenClientFicha}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal fullscreenOnMobile title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal fullscreenOnMobile title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal fullscreenOnMobile title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
@@ -35489,9 +35530,7 @@ export default function App() {
         {modal?.type==='fusionarClientes'&&<Modal fullscreenOnMobile title={modal.pending?'Confirmar fusión':'Fusionar clientes'} maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={modal.pending||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
-        {modal?.type==='estadoResultados'&&<Modal fullscreenOnMobile title='Estado de resultados' maxWidth={480} onClose={()=>setModal(null)}><EstadoResultadosModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros}/></Modal>}
         {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} onClose={()=>setModal(null)}/>}
-        {modal?.type==='flujoCaja'&&<Modal fullscreenOnMobile title='Flujo de caja proyectado' maxWidth={480} onClose={()=>setModal(null)}><FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros}/></Modal>}
         {modal?.type==='report'&&<Modal fullscreenOnMobile title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal fullscreenOnMobile title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
