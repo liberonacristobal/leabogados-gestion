@@ -8974,7 +8974,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   </div>)
 }
 
-function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros }){
+function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros, onOpenCobranza }){
   const [sub,setSub] = useState(null)
   const [comprasRows,setComprasRows] = useState([])   // DTE de compra del SII (sii_compras_docs): foto IVA crédito + módulo Compras
   useEffect(()=>{ if(DEMO){ setComprasRows([]); return } let v=true; supabase.from('sii_compras_docs').select('id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,neto,exento,iva,monto,glosa,proveedor_id,movimiento_id,periodo').then(({data})=>{ if(v&&data) setComprasRows(data) },()=>{}); return ()=>{v=false} },[])
@@ -9007,6 +9007,8 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const _curM = new Date().getMonth()+1
   let factSiiYr=0, resYr=0, cobradoYr=0
   for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; cobradoYr+=ingresosMesBill(billing,mm); const f=facSiiPeriodo(mm); factSiiYr+=f; if(m<=_curM) resYr += f + subMesT(mm) - costoBrutoMes(mm) - comMesT(mm) }
+  // "Facturación del año" = número GRUESO: todos los folios emitidos (33/34) tal cual, sin restar NC ni terceros. El afinado (− NC − terceros = propia) vive en Resultado del año.
+  const emitidoBrutoYr=(ventasRows||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(year)&&[33,34].includes(Number(d.tipo_dte))).reduce((a,d)=>a+(Number(d.monto)||0),0)
   const porCobrar=(billing||[]).filter(b=>b&&!b.deleted_at&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
   // Formato Oficina: millones con 1 decimal (igual que ResultadoAnioView.fmtMp), NO fmtShort (que da 0 decimales sobre 10M).
   const fM=n=>'$'+(Math.abs(Number(n)||0)/1e6).toFixed(1).replace('.',',')+' M'
@@ -9020,8 +9022,9 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       <div style={{fontSize:18,fontWeight:800,letterSpacing:-.4,color:bigC,fontVariantNumeric:'tabular-nums'}}>{big}</div>
       <div style={{fontSize:11,color:C.done,marginTop:3}}>{ctx}</div>
     </div>)
-  const kpi=(l,v,c)=>(
-    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px'}}>
+  const kpi=(l,v,c,on)=>(
+    <div onClick={on} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',cursor:on?'pointer':'default',position:'relative'}}>
+      {on&&<span style={{position:'absolute',top:9,right:11,color:C.done,fontSize:13,fontWeight:700}}>›</span>}
       <div style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted}}>{l}</div>
       <div style={{fontSize:16,fontWeight:800,marginTop:4,color:c||C.accent,fontVariantNumeric:'tabular-nums'}}>{v}</div>
     </div>)
@@ -9049,10 +9052,10 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       {puerta('','receipt',C.azulBg,C.azulInfo,'Compras · IVA',fM(ivaCreditoC),C.azulInfo,'IVA crédito',()=>setSub('compras'))}
     </div>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
-      {kpi('Facturación del año',fM(factSiiYr))}
-      {kpi('Cobrado · año',fM(cobradoYr))}
-      {kpi('Por cobrar',fM(porCobrar),C.soonText)}
-      {kpi('Resultado · año',`${resYr>=0?'+':'−'}${fM(resYr)}`,C.greenText)}
+      {kpi('Facturación del año',fM(emitidoBrutoYr),null,onOpenResultadoAnio)}
+      {kpi('Cobrado · año',fM(cobradoYr),null,onOpenEstadoResultados)}
+      {kpi('Por cobrar',fM(porCobrar),C.soonText,onOpenCobranza)}
+      {kpi('Resultado · año',`${resYr>=0?'+':'−'}${fM(resYr)}`,C.greenText,onOpenResultadoAnio)}
     </div>
     {sub==='costos' && <Modal fullscreenOnMobile title='Costos de Oficina' maxWidth={760} onClose={()=>setSub(null)}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
     {sub==='compras' && <Modal fullscreenOnMobile title='Compras · IVA' maxWidth={620} onClose={()=>setSub(null)}><ComprasModal compras={comprasRows} proveedores={proveedores} onSaveProveedor={onSaveProveedor} isDesktop={isDesktop}/></Modal>}
@@ -35215,7 +35218,7 @@ export default function App() {
                 <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Oficina</span>
               </div>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})}/>
             </div>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user}/>}
