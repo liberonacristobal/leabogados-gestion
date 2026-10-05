@@ -8741,10 +8741,19 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
               const rs=(rondasByMes[m]||[]).slice().sort((a,b)=>String(a.d0).localeCompare(String(b.d0)))
               if(rs.length===0){ if(ocultarVacios) continue; out.push(<tr key={'m'+m}><td style={{...tdMesEmpty,textAlign:'left',fontWeight:700}}>{MESL[m-1]}</td>{tablaMode==='monto'&&<><td style={tdMesEmpty}>—</td><td style={tdMesEmpty}>—</td></>}<td style={tdMesEmpty}>sin retiros</td></tr>); continue }
               const mt=mesTot(m), md=mt.a-mt.b
-              out.push(<tr key={'m'+m}><td style={{...tdMes,textAlign:'left'}}>{MESL[m-1]}{rs.length>1?` · ${rs.length} retiros`:''}</td>{tablaMode==='monto'&&<><td style={tdMes}>{mt.a>0?fmt(mt.a):'—'}</td><td style={tdMes}>{mt.b>0?fmt(mt.b):'—'}</td></>}<td style={tdMes}>{tablaMode==='acum'?'':(md===0?<span style={{color:C.done,fontWeight:600}}>$0</span>:<span style={pill}>{faltaTxt(md)}</span>)}</td></tr>)
+              const abierto=mesAbierto===m
+              out.push(<tr key={'m'+m} onClick={()=>setMesAbierto(abierto?null:m)} style={{cursor:'pointer'}}>
+                <td style={{...tdMes,textAlign:'left'}}>
+                  <span style={{display:'inline-block',width:11,marginRight:5,color:C.done,transform:abierto?'rotate(90deg)':'none',transition:'transform .15s',fontSize:11,fontWeight:700}}>›</span>
+                  {MESL[m-1]}<span style={{color:C.muted,fontWeight:600}}>{` · ${rs.length} retiro${rs.length!==1?'s':''}`}</span>
+                </td>
+                {tablaMode==='monto'&&<><td style={tdMes}>{mt.a>0?fmt(mt.a):'—'}</td><td style={tdMes}>{mt.b>0?fmt(mt.b):'—'}</td></>}
+                <td style={tdMes}>{tablaMode==='acum'?'':(md===0?<span style={{color:C.done,fontWeight:600}}>$0</span>:<span style={pill}>{faltaTxt(md)}</span>)}</td>
+              </tr>)
               rs.forEach((r,ri)=>{ const c=r[A]||0,er=r[B]||0,d=c-er; acum+=d; const falta=d!==0
+                if(!abierto) return
                 out.push(<tr key={'r'+m+'_'+ri} onClick={()=>scrollA(listaRef)} style={{cursor:'pointer',background:falta?'#FFFCF4':'transparent'}}>
-                  <td style={{...tdRet,textAlign:'left',color:C.accent,fontWeight:700}}>{dotEl(C.done)}{fechaLbl(r.d0,r.d1)}</td>
+                  <td style={{...tdRet,textAlign:'left',color:C.accent,fontWeight:700,paddingLeft:22}}>{dotEl(C.done)}{fechaLbl(r.d0,r.d1)}</td>
                   {tablaMode==='monto'&&<><td style={tdRet}>{c>0?fmt(c):'—'}</td><td style={tdRet}>{er>0?fmt(er):'—'}</td></>}
                   <td style={tdRet}>{tablaMode==='acum'?(acum===0?<span style={{color:C.done}}>$0</span>:<span style={{color:acum>0?C.accent:'#8A6D12',fontWeight:700}}>{acum>0?'+':'−'}{fmt(Math.abs(acum))}</span>):(d===0?<span style={{color:C.done}}>$0</span>:<span style={pill}>{faltaTxt(d)}</span>)}</td>
                 </tr>) })
@@ -8785,7 +8794,6 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const [open,setOpen]=useState(null)
   const [ncOpen,setNcOpen]=useState(false)
   const [ventas,setVentas]=useState([]); const [cm,setCm]=useState([])
-  const [bankSal,setBankSal]=useState([])   // cargos de sueldo del banco (Socio/Equipo) para cruzar vs planilla
   const [editM,setEditM]=useState(null)   // mes en edición (1-12) o null
   const [form,setForm]=useState({})
   const [busy,setBusy]=useState(false)
@@ -8793,7 +8801,6 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   useEffect(()=>{ if(DEMO){ setVentas([]); setCm([]); return } let v=true
     supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').then(({data})=>{ if(v&&data) setVentas(data) },()=>{})
     supabase.from('oficina_costos_mensual').select('*').eq('anio',yr).then(({data})=>{ if(v&&data) setCm(data) },()=>{})
-    supabase.from('cartola_movimientos').select('fecha,tipo,monto,categoria').in('categoria',['Socio','Equipo']).gte('fecha',`${yr}-01-01`).lte('fecha',`${yr}-12-31`).then(({data})=>{ if(v&&data) setBankSal(data) },()=>{})
     return ()=>{v=false} },[yr,reloadN])
   const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const yrs=(()=>{ const s=new Set([curY]); (ventas||[]).forEach(d=>{ const y=parseInt(String(d.fecha_emision||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
@@ -8923,14 +8930,12 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
       const abiertos=allM.filter(m=>mesEstado(m)!=='cerrado'), estM=allM.filter(m=>mesEstado(m)==='estimado')
       const desv=allM.filter(m=>{ const r=cmBy[m]; if(!r) return false; const real=Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos); const bud=costosOficinaMes(costosOfiRows,pad(m)); return bud>0&&Math.abs(real-bud)/bud>0.2 })
       const faltaClaudia=allM.filter(m=>{ const r=cmBy[m]; return r && (Number(r.cotizaciones)===0||Number(r.ppm)===0||r.estimado) })
-      const plSld=allM.reduce((a,m)=>{ const r=cmBy[m]; return a+(r?Number(r.sueldos):0) },0)
-      const bkSld=(bankSal||[]).filter(d=>d.tipo==='cargo'&&( (d.categoria==='Socio'&&Number(d.monto)>=1800000&&Number(d.monto)<=3000000&&Number(d.monto)%100000!==0) || (d.categoria==='Equipo'&&Number(d.monto)>=1000000) )).reduce((a,d)=>a+(Number(d.monto)||0),0)
-      const sldOk=plSld===0||bkSld===0||Math.abs(plSld-bkSld)/plSld<=0.2
+      const sldFalta=allM.filter(m=>{ const r=cmBy[m]; return !r || Number(r.sueldos)===0 })
       const checks=[
         [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · revísalas en Revisión de datos`:'todas enlazadas a una venta'],
         [abiertos.length===0,'Cierre de meses',abiertos.length?`${abiertos.length} sin cerrar${estM.length?` · ${estM.length} con datos estimados`:''}`:'todos los meses del período cerrados'],
         [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia'],
-        [sldOk,'Sueldos vs banco',sldOk?'cuadran con las transferencias del banco':`planilla ${fmtMp(plSld)} vs banco ${fmtMp(bkSld)} · revisar contra las liquidaciones`],
+        [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones'],
         [desv.length===0,'Costos vs presupuesto',desv.length?`${desv.length} mes${desv.length!==1?'es':''} con desvío mayor a 20% vs el presupuesto`:'en línea con el presupuesto'],
       ]
       return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
