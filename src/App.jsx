@@ -8782,6 +8782,11 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const [comprasRows,setComprasRows] = useState([])   // DTE de compra del SII (sii_compras_docs): foto IVA crédito + módulo Compras
   useEffect(()=>{ if(DEMO){ setComprasRows([]); return } let v=true; supabase.from('sii_compras_docs').select('id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,neto,exento,iva,monto,glosa,proveedor_id,movimiento_id,periodo').then(({data})=>{ if(v&&data) setComprasRows(data) },()=>{}); return ()=>{v=false} },[])
   const ivaCreditoC = comprasRows.reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
+  // Ventas del SII (sii_cargas_docs) = fuente de verdad de lo emitido, TODO el año (billing está incompleto). Facturación propia = tipo 33/34 − notas de crédito (61) − facturas por cuenta de terceros.
+  const [ventasRows,setVentasRows] = useState([])
+  useEffect(()=>{ if(DEMO){ setVentasRows([]); return } let v=true; supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,billing_id').then(({data})=>{ if(v&&data) setVentasRows(data) },()=>{}); return ()=>{v=false} },[])
+  const extBillIds = useMemo(()=>new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id))),[terceros])
+  const facSiiPeriodo = ym => (ventasRows||[]).filter(d=>String(d.fecha_emision||'').startsWith(ym)).reduce((a,d)=>{ const t=Number(d.tipo_dte); if(t===61) return a-(Number(d.monto)||0); if((t===33||t===34)&&!extBillIds.has(String(d.billing_id))) return a+(Number(d.monto)||0); return a },0)
   const ym = new Date().toISOString().slice(0,7), year=new Date().getFullYear()
   // Caja viva: ancla (config caja_ancla = 'AAAA-MM-DD:monto') + Σ(abonos − cargos) de cartola posteriores a la fecha del ancla, ambas cuentas.
   useEffect(()=>{ let vivo=true
@@ -8799,7 +8804,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   },[])
   const costoMes = costosOficinaMes(costosOfiRows, ym)
   const comiMes = comisionMesTerc(terceros, ym)
-  const factSiiMes = facturadoSiiPeriodo(billing, ym)              // DEVENGADO (dte_xml not null)
+  const factSiiMes = facSiiPeriodo(ym)                             // DEVENGADO: emitido en el SII (propia, neto NC)
   const resMes = factSiiMes - costoMes - comiMes                   // resultado del mes (devengado) — protagonista
   const cobradoMes = ingresosMesBill(billing, ym)                  // cobrado a caja del mes (contexto)
   const flujoMes = cobradoMes - costoMes                           // flujo de caja del mes (contexto)
@@ -8809,9 +8814,10 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const ESTRUCT = ['Retiros','Sueldos','Comisiones','Proveedores']
   const variosMes = ofi ? (expenses||[]).filter(e=>!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,7)===ym&&!ESTRUCT.includes(String(e.category||''))).reduce((a,e)=>a+(Number(e.amount)||0),0) : 0
   const porCobrarEq = ofi ? (expenses||[]).filter(e=>!e.deleted_at&&e.personal_de&&String(e.client_id)===String(ofi.id)&&!e.pagado_cliente_at).reduce((a,e)=>a+(Number(e.amount)||0),0) : 0
-  // KPIs del año (referencia): facturado SII y resultado devengado sobre los meses con DTE real; cobrado a caja; por cobrar (saldo vivo).
+  // KPIs del año (YTD): facturación propia desde el SII (todo el año) − costos − comisiones; cobrado a caja; por cobrar (saldo vivo).
+  const _curM = new Date().getMonth()+1
   let factSiiYr=0, resYr=0, cobradoYr=0
-  for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; const f=facturadoSiiPeriodo(billing,mm); cobradoYr+=ingresosMesBill(billing,mm); if(f>0){ factSiiYr+=f; resYr += f - costosOficinaMes(costosOfiRows,mm) - comisionMesTerc(terceros,mm) } }
+  for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; cobradoYr+=ingresosMesBill(billing,mm); const f=facSiiPeriodo(mm); factSiiYr+=f; if(m<=_curM) resYr += f - costosOficinaMes(costosOfiRows,mm) - comisionMesTerc(terceros,mm) }
   const porCobrar=(billing||[]).filter(b=>b&&!b.deleted_at&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
   const gridStyle = isDesktop
     ? {display:'grid',gridTemplateColumns:'2fr 1fr',gridTemplateAreas:'"res caja" "res flujo"',gap:12}
@@ -8867,7 +8873,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       {puerta('','receipt',C.azulBg,C.azulInfo,'Compras · IVA',fmtShort(ivaCreditoC),C.azulInfo,'IVA crédito',()=>setSub('compras'))}
     </div>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
-      {kpi('Facturado SII · año',fmtShort(factSiiYr))}
+      {kpi('Facturación del año',fmtShort(factSiiYr))}
       {kpi('Cobrado · año',fmtShort(cobradoYr))}
       {kpi('Por cobrar',fmtShort(porCobrar),C.soonText)}
       {kpi('Resultado · año',`${resYr>=0?'+':'−'}${fmtShort(Math.abs(resYr))}`,C.greenText)}
