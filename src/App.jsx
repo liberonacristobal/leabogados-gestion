@@ -8777,7 +8777,7 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
 }
 
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + subarriendo) − egresos (planilla real oficina_costos_mensual + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
-function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBack }){
+function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBack, user }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [yr,setYr]=useState(curY)
   const [scope,setScope]=useState('ytd')
@@ -8785,10 +8785,14 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const [open,setOpen]=useState(null)
   const [ncOpen,setNcOpen]=useState(false)
   const [ventas,setVentas]=useState([]); const [cm,setCm]=useState([])
+  const [editM,setEditM]=useState(null)   // mes en edición (1-12) o null
+  const [form,setForm]=useState({})
+  const [busy,setBusy]=useState(false)
+  const [reloadN,setReloadN]=useState(0)
   useEffect(()=>{ if(DEMO){ setVentas([]); setCm([]); return } let v=true
     supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').then(({data})=>{ if(v&&data) setVentas(data) },()=>{})
     supabase.from('oficina_costos_mensual').select('*').eq('anio',yr).then(({data})=>{ if(v&&data) setCm(data) },()=>{})
-    return ()=>{v=false} },[yr])
+    return ()=>{v=false} },[yr,reloadN])
   const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const yrs=(()=>{ const s=new Set([curY]); (ventas||[]).forEach(d=>{ const y=parseInt(String(d.fecha_emision||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
   const pad=m=>`${yr}-${String(m).padStart(2,'0')}`
@@ -8816,6 +8820,18 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const fmtM=n=>{ const s=n<0?'−':'+'; return s+'$'+(Math.abs(n)/1e6).toFixed(1).replace('.',',')+' M' }
   const fmtMp=n=>'$'+(Math.abs(n)/1e6).toFixed(1).replace('.',',')+' M'
   const titulo=scope==='mes'?`${MESES[selM-1]} ${yr}`:(yr<curY?`${yr} completo`:`Enero–${MESES[maxM-1]} ${yr}`)
+  const nCerrados=Array.from({length:maxM},(_,i)=>i+1).filter(m=>cmBy[m]&&cmBy[m].cerrado).length
+  const CAMPOS=[['sueldos','Sueldos'],['cotizaciones','Cotizaciones'],['ppm','PPM'],['contadora','Contadora'],['arriendo','Arriendo'],['gastos_comunes','Gastos comunes'],['honorarios','Honorarios'],['otros_costos','Otros'],['subarriendo','Subarriendo (ingreso)'],['comisiones','Comisiones']]
+  const mesEstado=m=>{ const r=cmBy[m]; if(r&&r.cerrado) return 'cerrado'; if(r&&r.estimado) return 'estimado'; if(r) return 'abierto'; return 'vacio' }
+  const EST_COL={cerrado:C.greenText,estimado:C.soonText,abierto:C.done,vacio:C.border}
+  const abrirEditor=m=>{ const r=cmBy[m]||{}; const f={}; CAMPOS.forEach(([k])=>f[k]=r[k]!=null?Number(r[k]):0); f.nota=r.nota||''; f.estimado=!!r.estimado; f.cerrado=!!r.cerrado; setForm(f); setEditM(m) }
+  const guardar=async(setCerrado)=>{ if(DEMO){ setEditM(null); return } setBusy(true); try{
+    const p={estudio_id:'lea',anio:yr,mes:editM,nota:form.nota||null,estimado:setCerrado===true?false:!!form.estimado,updated_at:new Date().toISOString()}
+    CAMPOS.forEach(([k])=>p[k]=Math.round(Number(form[k])||0))
+    if(setCerrado!==undefined){ p.cerrado=!!setCerrado; p.cerrado_at=setCerrado?new Date().toISOString():null; p.cerrado_por=setCerrado?((user&&user.email)||'—'):null }
+    const {error}=await supabase.from('oficina_costos_mensual').upsert(p,{onConflict:'estudio_id,anio,mes'}); if(error) throw error
+    setEditM(null); setReloadN(n=>n+1)
+  }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) } setBusy(false) }
 
   const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,marginBottom:9,overflow:'hidden'}
   const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:11,fontWeight:700,padding:'7px 14px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
@@ -8844,7 +8860,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
     {scope==='mes'&&<div style={{display:'flex',gap:6,overflowX:'auto',padding:'1px 1px 11px'}}>{Array.from({length:maxM},(_,i)=>i+1).map(m=><button key={m} onClick={()=>setSelM(m)} style={{flex:'0 0 auto',fontSize:11,fontWeight:700,padding:'6px 12px',borderRadius:20,cursor:'pointer',whiteSpace:'nowrap',border:`1px solid ${selM===m?C.accent:C.border}`,background:selM===m?C.accent:'#fff',color:selM===m?'#fff':C.muted}}>{MESES[m-1]}</button>)}</div>}
 
     <div style={{background:C.accent,color:'#fff',borderRadius:18,padding:'20px 21px',marginBottom:13}}>
-      <div style={{fontSize:10,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:'#9FC6D8'}}>Resultado · {titulo}{estim?' · incl. estimados':''}</div>
+      <div style={{fontSize:10,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:'#9FC6D8'}}>Resultado · {titulo}{scope==='ytd'&&yr===curY?' · al día':''}{estim?' · incl. estimados':''}</div>
       <div style={{fontSize:42,fontWeight:800,letterSpacing:-1.6,lineHeight:1,margin:'10px 0 5px',fontVariantNumeric:'tabular-nums'}}>{fmtM(resultado)}</div>
       <div style={{fontSize:11.5,color:'#9FC6D8'}}>ingresos − egresos</div>
       <div style={{display:'flex',gap:9,marginTop:15}}>
@@ -8882,12 +8898,12 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
     {sec('com',C.soonBg,C.soonText,<><path d='M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7'/></>,'Comisiones a colaboradores','pagadas + por compensación',fmtMp(comis),C.soonText,
       <>{row('Comisiones del período',fmtMp(comis))}<div style={{fontSize:10.5,color:C.done,paddingTop:7}}>Incluye las saldadas por compensación (ej. Rodrigo, mayo).</div></>)}
 
-    <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Resultado mes a mes</div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,margin:'22px 4px 10px',flexWrap:'wrap'}}><span style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Resultado mes a mes</span><span style={{fontSize:10.5,color:C.done,fontWeight:600}}>{nCerrados>0?`${nCerrados} ${nCerrados===1?'mes cerrado':'meses cerrados'} · `:''}toca un mes para editar o cerrar</span></div>
     <div style={card}><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
       <thead><tr>{['Mes','Facturación','Costos','Comis.','Resultado'].map((h,i)=><th key={h} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,padding:'8px 11px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft,textAlign:i?'right':'left',whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
       <tbody>{Array.from({length:maxM},(_,i)=>i+1).map(m=>{ const fp=emitidaMes(m)-ncMes(m)-terMes(m); const r=cmBy[m]; const cb=r?(Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos)):0; const cmo=r?Number(r.comisiones):0; const sb=r?Number(r.subarriendo):0; const res=fp+sb-cb-cmo; const td={fontSize:12,padding:'8px 11px',textAlign:'right',fontVariantNumeric:'tabular-nums',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap'}; const selR=scope==='mes'&&selM===m
-        return <tr key={m} onClick={()=>{setScope('mes');setSelM(m)}} style={{cursor:'pointer',background:selR?C.azulBg:'transparent'}}>
-          <td style={{...td,textAlign:'left',fontWeight:700,color:C.accent}}>{MESES[m-1]}</td>
+        return <tr key={m} onClick={()=>abrirEditor(m)} style={{cursor:'pointer',background:selR?C.azulBg:'transparent'}}>
+          <td style={{...td,textAlign:'left',fontWeight:700,color:C.accent}}><span title={mesEstado(m)} style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:EST_COL[mesEstado(m)],marginRight:7,verticalAlign:'middle'}}/>{MESES[m-1]}</td>
           <td style={td}>{fmtMp(fp)}</td><td style={td}>{fmtMp(cb)}</td><td style={td}>{cmo>0?fmtMp(cmo):'—'}</td>
           <td style={{...td,fontWeight:800,color:res>=0?C.greenText:C.overdueText}}>{res>=0?'+':'−'}{fmtMp(res)}</td>
         </tr> })}
@@ -8898,6 +8914,31 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
       </tbody>
     </table></div></div>
     <div style={{fontSize:11,color:C.muted,lineHeight:1.6,margin:'14px 4px 0'}}>Facturación desde el SII (neta de notas de crédito y terceros). Costos desde la planilla real (editable). {estim?'Algunos meses incluyen estimados (cotizaciones/PPM de Claudia aún pendientes).':''}</div>
+
+    {editM!=null&&<div onClick={()=>!busy&&setEditM(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:9999,display:'flex',alignItems:isDesktop?'center':'stretch',justifyContent:'center'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:isDesktop?16:0,width:isDesktop?470:'100%',maxWidth:'100%',height:isDesktop?'auto':'100%',maxHeight:isDesktop?'90vh':'100%',overflow:'auto',padding:'18px 18px 24px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:4}}>
+          <span style={{fontSize:16,fontWeight:800,color:C.accent}}>Costos de {MESES[editM-1]} {yr}</span>
+          {cmBy[editM]&&cmBy[editM].cerrado?<span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>Cerrado</span>:null}
+          <span style={{flex:1}}/>
+          <button onClick={()=>!busy&&setEditM(null)} style={{background:'none',border:'none',color:C.muted,fontSize:22,cursor:'pointer',lineHeight:1,padding:0}}>×</button>
+        </div>
+        <div style={{fontSize:11,color:C.done,marginBottom:8}}>Montos en pesos. El subarriendo es ingreso (baja el costo neto).</div>
+        {CAMPOS.map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+          <span style={{fontSize:12.5,color:k==='subarriendo'?C.greenText:C.text,fontWeight:600,flex:1}}>{l}</span>
+          <input type='number' value={form[k]==null?0:form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={{width:140,fontSize:13,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px',color:C.accent}}/>
+        </div>)}
+        <div style={{padding:'9px 0 4px',borderTop:`1px solid ${C.bgSoft}`}}><textarea placeholder='Nota (opcional)' value={form.nota||''} onChange={e=>setForm(f=>({...f,nota:e.target.value}))} rows={2} style={{width:'100%',fontSize:12.5,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px',resize:'vertical',fontFamily:'inherit',color:C.text,boxSizing:'border-box'}}/></div>
+        <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5,color:C.text,fontWeight:600,padding:'4px 0 12px',cursor:'pointer'}}><input type='checkbox' checked={!!form.estimado} onChange={e=>setForm(f=>({...f,estimado:e.target.checked}))}/> Marcar como estimado (datos aún no confirmados)</label>
+        <div style={{display:'flex',gap:9,flexWrap:'wrap'}}>
+          <button disabled={busy} onClick={()=>guardar(undefined)} style={{flex:1,minWidth:120,fontSize:13,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px',background:'#fff',color:C.accent,cursor:'pointer'}}>Guardar</button>
+          {cmBy[editM]&&cmBy[editM].cerrado
+            ? <button disabled={busy} onClick={()=>guardar(false)} style={{flex:1,minWidth:120,fontSize:13,fontWeight:700,border:`1px solid ${C.soonText}`,borderRadius:10,padding:'10px',background:C.soonBg,color:C.soonText,cursor:'pointer'}}>Reabrir mes</button>
+            : <button disabled={busy} onClick={()=>guardar(true)} style={{flex:1,minWidth:120,fontSize:13,fontWeight:700,border:'none',borderRadius:10,padding:'10px',background:C.greenText,color:'#fff',cursor:'pointer'}}>Guardar y cerrar mes</button>}
+        </div>
+        {cmBy[editM]&&cmBy[editM].cerrado_por?<div style={{fontSize:10.5,color:C.done,marginTop:9}}>Cerrado por {cmBy[editM].cerrado_por}{cmBy[editM].cerrado_at?' · '+String(cmBy[editM].cerrado_at).slice(0,10):''}</div>:null}
+      </div>
+    </div>}
   </div>)
 }
 
@@ -35165,7 +35206,7 @@ export default function App() {
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})}/>
             </div>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
-            {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack}/>}
+            {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
