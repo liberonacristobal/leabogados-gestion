@@ -11894,17 +11894,23 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 </Modal>
               )})()}
               {ncConfirm&&(()=>{ const it=ncConfirm.item; return (
-                <Modal title={`¿Anular la Factura N° ${it.facFolio}?`} onClose={()=>!ncBusy&&setNcConfirm(null)}>
-                  <div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{it.facCliente||it.receptor||'—'} · <b style={{fontVariantNumeric:'tabular-nums'}}>{fmt(it.monto)}</b>. Queda <b>Anulada</b> y sale del por cobrar. Reversible.</div>
-                  {it.replId&&<div onClick={()=>setNcVincular(v=>!v)} style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:12,background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:10,padding:'9px 10px',cursor:'pointer'}}>
-                    <span style={{width:17,height:17,borderRadius:6,flexShrink:0,marginTop:1,background:ncVincular?C.accent:'#fff',border:`1px solid ${ncVincular?C.accent:C.border}`,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{ncVincular&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>}</span>
-                    <div><div style={{fontSize:12,fontWeight:600,color:C.text}}>Vincular la Factura N°{it.replFolio} como su reemplazo</div><div style={{fontSize:10,color:C.muted,marginTop:1,lineHeight:1.4}}>{it.replCliente||''} · solo deja la trazabilidad, no mueve dinero.</div></div>
-                  </div>}
-                  <div style={{display:'flex',gap:8,marginTop:14}}>
-                    <button disabled={ncBusy} onClick={()=>setNcConfirm(null)} style={{flex:1,fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 0',cursor:'pointer'}}>Cancelar</button>
-                    <button disabled={ncBusy} onClick={()=>anularPorNC(it,0,it.replId?ncVincular:false)} style={{flex:1,fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'9px 0',cursor:'pointer',opacity:ncBusy?.6:1}}>{ncBusy?'Anulando…':'Anular'}</button>
+                <div style={{position:'fixed',inset:0,zIndex:9999,background:C.bgSoft,overflowY:'auto'}}>
+                  <div style={{maxWidth:560,margin:'0 auto',padding:'20px 16px 44px'}}>
+                    <button onClick={()=>!ncBusy&&setNcConfirm(null)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:ncBusy?'default':'pointer',fontSize:13,fontWeight:700,padding:0,marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>Volver</button>
+                    <h1 style={{fontSize:21,fontWeight:800,color:C.accent,letterSpacing:-.5,margin:'0 0 14px'}}>¿Anular la Factura N° {it.facFolio}?</h1>
+                    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'15px 16px'}}>
+                      <div style={{fontSize:13.5,color:C.text,lineHeight:1.55}}>{it.facCliente||it.receptor||'—'} · <b style={{fontVariantNumeric:'tabular-nums'}}>{fmt(it.monto)}</b>. Queda <b>Anulada</b> y sale del por cobrar. Reversible.{it.inferido?' Calce por RUT + monto exacto — confirma que es la factura correcta.':''}</div>
+                      {it.replId&&<div onClick={()=>setNcVincular(v=>!v)} style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:13,background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:10,padding:'10px 11px',cursor:'pointer'}}>
+                        <span style={{width:17,height:17,borderRadius:6,flexShrink:0,marginTop:1,background:ncVincular?C.accent:'#fff',border:`1px solid ${ncVincular?C.accent:C.border}`,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{ncVincular&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>}</span>
+                        <div><div style={{fontSize:12,fontWeight:600,color:C.text}}>Vincular la Factura N°{it.replFolio} como su reemplazo</div><div style={{fontSize:10,color:C.muted,marginTop:1,lineHeight:1.4}}>{it.replCliente||''} · solo deja la trazabilidad, no mueve dinero.</div></div>
+                      </div>}
+                    </div>
+                    <div style={{display:'flex',gap:9,marginTop:16}}>
+                      <button disabled={ncBusy} onClick={()=>setNcConfirm(null)} style={{flex:1,fontSize:13,fontWeight:700,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 0',cursor:'pointer'}}>Cancelar</button>
+                      <button disabled={ncBusy} onClick={()=>anularPorNC(it,0,it.replId?ncVincular:false)} style={{flex:1,fontSize:13,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:10,padding:'12px 0',cursor:ncBusy?'default':'pointer',opacity:ncBusy?.6:1}}>{ncBusy?'Anulando…':'Anular'}</button>
+                    </div>
                   </div>
-                </Modal>
+                </div>
               )})()}
             </div>
           </div>
