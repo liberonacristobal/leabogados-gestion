@@ -3083,6 +3083,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
   },[terminadosProy,user])
   // Alertas del dueño ("Requiere atención"): replegado por defecto; descartadas persisten (reaparecen si el monto empeora >20%).
   const [alertExp,setAlertExp] = usePersistedState('dash_alert_exp',false)
+  const [prioOpen,setPrioOpen] = useState(false)   // página "Prioridades financieras" (abre desde el tile de Finanzas·gestión; no persiste → al volver de una alerta cae en Inicio)
   const [alertOff,setAlertOff] = usePersistedState('dash_alert_off',{})
   const descartarAlerta = a => setAlertOff(p=>({...(p&&typeof p==='object'?p:{}), [a.key]: a.monto||0}))
   // KPIs colapsables: "Cómo va el año" queda fijo (hero); el resto arranca en mini y se abre al tocar (recuerda por usuario).
@@ -3565,6 +3566,32 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
   const _wk7ISO = (()=>{ const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10) })()
   const cargaSemN = (tasks||[]).filter(t=>t&&t.status!=='Terminado'&&t.due&&String(t.due).slice(0,10)<=_wk7ISO).length
 
+  // PÁGINA Prioridades financieras (early-return): abre desde el tile de Finanzas·gestión; cada alerta navega a su fuente (y cierra la página para que el volver caiga en Inicio).
+  if(prioOpen && prioridades.length){
+    const SEV={r:{bg:C.overdueBg,fg:C.overdueText},a:{bg:C.soonBg,fg:C.soonText},b:{bg:C.azulBg,fg:C.azulInfo}}
+    return (
+      <div style={{maxWidth:700,margin:'0 auto',padding:'10px 16px 40px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+          <button onClick={()=>setPrioOpen(false)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
+          <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Prioridades financieras</span>
+        </div>
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          {prioridades.map((a,i)=>{ const sv=SEV[a.sev]||SEV.b; const ir=()=>{ setPrioOpen(false); a.go&&a.go() }; return (
+            <div key={a.key} style={{display:'flex',alignItems:'center',gap:12,padding:'14px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+              <span style={{width:32,height:32,borderRadius:8,background:sv.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={a.icon} s={17} c={sv.fg}/></span>
+              <div onClick={ir} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.text,lineHeight:1.25}}>{a.t}</div>
+                <div style={{fontSize:12,color:C.muted,marginTop:2}}>{a.s}</div>
+              </div>
+              <span onClick={ir} style={{fontSize:11,fontWeight:800,color:C.accent,whiteSpace:'nowrap',cursor:'pointer'}}>{a.goLbl} →</span>
+              <span onClick={e=>{e.stopPropagation();descartarAlerta(a)}} title='Descartar' style={{color:C.done,cursor:'pointer',flexShrink:0,display:'flex'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></span>
+            </div>
+          )})}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className='dash-cols'>
 
@@ -3599,13 +3626,6 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
                   <span style={{fontSize:10,color:C.text}}>{label}</span>
                 </button>
               ))}
-              {prioridades.length>0&&(
-                <button onClick={()=>setAlertExp(v=>!v)} style={{position:'relative',background:'#fff',border:`1px solid ${alertExp?C.accent:C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
-                  <span style={{position:'absolute',top:6,right:8,fontSize:9,fontWeight:800,color:'#fff',background:prioridades.some(a=>a.sev==='r')?C.overdue:C.soon,borderRadius:20,padding:'1px 6px'}}>{prioridades.length}</span>
-                  <span style={{width:34,height:34,borderRadius:'50%',background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n='wallet' s={19} c={C.accent}/></span>
-                  <span style={{fontSize:10,color:C.text}}>Prioridades</span>
-                </button>
-              )}
             </div>
           </div>
         )
@@ -3613,8 +3633,9 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
 
       {/* REQUIERE ATENCIÓN — alertas del dueño, replegado por defecto. Iconos SIcon, paleta C, sin emojis. De datos que ya existen. */}
       {(()=>{
+        return null   // panel inline reemplazado por la PÁGINA Prioridades (early-return abajo; abre desde el tile de Finanzas·gestión)
         const alertas=prioridades
-        if(!alertas.length || !alertExp) return null   // se abre/cierra desde la tarjeta "Prioridades" de Accesos directos
+        if(!alertas.length || !alertExp) return null
         const SEV={r:{bg:C.overdueBg,fg:C.overdueText},a:{bg:C.soonBg,fg:C.soonText},b:{bg:C.azulBg,fg:C.azulInfo}}
         return (
         <div style={{padding:'0 20px 0'}}>
@@ -3904,6 +3925,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
         <div style={{padding:'6px 20px 0'}}>
           {/* Señales financieras — todas clickeables a su fuente. Resultado del mes y Flujo de caja abren su página; el resto navega o despliega. */}
           <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
+            {prioridades.length>0&&kTile('prioridades','Prioridades',String(prioridades.length),prioridades.some(a=>a.sev==='r')?C.overdueText:C.soonText,'wallet',prioridades.some(a=>a.sev==='r')?{fg:C.overdueText,bg:C.overdueBg}:{fg:C.soonText,bg:C.soonBg},'por resolver',()=>setPrioOpen(true))}
             {kTile('resmes','Resultado del mes',fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',{fg:C.greenText,bg:C.greenBg},(resMesDif>=0?'▲ ':'▼ ')+fmtShort(Math.abs(resMesDif))+' vs mes previo',onOpenEstadoResultados)}
             {kTile('flujo','Flujo de caja',fmtShort(flujoNeto8),flujoNeto8>=0?C.accent:C.overdueText,'wallet',{fg:C.tealText,bg:C.tealBg},'neto · 8 semanas',onOpenFlujoCaja)}
             {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'chart',{fg:C.greenText,bg:C.greenBg},'emitido'+(emFacTot>0?' · '+emPct+'% pagado':''),()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
