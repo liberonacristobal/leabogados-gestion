@@ -9216,15 +9216,35 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[] }){
 }
 // Flujo de caja proyectado, semana a semana: entra (cobros esperados + programadas) vs sale (costos de oficina + proveedores). Marca la semana apretada.
 function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], saldoInicial=0 }){
-  const [saldo0,setSaldo0] = useState(()=>Math.round(Number(saldoInicial)||0))
+  // ANCLA DE SALDO DEL BANCO: el saldo de hoy = último saldo confirmado (banco_saldo) + movimientos posteriores (cartola). Así el flujo parte de la caja real, no de $0 manual.
+  const [anchor,setAnchor] = useState(null)      // {fecha, saldo}
+  const [movs,setMovs] = useState([])            // movimientos para extrapolar desde el ancla
+  useEffect(()=>{ if(DEMO) return
+    supabase.from('banco_saldo').select('fecha,saldo').order('fecha',{ascending:false}).limit(1).then(({data})=>{ if(data&&data[0]) setAnchor(data[0]) },()=>{})
+    supabase.from('cartola_movimientos').select('fecha,tipo,monto').then(({data})=>{ if(data) setMovs(data) },()=>{})
+  },[])
+  const saldoHoy = useMemo(()=>{ if(!anchor) return Math.round(Number(saldoInicial)||0)
+    const base=Number(anchor.saldo)||0
+    const delta=(movs||[]).filter(m=>m&&m.fecha&&String(m.fecha).slice(0,10)>String(anchor.fecha).slice(0,10)).reduce((a,m)=>a+((m.tipo==='abono'?1:-1)*(Number(m.monto)||0)),0)
+    return Math.round(base+delta)
+  },[anchor,movs,saldoInicial])
+  const [saldoOv,setSaldoOv] = useState('')      // override manual (string); '' = usa el saldo calculado
+  const saldoUsado = saldoOv!=='' ? (Number(saldoOv)||0) : saldoHoy
+  const [savingSaldo,setSavingSaldo] = useState(false), [savedSaldo,setSavedSaldo] = useState(false)
+  const fijarSaldo = async()=>{ if(savingSaldo||DEMO) return; const v=Math.round(saldoUsado); setSavingSaldo(true)
+    const hoy=new Date().toISOString().slice(0,10)
+    const {error}=await supabase.from('banco_saldo').insert({fecha:hoy,saldo:v})
+    if(!error){ setAnchor({fecha:hoy,saldo:v}); setSaldoOv(''); setSavedSaldo(true); setTimeout(()=>setSavedSaldo(false),2500) }
+    setSavingSaldo(false) }
   const now=new Date(); const day=(now.getDay()+6)%7; const mon=new Date(now); mon.setDate(now.getDate()-day); mon.setHours(0,0,0,0)
   const iso=d=>d.toISOString().slice(0,10)
   const costosMes=costosOficinaMes(costosOfiRows); const costoSem=costosMes/4.3333
   const cxp=(()=>{ const billOk=bid=>{ if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }; return (terceros||[]).filter(t=>t&&(t.estado==='por_pagar'||t.estado==='pendiente')&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0) })()
   const pend=(billing||[]).filter(b=>b&&!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido','Programada'].includes(b.status)&&b.due)
-  const weeks=[]; let run=Number(saldo0)||0
+  const weeks=[]; let run=saldoUsado
   for(let i=0;i<8;i++){ const ws=new Date(mon); ws.setDate(mon.getDate()+i*7); const we=new Date(ws); we.setDate(ws.getDate()+7); const wsI=iso(ws), weI=iso(we)
-    const entra=pend.filter(b=>{ const d=String(b.due).slice(0,10); return d>=wsI && d<weI }).reduce((a,b)=>a+saldoBill(b),0)
+    // La semana 0 absorbe también lo VENCIDO (due en el pasado) = cobro esperado ya; el resto, por su vencimiento.
+    const entra=pend.filter(b=>{ const d=String(b.due).slice(0,10); return i===0 ? d<weI : (d>=wsI && d<weI) }).reduce((a,b)=>a+saldoBill(b),0)
     const sale=costoSem + (i===0?cxp:0)
     run += entra - sale
     weeks.push({ lbl:`${ws.getDate()}-${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][ws.getMonth()]}`, entra, sale, run })
@@ -9235,7 +9255,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], saldoInicia
     <div style={{padding:'2px 0 4px'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:8}}>
         <span style={{fontSize:12,color:C.muted}}>Próximas 8 semanas · entra vs sale</span>
-        <div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontSize:10,color:C.done}}>Saldo hoy $</span><input type='number' value={saldo0} onChange={e=>setSaldo0(e.target.value)} style={{height:28,width:96,textAlign:'right',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 8px',color:C.text,background:'#fff',outline:'none'}}/></div>
+        <div style={{display:'flex',alignItems:'center',gap:7}}><span style={{fontSize:10,color:C.done}}>Saldo hoy $</span><input type='number' value={saldoOv!==''?saldoOv:String(saldoHoy)} onChange={e=>setSaldoOv(e.target.value)} style={{height:28,width:112,textAlign:'right',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 8px',color:C.text,background:'#fff',outline:'none'}}/>{!DEMO&&<button onClick={fijarSaldo} disabled={savingSaldo} title='Guarda este saldo como el real de hoy; desde aquí se suma/resta cada movimiento nuevo del banco' style={{height:28,padding:'0 11px',borderRadius:8,border:'none',background:savedSaldo?C.greenText:C.accent,color:'#fff',fontSize:11,fontWeight:700,cursor:savingSaldo?'default':'pointer',whiteSpace:'nowrap'}}>{savedSaldo?'✓ Fijado':(savingSaldo?'…':'Fijar')}</button>}</div>
       </div>
       <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
         <div style={{display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr 1fr',padding:'8px 12px',background:C.accent,color:'#fff',fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.3px'}}><span>Semana</span><span style={{textAlign:'right'}}>Entra</span><span style={{textAlign:'right'}}>Sale</span><span style={{textAlign:'right'}}>Saldo</span></div>
@@ -9244,7 +9264,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], saldoInicia
       {apretada
         ? <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.overdueBg,borderRadius:10,padding:'10px 12px'}}><span style={{fontSize:11,fontWeight:700,color:C.overdueText}}>Semana del {apretada.lbl} · saldo proyectado</span><span style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>−{fmt(Math.abs(apretada.run))}</span></div>
         : <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.greenBg,borderRadius:10,padding:'10px 12px'}}><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Saldo proyectado en 8 semanas</span><span style={{fontSize:14,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(weeks[weeks.length-1].run)}</span></div>}
-      <div style={{fontSize:10,color:C.done,marginTop:9,lineHeight:1.5}}>Entra = cobros esperados (por cobrar + programadas por su vencimiento). Sale = costos de oficina prorrateados por semana + proveedores por pagar. Estimación — ajusta el saldo de hoy para verlo real.</div>
+      <div style={{fontSize:10,color:C.done,marginTop:9,lineHeight:1.5}}>Saldo de hoy = {anchor?<>último saldo fijado el {anchor.fecha} + los movimientos del banco posteriores</>:'(fíjalo para partir de la caja real)'}; toca <b>Fijar</b> al cargar una cartola. Entra = cobros esperados (lo vencido entra en la semana 0 + por cobrar + programadas por su vencimiento). Sale = costos de oficina por semana + comisiones por pagar.</div>
     </div>
   )
 }
