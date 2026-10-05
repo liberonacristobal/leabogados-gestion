@@ -8391,9 +8391,15 @@ let SOCIOS_CFG = [
   {nombre:'Cristóbal', rut:'15.621.320-9'},
   {nombre:'Erasmo',    rut:'15.371.733-8'},
 ]
+// Equipo (no-socios con RUT) — también tenant-aware desde `miembros`; fallback LEA. Alimenta el tagger de conciliación (EQUIPO_RUT).
+let EQUIPO_CFG = [
+  {nombre:'Martín',  rut:'19.889.733-7'},
+  {nombre:'Martina', rut:'21.138.928-1'},
+]
 const _norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim()
 const _rutK = s => String(s||'').replace(/[^0-9kK]/g,'').toLowerCase()
 function setSociosCfg(list){ const c=(list||[]).filter(s=>s&&s.nombre); if(c.length) SOCIOS_CFG=c }
+function setEquipoCfg(list){ EQUIPO_CFG=(list||[]).filter(s=>s&&s.nombre&&s.rut) }
 const _SOCIO_RET = e => {
   const sc=String(e.subcategory||'').trim(), scN=_norm(sc)
   for(const s of SOCIOS_CFG){ if(scN && scN===_norm(s.nombre)) return s.nombre }
@@ -29322,8 +29328,9 @@ function ConciliarLoteModal({ rows=[], cmap={}, clients=[], onClose, onConfirm }
 // para habilitar presentaciones movil/desktop sobre la MISMA logica. Traslado verbatim: no cambia ninguna formula.
 function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],pettyCash=[],setPettyCash,user,focusMovId,onFocusConsumed,focusBuscar,onBuscarConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII,onFacturaPagada}) {
   // Capa 2 — RUT conocidos para el tag "quién es"
-  const EQUIPO_RUT = { '198897337':'Martín', '211389281':'Martina' }   // Rodrigo (rd@): falta su RUT real; 9.619.443-9 era del CLIENTE Rodrigo Macho
-  const SOCIO_RUT  = { '156213209':'Cristóbal', '153717338':'Erasmo' }
+  // RUT conocidos para el tag "quién es" — SOCIO_RUT/EQUIPO_RUT se derivan de `miembros` (SOCIOS_CFG/EQUIPO_CFG, tenant-aware; fallback LEA). CONTADORA_RUT es externa (no es miembro): queda hardcodeada hasta tener su config.
+  const SOCIO_RUT  = useMemo(()=>{ const m={}; SOCIOS_CFG.forEach(s=>{ const k=crNormRut(s.rut); if(k) m[k]=s.nombre }); return m },[])   // eslint-disable-line
+  const EQUIPO_RUT = useMemo(()=>{ const m={}; EQUIPO_CFG.forEach(s=>{ const k=crNormRut(s.rut); if(k) m[k]=s.nombre }); return m },[])   // eslint-disable-line
   const CONTADORA_RUT = { '124631432':'Claudia (contadora)' }
   const [movs,setMovs] = useState([])
   const [loading,setLoading] = useState(true)
@@ -32990,12 +32997,13 @@ export default function App() {
   const saleReasignRef = useRef(null)
   const loadSocios = useCallback(async(estudioId) => {
     try{
-      let q=supabase.from('miembros').select('nombre,rut').eq('es_socio',true).order('nombre',{ascending:true})
+      let q=supabase.from('miembros').select('nombre,rut,es_socio').order('nombre',{ascending:true})
       if(estudioId) q=q.eq('estudio_id',estudioId)
       const { data } = await q
-      const seen=new Set(), list=[]
-      ;(data||[]).forEach(r=>{ const k=String(r.rut||r.nombre||'').replace(/[.\-\s]/g,'').toLowerCase(); if(k&&!seen.has(k)){ seen.add(k); list.push({nombre:r.nombre, rut:r.rut}) } })
-      if(list.length){ setSocios(list); setSociosCfg(list) }   // fuente única; si falla, queda el fallback LEA
+      const seen=new Set(), soc=[], eq=[]
+      ;(data||[]).forEach(r=>{ const k=String(r.rut||r.nombre||'').replace(/[.\-\s]/g,'').toLowerCase(); if(!k||seen.has(k)) return; seen.add(k); (r.es_socio?soc:eq).push({nombre:r.nombre, rut:r.rut}) })
+      if(soc.length){ setSocios(soc); setSociosCfg(soc) }   // fuente única; si falla, queda el fallback LEA
+      if((data||[]).length) setEquipoCfg(eq)                // equipo (no-socios con RUT) para el tagger de conciliación
     }catch(_){}
   },[])
   const loadUserRole = async(email) => {
