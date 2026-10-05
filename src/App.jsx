@@ -8463,9 +8463,98 @@ function RetirosOficinaModal({ expenses=[], clients=[], billing=[], terceros=[],
 // Módulo Oficina — hub BENTO. Protagonista = Resultado DEVENGADO (Facturado SII − costos − comisiones);
 // Caja hoy (ancla config caja_ancla + movimientos de cartola) y Flujo del mes son contexto. Puertas: Costos, Retiros, Gastos varios.
 // Cada cifra sale de su fuente única; el detalle reusa CostosOficinaModal/EstadoResultadosModal/FlujoCajaModal/RetirosOficinaModal (nada en paralelo).
-function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenVarios }){
+// Compras (IVA crédito): usa los DTE de compra que el SII ya sincronizó (sii_compras_docs) y que no se veían en ningún lado.
+// Foto IVA crédito (afectas tipo 33; restan NC tipo 61; exentas aparte) + crear proveedor desde el emisor (aprende) + enlazar el pago (cargo del banco por RUT+monto → sii_compras_docs.movimiento_id) + export para la contadora.
+function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=true }){
+  const [rows,setRows]=useState(compras)
+  useEffect(()=>{ setRows(compras) },[compras])
+  const [cargos,setCargos]=useState([])
+  const [q,setQ]=useState(''); const [ord,setOrd]=useState('anio'); const [yr,setYr]=useState(''); const [busy,setBusy]=useState(null)
+  useEffect(()=>{ if(DEMO){ setCargos([]); return } let v=true; supabase.from('cartola_movimientos').select('id,rut_contraparte,monto,fecha,nombre_contraparte').eq('tipo','cargo').then(({data})=>{ if(v&&data) setCargos(data) },()=>{}); return ()=>{v=false} },[])
+  const nR=r=>String(r||'').replace(/[.\s-]/g,'').toLowerCase()
+  const dmy=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
+  const tipoLbl=t=>({33:'Afecta',34:'Exenta',56:'Nota débito',61:'Nota crédito'})[Number(t)]||('DTE '+t)
+  const sign=d=>Number(d.tipo_dte)===61?-1:1
+  const yrDe=d=>String(d.periodo||d.fecha_emision||'').slice(0,4)
+  const years=[...new Set(rows.map(yrDe).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
+  const _q=q.trim().toLowerCase()
+  const fil=rows.filter(d=>{ if(yr&&yrDe(d)!==yr) return false; if(!_q) return true; return `${d.folio||''} ${d.emisor_name||''} ${d.emisor_rut||''}`.toLowerCase().includes(_q) })
+  const ivaCredito=fil.reduce((a,d)=>a+sign(d)*(Number(d.iva)||0),0)
+  const neto=fil.reduce((a,d)=>a+sign(d)*(Number(d.neto)||0),0)
+  const nAfecta=fil.filter(d=>Number(d.tipo_dte)===33).length
+  const sinProv=fil.filter(d=>!d.proveedor_id).length
+  const cargoByKey={}; cargos.forEach(m=>{ const k=nR(m.rut_contraparte)+'|'+Math.abs(Number(m.monto)||0); if(nR(m.rut_contraparte)&&!cargoByKey[k]) cargoByKey[k]=m })
+  const pagoDe=d=>d.movimiento_id?{enlazado:true}:(cargoByKey[nR(d.emisor_rut)+'|'+Math.abs(Number(d.monto)||0)]||null)
+  const calzan=fil.filter(d=>!d.movimiento_id&&pagoDe(d)).length
+  const groups={}; fil.forEach(d=>{ const k=nR(d.emisor_rut)||d.emisor_name||String(d.id); const g=groups[k]||(groups[k]={rut:d.emisor_rut,name:d.emisor_name,docs:[],neto:0,iva:0,hasProv:false}); g.docs.push(d); g.neto+=sign(d)*(Number(d.neto)||0); g.iva+=sign(d)*(Number(d.iva)||0); if(d.proveedor_id)g.hasProv=true })
+  let gs=Object.values(groups); gs.forEach(g=>g.docs.sort((a,b)=>String(b.fecha_emision||'').localeCompare(String(a.fecha_emision||''))))
+  if(ord==='iva') gs.sort((a,b)=>b.iva-a.iva)
+  else if(ord==='prov') gs.sort((a,b)=>String(a.name||'~').localeCompare(String(b.name||'~'),'es'))
+  else gs.sort((a,b)=>{ const fa=a.docs[0]?.fecha_emision||''; const fb=b.docs[0]?.fecha_emision||''; return String(fb).localeCompare(String(fa)) })
+  const crearProv=async(g)=>{ if(!onSaveProveedor) return; if(!(await appConfirm(`Crear el proveedor "${titleCase(g.name||'')}" (RUT ${g.rut||'—'}) y vincular sus ${g.docs.length} documento${g.docs.length!==1?'s':''}. Es reversible. ¿Confirmas?`))) return; setBusy('p:'+g.rut); try{ const np=await onSaveProveedor({razon_social:g.name,rut:g.rut}); if(np){ const ids=g.docs.map(d=>d.id); await supabase.from('sii_compras_docs').update({proveedor_id:np.id}).in('id',ids); setRows(p=>p.map(x=>ids.includes(x.id)?{...x,proveedor_id:np.id}:x)) } }catch(e){ appAlert('No se pudo crear el proveedor: '+(e.message||e)) } setBusy(null) }
+  const enlazarPago=async(d,m)=>{ if(!(await appConfirm(`Enlazar la factura N° ${d.folio} (${fmt(Math.round(Math.abs(d.monto)||0))}) con el cargo del banco del ${dmy(m.fecha)}. Es reversible. ¿Confirmas?`))) return; setBusy('m:'+d.id); try{ await supabase.from('sii_compras_docs').update({movimiento_id:m.id}).eq('id',d.id); setRows(p=>p.map(x=>x.id===d.id?{...x,movimiento_id:m.id}:x)) }catch(e){ appAlert('No se pudo enlazar: '+(e.message||e)) } setBusy(null) }
+  const exportar=()=>{ const H=['Folio','Fecha','Emisor','RUT','Tipo','Neto','IVA','Total','Proveedor','Pago']; const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`; const lines=fil.map(d=>[d.folio,d.fecha_emision,d.emisor_name,d.emisor_rut,tipoLbl(d.tipo_dte),Math.round(sign(d)*(Number(d.neto)||0)),Math.round(sign(d)*(Number(d.iva)||0)),Math.round(sign(d)*(Number(d.monto)||0)),d.proveedor_id?'si':'no',d.movimiento_id?'enlazado':''].map(esc).join(',')); const csv=[H.map(esc).join(','),...lines].join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`compras_iva${yr?'_'+yr:''}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }
+  const selSt={fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:11,padding:'8px 10px',background:C.bgSoft,color:C.accent,cursor:'pointer'}
+  const pillSt=(bg,fg)=>({fontSize:8.5,fontWeight:700,borderRadius:5,padding:'2px 6px',background:bg,color:fg,whiteSpace:'nowrap',flexShrink:0})
+  return (<div>
+    {rows.length===0
+      ? <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>No hay DTE de compra cargados. El SII los sincroniza con el cron de compras.</div>
+      : <>
+      <div style={{background:C.accent,color:'#fff',borderRadius:14,padding:'15px 16px'}}>
+        <div style={{fontSize:9.5,fontWeight:700,opacity:.7,textTransform:'uppercase',letterSpacing:'.3px'}}>IVA crédito{yr?` · ${yr}`:''}</div>
+        <div style={{fontSize:27,fontWeight:800,letterSpacing:-.6,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(Math.round(ivaCredito))}</div>
+        <div style={{fontSize:11,opacity:.9,marginTop:4}}>de {nAfecta} factura{nAfecta!==1?'s':''} afecta{nAfecta!==1?'s':''} · neto {fmt(Math.round(neto))} · exentas y notas de crédito aparte</div>
+      </div>
+      {(sinProv>0||calzan>0)&&<div style={{display:'flex',gap:8,marginTop:11,flexWrap:'wrap'}}>
+        {sinProv>0&&<div style={{flex:'1 1 130px',background:C.overdueBg,borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:16,fontWeight:800,color:C.overdueText}}>{sinProv}</div><div style={{fontSize:10.5,color:C.overdueText,lineHeight:1.3}}>sin proveedor · crear</div></div>}
+        {calzan>0&&<div style={{flex:'1 1 130px',background:C.greenBg,borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:16,fontWeight:800,color:C.greenText}}>{calzan}</div><div style={{fontSize:10.5,color:'#136b4e',lineHeight:1.3}}>pagos calzan con un cargo</div></div>}
+      </div>}
+      <div style={{display:'flex',gap:8,alignItems:'center',margin:'14px 0 8px',flexWrap:'wrap'}}>
+        <div style={{flex:1,display:'flex',alignItems:'center',gap:8,border:`1px solid ${C.border}`,borderRadius:11,padding:'8px 11px',background:C.bgSoft,minWidth:140}}>
+          <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.4' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar proveedor, RUT, N° folio…' style={{border:'none',background:'transparent',outline:'none',fontSize:12.5,color:C.text,width:'100%'}}/>
+        </div>
+        <select value={ord} onChange={e=>setOrd(e.target.value)} style={selSt}><option value='anio'>Año · nuevas</option><option value='iva'>IVA ↓</option><option value='prov'>Proveedor A–Z</option></select>
+        {years.length>1&&<select value={yr} onChange={e=>setYr(e.target.value)} style={selSt}><option value=''>Todos</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select>}
+      </div>
+      {gs.map((g,gi)=>{ const t5=g.docs.slice(0,5); const rest=g.docs.length-t5.length; return (
+        <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:13,marginBottom:9,overflow:'hidden'}}>
+          <div style={{padding:'11px 13px',display:'flex',gap:10,alignItems:'flex-start'}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCase(g.name||'—')}</div>
+              {g.rut&&<div style={{fontSize:10.5,color:C.muted,marginTop:2}}><b style={{color:C.done,fontWeight:700}}>RUT</b> {g.rut}</div>}
+              <div style={{fontSize:10.5,color:C.muted,marginTop:5}}><b style={{color:C.text}}>{g.docs.length}</b> doc{g.docs.length!==1?'s':''} · neto {fmt(Math.round(g.neto))}</div>
+              {g.hasProv
+                ? <span style={{display:'inline-block',marginTop:6,...pillSt(C.greenBg,C.greenText),textTransform:'uppercase',letterSpacing:.2}}>ya proveedor</span>
+                : <><span style={{display:'inline-block',marginTop:6,...pillSt(C.overdueBg,C.overdueText),textTransform:'uppercase',letterSpacing:.2}}>sin proveedor</span>
+                   <div onClick={busy?undefined:()=>crearProv(g)} style={{marginTop:8,fontSize:11,fontWeight:700,color:C.accent,cursor:busy?'default':'pointer'}}>{busy==='p:'+g.rut?'Creando…':'Crear proveedor ›'}</div></>}
+            </div>
+            <div style={{flexShrink:0,textAlign:'right'}}>
+              <div style={{fontSize:13,fontWeight:800,color:g.iva>0?C.accent:C.done,fontVariantNumeric:'tabular-nums'}}>{g.iva>0?fmt(Math.round(g.iva)):'—'}</div>
+              <div style={{fontSize:8.5,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>{g.iva>0?'IVA crédito':'exento'}</div>
+            </div>
+          </div>
+          <div style={{borderTop:`1px solid ${C.bgSoft}`,background:'#FBFCFD'}}>
+            {t5.map(d=>{ const enl=!!d.movimiento_id; const p=enl?null:pagoDe(d); const calza=!enl&&p&&!p.enlazado; return (
+              <div key={d.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11}}>
+                <span style={{flex:1,minWidth:0,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.text,fontWeight:600}}>N° {d.folio}</b> · {dmy(d.fecha_emision)} · {tipoLbl(d.tipo_dte)}</span>
+                {enl?<span style={pillSt(C.tealBg,C.tealText)}>pagado</span>:calza?<span style={pillSt(C.greenBg,C.greenText)}>pago calza</span>:<span style={pillSt(C.soonBg,C.soonText)}>por pagar</span>}
+                <span style={{fontSize:11,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0,minWidth:70,textAlign:'right'}}>{fmt(Math.round(Math.abs(d.monto)||0))}</span>
+                {calza&&<span onClick={busy?undefined:()=>enlazarPago(d,p)} style={{fontSize:10,fontWeight:700,color:C.azulInfo,cursor:busy?'default':'pointer',flexShrink:0}}>{busy==='m:'+d.id?'…':'Enlazar ›'}</span>}
+              </div>) })}
+            {rest>0&&<div style={{padding:'7px 13px',fontSize:10,color:C.done,borderTop:`1px solid ${C.bgSoft}`}}>+ {rest} documento{rest!==1?'s':''} más</div>}
+          </div>
+        </div>) })}
+      <div onClick={exportar} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginTop:12,border:`1px solid ${C.border}`,borderRadius:11,padding:10,background:'#fff',fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg> Exportar a Excel para la contadora</div>
+    </>}
+  </div>)
+}
+function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], isDesktop=true, onOpenEstadoResultados, onOpenVarios, proveedores=[], onSaveProveedor }){
   const [sub,setSub] = useState(null)
   const [caja,setCaja] = useState(null)
+  const [comprasRows,setComprasRows] = useState([])   // DTE de compra del SII (sii_compras_docs): foto IVA crédito + módulo Compras
+  useEffect(()=>{ if(DEMO){ setComprasRows([]); return } let v=true; supabase.from('sii_compras_docs').select('id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,neto,exento,iva,monto,glosa,proveedor_id,movimiento_id,periodo').then(({data})=>{ if(v&&data) setComprasRows(data) },()=>{}); return ()=>{v=false} },[])
+  const ivaCreditoC = comprasRows.reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
   const ym = new Date().toISOString().slice(0,7), year=new Date().getFullYear()
   // Caja viva: ancla (config caja_ancla = 'AAAA-MM-DD:monto') + Σ(abonos − cargos) de cartola posteriores a la fecha del ancla, ambas cuentas.
   useEffect(()=>{ let vivo=true
@@ -8498,8 +8587,8 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; const f=facturadoSiiPeriodo(billing,mm); cobradoYr+=ingresosMesBill(billing,mm); if(f>0){ factSiiYr+=f; resYr += f - costosOficinaMes(costosOfiRows,mm) - comisionMesTerc(terceros,mm) } }
   const porCobrar=(billing||[]).filter(b=>b&&!b.deleted_at&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
   const gridStyle = isDesktop
-    ? {display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gridTemplateAreas:'"res res caja" "res res flujo" "cos ret gas"',gap:12}
-    : {display:'grid',gridTemplateColumns:'1fr 1fr',gridTemplateAreas:'"res res" "caja flujo" "cos ret" "gas gas"',gap:11}
+    ? {display:'grid',gridTemplateColumns:'2fr 1fr',gridTemplateAreas:'"res caja" "res flujo"',gap:12}
+    : {display:'grid',gridTemplateColumns:'1fr 1fr',gridTemplateAreas:'"res res" "caja flujo"',gap:11}
   const puerta = (area,ic,bg,icCol,ti,big,bigC,ctx,on)=>(
     <div style={{gridArea:area,background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'15px 16px',cursor:'pointer',position:'relative'}} onClick={on}>
       <span style={{position:'absolute',top:15,right:14,color:C.done,fontSize:15,fontWeight:700}}>›</span>
@@ -8543,9 +8632,12 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
         <div style={{fontSize:21,fontWeight:800,letterSpacing:-.5,marginTop:3,color:flujoMes>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{flujoMes>=0?'+':'−'}{fmt(Math.abs(flujoMes))}</div>
         <div style={{fontSize:10,color:C.done,marginTop:2}}>cobrado − costos · desfase</div>
       </div>
-      {puerta('cos','building',C.azulBg,C.accent,'Costos',fmtShort(costoMes),C.accent,'por mes',()=>setSub('costos'))}
-      {puerta('ret','wallet',C.tealBg,C.tealText,'Retiros',fmtShort(ret.total),C.tealText,'en el año',()=>setSub('retiros'))}
-      {puerta('gas','receipt',C.bgWarm,C.muted,'Gastos varios',fmtShort(variosMes),C.accent,porCobrarEq>0?`${fmtShort(porCobrarEq)} por cobrar`:'este mes',()=>onOpenVarios&&onOpenVarios())}
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
+      {puerta('','building',C.azulBg,C.accent,'Costos',fmtShort(costoMes),C.accent,'por mes',()=>setSub('costos'))}
+      {puerta('','wallet',C.tealBg,C.tealText,'Retiros',fmtShort(ret.total),C.tealText,'en el año',()=>setSub('retiros'))}
+      {puerta('','receipt',C.bgWarm,C.muted,'Gastos varios',fmtShort(variosMes),C.accent,porCobrarEq>0?`${fmtShort(porCobrarEq)} por cobrar`:'este mes',()=>onOpenVarios&&onOpenVarios())}
+      {puerta('','receipt',C.azulBg,C.azulInfo,'Compras · IVA',fmtShort(ivaCreditoC),C.azulInfo,'IVA crédito',()=>setSub('compras'))}
     </div>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:12,marginTop:12}}>
       {kpi('Facturado SII · año',fmtShort(factSiiYr))}
@@ -8556,6 +8648,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
     {sub==='costos' && <Modal fullscreenOnMobile title='Costos de Oficina' maxWidth={760} onClose={()=>setSub(null)}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
     {sub==='retiros' && <Modal fullscreenOnMobile title='Retiros a socios' maxWidth={560} onClose={()=>setSub(null)}><RetirosOficinaModal expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows}/></Modal>}
     {sub==='flujo' && <Modal fullscreenOnMobile title='Caja y flujo' maxWidth={620} onClose={()=>setSub(null)}><FlujoCajaModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros} saldoInicial={caja||0}/></Modal>}
+    {sub==='compras' && <Modal fullscreenOnMobile title='Compras · IVA' maxWidth={620} onClose={()=>setSub(null)}><ComprasModal compras={comprasRows} proveedores={proveedores} onSaveProveedor={onSaveProveedor} isDesktop={isDesktop}/></Modal>}
   </div>)
 }
 // Estado de resultados mensual: ingresos cobrados − costos de oficina = resultado del mes. Navegable, comparable y exportable. Fuente única (cobradoBill, costosOficinaMes).
@@ -34701,7 +34794,7 @@ export default function App() {
                 <button onClick={goBack} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Oficina</span>
               </div>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>setModal({type:'estadoResultados'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}}/>
             </div>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
