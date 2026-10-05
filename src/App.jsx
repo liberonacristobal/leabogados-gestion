@@ -8915,6 +8915,25 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
     </table></div></div>
     <div style={{fontSize:11,color:C.muted,lineHeight:1.6,margin:'14px 4px 0'}}>Facturación desde el SII (neta de notas de crédito y terceros). Costos desde la planilla real (editable). {estim?'Algunos meses incluyen estimados (cotizaciones/PPM de Claudia aún pendientes).':''}</div>
 
+    {(()=>{
+      const allM=Array.from({length:maxM},(_,i)=>i+1)
+      const sinEnl=(ventas||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(yr)&&[33,34,61].includes(Number(d.tipo_dte))&&!d.billing_id)
+      const abiertos=allM.filter(m=>mesEstado(m)!=='cerrado'), estM=allM.filter(m=>mesEstado(m)==='estimado')
+      const desv=allM.filter(m=>{ const r=cmBy[m]; if(!r) return false; const real=Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos); const bud=costosOficinaMes(costosOfiRows,pad(m)); return bud>0&&Math.abs(real-bud)/bud>0.2 })
+      const checks=[
+        [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · revísalas en Revisión de datos`:'todas enlazadas a una venta'],
+        [abiertos.length===0,'Cierre de meses',abiertos.length?`${abiertos.length} sin cerrar${estM.length?` · ${estM.length} con datos estimados`:''}`:'todos los meses del período cerrados'],
+        [desv.length===0,'Costos vs presupuesto',desv.length?`${desv.length} mes${desv.length!==1?'es':''} con desvío mayor a 20% vs el presupuesto`:'en línea con el presupuesto'],
+      ]
+      return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
+        <div style={card}>{checks.map(([ok,t,d],i)=><div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 16px',borderTop:i?`1px solid ${C.bgSoft}`:'none'}}>
+          <span style={{width:28,height:28,borderRadius:'50%',background:ok?C.greenBg:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ok
+            ?<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>
+            :<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M12 9v4M12 17h.01'/><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z'/></svg>}</span>
+          <span style={{minWidth:0}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent,display:'block'}}>{t}</span><span style={{fontSize:11,color:ok?C.done:C.soonText}}>{d}</span></span>
+        </div>)}</div></>
+    })()}
+
     {editM!=null&&<div onClick={()=>!busy&&setEditM(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:9999,display:'flex',alignItems:isDesktop?'center':'stretch',justifyContent:'center'}}>
       <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:isDesktop?16:0,width:isDesktop?470:'100%',maxWidth:'100%',height:isDesktop?'auto':'100%',maxHeight:isDesktop?'90vh':'100%',overflow:'auto',padding:'18px 18px 24px'}}>
         <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:4}}>
