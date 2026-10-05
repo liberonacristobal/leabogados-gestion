@@ -8793,6 +8793,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const [selM,setSelM]=useState(curM)
   const [open,setOpen]=useState(null)
   const [ncOpen,setNcOpen]=useState(false)
+  const [sinEnlOpen,setSinEnlOpen]=useState(false)   // Salud de datos: despliegue inline de facturas SII sin enlazar
   const [ventas,setVentas]=useState([]); const [cm,setCm]=useState([])
   const [editM,setEditM]=useState(null)   // mes en edición (1-12) o null
   const [form,setForm]=useState({})
@@ -8841,6 +8842,16 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
     const {error}=await supabase.from('oficina_costos_mensual').upsert(p,{onConflict:'estudio_id,anio,mes'}); if(error) throw error
     setEditM(null); setReloadN(n=>n+1)
   }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) } setBusy(false) }
+  // Cierre masivo: meses pasados, completos (con sueldos), no estimados y aún no cerrados. No toca el mes en curso ni los estimados (sep/oct a la espera de Claudia).
+  const cerrables=Array.from({length:maxM},(_,i)=>i+1).filter(m=>{ const r=cmBy[m]; return r && !r.cerrado && !r.estimado && Number(r.sueldos)>0 && (yr<curY || m<curM) })
+  const cerrarLote=async()=>{ if(!cerrables.length||busy) return
+    const lista=cerrables.map(m=>MESES[m-1]).join(', ')
+    if(!await appConfirm(`¿Cerrar ${cerrables.length} ${cerrables.length===1?'mes':'meses'} (${lista})?\nPodrás reabrir cualquiera después desde su editor.`)) return
+    if(DEMO){ return }
+    setBusy(true)
+    try{ const {error}=await supabase.from('oficina_costos_mensual').update({cerrado:true,cerrado_at:new Date().toISOString(),cerrado_por:(user&&user.email)||'—',updated_at:new Date().toISOString()}).eq('estudio_id','lea').eq('anio',yr).in('mes',cerrables); if(error) throw error; setReloadN(n=>n+1) }
+    catch(e){ appAlert('No se pudieron cerrar: '+(e.message||e)) }
+    setBusy(false) }
 
   const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,marginBottom:9,overflow:'hidden'}
   const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:11,fontWeight:700,padding:'7px 14px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
@@ -8907,7 +8918,12 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
     {sec('com',C.soonBg,C.soonText,<><path d='M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7'/></>,'Comisiones a colaboradores','pagadas + por compensación',fmtMp(comis),C.soonText,
       <>{row('Comisiones del período',fmtMp(comis))}<div style={{fontSize:10.5,color:C.done,paddingTop:7}}>Incluye las saldadas por compensación (ej. Rodrigo, mayo).</div></>)}
 
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,margin:'22px 4px 10px',flexWrap:'wrap'}}><span style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Resultado mes a mes</span><span style={{fontSize:10.5,color:C.done,fontWeight:600}}>{nCerrados>0?`${nCerrados} ${nCerrados===1?'mes cerrado':'meses cerrados'} · `:''}toca un mes para editar o cerrar</span></div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,margin:'22px 4px 10px',flexWrap:'wrap'}}><span style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Resultado mes a mes</span>
+      <span style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <span style={{fontSize:10.5,color:C.done,fontWeight:600}}>{nCerrados>0?`${nCerrados} ${nCerrados===1?'mes cerrado':'meses cerrados'} · `:''}toca un mes para editar o cerrar</span>
+        {cerrables.length>0&&<button disabled={busy} onClick={cerrarLote} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,fontWeight:800,color:'#fff',background:C.greenText,border:'none',borderRadius:20,padding:'6px 12px',cursor:busy?'default':'pointer',opacity:busy?.6:1}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>Cerrar {cerrables.length} {cerrables.length===1?'mes':'meses'} listo{cerrables.length===1?'':'s'}</button>}
+      </span>
+    </div>
     <div style={card}><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
       <thead><tr>{['Mes','Facturación','Costos','Comis.','Resultado'].map((h,i)=><th key={h} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,padding:'8px 11px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft,textAlign:i?'right':'left',whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
       <tbody>{Array.from({length:maxM},(_,i)=>i+1).map(m=>{ const fp=emitidaMes(m)-ncMes(m)-terMes(m); const r=cmBy[m]; const cb=r?(Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos)):0; const cmo=r?Number(r.comisiones):0; const sb=r?Number(r.subarriendo):0; const res=fp+sb-cb-cmo; const td={fontSize:12,padding:'8px 11px',textAlign:'right',fontVariantNumeric:'tabular-nums',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap'}; const selR=scope==='mes'&&selM===m
@@ -8932,19 +8948,23 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
       const faltaClaudia=allM.filter(m=>{ const r=cmBy[m]; return r && (Number(r.cotizaciones)===0||Number(r.ppm)===0||r.estimado) })
       const sldFalta=allM.filter(m=>{ const r=cmBy[m]; return !r || Number(r.sueldos)===0 })
       const checks=[
-        [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · revísalas en Revisión de datos`:'todas enlazadas a una venta'],
-        [abiertos.length===0,'Cierre de meses',abiertos.length?`${abiertos.length} sin cerrar${estM.length?` · ${estM.length} con datos estimados`:''}`:'todos los meses del período cerrados'],
-        [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia'],
-        [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones'],
-        [desv.length===0,'Costos vs presupuesto',desv.length?`${desv.length} mes${desv.length!==1?'es':''} con desvío mayor a 20% vs el presupuesto`:'en línea con el presupuesto'],
+        [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · tócalo para ver cuáles`:'todas enlazadas a una venta', sinEnl.length?{label:sinEnlOpen?'ocultar':'ver',on:()=>setSinEnlOpen(o=>!o)}:null],
+        [abiertos.length===0,'Cierre de meses',abiertos.length?`${abiertos.length} sin cerrar${estM.length?` · ${estM.length} con datos estimados`:''}`:'todos los meses del período cerrados', abiertos.length?(cerrables.length?{label:`cerrar ${cerrables.length}`,on:cerrarLote}:{label:'editar',on:()=>abrirEditor(abiertos[0])}):null],
+        [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia', faltaClaudia.length?{label:'editar',on:()=>abrirEditor(faltaClaudia[0])}:null],
+        [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],
+        [desv.length===0,'Costos vs presupuesto',desv.length?`${desv.length} mes${desv.length!==1?'es':''} con desvío mayor a 20% vs el presupuesto`:'en línea con el presupuesto', desv.length?{label:'editar',on:()=>abrirEditor(desv[0])}:null],
       ]
       return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
-        <div style={card}>{checks.map(([ok,t,d],i)=><div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 16px',borderTop:i?`1px solid ${C.bgSoft}`:'none'}}>
-          <span style={{width:28,height:28,borderRadius:'50%',background:ok?C.greenBg:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ok
-            ?<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>
-            :<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M12 9v4M12 17h.01'/><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z'/></svg>}</span>
-          <span style={{minWidth:0}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent,display:'block'}}>{t}</span><span style={{fontSize:11,color:ok?C.done:C.soonText}}>{d}</span></span>
-        </div>)}</div></>
+        <div style={card}>{(()=>{ const out=[]; checks.forEach(([ok,t,d,act],i)=>{
+          out.push(<div key={'c'+i} onClick={act?act.on:undefined} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 16px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:act?'pointer':'default'}}>
+            <span style={{width:28,height:28,borderRadius:'50%',background:ok?C.greenBg:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ok
+              ?<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>
+              :<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M12 9v4M12 17h.01'/><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z'/></svg>}</span>
+            <span style={{minWidth:0,flex:1}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent,display:'block'}}>{t}</span><span style={{fontSize:11,color:ok?C.done:C.soonText}}>{d}</span></span>
+            {act&&<span style={{flexShrink:0,fontSize:11,fontWeight:800,color:C.soonText,whiteSpace:'nowrap'}}>{act.label} ›</span>}
+          </div>)
+          if(i===0&&sinEnlOpen&&sinEnl.length>0) out.push(<div key='sinenl' style={{padding:'0 16px 12px'}}><div style={{background:C.overdueBg,borderRadius:10,overflow:'hidden'}}>{sinEnl.slice().sort((a,b)=>String(a.fecha_emision||'').localeCompare(String(b.fecha_emision||''))).map((d,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 12px',fontSize:11.5,color:C.overdueText,fontWeight:600,borderTop:j?'1px solid rgba(163,45,45,.14)':'none'}}><span>{Number(d.tipo_dte)===61?'NC · ':''}N° {d.folio} · {d.receptor_name||'—'}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Number(d.monto)||0)}</span></div>)}</div></div>)
+        }); return out })()}</div></>
     })()}
 
     {editM!=null&&<div onClick={()=>!busy&&setEditM(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:9999,display:'flex',alignItems:isDesktop?'center':'stretch',justifyContent:'center'}}>
