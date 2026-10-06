@@ -28820,7 +28820,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const _dias = iso => iso==null?null:Math.round((Date.now()-new Date(String(iso).slice(0,10)+'T12:00').getTime())/86400000)
   const HOY = new Date().toISOString().slice(0,10)
   const esAdmin = userRole==='admin'
-  const miInicial = INICIALES_RESP[currentUserName] || null
+  const miInicial = INICIALES_RESP[currentUserName] || (DEMO?'CL':null)   // en demo cae a CL para mostrar el opt-in/Mi semana
   // Opt-in por abogado: un proyecto es MÍO si soy responsable, estoy en el equipo o lo sigo. Nada ajeno por default.
   const _soy = miInicial
   const _enEquipo = pid => (proyEquipo||[]).some(e=>String(e.proyecto_id)===String(pid)&&e.miembro===_soy)
@@ -29453,7 +29453,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         </div>
       )}
 
-      {(()=>{ const scope=arr=> vista==='estudio' ? arr.filter(p=>!esMio(p)) : arr.filter(esMio)
+      {vista!=='semana'&&(()=>{ const scope=arr=> vista==='estudio' ? arr.filter(p=>!esMio(p)) : arr.filter(esMio)
         const nCurso=scope((proyectos||[]).filter(p=>p.activo!==false&&!p.pausado)).length
         const nPausa=scope((proyectos||[]).filter(p=>p.activo!==false&&!!p.pausado)).length
         const nTerm=scope(archivados||[]).length
@@ -29462,7 +29462,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       })()}
 
       <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
-        {fase!=='terminados'&&<select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ fontSize:12, color:C.muted, background:'#EEF1F3', border:'none', borderRadius:8, padding:'6px 10px', cursor:'pointer' }}>
+        {vista!=='semana'&&fase!=='terminados'&&<select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ fontSize:12, color:C.muted, background:'#EEF1F3', border:'none', borderRadius:8, padding:'6px 10px', cursor:'pointer' }}>
           <option value='movimiento'>En movimiento</option>
           <option value='sinmover'>Sin mover</option>
           <option value='plazo'>Plazo</option>
@@ -29470,13 +29470,41 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <option value='cliente'>Cliente</option>
         </select>}
         {miInicial && (<>
+          <button onClick={()=>{setVista('semana');setOpenId(null)}} style={chipSty(vista==='semana',C.accent,C.azulBg)}>Mi semana</button>
           <button onClick={()=>{setVista('mios');setOpenId(null)}} style={chipSty(vista==='mios',C.accent,C.azulBg)}>Mis proyectos</button>
           <button onClick={()=>{setVista('estudio');setOpenId(null)}} style={chipSty(vista==='estudio',C.muted,'#EEF1F3')}>Del estudio</button>
         </>)}
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{ marginLeft:'auto', fontSize:12, padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', width:110 }}/>
       </div>
 
-      {grupos.length===0
+      {vista==='semana' ? (()=>{
+          // MI SEMANA (Fase 3): cruza tareas + hitos + plazos de MIS proyectos que vencen en los próximos 7 días (o ya vencidos). "Qué tengo para la semana".
+          const weekEnd=(()=>{ const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10) })()
+          const misP=(proyectos||[]).filter(p=>p.activo!==false && esMio(p))
+          const idSet=new Set(misP.map(p=>String(p.id)))
+          const items=[]
+          ;(tasks||[]).forEach(t=>{ if(t.status==='Terminado'||t.archived||!t.due) return; const due=String(t.due).slice(0,10); if(due>weekEnd) return
+            const p = misP.find(x=>String(x.id)===String(t.project_id)) || misP.find(x=>!t.project_id && x.cliente_id && String(x.cliente_id)===String(t.client_id)); if(!p) return
+            items.push({ fecha:due, texto:t.title||'Tarea', proy:cnm(p.cliente_id)||p.nombre_proyecto||'', kind:'Tarea', pid:p.id }) })
+          ;(proyHitos||[]).forEach(h=>{ if(h.hecho||!h.fecha||!idSet.has(String(h.proyecto_id))) return; const f=String(h.fecha).slice(0,10); if(f>weekEnd) return; const p=misP.find(x=>String(x.id)===String(h.proyecto_id)); items.push({ fecha:f, texto:h.titulo, proy:p?(cnm(p.cliente_id)||p.nombre_proyecto):'', kind:'Hito', pid:h.proyecto_id }) })
+          ;misP.forEach(p=>{ if(!p.plazo) return; const f=String(p.plazo).slice(0,10); if(f>weekEnd) return; items.push({ fecha:f, texto:p.plazo_label||'Plazo del proyecto', proy:cnm(p.cliente_id)||p.nombre_proyecto, kind:'Plazo', pid:p.id }) })
+          items.sort((a,b)=> a.fecha.localeCompare(b.fecha) || (a.kind>b.kind?1:-1))
+          if(!items.length) return <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>Nada vence esta semana en tus proyectos. Semana despejada.</div>
+          const KIND={ Tarea:{c:C.azulInfo,bg:C.azulBg}, Hito:{c:C.accent,bg:C.azulBg}, Plazo:{c:'#A32D2D',bg:'#FCEBEB'} }
+          const dayLbl=f=>{ const dd=cartDiasPlazo(f); if(dd==null) return ''; if(dd<0) return `vencido ${-dd}d`; if(dd===0) return 'hoy'; if(dd===1) return 'mañana'; return new Date(f+'T12:00').toLocaleDateString('es-CL',{weekday:'short'}) }
+          const dayCol=f=>{ const dd=cartDiasPlazo(f); return dd==null?C.muted:dd<0?'#A32D2D':dd===0?'#993C1D':C.tealText }
+          return <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, padding:'11px 14px 2px' }}>Esta semana · {items.length}</div>
+            {items.map((it,i)=>{ const k=KIND[it.kind]||KIND.Tarea; return (
+              <div key={i} onClick={()=>{ setVista('mios'); setFase('curso'); setOpenId(it.pid) }} style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
+                <span style={{ fontSize:10.5, fontWeight:800, color:'#fff', background:dayCol(it.fecha), borderRadius:7, padding:'3px 7px', minWidth:64, textAlign:'center', flexShrink:0 }}>{dayLbl(it.fecha)}</span>
+                <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.texto}</div>{it.proy&&<div style={{ fontSize:10.5, color:C.muted }}>{it.proy}</div>}</div>
+                <span style={{ fontSize:9.5, fontWeight:800, textTransform:'uppercase', letterSpacing:.3, color:k.c, background:k.bg, borderRadius:20, padding:'2px 8px', flexShrink:0 }}>{it.kind}</span>
+              </div>
+            )})}
+          </div>
+        })()
+      : grupos.length===0
         ? <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>{proyectos.length?'Nada con este filtro.':'Aún no hay proyectos. Toca “+ Nuevo” o se irán creando desde tus ventas activas.'}</div>
         : <div style={isDesktop?{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, alignItems:'start' }:{ display:'flex', flexDirection:'column', gap:10 }}>
             {grupos.map(g=>{
