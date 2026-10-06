@@ -30251,7 +30251,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   }
 
   // Overlay compartido: la lectura de la propuesta (Alcance) se dispara desde el Plan (workspace) y desde el landing → se renderiza en ambos.
-  const alcanceOverlay = alcanceFor ? <CarteraAlcanceModal proyecto={alcanceFor} client={clients.find(c=>String(c.id)===String(alcanceFor.cliente_id))||null} onClose={()=>setAlcanceFor(null)} onAddHito={onAddHito} onApplied={(id,campos)=>{ setProyectos(prev=>prev.map(x=>x.id===id?{...x,...campos}:x)); if(openId===id) setDraft(d=>d) }}/> : null
+  const alcanceOverlay = alcanceFor ? <CarteraAlcanceModal proyecto={alcanceFor} client={clients.find(c=>String(c.id)===String(alcanceFor.cliente_id))||null} onClose={()=>setAlcanceFor(null)} onAddHito={onAddHito} onAddEntregable={onAddEntregable} onApplied={(id,campos)=>{ setProyectos(prev=>prev.map(x=>x.id===id?{...x,...campos}:x)); if(openId===id) setDraft(d=>d) }}/> : null
   if(focoOpen) return renderFoco()
   if(metOpen) return renderMetricas()
   if(bibOpen) return renderBiblioteca()
@@ -30411,28 +30411,38 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
 }
 
 // Fase 2A — lee la propuesta aceptada del Drive con IA y extrae el alcance (compuerta humana antes de aplicar).
-function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAddHito }){
+function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAddHito, onAddEntregable }){
   const [step,setStep] = useState('picker')   // picker | busy | review
   const [err,setErr] = useState(null)
   const [file,setFile] = useState(null)
   const [resumen,setResumen] = useState('')
   const [servicios,setServicios] = useState([])   // [{t,on}]
-  const [hitos,setHitos] = useState([])           // [{titulo,fecha,descripcion,on}]
+  const [fases,setFases] = useState([])           // [{titulo,fecha,subetapas:[],on}] — las etapas del plan con sus sub-etapas
   const [saving,setSaving] = useState(false)
+  // Propuestas del estudio (carpeta central de Drive), filtradas por el nombre del cliente — es ahí donde viven, no en la carpeta del cliente.
+  const [propAll,setPropAll] = useState(null)   // null=cargando · []=sin acceso/sin match
+  const [propQ,setPropQ] = useState(_norm(client?.name||'').split(' ')[0]||'')
+  useEffect(()=>{ let alive=true
+    driveCall({action:'search', q:`'${PREC_FOLDERS.propuesta}' in parents and trashed=false`, pageSize:200})
+      .then(d=>{ if(!alive) return; const legible=(f)=>/pdf|wordprocessing|presentation|document/i.test(f.mimeType||''); setPropAll((d.files||[]).filter(legible).sort((a,b)=>String(b.modifiedTime||'').localeCompare(String(a.modifiedTime||'')))) })
+      .catch(()=>{ if(alive) setPropAll([]) })
+    return ()=>{ alive=false } }, [])   // eslint-disable-line
+  const propMatch = (propAll||[]).filter(f=>{ const q=_norm(propQ).trim(); return !q || _norm(f.name).includes(q) })
 
   const extraer = async (f) => {
     setStep('busy'); setErr(null); setFile(f)
     try{
-      const txt = (await leerDriveTextoSA(f)).slice(0,14000)
+      const txt = (await leerDriveTextoSA(f)).slice(0,16000)
       if(!txt||txt.length<100) throw new Error('El documento no tiene texto suficiente.')
-      const sys = `Eres abogado chileno. Del texto de esta PROPUESTA DE HONORARIOS/SERVICIOS extrae el ALCANCE del encargo. Devuelve SOLO un JSON (sin markdown) con la forma {"resumen":"2-3 frases del alcance","servicios":["...","..."],"hitos":[{"titulo":"...","fecha":"YYYY-MM-DD o vacío","descripcion":"..."}]}. En hitos pon entregables o etapas con fecha si la propuesta las menciona; fecha SOLO si es cierta, si no deja "". NO inventes fechas ni servicios.`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:2500,system:sys,messages:[{role:'user',content:txt}]})
+      const sys = `Eres abogado chileno. Del texto de esta PROPUESTA DE HONORARIOS/SERVICIOS extrae el PLAN DE TRABAJO (el "alcance de los servicios"), respetando su estructura real. Devuelve SOLO un JSON (sin markdown): {"resumen":"2-3 frases del alcance","servicios":["..."],"fases":[{"titulo":"nombre de la etapa o fase","fecha":"YYYY-MM-DD o vacío","subetapas":["tarea o punto dentro de la fase","..."]}]}. Las FASES son las etapas del encargo EN ORDEN; las SUBETAPAS son los puntos o tareas de cada fase, tal como los lista la propuesta. Pon fecha SOLO si la propuesta la menciona para esa fase (p. ej. un plan por meses); si no, deja "". NO inventes fases, subetapas ni fechas: usa el lenguaje de la propuesta. En litigios, las fases son las etapas procesales del encargo.`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:3500,system:sys,messages:[{role:'user',content:txt}]})
       const out = data?.content?.[0]?.text||''; const m = out.match(/\{[\s\S]*\}/); let obj={}
       try{ obj = m?JSON.parse(m[0]):{} }catch(_){ obj={} }
       setResumen(String(obj.resumen||''))
       setServicios((Array.isArray(obj.servicios)?obj.servicios:[]).filter(Boolean).map(s=>({t:String(s).slice(0,240),on:true})))
-      setHitos((Array.isArray(obj.hitos)?obj.hitos:[]).filter(x=>x&&x.titulo).map(x=>({titulo:String(x.titulo).slice(0,200), fecha:/^\d{4}-\d{2}-\d{2}$/.test(x.fecha||'')?x.fecha:'', descripcion:String(x.descripcion||''), on:true})))
-      if(!obj.resumen && !(obj.hitos||[]).length && !(obj.servicios||[]).length) throw new Error('No pude leer un alcance claro en ese documento.')
+      const fs=(Array.isArray(obj.fases)?obj.fases:[]).filter(x=>x&&x.titulo).map(x=>({ titulo:String(x.titulo).slice(0,200), fecha:/^\d{4}-\d{2}-\d{2}$/.test(x.fecha||'')?x.fecha:'', subetapas:(Array.isArray(x.subetapas)?x.subetapas:[]).filter(Boolean).map(s=>String(s).slice(0,400)), on:true }))
+      setFases(fs)
+      if(!obj.resumen && !fs.length && !(obj.servicios||[]).length) throw new Error('No pude leer un plan claro en ese documento.')
       setStep('review')
     }catch(e){ setErr(/No hay conexión|Failed to fetch|No autorizado|GOOGLE_OAUTH/i.test(e?.message||'')?'Conecta Drive desde el menú para leer el documento.':(e?.message||'No se pudo leer.')); setStep('picker') }
   }
@@ -30441,20 +30451,24 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAddHito }
     try{
       const servSel = servicios.filter(s=>s.on).map(s=>s.t)
       const alcance = (resumen.trim() + (servSel.length?`\n\nServicios: ${servSel.join(' · ')}`:'')).trim() || null
-      const hitSel = hitos.filter(h=>h.on)
-      const conFecha = hitSel.filter(h=>h.fecha).sort((a,b)=>a.fecha.localeCompare(b.fecha))
-      const prox = conFecha.find(h=>h.fecha>=new Date().toISOString().slice(0,10)) || conFecha[0] || null
+      const faseSel = fases.filter(f=>f.on)
+      const conFecha = faseSel.filter(f=>f.fecha).sort((a,b)=>a.fecha.localeCompare(b.fecha))
+      const prox = conFecha.find(f=>f.fecha>=new Date().toISOString().slice(0,10)) || conFecha[0] || null
       const campos = { alcance, ultima_actividad:new Date().toISOString().slice(0,10), updated_at:new Date().toISOString() }
       if(prox){ campos.plazo_label = prox.titulo; campos.plazo = prox.fecha }
       const { error } = await supabase.from('proyectos_cartera').update(campos).eq('id',proyecto.id)
       if(error) throw error
-      // Agenda los hitos marcados como plazos del cliente (misma tabla que el calendario de plazos)
-      if(hitSel.length && client?.id){
-        const ins = hitSel.map(h=>({ client_id:String(client.id), titulo:h.titulo, descripcion:h.descripcion||null, tipo:'hito', fecha:h.fecha||null, fuente:file?.name||'propuesta', file_id:file?.id||null }))
+      // Agenda las fases con fecha como plazos del cliente (misma tabla que el calendario de plazos)
+      const conAgenda = faseSel.filter(f=>f.fecha)
+      if(conAgenda.length && client?.id){
+        const ins = conAgenda.map(f=>({ client_id:String(client.id), titulo:f.titulo, tipo:'hito', fecha:f.fecha||null, fuente:file?.name||'propuesta', file_id:file?.id||null }))
         await supabase.from('plazos').insert(ins).then(()=>{},()=>{})   // tolera tabla ausente
       }
-      // OLA 4 — SIEMBRA EL PLAN con los hitos de la propuesta (pasos reales del documento, no inventados). orden y plazo = fecha del hito.
-      if(hitSel.length && onAddHito){ for(let i=0;i<hitSel.length;i++){ const h=hitSel[i]; try{ await onAddHito(proyecto.id, h.titulo, null, null, { plazo:h.fecha||null, orden:i }) }catch(_){} } }
+      // SIEMBRA EL PLAN desde la propuesta: cada fase = un paso (hito) ordenado, con sus sub-etapas (entregables colgando del hito). Pasos reales del documento, no inventados.
+      if(faseSel.length && onAddHito){ for(let i=0;i<faseSel.length;i++){ const f=faseSel[i]
+        try{ const h=await onAddHito(proyecto.id, f.titulo, null, null, { plazo:f.fecha||null, orden:i })
+          if(h?.id && onAddEntregable){ for(let j=0;j<(f.subetapas||[]).length;j++){ try{ await onAddEntregable(proyecto.id, f.subetapas[j], null, h.id) }catch(_){} } }
+        }catch(_){} } }
       onApplied&&onApplied(proyecto.id, campos)
       onClose()
     }catch(e){ setErr(/relation .*proyectos_cartera|Could not find the table|column .*alcance/i.test(e?.message||'')?'Falta la columna: corre el ALTER de docs/sql_proyectos_cartera.sql.':(e?.message||'No se pudo aplicar.')); setSaving(false) }
@@ -30468,8 +30482,23 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAddHito }
         {err&&<div style={{ fontSize:12, color:C.overdue, background:C.overdueBg||'#FCEBEB', borderRadius:8, padding:'8px 10px', marginBottom:10 }}>{err}</div>}
         {step==='picker'&&(
           <>
-            <div style={{ fontSize:13, color:C.muted, marginBottom:10 }}>Elige la propuesta aceptada del Drive del cliente. La IA leerá el alcance y lo dejará para tu revisión.</div>
-            {client ? <DocumentosDrive client={client} onPick={extraer}/> : <div style={{ fontSize:12, color:C.overdue }}>Este proyecto no tiene cliente asignado.</div>}
+            <div style={{ fontSize:13, color:C.muted, marginBottom:10 }}>Elige la propuesta de honorarios aceptada. La IA leerá su alcance y armará el plan para tu revisión.</div>
+            <div style={lbl}>Propuestas del estudio</div>
+            <div style={{ display:'flex', alignItems:'center', gap:6, border:`1.5px solid ${C.accent}`, background:'#fff', borderRadius:8, padding:'6px 9px', marginBottom:8 }}>
+              <input value={propQ} onChange={e=>setPropQ(e.target.value)} placeholder='Buscar propuesta por nombre…' style={{ border:'none', outline:'none', fontSize:13, color:C.text, flex:1, minWidth:0, background:'none' }}/>
+            </div>
+            <div style={{ border:`1px solid ${C.border}`, borderRadius:8, overflow:'hidden', marginBottom:14, maxHeight:230, overflowY:'auto' }}>
+              {propAll===null ? <div style={{ fontSize:12, color:C.muted, padding:'10px' }}>Buscando propuestas…</div>
+                : propMatch.length===0 ? <div style={{ fontSize:12, color:C.muted, padding:'10px' }}>{propAll.length?'Sin propuestas que calcen — ajusta la búsqueda o elige del Drive del cliente.':'No se pudo leer la carpeta de propuestas (revisa la conexión a Drive).'}</div>
+                : propMatch.slice(0,20).map(f=>(
+                  <div key={f.id} onClick={()=>extraer(f)} style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}`, cursor:'pointer' }}>
+                    <span style={{ flex:1, minWidth:0, fontSize:12.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</span>
+                    <span style={{ fontSize:10, color:C.muted, flexShrink:0 }}>{String(f.modifiedTime||'').slice(0,10)}</span>
+                    <span style={{ color:C.done, fontSize:14, flexShrink:0 }}>›</span>
+                  </div>
+                ))}
+            </div>
+            {client ? <><div style={lbl}>…o del Drive del cliente</div><DocumentosDrive client={client} onPick={extraer}/></> : null}
           </>
         )}
         {step==='busy'&&<div style={{ fontSize:13, color:C.muted, textAlign:'center', padding:'26px 0' }}>Leyendo la propuesta y extrayendo el alcance…</div>}
@@ -30491,21 +30520,24 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAddHito }
                 ))}
               </div>
             </>}
-            {hitos.length>0&&<>
-              <div style={lbl}>Hitos y plazos detectados</div>
+            {fases.length>0&&<>
+              <div style={lbl}>Plan del proyecto · {fases.length} {fases.length===1?'etapa':'etapas'}</div>
               <div style={{ border:`1px solid ${C.border}`, borderRadius:8, overflow:'hidden', marginBottom:4 }}>
-                {hitos.map((h,i)=>(
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none' }}>
-                    <span style={{ fontSize:13, color:C.text, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h.titulo}</span>
-                    <input type='date' value={h.fecha} onChange={e=>setHitos(a=>a.map((x,j)=>j===i?{...x,fecha:e.target.value}:x))} style={{ fontSize:11, padding:'2px 5px', borderRadius:6, border:`1px solid ${C.border}`, color:C.text }}/>
-                    <span onClick={()=>setHitos(a=>a.map((x,j)=>j===i?{...x,on:!x.on}:x))} style={{ width:16, height:16, borderRadius:4, flexShrink:0, cursor:'pointer', background:h.on?C.done:'transparent', border:h.on?'none':`1.5px solid ${C.done||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{h.on?'✓':''}</span>
+                {fases.map((f,i)=>(
+                  <div key={i} style={{ padding:'9px 10px', borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', opacity:f.on?1:.5 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ fontSize:13, fontWeight:600, color:C.text, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{i+1}. {f.titulo}</span>
+                      <input type='date' value={f.fecha} onChange={e=>setFases(a=>a.map((x,j)=>j===i?{...x,fecha:e.target.value}:x))} style={{ fontSize:11, padding:'2px 5px', borderRadius:6, border:`1px solid ${C.border}`, color:C.text }}/>
+                      <span onClick={()=>setFases(a=>a.map((x,j)=>j===i?{...x,on:!x.on}:x))} style={{ width:16, height:16, borderRadius:4, flexShrink:0, cursor:'pointer', background:f.on?C.done:'transparent', border:f.on?'none':`1.5px solid ${C.done||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{f.on?'✓':''}</span>
+                    </div>
+                    {(f.subetapas||[]).length>0&&<ul style={{ margin:'5px 0 0', paddingLeft:18 }}>{f.subetapas.map((s,j)=><li key={j} style={{ fontSize:11.5, color:C.muted, marginBottom:2 }}>{s}</li>)}</ul>}
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize:11, color:C.grisText, marginBottom:14 }}>Los marcados se agendan como plazos del proyecto.</div>
+              <div style={{ fontSize:11, color:C.grisText, marginBottom:14 }}>Cada etapa marcada se crea como paso del plan, con sus sub-etapas. Las que tengan fecha se agendan como plazo.</div>
             </>}
             <div style={{ display:'flex', gap:8 }}>
-              <button onClick={aplicar} disabled={saving} style={{ flex:1, fontSize:13, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:10, cursor:saving?'default':'pointer' }}>{saving?'Agendando…':'Agendar al proyecto'}</button>
+              <button onClick={aplicar} disabled={saving} style={{ flex:1, fontSize:13, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:10, cursor:saving?'default':'pointer' }}>{saving?'Creando el plan…':'Crear el plan'}</button>
               <button onClick={onClose} style={{ fontSize:13, fontWeight:600, color:C.muted, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 14px', cursor:'pointer' }}>Descartar</button>
             </div>
           </>
