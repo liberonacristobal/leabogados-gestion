@@ -29509,7 +29509,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   // Sin plan / al día tienen su propia caja. Es el mapa del flujo de trabajo del estudio en una pantalla.
   const FASE_DEFS = [
     {k:'diagnostico',   l:'Estudio de antecedentes',      o:1, re:/diagn[oó]stico|due diligence|estudio|levantamiento|antecedentes|t[ií]tulos/},
-    {k:'diseno',        l:'Redacción de instrumentos',    o:2, re:/dise[ñn]o|estatuto|borrador|minuta|informe|estructura|contrato|poder|mandato/},
+    {k:'diseno',        l:'Redacción de documentos',      o:2, re:/dise[ñn]o|estatuto|borrador|minuta|informe|estructura|contrato|poder|mandato/},
     {k:'negociacion',   l:'Negociación',                  o:3, re:/revisi[oó]n|negociaci[oó]n/},
     {k:'escrituras',    l:'Otorgamiento y firma',         o:4, re:/escritura|firma|notar[ií]a|comparec/},
     {k:'inscripciones', l:'Publicaciones e inscripciones',o:5, re:/publicaci[oó]n|diario oficial|inscripci[oó]n|cbr|conservador|registro|posesi[oó]n/},
