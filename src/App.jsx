@@ -30172,7 +30172,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     const riesgo = foco.map(p=>{ const nx=nextDe(p); const dd=nx&&nx.plazo?cartDiasPlazo(nx.plazo):null; const c=cad(p); return {p,nx,dd,inact:c.inact,frio:c.frio} })
       .filter(x=>x.nx&&x.dd!=null&&x.dd>=0&&x.dd<=7&&x.frio).sort((a,b)=>a.dd-b.dd)
     const riesgoIds = new Set(riesgo.map(x=>String(x.p.id)))
-    const nVenc = pend.filter(x=>x.dd!=null&&x.dd<0).length, nSem = pend.filter(x=>x.dd!=null&&x.dd>=0&&x.dd<=7).length, nDet = foco.filter(esDetenido).length
+    const nVenc = pend.filter(x=>x.dd!=null&&x.dd<0).length, nSem = pend.filter(x=>x.dd!=null&&x.dd>=0&&x.dd<=7).length, nDet = foco.filter(p=>esDetenido(p)&&hitosDe(p).length>0).length   // "sin mover" solo cuenta proyectos CON plan (los que muestran el chip en "Tus proyectos"); los sin plan ya están en su sección
     const filaPaso = (x) => { const dc = x.dd<0?C.overdue:x.dd<=2?'#E09B2D':C.soonText; const tc = x.dd<0?C.overdueText:x.dd<=2?C.soonText:C.greenText
       return <div key={x.p.id+'_'+x.h.id} onClick={()=>abrir(x.p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'10px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:dc, flexShrink:0 }}/>
