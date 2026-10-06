@@ -28965,6 +28965,9 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const AUTO_MIN = 2                                                        // umbral de "patrón aprendido" para abrir la compuerta solo
   useEffect(()=>{ if(DEMO){ setPmoAutoCount(demoData.pmo_learn_count||{}); return }
     supabase.from('learnings').select('key').in('kind',['pmo_tramite_hito','pmo_doc_hito']).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ const k=String(r.key); m[k]=(m[k]||0)+1 }); setPmoAutoCount(m) },()=>{}) },[])
+  const [pmoProyOp,setPmoProyOp] = useState({})                             // projectId → operacionId (de qué operación nació) — para que la biblioteca aprenda del uso
+  useEffect(()=>{ if(DEMO){ setPmoProyOp(demoData.pmo_proy_op||{}); return }
+    supabase.from('learnings').select('key,value').eq('kind','pmo_proy_op').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[String(r.key)]=String(r.value) }); setPmoProyOp(m) },()=>{}) },[])
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
@@ -29907,6 +29910,27 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               <button onClick={()=>{ if(onDelOperacion){ onDelOperacion(op.id); setBibSel(null) } }} style={{ fontSize:12, fontWeight:600, color:C.coralText, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>Eliminar operación</button>
             </div>
           </div>
+          {/* OLA 3 — la biblioteca MEJORA desde el uso: pasos que ≥2 proyectos de esta operación agregaron fuera de la plantilla → proponer sumarlos. */}
+          {(()=>{
+            const nt = s => _normTxt(s)
+            const plantillaSet = new Set((pasos||[]).map(s=>nt(s.t)))
+            const proyectosOp = (proyectos||[]).concat(archivados||[]).filter(pr=>String(pmoProyOp[String(pr.id)]||'')===String(op.id))
+            if(proyectosOp.length<2) return null
+            const extra={}, pretty={}
+            proyectosOp.forEach(pr=>{ const seen=new Set(); hitosDe(pr).forEach(h=>{ const k=nt(h.titulo); if(!k||plantillaSet.has(k)||seen.has(k)) return; seen.add(k); extra[k]=(extra[k]||0)+1; if(!pretty[k]) pretty[k]=h.titulo }) })
+            const sug = Object.entries(extra).filter(([,n])=>n>=2).sort((a,b)=>b[1]-a[1]).map(([k,n])=>({k,n,t:pretty[k]}))
+            if(!sug.length) return null
+            return <div style={{ ...card, border:`1px solid #E3DAF2`, background:'#F7F4FC' }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3, marginBottom:3 }}>Sugerencias desde el uso</div>
+              <div style={{ fontSize:11.5, color:C.muted, marginBottom:9 }}>Varios proyectos de esta operación agregaron estos pasos fuera de la plantilla.</div>
+              {sug.map((s,i)=>(
+                <div key={s.k} style={{ display:'flex', alignItems:'center', gap:10, borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
+                  <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:12.5, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.t}</div><div style={{ fontSize:10.5, color:C.muted }}>en {s.n} proyectos</div></div>
+                  <button onClick={()=>setPasos([...pasos,{t:s.t,m:false,subs:[]}])} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer', flexShrink:0 }}>Agregar a la plantilla</button>
+                </div>
+              ))}
+            </div>
+          })()}
         </>}
       </div>
     )
@@ -34429,6 +34453,8 @@ export default function App() {
   // Siembra el PLAN (pasos de una operación) como hitos ordenados + sub-etapas (entregables colgando del hito). La OBRA con la que nace el proyecto. Nace con plazos realistas aprendidos.
   const handleSeedPlan = async (proyectoId, operacion) => {
     const pasos = operacion?.pasos||[]; if(!pasos.length) return
+    // OLA 3 — recuerda de qué operación nació el proyecto (singleton learnings, sin migración) para que la biblioteca aprenda del uso.
+    if(operacion?.id && !DEMO) setLearningKV('pmo_proy_op', String(proyectoId), String(operacion.id)).catch(()=>{})
     const base = (proyHitos||[]).filter(x=>String(x.proyecto_id)===String(proyectoId)).length
     const plazos = plazosRealistasPlan(operacion)
     if(DEMO){ const nh=[], ne=[]; pasos.forEach((ps,i)=>{ const hid='h'+Date.now()+'_'+i; nh.push({id:hid,proyecto_id:proyectoId,titulo:ps.t,fecha:null,plazo:plazos[i]||null,hecho:false,orden:base+i,responsable:null}); (ps.subs||[]).forEach((s,j)=>ne.push({id:'e'+Date.now()+'_'+i+'_'+j,proyecto_id:proyectoId,texto:s,hecho:false,hito_id:hid,etapa_idx:null,orden:j})) }); setProyHitos(p=>[...p,...nh]); setProyEntregables(p=>[...p,...ne]); return }

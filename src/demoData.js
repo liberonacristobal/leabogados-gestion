@@ -39,7 +39,10 @@ export const demoData = {
     { id:'p3', cliente_id:'c6', nombre_proyecto:'Constitución de sociedad', estado:'ambar', etapa_idx:0, responsable:'EE', nota:'Reuniendo antecedentes de los socios', plazo_label:null, plazo:new Date(Date.now()+6*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-12*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
     { id:'p4', cliente_id:'c5', nombre_proyecto:'Contrato de distribución', estado:'verde', etapa_idx:3, responsable:'MP', nota:'Enviado a revisión del cliente', plazo_label:null, plazo:new Date(Date.now()+21*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-2*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
     { id:'p5', cliente_id:'c4', nombre_proyecto:'Due diligence de compra', estado:'verde', etapa_idx:1, responsable:'MC', nota:'Revisando carpeta tributaria en Drive', plazo_label:null, plazo:null, ultima_actividad:new Date(Date.now()-1*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
+    { id:'p6', cliente_id:'c2', nombre_proyecto:'Reorganización Ríofrío', estado:'verde', etapa_idx:1, responsable:'EE', nota:'Holding familiar', plazo_label:null, plazo:new Date(Date.now()+30*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-3*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
   ],
+  // OLA 3 — de qué operación nació cada proyecto (para que la biblioteca aprenda del uso). p1 y p6 = reorganización (op2).
+  pmo_proy_op: { p1:'op2', p6:'op2' },
   // OLA 3 auto-confirmar: mapeos concepto→paso ya aprendidos ≥2 veces (conceptKey = glosaKey del gasto). "extracto inscripcion" = Inscripción en CBR (x7b).
   pmo_learn_count: { 'extracto inscripcion': 2 },
   // PLAN de pasos (carta Gantt) de algunos proyectos — para que "Mi foco" muestre el mapa de un vistazo.
@@ -60,6 +63,12 @@ export const demoData = {
     { id:'hp4_2', proyecto_id:'p4', titulo:'Borrador del contrato',         hecho:true,  fecha:new Date(Date.now()-4*864e5).toISOString().slice(0,10),  plazo:new Date(Date.now()-5*864e5).toISOString().slice(0,10),  orden:1, responsable:'MP' },
     { id:'hp4_3', proyecto_id:'p4', titulo:'Revisión / negociación',        hecho:false, fecha:null, plazo:new Date(Date.now()+10*864e5).toISOString().slice(0,10), orden:2, responsable:'MP' },
     { id:'hp4_4', proyecto_id:'p4', titulo:'Firma',                         hecho:false, fecha:null, plazo:new Date(Date.now()+18*864e5).toISOString().slice(0,10), orden:3, responsable:'MP' },
+    // p1 += paso agregado a mano fuera de la plantilla de reorganización (op2)
+    { id:'hp1_6', proyecto_id:'p1', titulo:'Opinión de un abogado externo', hecho:false, fecha:null, plazo:null, orden:5, responsable:'CL' },
+    // p6 Reorganización Ríofrío (op2) — también con el paso agregado fuera de la plantilla
+    { id:'hp6_1', proyecto_id:'p6', titulo:'Diagnóstico tributario y patrimonial', hecho:true,  fecha:new Date(Date.now()-20*864e5).toISOString().slice(0,10), plazo:new Date(Date.now()-22*864e5).toISOString().slice(0,10), orden:0, responsable:'EE' },
+    { id:'hp6_2', proyecto_id:'p6', titulo:'Opinión de un abogado externo',        hecho:false, fecha:null, plazo:new Date(Date.now()+6*864e5).toISOString().slice(0,10),  orden:1, responsable:'EE' },
+    { id:'hp6_3', proyecto_id:'p6', titulo:'Diseño + informe tributario',          hecho:false, fecha:null, plazo:new Date(Date.now()+20*864e5).toISOString().slice(0,10), orden:2, responsable:'EE' },
   ],
   client_entities: [
     { id:'e1',  client_id:'c1', name:'Comercial Andes SpA', rut:'76.111.222-3' },
