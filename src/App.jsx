@@ -28958,9 +28958,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
+  const [pickOp,setPickOp] = useState('')          // operación a aplicar al agregar ventas desde el panel "Elegir"
   const [bibOpen,setBibOpen] = useState(false)     // editor de la biblioteca de pasos (pmo_operaciones)
   const [bibSel,setBibSel] = useState(null)        // operación seleccionada en el editor
-  const NF0 = { cliente_id:'', sale_id:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
+  const NF0 = { cliente_id:'', sale_id:'', operacionId:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
   const [nf,setNf] = useState(NF0)
   const [clientQ,setClientQ] = useState('')
   const [alcanceFor,setAlcanceFor] = useState(null)   // Fase 2A: proyecto sobre el que leer la propuesta
@@ -29309,20 +29310,25 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   },[])   // eslint-disable-line
   const crear = async () => {
     if(!nf.cliente_id||!nf.nombre.trim()){ appAlert('Elige un cliente y escribe el nombre del proyecto.'); return }
+    const op = nf.operacionId ? (pmoOps||[]).find(o=>String(o.id)===String(nf.operacionId)) : null
     const row = { cliente_id:nf.cliente_id, sale_id:nf.sale_id||null, nombre_proyecto:nf.nombre.trim(), responsable:nf.responsable||null, nota:nf.nota.trim()||null, plazo:nf.plazo||null, estado:'verde', etapa_idx:0, origen:nf.sale_id?'venta':'manual', activo:true, ultima_actividad:HOY }
-    const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single()
-    if(error){ appAlert('No se pudo crear: '+error.message); return }
-    setProyectos(prev=>[data,...prev]); setNuevo(false); setNf(NF0); setClientQ('')
+    let created
+    if(DEMO){ created={id:'p'+Date.now(),...row}; setProyectos(prev=>[created,...prev]) }
+    else { const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single(); if(error){ appAlert('No se pudo crear: '+error.message); return } created=data; setProyectos(prev=>[data,...prev]) }
+    if(op && created && onSeedPlan) onSeedPlan(created.id, op)   // nace con su plan (los pasos del asunto)
+    setNuevo(false); setNf(NF0); setClientQ('')
   }
 
   // La app SUGIERE: ventas Activas que aún no tienen proyecto en el panel (para el backfill de un toque).
   const activasSinProyecto = useMemo(()=>{ const have=new Set((proyectos||[]).map(p=>p.sale_id&&String(p.sale_id)).filter(Boolean)); return (sales||[]).filter(s=>s.status==='Activo'&&!s.deleted_at&&!have.has(String(s.id))) },[sales,proyectos])
   // El usuario DECIDE qué venta vuelve proyecto — se agrega UNA a la vez (nada automático en bloque).
-  const agregarUno = async (s) => {
+  const agregarUno = async (s, operacionId) => {
+    const op = operacionId ? (pmoOps||[]).find(o=>String(o.id)===String(operacionId)) : null
     const row = { sale_id:String(s.id), cliente_id:s.client_id?String(s.client_id):null, nombre_proyecto:s.title||'Proyecto', responsable:INICIALES_RESP[s.responsible||s.abogado_responsable]||null, estado:'verde', etapa_idx:0, origen:'venta', activo:true, ultima_actividad:HOY }
-    const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single()
-    if(error){ appAlert('No se pudo agregar: '+error.message); return }
-    setProyectos(prev=>[data,...prev])
+    let created
+    if(DEMO){ created={id:'p'+Date.now()+Math.random(),...row}; setProyectos(prev=>[created,...prev]) }
+    else { const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single(); if(error){ appAlert('No se pudo agregar: '+error.message); return } created=data; setProyectos(prev=>[data,...prev]) }
+    if(op && created && onSeedPlan) onSeedPlan(created.id, op)
   }
 
   // Fase 2B: escaneo del correo (client-side, tu buzón). Corre 1×/día al abrir (solo admin) + botón manual. Cache en localStorage.
@@ -29843,14 +29849,15 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           </div>
           {pickOpen&&(()=>{ const byCli={}; activasSinProyecto.forEach(s=>{ const k=s.client_id?String(s.client_id):'—'; (byCli[k]=byCli[k]||[]).push(s) })
             const grupos=Object.entries(byCli).map(([cid,ss])=>({cid,nombre:cnm(cid)||'Sin cliente',ss})).sort((a,b)=>a.nombre.localeCompare(b.nombre))
-            return <div style={{ borderTop:`1px solid ${C.border}`, background:'#fff', maxHeight:360, overflowY:'auto' }}>
+            return <div style={{ borderTop:`1px solid ${C.border}`, background:'#fff', maxHeight:380, overflowY:'auto' }}>
+              {(pmoOps||[]).length>0&&<div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderBottom:`1px solid ${C.bgSoft||'#F1EFE8'}` }}><span style={{ fontSize:11, color:C.muted }}>Plan al agregar:</span><select value={pickOp} onChange={e=>setPickOp(e.target.value)} style={{ flex:1, minWidth:0, fontSize:12, padding:'5px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}><option value=''>Sin plan por ahora</option>{(pmoOps||[]).map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}</select></div>}
               {grupos.map(g=>(
                 <div key={g.cid} style={{ padding:'8px 12px', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}` }}>
                   <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(g.cid)} style={{ fontSize:12.5, fontWeight:700, color:C.accent, marginBottom:4, cursor:'pointer' }}>{g.nombre}</div>
                   {g.ss.map(s=>(
                     <div key={s.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'5px 0' }}>
                       <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:12.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.title||'Venta sin título'}</div><div style={{ fontSize:10, color:C.muted }}>{s.status||''}{s.responsible?` · ${INICIALES_RESP[s.responsible]||s.responsible}`:''}</div></div>
-                      <button onClick={()=>agregarUno(s)} style={{ fontSize:11, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer', flexShrink:0 }}>Agregar</button>
+                      <button onClick={()=>agregarUno(s, pickOp)} style={{ fontSize:11, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer', flexShrink:0 }}>Agregar</button>
                     </div>
                   ))}
                 </div>
@@ -29942,6 +29949,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           })()}
           <input value={nf.nombre} onChange={e=>setNf(f=>({...f,nombre:e.target.value}))} placeholder='Nombre del proyecto' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
           <input value={nf.nota} onChange={e=>setNf(f=>({...f,nota:e.target.value}))} placeholder='¿En qué está? (tema abierto)' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
+          {(pmoOps||[]).length>0&&<select value={nf.operacionId} onChange={e=>setNf(f=>({...f,operacionId:e.target.value}))} title='Nace con los pasos de esta operación' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text, marginBottom:8 }}><option value=''>Plan del asunto — sin plan por ahora</option>{(pmoOps||[]).map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}</select>}
           <div style={{ display:'flex', gap:8, marginBottom:10 }}>
             <select value={nf.responsable} onChange={e=>setNf(f=>({...f,responsable:e.target.value}))} disabled={!esAdmin} style={{ fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}>
               {['CL','EE','MC','MP','RD'].map(i=><option key={i} value={i}>{i}</option>)}
