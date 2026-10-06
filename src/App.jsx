@@ -31848,6 +31848,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   const ingresoOficina = async(mov, sub, proveedorId=null)=>{
     if(busy) return
     if(!sub){ appAlert('Elige el tipo de ingreso de oficina.'); return }
+    if(DEMO){ const monto=(mov.monto||0)-(mov.monto_conciliado||0); const movAplic=(mov.monto_conciliado||0)+monto; const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'; setConc(p=>[...p,{id:'demo-ing-'+mov.id,movimiento_id:mov.id,tipo_destino:'ingreso',monto_aplicado:monto,origen:'manual'}]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Ingresos Oficina'}:x)); setIngFor(null); setIngComFor(null); setIngProvQ(''); setAbFam(p=>({...p,[mov.id]:undefined})); return }
     setBusy(mov.id)
     let ing=null, cr=null
     try{
@@ -32754,13 +32755,44 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const sc=sugMov(m)
       if(gmI?.sweep) return wrap(<>{intBtn}<button onClick={()=>setModalMov(m.id)} style={bGh}>Es de un cliente ›</button></>)
       if(sc) return wrap(<><button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={bG}>Es {(sc.nombre||'').length>16?(sc.nombre.slice(0,16)+'…'):sc.nombre} ✓</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Otro ›</button>{intBtn}</>)
-      return wrap(<><button onClick={()=>setModalMov(m.id)} style={bO}>Asignar cliente</button><span onClick={stop} style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{fontSize:9,color:C.done}}>o fondo:</span><select disabled={busy===m.id} value='' onChange={e=>{ const p=e.target.value; e.target.value=''; if(p) crearFondoPersonal(m,p) }} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',background:'#fff',color:C.accent,cursor:'pointer'}}><option value=''>equipo…</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(p=><option key={p} value={p}>{p}</option>)}</select></span>{intBtn}</>)
+      return wrap(<><button onClick={()=>setModalMov(m.id)} style={bO}>Asignar cliente</button><button onClick={()=>{ setModalMov(m.id); setAbFam(p=>({...p,[m.id]:'oficina'})) }} title='Subarriendo, comisión recibida, reembolso u otro ingreso de la oficina' style={bO}>Ingreso de oficina ›</button><span onClick={stop} style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{fontSize:9,color:C.done}}>o fondo:</span><select disabled={busy===m.id} value='' onChange={e=>{ const p=e.target.value; e.target.value=''; if(p) crearFondoPersonal(m,p) }} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',background:'#fff',color:C.accent,cursor:'pointer'}}><option value=''>equipo…</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(p=><option key={p} value={p}>{p}</option>)}</select></span>{intBtn}</>)
     }
     if(tieneCand(m)){ const f=mejorCandidato(m)||candidatosMostrar(m)[0]; if(f) return wrap(<><button disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={bG}>Conciliar N°{folioN(f.invoice_no)||'—'}</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Ver ›</button></>) }
     const t=Math.abs(m.monto||0); const parc=facturasParaMov(m).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>t).sort((a,b)=>(a.f.issued_at||'').localeCompare(b.f.issued_at||''))[0]
     if(parc) return wrap(<><button disabled={busy===m.id} onClick={()=>reconciliar(m,parc.f,'manual')} style={bO}>Imputar a N°{folioN(parc.f.invoice_no)||'—'}</button><button onClick={()=>setModalMov(m.id)} style={bGh}>Otra opción ›</button></>)
     return wrap(<button onClick={()=>setModalMov(m.id)} style={bO}>Resolver ›</button>)
   }
+  // Selector "Ingreso de oficina" (Comisión Recibida / Subarrendamiento / Reembolso a la oficina / Otros) — fuente ÚNICA, reusada
+  // en el abono CON cliente (dentro del calce) y en el abono SIN cliente (Rodrigo que paga subarriendo, remitente oculto por BICE):
+  // el ingreso de oficina no necesita cliente, así que vive fuera del gate esConciliable. `resto` solo se muestra si viene.
+  const ofiIngresoPicker = (m, resto) => { const stop=e=>e.stopPropagation(); return (
+    <div onClick={stop} style={{marginBottom:6}}>
+      <div onClick={()=>setAbFam(p=>({...p,[m.id]:undefined}))} style={{display:'flex',alignItems:'center',gap:7,padding:'6px 2px 4px',cursor:'pointer'}}><span style={{color:C.accent,fontSize:15}}>←</span><span style={{fontSize:11,fontWeight:700,color:C.accent}}>Ingreso de oficina</span>{resto!=null&&<span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.soon,flexShrink:0}}>Resta {fmtM(resto)}</span>}</div>
+      <div style={{padding:'2px 2px 6px'}}>
+        {[['Comisión Recibida','asignable a un tercero'],['Subarrendamiento','ya está en el presupuesto'],['Reembolso a la oficina','algo que adelantamos y nos devuelven'],['Otros','otro ingreso']].map(([sub,hint])=>{
+          const esCom=sub==='Comisión Recibida'; const comOpen=esCom&&ingComFor===m.id
+          return <div key={sub}>
+            <div onClick={busy===m.id?undefined:()=>{ if(esCom){ setIngComFor(comOpen?null:m.id); setIngProvQ('') } else ingresoOficina(m,sub,null) }} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 2px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer'}}>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{sub}</div><div style={{fontSize:10,color:C.muted}}>{hint}</div></div>
+              <span style={{color:C.done,fontSize:13}}>{comOpen?'▾':'›'}</span>
+            </div>
+            {comOpen&&(()=>{ const ql=ingProvQ.trim().toLowerCase(); const provs=[...(proveedores||[])].sort((a,b)=>((a.razon_social||a.nombre||'')).localeCompare(b.razon_social||b.nombre||'','es')).filter(p=>!ql||(`${p.razon_social||''} ${p.nombre||''} ${p.rut||''}`).toLowerCase().includes(ql)); return (
+              <div style={{padding:'4px 2px 6px 4px'}}>
+                <div onClick={()=>setIngComFor(null)} style={{fontSize:10,fontWeight:700,color:C.accent,cursor:'pointer',marginBottom:6}}>← Volver a los tipos</div>
+                <div style={{display:'flex',alignItems:'center',gap:6,border:`1.5px solid ${C.accent}`,background:'#fff',borderRadius:8,padding:'6px 9px',marginBottom:6}}>
+                  <input value={ingProvQ} onChange={e=>setIngProvQ(e.target.value)} placeholder='Buscar proveedor o tercero…' style={{border:'none',outline:'none',fontSize:12,color:C.text,flex:1,minWidth:0,background:'none'}}/>
+                </div>
+                <div style={{maxHeight:150,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8}}>
+                  {provs.slice(0,8).map(p=><div key={p.id} onClick={busy===m.id?undefined:()=>ingresoOficina(m,'Comisión Recibida',p.id)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer',fontSize:12}}><span style={{width:6,height:6,borderRadius:'50%',background:C.azulInfo,flexShrink:0}}/><span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social||p.nombre||'—'}</span></div>)}
+                  {!provs.length&&!ql&&<div style={{padding:'8px 9px',fontSize:11,color:C.muted}}>Escribe para buscar o crear un tercero…</div>}
+                  {ql&&!provs.some(p=>((p.razon_social||p.nombre||'').toLowerCase()===ql))&&<div onClick={busy===m.id?undefined:async()=>{ try{ const {data,error}=await supabase.from('proveedores').insert({razon_social:ingProvQ.trim(),activo:true}).select().single(); if(error) throw error; await ingresoOficina(m,'Comisión Recibida',data?.id||null) }catch(e){ appAlert('No se pudo crear el tercero: '+(e.message||e)) } }} style={{padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:600,color:C.accent,cursor:busy===m.id?'default':'pointer',background:'#FBFCFD'}}>+ Crear "{ingProvQ.trim()}" como tercero</div>}
+                  <div onClick={busy===m.id?undefined:()=>ingresoOficina(m,'Comisión Recibida',null)} style={{padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:600,color:C.muted,cursor:busy===m.id?'default':'pointer'}}>Sin asignar · registrar comisión</div>
+                </div>
+              </div>) })()}
+          </div>
+        })}
+      </div>
+    </div>) }
   // Cola de "Resolver de a uno": abonos sin cliente ni conciliar dentro del foco (respeta filtros/búsqueda de `lista`); los saltados van al final.
   const unoBase = focoKey==='sinid' ? lista.filter(m=>!m.es_interno && !m.cliente_id && !(concByMov[m.id]?.length) && !RESUELTAS_ABO.includes(m.categoria)) : []
   const unoPend = [...unoBase.filter(m=>!unoSkip.has(m.id)), ...unoBase.filter(m=>unoSkip.has(m.id))]
@@ -33347,11 +33379,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     ? <div style={{fontSize:11,color:C.accent,marginBottom:4}}>↔ origen: <b>{nom}</b> · abono en {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
                     : <div style={{fontSize:11,color:C.overdue,marginBottom:4}}>↔ posible origen: <b>{nom}</b> · abono en {cta} — <b>Diferencia {fmtM(Math.abs(o.diff))}</b>, revisar</div>
                 })()}
-                {!m.es_interno&&m.tipo==='abono'&&<div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Cliente</div>}
+                {!m.es_interno&&m.tipo==='abono'&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>{(!m.cliente_id&&abFam[m.id]==='oficina')?'Ingreso de oficina':'Cliente'}</span>{!m.cliente_id&&abFam[m.id]!=='oficina'&&<button onClick={e=>{e.stopPropagation();setAbFam(p=>({...p,[m.id]:'oficina'}))}} title='No es de un cliente: subarriendo, comisión recibida, reembolso u otro ingreso de la oficina' style={{marginLeft:'auto',fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 10px',cursor:'pointer'}}>Ingreso de oficina ›</button>}</div>}
                 {!m.es_interno&&m.tipo==='cargo'&&renderCargoClasificar(m)}
                 {!m.es_interno&&m.tipo==='cargo'&&renderPagoProveedor(m)}
                 {!m.es_interno&&m.tipo==='abono'&&(
-                  editMov===m.id
+                  (!m.cliente_id&&abFam[m.id]==='oficina')
+                    ? <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>{ofiIngresoPicker(m,(m.monto||0)-(m.monto_conciliado||0))}</div>
+                  : editMov===m.id
                     ? <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
                           <input value={editForm.rut} onChange={e=>setEditForm(f=>({...f,rut:e.target.value}))} placeholder='RUT (ej. 76.123.456-7)' style={{flex:'1 1 130px',minWidth:0,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,outline:'none'}}/>
@@ -33649,33 +33683,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                 </div>
                               </div>)}
                             </>}
-                            {fam==='oficina'&&<>
-                            {backHd('Ingreso de oficina')}
-                            <div onClick={e=>e.stopPropagation()} style={{padding:'2px 2px 6px'}}>
-                                {[['Comisión Recibida','asignable a un tercero'],['Subarrendamiento','ya está en el presupuesto'],['Reembolso a la oficina','algo que adelantamos y nos devuelven'],['Otros','otro ingreso']].map(([sub,hint])=>{
-                                  const esCom=sub==='Comisión Recibida'; const comOpen=esCom&&ingComFor===m.id
-                                  return <div key={sub}>
-                                    <div onClick={busy===m.id?undefined:()=>{ if(esCom){ setIngComFor(comOpen?null:m.id); setIngProvQ('') } else ingresoOficina(m,sub,null) }} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 2px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer'}}>
-                                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{sub}</div><div style={{fontSize:10,color:C.muted}}>{hint}</div></div>
-                                      <span style={{color:C.done,fontSize:13}}>{comOpen?'▾':'›'}</span>
-                                    </div>
-                                    {comOpen&&(()=>{ const ql=ingProvQ.trim().toLowerCase(); const provs=[...(proveedores||[])].sort((a,b)=>((a.razon_social||a.nombre||'')).localeCompare(b.razon_social||b.nombre||'','es')).filter(p=>!ql||(`${p.razon_social||''} ${p.nombre||''} ${p.rut||''}`).toLowerCase().includes(ql)); return (
-                                      <div style={{padding:'4px 2px 6px 4px'}}>
-                                        <div onClick={()=>setIngComFor(null)} style={{fontSize:10,fontWeight:700,color:C.accent,cursor:'pointer',marginBottom:6}}>← Volver a los tipos</div>
-                                        <div style={{display:'flex',alignItems:'center',gap:6,border:`1.5px solid ${C.accent}`,background:'#fff',borderRadius:8,padding:'6px 9px',marginBottom:6}}>
-                                          <input value={ingProvQ} onChange={e=>setIngProvQ(e.target.value)} placeholder='Buscar proveedor o tercero…' style={{border:'none',outline:'none',fontSize:12,color:C.text,flex:1,minWidth:0,background:'none'}}/>
-                                        </div>
-                                        <div style={{maxHeight:150,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8}}>
-                                          {provs.slice(0,8).map(p=><div key={p.id} onClick={busy===m.id?undefined:()=>ingresoOficina(m,'Comisión Recibida',p.id)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer',fontSize:12}}><span style={{width:6,height:6,borderRadius:'50%',background:C.azulInfo,flexShrink:0}}/><span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social||p.nombre||'—'}</span></div>)}
-                                          {!provs.length&&!ql&&<div style={{padding:'8px 9px',fontSize:11,color:C.muted}}>Escribe para buscar o crear un tercero…</div>}
-                                          {ql&&!provs.some(p=>((p.razon_social||p.nombre||'').toLowerCase()===ql))&&<div onClick={busy===m.id?undefined:async()=>{ try{ const {data,error}=await supabase.from('proveedores').insert({razon_social:ingProvQ.trim(),activo:true}).select().single(); if(error) throw error; await ingresoOficina(m,'Comisión Recibida',data?.id||null) }catch(e){ appAlert('No se pudo crear el tercero: '+(e.message||e)) } }} style={{padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:600,color:C.accent,cursor:busy===m.id?'default':'pointer',background:'#FBFCFD'}}>+ Crear "{ingProvQ.trim()}" como tercero</div>}
-                                          <div onClick={busy===m.id?undefined:()=>ingresoOficina(m,'Comisión Recibida',null)} style={{padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:600,color:C.muted,cursor:busy===m.id?'default':'pointer'}}>Sin asignar · registrar comisión</div>
-                                        </div>
-                                      </div>) })()}
-                                  </div>
-                                })}
-                            </div>
-                            </>}
+                            {fam==='oficina'&&ofiIngresoPicker(m,resto)}
                           </div>
                         })()}
                         {splitMov===m.id&&(()=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const adel=Math.max(0,Math.min(parseInt(splitAdel)||0,resto)); const fond=resto-adel; return (
