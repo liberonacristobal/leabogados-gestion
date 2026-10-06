@@ -29528,7 +29528,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <span style={{ width:8, height:8, borderRadius:'50%', background:dc, flexShrink:0, marginTop:6 }}/>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:15, fontWeight:700, color:C.accent, letterSpacing:'-.01em', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nombre_proyecto}</div>
-          <div onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:12, color:C.muted, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', cursor:'pointer' }}>{cnm(p.cliente_id)||'—'}</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{cnm(p.cliente_id)||'—'}</div>
           <div style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, fontWeight:600, color:C.muted, border:`1px solid ${C.border}`, borderRadius:7, padding:'3px 9px', marginTop:9, maxWidth:'100%', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{etapaNm}</div>
           <div style={{ display:'flex', alignItems:'center', gap:7, marginTop:8, fontSize:12.5, fontWeight:600, color:tc }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}>{stepIcon(cap)}</svg><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cap} · {due}</span></div>
         </div>
