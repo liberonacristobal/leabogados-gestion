@@ -28838,7 +28838,7 @@ function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], curre
     </div>
   )
 }
-function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onMoverEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onUpdHito, onReorderHitos, onSeedPlan, pmoOps=[], onAddMiembro, onDelMiembro, pmoSug=[], onAplicarTramite, onDescartarTramite, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onMoverEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onUpdHito, onReorderHitos, onSeedPlan, pmoOps=[], onSaveOperacion, onDelOperacion, onAddMiembro, onDelMiembro, pmoSug=[], onAplicarTramite, onDescartarTramite, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
@@ -28918,6 +28918,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
+  const [bibOpen,setBibOpen] = useState(false)     // editor de la biblioteca de pasos (pmo_operaciones)
+  const [bibSel,setBibSel] = useState(null)        // operación seleccionada en el editor
   const NF0 = { cliente_id:'', sale_id:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
   const [nf,setNf] = useState(NF0)
   const [clientQ,setClientQ] = useState('')
@@ -29615,6 +29617,68 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     )
   }
 
+  // EDITOR de la biblioteca de pasos (pmo_operaciones) — página; se guarda en la tabla configurable (vendible: cada estudio arma la suya).
+  const renderBiblioteca = () => {
+    const ops = (pmoOps||[]).slice().sort((a,b)=>((a.orden||0)-(b.orden||0)))
+    const op = ops.find(o=>String(o.id)===String(bibSel)) || ops[0] || null
+    const inp = { fontSize:12, padding:'4px 7px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }
+    const card = { background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, padding:'12px 14px', marginBottom:12 }
+    const pasos = op?.pasos || []
+    const setPasos = (np) => onSaveOperacion && onSaveOperacion({ ...op, pasos:np })
+    const upd = (i,patch) => setPasos(pasos.map((s,k)=>k===i?{...s,...patch}:s))
+    const mover = (from,to) => { if(to<0||to>=pasos.length) return; const a=pasos.slice(); const [m]=a.splice(from,1); a.splice(to,0,m); setPasos(a) }
+    const crearOp = async () => { if(!onSaveOperacion) return; const nueva=await onSaveOperacion({ id:'new_'+Date.now(), nombre:'Nueva operación', hint:'', pasos:[], orden:(ops.length+1) }); if(nueva?.id) setBibSel(nueva.id) }
+    return (
+      <div style={{ maxWidth:isDesktop?780:720, margin:'0 auto', padding:'0 14px 48px' }}>
+        <div style={{ padding:'14px 0 10px' }}>
+          <button onClick={()=>setBibOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
+          <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Biblioteca de pasos</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>El paso a paso de cada operación. Se usa al armar el plan de un proyecto.</div>
+        </div>
+        <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
+          <select value={op?op.id:''} onChange={e=>setBibSel(e.target.value)} style={{ ...inp, flex:1, minWidth:0, fontSize:13, padding:'9px 11px' }}>{ops.map(o=><option key={o.id} value={o.id}>{o.nombre} · {(o.pasos||[]).length} pasos</option>)}</select>
+          <button onClick={crearOp} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', cursor:'pointer' }}>+ Operación</button>
+        </div>
+        {!op ? <div style={{ ...card, fontSize:12, color:C.muted, textAlign:'center' }}>No hay operaciones aún. Crea la primera.</div> : <>
+          <div style={card}>
+            <input defaultValue={op.nombre} key={'n'+op.id} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==op.nombre) onSaveOperacion&&onSaveOperacion({...op,nombre:v}) }} style={{ width:'100%', boxSizing:'border-box', fontSize:16, fontWeight:700, color:C.accent, border:'none', background:'none', padding:'2px 2px' }}/>
+            <input defaultValue={op.hint||''} key={'h'+op.id} onBlur={e=>{ if(e.target.value!==(op.hint||'')) onSaveOperacion&&onSaveOperacion({...op,hint:e.target.value}) }} placeholder='Descripción corta (opcional)' style={{ width:'100%', boxSizing:'border-box', fontSize:12, color:C.muted, border:'none', background:'none', padding:'3px 2px', marginTop:2 }}/>
+          </div>
+          <div style={card}>
+            <div style={{ display:'flex', alignItems:'center', marginBottom:8 }}>{secHdBib('Pasos')}<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:C.muted }}>{pasos.length}</span></div>
+            {pasos.map((s,i)=>(
+              <div key={i} style={{ borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', padding:'9px 0' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+                  <span style={{ width:20, height:20, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, background:s.m?C.accent:C.bgSoft, color:s.m?'#fff':C.muted, border:s.m?'none':`1px solid ${C.border}` }}>{i+1}</span>
+                  <input defaultValue={s.t} key={op.id+'_'+i+'_'+s.t} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==s.t) upd(i,{t:v}) }} style={{ flex:1, minWidth:0, fontSize:13, fontWeight:600, color:C.text, border:'none', background:'none', padding:'1px 2px' }}/>
+                  <span onClick={()=>upd(i,{m:!s.m})} title='Marca si un trámite (CBR/D.Oficial/Notaría) confirma este paso' style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:s.m?'#fff':C.muted, background:s.m?C.accent:C.bgSoft, border:`1px solid ${s.m?C.accent:C.border}`, borderRadius:20, padding:'2px 7px', cursor:'pointer', flexShrink:0 }}>hito</span>
+                  <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}><span onClick={()=>mover(i,i-1)} style={{ cursor:i>0?'pointer':'default', color:i>0?C.done:C.border, fontSize:10, lineHeight:1 }}>▲</span><span onClick={()=>mover(i,i+1)} style={{ cursor:i<pasos.length-1?'pointer':'default', color:i<pasos.length-1?C.done:C.border, fontSize:10, lineHeight:1 }}>▼</span></div>
+                  <span onClick={()=>setPasos(pasos.filter((_,k)=>k!==i))} title='Quitar paso' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
+                </div>
+                <div style={{ paddingLeft:29, marginTop:5, display:'flex', flexDirection:'column', gap:4 }}>
+                  {(s.subs||[]).map((sub,j)=>(
+                    <div key={j} style={{ display:'flex', alignItems:'center', gap:7 }}>
+                      <span style={{ width:4, height:4, borderRadius:'50%', background:C.faint||C.done, flexShrink:0 }}/>
+                      <input defaultValue={sub} key={op.id+'_'+i+'_s'+j+'_'+sub} onBlur={e=>{ const v=e.target.value; if(v!==sub) upd(i,{subs:(s.subs||[]).map((x,k)=>k===j?v:x)}) }} style={{ flex:1, minWidth:0, fontSize:11.5, color:C.text, border:'none', borderBottom:`1px solid transparent`, background:'none', padding:'1px 1px' }}/>
+                      <span onClick={()=>upd(i,{subs:(s.subs||[]).filter((_,k)=>k!==j)})} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:13, flexShrink:0, lineHeight:1 }}>×</span>
+                    </div>
+                  ))}
+                  <input placeholder='+ sub-etapa…' onKeyDown={e=>{ if(e.key==='Enter'&&e.target.value.trim()){ upd(i,{subs:[...(s.subs||[]),e.target.value.trim()]}); e.target.value='' } }} style={{ fontSize:11, padding:'3px 6px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff', marginTop:2 }}/>
+                </div>
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:12, borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
+              <button onClick={()=>setPasos([...pasos,{t:'Nuevo paso',m:false,subs:[]}])} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>+ Paso</button>
+              <button onClick={()=>{ if(onDelOperacion){ onDelOperacion(op.id); setBibSel(null) } }} style={{ fontSize:12, fontWeight:600, color:C.coralText, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>Eliminar operación</button>
+            </div>
+          </div>
+        </>}
+      </div>
+    )
+  }
+  const secHdBib = t => <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>{t}</span>
+
+  if(bibOpen) return renderBiblioteca()
   const wsP = openId ? ((proyectos||[]).find(x=>String(x.id)===String(openId)) || (archivados||[]).find(x=>String(x.id)===String(openId))) : null
   if(wsP) return renderWorkspace(wsP)
 
@@ -29623,6 +29687,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
         <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
         <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:17, fontWeight:600, color:C.accent }}>Mis proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</div><div style={{ fontSize:10, color:C.muted, fontWeight:500, marginTop:1 }}>seguimiento de proyectos activos</div></div>
+        {esAdmin&&<button onClick={()=>{ setBibSel((pmoOps||[])[0]?.id||null); setBibOpen(true) }} title='Editar la biblioteca de pasos por operación' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Biblioteca</button>}
         {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
         <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
       </div>
@@ -34003,6 +34068,17 @@ export default function App() {
     }catch(e){ appAlert('No se pudo aplicar: '+(e.message||e)) }
   }
   const handleDescartarTramite = async (p, sug) => { try{ await _resolverSug(p,sug,'descartada') }catch(e){} }
+  // Biblioteca de pasos configurable (pmo_operaciones): guardar/crear y eliminar operaciones. Vendible: cada estudio arma la suya.
+  const handleSaveOperacion = async (op) => {
+    const esNueva = !op.id || String(op.id).startsWith('new_')
+    if(DEMO){ setPmoOps(list=> esNueva ? [...list,{...op,id:op.id||('op'+Date.now())}] : list.map(o=>String(o.id)===String(op.id)?{...o,...op}:o)); return op }
+    if(esNueva){ const { data } = await supabase.from('pmo_operaciones').insert({nombre:op.nombre||'Nueva operación',hint:op.hint||null,pasos:op.pasos||[],orden:op.orden||((pmoOps||[]).length+1)}).select().single(); if(data){ setPmoOps(list=>[...list,data]); return data } return null }
+    const patch={nombre:op.nombre,hint:op.hint||null,pasos:op.pasos||[],orden:op.orden,updated_at:new Date().toISOString()}
+    setPmoOps(list=>list.map(o=>String(o.id)===String(op.id)?{...o,...patch}:o))
+    supabase.from('pmo_operaciones').update(patch).eq('id',op.id).then(()=>{},()=>{})
+    return op
+  }
+  const handleDelOperacion = async (id) => { setPmoOps(list=>list.filter(o=>String(o.id)!==String(id))); if(!DEMO) supabase.from('pmo_operaciones').update({activo:false}).eq('id',id).then(()=>{},()=>{}) }
   const handleDelHito = (id) => { setProyHitos(p=>p.filter(x=>x.id!==id)); if(!DEMO) supabase.from('proyecto_hitos').delete().eq('id',id).then(()=>{},()=>{}) }
   // Agregar integrante al equipo → también lo suma a SUS proyectos (seguidor). Así "me involucran".
   const handleAddMiembro = (proyectoId, miembro, rol) => { if(!miembro) return
@@ -35872,7 +35948,7 @@ export default function App() {
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
-            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarTramite={handleAplicarTramite} onDescartarTramite={handleDescartarTramite} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onSaveOperacion={handleSaveOperacion} onDelOperacion={handleDelOperacion} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarTramite={handleAplicarTramite} onDescartarTramite={handleDescartarTramite} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
