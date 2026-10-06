@@ -29414,6 +29414,22 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     if(/junta|reuni|audiencia|comparendo/.test(c)) return <><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 6a3 3 0 0 1 0 6"/></>
     return <><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></>
   }
+  // OLA 2 — FASE del proyecto (para la "vista por etapa del estudio"): se deduce del PRÓXIMO paso pendiente,
+  // mapeado al flujo típico (diagnóstico → diseño → negociación → escrituras → inscripciones → SII → cierre).
+  // Sin plan / al día tienen su propia caja. Es el mapa del flujo de trabajo del estudio en una pantalla.
+  const FASE_DEFS = [
+    {k:'diagnostico',   l:'Diagnóstico',                 o:1, re:/diagn[oó]stico|due diligence|estudio|levantamiento|antecedentes|t[ií]tulos/},
+    {k:'diseno',        l:'Diseño y redacción',          o:2, re:/dise[ñn]o|estatuto|borrador|minuta|informe|estructura|contrato|poder|mandato/},
+    {k:'negociacion',   l:'Revisión y negociación',      o:3, re:/revisi[oó]n|negociaci[oó]n/},
+    {k:'escrituras',    l:'Escrituras y firma',          o:4, re:/escritura|firma|notar[ií]a|comparec/},
+    {k:'inscripciones', l:'Publicaciones e inscripciones',o:5, re:/publicaci[oó]n|diario oficial|inscripci[oó]n|cbr|conservador|registro|posesi[oó]n/},
+    {k:'sii',           l:'SII e impuestos',             o:6, re:/\bsii\b|\brut\b|inicio de actividades|impuesto|efectos/},
+    {k:'cierre',        l:'Cierre y entrega',            o:7, re:/cierre|entrega|carpeta|cumplimiento/},
+  ]
+  const faseDe = p => { const pasos=hitosDe(p); if(!pasos.length) return {k:'sinplan',l:'Sin plan',o:98}
+    const next=pasos.filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
+    if(!next) return {k:'aldia',l:'Plan al día',o:97}
+    const t=(next.titulo||'').toLowerCase(); return FASE_DEFS.find(x=>x.re.test(t)) || {k:'otro',l:'En curso',o:90} }
   // Fila A+ del landing: nombre · cliente debajo · avance en pasos (chip) · próximo paso pendiente con icono+color · avatar responsable.
   const filaProyecto = p => {
     const pasosF = hitosDe(p)
@@ -30095,6 +30111,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <option value='plazo'>Plazo</option>
           <option value='prioridad'>Prioridad</option>
           <option value='cliente'>Cliente</option>
+          <option value='etapa'>Por etapa</option>
         </select>}
         <div style={{ position:'relative' }}>
           <button onClick={()=>setPerOpen(o=>!o)} style={{ display:'inline-flex', alignItems:'center', gap:7, fontSize:12.5, fontWeight:600, color:C.text, background:'#fff', border:`1px solid ${C.border}`, borderRadius:9, padding:'5px 9px 5px 6px', cursor:'pointer' }}>
@@ -30113,10 +30130,16 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       {(()=>{
         // LANDING A+ (PMO): Prioritarios (riesgoDe) arriba, luego En curso/En pausa/Terminados. Fila A+; al abrir, detalle inline (reemplazo por página workspace en el próximo paso).
         if(!rows.length) return <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>{proyectos.length?'Nada con este filtro.':'Aún no hay proyectos. Toca “+ Nuevo” o se irán creando desde tus ventas activas.'}</div>
-        const prio = fase==='curso' ? rows.filter(p=>riesgoDe(p)) : []
-        const resto = fase==='curso' ? rows.filter(p=>!riesgoDe(p)) : rows
         const sech = (t,n,late)=> <div key={'h'+t} style={{ display:'flex', alignItems:'center', gap:6, margin:'16px 2px 7px', fontSize:9, fontWeight:700, letterSpacing:.5, textTransform:'uppercase', color:late?C.overdueText:C.done }}>{t}<span style={{ color:C.muted }}>· {n}</span></div>
         const lista = p => filaProyecto(p)   // abrir un proyecto navega a su página workspace (early-return arriba), ya no expande inline
+        // Vista por ETAPA del estudio: agrupa por la fase en que está cada proyecto (el flujo de trabajo de un vistazo).
+        if(sortBy==='etapa'){
+          const byF={}; rows.forEach(p=>{ const f=faseDe(p); (byF[f.k]=byF[f.k]||{f,ps:[]}).ps.push(p) })
+          const gs=Object.values(byF).sort((a,b)=>a.f.o-b.f.o)
+          return <div>{gs.map(g=>[sech(g.f.l,g.ps.length,false), ...g.ps.map(lista)])}</div>
+        }
+        const prio = fase==='curso' ? rows.filter(p=>riesgoDe(p)) : []
+        const resto = fase==='curso' ? rows.filter(p=>!riesgoDe(p)) : rows
         return <div>
           {prio.length>0 && [sech('Prioritarios',prio.length,true), ...prio.map(lista)]}
           {resto.length>0 && [sech(fase==='pausa'?'En pausa':fase==='terminados'?'Terminados':'En curso',resto.length,false), ...resto.map(lista)]}
