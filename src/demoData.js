@@ -54,6 +54,7 @@ export const demoData = {
     { id:'hp1_4', proyecto_id:'p1', titulo:'Publicaciones e inscripciones',          hecho:false, fecha:null, plazo:new Date(Date.now()+18*864e5).toISOString().slice(0,10), orden:3, responsable:'CL' },
     { id:'hp1_5', proyecto_id:'p1', titulo:'Efectos en el SII',                      hecho:false, fecha:null, plazo:new Date(Date.now()+28*864e5).toISOString().slice(0,10), orden:4, responsable:'CL' },
     // p2 Regularización servidumbre (próximo paso en 4 días)
+    { id:'hp2_0', proyecto_id:'p2', titulo:'Solicitar provisión de fondos', hecho:false, fecha:null, plazo:new Date(Date.now()-1*864e5).toISOString().slice(0,10), orden:-1, responsable:'RD' },
     { id:'hp2_1', proyecto_id:'p2', titulo:'Estudio de títulos',       hecho:true,  fecha:new Date(Date.now()-15*864e5).toISOString().slice(0,10), plazo:new Date(Date.now()-14*864e5).toISOString().slice(0,10), orden:0, responsable:'RD' },
     { id:'hp2_2', proyecto_id:'p2', titulo:'Minuta para el CBR',       hecho:false, fecha:null, plazo:new Date(Date.now()+4*864e5).toISOString().slice(0,10),  orden:1, responsable:'RD' },
     { id:'hp2_3', proyecto_id:'p2', titulo:'Inscripción en el CBR',    hecho:false, fecha:null, plazo:new Date(Date.now()+40*864e5).toISOString().slice(0,10), orden:2, responsable:'RD' },
@@ -234,6 +235,7 @@ export const demoData = {
     { id:'ant1', client_id:'c4', monto:1500000, fecha:'2026-06-10', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'ant2', client_id:'c4', monto:1500000, fecha:'2026-07-15', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'ant3', client_id:'c4', monto:1200000, fecha:'2026-08-01', nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+    { id:'ant4', client_id:'c3', monto:800000, fecha:new Date(Date.now()-5*864e5).toISOString().slice(0,10), nota:'Provisión de fondos del cliente', estado:'disponible', created_by:'Erasmo' },
   ],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.
   cartola_movimientos: [
@@ -337,6 +339,7 @@ export const demoData = {
   ],
   pmo_operaciones: [
     { id:'op1', nombre:'Constitución de sociedad por aporte', hint:'Constitución con aporte de bienes (inmuebles / acciones).', orden:1, activo:true, pasos:[
+      {t:'Solicitar provisión de fondos', m:false, dias:3, subs:[]},
       {t:'Due diligence del aportante y de los bienes', m:false, dias:10, subs:['Recopilar títulos de dominio','Certificados: dominio vigente, gravámenes','Verificar vigencia y poderes del aportante']},
       {t:'Diseño de estructura y estatutos', m:false, dias:7, subs:['Elegir tipo social (SpA / Ltda)','Redactar borrador de estatutos']},
       {t:'Escritura pública de constitución', m:true, dias:7, subs:['Agendar notaría','Firma de los comparecientes']},
@@ -347,6 +350,7 @@ export const demoData = {
       {t:'Cierre y entrega', m:false, dias:5, subs:['Armar carpeta societaria']},
     ]},
     { id:'op2', nombre:'Reorganización / reestructuración patrimonial', hint:'Holding, división, fusión, aportes + opinión tributaria.', orden:2, activo:true, pasos:[
+      {t:'Solicitar provisión de fondos', m:false, dias:3, subs:[]},
       {t:'Diagnóstico tributario y patrimonial', m:false, dias:14, subs:['Levantar estructura actual','Identificar contingencias']},
       {t:'Diseño + informe tributario', m:false, dias:14, subs:['Definir figura','Razón de negocio (art. 64 LIR)']},
       {t:'Escrituras de los actos', m:true, dias:10, subs:[]},

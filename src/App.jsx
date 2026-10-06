@@ -29207,6 +29207,26 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     })
     return out
   }
+  // OLA 4 — COBROS Y FONDOS que confirman un paso: un anticipo recibido confirma "Provisión de fondos"; una factura pagada confirma "Pago de honorarios".
+  // Reusa los anticipos y la cobranza que ya existen (sin cálculo de saldo — solo confirma el paso). Hacia adelante. Compuerta.
+  const fondoSugDe = p => {
+    if(tipoDe(p)!=='proyecto' || !p.cliente_id) return []
+    const pendFondo = hitosDe(p).filter(h=>!h.hecho && /provisi[oó]n|fondos|anticipo/.test(_normC(h.titulo)))
+    const pendPago = hitosDe(p).filter(h=>!h.hecho && /pago|honorario|cobro/.test(_normC(h.titulo)))
+    if(!pendFondo.length && !pendPago.length) return []
+    const desc=new Set((pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='fondo'&&s.estado==='descartada').map(s=>String(s.origen_id)))
+    const usados=new Set(); const out=[]
+    ;(anticipos||[]).forEach(a=>{ if(!pendFondo.length||String(a.client_id||'')!==String(p.cliente_id)||a.deleted_at) return
+      const fe=String(a.fecha||'').slice(0,10); if(fe&&fe<_TRAMITE_DESDE) return; const oid='ant:'+a.id; if(desc.has(oid)) return
+      const h=pendFondo.find(x=>!usados.has(x.id)); if(!h) return; usados.add(h.id)
+      out.push({ source:'fondo', origenId:oid, label:`Anticipo recibido${a.nota?` · ${a.nota}`:''}`, conceptKey:_normC(h.titulo), hitoId:h.id, hitoTitulo:h.titulo, fecha:fe||null }) })
+    ;(billing||[]).forEach(b=>{ if(!pendPago.length||b.deleted_at||!b.paid_at||b.status!=='Pagado') return
+      if(String(b.client_id||'')!==String(p.cliente_id)&&!(p.sale_id&&String(b.sale_id)===String(p.sale_id))) return
+      const fe=String(b.paid_at).slice(0,10); if(fe&&fe<_TRAMITE_DESDE) return; const oid='fac:'+b.id; if(desc.has(oid)) return
+      const h=pendPago.find(x=>!usados.has(x.id)); if(!h) return; usados.add(h.id)
+      out.push({ source:'fondo', origenId:oid, label:`Pago recibido${b.invoice_no?` · factura N° ${b.invoice_no}`:''}`, conceptKey:_normC(h.titulo), hitoId:h.id, hitoTitulo:h.titulo, fecha:fe||null }) })
+    return out
+  }
   // Escaneo perezoso de la carpeta de Drive del cliente (admin). Cachea por proyecto. Carpeta = clients.drive_folder_id; escanea el folder + subcarpetas (1 nivel).
   const cargarDocsProy = async (p) => {
     if(!esAdmin || !p.cliente_id || docsProy[String(p.id)]) return
@@ -29640,7 +29660,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           })()}
           {/* AGENTE PMO · se refleja solo — gastos de trámite del cliente → hito, con compuerta (bloque 2) */}
           {(()=>{
-            const base=[...tramiteSugDe(p), ...docSugDe(p), ...correoSugDe(p), ...(iaSug[p.id]||[])]
+            const base=[...tramiteSugDe(p), ...docSugDe(p), ...correoSugDe(p), ...fondoSugDe(p), ...(iaSug[p.id]||[])]
             const seen=new Set(); const sug=base.filter(s=>{ if(seen.has(s.hitoId)) return false; seen.add(s.hitoId); return true })
             const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
             const yaNombre=new Set(docSugDe(p).map(s=>String(s.origenId)))
@@ -29653,8 +29673,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:sug.length?8:0 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO · evidencia del plan</span>{sug.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span>}</div>
               {sug.map((s,i)=>(
                 <div key={s.source+'_'+s.origenId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
-                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':s.source==='correo'?'Un correo':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':s.source==='correo'?'Correo':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span></div>
+                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':s.source==='correo'?'Un correo':s.source==='fondo'?'Un cobro':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':s.source==='correo'?'Correo':s.source==='fondo'?'Cobro':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span></div>
                   <div style={{ display:'flex', gap:12, marginTop:6, alignItems:'center' }}>
                     <button onClick={()=>onAplicarEvidencia&&onAplicarEvidencia(p,s)} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Marcar hecho</button>
                     <span onClick={()=>onDescartarEvidencia&&onDescartarEvidencia(p,s)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>No corresponde</span>
