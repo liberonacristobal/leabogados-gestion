@@ -28957,6 +28957,14 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [subAbierto,setSubAbierto] = useState({})                           // pasos con sus sub-etapas expandidas
   const [faseAgr,setFaseAgr] = useState(false)                              // Plan: agrupar pasos por fase (proyectos largos)
   const [faseCol,setFaseCol] = useState({})                                 // fases colapsadas (por key); default = fase completa colapsada
+  // OLA 3 — AUTO-CONFIRMAR: cuántas veces se confirmó a mano cada mapeo concepto→paso (learnings). Si ≥2, el Agente lo marca solo (reversible).
+  const [pmoAutoCount,setPmoAutoCount] = useState({})                       // conceptKey → nº de confirmaciones manuales previas
+  const [autoHechos,setAutoHechos] = useState([])                           // pasos marcados SOLOS esta sesión (para el aviso "Confirmado solo · Deshacer")
+  const [autoNo,setAutoNo] = useState(()=>new Set())                        // evidencias que el usuario deshizo → no volver a auto-confirmar en la sesión
+  const autoDone = useRef(new Set())                                        // evidencias ya auto-aplicadas (evita doble aplicación)
+  const AUTO_MIN = 2                                                        // umbral de "patrón aprendido" para abrir la compuerta solo
+  useEffect(()=>{ if(DEMO){ setPmoAutoCount(demoData.pmo_learn_count||{}); return }
+    supabase.from('learnings').select('key').in('kind',['pmo_tramite_hito','pmo_doc_hito']).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ const k=String(r.key); m[k]=(m[k]||0)+1 }); setPmoAutoCount(m) },()=>{}) },[])
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
@@ -29283,6 +29291,15 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
   useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||''); cargarUltContacto(p) } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
+  // OLA 3 — AUTO-CONFIRMAR al abrir (acción deliberada del usuario, NO en cada render): un gasto de trámite cuyo mapeo ya se
+  // aprendió ≥AUTO_MIN veces marca su paso SOLO (reversible). Solo gasto (evidencia inequívoca); docs/correos siguen con compuerta.
+  useEffect(()=>{ if(!openId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(!p) return
+    tramiteSugDe(p).forEach(s=>{ const k=s.source+':'+s.origenId; if(autoDone.current.has(k)||autoNo.has(k)) return
+      if(s.source!=='gasto'||!s.conceptKey||(pmoAutoCount[s.conceptKey]||0)<AUTO_MIN) return
+      autoDone.current.add(k); onAplicarEvidencia&&onAplicarEvidencia(p,s,{auto:true})
+      setAutoHechos(a=>a.some(x=>x.evKey===k)?a:[...a,{pid:String(p.id),hitoId:s.hitoId,titulo:s.hitoTitulo,source:s.source,origenId:s.origenId,evKey:k}]) })
+  },[openId,pmoAutoCount])   // eslint-disable-line
+  const deshacerAuto = (x) => { onUpdHito&&onUpdHito(x.hitoId,{hecho:false,fecha:null}); setAutoNo(s=>{ const n=new Set(s); n.add(x.evKey); return n }); setAutoHechos(a=>a.filter(y=>y.evKey!==x.evKey)) }
   const patch = async (p,campos) => {
     const upd = { ...campos, ultima_actividad:HOY, updated_at:new Date().toISOString() }
     setProyectos(prev=>prev.map(x=>x.id===p.id?{...x,...upd}:x))
@@ -29598,6 +29615,18 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:11 }}>{secHd('Mapa del proyecto')}<span style={{ marginLeft:'auto', fontSize:11, fontWeight:700, color:C.muted }}>{fz.l}</span></div>
               <div style={{ display:'flex', alignItems:'center', padding:'0 3px' }}>{nodes}</div>
               <div style={{ fontSize:12.5, color:C.text, marginTop:11, fontWeight:600 }}>{nextPaso?`Próximo: ${nextPaso.titulo}`:'Todos los pasos hechos'}{nextPaso&&proxPlazo?<span style={{ color:dProx==null?C.muted:dProx<0?C.overdueText:dProx<=7?C.soonText:C.muted, fontWeight:700 }}>{` · ${dProx<0?`vencido ${-dProx}d`:dProx===0?'hoy':`en ${dProx} días`}`}</span>:''}</div>
+            </div>
+          })()}
+          {/* OLA 3 — AUTO-CONFIRMADO: pasos que el Agente marcó SOLO (patrón ya aprendido ≥2 veces). Avisado y reversible. */}
+          {(()=>{ const mios=autoHechos.filter(x=>String(x.pid)===String(p.id)); if(!mios.length) return null
+            return <div style={{ background:C.greenBg, border:`1px solid ${C.greenText}33`, borderRadius:12, padding:'11px 13px', marginBottom:12 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.greenText} strokeWidth="2.5"><path d="M4 12l5 5L20 6"/></svg><span style={{ fontSize:10, fontWeight:700, color:C.greenText, textTransform:'uppercase', letterSpacing:.3 }}>Confirmado solo por el Agente</span></div>
+              {mios.map((x,i)=>(
+                <div key={x.evKey} style={{ display:'flex', alignItems:'center', gap:10, borderTop:i?`1px solid ${C.greenText}22`:'none', padding:'7px 0 2px' }}>
+                  <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:12.5, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{x.titulo}</div><div style={{ fontSize:10.5, color:C.muted }}>evidencia inequívoca · patrón aprendido</div></div>
+                  <span onClick={()=>deshacerAuto(x)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer', flexShrink:0 }}>Deshacer</span>
+                </div>
+              ))}
             </div>
           })()}
           {/* AGENTE PMO · se refleja solo — gastos de trámite del cliente → hito, con compuerta (bloque 2) */}
@@ -34411,24 +34440,25 @@ export default function App() {
   // BLOQUE 2 — "se refleja solo": aplicar una sugerencia de trámite (gasto→hito). Crea el hito HECHO (el gasto implica que el trámite ocurrió), enlaza el gasto al proyecto, aprende el mapeo y audita. Compuerta → aprende → se libera.
   // EVIDENCIA que confirma un paso del plan: gasto de trámite (origen='gasto') o documento de Drive (origen='documento'). sug = {source, origenId, hitoId, hitoTitulo, fecha, conceptKey?, label?}.
   // Resuelve (o crea) la fila de pmo_sugerencias: si el Agente (edge) ya dejó una 'pendiente', la actualiza en vez de duplicar.
-  const _resolverSug = async (p, sug, estado) => {
+  const _resolverSug = async (p, sug, estado, auto=false) => {
     const origen = sug.source||'gasto'; const oid = String(sug.origenId!=null?sug.origenId:sug.expenseId)
     const prev = (pmoSug||[]).find(s=>String(s.proyecto_id)===String(p.id)&&s.origen===origen&&String(s.origen_id)===oid&&s.estado==='pendiente')
     const patch = { estado, resolved_at:new Date().toISOString() }
-    if(DEMO){ if(prev) setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)); else setPmoSug(s=>[...s,{id:'s'+Date.now()+Math.random(),proyecto_id:p.id,origen,origen_id:oid,tipo:'hito',estado}]); return }
-    if(prev){ await supabase.from('pmo_sugerencias').update(patch).eq('id',prev.id); setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)) }
-    else { const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen,origen_id:oid,tipo:'hito',payload:{hito:sug.hitoTitulo,fecha:sug.fecha||null,detalle:sug.label||sug.concept||''},...patch}).select().single(); if(s) setPmoSug(x=>[...x,s]) }
+    if(DEMO){ if(prev) setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)); else setPmoSug(s=>[...s,{id:'s'+Date.now()+Math.random(),proyecto_id:p.id,origen,origen_id:oid,tipo:'hito',estado,auto}]); return }
+    if(prev){ await supabase.from('pmo_sugerencias').update({...patch,payload:{...(prev.payload||{}),auto}}).eq('id',prev.id); setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)) }
+    else { const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen,origen_id:oid,tipo:'hito',payload:{hito:sug.hitoTitulo,fecha:sug.fecha||null,detalle:sug.label||sug.concept||'',auto},...patch}).select().single(); if(s) setPmoSug(x=>[...x,s]) }
   }
   // Aplica la evidencia: marca el hito HECHO (con la fecha del gasto/documento) + (si es gasto) lo enlaza al proyecto + aprende el mapeo + resuelve.
-  const handleAplicarEvidencia = async (p, sug) => {
+  // opts.auto = lo marcó el Agente solo (patrón ya aprendido): NO vuelve a aprender (no infla el conteo) y queda auditado como auto.
+  const handleAplicarEvidencia = async (p, sug, opts={}) => {
     const patchHito = { hecho:true, ...(sug.fecha?{fecha:sug.fecha}:{}) }
-    const esGasto = (sug.source||'gasto')==='gasto'
-    if(DEMO){ setProyHitos(h=>h.map(x=>x.id===sug.hitoId?{...x,...patchHito}:x)); if(esGasto) setExpenses(xs=>xs.map(x=>x.id===sug.origenId?{...x,proyecto_id:p.id}:x)); _resolverSug(p,sug,'aceptada'); return }
+    const esGasto = (sug.source||'gasto')==='gasto'; const auto=!!opts.auto
+    if(DEMO){ setProyHitos(h=>h.map(x=>x.id===sug.hitoId?{...x,...patchHito}:x)); if(esGasto) setExpenses(xs=>xs.map(x=>x.id===sug.origenId?{...x,proyecto_id:p.id}:x)); _resolverSug(p,sug,'aceptada',auto); return }
     try{
       await supabase.from('proyecto_hitos').update(patchHito).eq('id',sug.hitoId); setProyHitos(x=>x.map(h=>h.id===sug.hitoId?{...h,...patchHito}:h))
-      if(esGasto){ await supabase.from('expenses').update({proyecto_id:p.id}).eq('id',sug.origenId); setExpenses(xs=>xs.map(x=>x.id===sug.origenId?{...x,proyecto_id:p.id}:x)); if(sug.conceptKey) learnPut('pmo_tramite_hito', sug.conceptKey, sug.hitoTitulo) }
-      else if(sug.conceptKey) learnPut('pmo_doc_hito', sug.conceptKey, sug.hitoTitulo)
-      await _resolverSug(p,sug,'aceptada')
+      if(esGasto){ await supabase.from('expenses').update({proyecto_id:p.id}).eq('id',sug.origenId); setExpenses(xs=>xs.map(x=>x.id===sug.origenId?{...x,proyecto_id:p.id}:x)); if(!auto&&sug.conceptKey) learnPut('pmo_tramite_hito', sug.conceptKey, sug.hitoTitulo) }
+      else if(!auto&&sug.conceptKey) learnPut('pmo_doc_hito', sug.conceptKey, sug.hitoTitulo)
+      await _resolverSug(p,sug,'aceptada',auto)
     }catch(e){ appAlert('No se pudo aplicar: '+(e.message||e)) }
   }
   const handleDescartarEvidencia = async (p, sug) => { try{ await _resolverSug(p,sug,'descartada') }catch(e){} }
