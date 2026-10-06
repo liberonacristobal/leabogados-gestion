@@ -346,10 +346,10 @@ export const demoData = {
       {t:'Due diligence del aportante y de los bienes', m:false, dias:10, subs:['Recopilar títulos de dominio','Certificados: dominio vigente, gravámenes','Verificar vigencia y poderes del aportante']},
       {t:'Diseño de estructura y estatutos', m:false, dias:7, subs:['Elegir tipo social (SpA / Ltda)','Redactar borrador de estatutos']},
       {t:'Escritura pública de constitución', m:true, dias:7, subs:['Agendar notaría','Firma de los comparecientes']},
-      {t:'Publicación en el Diario Oficial (≤60 días)', m:true, dias:12, subs:[]},
-      {t:'Inscripción del extracto en el CBR (≤60 días)', m:true, dias:20, subs:[]},
+      {t:'Publicación en el Diario Oficial · plazo 60 días', m:true, dias:12, subs:[]},
+      {t:'Inscripción del extracto en el CBR · plazo 60 días', m:true, dias:20, subs:[]},
       {t:'RUT e inicio de actividades en el SII', m:true, dias:7, subs:[]},
-      {t:'Inscripción de los inmuebles aportados (CBR)', m:true, dias:25, subs:[]},
+      {t:'Inscripción de los inmuebles aportados en el CBR', m:true, dias:25, subs:[]},
       {t:'Cierre y entrega', m:false, dias:5, subs:['Armar carpeta societaria']},
     ]},
     { id:'op2', nombre:'Reorganización / reestructuración patrimonial', hint:'Holding, división, fusión, aportes + opinión tributaria.', orden:2, activo:true, pasos:[
