@@ -28913,7 +28913,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [wsTab,setWsTab] = useState('resumen')                              // subpágina del workspace: resumen|plan|calendario|tareas|equipo|bitacora
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
-  const NF0 = { cliente_id:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
+  const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
+  const NF0 = { cliente_id:'', sale_id:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
   const [nf,setNf] = useState(NF0)
   const [clientQ,setClientQ] = useState('')
   const [alcanceFor,setAlcanceFor] = useState(null)   // Fase 2A: proyecto sobre el que leer la propuesta
@@ -29139,7 +29140,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   },[])   // eslint-disable-line
   const crear = async () => {
     if(!nf.cliente_id||!nf.nombre.trim()){ appAlert('Elige un cliente y escribe el nombre del proyecto.'); return }
-    const row = { cliente_id:nf.cliente_id, nombre_proyecto:nf.nombre.trim(), responsable:nf.responsable||null, nota:nf.nota.trim()||null, plazo:nf.plazo||null, estado:'verde', etapa_idx:0, origen:'manual', activo:true, ultima_actividad:HOY }
+    const row = { cliente_id:nf.cliente_id, sale_id:nf.sale_id||null, nombre_proyecto:nf.nombre.trim(), responsable:nf.responsable||null, nota:nf.nota.trim()||null, plazo:nf.plazo||null, estado:'verde', etapa_idx:0, origen:nf.sale_id?'venta':'manual', activo:true, ultima_actividad:HOY }
     const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single()
     if(error){ appAlert('No se pudo crear: '+error.message); return }
     setProyectos(prev=>[data,...prev]); setNuevo(false); setNf(NF0); setClientQ('')
@@ -29147,13 +29148,12 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
 
   // La app SUGIERE: ventas Activas que aún no tienen proyecto en el panel (para el backfill de un toque).
   const activasSinProyecto = useMemo(()=>{ const have=new Set((proyectos||[]).map(p=>p.sale_id&&String(p.sale_id)).filter(Boolean)); return (sales||[]).filter(s=>s.status==='Activo'&&!s.deleted_at&&!have.has(String(s.id))) },[sales,proyectos])
-  const backfill = async () => {
-    if(!activasSinProyecto.length) return
-    if(!(await appConfirm(`¿Crear ${activasSinProyecto.length} proyecto${activasSinProyecto.length!==1?'s':''} desde tus ventas activas? Podrás editar etapa, plazo y nota de cada uno.`))) return
-    const nuevos = activasSinProyecto.map(s=>({ sale_id:String(s.id), cliente_id:s.client_id?String(s.client_id):null, nombre_proyecto:s.title||'Proyecto', responsable:INICIALES_RESP[s.responsible||s.abogado_responsable]||null, estado:'verde', etapa_idx:0, origen:'venta', activo:true, ultima_actividad:HOY }))
-    const { data,error } = await supabase.from('proyectos_cartera').insert(nuevos).select()
-    if(error){ appAlert('No se pudo generar: '+error.message); return }
-    setProyectos(prev=>[...(data||[]),...prev])
+  // El usuario DECIDE qué venta vuelve proyecto — se agrega UNA a la vez (nada automático en bloque).
+  const agregarUno = async (s) => {
+    const row = { sale_id:String(s.id), cliente_id:s.client_id?String(s.client_id):null, nombre_proyecto:s.title||'Proyecto', responsable:INICIALES_RESP[s.responsible||s.abogado_responsable]||null, estado:'verde', etapa_idx:0, origen:'venta', activo:true, ultima_actividad:HOY }
+    const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single()
+    if(error){ appAlert('No se pudo agregar: '+error.message); return }
+    setProyectos(prev=>[data,...prev])
   }
 
   // Fase 2B: escaneo del correo (client-side, tu buzón). Corre 1×/día al abrir (solo admin) + botón manual. Cache en localStorage.
@@ -29527,9 +29527,27 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       </div>
 
       {esAdmin&&activasSinProyecto.length>0&&(
-        <div onClick={backfill} style={{ display:'flex', alignItems:'center', gap:8, background:C.azulBg||'#E6F1FB', border:`1px solid ${C.border}`, borderRadius:10, padding:'10px 12px', marginBottom:10, cursor:'pointer' }}>
-          <span style={{ fontSize:12, color:C.accent, flex:1 }}>{activasSinProyecto.length} venta{activasSinProyecto.length!==1?'s':''} activa{activasSinProyecto.length!==1?'s':''} sin proyecto en el panel</span>
-          <span style={{ fontSize:12, fontWeight:600, color:C.accent, whiteSpace:'nowrap' }}>Generar →</span>
+        <div style={{ background:C.azulBg||'#E6F1FB', border:`1px solid ${C.border}`, borderRadius:10, marginBottom:10, overflow:'hidden' }}>
+          <div onClick={()=>setPickOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', cursor:'pointer' }}>
+            <span style={{ fontSize:12, color:C.accent, flex:1 }}>{activasSinProyecto.length} venta{activasSinProyecto.length!==1?'s':''} activa{activasSinProyecto.length!==1?'s':''} sin proyecto — tú eliges cuáles agregar</span>
+            <span style={{ fontSize:12, fontWeight:600, color:C.accent, whiteSpace:'nowrap' }}>{pickOpen?'Cerrar':'Elegir →'}</span>
+          </div>
+          {pickOpen&&(()=>{ const byCli={}; activasSinProyecto.forEach(s=>{ const k=s.client_id?String(s.client_id):'—'; (byCli[k]=byCli[k]||[]).push(s) })
+            const grupos=Object.entries(byCli).map(([cid,ss])=>({cid,nombre:cnm(cid)||'Sin cliente',ss})).sort((a,b)=>a.nombre.localeCompare(b.nombre))
+            return <div style={{ borderTop:`1px solid ${C.border}`, background:'#fff', maxHeight:360, overflowY:'auto' }}>
+              {grupos.map(g=>(
+                <div key={g.cid} style={{ padding:'8px 12px', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}` }}>
+                  <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(g.cid)} style={{ fontSize:12.5, fontWeight:700, color:C.accent, marginBottom:4, cursor:'pointer' }}>{g.nombre}</div>
+                  {g.ss.map(s=>(
+                    <div key={s.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'5px 0' }}>
+                      <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:12.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.title||'Venta sin título'}</div><div style={{ fontSize:10, color:C.muted }}>{s.status||''}{s.responsible?` · ${INICIALES_RESP[s.responsible]||s.responsible}`:''}</div></div>
+                      <button onClick={()=>agregarUno(s)} style={{ fontSize:11, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer', flexShrink:0 }}>Agregar</button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          })()}
         </div>
       )}
 
@@ -29596,6 +29614,23 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               </div>
             )}
           </div>
+          {/* ¿De qué VENTA de este cliente nace el proyecto? (tú eliges) — o proyecto suelto sin venta */}
+          {nf.cliente_id&&(()=>{ const cliSales=(sales||[]).filter(s=>String(s.client_id)===String(nf.cliente_id)&&!s.deleted_at).sort((a,b)=>(a.status==='Activo'?0:1)-(b.status==='Activo'?0:1))
+            const hasProj=sid=>(proyectos||[]).some(p=>String(p.sale_id)===String(sid))
+            return <div style={{ marginBottom:8 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:6 }}>¿De qué venta nace?</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                {cliSales.map(s=>{ const ya=hasProj(s.id); const on=String(nf.sale_id)===String(s.id); return (
+                  <button key={s.id} disabled={ya} onClick={()=>setNf(f=>({...f, sale_id:on?'':String(s.id), nombre:on?f.nombre:(s.title||f.nombre) }))} style={{ display:'flex', alignItems:'center', gap:8, textAlign:'left', background:on?C.azulBg:'#fff', border:`1px solid ${on?C.accent:C.border}`, borderRadius:8, padding:'8px 10px', cursor:ya?'default':'pointer', opacity:ya?.55:1 }}>
+                    <span style={{ width:15, height:15, borderRadius:'50%', border:`1.5px solid ${on?C.accent:C.done}`, background:on?C.accent:'transparent', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>{on&&<span style={{ width:6, height:6, borderRadius:'50%', background:'#fff' }}/>}</span>
+                    <span style={{ flex:1, minWidth:0 }}><span style={{ fontSize:12.5, fontWeight:600, color:C.text, display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.title||'Venta sin título'}</span><span style={{ fontSize:10.5, color:C.muted }}>{s.status||''}{s.responsible?` · ${INICIALES_RESP[s.responsible]||s.responsible}`:''}</span></span>
+                    {ya&&<span style={{ fontSize:9.5, fontWeight:700, color:C.done, flexShrink:0 }}>ya tiene proyecto</span>}
+                  </button>
+                )})}
+                <button onClick={()=>setNf(f=>({...f,sale_id:''}))} style={{ textAlign:'left', background:!nf.sale_id?C.azulBg:'#fff', border:`1px solid ${!nf.sale_id?C.accent:C.border}`, borderRadius:8, padding:'8px 10px', cursor:'pointer', fontSize:12, color:C.muted }}>Sin venta — proyecto suelto</button>
+              </div>
+            </div>
+          })()}
           <input value={nf.nombre} onChange={e=>setNf(f=>({...f,nombre:e.target.value}))} placeholder='Nombre del proyecto' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
           <input value={nf.nota} onChange={e=>setNf(f=>({...f,nota:e.target.value}))} placeholder='¿En qué está? (tema abierto)' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
           <div style={{ display:'flex', gap:8, marginBottom:10 }}>
