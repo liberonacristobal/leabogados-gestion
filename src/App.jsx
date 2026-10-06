@@ -29783,7 +29783,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <div style={{ padding:'14px 0 10px' }}>
           <button onClick={()=>setBibOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
           <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Biblioteca de pasos</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>El paso a paso de cada operación. Se usa al armar el plan de un proyecto.</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>El paso a paso y la duración típica de cada operación. Arma el plan y sus plazos; la app ajusta los días con la experiencia.</div>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
           <select value={op?op.id:''} onChange={e=>setBibSel(e.target.value)} style={{ ...inp, flex:1, minWidth:0, fontSize:13, padding:'9px 11px' }}>{ops.map(o=><option key={o.id} value={o.id}>{o.nombre} · {(o.pasos||[]).length} pasos</option>)}</select>
@@ -29801,6 +29801,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 <div style={{ display:'flex', alignItems:'center', gap:9 }}>
                   <span style={{ width:20, height:20, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, background:s.m?C.accent:C.bgSoft, color:s.m?'#fff':C.muted, border:s.m?'none':`1px solid ${C.border}` }}>{i+1}</span>
                   <input defaultValue={s.t} key={op.id+'_'+i+'_'+s.t} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==s.t) upd(i,{t:v}) }} style={{ flex:1, minWidth:0, fontSize:13, fontWeight:600, color:C.text, border:'none', background:'none', padding:'1px 2px' }}/>
+                  <span style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}><input type='number' min='1' defaultValue={s.dias||''} key={op.id+'_'+i+'_d'+(s.dias||'')} onBlur={e=>{ const v=parseInt(e.target.value,10); const nv=v>0?v:null; if(nv!==(s.dias||null)) upd(i,{dias:nv}) }} placeholder='–' title='Días que suele tomar este paso. Define el plazo estimado al armar el plan (la app lo ajusta sola con la experiencia).' style={{ width:36, fontSize:11, color:C.muted, textAlign:'center', border:`1px solid ${C.border}`, borderRadius:6, background:'#fff', padding:'2px 2px' }}/><span style={{ fontSize:9.5, color:C.grisText }}>d</span></span>
                   <span onClick={()=>upd(i,{m:!s.m})} title='Marca si un trámite (CBR/D.Oficial/Notaría) confirma este paso' style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:s.m?'#fff':C.muted, background:s.m?C.accent:C.bgSoft, border:`1px solid ${s.m?C.accent:C.border}`, borderRadius:20, padding:'2px 7px', cursor:'pointer', flexShrink:0 }}>hito</span>
                   <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}><span onClick={()=>mover(i,i-1)} style={{ cursor:i>0?'pointer':'default', color:i>0?C.done:C.border, fontSize:10, lineHeight:1 }}>▲</span><span onClick={()=>mover(i,i+1)} style={{ cursor:i<pasos.length-1?'pointer':'default', color:i<pasos.length-1?C.done:C.border, fontSize:10, lineHeight:1 }}>▼</span></div>
                   <span onClick={()=>setPasos(pasos.filter((_,k)=>k!==i))} title='Quitar paso' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
@@ -34245,12 +34246,38 @@ export default function App() {
   const handleToggleHito = (id, hecho) => { const h=(proyHitos||[]).find(x=>x.id===id); const patch={hecho}; if(hecho&&h&&!h.fecha) patch.fecha=new Date().toISOString().slice(0,10); setProyHitos(p=>p.map(x=>x.id===id?{...x,...patch}:x)); if(!DEMO) supabase.from('proyecto_hitos').update(patch).eq('id',id).then(()=>{},()=>{}) }
   const handleUpdHito = (id, patch) => { setProyHitos(p=>p.map(x=>x.id===id?{...x,...patch}:x)); if(!DEMO) supabase.from('proyecto_hitos').update(patch).eq('id',id).then(()=>{},()=>{}) }
   const handleReorderHitos = (orderedIds) => { const pos={}; orderedIds.forEach((id,i)=>pos[String(id)]=i); setProyHitos(p=>p.map(x=>pos[String(x.id)]!=null?{...x,orden:pos[String(x.id)]}:x)); if(!DEMO) orderedIds.forEach((id,i)=>supabase.from('proyecto_hitos').update({orden:i}).eq('id',id).then(()=>{},()=>{})) }
-  // Siembra el PLAN (pasos de una operación) como hitos ordenados + sub-etapas (entregables colgando del hito). La OBRA con la que nace el proyecto.
+  // PLAZOS REALISTAS APRENDIDOS: duración típica (días) por paso de una operación.
+  // Aprende de la historia: mediana del gap real (fecha de un paso − fecha del paso hecho anterior)
+  // en proyectos que ya avanzaron con esos títulos. Si no hay datos, usa la duración configurada (ps.dias)
+  // y, en última instancia, DIAS_DEFECTO. Así el plan nace con plazos sensatos y mejora con el uso.
+  const DIAS_DEFECTO = 14
+  const _medianaDias = arr => { if(!arr||!arr.length) return null; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:Math.round((s[m-1]+s[m])/2) }
+  const aprenderDiasOperacion = (operacion) => {
+    const titulos = new Set((operacion?.pasos||[]).map(p=>p.t))
+    const obs = {}
+    const porProy = {}; (proyHitos||[]).forEach(h=>{ (porProy[h.proyecto_id]=porProy[h.proyecto_id]||[]).push(h) })
+    Object.values(porProy).forEach(hs=>{
+      const ord = hs.filter(h=>h.fecha).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))
+      for(let i=0;i<ord.length;i++){ const cur=ord[i]; if(!titulos.has(cur.titulo)) continue
+        const prev = i>0?ord[i-1].fecha:null; if(!prev) continue
+        const d=Math.round((new Date(cur.fecha+'T00:00')-new Date(prev+'T00:00'))/86400000)
+        if(d>0&&d<400) (obs[cur.titulo]=obs[cur.titulo]||[]).push(d)
+      }
+    })
+    const out={}; (operacion?.pasos||[]).forEach(ps=>{ out[ps.t]=_medianaDias(obs[ps.t]) }); return out
+  }
+  // Fechas (plazo) acumuladas desde hoy: cada paso vence "dias" después del anterior (aprendido > configurado > defecto).
+  const plazosRealistasPlan = (operacion) => {
+    const aprendido = aprenderDiasOperacion(operacion); const t0=Date.now(); let cum=0
+    return (operacion?.pasos||[]).map(ps=>{ const d = aprendido[ps.t]!=null?aprendido[ps.t] : (parseInt(ps.dias,10)>0?parseInt(ps.dias,10):DIAS_DEFECTO); cum+=d; return new Date(t0+cum*86400000).toISOString().slice(0,10) })
+  }
+  // Siembra el PLAN (pasos de una operación) como hitos ordenados + sub-etapas (entregables colgando del hito). La OBRA con la que nace el proyecto. Nace con plazos realistas aprendidos.
   const handleSeedPlan = async (proyectoId, operacion) => {
     const pasos = operacion?.pasos||[]; if(!pasos.length) return
     const base = (proyHitos||[]).filter(x=>String(x.proyecto_id)===String(proyectoId)).length
-    if(DEMO){ const nh=[], ne=[]; pasos.forEach((ps,i)=>{ const hid='h'+Date.now()+'_'+i; nh.push({id:hid,proyecto_id:proyectoId,titulo:ps.t,fecha:null,plazo:null,hecho:false,orden:base+i,responsable:null}); (ps.subs||[]).forEach((s,j)=>ne.push({id:'e'+Date.now()+'_'+i+'_'+j,proyecto_id:proyectoId,texto:s,hecho:false,hito_id:hid,etapa_idx:null,orden:j})) }); setProyHitos(p=>[...p,...nh]); setProyEntregables(p=>[...p,...ne]); return }
-    const { data:hs } = await supabase.from('proyecto_hitos').insert(pasos.map((ps,i)=>({proyecto_id:proyectoId,titulo:ps.t,orden:base+i}))).select()
+    const plazos = plazosRealistasPlan(operacion)
+    if(DEMO){ const nh=[], ne=[]; pasos.forEach((ps,i)=>{ const hid='h'+Date.now()+'_'+i; nh.push({id:hid,proyecto_id:proyectoId,titulo:ps.t,fecha:null,plazo:plazos[i]||null,hecho:false,orden:base+i,responsable:null}); (ps.subs||[]).forEach((s,j)=>ne.push({id:'e'+Date.now()+'_'+i+'_'+j,proyecto_id:proyectoId,texto:s,hecho:false,hito_id:hid,etapa_idx:null,orden:j})) }); setProyHitos(p=>[...p,...nh]); setProyEntregables(p=>[...p,...ne]); return }
+    const { data:hs } = await supabase.from('proyecto_hitos').insert(pasos.map((ps,i)=>({proyecto_id:proyectoId,titulo:ps.t,orden:base+i,plazo:plazos[i]||null}))).select()
     if(!hs) return; setProyHitos(p=>[...p,...hs])
     const subs=[]; pasos.forEach((ps,i)=>{ const h=hs[i]; if(!h) return; (ps.subs||[]).forEach((s,j)=>subs.push({proyecto_id:proyectoId,texto:s,hito_id:h.id,orden:j})) })
     if(subs.length){ const { data:es } = await supabase.from('proyecto_entregables').insert(subs).select(); if(es) setProyEntregables(p=>[...p,...es]) }
