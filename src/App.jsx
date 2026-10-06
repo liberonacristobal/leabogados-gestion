@@ -29942,6 +29942,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     const nextDe = p => hitosDe(p).filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
     const cad = p => cadenciaProyecto(p)   // cadencia adaptativa: frío según el horizonte del proyecto, no un umbral fijo
     const esDetenido = p => cad(p).frio
+    // OLA 3 — ANTICIPAR ATRASOS: el plazo viene (0–7d, aún NO vencido) pero el proyecto está frío (sin avance) → se va a atrasar. Avisar antes.
+    const riesgo = foco.map(p=>{ const nx=nextDe(p); const dd=nx&&nx.plazo?cartDiasPlazo(nx.plazo):null; const c=cad(p); return {p,nx,dd,inact:c.inact,frio:c.frio} })
+      .filter(x=>x.nx&&x.dd!=null&&x.dd>=0&&x.dd<=7&&x.frio).sort((a,b)=>a.dd-b.dd)
+    const riesgoIds = new Set(riesgo.map(x=>String(x.p.id)))
     const nVenc = pend.filter(x=>x.dd!=null&&x.dd<0).length, nSem = pend.filter(x=>x.dd!=null&&x.dd>=0&&x.dd<=7).length, nDet = foco.filter(esDetenido).length
     const stat = (n,l,col) => <div style={{ flex:1, padding:'11px 8px', textAlign:'center' }}><div style={{ fontSize:20, fontWeight:800, color:n>0?col:C.muted, letterSpacing:'-.02em' }}>{n}</div><div style={{ fontSize:9.5, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginTop:1 }}>{l}</div></div>
     const filaPaso = (x) => { const dc = x.dd<0?C.overdue:x.dd<=2?'#E09B2D':C.soonText; const tc = x.dd<0?C.overdueText:x.dd<=2?C.soonText:C.greenText
@@ -29961,6 +29965,15 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:9, flexShrink:0 }}>{det&&<span title={`Sin avance hace ${c.inact}d (se revisa cada ${c.intervalo}d)`} style={{ fontSize:9, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 7px', textTransform:'uppercase', letterSpacing:.3 }}>Frío · {c.inact}d</span>}<span style={{ fontSize:10.5, fontWeight:700, color:C.muted }}>{done}/{hs.length}</span><span style={{ color:C.done, fontSize:14 }}>›</span></div>
       </div> }
+    const filaRiesgo = (x) => (
+      <div key={'r'+x.p.id} onClick={()=>abrir(x.p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
+        <span style={{ width:8, height:8, borderRadius:'50%', background:'#E09B2D', flexShrink:0 }}/>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(x.p.cliente_id)||x.p.nombre_proyecto}</div>
+          <div style={{ fontSize:11.5, color:C.muted, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{x.nx.titulo} · vence {x.dd===0?'hoy':`en ${x.dd}d`} · sin avance {x.inact}d</div>
+        </div>
+        <span style={{ color:C.done, fontSize:14, flexShrink:0 }}>›</span>
+      </div> )
     return (
       <div style={{ maxWidth:isDesktop?880:720, margin:'0 auto', padding:'0 14px 48px' }}>
         <div style={{ padding:'14px 0 10px' }}>
@@ -29974,6 +29987,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <div style={{ ...card, display:'flex' }}>
           {stat(nVenc,'Vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(nSem,'Vencen 7 días',C.soonText)}<div style={{ width:1, background:C.border }}/>{stat(nDet,'Fríos',C.grisText)}<div style={{ width:1, background:C.border }}/>{stat(sinPlan.length,'Sin plan',C.muted)}
         </div>
+        {riesgo.length>0 && <>{secHd('En riesgo de atraso',riesgo.length,'#E09B2D')}<div style={card}>{riesgo.map(filaRiesgo)}</div></>}
         {urgentes.length>0 && <>{secHd('Pasos que vencen',urgentes.length,C.overdueText)}<div style={card}>{urgentes.map(filaPaso)}</div></>}
         {conPlan.length>0 && <>{secHd('Tus proyectos · siguiente paso',conPlan.length)}<div style={card}>{conPlan.slice().sort((a,b)=>{ const na=nextDe(a),nb=nextDe(b); const da=na&&na.plazo?cartDiasPlazo(na.plazo):9999, db=nb&&nb.plazo?cartDiasPlazo(nb.plazo):9999; const aa=((da<=7)||esDetenido(a))?0:1, ab=((db<=7)||esDetenido(b))?0:1; return aa!==ab?aa-ab:da-db }).map(filaProy)}</div></>}
         {sinPlan.length>0 && <>{secHd('Sin plan — ármalo',sinPlan.length,C.muted)}<div style={card}>{sinPlan.map(p=>(
