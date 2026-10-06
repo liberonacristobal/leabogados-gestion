@@ -29772,8 +29772,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             : null
           if(!pasos.length) return <div style={{ ...card, textAlign:'center' }}>
             <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:4 }}>Arma el plan del proyecto</div>
-            <div style={{ fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.45 }}>Elige el tipo de operación y se cargan sus pasos (los editas, mueves y marcas hechos). O agrega un paso suelto.</div>
-            <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>{opSelect('Elegir operación…')}<button onClick={()=>onAddHito&&onAddHito(p.id,'Nuevo paso')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', cursor:'pointer' }}>+ Paso suelto</button></div>
+            <div style={{ fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.45 }}>Elige el tipo de operación y se cargan sus pasos; los editas, mueves y marcas hechos. O lee la propuesta y el plan nace de ella.</div>
+            <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>{opSelect('Elegir operación…')}{esAdmin&&<button onClick={()=>setAlcanceFor(p)} style={{ fontSize:12, fontWeight:600, color:C.azulInfo, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', cursor:'pointer' }}>Leer la propuesta</button>}<button onClick={()=>onAddHito&&onAddHito(p.id,'Nuevo paso')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', cursor:'pointer' }}>+ Paso suelto</button></div>
           </div>
           const done = pasos.filter(h=>h.hecho).length
           // Fila de paso reutilizable (modo plano y agrupado por fase). i = índice GLOBAL en `pasos` (para reordenar). canReorder: solo en modo plano.
@@ -30241,11 +30241,13 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     )
   }
 
+  // Overlay compartido: la lectura de la propuesta (Alcance) se dispara desde el Plan (workspace) y desde el landing → se renderiza en ambos.
+  const alcanceOverlay = alcanceFor ? <CarteraAlcanceModal proyecto={alcanceFor} client={clients.find(c=>String(c.id)===String(alcanceFor.cliente_id))||null} onClose={()=>setAlcanceFor(null)} onAddHito={onAddHito} onApplied={(id,campos)=>{ setProyectos(prev=>prev.map(x=>x.id===id?{...x,...campos}:x)); if(openId===id) setDraft(d=>d) }}/> : null
   if(focoOpen) return renderFoco()
   if(metOpen) return renderMetricas()
   if(bibOpen) return renderBiblioteca()
   const wsP = openId ? ((proyectos||[]).find(x=>String(x.id)===String(openId)) || (archivados||[]).find(x=>String(x.id)===String(openId))) : null
-  if(wsP) return renderWorkspace(wsP)
+  if(wsP) return <>{renderWorkspace(wsP)}{alcanceOverlay}</>
 
   return (
     <div style={{ maxWidth:isDesktop?1040:720, margin:'0 auto', padding:'0 14px 40px' }}>
@@ -30434,13 +30436,13 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         </div>
       })()}
 
-      {alcanceFor&&<CarteraAlcanceModal proyecto={alcanceFor} client={clients.find(c=>String(c.id)===String(alcanceFor.cliente_id))||null} onClose={()=>setAlcanceFor(null)} onApplied={(id,campos)=>{ setProyectos(prev=>prev.map(x=>x.id===id?{...x,...campos}:x)); if(openId===id) setDraft(d=>d) }}/>}
+      {alcanceOverlay}
     </div>
   )
 }
 
 // Fase 2A — lee la propuesta aceptada del Drive con IA y extrae el alcance (compuerta humana antes de aplicar).
-function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
+function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAddHito }){
   const [step,setStep] = useState('picker')   // picker | busy | review
   const [err,setErr] = useState(null)
   const [file,setFile] = useState(null)
@@ -30482,6 +30484,8 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
         const ins = hitSel.map(h=>({ client_id:String(client.id), titulo:h.titulo, descripcion:h.descripcion||null, tipo:'hito', fecha:h.fecha||null, fuente:file?.name||'propuesta', file_id:file?.id||null }))
         await supabase.from('plazos').insert(ins).then(()=>{},()=>{})   // tolera tabla ausente
       }
+      // OLA 4 — SIEMBRA EL PLAN con los hitos de la propuesta (pasos reales del documento, no inventados). orden y plazo = fecha del hito.
+      if(hitSel.length && onAddHito){ for(let i=0;i<hitSel.length;i++){ const h=hitSel[i]; try{ await onAddHito(proyecto.id, h.titulo, null, null, { plazo:h.fecha||null, orden:i }) }catch(_){} } }
       onApplied&&onApplied(proyecto.id, campos)
       onClose()
     }catch(e){ setErr(/relation .*proyectos_cartera|Could not find the table|column .*alcance/i.test(e?.message||'')?'Falta la columna: corre el ALTER de docs/sql_proyectos_cartera.sql.':(e?.message||'No se pudo aplicar.')); setSaving(false) }
