@@ -28901,6 +28901,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [iaSug,setIaSug] = useState({})         // confirmaciones por CONTENIDO (IA leyó el documento/correo) por proyecto
   const [iaBusy,setIaBusy] = useState({})       // "leyendo con IA" por proyecto
   const [correosProy,setCorreosProy] = useState({})   // cache de correos recientes por proyecto (para confirmar pasos del plan)
+  const [calProy,setCalProy] = useState({})           // OLA 4 — cache de citas de Google Calendar por proyecto (audiencias/firmas → paso)
   const resolverEmailCli = async(clientId)=>{ const cl=clients.find(c=>String(c.id)===String(clientId)); let to=(cl?.email||'').trim()
     if(!to){ try{ const {data}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(clientId)).maybeSingle(); if(data?.value) to=String(data.value).split(/[,;]/)[0].trim() }catch(_){} }
     if(!to){ try{ const {data}=await supabase.from('contacts').select('email,principal').eq('client_id',clientId); const c=(data||[]).find(x=>x.principal&&x.email)||(data||[]).find(x=>x.email); if(c) to=String(c.email).trim() }catch(_){} }
@@ -28921,6 +28922,22 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     try{ const email=await resolverEmailCli(p.cliente_id); if(!email){ setCorreosProy(o=>({...o,[pid]:{none:true,noEmail:true}})); return }
       const msgs=await correosProyGmail(email, FIRM_MAIL_DOM, _TRAMITE_DESDE); setCorreosProy(o=>({...o,[pid]:{ msgs:msgs||[] }})) }
     catch(e){ setCorreosProy(o=>({...o,[pid]:{err:(e?.code===401||e?.code===403)?'sinpermiso':'error'}})) } }
+  // OLA 4 — Citas de Google Calendar del proyecto (audiencias/firmas) para ligarlas al paso. Reusa driveToken (ya se escribe al Calendar).
+  const cargarCalProy = async(p)=>{ if(!esAdmin||!p?.cliente_id) return; const pid=String(p.id); if(calProy[pid]) return
+    if(DEMO){ setCalProy(o=>({...o,[pid]:{ eventos:[
+      { id:'ev1', summary:'Firma de las escrituras de los actos', fecha:new Date(Date.now()-2*864e5).toISOString().slice(0,10) },
+      { id:'ev2', summary:'Reunión con el cliente', fecha:new Date(Date.now()+6*864e5).toISOString().slice(0,10) },
+    ] }})); return }
+    setCalProy(o=>({...o,[pid]:{loading:true}}))
+    try{ const token=await driveToken(); if(!token){ setCalProy(o=>({...o,[pid]:{none:true}})); return }
+      const nombre=(clients.find(c=>String(c.id)===String(p.cliente_id))||{}).name||''
+      const timeMin=new Date(_TRAMITE_DESDE+'T00:00').toISOString(); const timeMax=new Date(Date.now()+365*864e5).toISOString()
+      const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=50${nombre?`&q=${encodeURIComponent(nombre)}`:''}`
+      const r=await fetch(url,{headers:{Authorization:'Bearer '+token}})
+      if(!r.ok){ setCalProy(o=>({...o,[pid]:{err:(r.status===401||r.status===403)?'sinpermiso':'error'}})); return }
+      const d=await r.json(); const eventos=(d.items||[]).map(ev=>({ id:ev.id, summary:ev.summary||'(sin título)', fecha:String(ev.start?.date||ev.start?.dateTime||'').slice(0,10) })).filter(ev=>ev.fecha)
+      setCalProy(o=>({...o,[pid]:{ eventos }})) }
+    catch(e){ setCalProy(o=>({...o,[pid]:{err:'error'}})) } }
   const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${nDias(d)}` }
   const haceCol = iso => { const d=cartDias(iso); return d==null?C.grisText:d>=21?'#A32D2D':d>=14?'#854F0B':C.muted }
   // Propuesta abierta = proyecto cuya venta vinculada sigue en 'Propuesta' (pipeline no cerrado) → se mantiene visible arriba.
@@ -29227,6 +29244,21 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       out.push({ source:'fondo', origenId:oid, label:`Pago recibido${b.invoice_no?` · factura N° ${b.invoice_no}`:''}`, conceptKey:_normC(h.titulo), hitoId:h.id, hitoTitulo:h.titulo, fecha:fe||null }) })
     return out
   }
+  // OLA 4 — CITAS de Google Calendar (audiencia/firma) que ya ocurrieron confirman su paso (match por tokens del título). Compuerta.
+  const calSugDe = p => {
+    if(tipoDe(p)!=='proyecto' || !p.cliente_id) return []
+    const cc=calProy[String(p.id)]; const evs=cc&&cc.eventos; if(!evs||!evs.length) return []
+    const hoy=new Date().toISOString().slice(0,10)
+    const desc=new Set((pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='calendario'&&s.estado==='descartada').map(s=>String(s.origen_id)))
+    const pend=hitosDe(p).filter(h=>!h.hecho)
+    const usados=new Set(); const out=[]
+    evs.forEach(ev=>{ const fe=String(ev.fecha||'').slice(0,10); if(!fe||fe>hoy||fe<_TRAMITE_DESDE) return   // solo citas pasadas (ya ocurrieron) y hacia adelante
+      if(desc.has(String(ev.id))) return
+      const h=pend.find(x=>!usados.has(x.id) && _docConfirma(ev.summary, x.titulo)); if(!h) return
+      usados.add(h.id)
+      out.push({ source:'calendario', origenId:ev.id, label:ev.summary, conceptKey:_normC(ev.summary), hitoId:h.id, hitoTitulo:h.titulo, fecha:fe||null }) })
+    return out
+  }
   // Escaneo perezoso de la carpeta de Drive del cliente (admin). Cachea por proyecto. Carpeta = clients.drive_folder_id; escanea el folder + subcarpetas (1 nivel).
   const cargarDocsProy = async (p) => {
     if(!esAdmin || !p.cliente_id || docsProy[String(p.id)]) return
@@ -29316,7 +29348,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     })
   },[proyectos,archivados,fase,esAdmin,miInicial,selPer,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
 
-  const abrir = p => { setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p); cargarDocsProy(p); cargarCorreosProy(p) }   // abre el proyecto como PÁGINA workspace (el "‹ Mis proyectos" lo cierra)
+  const abrir = p => { setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p); cargarDocsProy(p); cargarCorreosProy(p); cargarCalProy(p) }   // abre el proyecto como PÁGINA workspace (el "‹ Mis proyectos" lo cierra)
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
   useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||''); cargarUltContacto(p) } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
@@ -29660,7 +29692,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           })()}
           {/* AGENTE PMO · se refleja solo — gastos de trámite del cliente → hito, con compuerta (bloque 2) */}
           {(()=>{
-            const base=[...tramiteSugDe(p), ...docSugDe(p), ...correoSugDe(p), ...fondoSugDe(p), ...(iaSug[p.id]||[])]
+            const base=[...tramiteSugDe(p), ...docSugDe(p), ...correoSugDe(p), ...fondoSugDe(p), ...calSugDe(p), ...(iaSug[p.id]||[])]
             const seen=new Set(); const sug=base.filter(s=>{ if(seen.has(s.hitoId)) return false; seen.add(s.hitoId); return true })
             const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
             const yaNombre=new Set(docSugDe(p).map(s=>String(s.origenId)))
@@ -29673,8 +29705,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:sug.length?8:0 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO · evidencia del plan</span>{sug.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span>}</div>
               {sug.map((s,i)=>(
                 <div key={s.source+'_'+s.origenId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
-                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':s.source==='correo'?'Un correo':s.source==='fondo'?'Un cobro':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':s.source==='correo'?'Correo':s.source==='fondo'?'Cobro':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span></div>
+                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':s.source==='correo'?'Un correo':s.source==='fondo'?'Un cobro':s.source==='calendario'?'Una cita':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':s.source==='correo'?'Correo':s.source==='fondo'?'Cobro':s.source==='calendario'?'Agenda':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span></div>
                   <div style={{ display:'flex', gap:12, marginTop:6, alignItems:'center' }}>
                     <button onClick={()=>onAplicarEvidencia&&onAplicarEvidencia(p,s)} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Marcar hecho</button>
                     <span onClick={()=>onDescartarEvidencia&&onDescartarEvidencia(p,s)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>No corresponde</span>
