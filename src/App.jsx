@@ -28812,7 +28812,7 @@ function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], curre
     </div>
   )
 }
-function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], onSeguir, onSetTipo, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onAddMiembro, onDelMiembro, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
@@ -28832,6 +28832,12 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const _TIPO_ORDEN = ['puntual','permanente','proyecto']
   // Etapas del proyecto según su plantilla (solo tipo 'proyecto'; permanente/puntual no llevan etapas → aparición progresiva).
   const etapasDe = p => (tipoDe(p)==='proyecto') ? (STAGE_TEMPLATES[p.template]||ETAPAS_CARTERA) : null
+  // Fase 2b — estructura del proyecto: entregables, hitos, equipo.
+  const entregablesDe = p => (proyEntregables||[]).filter(e=>String(e.proyecto_id)===String(p.id)).sort((a,b)=>(a.orden||0)-(b.orden||0))
+  const hitosDe = p => (proyHitos||[]).filter(h=>String(h.proyecto_id)===String(p.id)).sort((a,b)=>String(a.fecha||'~').localeCompare(String(b.fecha||'~')))
+  const equipoDe = p => (proyEquipo||[]).filter(e=>String(e.proyecto_id)===String(p.id))
+  const ROL_LBL={responsable:'Responsable',apoyo:'Apoyo',revisa:'Revisa',tramites:'Trámites'}
+  const NOMBRE_DE_INI={CL:'Cristóbal',EE:'Erasmo',MC:'Martín',MP:'Martina',RD:'Rodrigo'}
   const cnm = id => { const c=clients.find(x=>String(x.id)===String(id)); return c?.name || '' }
   const fmtDia = iso => iso ? fmtFechaDMY(iso) : ''   // unificado a DD-MM-AAAA (antes "10 sept" sin año)
   const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${nDias(d)}` }
@@ -28856,6 +28862,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [estadoF,setEstadoF] = usePersistedState('cartera_estadoF','todos') // todos | rojo | ambar | verde
   const [soloMios,setSoloMios] = usePersistedState('cartera_solomios2',true) // (legado) — reemplazado por 'vista'
   const [vista,setVista] = usePersistedState('cartera_vista','mios')          // mios | estudio (opt-in por abogado)
+  const [entDraft,setEntDraft] = useState('')     // Fase 2b: nuevo entregable
+  const [hitoDraft,setHitoDraft] = useState('')   // Fase 2b: nuevo hito (título)
+  const [hitoFecha,setHitoFecha] = useState('')   // Fase 2b: nuevo hito (fecha)
+  const [addMiemOpen,setAddMiemOpen] = useState(false)  // Fase 2b: picker de integrante
   const [openId,setOpenId] = usePersistedState('cartera_open',null)         // proyecto abierto
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
@@ -29186,6 +29196,54 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 <input type='date' value={p.plazo||''} onChange={e=>patch(p,{plazo:e.target.value||null})} style={inp}/>
                 {_et&&(()=>{ const fin=(p.etapa_idx||0)>=_et.length-1; return <button onClick={()=>avanzar(p)} disabled={fin} style={{ fontSize:11, fontWeight:600, color:fin?C.grisText:C.accent, background:'none', border:'none', cursor:fin?'default':'pointer', padding:0, marginLeft:'auto' }}>→ Avanzar etapa</button> })()}
               </div>
+              {/* ALCANCE · ENTREGABLES (Fase 2b) — proyecto y puntual */}
+              {tipoDe(p)!=='permanente'&&(()=>{ const ents=entregablesDe(p); const done=ents.filter(e=>e.hecho).length; return (
+                <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10 }}>
+                  <div style={{ display:'flex', alignItems:'center', marginBottom:ents.length?6:4 }}><span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Alcance · entregables</span>{ents.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:C.muted }}>{done}/{ents.length}</span>}</div>
+                  {ents.map(e=>(
+                    <div key={e.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
+                      <span onClick={()=>onToggleEntregable&&onToggleEntregable(e.id,!e.hecho)} style={{ width:16, height:16, borderRadius:5, border:`1.5px solid ${e.hecho?C.greenText:C.done}`, background:e.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{e.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
+                      <span style={{ flex:1, fontSize:12.5, color:e.hecho?C.muted:C.text, textDecoration:e.hecho?'line-through':'none' }}>{e.texto}</span>
+                      <span onClick={()=>onDelEntregable&&onDelEntregable(e.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
+                    </div>
+                  ))}
+                  <input value={openId===p.id?entDraft:''} onChange={e=>setEntDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&entDraft.trim()){ onAddEntregable&&onAddEntregable(p.id,entDraft); setEntDraft('') } }} placeholder='+ Agregar entregable…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'6px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', marginTop:6 }}/>
+                </div>
+              )})()}
+              {/* HITOS (Fase 2b) — proyecto */}
+              {tipoDe(p)==='proyecto'&&(()=>{ const hs=hitosDe(p); return (
+                <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:hs.length?6:4 }}>Hitos</div>
+                  {hs.map(h=>{ const dd=h.fecha?cartDiasPlazo(h.fecha):null; return (
+                    <div key={h.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
+                      <span onClick={()=>onToggleHito&&onToggleHito(h.id,!h.hecho)} style={{ width:16, height:16, borderRadius:5, border:`1.5px solid ${h.hecho?C.greenText:C.done}`, background:h.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{h.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
+                      {h.fecha&&<span style={{ fontSize:10.5, fontWeight:700, color:h.hecho?C.muted:(dd!=null&&dd<0?'#A32D2D':dd!=null&&dd<=7?'#854F0B':C.accent), minWidth:58 }}>{fmtDia(h.fecha)}</span>}
+                      <span style={{ flex:1, fontSize:12.5, color:h.hecho?C.muted:C.text, textDecoration:h.hecho?'line-through':'none' }}>{h.titulo}</span>
+                      {h.responsable&&<span style={{ fontSize:10, color:C.muted }}>{h.responsable}</span>}
+                      <span onClick={()=>onDelHito&&onDelHito(h.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
+                    </div>
+                  )})}
+                  <div style={{ display:'flex', gap:6, marginTop:6 }}>
+                    <input value={openId===p.id?hitoDraft:''} onChange={e=>setHitoDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&hitoDraft.trim()){ onAddHito&&onAddHito(p.id,hitoDraft,hitoFecha||null); setHitoDraft(''); setHitoFecha('') } }} placeholder='+ Agregar hito…' style={{ flex:1, fontSize:12, padding:'6px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff' }}/>
+                    <input type='date' value={openId===p.id?hitoFecha:''} onChange={e=>setHitoFecha(e.target.value)} style={{ fontSize:12, padding:'5px 6px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff' }}/>
+                  </div>
+                </div>
+              )})()}
+              {/* EQUIPO (Fase 2b) — agregar integrante lo suma a SUS proyectos */}
+              {(()=>{ const eq=equipoDe(p); return (
+                <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10 }}>
+                  <div style={{ display:'flex', alignItems:'center', marginBottom:eq.length?6:4 }}><span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Equipo</span>{esAdmin&&<span onClick={()=>setAddMiemOpen(o=>!o)} style={{ marginLeft:'auto', fontSize:10.5, fontWeight:700, color:C.azulInfo, cursor:'pointer' }}>{addMiemOpen?'Cerrar':'+ Integrante'}</span>}</div>
+                  {eq.map(e=>(
+                    <div key={e.miembro} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
+                      <span style={{ width:22, height:22, borderRadius:'50%', background:CART_AV[e.miembro]||C.muted, color:'#fff', fontSize:9.5, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{e.miembro}</span>
+                      <span style={{ flex:1, fontSize:12.5, color:C.text }}>{NOMBRE_DE_INI[e.miembro]||e.miembro}</span>
+                      <span style={{ fontSize:10, fontWeight:700, color:C.muted, background:C.bgSoft, border:`1px solid ${C.border}`, borderRadius:20, padding:'1px 8px' }}>{ROL_LBL[e.rol]||e.rol}</span>
+                      {esAdmin&&e.rol!=='responsable'&&<span onClick={()=>onDelMiembro&&onDelMiembro(p.id,e.miembro)} title='Quitar del equipo' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>}
+                    </div>
+                  ))}
+                  {addMiemOpen&&esAdmin&&<div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:7 }}>{['CL','EE','MC','MP','RD'].filter(i=>!eq.some(e=>e.miembro===i)).map(i=><button key={i} onClick={()=>{ onAddMiembro&&onAddMiembro(p.id,i,'apoyo'); setAddMiemOpen(false) }} style={{ fontSize:11, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 11px', cursor:'pointer' }}>+ {i}</button>)}</div>}
+                </div>
+              )})()}
               {/* RENTABILIDAD */}
               {(()=>{ const r=rentabilidadDe(p); if(!r) return null; const busy=sugEsf[p.id]==='busy'
                 return <div style={{ border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10, background:'#fff' }}>
@@ -33236,6 +33294,8 @@ export default function App() {
   const [proyectosCartera,setProyectosCartera]=useState([])
   const [proyEquipo,setProyEquipo]=useState([])          // proyecto_equipo: {proyecto_id, miembro, rol} — quién trabaja en cada proyecto
   const [proySeguidores,setProySeguidores]=useState([])  // proyecto_seguidores: {proyecto_id, miembro} — opt-in "lo sigo en mis proyectos"
+  const [proyEntregables,setProyEntregables]=useState([])// proyecto_entregables: {id, proyecto_id, texto, hecho, orden}
+  const [proyHitos,setProyHitos]=useState([])            // proyecto_hitos: {id, proyecto_id, titulo, fecha, hecho, responsable}
   const [billing,setBilling]=useState([])
   // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
   const vencFlipDone=useRef(false)
@@ -33567,6 +33627,8 @@ export default function App() {
     supabase.from('proyectos_cartera').select('*').eq('activo',true).order('ultima_actividad',{ascending:true,nullsFirst:true}).then(({data})=>{ if(data) setProyectosCartera(data) },()=>{})
     supabase.from('proyecto_equipo').select('proyecto_id,miembro,rol').then(({data})=>{ if(data) setProyEquipo(data) },()=>{})
     supabase.from('proyecto_seguidores').select('proyecto_id,miembro').then(({data})=>{ if(data) setProySeguidores(data) },()=>{})
+    supabase.from('proyecto_entregables').select('*').then(({data})=>{ if(data) setProyEntregables(data) },()=>{})
+    supabase.from('proyecto_hitos').select('*').then(({data})=>{ if(data) setProyHitos(data) },()=>{})
     // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
   },[session?.user?.id])
 
@@ -33602,6 +33664,19 @@ export default function App() {
     setProyectosCartera(p=> p.map(x=>String(x.id)===String(proyectoId)?{...x,tipo}:x))
     if(!DEMO) supabase.from('proyectos_cartera').update({tipo,updated_at:new Date().toISOString()}).eq('id',proyectoId).then(()=>{},()=>{})
   }
+  // Fase 2b — entregables (checklist del alcance), hitos múltiples y equipo con roles.
+  const handleAddEntregable = async (proyectoId, texto) => { const t=(texto||'').trim(); if(!t) return; if(DEMO){ setProyEntregables(p=>[...p,{id:'e'+Date.now(),proyecto_id:proyectoId,texto:t,hecho:false}]); return } const { data } = await supabase.from('proyecto_entregables').insert({proyecto_id:proyectoId,texto:t,orden:(proyEntregables||[]).filter(x=>String(x.proyecto_id)===String(proyectoId)).length}).select().single(); if(data) setProyEntregables(p=>[...p,data]) }
+  const handleToggleEntregable = (id, hecho) => { setProyEntregables(p=>p.map(x=>x.id===id?{...x,hecho}:x)); if(!DEMO) supabase.from('proyecto_entregables').update({hecho}).eq('id',id).then(()=>{},()=>{}) }
+  const handleDelEntregable = (id) => { setProyEntregables(p=>p.filter(x=>x.id!==id)); if(!DEMO) supabase.from('proyecto_entregables').delete().eq('id',id).then(()=>{},()=>{}) }
+  const handleAddHito = async (proyectoId, titulo, fecha, responsable) => { const t=(titulo||'').trim(); if(!t) return; if(DEMO){ setProyHitos(p=>[...p,{id:'h'+Date.now(),proyecto_id:proyectoId,titulo:t,fecha:fecha||null,hecho:false,responsable:responsable||null}]); return } const { data } = await supabase.from('proyecto_hitos').insert({proyecto_id:proyectoId,titulo:t,fecha:fecha||null,responsable:responsable||null}).select().single(); if(data) setProyHitos(p=>[...p,data]) }
+  const handleToggleHito = (id, hecho) => { setProyHitos(p=>p.map(x=>x.id===id?{...x,hecho}:x)); if(!DEMO) supabase.from('proyecto_hitos').update({hecho}).eq('id',id).then(()=>{},()=>{}) }
+  const handleDelHito = (id) => { setProyHitos(p=>p.filter(x=>x.id!==id)); if(!DEMO) supabase.from('proyecto_hitos').delete().eq('id',id).then(()=>{},()=>{}) }
+  // Agregar integrante al equipo → también lo suma a SUS proyectos (seguidor). Así "me involucran".
+  const handleAddMiembro = (proyectoId, miembro, rol) => { if(!miembro) return
+    setProyEquipo(p=> p.some(x=>String(x.proyecto_id)===String(proyectoId)&&x.miembro===miembro)?p:[...p,{proyecto_id:proyectoId,miembro,rol:rol||'apoyo'}])
+    setProySeguidores(p=> p.some(x=>String(x.proyecto_id)===String(proyectoId)&&x.miembro===miembro)?p:[...p,{proyecto_id:proyectoId,miembro}])
+    if(!DEMO){ supabase.from('proyecto_equipo').insert({proyecto_id:proyectoId,miembro,rol:rol||'apoyo'}).then(()=>{},()=>{}); supabase.from('proyecto_seguidores').insert({proyecto_id:proyectoId,miembro}).then(()=>{},()=>{}) } }
+  const handleDelMiembro = (proyectoId, miembro) => { setProyEquipo(p=>p.filter(x=>!(String(x.proyecto_id)===String(proyectoId)&&x.miembro===miembro))); if(!DEMO) supabase.from('proyecto_equipo').delete().eq('proyecto_id',proyectoId).eq('miembro',miembro).then(()=>{},()=>{}) }
 
   // Carpeta en Drive por cliente ACTIVO (best-effort, idempotente). Se dispara cuando un cliente queda Activo.
   // Anti-duplicado en dos capas: (a) drive_folder_id ya seteado → no llama; (b) el edge reusa la carpeta si ya existe;
@@ -35464,7 +35539,7 @@ export default function App() {
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
-            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
