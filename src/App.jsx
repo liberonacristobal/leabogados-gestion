@@ -31848,7 +31848,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   const ingresoOficina = async(mov, sub, proveedorId=null)=>{
     if(busy) return
     if(!sub){ appAlert('Elige el tipo de ingreso de oficina.'); return }
-    if(DEMO){ const monto=(mov.monto||0)-(mov.monto_conciliado||0); const movAplic=(mov.monto_conciliado||0)+monto; const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'; setConc(p=>[...p,{id:'demo-ing-'+mov.id,movimiento_id:mov.id,tipo_destino:'ingreso',monto_aplicado:monto,origen:'manual'}]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Ingresos Oficina'}:x)); setIngFor(null); setIngComFor(null); setIngProvQ(''); setAbFam(p=>({...p,[mov.id]:undefined})); return }
+    if(DEMO){ const monto=(mov.monto||0)-(mov.monto_conciliado||0); const movAplic=(mov.monto_conciliado||0)+monto; const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'; setConc(p=>[...p,{id:'demo-ing-'+mov.id,movimiento_id:mov.id,tipo_destino:'ingreso',monto_aplicado:monto,origen:'manual'}]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Ingresos Oficina'}:x)); setIngFor(null); setIngComFor(null); setIngProvQ(''); setAbFam(p=>({...p,[mov.id]:undefined})); setModalMov(null); return }
     setBusy(mov.id)
     let ing=null, cr=null
     try{
@@ -31864,7 +31864,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Ingresos Oficina' }).eq('id',mov.id)
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Ingresos Oficina'}:x))
-      setIngFor(null); setIngComFor(null); setIngProvQ('')
+      setIngFor(null); setIngComFor(null); setIngProvQ(''); setAbFam(p=>({...p,[mov.id]:undefined})); setModalMov(null)
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(ing) await supabase.from('ingresos_oficina').delete().eq('id',ing.id); appAlert('Error al registrar el ingreso de oficina: '+e.message) }
     setBusy(null)
   }
