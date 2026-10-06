@@ -28968,6 +28968,11 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [pmoProyOp,setPmoProyOp] = useState({})                             // projectId → operacionId (de qué operación nació) — para que la biblioteca aprenda del uso
   useEffect(()=>{ if(DEMO){ setPmoProyOp(demoData.pmo_proy_op||{}); return }
     supabase.from('learnings').select('key,value').eq('kind','pmo_proy_op').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[String(r.key)]=String(r.value) }); setPmoProyOp(m) },()=>{}) },[])
+  // OLA 3 #4 — Agente proactivo cross-cartera (barrido diario de Drive, server-side). Apagado hasta que el admin lo encienda; "Probar" simula sin escribir.
+  const [crossCfg,setCrossCfg] = useState('off'); const [crossBusy,setCrossBusy] = useState(false); const [crossRes,setCrossRes] = useState(null)
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','pmo_cross_cartera').limit(1).then(({data})=>{ if(data&&data[0]) setCrossCfg(String(data[0].value||'off').toLowerCase()) },()=>{}) },[])
+  const probarCross = async()=>{ setCrossBusy(true); setCrossRes(null); try{ const {data,error}=await supabase.functions.invoke('agente-pmo',{body:{dryRun:true,preview:true}}); setCrossRes(error?{error:error.message}:(data||{})) }catch(e){ setCrossRes({error:e.message||'error'}) } setCrossBusy(false) }
+  const toggleCross = async()=>{ const nv=crossCfg==='on'?'off':'on'; setCrossCfg(nv); try{ await setLearningKV('config','pmo_cross_cartera',nv) }catch(_){} }
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
@@ -29932,6 +29937,21 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             </div>
           })()}
         </>}
+        {/* OLA 3 #4 — Agente proactivo cross-cartera (Drive, server-side). Apagado por defecto; Probar simula sin escribir. Admin. */}
+        {esAdmin && <div style={{ ...card, marginTop:4 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:12.5, fontWeight:700, color:C.accent }}>Agente cross-cartera · Drive</div>
+              <div style={{ fontSize:11, color:C.muted, marginTop:2, lineHeight:1.4 }}>Un barrido diario revisa los documentos de Drive de toda la cartera y deja la evidencia por confirmar (nunca marca el paso solo).</div>
+            </div>
+            <span style={{ fontSize:10, fontWeight:700, color:crossCfg==='on'?C.greenText:C.grisText, background:crossCfg==='on'?C.greenBg:C.bgSoft, borderRadius:20, padding:'2px 9px', flexShrink:0 }}>{crossCfg==='on'?'Encendido':'Apagado'}</span>
+          </div>
+          <div style={{ display:'flex', gap:12, alignItems:'center', marginTop:10, flexWrap:'wrap' }}>
+            <button onClick={probarCross} disabled={crossBusy} style={{ fontSize:11.5, fontWeight:600, color:C.azulInfo, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:crossBusy?'default':'pointer' }}>{crossBusy?'Simulando…':'Probar (simulación)'}</button>
+            <button onClick={toggleCross} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:crossCfg==='on'?C.coralText:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>{crossCfg==='on'?'Apagar':'Encender'}</button>
+            {crossRes&&<span style={{ fontSize:11, color:crossRes.error?C.coralText:C.muted }}>{crossRes.error?('Error: '+crossRes.error):`Simulación: ${crossRes.documento||0} documento(s) por confirmar · ${crossRes.cross_cartera||''}`}</span>}
+          </div>
+        </div>}
       </div>
     )
   }
