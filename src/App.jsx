@@ -29094,7 +29094,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     ;(expenses||[]).forEach(e=>{ if(e.deleted_at||e.proyecto_id||String(e.client_id||'')!==String(p.cliente_id)||!_TRAMITE_CATS.has(e.category)||desc.has(String(e.id))) return
       const fe=_fechaEfectiva(e); if(!fe||fe<_TRAMITE_DESDE) return   // hacia adelante: ignora trámites de tiempos muy pasados
       const titulo=_tramiteHito(e.category,e.concept); if(!titulo) return
-      const h = pendientesPlan.find(x=>!usados.has(x.id) && _normC(x.titulo)===_normC(titulo))   // ¿calza con un hito del plan?
+      const tks=_sigTok(titulo)   // ¿calza con un paso del plan? (todos los tokens del concepto presentes en el título del paso — flexible)
+      const h = pendientesPlan.find(x=>{ if(usados.has(x.id)) return false; const hs=new Set(_sigTok(x.titulo)); return tks.length && tks.every(w=>hs.has(w)) })
       if(!h) return   // no está en el plan → contexto, sin tarjeta
       usados.add(h.id)
       out.push({ source:'gasto', origenId:e.id, label:e.concept||'', conceptKey:(glosaKey&&glosaKey(e.concept||''))||_normC(e.concept), hitoId:h.id, hitoTitulo:h.titulo, fecha:e.date||null })
