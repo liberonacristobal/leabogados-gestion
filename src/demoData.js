@@ -43,6 +43,10 @@ export const demoData = {
   ],
   // OLA 3 — de qué operación nació cada proyecto (para que la biblioteca aprenda del uso). p1 y p6 = reorganización (op2).
   pmo_proy_op: { p1:'op2', p6:'op2' },
+  // OLA 4 — plazos legales del cliente (tabla plazos), para integrarlos al Calendario del proyecto. Título de práctica legal real.
+  plazos: [
+    { id:'pl1', client_id:'c3', titulo:'Audiencia de conciliación', fecha:new Date(Date.now()+12*864e5).toISOString().slice(0,10), tipo:'audiencia', estado:'pendiente' },
+  ],
   // OLA 3 auto-confirmar: mapeos concepto→paso ya aprendidos ≥2 veces (conceptKey = glosaKey del gasto). "extracto inscripcion" = Inscripción en CBR (x7b).
   pmo_learn_count: { 'extracto inscripcion': 2 },
   // PLAN de pasos (carta Gantt) de algunos proyectos — para que "Mi foco" muestre el mapa de un vistazo.

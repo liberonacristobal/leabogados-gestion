@@ -28990,6 +28990,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [pmoProyOp,setPmoProyOp] = useState({})                             // projectId → operacionId (de qué operación nació) — para que la biblioteca aprenda del uso
   useEffect(()=>{ if(DEMO){ setPmoProyOp(demoData.pmo_proy_op||{}); return }
     supabase.from('learnings').select('key,value').eq('kind','pmo_proy_op').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[String(r.key)]=String(r.value) }); setPmoProyOp(m) },()=>{}) },[])
+  // OLA 4 — plazos legales del cliente (tabla `plazos`: audiencias, vencimientos, obligaciones) para integrarlos al Calendario del proyecto. Título propio del plazo, sin inventar.
+  const [plazosAll,setPlazosAll] = useState([])
+  useEffect(()=>{ if(DEMO){ setPlazosAll(demoData.plazos||[]); return }
+    supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazosAll(data||[]),()=>{}) },[])
   // OLA 3 #4 — Agente proactivo cross-cartera (barrido diario de Drive, server-side). Apagado hasta que el admin lo encienda; "Probar" simula sin escribir.
   const [crossCfg,setCrossCfg] = useState('off'); const [crossBusy,setCrossBusy] = useState(false); const [crossRes,setCrossRes] = useState(null)
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','pmo_cross_cartera').limit(1).then(({data})=>{ if(data&&data[0]) setCrossCfg(String(data[0].value||'off').toLowerCase()) },()=>{}) },[])
@@ -29849,9 +29853,13 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           hs.forEach(h=>{ if(!h.hecho&&h.fecha) items.push({ fecha:String(h.fecha).slice(0,10), texto:h.titulo, kind:'Hito' }) })
           tks.forEach(t=>{ if(t.due) items.push({ fecha:String(t.due).slice(0,10), texto:t.title||'Tarea', kind:'Tarea', t }) })
           if(p.plazo) items.push({ fecha:String(p.plazo).slice(0,10), texto:p.plazo_label||'Plazo del proyecto', kind:'Plazo' })
+          // OLA 4 — plazos legales del cliente (su propio título) + citas de agenda futuras (el título del evento). Integra lo legal y lo agendado, sin inventar.
+          ;(plazosAll||[]).forEach(pl=>{ if(String(pl.client_id)!==String(p.cliente_id)||!pl.fecha||pl.estado==='cumplido') return; items.push({ fecha:String(pl.fecha).slice(0,10), texto:pl.titulo||'Plazo', kind:'Plazo' }) })
+          const hoyCal=new Date().toISOString().slice(0,10); const cc=calProy[String(p.id)]
+          ;((cc&&cc.eventos)||[]).forEach(ev=>{ const f=String(ev.fecha||'').slice(0,10); if(!f||f<hoyCal) return; items.push({ fecha:f, texto:ev.summary||'Cita', kind:'Agenda' }) })
           items.sort((a,b)=>a.fecha.localeCompare(b.fecha))
           if(!items.length) return <div style={{ ...card, fontSize:12, color:C.muted, textAlign:'center' }}>Sin fechas en este proyecto. Agrega hitos o plazos de tareas y aparecerán aquí.</div>
-          const KIND={ Tarea:{c:C.azulInfo,bg:C.azulBg}, Hito:{c:C.accent,bg:C.azulBg}, Plazo:{c:C.overdueText,bg:C.overdueBg} }
+          const KIND={ Tarea:{c:C.azulInfo,bg:C.azulBg}, Hito:{c:C.accent,bg:C.azulBg}, Plazo:{c:C.overdueText,bg:C.overdueBg}, Agenda:{c:C.azulInfo,bg:C.azulBg} }
           return <div style={{ ...card, padding:0, overflow:'hidden' }}>
             {items.map((it,i)=>{ const dd=cartDiasPlazo(it.fecha); const k=KIND[it.kind]||KIND.Tarea; const dc=dd==null?C.muted:dd<0?C.overdue:dd<=7?'#E09B2D':C.greenText
               return <div key={i} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:i?`1px solid ${C.border}`:'none' }}>
