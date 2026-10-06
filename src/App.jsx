@@ -28978,6 +28978,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
   const [pickOp,setPickOp] = useState('')          // operación a aplicar al agregar ventas desde el panel "Elegir"
   const [focoOpen,setFocoOpen] = useState(false)   // vista "Mi foco" (cross-proyecto: qué vence / siguiente paso / detenidos)
+  const [metOpen,setMetOpen] = useState(false)     // vista "Métricas del PMO" (Ola 4)
   const [bibOpen,setBibOpen] = useState(false)     // editor de la biblioteca de pasos (pmo_operaciones)
   const [bibSel,setBibSel] = useState(null)        // operación seleccionada en el editor
   const NF0 = { cliente_id:'', sale_id:'', operacionId:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
@@ -30004,6 +30005,79 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     </div></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
+  // OLA 4 — MÉTRICAS Y EXPORTACIÓN del PMO: cumplimiento de plazos, por operación, dónde se atasca. Del dato al insight, descargable. (Números y tabla, NO barras.)
+  const renderMetricas = () => {
+    const card = { background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, marginBottom:12, overflow:'hidden' }
+    const secHd = (t,n,col) => <div style={{ display:'flex', alignItems:'center', gap:7, margin:'18px 2px 8px', fontSize:9, fontWeight:700, letterSpacing:.5, textTransform:'uppercase', color:col||C.muted }}>{t}{n!=null&&<span style={{ color:C.muted }}>· {n}</span>}</div>
+    const base = (proyectos||[]).concat(archivados||[]).filter(p=>((selPer&&selPer!=='all')?esDePersona(p,selPer):true))
+    const conPlan = base.filter(p=>hitosDe(p).length>0)
+    const dif = (fecha,plazo) => Math.round((new Date(fecha+'T00:00')-new Date(plazo+'T00:00'))/86400000)
+    let aTiempo=0, tarde=0, pendVenc=0, pendOk=0; const demora={}
+    conPlan.forEach(p=>hitosDe(p).forEach(h=>{ if(!h.plazo) return
+      if(h.hecho){ if(h.fecha){ const d=dif(String(h.fecha).slice(0,10),String(h.plazo).slice(0,10)); if(d<=0) aTiempo++; else { tarde++; const k=_normTxt(h.titulo); (demora[k]=demora[k]||{sum:0,n:0,t:h.titulo}); demora[k].sum+=d; demora[k].n++ } } }
+      else { const dd=cartDiasPlazo(h.plazo); if(dd!=null&&dd<0) pendVenc++; else pendOk++ } }))
+    const conFecha = aTiempo+tarde; const cumpl = conFecha?Math.round(aTiempo/conFecha*100):null
+    const ops={}
+    conPlan.forEach(p=>{ const oid=pmoProyOp[String(p.id)]||'_'; const nombre=(pmoOps||[]).find(o=>String(o.id)===String(oid))?.nombre || 'Sin operación'; const o=(ops[oid]=ops[oid]||{nombre,nProy:0,done:0,total:0,aTiempo:0,conFecha:0}); o.nProy++
+      hitosDe(p).forEach(h=>{ o.total++; if(h.hecho){ o.done++; if(h.plazo&&h.fecha){ o.conFecha++; if(dif(String(h.fecha).slice(0,10),String(h.plazo).slice(0,10))<=0) o.aTiempo++ } } }) })
+    const opRows = Object.values(ops).filter(o=>o.total).sort((a,b)=>b.nProy-a.nProy)
+    const atasco = Object.values(demora).map(x=>({t:x.t, media:Math.round(x.sum/x.n), n:x.n})).sort((a,b)=>b.media-a.media).slice(0,4)
+    const exportar = () => {
+      const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`
+      const rows=[['Operación','Proyectos','Pasos hechos','Pasos totales','Pasos con fecha','A tiempo','% a tiempo']]
+      opRows.forEach(o=>rows.push([o.nombre,o.nProy,o.done,o.total,o.conFecha,o.aTiempo,o.conFecha?Math.round(o.aTiempo/o.conFecha*100)+'%':'—']))
+      rows.push([]); rows.push(['Cumplimiento global',cumpl!=null?cumpl+'%':'—']); rows.push(['Pasos a tiempo',aTiempo]); rows.push(['Pasos tarde',tarde]); rows.push(['Pasos pendientes vencidos',pendVenc])
+      const csv='﻿'+rows.map(r=>r.map(esc).join(';')).join('\n')
+      const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='metricas_pmo.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),500)
+    }
+    const stat = (n,l,col) => <div style={{ flex:1, padding:'10px 8px', textAlign:'center' }}><div style={{ fontSize:19, fontWeight:800, color:n>0?col:C.muted, letterSpacing:'-.02em' }}>{n}</div><div style={{ fontSize:9.5, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginTop:1 }}>{l}</div></div>
+    return (
+      <div style={{ maxWidth:isDesktop?880:720, margin:'0 auto', padding:'0 14px 48px' }}>
+        <div style={{ padding:'14px 0 10px' }}>
+          <button onClick={()=>setMetOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Métricas del PMO</div>
+            {conPlan.length>0 && <span onClick={exportar} style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Exportar CSV ↓</span>}
+          </div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · {conPlan.length} proyecto{conPlan.length!==1?'s':''} con plan</div>
+        </div>
+        {!conPlan.length ? <div style={{ ...card, textAlign:'center', fontSize:13, color:C.muted, padding:'32px 16px' }}>Aún no hay proyectos con plan para medir. Arma planes y verás aquí el cumplimiento de plazos.</div> : <>
+          {/* Protagonista: cumplimiento de plazos, con a tiempo / tarde anidados */}
+          <div style={card}>
+            <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px' }}>
+              <div style={{ flexShrink:0 }}><div style={{ fontSize:32, fontWeight:800, color:cumpl==null?C.muted:cumpl>=80?C.greenText:cumpl>=50?'#E09B2D':C.overdueText, letterSpacing:'-.02em', lineHeight:1 }}>{cumpl==null?'—':`${cumpl}%`}</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>plazos cumplidos</div></div>
+              <div style={{ flex:1, minWidth:0, fontSize:12, color:C.muted, lineHeight:1.5 }}>De {conFecha} paso{conFecha!==1?'s':''} completado{conFecha!==1?'s':''} con plazo, <b style={{ color:C.greenText }}>{aTiempo} a tiempo</b> y <b style={{ color:C.overdueText }}>{tarde} tarde</b>.</div>
+            </div>
+            <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
+              {stat(pendVenc,'Pendientes vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(pendOk,'Pendientes al día',C.muted)}<div style={{ width:1, background:C.border }}/>{stat(conPlan.length,'Con plan',C.accent)}
+            </div>
+          </div>
+          {/* Por operación (tabla de números) */}
+          {opRows.length>0 && <>{secHd('Por operación')}<div style={card}>
+            <div style={{ display:'flex', alignItems:'center', padding:'8px 14px', borderBottom:`1px solid ${C.border}`, fontSize:9, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>
+              <div style={{ flex:1 }}>Operación</div><div style={{ width:60, textAlign:'right' }}>Proy.</div><div style={{ width:70, textAlign:'right' }}>Avance</div><div style={{ width:70, textAlign:'right' }}>A tiempo</div>
+            </div>
+            {opRows.map((o,i)=>{ const pct=o.conFecha?Math.round(o.aTiempo/o.conFecha*100):null
+              return <div key={i} style={{ display:'flex', alignItems:'center', padding:'10px 14px', borderTop:i?`1px solid ${C.border}`:'none', fontSize:12.5 }}>
+                <div style={{ flex:1, minWidth:0, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.nombre}</div>
+                <div style={{ width:60, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.nProy}</div>
+                <div style={{ width:70, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.done}/{o.total}</div>
+                <div style={{ width:70, textAlign:'right', fontWeight:700, fontVariantNumeric:'tabular-nums', color:pct==null?C.muted:pct>=80?C.greenText:pct>=50?'#E09B2D':C.overdueText }}>{pct==null?'—':`${pct}%`}</div>
+              </div> })}
+          </div></>}
+          {/* Dónde se atasca */}
+          {atasco.length>0 && <>{secHd('Dónde se atasca',null,'#E09B2D')}<div style={card}>
+            {atasco.map((a,i)=>(
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:11, padding:'10px 14px', borderTop:i?`1px solid ${C.border}`:'none' }}>
+                <div style={{ flex:1, minWidth:0, fontSize:12.5, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.t}</div>
+                <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:12, fontWeight:700, color:'#E09B2D' }}>+{a.media}d tarde</div><div style={{ fontSize:9.5, color:C.muted }}>{a.n===1?'1 vez':`${a.n} veces`}</div></div>
+              </div>
+            ))}
+          </div></>}
+        </>}
+      </div>
+    )
+  }
   const renderFoco = () => {
     const foco = (proyectos||[]).filter(p=>p.activo!==false && !p.pausado && ((selPer&&selPer!=='all')?esDePersona(p,selPer):true))
     const card = { background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', marginBottom:12 }
@@ -30076,20 +30150,25 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   }
 
   if(focoOpen) return renderFoco()
+  if(metOpen) return renderMetricas()
   if(bibOpen) return renderBiblioteca()
   const wsP = openId ? ((proyectos||[]).find(x=>String(x.id)===String(openId)) || (archivados||[]).find(x=>String(x.id)===String(openId))) : null
   if(wsP) return renderWorkspace(wsP)
 
   return (
     <div style={{ maxWidth:isDesktop?1040:720, margin:'0 auto', padding:'0 14px 40px' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
-        <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
-        <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:17, fontWeight:600, color:C.accent }}>Mis proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</div><div style={{ fontSize:10, color:C.muted, fontWeight:500, marginTop:1 }}>seguimiento de proyectos activos</div></div>
-        <button onClick={()=>setFocoOpen(true)} title='Mi foco — lo que pide tu acción, de un vistazo' style={{ fontSize:12, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>Mi foco</button>
-        {esAdmin&&<button onClick={()=>{ setBibSel((pmoOps||[])[0]?.id||null); setBibOpen(true) }} title='Editar la biblioteca de pasos por operación' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Biblioteca</button>}
-        {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
-        <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
-      </div>
+      {(()=>{ const btns = <>
+          <button onClick={()=>setFocoOpen(true)} title='Mi foco — lo que pide tu acción, de un vistazo' style={{ fontSize:12, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>Mi foco</button>
+          {esAdmin&&<button onClick={()=>setMetOpen(true)} title='Métricas del PMO: cumplimiento de plazos, por operación, dónde se atasca' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Métricas</button>}
+          {esAdmin&&<button onClick={()=>{ setBibSel((pmoOps||[])[0]?.id||null); setBibOpen(true) }} title='Editar la biblioteca de pasos por operación' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Biblioteca</button>}
+          {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
+          <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
+        </>
+        const titulo = <><button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button><div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:17, fontWeight:600, color:C.accent }}>Mis proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</div><div style={{ fontSize:10, color:C.muted, fontWeight:500, marginTop:1 }}>seguimiento de proyectos activos</div></div></>
+        return isDesktop
+          ? <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>{titulo}{btns}</div>
+          : <div style={{ padding:'14px 0 12px' }}><div style={{ display:'flex', alignItems:'center', gap:8 }}>{titulo}</div><div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginTop:10 }}>{btns}</div></div>
+      })()}
 
       {esAdmin&&activasSinProyecto.length>0&&(
         <div style={{ background:C.azulBg||'#E6F1FB', border:`1px solid ${C.border}`, borderRadius:10, marginBottom:10, overflow:'hidden' }}>
