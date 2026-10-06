@@ -28872,6 +28872,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const FIRM_MAIL_DOM = (String((BRAND?.pago?.gastos?.email)||'').split('@')[1]||'').toLowerCase()
   const [ultCont,setUltCont] = useState({})
   const [docsProy,setDocsProy] = useState({})   // cache de documentos de Drive por proyecto (para confirmar pasos del plan)
+  const [iaSug,setIaSug] = useState({})         // confirmaciones por CONTENIDO (IA leyó el documento) por proyecto
+  const [iaBusy,setIaBusy] = useState({})       // "leyendo con IA" por proyecto
   const resolverEmailCli = async(clientId)=>{ const cl=clients.find(c=>String(c.id)===String(clientId)); let to=(cl?.email||'').trim()
     if(!to){ try{ const {data}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(clientId)).maybeSingle(); if(data?.value) to=String(data.value).split(/[,;]/)[0].trim() }catch(_){} }
     if(!to){ try{ const {data}=await supabase.from('contacts').select('email,principal').eq('client_id',clientId); const c=(data||[]).find(x=>x.principal&&x.email)||(data||[]).find(x=>x.email); if(c) to=String(c.email).trim() }catch(_){} }
@@ -29129,6 +29131,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       { id:'d1', name:'Escritura de constitución Pehuén SpA.docx', mimeType:'application/vnd.google-apps.document', modifiedTime:hoy },
       { id:'d2', name:'Publicación Diario Oficial - extracto.pdf', mimeType:'application/pdf', modifiedTime:hoy },
       { id:'d3', name:'Minuta reunión cliente.docx', mimeType:'application/vnd.google-apps.document', modifiedTime:hoy },
+      { id:'d4', name:'Certificado de vigencia sociedad.pdf', mimeType:'application/pdf', modifiedTime:hoy },
     ] }})); return }
     const cl = clients.find(c=>String(c.id)===String(p.cliente_id)); const fid = cl?.drive_folder_id
     if(!fid){ setDocsProy(o=>({...o,[String(p.id)]:{none:true,noFolder:true}})); return }
@@ -29140,6 +29143,42 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       for(const s of subs){ try{ const r=await driveCall({ action:'search', q:`'${s.id}' in parents and trashed=false`, pageSize:100 }); files=files.concat((r.files||[]).filter(f=>f.mimeType!=='application/vnd.google-apps.folder')) }catch(_){} }
       setDocsProy(o=>({...o,[String(p.id)]:{ files }}))
     }catch(e){ setDocsProy(o=>({...o,[String(p.id)]:{ err:(e&&(e.code===401||e.code===403))?'sinpermiso':'error' }})) }
+  }
+  // Lee el CONTENIDO de un documento (PDF vía pdfjs). GDoc/Word: pendiente (requiere export de texto).
+  const extraerTextoDoc = async (file) => {
+    const mt=file.mimeType||''; const isPdf = mt==='application/pdf' || /\.pdf$/i.test(file.name||'')
+    if(!isPdf) return null
+    const d = await driveCall({ action:'download', fileId:file.id, mimeType:mt })
+    if(!d?.base64) return null
+    const bin=atob(d.base64); const buf=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i)
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise
+    let text=''; const N=Math.min(pdf.numPages,8)
+    for(let i=1;i<=N;i++){ const pg=await pdf.getPage(i); const c=await pg.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
+    return text.slice(0,6000)
+  }
+  // Revisa con IA el CONTENIDO de los documentos que el NOMBRE no confirmó: pregunta cuál paso del plan evidencia cada uno. Compuerta (surgen en la misma tarjeta). Acotado (6 docs) y bajo demanda.
+  const revisarDocsIA = async (p) => {
+    if(iaBusy[p.id]) return; setIaBusy(o=>({...o,[p.id]:true}))
+    try{
+      const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
+      const yaNombre=new Set(docSugDe(p).map(s=>String(s.origenId)))
+      const yaResuelto=new Set((pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='documento').map(s=>String(s.origen_id)))
+      const pend=hitosDe(p).filter(h=>!h.hecho)
+      const cands=files.filter(f=>{ const mt=f.mimeType||''; const isPdf=mt==='application/pdf'||/\.pdf$/i.test(f.name||''); const fe=String(f.modifiedTime||'').slice(0,10); return isPdf && !yaNombre.has(String(f.id)) && !yaResuelto.has(String(f.id)) && (!fe||fe>=_TRAMITE_DESDE) }).slice(0,6)
+      if(!pend.length||!cands.length){ setIaSug(o=>({...o,[p.id]:[]})); setIaBusy(o=>({...o,[p.id]:false})); return }
+      const docs=[]
+      for(const f of cands){ try{ const tx=await extraerTextoDoc(f); if(tx&&tx.trim().length>40) docs.push({id:f.id,name:f.name,fecha:String(f.modifiedTime||'').slice(0,10),texto:tx}) }catch(_){} }
+      if(!docs.length){ setIaSug(o=>({...o,[p.id]:[]})); setIaBusy(o=>({...o,[p.id]:false})); return }
+      const pasosTxt=pend.map((h,i)=>`${i+1}. ${h.titulo}`).join('\n')
+      const docsTxt=docs.map((d,i)=>`[${String.fromCharCode(65+i)}] ${d.name}\n${d.texto}`).join('\n\n---\n\n')
+      const prompt=`Eres asistente de un estudio de abogados chileno. PASOS pendientes del proyecto:\n${pasosTxt}\n\nDOCUMENTOS de la carpeta (nombre + extracto):\n${docsTxt}\n\n¿Qué documento EVIDENCIA que un paso está CUMPLIDO (el documento es el producto/resultado de ese paso, no solo lo menciona)? Responde SOLO JSON: [{"doc":"A","paso":N}] con los matches claros; si ninguno, []. Usa solo lo que el documento prueba; no inventes.`
+      const data=await claudeCall({model:'claude-sonnet-4-6',max_tokens:400,messages:[{role:'user',content:prompt}]})
+      const raw=(data?.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
+      let arr=[]; try{ arr=JSON.parse(raw) }catch(_){ arr=[] }
+      const out=[]; (Array.isArray(arr)?arr:[]).forEach(m=>{ const di=String(m.doc||'').toUpperCase().charCodeAt(0)-65; const pi=(parseInt(m.paso,10)||0)-1; const d=docs[di]; const h=pend[pi]; if(d&&h&&!out.some(x=>x.hitoId===h.id)) out.push({ source:'documento', origenId:d.id, label:d.name+' · leído por IA', conceptKey:_normC(d.name), hitoId:h.id, hitoTitulo:h.titulo, fecha:d.fecha||null }) })
+      setIaSug(o=>({...o,[p.id]:out}))
+    }catch(e){ setIaSug(o=>({...o,[p.id]:[]})) }
+    setIaBusy(o=>({...o,[p.id]:false}))
   }
   // Fase 4 — RADAR DE ATENCIÓN (rule-based, datos reales; umbrales alineados al correo semanal). Anticipa, no proyecta plata ni fechas inventadas.
   // Devuelve {nivel:'alto'|'medio', motivos:[], orden} o null si el proyecto está al día. Solo proyectos en curso.
@@ -29465,9 +29504,17 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             </div>
           </div>
           {/* AGENTE PMO · se refleja solo — gastos de trámite del cliente → hito, con compuerta (bloque 2) */}
-          {(()=>{ const sug=[...tramiteSugDe(p), ...docSugDe(p)]; if(!sug.length) return null
+          {(()=>{
+            const base=[...tramiteSugDe(p), ...docSugDe(p), ...(iaSug[p.id]||[])]
+            const seen=new Set(); const sug=base.filter(s=>{ if(seen.has(s.hitoId)) return false; seen.add(s.hitoId); return true })
+            const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
+            const yaNombre=new Set(docSugDe(p).map(s=>String(s.origenId)))
+            const candPDF=files.filter(f=>{ const mt=f.mimeType||''; const isPdf=mt==='application/pdf'||/\.pdf$/i.test(f.name||''); return isPdf && !yaNombre.has(String(f.id)) }).length
+            const puedeIA = esAdmin && candPDF>0 && hitosDe(p).some(h=>!h.hecho)
+            if(!sug.length && !puedeIA) return null
+            const iaDone = iaSug[p.id]!==undefined
             return <div style={{ background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:12, padding:'11px 13px', marginBottom:12 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO · evidencia del plan</span><span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span></div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:sug.length?8:0 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO · evidencia del plan</span>{sug.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span>}</div>
               {sug.map((s,i)=>(
                 <div key={s.source+'_'+s.origenId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
                   <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
@@ -29478,6 +29525,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                   </div>
                 </div>
               ))}
+              {puedeIA&&<div style={{ marginTop:sug.length?10:0, display:'flex', alignItems:'center', gap:10 }}>
+                <button onClick={()=>revisarDocsIA(p)} disabled={!!iaBusy[p.id]} style={{ fontSize:11.5, fontWeight:600, color:'#5B3E8E', background:'#EFEAF7', border:'none', borderRadius:8, padding:'6px 12px', cursor:iaBusy[p.id]?'default':'pointer' }}>{iaBusy[p.id]?'Leyendo documentos…':'Leer documentos con IA'}</button>
+                {iaDone&&!iaBusy[p.id]&&(iaSug[p.id]||[]).length===0&&<span style={{ fontSize:11, color:C.muted }}>Sin evidencia nueva en el contenido.</span>}
+              </div>}
             </div>
           })()}
           {/* ÚLTIMO CONTACTO (Gmail del usuario; admin) */}
