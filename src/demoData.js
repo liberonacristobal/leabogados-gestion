@@ -343,7 +343,6 @@ export const demoData = {
   ],
   pmo_operaciones: [
     { id:'op1', nombre:'Constitución de sociedad por aporte', hint:'Constitución con aporte de bienes (inmuebles / acciones).', orden:1, activo:true, pasos:[
-      {t:'Solicitar provisión de fondos', m:false, dias:3, subs:[]},
       {t:'Due diligence del aportante y de los bienes', m:false, dias:10, subs:['Recopilar títulos de dominio','Certificados: dominio vigente, gravámenes','Verificar vigencia y poderes del aportante']},
       {t:'Diseño de estructura y estatutos', m:false, dias:7, subs:['Elegir tipo social (SpA / Ltda)','Redactar borrador de estatutos']},
       {t:'Escritura pública de constitución', m:true, dias:7, subs:['Agendar notaría','Firma de los comparecientes']},
@@ -354,7 +353,6 @@ export const demoData = {
       {t:'Cierre y entrega', m:false, dias:5, subs:['Armar carpeta societaria']},
     ]},
     { id:'op2', nombre:'Reorganización / reestructuración patrimonial', hint:'Holding, división, fusión, aportes + opinión tributaria.', orden:2, activo:true, pasos:[
-      {t:'Solicitar provisión de fondos', m:false, dias:3, subs:[]},
       {t:'Diagnóstico tributario y patrimonial', m:false, dias:14, subs:['Levantar estructura actual','Identificar contingencias']},
       {t:'Diseño + informe tributario', m:false, dias:14, subs:['Definir figura','Razón de negocio (art. 64 LIR)']},
       {t:'Escrituras de los actos', m:true, dias:10, subs:[]},
