@@ -28995,7 +28995,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
   const [pickOp,setPickOp] = useState('')          // operación a aplicar al agregar ventas desde el panel "Elegir"
   const [focoOpen,setFocoOpen] = useState(false)   // vista "Mi foco" (cross-proyecto: qué vence / siguiente paso / detenidos)
-  const [metOpen,setMetOpen] = useState(false)     // vista "Métricas del PMO" (Ola 4)
+  const [metOpen,setMetOpen] = useState(false)     // vista "Métricas de proyectos" (Ola 4)
+  const [metExp,setMetExp] = useState(null)        // fila expandida en Métricas (drill-down a su lista de proyectos)
   const [bibOpen,setBibOpen] = useState(false)     // editor de la biblioteca de pasos (pmo_operaciones)
   const [bibSel,setBibSel] = useState(null)        // operación seleccionada en el editor
   const NF0 = { cliente_id:'', sale_id:'', operacionId:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
@@ -29681,7 +29682,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           {/* OLA 3 — AUTO-CONFIRMADO: pasos que el Agente marcó SOLO (patrón ya aprendido ≥2 veces). Avisado y reversible. */}
           {(()=>{ const mios=autoHechos.filter(x=>String(x.pid)===String(p.id)); if(!mios.length) return null
             return <div style={{ background:C.greenBg, border:`1px solid ${C.greenText}33`, borderRadius:12, padding:'11px 13px', marginBottom:12 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.greenText} strokeWidth="2.5"><path d="M4 12l5 5L20 6"/></svg><span style={{ fontSize:10, fontWeight:700, color:C.greenText, textTransform:'uppercase', letterSpacing:.3 }}>Confirmado solo por el Agente</span></div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.greenText} strokeWidth="2.5"><path d="M4 12l5 5L20 6"/></svg><span style={{ fontSize:10, fontWeight:700, color:C.greenText, textTransform:'uppercase', letterSpacing:.3 }}>Confirmado automáticamente</span></div>
               {mios.map((x,i)=>(
                 <div key={x.evKey} style={{ display:'flex', alignItems:'center', gap:10, borderTop:i?`1px solid ${C.greenText}22`:'none', padding:'7px 0 2px' }}>
                   <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:12.5, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{x.titulo}</div><div style={{ fontSize:10.5, color:C.muted }}>evidencia inequívoca · patrón aprendido</div></div>
@@ -29702,7 +29703,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             if(!sug.length && !puedeIA) return null
             const iaDone = iaSug[p.id]!==undefined
             return <div style={{ background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:12, padding:'11px 13px', marginBottom:12 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:sug.length?8:0 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO · evidencia del plan</span>{sug.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span>}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:sug.length?8:0 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Antecedentes del plan</span>{sug.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span>}</div>
               {sug.map((s,i)=>(
                 <div key={s.source+'_'+s.origenId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
                   <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':s.source==='correo'?'Un correo':s.source==='fondo'?'Un cobro':s.source==='calendario'?'Una cita':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
@@ -30004,7 +30005,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         {esAdmin && <div style={{ ...card, marginTop:4 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:12.5, fontWeight:700, color:C.accent }}>Agente de toda la cartera · Drive</div>
+              <div style={{ fontSize:12.5, fontWeight:700, color:C.accent }}>Antecedentes de la cartera · Drive</div>
               <div style={{ fontSize:11, color:C.muted, marginTop:2, lineHeight:1.4 }}>A diario revisa los documentos de Drive de la cartera y deja la evidencia por confirmar. No marca pasos solo.</div>
             </div>
             <span style={{ fontSize:10, fontWeight:700, color:crossCfg==='on'?C.greenText:C.grisText, background:crossCfg==='on'?C.greenBg:C.bgSoft, borderRadius:20, padding:'2px 9px', flexShrink:0 }}>{crossCfg==='on'?'Encendido':'Apagado'}</span>
@@ -30076,14 +30077,19 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     const dif = (fecha,plazo) => Math.round((new Date(fecha+'T00:00')-new Date(plazo+'T00:00'))/86400000)
     let aTiempo=0, tarde=0, pendVenc=0, pendOk=0; const demora={}
     conPlan.forEach(p=>hitosDe(p).forEach(h=>{ if(!h.plazo) return
-      if(h.hecho){ if(h.fecha){ const d=dif(String(h.fecha).slice(0,10),String(h.plazo).slice(0,10)); if(d<=0) aTiempo++; else { tarde++; const k=_normTxt(h.titulo); (demora[k]=demora[k]||{sum:0,n:0,t:h.titulo}); demora[k].sum+=d; demora[k].n++ } } }
+      if(h.hecho){ if(h.fecha){ const d=dif(String(h.fecha).slice(0,10),String(h.plazo).slice(0,10)); if(d<=0) aTiempo++; else { tarde++; const k=_normTxt(h.titulo); (demora[k]=demora[k]||{sum:0,n:0,t:h.titulo,proys:[]}); demora[k].sum+=d; demora[k].n++; if(!demora[k].proys.some(x=>String(x.id)===String(p.id))) demora[k].proys.push(p) } } }
       else { const dd=cartDiasPlazo(h.plazo); if(dd!=null&&dd<0) pendVenc++; else pendOk++ } }))
     const conFecha = aTiempo+tarde; const cumpl = conFecha?Math.round(aTiempo/conFecha*100):null
     const ops={}
-    conPlan.forEach(p=>{ const oid=pmoProyOp[String(p.id)]||'_'; const nombre=(pmoOps||[]).find(o=>String(o.id)===String(oid))?.nombre || 'Sin operación'; const o=(ops[oid]=ops[oid]||{nombre,nProy:0,done:0,total:0,aTiempo:0,conFecha:0}); o.nProy++
+    conPlan.forEach(p=>{ const oid=pmoProyOp[String(p.id)]||'_'; const nombre=(pmoOps||[]).find(o=>String(o.id)===String(oid))?.nombre || 'Sin operación'; const o=(ops[oid]=ops[oid]||{key:oid,nombre,nProy:0,done:0,total:0,aTiempo:0,conFecha:0,proys:[]}); o.nProy++; o.proys.push(p)
       hitosDe(p).forEach(h=>{ o.total++; if(h.hecho){ o.done++; if(h.plazo&&h.fecha){ o.conFecha++; if(dif(String(h.fecha).slice(0,10),String(h.plazo).slice(0,10))<=0) o.aTiempo++ } } }) })
     const opRows = Object.values(ops).filter(o=>o.total).sort((a,b)=>b.nProy-a.nProy)
-    const atasco = Object.values(demora).map(x=>({t:x.t, media:Math.round(x.sum/x.n), n:x.n})).sort((a,b)=>b.media-a.media).slice(0,4)
+    const atasco = Object.entries(demora).map(([k,x])=>({k, t:x.t, media:Math.round(x.sum/x.n), n:x.n, proys:x.proys})).sort((a,b)=>b.media-a.media).slice(0,4)
+    const avanceDe = p => { const hs=hitosDe(p); return `${hs.filter(h=>h.hecho).length}/${hs.length}` }
+    const subFila = p => <div key={'s'+p.id} onClick={()=>{ setMetOpen(false); abrir(p) }} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px 8px 26px', borderTop:`1px solid ${C.border}`, background:C.bgSoft||'#F7F9FA', cursor:'pointer' }}>
+      <div style={{ flex:1, minWidth:0, fontSize:12, color:C.accent, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
+      <div style={{ fontSize:10.5, fontWeight:700, color:C.muted, flexShrink:0, fontVariantNumeric:'tabular-nums' }}>{avanceDe(p)}</div><span style={{ color:C.done, fontSize:13, flexShrink:0 }}>›</span>
+    </div>
     const exportar = () => {
       const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`
       const rows=[['Operación','Proyectos','Pasos hechos','Pasos totales','Pasos con fecha','A tiempo','% a tiempo']]
@@ -30092,13 +30098,13 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       const csv='﻿'+rows.map(r=>r.map(esc).join(';')).join('\n')
       const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='metricas_pmo.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),500)
     }
-    const stat = (n,l,col) => <div style={{ flex:1, padding:'10px 8px', textAlign:'center' }}><div style={{ fontSize:19, fontWeight:800, color:n>0?col:C.muted, letterSpacing:'-.02em' }}>{n}</div><div style={{ fontSize:9.5, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginTop:1 }}>{l}</div></div>
+    const stat = (n,l,col,onClick) => <div onClick={onClick} style={{ flex:1, padding:'10px 8px', textAlign:'center', cursor:onClick?'pointer':'default' }}><div style={{ fontSize:19, fontWeight:800, color:n>0?col:C.muted, letterSpacing:'-.02em' }}>{n}</div><div style={{ fontSize:9.5, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginTop:1 }}>{l}</div></div>
     return (
       <div style={{ maxWidth:isDesktop?880:720, margin:'0 auto', padding:'0 14px 48px' }}>
         <div style={{ padding:'14px 0 10px' }}>
           <button onClick={()=>setMetOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Métricas del PMO</div>
+            <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Métricas de proyectos</div>
             {conPlan.length>0 && <span onClick={exportar} style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Exportar CSV ↓</span>}
           </div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · {conPlan.length} proyecto{conPlan.length!==1?'s':''} con plan</div>
@@ -30111,30 +30117,37 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               <div style={{ flex:1, minWidth:0, fontSize:12, color:C.muted, lineHeight:1.5 }}>De {conFecha} paso{conFecha!==1?'s':''} completado{conFecha!==1?'s':''} con plazo, <b style={{ color:C.greenText }}>{aTiempo} a tiempo</b> y <b style={{ color:C.overdueText }}>{tarde} tarde</b>.</div>
             </div>
             <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
-              {stat(pendVenc,'Pendientes vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(pendOk,'Pendientes al día',C.muted)}<div style={{ width:1, background:C.border }}/>{stat(conPlan.length,'Con plan',C.accent)}
+              {stat(pendVenc,'Pendientes vencidos',C.overdueText,()=>{ setMetOpen(false); setFocoOpen(true) })}<div style={{ width:1, background:C.border }}/>{stat(pendOk,'Pendientes al día',C.muted)}<div style={{ width:1, background:C.border }}/>{stat(conPlan.length,'Con plan',C.accent,()=>setMetOpen(false))}
             </div>
           </div>
           {/* Por operación (tabla de números) */}
           {opRows.length>0 && <>{secHd('Por operación')}<div style={card}>
             <div style={{ display:'flex', alignItems:'center', padding:'8px 14px', borderBottom:`1px solid ${C.border}`, fontSize:9, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>
-              <div style={{ flex:1 }}>Operación</div><div style={{ width:60, textAlign:'right' }}>Proy.</div><div style={{ width:70, textAlign:'right' }}>Avance</div><div style={{ width:70, textAlign:'right' }}>A tiempo</div>
+              <span style={{ width:12, flexShrink:0 }}/><div style={{ flex:1 }}>Operación</div><div style={{ width:54, textAlign:'right' }}>Proy.</div><div style={{ width:66, textAlign:'right' }}>Avance</div><div style={{ width:66, textAlign:'right' }}>A tiempo</div>
             </div>
-            {opRows.map((o,i)=>{ const pct=o.conFecha?Math.round(o.aTiempo/o.conFecha*100):null
-              return <div key={i} style={{ display:'flex', alignItems:'center', padding:'10px 14px', borderTop:i?`1px solid ${C.border}`:'none', fontSize:12.5 }}>
-                <div style={{ flex:1, minWidth:0, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.nombre}</div>
-                <div style={{ width:60, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.nProy}</div>
-                <div style={{ width:70, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.done}/{o.total}</div>
-                <div style={{ width:70, textAlign:'right', fontWeight:700, fontVariantNumeric:'tabular-nums', color:pct==null?C.muted:pct>=80?C.greenText:pct>=50?'#E09B2D':C.overdueText }}>{pct==null?'—':`${pct}%`}</div>
+            {opRows.map((o,i)=>{ const pct=o.conFecha?Math.round(o.aTiempo/o.conFecha*100):null; const ek='op:'+o.key; const open=metExp===ek
+              return <div key={i}>
+                <div onClick={()=>setMetExp(open?null:ek)} style={{ display:'flex', alignItems:'center', padding:'10px 14px', borderTop:i?`1px solid ${C.border}`:'none', fontSize:12.5, cursor:'pointer' }}>
+                  <span style={{ width:12, flexShrink:0, color:C.done, fontSize:10 }}>{open?'▾':'▸'}</span>
+                  <div style={{ flex:1, minWidth:0, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.nombre}</div>
+                  <div style={{ width:54, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.nProy}</div>
+                  <div style={{ width:66, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.done}/{o.total}</div>
+                  <div style={{ width:66, textAlign:'right', fontWeight:700, fontVariantNumeric:'tabular-nums', color:pct==null?C.muted:pct>=80?C.greenText:pct>=50?'#E09B2D':C.overdueText }}>{pct==null?'—':`${pct}%`}</div>
+                </div>
+                {open && o.proys.map(subFila)}
               </div> })}
           </div></>}
           {/* Dónde se atasca */}
           {atasco.length>0 && <>{secHd('Dónde se atasca',null,'#E09B2D')}<div style={card}>
-            {atasco.map((a,i)=>(
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:11, padding:'10px 14px', borderTop:i?`1px solid ${C.border}`:'none' }}>
-                <div style={{ flex:1, minWidth:0, fontSize:12.5, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.t}</div>
-                <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:12, fontWeight:700, color:'#E09B2D' }}>+{a.media}d tarde</div><div style={{ fontSize:9.5, color:C.muted }}>{a.n===1?'1 vez':`${a.n} veces`}</div></div>
-              </div>
-            ))}
+            {atasco.map((a,i)=>{ const ek='at:'+a.k; const open=metExp===ek
+              return <div key={i}>
+                <div onClick={()=>setMetExp(open?null:ek)} style={{ display:'flex', alignItems:'center', gap:11, padding:'10px 14px', borderTop:i?`1px solid ${C.border}`:'none', cursor:'pointer' }}>
+                  <span style={{ width:12, flexShrink:0, color:C.done, fontSize:10 }}>{open?'▾':'▸'}</span>
+                  <div style={{ flex:1, minWidth:0, fontSize:12.5, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.t}</div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:12, fontWeight:700, color:'#E09B2D' }}>+{a.media}d tarde</div><div style={{ fontSize:9.5, color:C.muted }}>{a.n===1?'1 vez':`${a.n} veces`}</div></div>
+                </div>
+                {open && a.proys.map(subFila)}
+              </div> })}
           </div></>}
         </>}
       </div>
@@ -30221,7 +30234,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     <div style={{ maxWidth:isDesktop?1040:720, margin:'0 auto', padding:'0 14px 40px' }}>
       {(()=>{ const btns = <>
           <button onClick={()=>setFocoOpen(true)} title='Mi foco — lo que pide tu acción, de un vistazo' style={{ fontSize:12, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>Mi foco</button>
-          {esAdmin&&<button onClick={()=>setMetOpen(true)} title='Métricas del PMO: cumplimiento de plazos, por operación, dónde se atasca' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Métricas</button>}
+          {esAdmin&&<button onClick={()=>setMetOpen(true)} title='Métricas de proyectos: cumplimiento de plazos, por operación, dónde se atasca' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Métricas</button>}
           {esAdmin&&<button onClick={()=>{ setBibSel((pmoOps||[])[0]?.id||null); setBibOpen(true) }} title='Editar la biblioteca de pasos por operación' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Biblioteca</button>}
           {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
           <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
