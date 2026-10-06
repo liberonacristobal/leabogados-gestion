@@ -29839,6 +29839,52 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const secHdBib = t => <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>{t}</span>
 
   // MI FOCO — una pantalla cross-proyecto: qué vence, tu siguiente paso por proyecto (el mapa) y lo detenido. Para dejar de revisar uno por uno.
+  // OLA 2 — Carta Gantt del PORTAFOLIO (descargable → PDF): una fila por proyecto sobre un mismo eje de meses.
+  // Reusa la lógica del Gantt por proyecto (eje de meses + rombos plazo/real + línea hoy), pero cross-proyecto:
+  // se ve de un vistazo cuáles se solapan y cuáles vienen. Barras/spans van en el PDF, no en la UI (regla "no barras").
+  const descargarGanttPortafolio = () => {
+    const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const hoy=new Date().toISOString().slice(0,10)
+    const filtro = selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'
+    const items = (proyectos||[]).filter(p=>p.activo!==false && !p.pausado && ((selPer&&selPer!=='all')?esDePersona(p,selPer):true))
+      .map(p=>{ const hs=hitosDe(p); const fechas=[]; hs.forEach(h=>{ if(h.plazo) fechas.push(String(h.plazo).slice(0,10)); if(h.fecha) fechas.push(String(h.fecha).slice(0,10)) })
+        const done=hs.filter(h=>h.hecho).length; const next=hs.filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
+        return { p, hs, fechas, done, next } })
+      .filter(x=>x.fechas.length)   // solo proyectos con plan datado
+    if(!items.length){ appAlert('Aún no hay proyectos con plazos para graficar.'); return }
+    const allF=[hoy]; items.forEach(x=>x.fechas.forEach(f=>allF.push(f)))
+    const minF=allF.reduce((a,b)=>a<b?a:b), maxF=allF.reduce((a,b)=>a>b?a:b)
+    const d0=new Date(minF+'T12:00'), d1=new Date(maxF+'T12:00'); const span=Math.max(1,(d1-d0))
+    const pos=f=>Math.max(0,Math.min(100,((new Date(String(f).slice(0,10)+'T12:00')-d0)/span)*100))
+    const months=[]; { const c=new Date(d0.getFullYear(),d0.getMonth(),1); const end=new Date(d1.getFullYear(),d1.getMonth(),1); while(c<=end){ months.push(new Date(c)); c.setMonth(c.getMonth()+1) } }
+    const monthCols=months.map(m=>`<div style="flex:1;border-left:1px solid #E4E8EB;padding:3px 4px;font-size:9px;color:#537281;text-transform:uppercase">${m.toLocaleDateString('es-CL',{month:'short'})} ${String(m.getFullYear()).slice(2)}</div>`).join('')
+    const hoyPos=pos(hoy)
+    const filas = items.map(x=>{ const fs=x.fechas.map(pos); const a=Math.min(...fs), b=Math.max(...fs)
+      const rombos = x.hs.map(h=>{ const plan=h.plazo?pos(h.plazo):null, real=h.fecha?pos(h.fecha):null
+        return (plan!=null?`<div title="plazo: ${esc(h.titulo)}" style="position:absolute;left:${plan}%;top:50%;width:9px;height:9px;border:1.5px solid #003C50;background:#fff;transform:translate(-50%,-50%) rotate(45deg)"></div>`:'')
+             + (real!=null?`<div title="hecho: ${esc(h.titulo)}" style="position:absolute;left:${real}%;top:50%;width:9px;height:9px;background:#1D9E75;transform:translate(-50%,-50%) rotate(45deg)"></div>`:'') }).join('')
+      const sub = `${x.done}/${x.hs.length}${x.next?` · ${esc(x.next.titulo)}`:''}`
+      return `<div style="display:flex;align-items:center;border-top:1px solid #EEF1F3">
+        <div style="width:250px;flex-shrink:0;padding:7px 10px"><div style="font-size:11px;font-weight:600;color:#003C50">${esc(cnm(x.p.cliente_id)||x.p.nombre_proyecto||'Proyecto')}</div><div style="font-size:9px;color:#99ABB4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:235px">${sub}</div></div>
+        <div style="flex:1;position:relative;height:28px;border-left:1px solid #E4E8EB">
+          <div style="position:absolute;left:${hoyPos}%;top:0;bottom:0;width:1px;background:#99ABB4"></div>
+          <div style="position:absolute;left:${a}%;width:${Math.max(0,b-a)}%;top:50%;height:2px;background:#E4E8EB;transform:translateY(-50%)"></div>
+          ${rombos}
+        </div></div>` }).join('')
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Carta Gantt del portafolio</title><style>@media print{.no-print{display:none}}body{margin:0;font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;background:#fff}</style></head><body><div style="max-width:980px;margin:0 auto;padding:22px 26px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #003C50;padding-bottom:10px;margin-bottom:14px">
+        <div><div style="font-size:16px;font-weight:800;color:#003C50">Carta Gantt del portafolio</div><div style="font-size:11px;color:#537281;margin-top:2px">${esc(filtro)} · ${items.length} proyecto${items.length!==1?'s':''}</div></div>
+        <div style="font-size:10px;color:#537281;text-align:right">${esc(BRAND?.nombre||'')}<br>${esc(hoy)}</div>
+      </div>
+      <div style="border:1px solid #E4E8EB;border-radius:8px;overflow:hidden">
+        <div style="display:flex;background:#F5F7F9"><div style="width:250px;flex-shrink:0;padding:3px 10px;font-size:9px;color:#537281;text-transform:uppercase">Proyecto</div>${monthCols}</div>
+        ${filas}
+      </div>
+      <div style="margin-top:10px;font-size:9.5px;color:#537281">◇ plazo planificado · ◆ realizado (verde) · línea gris = hoy. Un proyecto por fila, mismo eje de tiempo.</div>
+      <button class="no-print" onclick="window.print()" style="margin-top:16px;background:#003C50;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer">Imprimir / Guardar PDF</button>
+    </div></body></html>`
+    const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
+  }
   const renderFoco = () => {
     const foco = (proyectos||[]).filter(p=>p.activo!==false && !p.pausado && ((selPer&&selPer!=='all')?esDePersona(p,selPer):true))
     const card = { background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', marginBottom:12 }
@@ -29873,7 +29919,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       <div style={{ maxWidth:isDesktop?880:720, margin:'0 auto', padding:'0 14px 48px' }}>
         <div style={{ padding:'14px 0 10px' }}>
           <button onClick={()=>setFocoOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
-          <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Mi foco</div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Mi foco</div>
+            {conPlan.length>0 && <span onClick={descargarGanttPortafolio} title='Todos los proyectos en un mismo eje de tiempo (para imprimir/PDF)' style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Carta Gantt del portafolio ↓</span>}
+          </div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · lo que pide tu acción, de un vistazo</div>
         </div>
         <div style={{ ...card, display:'flex' }}>
