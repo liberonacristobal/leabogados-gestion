@@ -29197,18 +29197,9 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       setDocsProy(o=>({...o,[String(p.id)]:{ files }}))
     }catch(e){ setDocsProy(o=>({...o,[String(p.id)]:{ err:(e&&(e.code===401||e.code===403))?'sinpermiso':'error' }})) }
   }
-  // Lee el CONTENIDO de un documento (PDF vía pdfjs). GDoc/Word: pendiente (requiere export de texto).
-  const extraerTextoDoc = async (file) => {
-    const mt=file.mimeType||''; const isPdf = mt==='application/pdf' || /\.pdf$/i.test(file.name||'')
-    if(!isPdf) return null
-    const d = await driveCall({ action:'download', fileId:file.id, mimeType:mt })
-    if(!d?.base64) return null
-    const bin=atob(d.base64); const buf=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i)
-    const pdf=await pdfjsLib.getDocument({data:buf}).promise
-    let text=''; const N=Math.min(pdf.numPages,8)
-    for(let i=1;i<=N;i++){ const pg=await pdf.getPage(i); const c=await pg.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
-    return text.slice(0,6000)
-  }
+  // ¿El contenido del archivo es legible por IA? PDF (pdfjs) + Google Doc / Word .docx (mammoth) — vía leerDriveTexto.
+  const _legible = f => { const mt=f.mimeType||''; const nm=(f.name||'').toLowerCase()
+    return mt==='application/pdf' || nm.endsWith('.pdf') || mt==='application/vnd.google-apps.document' || mt==='application/vnd.openxmlformats-officedocument.wordprocessingml.document' || nm.endsWith('.docx') }
   // Revisa con IA el CONTENIDO de los documentos que el NOMBRE no confirmó: pregunta cuál paso del plan evidencia cada uno. Compuerta (surgen en la misma tarjeta). Acotado (6 docs) y bajo demanda.
   // Revisa con IA el CONTENIDO de la evidencia que no confirmó por nombre/asunto: documentos (PDF, se baja y extrae texto) + correos (asunto+snippet). Una sola llamada; compuerta.
   const revisarDocsIA = async (p) => {
@@ -29217,13 +29208,13 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       const pend=hitosDe(p).filter(h=>!h.hecho)
       const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
       const yaDoc=new Set([...docSugDe(p).map(s=>String(s.origenId)), ...(pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='documento').map(s=>String(s.origen_id))])
-      const docCands=files.filter(f=>{ const mt=f.mimeType||''; const isPdf=mt==='application/pdf'||/\.pdf$/i.test(f.name||''); const fe=String(f.modifiedTime||'').slice(0,10); return isPdf && !yaDoc.has(String(f.id)) && (!fe||fe>=_TRAMITE_DESDE) }).slice(0,5)
+      const docCands=files.filter(f=>{ const fe=String(f.modifiedTime||'').slice(0,10); return _legible(f) && !yaDoc.has(String(f.id)) && (!fe||fe>=_TRAMITE_DESDE) }).slice(0,5)
       const cc=correosProy[String(p.id)]; const msgs=(cc&&cc.msgs)||[]
       const yaCorreo=new Set([...correoSugDe(p).map(s=>String(s.origenId)), ...(pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='correo').map(s=>String(s.origen_id))])
       const mailCands=msgs.filter(m=>{ const fe=String(m.fecha||'').slice(0,10); return !yaCorreo.has(String(m.id)) && (!fe||fe>=_TRAMITE_DESDE) }).slice(0,8)
       if(!pend.length || (!docCands.length && !mailCands.length)){ setIaSug(o=>({...o,[p.id]:[]})); setIaBusy(o=>({...o,[p.id]:false})); return }
       const items=[]
-      for(const f of docCands){ try{ const tx=await extraerTextoDoc(f); if(tx&&tx.trim().length>40) items.push({ source:'documento', id:f.id, name:f.name, fecha:String(f.modifiedTime||'').slice(0,10), texto:tx }) }catch(_){} }
+      for(const f of docCands){ try{ const tx=await leerDriveTexto(f); if(tx&&tx.trim().length>40) items.push({ source:'documento', id:f.id, name:f.name, fecha:String(f.modifiedTime||'').slice(0,10), texto:tx.slice(0,6000) }) }catch(_){} }
       mailCands.forEach(m=>{ const tx=`${m.subject||''}\n${m.snippet||''}`; if(tx.trim().length>10) items.push({ source:'correo', id:m.id, name:m.subject||'(correo)', fecha:String(m.fecha||'').slice(0,10), texto:tx }) })
       if(!items.length){ setIaSug(o=>({...o,[p.id]:[]})); setIaBusy(o=>({...o,[p.id]:false})); return }
       const pasosTxt=pend.map((h,i)=>`${i+1}. ${h.titulo}`).join('\n')
@@ -29566,7 +29557,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             const seen=new Set(); const sug=base.filter(s=>{ if(seen.has(s.hitoId)) return false; seen.add(s.hitoId); return true })
             const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
             const yaNombre=new Set(docSugDe(p).map(s=>String(s.origenId)))
-            const candPDF=files.filter(f=>{ const mt=f.mimeType||''; const isPdf=mt==='application/pdf'||/\.pdf$/i.test(f.name||''); return isPdf && !yaNombre.has(String(f.id)) }).length
+            const candPDF=files.filter(f=>_legible(f) && !yaNombre.has(String(f.id))).length
             const cc=correosProy[String(p.id)]; const candMail=((cc&&cc.msgs)||[]).filter(m=>!correoSugDe(p).some(s=>String(s.origenId)===String(m.id))).length
             const puedeIA = esAdmin && (candPDF>0||candMail>0) && hitosDe(p).some(h=>!h.hecho)
             if(!sug.length && !puedeIA) return null
