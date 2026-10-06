@@ -29599,7 +29599,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <div style="display:flex;background:#F5F7F9"><div style="width:250px;flex-shrink:0;padding:3px 10px;font-size:9px;color:#537281;text-transform:uppercase">Paso</div>${monthCols}</div>
           ${filas}
         </div>
-        <div style="margin-top:10px;font-size:9.5px;color:#537281">◇ plazo planificado · ◆ realizado (verde) · línea gris = hoy. Fechas reales registradas en el proyecto.</div>
+        <div style="margin-top:10px;font-size:9.5px;color:#537281">◇ plazo planificado · ◆ realizado en verde · línea gris = hoy. Fechas reales registradas en el proyecto.</div>
         <button class="no-print" onclick="window.print()" style="margin-top:16px;background:#003C50;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer">Imprimir / Guardar PDF</button>
       </div></body></html>`
       const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
@@ -29938,7 +29938,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <div style={{ padding:'14px 0 10px' }}>
           <button onClick={()=>setBibOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
           <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Biblioteca de pasos</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>El paso a paso y la duración típica de cada operación. Arma el plan y sus plazos; la app ajusta los días con la experiencia.</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>El paso a paso y la duración de cada operación; arma el plan y sus plazos.</div>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
           <select value={op?op.id:''} onChange={e=>setBibSel(e.target.value)} style={{ ...inp, flex:1, minWidth:0, fontSize:13, padding:'9px 11px' }}>{ops.map(o=><option key={o.id} value={o.id}>{o.nombre} · {(o.pasos||[]).length} pasos</option>)}</select>
@@ -29956,7 +29956,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 <div style={{ display:'flex', alignItems:'center', gap:9 }}>
                   <span style={{ width:20, height:20, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, background:s.m?C.accent:C.bgSoft, color:s.m?'#fff':C.muted, border:s.m?'none':`1px solid ${C.border}` }}>{i+1}</span>
                   <input defaultValue={s.t} key={op.id+'_'+i+'_'+s.t} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==s.t) upd(i,{t:v}) }} style={{ flex:1, minWidth:0, fontSize:13, fontWeight:600, color:C.text, border:'none', background:'none', padding:'1px 2px' }}/>
-                  <span style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}><input type='number' min='1' defaultValue={s.dias||''} key={op.id+'_'+i+'_d'+(s.dias||'')} onBlur={e=>{ const v=parseInt(e.target.value,10); const nv=v>0?v:null; if(nv!==(s.dias||null)) upd(i,{dias:nv}) }} placeholder='–' title='Días que suele tomar este paso. Define el plazo estimado al armar el plan (la app lo ajusta sola con la experiencia).' style={{ width:36, fontSize:11, color:C.muted, textAlign:'center', border:`1px solid ${C.border}`, borderRadius:6, background:'#fff', padding:'2px 2px' }}/><span style={{ fontSize:9.5, color:C.grisText }}>d</span></span>
+                  <span style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}><input type='number' min='1' defaultValue={s.dias||''} key={op.id+'_'+i+'_d'+(s.dias||'')} onBlur={e=>{ const v=parseInt(e.target.value,10); const nv=v>0?v:null; if(nv!==(s.dias||null)) upd(i,{dias:nv}) }} placeholder='–' title='Días que suele tomar este paso. Define el plazo estimado del plan.' style={{ width:36, fontSize:11, color:C.muted, textAlign:'center', border:`1px solid ${C.border}`, borderRadius:6, background:'#fff', padding:'2px 2px' }}/><span style={{ fontSize:9.5, color:C.grisText }}>d</span></span>
                   <span onClick={()=>upd(i,{m:!s.m})} title='Marca si un trámite (CBR/D.Oficial/Notaría) confirma este paso' style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:s.m?'#fff':C.muted, background:s.m?C.accent:C.bgSoft, border:`1px solid ${s.m?C.accent:C.border}`, borderRadius:20, padding:'2px 7px', cursor:'pointer', flexShrink:0 }}>hito</span>
                   <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}><span onClick={()=>mover(i,i-1)} style={{ cursor:i>0?'pointer':'default', color:i>0?C.done:C.border, fontSize:10, lineHeight:1 }}>▲</span><span onClick={()=>mover(i,i+1)} style={{ cursor:i<pasos.length-1?'pointer':'default', color:i<pasos.length-1?C.done:C.border, fontSize:10, lineHeight:1 }}>▼</span></div>
                   <span onClick={()=>setPasos(pasos.filter((_,k)=>k!==i))} title='Quitar paso' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
@@ -29990,7 +29990,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             if(!sug.length) return null
             return <div style={{ ...card, border:`1px solid #E3DAF2`, background:'#F7F4FC' }}>
               <div style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3, marginBottom:3 }}>Sugerencias desde el uso</div>
-              <div style={{ fontSize:11.5, color:C.muted, marginBottom:9 }}>Varios proyectos de esta operación agregaron estos pasos fuera de la plantilla.</div>
+              <div style={{ fontSize:11.5, color:C.muted, marginBottom:9 }}>Pasos que varios proyectos agregaron fuera de la plantilla.</div>
               {sug.map((s,i)=>(
                 <div key={s.k} style={{ display:'flex', alignItems:'center', gap:10, borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
                   <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:12.5, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.t}</div><div style={{ fontSize:10.5, color:C.muted }}>en {s.n} proyectos</div></div>
@@ -30004,15 +30004,15 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         {esAdmin && <div style={{ ...card, marginTop:4 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:12.5, fontWeight:700, color:C.accent }}>Agente cross-cartera · Drive</div>
-              <div style={{ fontSize:11, color:C.muted, marginTop:2, lineHeight:1.4 }}>Un barrido diario revisa los documentos de Drive de toda la cartera y deja la evidencia por confirmar (nunca marca el paso solo).</div>
+              <div style={{ fontSize:12.5, fontWeight:700, color:C.accent }}>Agente de toda la cartera · Drive</div>
+              <div style={{ fontSize:11, color:C.muted, marginTop:2, lineHeight:1.4 }}>A diario revisa los documentos de Drive de la cartera y deja la evidencia por confirmar. No marca pasos solo.</div>
             </div>
             <span style={{ fontSize:10, fontWeight:700, color:crossCfg==='on'?C.greenText:C.grisText, background:crossCfg==='on'?C.greenBg:C.bgSoft, borderRadius:20, padding:'2px 9px', flexShrink:0 }}>{crossCfg==='on'?'Encendido':'Apagado'}</span>
           </div>
           <div style={{ display:'flex', gap:12, alignItems:'center', marginTop:10, flexWrap:'wrap' }}>
-            <button onClick={probarCross} disabled={crossBusy} style={{ fontSize:11.5, fontWeight:600, color:C.azulInfo, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:crossBusy?'default':'pointer' }}>{crossBusy?'Simulando…':'Probar (simulación)'}</button>
+            <button onClick={probarCross} disabled={crossBusy} style={{ fontSize:11.5, fontWeight:600, color:C.azulInfo, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:crossBusy?'default':'pointer' }}>{crossBusy?'Simulando…':'Probar'}</button>
             <button onClick={toggleCross} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:crossCfg==='on'?C.coralText:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>{crossCfg==='on'?'Apagar':'Encender'}</button>
-            {crossRes&&<span style={{ fontSize:11, color:crossRes.error?C.coralText:C.muted }}>{crossRes.error?('Error: '+crossRes.error):`Simulación: ${crossRes.documento||0} documento(s) por confirmar · ${crossRes.cross_cartera||''}`}</span>}
+            {crossRes&&<span style={{ fontSize:11, color:crossRes.error?C.coralText:C.muted }}>{crossRes.error?('Error: '+crossRes.error):`Simulación: ${crossRes.documento||0} ${(crossRes.documento||0)===1?'documento':'documentos'} por confirmar · ${crossRes.cross_cartera||''}`}</span>}
           </div>
         </div>}
       </div>
@@ -30062,7 +30062,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <div style="display:flex;background:#F5F7F9"><div style="width:250px;flex-shrink:0;padding:3px 10px;font-size:9px;color:#537281;text-transform:uppercase">Proyecto</div>${monthCols}</div>
         ${filas}
       </div>
-      <div style="margin-top:10px;font-size:9.5px;color:#537281">◇ plazo planificado · ◆ realizado (verde) · línea gris = hoy. Un proyecto por fila, mismo eje de tiempo.</div>
+      <div style="margin-top:10px;font-size:9.5px;color:#537281">◇ plazo planificado · ◆ realizado en verde · línea gris = hoy. Un proyecto por fila, mismo eje de tiempo.</div>
       <button class="no-print" onclick="window.print()" style="margin-top:16px;background:#003C50;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer">Imprimir / Guardar PDF</button>
     </div></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
@@ -30103,7 +30103,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           </div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · {conPlan.length} proyecto{conPlan.length!==1?'s':''} con plan</div>
         </div>
-        {!conPlan.length ? <div style={{ ...card, textAlign:'center', fontSize:13, color:C.muted, padding:'32px 16px' }}>Aún no hay proyectos con plan para medir. Arma planes y verás aquí el cumplimiento de plazos.</div> : <>
+        {!conPlan.length ? <div style={{ ...card, textAlign:'center', fontSize:13, color:C.muted, padding:'32px 16px' }}>Aún no hay proyectos con plan para medir.</div> : <>
           {/* Protagonista: cumplimiento de plazos, con a tiempo / tarde anidados */}
           <div style={card}>
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px' }}>
@@ -30172,7 +30172,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <div style={{ fontSize:13.5, fontWeight:700, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
           <div style={{ fontSize:11.5, color:tc, fontWeight:600, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{nx?`Siguiente: ${nx.titulo}`:'Plan al día'}{nx&&nx.plazo?` · ${dd<0?`venció ${-dd}d`:dd===0?'hoy':`en ${dd}d`}`:''}</div>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:9, flexShrink:0 }}>{det&&<span title={`Sin avance hace ${c.inact}d (se revisa cada ${c.intervalo}d)`} style={{ fontSize:9, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 7px', textTransform:'uppercase', letterSpacing:.3 }}>Frío · {c.inact}d</span>}<span style={{ fontSize:10.5, fontWeight:700, color:C.muted }}>{done}/{hs.length}</span><span style={{ color:C.done, fontSize:14 }}>›</span></div>
+        <div style={{ display:'flex', alignItems:'center', gap:9, flexShrink:0 }}>{det&&<span title={`Sin movimiento hace ${c.inact}d · se revisa cada ${c.intervalo}d`} style={{ fontSize:9, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 7px', textTransform:'uppercase', letterSpacing:.3 }}>Sin mover · {c.inact}d</span>}<span style={{ fontSize:10.5, fontWeight:700, color:C.muted }}>{done}/{hs.length}</span><span style={{ color:C.done, fontSize:14 }}>›</span></div>
       </div> }
     const filaRiesgo = (x) => (
       <div key={'r'+x.p.id} onClick={()=>abrir(x.p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
@@ -30189,12 +30189,12 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <button onClick={()=>setFocoOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Mi foco</div>
-            {conPlan.length>0 && <span onClick={descargarGanttPortafolio} title='Todos los proyectos en un mismo eje de tiempo (para imprimir/PDF)' style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Carta Gantt del portafolio ↓</span>}
+            {conPlan.length>0 && <span onClick={descargarGanttPortafolio} title='Todos los proyectos en un mismo eje de tiempo' style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Carta Gantt del portafolio ↓</span>}
           </div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · lo que pide tu acción, de un vistazo</div>
         </div>
         <div style={{ ...card, display:'flex' }}>
-          {stat(nVenc,'Vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(nSem,'Vencen 7 días',C.soonText)}<div style={{ width:1, background:C.border }}/>{stat(nDet,'Fríos',C.grisText)}<div style={{ width:1, background:C.border }}/>{stat(sinPlan.length,'Sin plan',C.muted)}
+          {stat(nVenc,'Vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(nSem,'Vencen 7 días',C.soonText)}<div style={{ width:1, background:C.border }}/>{stat(nDet,'Sin mover',C.grisText)}<div style={{ width:1, background:C.border }}/>{stat(sinPlan.length,'Sin plan',C.muted)}
         </div>
         {riesgo.length>0 && <>{secHd('En riesgo de atraso',riesgo.length,'#E09B2D')}<div style={card}>{riesgo.map(filaRiesgo)}</div></>}
         {urgentes.length>0 && <>{secHd('Pasos que vencen',urgentes.length,C.overdueText)}<div style={card}>{urgentes.map(filaPaso)}</div></>}
