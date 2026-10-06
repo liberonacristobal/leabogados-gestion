@@ -29107,6 +29107,15 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   // Movimiento por proyecto (fuente única). Se recomputa cuando cambian los datos reales.
   const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
   const mov = p => movMap[p.id] || { ultima:null, dias:null, score:0 }
+  // CADENCIA ADAPTATIVA: cada cuánto conviene revisar un proyecto, según su horizonte (último plazo pendiente).
+  // Proyecto corto → se revisa seguido; largo → menos (sin ruido). "Frío" = pasó el intervalo sin avance real.
+  const cadenciaProyecto = p => {
+    const dd = hitosDe(p).filter(h=>!h.hecho && h.plazo).map(h=>cartDiasPlazo(h.plazo)).filter(d=>d!=null)
+    const horizonte = dd.length ? Math.max(...dd) : null
+    const intervalo = horizonte==null ? 14 : horizonte<60 ? 7 : horizonte<=180 ? 14 : 21
+    const inact = mov(p).dias
+    return { intervalo, horizonte, inact, frio: inact!=null && inact > intervalo }
+  }
   // BLOQUE 2 — "el proyecto se alimenta solo": gastos de TRÁMITE del cliente (CBR/Conservador/Diario Oficial/Reg.Civil) → hito del proyecto, con compuerta. Solo hitos REALES (inscripción/publicación/posesión), nunca copias/vigencias/certificados. Conservador: no enlaza a ciegas, el humano confirma dentro del proyecto.
   const _TRAMITE_CATS = new Set(['CBR','Conservador','Diario Oficial','Registro Civil','Notaria'])
   const _normC = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
@@ -29839,7 +29848,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     const conPlan = foco.filter(p=>hitosDe(p).length>0)
     const sinPlan = foco.filter(p=>hitosDe(p).length===0)
     const nextDe = p => hitosDe(p).filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
-    const esDetenido = p => { const m=mov(p); return m && m.dias!=null && m.dias>21 }
+    const cad = p => cadenciaProyecto(p)   // cadencia adaptativa: frío según el horizonte del proyecto, no un umbral fijo
+    const esDetenido = p => cad(p).frio
     const nVenc = pend.filter(x=>x.dd!=null&&x.dd<0).length, nSem = pend.filter(x=>x.dd!=null&&x.dd>=0&&x.dd<=7).length, nDet = foco.filter(esDetenido).length
     const stat = (n,l,col) => <div style={{ flex:1, padding:'11px 8px', textAlign:'center' }}><div style={{ fontSize:20, fontWeight:800, color:n>0?col:C.muted, letterSpacing:'-.02em' }}>{n}</div><div style={{ fontSize:9.5, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginTop:1 }}>{l}</div></div>
     const filaPaso = (x) => { const dc = x.dd<0?C.overdue:x.dd<=2?'#E09B2D':C.soonText; const tc = x.dd<0?C.overdueText:x.dd<=2?C.soonText:C.greenText
@@ -29849,7 +29859,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:11, fontWeight:700, color:tc }}>{x.dd<0?`venció ${-x.dd}d`:x.dd===0?'hoy':`en ${x.dd}d`}</div><div style={{ fontSize:9.5, color:C.muted }}>{fmtDia(x.h.plazo)}</div></div>
         <span style={{ color:C.done, fontSize:14 }}>›</span>
       </div> }
-    const filaProy = p => { const hs=hitosDe(p); const done=hs.filter(h=>h.hecho).length; const nx=nextDe(p); const dd=nx&&nx.plazo?cartDiasPlazo(nx.plazo):null; const det=esDetenido(p)
+    const filaProy = p => { const hs=hitosDe(p); const done=hs.filter(h=>h.hecho).length; const nx=nextDe(p); const dd=nx&&nx.plazo?cartDiasPlazo(nx.plazo):null; const c=cad(p); const det=c.frio
       const tc = dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted
       return <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
@@ -29857,7 +29867,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <div style={{ fontSize:13.5, fontWeight:700, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
           <div style={{ fontSize:11.5, color:tc, fontWeight:600, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{nx?`Siguiente: ${nx.titulo}`:'Plan al día'}{nx&&nx.plazo?` · ${dd<0?`venció ${-dd}d`:dd===0?'hoy':`en ${dd}d`}`:''}</div>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:9, flexShrink:0 }}>{det&&<span style={{ fontSize:9, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 7px', textTransform:'uppercase', letterSpacing:.3 }}>Detenido</span>}<span style={{ fontSize:10.5, fontWeight:700, color:C.muted }}>{done}/{hs.length}</span><span style={{ color:C.done, fontSize:14 }}>›</span></div>
+        <div style={{ display:'flex', alignItems:'center', gap:9, flexShrink:0 }}>{det&&<span title={`Sin avance hace ${c.inact}d (se revisa cada ${c.intervalo}d)`} style={{ fontSize:9, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 7px', textTransform:'uppercase', letterSpacing:.3 }}>Frío · {c.inact}d</span>}<span style={{ fontSize:10.5, fontWeight:700, color:C.muted }}>{done}/{hs.length}</span><span style={{ color:C.done, fontSize:14 }}>›</span></div>
       </div> }
     return (
       <div style={{ maxWidth:isDesktop?880:720, margin:'0 auto', padding:'0 14px 48px' }}>
@@ -29867,10 +29877,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · lo que pide tu acción, de un vistazo</div>
         </div>
         <div style={{ ...card, display:'flex' }}>
-          {stat(nVenc,'Vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(nSem,'Vencen 7 días',C.soonText)}<div style={{ width:1, background:C.border }}/>{stat(nDet,'Detenidos',C.grisText)}<div style={{ width:1, background:C.border }}/>{stat(sinPlan.length,'Sin plan',C.muted)}
+          {stat(nVenc,'Vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(nSem,'Vencen 7 días',C.soonText)}<div style={{ width:1, background:C.border }}/>{stat(nDet,'Fríos',C.grisText)}<div style={{ width:1, background:C.border }}/>{stat(sinPlan.length,'Sin plan',C.muted)}
         </div>
         {urgentes.length>0 && <>{secHd('Pasos que vencen',urgentes.length,C.overdueText)}<div style={card}>{urgentes.map(filaPaso)}</div></>}
-        {conPlan.length>0 && <>{secHd('Tus proyectos · siguiente paso',conPlan.length)}<div style={card}>{conPlan.slice().sort((a,b)=>{ const na=nextDe(a),nb=nextDe(b); const da=na&&na.plazo?cartDiasPlazo(na.plazo):9999, db=nb&&nb.plazo?cartDiasPlazo(nb.plazo):9999; return da-db }).map(filaProy)}</div></>}
+        {conPlan.length>0 && <>{secHd('Tus proyectos · siguiente paso',conPlan.length)}<div style={card}>{conPlan.slice().sort((a,b)=>{ const na=nextDe(a),nb=nextDe(b); const da=na&&na.plazo?cartDiasPlazo(na.plazo):9999, db=nb&&nb.plazo?cartDiasPlazo(nb.plazo):9999; const aa=((da<=7)||esDetenido(a))?0:1, ab=((db<=7)||esDetenido(b))?0:1; return aa!==ab?aa-ab:da-db }).map(filaProy)}</div></>}
         {sinPlan.length>0 && <>{secHd('Sin plan — ármalo',sinPlan.length,C.muted)}<div style={card}>{sinPlan.map(p=>(
           <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:C.faint||C.done, flexShrink:0 }}/>
@@ -33861,7 +33871,7 @@ export default function App() {
   const [proyEquipo,setProyEquipo]=useState([])          // proyecto_equipo: {proyecto_id, miembro, rol} — quién trabaja en cada proyecto
   const [proySeguidores,setProySeguidores]=useState([])  // proyecto_seguidores: {proyecto_id, miembro} — opt-in "lo sigo en mis proyectos"
   const [proyEntregables,setProyEntregables]=useState([])// proyecto_entregables: {id, proyecto_id, texto, hecho, orden}
-  const [proyHitos,setProyHitos]=useState([])            // proyecto_hitos: {id, proyecto_id, titulo, fecha, hecho, responsable}
+  const [proyHitos,setProyHitos]=useState(DEMO?(demoData.proyecto_hitos||[]):[])            // proyecto_hitos: {id, proyecto_id, titulo, fecha, hecho, plazo, orden, responsable}
   const [pmoSug,setPmoSug]=useState([])                  // pmo_sugerencias: propuestas del Agente PMO (gasto/correo→hito) con compuerta
   const [pmoOps,setPmoOps]=useState(DEMO?(demoData.pmo_operaciones||[]):[])   // pmo_operaciones: biblioteca configurable de pasos por tipo de operación
   const [billing,setBilling]=useState([])

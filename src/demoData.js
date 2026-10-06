@@ -40,6 +40,25 @@ export const demoData = {
     { id:'p4', cliente_id:'c5', nombre_proyecto:'Contrato de distribución', estado:'verde', etapa_idx:3, responsable:'MP', nota:'Enviado a revisión del cliente', plazo_label:null, plazo:new Date(Date.now()+21*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-2*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
     { id:'p5', cliente_id:'c4', nombre_proyecto:'Due diligence de compra', estado:'verde', etapa_idx:1, responsable:'MC', nota:'Revisando carpeta tributaria en Drive', plazo_label:null, plazo:null, ultima_actividad:new Date(Date.now()-1*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
   ],
+  // PLAN de pasos (carta Gantt) de algunos proyectos — para que "Mi foco" muestre el mapa de un vistazo.
+  proyecto_hitos: [
+    // p1 Reestructuración (frío 18d, con un paso vencido)
+    { id:'hp1_1', proyecto_id:'p1', titulo:'Diagnóstico tributario y patrimonial', hecho:true,  fecha:new Date(Date.now()-40*864e5).toISOString().slice(0,10), plazo:new Date(Date.now()-42*864e5).toISOString().slice(0,10), orden:0, responsable:'CL' },
+    { id:'hp1_2', proyecto_id:'p1', titulo:'Diseño + informe tributario',          hecho:true,  fecha:new Date(Date.now()-20*864e5).toISOString().slice(0,10), plazo:new Date(Date.now()-22*864e5).toISOString().slice(0,10), orden:1, responsable:'CL' },
+    { id:'hp1_3', proyecto_id:'p1', titulo:'Escrituras de los actos',               hecho:false, fecha:null, plazo:new Date(Date.now()-3*864e5).toISOString().slice(0,10),  orden:2, responsable:'CL' },
+    { id:'hp1_4', proyecto_id:'p1', titulo:'Publicaciones e inscripciones',          hecho:false, fecha:null, plazo:new Date(Date.now()+18*864e5).toISOString().slice(0,10), orden:3, responsable:'CL' },
+    { id:'hp1_5', proyecto_id:'p1', titulo:'Efectos en el SII',                      hecho:false, fecha:null, plazo:new Date(Date.now()+28*864e5).toISOString().slice(0,10), orden:4, responsable:'CL' },
+    // p2 Regularización servidumbre (próximo paso en 4 días)
+    { id:'hp2_1', proyecto_id:'p2', titulo:'Estudio de títulos',       hecho:true,  fecha:new Date(Date.now()-15*864e5).toISOString().slice(0,10), plazo:new Date(Date.now()-14*864e5).toISOString().slice(0,10), orden:0, responsable:'RD' },
+    { id:'hp2_2', proyecto_id:'p2', titulo:'Minuta para el CBR',       hecho:false, fecha:null, plazo:new Date(Date.now()+4*864e5).toISOString().slice(0,10),  orden:1, responsable:'RD' },
+    { id:'hp2_3', proyecto_id:'p2', titulo:'Inscripción en el CBR',    hecho:false, fecha:null, plazo:new Date(Date.now()+40*864e5).toISOString().slice(0,10), orden:2, responsable:'RD' },
+    { id:'hp2_4', proyecto_id:'p2', titulo:'Cierre y entrega',         hecho:false, fecha:null, plazo:new Date(Date.now()+70*864e5).toISOString().slice(0,10), orden:3, responsable:'RD' },
+    // p4 Contrato distribución (al día)
+    { id:'hp4_1', proyecto_id:'p4', titulo:'Levantamiento de la operación', hecho:true,  fecha:new Date(Date.now()-10*864e5).toISOString().slice(0,10), plazo:new Date(Date.now()-11*864e5).toISOString().slice(0,10), orden:0, responsable:'MP' },
+    { id:'hp4_2', proyecto_id:'p4', titulo:'Borrador del contrato',         hecho:true,  fecha:new Date(Date.now()-4*864e5).toISOString().slice(0,10),  plazo:new Date(Date.now()-5*864e5).toISOString().slice(0,10),  orden:1, responsable:'MP' },
+    { id:'hp4_3', proyecto_id:'p4', titulo:'Revisión / negociación',        hecho:false, fecha:null, plazo:new Date(Date.now()+10*864e5).toISOString().slice(0,10), orden:2, responsable:'MP' },
+    { id:'hp4_4', proyecto_id:'p4', titulo:'Firma',                         hecho:false, fecha:null, plazo:new Date(Date.now()+18*864e5).toISOString().slice(0,10), orden:3, responsable:'MP' },
+  ],
   client_entities: [
     { id:'e1',  client_id:'c1', name:'Comercial Andes SpA', rut:'76.111.222-3' },
     { id:'e1b', client_id:'c1', name:'Andes Retail SpA',    rut:'76.111.999-1' },
