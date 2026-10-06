@@ -29583,6 +29583,20 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               </div>)}
             </div>
           </div>
+          {/* OLA 2 — MAPA DEL PROYECTO: el flujo de pasos como diagrama liviano (hecho verde · actual anillo · pendiente contorno). Mapa mental de un vistazo; toca para ir al Plan. (Dots, NO barras.) */}
+          {hs.length>0 && (()=>{
+            const pasosOrd=_pasosOrd(); const fz=faseDe(p)
+            const nextId=pasosOrd.filter(h=>!h.hecho)[0]?.id
+            const nodes=[]; pasosOrd.forEach((h,i)=>{ if(i>0) nodes.push(<div key={'c'+h.id} style={{ flex:'1 1 10px', minWidth:10, height:2, background:pasosOrd[i-1].hecho?C.greenText:C.border }}/>)
+              const isNext=h.id===nextId; const col=h.hecho?C.greenText:isNext?C.accent:C.border
+              nodes.push(<div key={h.id} title={h.titulo} style={{ width:isNext?15:11, height:isNext?15:11, borderRadius:'50%', flexShrink:0, background:h.hecho?C.greenText:'#fff', border:`2px solid ${col}`, boxShadow:isNext?`0 0 0 3px ${C.azulBg}`:'none' }}/>) })
+            const dProx = proxPlazo?cartDiasPlazo(proxPlazo):null
+            return <div onClick={()=>setWsTab('plan')} style={{ ...card, cursor:'pointer' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:11 }}>{secHd('Mapa del proyecto')}<span style={{ marginLeft:'auto', fontSize:11, fontWeight:700, color:C.muted }}>{fz.l}</span></div>
+              <div style={{ display:'flex', alignItems:'center', padding:'0 3px' }}>{nodes}</div>
+              <div style={{ fontSize:12.5, color:C.text, marginTop:11, fontWeight:600 }}>{nextPaso?`Próximo: ${nextPaso.titulo}`:'Todos los pasos hechos'}{nextPaso&&proxPlazo?<span style={{ color:dProx==null?C.muted:dProx<0?C.overdueText:dProx<=7?C.soonText:C.muted, fontWeight:700 }}>{` · ${dProx<0?`vencido ${-dProx}d`:dProx===0?'hoy':`en ${dProx} días`}`}</span>:''}</div>
+            </div>
+          })()}
           {/* AGENTE PMO · se refleja solo — gastos de trámite del cliente → hito, con compuerta (bloque 2) */}
           {(()=>{
             const base=[...tramiteSugDe(p), ...docSugDe(p), ...correoSugDe(p), ...(iaSug[p.id]||[])]
