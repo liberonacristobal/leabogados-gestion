@@ -26876,6 +26876,32 @@ async function ultimoContactoGmail(email, firmDom){
   return { fecha:iso, asunto:(H['subject']||'(sin asunto)').slice(0,140), dir, threadId:th.id, cuenta:fromEmail }
 }
 
+// Correos recientes del proyecto (con el cliente/su dominio), HACIA ADELANTE (after:desde). Devuelve [{id,subject,from,fecha,snippet,dir}] para que el Agente detecte evidencia de pasos cumplidos.
+async function correosProyGmail(email, firmDom, desdeISO){
+  const token=await driveToken()
+  if(!token){ const e=new Error('Sin token de Google'); e.code=401; throw e }
+  const dom=(String(email).split('@')[1]||'').toLowerCase()
+  const free=/^(gmail|hotmail|outlook|yahoo|live|icloud|me|proton|protonmail|aol|gmx|yopmail)\./.test(dom+'.')
+  const target=(dom && !free) ? `@${dom}` : email
+  const after = desdeISO ? ` after:${String(desdeISO).replace(/-/g,'/')}` : ''
+  const q=encodeURIComponent(`(from:${target} OR to:${target}) -in:spam -in:trash${after}`)
+  const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=12`,{headers:{Authorization:'Bearer '+token}})
+  if(!r.ok){ const e=new Error('Gmail '+r.status); e.code=r.status; throw e }
+  const j=await r.json(); const ids=(j.messages||[]).map(m=>m.id)
+  const out=[]
+  for(const id of ids){ try{
+    const rm=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,{headers:{Authorization:'Bearer '+token}})
+    if(!rm.ok) continue; const jm=await rm.json()
+    const H={}; (jm.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
+    const fromRaw=(H['from']||''); const mm=fromRaw.match(/<(.+?)>/); const fromEmail=(mm?mm[1]:fromRaw).trim().toLowerCase()
+    const dir=(firmDom && fromEmail.endsWith('@'+firmDom)) ? 'out' : 'in'
+    const ms=jm.internalDate?Number(jm.internalDate):(H['date']?Date.parse(H['date']):NaN)
+    const fecha=isFinite(ms)?new Date(ms).toISOString().slice(0,10):null
+    out.push({ id, subject:(H['subject']||'(sin asunto)').slice(0,160), from:fromEmail, fecha, snippet:(jm.snippet||'').slice(0,300), dir })
+  }catch(_){} }
+  return out
+}
+
 // Fase 2C — Calendar → hitos de CARTERA (client-side, scope calendar.events ya concedido). Liga eventos próximos a proyectos.
 async function escanearCarteraCalendario(clients=[], proyectos=[]){
   const token=await driveToken()
@@ -28872,8 +28898,9 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const FIRM_MAIL_DOM = (String((BRAND?.pago?.gastos?.email)||'').split('@')[1]||'').toLowerCase()
   const [ultCont,setUltCont] = useState({})
   const [docsProy,setDocsProy] = useState({})   // cache de documentos de Drive por proyecto (para confirmar pasos del plan)
-  const [iaSug,setIaSug] = useState({})         // confirmaciones por CONTENIDO (IA leyó el documento) por proyecto
+  const [iaSug,setIaSug] = useState({})         // confirmaciones por CONTENIDO (IA leyó el documento/correo) por proyecto
   const [iaBusy,setIaBusy] = useState({})       // "leyendo con IA" por proyecto
+  const [correosProy,setCorreosProy] = useState({})   // cache de correos recientes por proyecto (para confirmar pasos del plan)
   const resolverEmailCli = async(clientId)=>{ const cl=clients.find(c=>String(c.id)===String(clientId)); let to=(cl?.email||'').trim()
     if(!to){ try{ const {data}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(clientId)).maybeSingle(); if(data?.value) to=String(data.value).split(/[,;]/)[0].trim() }catch(_){} }
     if(!to){ try{ const {data}=await supabase.from('contacts').select('email,principal').eq('client_id',clientId); const c=(data||[]).find(x=>x.principal&&x.email)||(data||[]).find(x=>x.email); if(c) to=String(c.email).trim() }catch(_){} }
@@ -28884,6 +28911,16 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     try{ const email=await resolverEmailCli(cid); if(!email){ setUltCont(m=>({...m,[cid]:{none:true,noEmail:true}})); return }
       const res=await ultimoContactoGmail(email, FIRM_MAIL_DOM); setUltCont(m=>({...m,[cid]:res||{none:true}})) }
     catch(e){ setUltCont(m=>({...m,[cid]:{err:(e?.code===401||e?.code===403)?'sinpermiso':'error'}})) } }
+  // Escaneo perezoso de CORREOS recientes del proyecto (admin, hacia adelante). Cachea por proyecto.
+  const cargarCorreosProy = async(p)=>{ if(!esAdmin||!p?.cliente_id) return; const pid=String(p.id); if(correosProy[pid]) return
+    if(DEMO){ const hoy=new Date().toISOString().slice(0,10); setCorreosProy(o=>({...o,[pid]:{ msgs:[
+      { id:'m1', subject:'Inscripción de los inmuebles aportados en el Conservador', from:'notaria@notariaxyz.cl', fecha:hoy, snippet:'Se practicó la inscripción de dominio de los inmuebles aportados a nombre de la sociedad.', dir:'in' },
+      { id:'m2', subject:'RE: Borradores de la reorganización', from:'gerencia@cliente.cl', fecha:hoy, snippet:'Quedamos a la espera de sus comentarios.', dir:'in' },
+    ] }})); return }
+    setCorreosProy(o=>({...o,[pid]:{loading:true}}))
+    try{ const email=await resolverEmailCli(p.cliente_id); if(!email){ setCorreosProy(o=>({...o,[pid]:{none:true,noEmail:true}})); return }
+      const msgs=await correosProyGmail(email, FIRM_MAIL_DOM, _TRAMITE_DESDE); setCorreosProy(o=>({...o,[pid]:{ msgs:msgs||[] }})) }
+    catch(e){ setCorreosProy(o=>({...o,[pid]:{err:(e?.code===401||e?.code===403)?'sinpermiso':'error'}})) } }
   const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${nDias(d)}` }
   const haceCol = iso => { const d=cartDias(iso); return d==null?C.grisText:d>=21?'#A32D2D':d>=14?'#854F0B':C.muted }
   // Propuesta abierta = proyecto cuya venta vinculada sigue en 'Propuesta' (pipeline no cerrado) → se mantiene visible arriba.
@@ -29125,6 +29162,21 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     })
     return out
   }
+  // CORREOS que confirman un paso del plan: asunto+snippet comparten tokens significativos con el título del paso (hacia adelante). Compuerta.
+  const correoSugDe = p => {
+    if(tipoDe(p)!=='proyecto' || !p.cliente_id) return []
+    const cc=correosProy[String(p.id)]; const msgs=cc&&cc.msgs; if(!msgs||!msgs.length) return []
+    const desc=new Set((pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='correo'&&s.estado==='descartada').map(s=>String(s.origen_id)))
+    const pend=hitosDe(p).filter(h=>!h.hecho)
+    const usados=new Set(); const out=[]
+    msgs.forEach(m=>{ if(desc.has(String(m.id))) return; const fe=String(m.fecha||'').slice(0,10); if(fe&&fe<_TRAMITE_DESDE) return
+      const texto=`${m.subject||''} ${m.snippet||''}`
+      const h=pend.find(x=>!usados.has(x.id) && _docConfirma(texto, x.titulo)); if(!h) return
+      usados.add(h.id)
+      out.push({ source:'correo', origenId:m.id, label:m.subject||'(sin asunto)', conceptKey:_normC(m.subject||''), hitoId:h.id, hitoTitulo:h.titulo, fecha:fe||null })
+    })
+    return out
+  }
   // Escaneo perezoso de la carpeta de Drive del cliente (admin). Cachea por proyecto. Carpeta = clients.drive_folder_id; escanea el folder + subcarpetas (1 nivel).
   const cargarDocsProy = async (p) => {
     if(!esAdmin || !p.cliente_id || docsProy[String(p.id)]) return
@@ -29158,25 +29210,29 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     return text.slice(0,6000)
   }
   // Revisa con IA el CONTENIDO de los documentos que el NOMBRE no confirmó: pregunta cuál paso del plan evidencia cada uno. Compuerta (surgen en la misma tarjeta). Acotado (6 docs) y bajo demanda.
+  // Revisa con IA el CONTENIDO de la evidencia que no confirmó por nombre/asunto: documentos (PDF, se baja y extrae texto) + correos (asunto+snippet). Una sola llamada; compuerta.
   const revisarDocsIA = async (p) => {
     if(iaBusy[p.id]) return; setIaBusy(o=>({...o,[p.id]:true}))
     try{
-      const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
-      const yaNombre=new Set(docSugDe(p).map(s=>String(s.origenId)))
-      const yaResuelto=new Set((pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='documento').map(s=>String(s.origen_id)))
       const pend=hitosDe(p).filter(h=>!h.hecho)
-      const cands=files.filter(f=>{ const mt=f.mimeType||''; const isPdf=mt==='application/pdf'||/\.pdf$/i.test(f.name||''); const fe=String(f.modifiedTime||'').slice(0,10); return isPdf && !yaNombre.has(String(f.id)) && !yaResuelto.has(String(f.id)) && (!fe||fe>=_TRAMITE_DESDE) }).slice(0,6)
-      if(!pend.length||!cands.length){ setIaSug(o=>({...o,[p.id]:[]})); setIaBusy(o=>({...o,[p.id]:false})); return }
-      const docs=[]
-      for(const f of cands){ try{ const tx=await extraerTextoDoc(f); if(tx&&tx.trim().length>40) docs.push({id:f.id,name:f.name,fecha:String(f.modifiedTime||'').slice(0,10),texto:tx}) }catch(_){} }
-      if(!docs.length){ setIaSug(o=>({...o,[p.id]:[]})); setIaBusy(o=>({...o,[p.id]:false})); return }
+      const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
+      const yaDoc=new Set([...docSugDe(p).map(s=>String(s.origenId)), ...(pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='documento').map(s=>String(s.origen_id))])
+      const docCands=files.filter(f=>{ const mt=f.mimeType||''; const isPdf=mt==='application/pdf'||/\.pdf$/i.test(f.name||''); const fe=String(f.modifiedTime||'').slice(0,10); return isPdf && !yaDoc.has(String(f.id)) && (!fe||fe>=_TRAMITE_DESDE) }).slice(0,5)
+      const cc=correosProy[String(p.id)]; const msgs=(cc&&cc.msgs)||[]
+      const yaCorreo=new Set([...correoSugDe(p).map(s=>String(s.origenId)), ...(pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='correo').map(s=>String(s.origen_id))])
+      const mailCands=msgs.filter(m=>{ const fe=String(m.fecha||'').slice(0,10); return !yaCorreo.has(String(m.id)) && (!fe||fe>=_TRAMITE_DESDE) }).slice(0,8)
+      if(!pend.length || (!docCands.length && !mailCands.length)){ setIaSug(o=>({...o,[p.id]:[]})); setIaBusy(o=>({...o,[p.id]:false})); return }
+      const items=[]
+      for(const f of docCands){ try{ const tx=await extraerTextoDoc(f); if(tx&&tx.trim().length>40) items.push({ source:'documento', id:f.id, name:f.name, fecha:String(f.modifiedTime||'').slice(0,10), texto:tx }) }catch(_){} }
+      mailCands.forEach(m=>{ const tx=`${m.subject||''}\n${m.snippet||''}`; if(tx.trim().length>10) items.push({ source:'correo', id:m.id, name:m.subject||'(correo)', fecha:String(m.fecha||'').slice(0,10), texto:tx }) })
+      if(!items.length){ setIaSug(o=>({...o,[p.id]:[]})); setIaBusy(o=>({...o,[p.id]:false})); return }
       const pasosTxt=pend.map((h,i)=>`${i+1}. ${h.titulo}`).join('\n')
-      const docsTxt=docs.map((d,i)=>`[${String.fromCharCode(65+i)}] ${d.name}\n${d.texto}`).join('\n\n---\n\n')
-      const prompt=`Eres asistente de un estudio de abogados chileno. PASOS pendientes del proyecto:\n${pasosTxt}\n\nDOCUMENTOS de la carpeta (nombre + extracto):\n${docsTxt}\n\n¿Qué documento EVIDENCIA que un paso está CUMPLIDO (el documento es el producto/resultado de ese paso, no solo lo menciona)? Responde SOLO JSON: [{"doc":"A","paso":N}] con los matches claros; si ninguno, []. Usa solo lo que el documento prueba; no inventes.`
+      const itemsTxt=items.map((d,i)=>`[${String.fromCharCode(65+i)}] (${d.source}) ${d.name}\n${d.texto}`).join('\n\n---\n\n')
+      const prompt=`Eres asistente de un estudio de abogados chileno. PASOS pendientes del proyecto:\n${pasosTxt}\n\nEVIDENCIA (documentos y correos — tipo, nombre/asunto, extracto):\n${itemsTxt}\n\n¿Qué evidencia PRUEBA que un paso está CUMPLIDO (es el producto/resultado de ese paso, no solo lo menciona)? Responde SOLO JSON: [{"doc":"A","paso":N}] con los matches claros; si ninguno, []. Usa solo lo que la evidencia prueba; no inventes.`
       const data=await claudeCall({model:'claude-sonnet-4-6',max_tokens:400,messages:[{role:'user',content:prompt}]})
       const raw=(data?.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
       let arr=[]; try{ arr=JSON.parse(raw) }catch(_){ arr=[] }
-      const out=[]; (Array.isArray(arr)?arr:[]).forEach(m=>{ const di=String(m.doc||'').toUpperCase().charCodeAt(0)-65; const pi=(parseInt(m.paso,10)||0)-1; const d=docs[di]; const h=pend[pi]; if(d&&h&&!out.some(x=>x.hitoId===h.id)) out.push({ source:'documento', origenId:d.id, label:d.name+' · leído por IA', conceptKey:_normC(d.name), hitoId:h.id, hitoTitulo:h.titulo, fecha:d.fecha||null }) })
+      const out=[]; (Array.isArray(arr)?arr:[]).forEach(m=>{ const di=String(m.doc||'').toUpperCase().charCodeAt(0)-65; const pi=(parseInt(m.paso,10)||0)-1; const d=items[di]; const h=pend[pi]; if(d&&h&&!out.some(x=>x.hitoId===h.id)) out.push({ source:d.source, origenId:d.id, label:d.name+' · leído por IA', conceptKey:_normC(d.name), hitoId:h.id, hitoTitulo:h.titulo, fecha:d.fecha||null }) })
       setIaSug(o=>({...o,[p.id]:out}))
     }catch(e){ setIaSug(o=>({...o,[p.id]:[]})) }
     setIaBusy(o=>({...o,[p.id]:false}))
@@ -29219,7 +29275,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     })
   },[proyectos,archivados,fase,esAdmin,miInicial,selPer,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
 
-  const abrir = p => { setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p); cargarDocsProy(p) }   // abre el proyecto como PÁGINA workspace (el "‹ Mis proyectos" lo cierra)
+  const abrir = p => { setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p); cargarDocsProy(p); cargarCorreosProy(p) }   // abre el proyecto como PÁGINA workspace (el "‹ Mis proyectos" lo cierra)
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
   useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||''); cargarUltContacto(p) } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
@@ -29506,20 +29562,21 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           </div>
           {/* AGENTE PMO · se refleja solo — gastos de trámite del cliente → hito, con compuerta (bloque 2) */}
           {(()=>{
-            const base=[...tramiteSugDe(p), ...docSugDe(p), ...(iaSug[p.id]||[])]
+            const base=[...tramiteSugDe(p), ...docSugDe(p), ...correoSugDe(p), ...(iaSug[p.id]||[])]
             const seen=new Set(); const sug=base.filter(s=>{ if(seen.has(s.hitoId)) return false; seen.add(s.hitoId); return true })
             const dd=docsProy[String(p.id)]; const files=(dd&&dd.files)||[]
             const yaNombre=new Set(docSugDe(p).map(s=>String(s.origenId)))
             const candPDF=files.filter(f=>{ const mt=f.mimeType||''; const isPdf=mt==='application/pdf'||/\.pdf$/i.test(f.name||''); return isPdf && !yaNombre.has(String(f.id)) }).length
-            const puedeIA = esAdmin && candPDF>0 && hitosDe(p).some(h=>!h.hecho)
+            const cc=correosProy[String(p.id)]; const candMail=((cc&&cc.msgs)||[]).filter(m=>!correoSugDe(p).some(s=>String(s.origenId)===String(m.id))).length
+            const puedeIA = esAdmin && (candPDF>0||candMail>0) && hitosDe(p).some(h=>!h.hecho)
             if(!sug.length && !puedeIA) return null
             const iaDone = iaSug[p.id]!==undefined
             return <div style={{ background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:12, padding:'11px 13px', marginBottom:12 }}>
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:sug.length?8:0 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO · evidencia del plan</span>{sug.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span>}</div>
               {sug.map((s,i)=>(
                 <div key={s.source+'_'+s.origenId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
-                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span></div>
+                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':s.source==='correo'?'Un correo':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':s.source==='correo'?'Correo':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span></div>
                   <div style={{ display:'flex', gap:12, marginTop:6, alignItems:'center' }}>
                     <button onClick={()=>onAplicarEvidencia&&onAplicarEvidencia(p,s)} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Marcar hecho</button>
                     <span onClick={()=>onDescartarEvidencia&&onDescartarEvidencia(p,s)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>No corresponde</span>
@@ -29527,7 +29584,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 </div>
               ))}
               {puedeIA&&<div style={{ marginTop:sug.length?10:0, display:'flex', alignItems:'center', gap:10 }}>
-                <button onClick={()=>revisarDocsIA(p)} disabled={!!iaBusy[p.id]} style={{ fontSize:11.5, fontWeight:600, color:'#5B3E8E', background:'#EFEAF7', border:'none', borderRadius:8, padding:'6px 12px', cursor:iaBusy[p.id]?'default':'pointer' }}>{iaBusy[p.id]?'Leyendo documentos…':'Leer documentos con IA'}</button>
+                <button onClick={()=>revisarDocsIA(p)} disabled={!!iaBusy[p.id]} style={{ fontSize:11.5, fontWeight:600, color:'#5B3E8E', background:'#EFEAF7', border:'none', borderRadius:8, padding:'6px 12px', cursor:iaBusy[p.id]?'default':'pointer' }}>{iaBusy[p.id]?'Leyendo con IA…':'Revisar documentos y correos con IA'}</button>
                 {iaDone&&!iaBusy[p.id]&&(iaSug[p.id]||[]).length===0&&<span style={{ fontSize:11, color:C.muted }}>Sin evidencia nueva en el contenido.</span>}
               </div>}
             </div>
