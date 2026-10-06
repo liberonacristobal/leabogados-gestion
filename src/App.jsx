@@ -29508,13 +29508,13 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   // mapeado al flujo típico (diagnóstico → diseño → negociación → escrituras → inscripciones → SII → cierre).
   // Sin plan / al día tienen su propia caja. Es el mapa del flujo de trabajo del estudio en una pantalla.
   const FASE_DEFS = [
-    {k:'diagnostico',   l:'Diagnóstico',                 o:1, re:/diagn[oó]stico|due diligence|estudio|levantamiento|antecedentes|t[ií]tulos/},
-    {k:'diseno',        l:'Diseño y redacción',          o:2, re:/dise[ñn]o|estatuto|borrador|minuta|informe|estructura|contrato|poder|mandato/},
-    {k:'negociacion',   l:'Revisión y negociación',      o:3, re:/revisi[oó]n|negociaci[oó]n/},
-    {k:'escrituras',    l:'Escrituras y firma',          o:4, re:/escritura|firma|notar[ií]a|comparec/},
+    {k:'diagnostico',   l:'Estudio de antecedentes',      o:1, re:/diagn[oó]stico|due diligence|estudio|levantamiento|antecedentes|t[ií]tulos/},
+    {k:'diseno',        l:'Redacción de instrumentos',    o:2, re:/dise[ñn]o|estatuto|borrador|minuta|informe|estructura|contrato|poder|mandato/},
+    {k:'negociacion',   l:'Negociación',                  o:3, re:/revisi[oó]n|negociaci[oó]n/},
+    {k:'escrituras',    l:'Otorgamiento y firma',         o:4, re:/escritura|firma|notar[ií]a|comparec/},
     {k:'inscripciones', l:'Publicaciones e inscripciones',o:5, re:/publicaci[oó]n|diario oficial|inscripci[oó]n|cbr|conservador|registro|posesi[oó]n/},
-    {k:'sii',           l:'SII e impuestos',             o:6, re:/\bsii\b|\brut\b|inicio de actividades|impuesto|efectos/},
-    {k:'cierre',        l:'Cierre y entrega',            o:7, re:/cierre|entrega|carpeta|cumplimiento/},
+    {k:'sii',           l:'Trámites ante el SII',         o:6, re:/\bsii\b|\brut\b|inicio de actividades|impuesto|efectos/},
+    {k:'cierre',        l:'Cierre',                       o:7, re:/cierre|entrega|carpeta|cumplimiento/},
   ]
   const faseDePaso = t => { const s=(t||'').toLowerCase(); return FASE_DEFS.find(x=>x.re.test(s)) || {k:'otro',l:'Otros pasos',o:90} }
   const faseDe = p => { const pasos=hitosDe(p); if(!pasos.length) return {k:'sinplan',l:'Sin plan',o:98}
