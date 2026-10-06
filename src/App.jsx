@@ -28959,6 +28959,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [nuevo,setNuevo] = useState(false)
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
   const [pickOp,setPickOp] = useState('')          // operación a aplicar al agregar ventas desde el panel "Elegir"
+  const [focoOpen,setFocoOpen] = useState(false)   // vista "Mi foco" (cross-proyecto: qué vence / siguiente paso / detenidos)
   const [bibOpen,setBibOpen] = useState(false)     // editor de la biblioteca de pasos (pmo_operaciones)
   const [bibSel,setBibSel] = useState(null)        // operación seleccionada en el editor
   const NF0 = { cliente_id:'', sale_id:'', operacionId:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
@@ -29827,6 +29828,61 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   }
   const secHdBib = t => <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>{t}</span>
 
+  // MI FOCO — una pantalla cross-proyecto: qué vence, tu siguiente paso por proyecto (el mapa) y lo detenido. Para dejar de revisar uno por uno.
+  const renderFoco = () => {
+    const foco = (proyectos||[]).filter(p=>p.activo!==false && !p.pausado && ((selPer&&selPer!=='all')?esDePersona(p,selPer):true))
+    const card = { background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', marginBottom:12 }
+    const secHd = (t,n,col) => <div style={{ display:'flex', alignItems:'center', gap:7, margin:'18px 2px 8px', fontSize:9, fontWeight:700, letterSpacing:.5, textTransform:'uppercase', color:col||C.muted }}>{t}<span style={{ color:C.muted }}>· {n}</span></div>
+    const pend=[]; foco.forEach(p=> hitosDe(p).filter(h=>!h.hecho&&h.plazo).forEach(h=>pend.push({p,h,dd:cartDiasPlazo(h.plazo)})))
+    const urgentes = pend.filter(x=>x.dd!=null&&x.dd<=7).sort((a,b)=>a.dd-b.dd)
+    const conPlan = foco.filter(p=>hitosDe(p).length>0)
+    const sinPlan = foco.filter(p=>hitosDe(p).length===0)
+    const nextDe = p => hitosDe(p).filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
+    const esDetenido = p => { const m=mov(p); return m && m.dias!=null && m.dias>21 }
+    const nVenc = pend.filter(x=>x.dd!=null&&x.dd<0).length, nSem = pend.filter(x=>x.dd!=null&&x.dd>=0&&x.dd<=7).length, nDet = foco.filter(esDetenido).length
+    const stat = (n,l,col) => <div style={{ flex:1, padding:'11px 8px', textAlign:'center' }}><div style={{ fontSize:20, fontWeight:800, color:n>0?col:C.muted, letterSpacing:'-.02em' }}>{n}</div><div style={{ fontSize:9.5, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginTop:1 }}>{l}</div></div>
+    const filaPaso = (x) => { const dc = x.dd<0?C.overdue:x.dd<=2?'#E09B2D':C.soonText; const tc = x.dd<0?C.overdueText:x.dd<=2?C.soonText:C.greenText
+      return <div key={x.p.id+'_'+x.h.id} onClick={()=>abrir(x.p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'10px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
+        <span style={{ width:8, height:8, borderRadius:'50%', background:dc, flexShrink:0 }}/>
+        <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{x.h.titulo}</div><div style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(x.p.cliente_id)||x.p.nombre_proyecto}</div></div>
+        <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:11, fontWeight:700, color:tc }}>{x.dd<0?`venció ${-x.dd}d`:x.dd===0?'hoy':`en ${x.dd}d`}</div><div style={{ fontSize:9.5, color:C.muted }}>{fmtDia(x.h.plazo)}</div></div>
+        <span style={{ color:C.done, fontSize:14 }}>›</span>
+      </div> }
+    const filaProy = p => { const hs=hitosDe(p); const done=hs.filter(h=>h.hecho).length; const nx=nextDe(p); const dd=nx&&nx.plazo?cartDiasPlazo(nx.plazo):null; const det=esDetenido(p)
+      const tc = dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted
+      return <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
+        <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13.5, fontWeight:700, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
+          <div style={{ fontSize:11.5, color:tc, fontWeight:600, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{nx?`Siguiente: ${nx.titulo}`:'Plan al día'}{nx&&nx.plazo?` · ${dd<0?`venció ${-dd}d`:dd===0?'hoy':`en ${dd}d`}`:''}</div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:9, flexShrink:0 }}>{det&&<span style={{ fontSize:9, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 7px', textTransform:'uppercase', letterSpacing:.3 }}>Detenido</span>}<span style={{ fontSize:10.5, fontWeight:700, color:C.muted }}>{done}/{hs.length}</span><span style={{ color:C.done, fontSize:14 }}>›</span></div>
+      </div> }
+    return (
+      <div style={{ maxWidth:isDesktop?880:720, margin:'0 auto', padding:'0 14px 48px' }}>
+        <div style={{ padding:'14px 0 10px' }}>
+          <button onClick={()=>setFocoOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
+          <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Mi foco</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · lo que pide tu acción, de un vistazo</div>
+        </div>
+        <div style={{ ...card, display:'flex' }}>
+          {stat(nVenc,'Vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(nSem,'Vencen 7 días',C.soonText)}<div style={{ width:1, background:C.border }}/>{stat(nDet,'Detenidos',C.grisText)}<div style={{ width:1, background:C.border }}/>{stat(sinPlan.length,'Sin plan',C.muted)}
+        </div>
+        {urgentes.length>0 && <>{secHd('Pasos que vencen',urgentes.length,C.overdueText)}<div style={card}>{urgentes.map(filaPaso)}</div></>}
+        {conPlan.length>0 && <>{secHd('Tus proyectos · siguiente paso',conPlan.length)}<div style={card}>{conPlan.slice().sort((a,b)=>{ const na=nextDe(a),nb=nextDe(b); const da=na&&na.plazo?cartDiasPlazo(na.plazo):9999, db=nb&&nb.plazo?cartDiasPlazo(nb.plazo):9999; return da-db }).map(filaProy)}</div></>}
+        {sinPlan.length>0 && <>{secHd('Sin plan — ármalo',sinPlan.length,C.muted)}<div style={card}>{sinPlan.map(p=>(
+          <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:C.faint||C.done, flexShrink:0 }}/>
+            <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div><div style={{ fontSize:11, color:C.muted }}>Elige la operación y nace con sus pasos</div></div>
+            <span style={{ color:C.done, fontSize:14 }}>›</span>
+          </div>
+        ))}</div></>}
+        {!foco.length && <div style={{ ...card, textAlign:'center', fontSize:13, color:C.muted, padding:'32px 16px' }}>No hay proyectos activos con este filtro.</div>}
+      </div>
+    )
+  }
+
+  if(focoOpen) return renderFoco()
   if(bibOpen) return renderBiblioteca()
   const wsP = openId ? ((proyectos||[]).find(x=>String(x.id)===String(openId)) || (archivados||[]).find(x=>String(x.id)===String(openId))) : null
   if(wsP) return renderWorkspace(wsP)
@@ -29836,6 +29892,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
         <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
         <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:17, fontWeight:600, color:C.accent }}>Mis proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</div><div style={{ fontSize:10, color:C.muted, fontWeight:500, marginTop:1 }}>seguimiento de proyectos activos</div></div>
+        <button onClick={()=>setFocoOpen(true)} title='Mi foco — lo que pide tu acción, de un vistazo' style={{ fontSize:12, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>Mi foco</button>
         {esAdmin&&<button onClick={()=>{ setBibSel((pmoOps||[])[0]?.id||null); setBibOpen(true) }} title='Editar la biblioteca de pasos por operación' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Biblioteca</button>}
         {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
         <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
