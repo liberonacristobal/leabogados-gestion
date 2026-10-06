@@ -29065,6 +29065,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const _TRAMITE_CATS = new Set(['CBR','Conservador','Diario Oficial','Registro Civil'])
   const _normC = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
   const _tramiteHito = (cat, concept) => { const c=_normC(concept)
+    if(/copia|certificad|vigencia|fotocopia/.test(c)) return null   // documentos/retiros, NO el acto (no son hito)
     if(/publicac/.test(c)) return 'Publicación en Diario Oficial'
     if(/posesion efectiva/.test(c)) return 'Posesión efectiva inscrita'
     if(/inscrip/.test(c)) return cat==='Diario Oficial' ? 'Publicación en Diario Oficial' : 'Inscripción en CBR'
@@ -29631,6 +29632,14 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
         <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
       </div>
+
+      {(()=>{ const activos=(proyectos||[]).filter(p=>p.activo!==false); let n=0; let primero=null; activos.forEach(p=>{ const k=tramiteSugDe(p).length; if(k){ n+=k; if(!primero) primero=p } }); if(!n) return null
+        return <div onClick={()=>primero&&abrir(primero)} style={{ display:'flex', alignItems:'center', gap:8, background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:10, padding:'10px 12px', marginBottom:10, cursor:'pointer' }}>
+          <span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO</span>
+          <span style={{ fontSize:12, color:C.text, flex:1 }}>{n} hito{n!==1?'s':''} de trámite por confirmar{primero?` · ${cnm(primero.cliente_id)||primero.nombre_proyecto}`:''}</span>
+          <span style={{ fontSize:12, fontWeight:600, color:'#5B3E8E', whiteSpace:'nowrap' }}>Revisar →</span>
+        </div>
+      })()}
 
       {esAdmin&&activasSinProyecto.length>0&&(
         <div style={{ background:C.azulBg||'#E6F1FB', border:`1px solid ${C.border}`, borderRadius:10, marginBottom:10, overflow:'hidden' }}>
@@ -33971,19 +33980,24 @@ export default function App() {
   const handleAddHito = async (proyectoId, titulo, fecha, responsable) => { const t=(titulo||'').trim(); if(!t) return; if(DEMO){ setProyHitos(p=>[...p,{id:'h'+Date.now(),proyecto_id:proyectoId,titulo:t,fecha:fecha||null,hecho:false,responsable:responsable||null}]); return } const { data } = await supabase.from('proyecto_hitos').insert({proyecto_id:proyectoId,titulo:t,fecha:fecha||null,responsable:responsable||null}).select().single(); if(data) setProyHitos(p=>[...p,data]) }
   const handleToggleHito = (id, hecho) => { setProyHitos(p=>p.map(x=>x.id===id?{...x,hecho}:x)); if(!DEMO) supabase.from('proyecto_hitos').update({hecho}).eq('id',id).then(()=>{},()=>{}) }
   // BLOQUE 2 — "se refleja solo": aplicar una sugerencia de trámite (gasto→hito). Crea el hito HECHO (el gasto implica que el trámite ocurrió), enlaza el gasto al proyecto, aprende el mapeo y audita. Compuerta → aprende → se libera.
+  // Resuelve (o crea) la fila de pmo_sugerencias para un gasto: si el Agente PMO (edge) ya dejó una 'pendiente', la actualiza en vez de duplicar.
+  const _resolverSug = async (p, sug, estado) => {
+    const prev = (pmoSug||[]).find(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='gasto'&&String(s.origen_id)===String(sug.expenseId)&&s.estado==='pendiente')
+    const patch = { estado, resolved_at:new Date().toISOString() }
+    if(DEMO){ if(prev) setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)); else setPmoSug(s=>[...s,{id:'s'+Date.now(),proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',estado}]); return }
+    if(prev){ await supabase.from('pmo_sugerencias').update(patch).eq('id',prev.id); setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)) }
+    else { const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',payload:{concepto:sug.concept,hito:sug.hitoTitulo,fecha:sug.fecha||null},...patch}).select().single(); if(s) setPmoSug(x=>[...x,s]) }
+  }
   const handleAplicarTramite = async (p, sug) => {
-    if(DEMO){ setProyHitos(h=>[...h,{id:'h'+Date.now(),proyecto_id:p.id,titulo:sug.hitoTitulo,fecha:sug.fecha||null,hecho:true,responsable:null}]); setExpenses(xs=>xs.map(x=>x.id===sug.expenseId?{...x,proyecto_id:p.id}:x)); setPmoSug(s=>[...s,{id:'s'+Date.now(),proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',estado:'aceptada'}]); return }
+    if(DEMO){ setProyHitos(h=>[...h,{id:'h'+Date.now(),proyecto_id:p.id,titulo:sug.hitoTitulo,fecha:sug.fecha||null,hecho:true,responsable:null}]); setExpenses(xs=>xs.map(x=>x.id===sug.expenseId?{...x,proyecto_id:p.id}:x)); _resolverSug(p,sug,'aceptada'); return }
     try{
       const { data:h } = await supabase.from('proyecto_hitos').insert({proyecto_id:p.id,titulo:sug.hitoTitulo,fecha:sug.fecha||null,hecho:true}).select().single(); if(h) setProyHitos(x=>[...x,h])
       await supabase.from('expenses').update({proyecto_id:p.id}).eq('id',sug.expenseId); setExpenses(xs=>xs.map(x=>x.id===sug.expenseId?{...x,proyecto_id:p.id}:x))
       if(sug.conceptKey) learnPut('pmo_tramite_hito', sug.conceptKey, sug.hitoTitulo)
-      const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',payload:{concepto:sug.concept,hito:sug.hitoTitulo,fecha:sug.fecha||null},estado:'aceptada',resolved_at:new Date().toISOString()}).select().single(); if(s) setPmoSug(x=>[...x,s])
+      await _resolverSug(p,sug,'aceptada')
     }catch(e){ appAlert('No se pudo aplicar: '+(e.message||e)) }
   }
-  const handleDescartarTramite = async (p, sug) => {
-    if(DEMO){ setPmoSug(s=>[...s,{id:'s'+Date.now(),proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',estado:'descartada'}]); return }
-    try{ const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',payload:{concepto:sug.concept},estado:'descartada',resolved_at:new Date().toISOString()}).select().single(); if(s) setPmoSug(x=>[...x,s]) }catch(e){}
-  }
+  const handleDescartarTramite = async (p, sug) => { try{ await _resolverSug(p,sug,'descartada') }catch(e){} }
   const handleDelHito = (id) => { setProyHitos(p=>p.filter(x=>x.id!==id)); if(!DEMO) supabase.from('proyecto_hitos').delete().eq('id',id).then(()=>{},()=>{}) }
   // Agregar integrante al equipo → también lo suma a SUS proyectos (seguidor). Así "me involucran".
   const handleAddMiembro = (proyectoId, miembro, rol) => { if(!miembro) return
