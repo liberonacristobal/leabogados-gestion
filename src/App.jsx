@@ -27216,6 +27216,15 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
 
 // ─── PANEL DE CARTERA (Fase 1: vista limpia de proyectos activos, orden por "sin mover") ────
 const ETAPAS_CARTERA = ['Diagnóstico','Análisis','Borrador','Revisión cliente','Ejecución','Cierre']
+// Plantillas de etapas por tipo de asunto (reemplazan las 6 genéricas para los 'proyecto'). De los flujos legales reales.
+const STAGE_TEMPLATES = {
+  reorg: ['Diagnóstico','Diseño de estructura','Escrituras/aportes','SII/formalización','Cierre'],
+  sucesorio: ['Antecedentes','Inventario','Trámite','Inscripción','Cierre'],
+  compraventa: ['Due diligence','Promesa','Escritura','Inscripción CBR','Cierre'],
+  juicio: ['Demanda','Contestación','Prueba','Sentencia','Apelación'],
+  informe: ['Antecedentes','Análisis','Informe','Entrega'],
+}
+const TEMPLATE_LABELS = { reorg:'Reorganización / holding', sucesorio:'Sucesorio', compraventa:'Compraventa', juicio:'Juicio', informe:'Informe / opinión', '':'Genérico' }
 const CART_DOT = { rojo:'#E24B4A', ambar:'#EF9F27', verde:'#1D9E75' }   // semáforo (eje nuevo: salud del proyecto)
 const CART_AV  = (()=>{ const N={CL:'Cristóbal',EE:'Erasmo',MC:'Martín',MP:'Martina',RD:'Rodrigo'}; const o={}; for(const i in N) o[i]=personChip(N[i]).color; return o })()  // color por persona: DERIVA de PERSON_CHIP (fuente única, no duplicar)
 const SEÑAL_COL = { pago:'#0F6E56', factura:'#185FA5', anticipo:'#185FA5', tarea:'#854F0B', gasto:'#537281', plan:'#537281', genesis:'#003C50', nota:'#99ABB4' }
@@ -28821,6 +28830,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const TIPO_META = { puntual:{l:'Puntual',c:C.greenText,bg:C.greenBg}, permanente:{l:'Permanente',c:C.tealText,bg:C.tealBg}, proyecto:{l:'Proyecto',c:C.accent,bg:C.azulBg} }
   const tipoDe = p => p.tipo || 'proyecto'
   const _TIPO_ORDEN = ['puntual','permanente','proyecto']
+  // Etapas del proyecto según su plantilla (solo tipo 'proyecto'; permanente/puntual no llevan etapas → aparición progresiva).
+  const etapasDe = p => (tipoDe(p)==='proyecto') ? (STAGE_TEMPLATES[p.template]||ETAPAS_CARTERA) : null
   const cnm = id => { const c=clients.find(x=>String(x.id)===String(id)); return c?.name || '' }
   const fmtDia = iso => iso ? fmtFechaDMY(iso) : ''   // unificado a DD-MM-AAAA (antes "10 sept" sin año)
   const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${nDias(d)}` }
@@ -28952,7 +28963,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     const cobrado = bMine.filter(b=>b.paid_at && b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
     const prog = bMine.filter(b=>b.status==='Programada')
     const tks = tareasDe(p)
-    const parts = [ETAPAS_CARTERA[p.etapa_idx||0]]
+    const _et = etapasDe(p)
+    const parts = [ _et ? _et[Math.min(p.etapa_idx||0,_et.length-1)] : (TIPO_META[tipoDe(p)]?.l||'Encargo') ]
     if(tks.length) parts.push(`${tks.length} tarea${tks.length!==1?'s':''} abierta${tks.length!==1?'s':''}`)
     if(cobrado>0) parts.push(`${fmt(cobrado)} cobrado`)
     else if(emit.length) parts.push(`${emit.length} factura${emit.length!==1?'s':''} emitida${emit.length!==1?'s':''}`)
@@ -28995,7 +29007,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     const { error } = await supabase.from('proyectos_cartera').update(upd).eq('id',p.id)
     if(error) appAlert('No se pudo guardar: '+error.message)
   }
-  const avanzar = p => patch(p,{ etapa_idx:Math.min(5,(p.etapa_idx||0)+1) })
+  const avanzar = p => { const et=etapasDe(p); const max=(et?et.length:6)-1; patch(p,{ etapa_idx:Math.min(max,(p.etapa_idx||0)+1) }) }
+  const setTemplate = (p,tpl) => { const et=STAGE_TEMPLATES[tpl]||ETAPAS_CARTERA; updP(p,{ template:tpl||null, etapa_idx:Math.min(p.etapa_idx||0, et.length-1) }) }
   const setEstado = (p,e) => patch(p,{ estado:e })
   const guardarNota = p => { if((draft||'')!==(p.nota||'')) patch(p,{ nota:draft||null }) }
   // Cambios de gestión (pausar/fijar) que NO son "movimiento real": no tocan ultima_actividad.
@@ -29105,10 +29118,11 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const renderProyecto = (p, nested) => {
     const abierto = openId===p.id
     const dP = cartDiasPlazo(p.plazo)
-    const etapa = ETAPAS_CARTERA[p.etapa_idx||0]
+    const _et = etapasDe(p)
+    const etapa = _et ? (_et[Math.min(p.etapa_idx||0,_et.length-1)]||_et[0]) : (TIPO_META[tipoDe(p)]?.l||'Encargo')
     const m = mov(p)
     const terminado = fase==='terminados'
-    const avancePct = Math.round(((p.etapa_idx||0)/5)*100)
+    const avancePct = _et ? Math.round(((Math.min(p.etapa_idx||0,_et.length-1))/Math.max(1,_et.length-1))*100) : 0
     const tks = tareasDe(p)
     const venceTk = tks.map(t=>daysLeft(t.due)).filter(d=>d!=null).sort((a,b)=>a-b)[0]
     const inp = { fontSize:12, padding:'3px 6px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }
@@ -29152,10 +29166,15 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <div style={{ padding:'0 13px 13px', background:C.bgSoft||'#FAFBFC' }}>
             <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:11 }}>
               <div style={{ fontSize:12, color:C.muted, marginBottom:10, lineHeight:1.4 }}>{resumenDe(p)}</div>
-              {/* EN QUÉ ESTÁ */}
-              <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:7 }}>En qué está</div>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:5 }}><span style={{ fontSize:11, fontWeight:600, color:C.accent }}>Etapa {(p.etapa_idx||0)+1} de 6 · {etapa}</span><span style={{ fontSize:11, fontWeight:700, color:C.accent }}>{avancePct}%</span></div>
-              <div style={{ height:6, borderRadius:4, background:'#EAEEF1', overflow:'hidden', marginBottom:10 }}><div style={{ height:'100%', width:avancePct+'%', background:C.accent, borderRadius:4 }}/></div>
+              {/* EN QUÉ ESTÁ — etapas solo para 'proyecto', con plantilla por tipo de asunto (no rígido). Permanente/puntual: sin etapas. */}
+              {_et ? <>
+                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:7, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>En qué está</span>
+                  <select value={p.template||''} onChange={e=>setTemplate(p,e.target.value)} title='Plantilla de etapas — elige el tipo de asunto' style={{ ...inp, marginLeft:'auto' }}>{Object.keys(TEMPLATE_LABELS).map(k=><option key={k} value={k}>{TEMPLATE_LABELS[k]}</option>)}</select>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:5 }}><span style={{ fontSize:11, fontWeight:600, color:C.accent }}>Etapa {Math.min(p.etapa_idx||0,_et.length-1)+1} de {_et.length} · {etapa}</span><span style={{ fontSize:11, fontWeight:700, color:C.accent }}>{avancePct}%</span></div>
+                <div style={{ height:6, borderRadius:4, background:'#EAEEF1', overflow:'hidden', marginBottom:10 }}><div style={{ height:'100%', width:avancePct+'%', background:C.accent, borderRadius:4 }}/></div>
+              </> : <div style={{ fontSize:11, fontWeight:600, color:C.muted, marginBottom:10 }}>{tipoDe(p)==='permanente'?'Asesoría permanente — sin etapas; se sigue por temas abiertos y actividad.':'Encargo puntual — un entregable y un plazo.'}</div>}
               <div style={{ display:'flex', gap:8, marginBottom:10 }}>
                 <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Próximo plazo</div><div style={{ fontSize:13, fontWeight:700, color:C.text, marginTop:2 }}>{p.plazo?fmtDia(p.plazo):'sin plazo'}</div>{p.plazo&&<div style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':dP<=7?'#854F0B':C.muted }}>{dP<0?`vencido ${-dP}d`:dP===0?'hoy':`en ${dP} días`}</div>}{p.plazo_label&&<div style={{ fontSize:10, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.plazo_label}</div>}</div>
                 <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Tareas abiertas</div><div style={{ fontSize:13, fontWeight:700, color:C.text, marginTop:2 }}>{tks.length}</div>{venceTk!=null&&<div style={{ fontSize:10, color:venceTk<0?'#A32D2D':venceTk<=7?'#854F0B':C.muted }}>{venceTk<0?`1 vencida`:venceTk<=7?`próxima en ${venceTk}d`:`próxima en ${venceTk}d`}</div>}</div>
@@ -29165,7 +29184,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 <select value={p.responsable||''} onChange={e=>patch(p,{responsable:e.target.value})} disabled={!esAdmin} style={inp}>{['CL','EE','MC','MP','RD'].map(i=><option key={i} value={i}>{i}</option>)}</select>
                 <span style={{ fontSize:11, color:C.muted, marginLeft:4 }}>Plazo</span>
                 <input type='date' value={p.plazo||''} onChange={e=>patch(p,{plazo:e.target.value||null})} style={inp}/>
-                <button onClick={()=>avanzar(p)} disabled={(p.etapa_idx||0)>=5} style={{ fontSize:11, fontWeight:600, color:(p.etapa_idx||0)>=5?C.grisText:C.accent, background:'none', border:'none', cursor:(p.etapa_idx||0)>=5?'default':'pointer', padding:0, marginLeft:'auto' }}>→ Avanzar etapa</button>
+                {_et&&(()=>{ const fin=(p.etapa_idx||0)>=_et.length-1; return <button onClick={()=>avanzar(p)} disabled={fin} style={{ fontSize:11, fontWeight:600, color:fin?C.grisText:C.accent, background:'none', border:'none', cursor:fin?'default':'pointer', padding:0, marginLeft:'auto' }}>→ Avanzar etapa</button> })()}
               </div>
               {/* RENTABILIDAD */}
               {(()=>{ const r=rentabilidadDe(p); if(!r) return null; const busy=sugEsf[p.id]==='busy'
