@@ -90,13 +90,15 @@ serve(async (req) => {
     }
     const desde = new Date(Date.now() - VENTANA_DIAS * 86400000).toISOString().slice(0, 10);
 
-    const [{ data: proys }, { data: exps }, { data: hitos }, { data: sugs }, { data: cli }, { data: cfg }] = await Promise.all([
+    const [{ data: proys }, { data: exps }, { data: hitos }, { data: sugs }, { data: cli }, { data: cfg }, { data: ants }, { data: bills }] = await Promise.all([
       sb.from("proyectos_cartera").select("id,cliente_id,tipo,activo"),
       sb.from("expenses").select("id,client_id,category,concept,date,created_at,proyecto_id,deleted_at,type"),
       sb.from("proyecto_hitos").select("id,proyecto_id,titulo,hecho"),
       sb.from("pmo_sugerencias").select("origen,origen_id"),
       sb.from("clients").select("id,drive_folder_id"),
       sb.from("learnings").select("value").eq("kind", "config").eq("key", "pmo_cross_cartera").limit(1),
+      sb.from("anticipos").select("id,client_id,fecha,nota,deleted_at"),
+      sb.from("billing").select("id,client_id,sale_id,paid_at,status,invoice_no,deleted_at"),
     ]);
     const activos = (proys || []).filter((p: any) => p.activo !== false && (!p.tipo || p.tipo === "proyecto"));
     const porCli: Record<string, any[]> = {};
@@ -123,6 +125,33 @@ serve(async (req) => {
       if (!h) continue;
       usadosHito.add(String(h.id)); yaSugGasto.add(String(e.id));
       nuevas.push({ proyecto_id: proy.id, origen: "gasto", origen_id: String(e.id), tipo: "hito", payload: { hito_id: h.id, hito: h.titulo, concepto: e.concept, fecha: fe }, estado: "pendiente" });
+    }
+
+    // (A2) COBRO — anticipo recibido confirma paso de provision/fondos; factura pagada confirma paso de pago/honorario. Idempotente, hacia adelante. (integracion #2)
+    const yaSugFondo = new Set((sugs || []).filter((s: any) => s.origen === "fondo").map((s: any) => String(s.origen_id)));
+    const reFondo = /provisi[oó]n|fondos|anticipo/;
+    const rePago = /pago|honorario|cobro/;
+    for (const a of ants || []) {
+      if (a.deleted_at) continue;
+      const fe = String(a.fecha || "").slice(0, 10); if (!fe || fe < desde) continue;
+      const oid = "ant:" + a.id; if (yaSugFondo.has(oid)) continue;
+      const cand = porCli[String(a.client_id || "")]; if (!cand || cand.length !== 1) continue;
+      const pend = pendByProy[String(cand[0].id)] || [];
+      const h = pend.find((x: any) => !usadosHito.has(String(x.id)) && reFondo.test(nrm(x.titulo)));
+      if (!h) continue;
+      usadosHito.add(String(h.id)); yaSugFondo.add(oid);
+      nuevas.push({ proyecto_id: cand[0].id, origen: "fondo", origen_id: oid, tipo: "hito", payload: { hito_id: h.id, hito: h.titulo, detalle: "Anticipo recibido" + (a.nota ? " · " + a.nota : ""), fecha: fe }, estado: "pendiente" });
+    }
+    for (const b of bills || []) {
+      if (b.deleted_at || !b.paid_at || b.status !== "Pagado") continue;
+      const fe = String(b.paid_at).slice(0, 10); if (!fe || fe < desde) continue;
+      const oid = "fac:" + b.id; if (yaSugFondo.has(oid)) continue;
+      const cand = porCli[String(b.client_id || "")]; if (!cand || cand.length !== 1) continue;
+      const pend = pendByProy[String(cand[0].id)] || [];
+      const h = pend.find((x: any) => !usadosHito.has(String(x.id)) && rePago.test(nrm(x.titulo)));
+      if (!h) continue;
+      usadosHito.add(String(h.id)); yaSugFondo.add(oid);
+      nuevas.push({ proyecto_id: cand[0].id, origen: "fondo", origen_id: oid, tipo: "hito", payload: { hito_id: h.id, hito: h.titulo, detalle: "Pago recibido" + (b.invoice_no ? " · factura N° " + b.invoice_no : ""), fecha: fe }, estado: "pendiente" });
     }
 
     // (B) OLA 3 #4 — DOCUMENTOS de Drive cross-cartera (modo seguro: solo si pmo_cross_cartera='on'; nunca marca, solo deja pendiente)
@@ -158,7 +187,8 @@ serve(async (req) => {
     }
 
     if (!dry && nuevas.length) { for (let i = 0; i < nuevas.length; i += 200) await sb.from("pmo_sugerencias").insert(nuevas.slice(i, i + 200)); }
-    return new Response(JSON.stringify({ ok: true, modo: dry ? "simulacion" : "barrido", nuevas: nuevas.length, gasto: nuevas.length - docNuevas, documento: docNuevas, cross_cartera: crossOn ? driveMsg : "off", muestra: nuevas.slice(0, 10) }), { headers: { "Content-Type": "application/json", ...CORS } });
+    const gastoN = nuevas.filter((n: any) => n.origen === "gasto").length, fondoN = nuevas.filter((n: any) => n.origen === "fondo").length;
+    return new Response(JSON.stringify({ ok: true, modo: dry ? "simulacion" : "barrido", nuevas: nuevas.length, gasto: gastoN, fondo: fondoN, documento: docNuevas, cross_cartera: crossOn ? driveMsg : "off", muestra: nuevas.slice(0, 10) }), { headers: { "Content-Type": "application/json", ...CORS } });
   } catch (err) {
     return new Response(JSON.stringify({ error: (err as any).message }), { status: 500, headers: { "Content-Type": "application/json", ...CORS } });
   }
