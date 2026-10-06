@@ -28852,6 +28852,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const _enEquipo = pid => (proyEquipo||[]).some(e=>String(e.proyecto_id)===String(pid)&&e.miembro===_soy)
   const _sigo = pid => (proySeguidores||[]).some(e=>String(e.proyecto_id)===String(pid)&&e.miembro===_soy)
   const esMio = p => !_soy || (p.responsable||'')===_soy || _enEquipo(p.id) || _sigo(p.id)
+  // Generalizado para el selector de persona: ¿la persona `per` es responsable/equipo/seguidor de p?
+  const esDePersona = (p,per) => (p.responsable||'')===per || (proyEquipo||[]).some(e=>String(e.proyecto_id)===String(p.id)&&e.miembro===per) || (proySeguidores||[]).some(e=>String(e.proyecto_id)===String(p.id)&&e.miembro===per)
   const razonMia = p => (p.responsable||'')===_soy ? 'Responsable' : _enEquipo(p.id) ? 'En el equipo' : _sigo(p.id) ? 'Siguiendo' : null
   const TIPO_META = { puntual:{l:'Puntual',c:C.greenText,bg:C.greenBg}, permanente:{l:'Permanente',c:C.tealText,bg:C.tealBg}, proyecto:{l:'Proyecto',c:C.accent,bg:C.azulBg} }
   const tipoDe = p => p.tipo || 'proyecto'
@@ -28900,7 +28902,9 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [sortBy,setSortBy] = usePersistedState('cartera_sort2','movimiento')   // movimiento | sinmover | plazo | prioridad | cliente (recuerda al volver)
   const [estadoF,setEstadoF] = usePersistedState('cartera_estadoF','todos') // todos | rojo | ambar | verde
   const [soloMios,setSoloMios] = usePersistedState('cartera_solomios2',true) // (legado) — reemplazado por 'vista'
-  const [vista,setVista] = usePersistedState('cartera_vista','mios')          // mios | estudio (opt-in por abogado)
+  const [vista,setVista] = usePersistedState('cartera_vista','mios')          // (legado) mios | estudio — reemplazado por el selector de persona
+  const [selPer,setSelPer] = usePersistedState('cartera_persona', INICIALES_RESP[currentUserName]||'all')   // inicial (CL/EE/..) o 'all' = todo el estudio
+  const [perOpen,setPerOpen] = useState(false)   // dropdown del selector de persona
   const [entDraft,setEntDraft] = useState('')     // Fase 2b: nuevo entregable
   const [hitoDraft,setHitoDraft] = useState('')   // Fase 2b: nuevo hito (título)
   const [hitoFecha,setHitoFecha] = useState('')   // Fase 2b: nuevo hito (fecha)
@@ -29074,9 +29078,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const rows = useMemo(()=>{
     // Pestaña: En curso (activa, no pausada) · En pausa (activa, pausada) · Terminados (archivados = activo:false)
     let arr = fase==='terminados' ? (archivados||[]) : (proyectos||[]).filter(p=> p.activo!==false && (fase==='pausa' ? !!p.pausado : !p.pausado))
-    // Mis proyectos (responsable ∪ equipo ∪ seguidor) vs Del estudio (los demás, para seguir). Nada ajeno por default.
-    if(vista==='estudio') arr = arr.filter(p=>!esMio(p))
-    else arr = arr.filter(esMio)
+    // Selector de persona: 'all' = toda la cartera del estudio; un inicial = proyectos donde esa persona es responsable ∪ equipo ∪ seguidor.
+    if(selPer && selPer!=='all') arr = arr.filter(p=>esDePersona(p,selPer))
     if(estadoF!=='todos') arr = arr.filter(p=>(p.estado||'verde')===estadoF)
     if(q){ const s=q.toLowerCase(); arr = arr.filter(p=>(cnm(p.cliente_id)+' '+(p.nombre_proyecto||'')+' '+(p.nota||'')).toLowerCase().includes(s)) }
     const key = p => { const d=mov(p).dias; return d==null?Infinity:d }
@@ -29090,7 +29093,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       if(sortBy==='cliente') return cnm(a.cliente_id).localeCompare(cnm(b.cliente_id),'es')
       return 0
     })
-  },[proyectos,archivados,fase,esAdmin,miInicial,vista,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
+  },[proyectos,archivados,fase,esAdmin,miInicial,selPer,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
 
   const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||''); cargarUltContacto(p) } }
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
@@ -29198,8 +29201,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
 
   const nCrit = rows.filter(p=>(p.estado||'verde')==='rojo').length
   const chipSty = (on,col,bg) => ({ fontSize:12, fontWeight:500, color:on?'#fff':col, background:on?C.accent:bg, borderRadius:20, padding:'4px 12px', border:'none', cursor:'pointer' })
-  // Fase 4 — mis proyectos que piden atención (rule-based), alto primero. Alimenta el contador del toggle y la vista "Atención".
-  const misRiesgo = (proyectos||[]).filter(p=>p.activo!==false && !p.pausado && esMio(p)).map(p=>({p,r:riesgoDe(p)})).filter(x=>x.r).sort((a,b)=>b.r.orden-a.r.orden)
+  const perItem = { display:'flex', alignItems:'center', gap:9, width:'100%', border:'none', background:'none', padding:'7px 9px', borderRadius:8, fontSize:13, fontWeight:600, color:C.text, textAlign:'left', cursor:'pointer' }
+  const perAv = (i,sz=22) => <span style={{ width:sz, height:sz, borderRadius:'50%', background:CART_AV[i]||C.muted, color:'#fff', fontSize:9.5, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{i}</span>
 
   // Fijar a nivel CLIENTE (toca todos sus proyectos activos a la vez).
   const fijarCliente = g => g.proyectos.forEach(p=>{ if(!p.fijado) fijar(p) })
@@ -29241,7 +29244,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 {p.pausado&&fase!=='pausa'&&!terminado&&<span style={{ fontSize:10, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'1px 7px', flexShrink:0 }}>En pausa</span>}
                 {p.plazo&&dP!=null&&(dP<0||dP<=7)&&!terminado&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
                 {(()=>{ const tm=TIPO_META[tipoDe(p)]||TIPO_META.proyecto; return <span onClick={e=>{ e.stopPropagation(); const nx=_TIPO_ORDEN[(_TIPO_ORDEN.indexOf(tipoDe(p))+1)%_TIPO_ORDEN.length]; onSetTipo&&onSetTipo(p.id,nx) }} title='Tipo de encargo — toca para cambiar (puntual · permanente · proyecto)' style={{ fontSize:9.5, fontWeight:700, color:tm.c, background:tm.bg, borderRadius:20, padding:'1px 8px', flexShrink:0, cursor:'pointer' }}>{tm.l}</span> })()}
-                {vista==='estudio'
+                {(selPer!=='all'&&selPer!==_soy)
                   ? <span style={{ fontSize:9.5, fontWeight:600, color:C.grisText, flexShrink:0 }}>Resp. {p.responsable||'—'}</span>
                   : (()=>{ const r=razonMia(p); return (r&&r!=='Responsable')?<span style={{ fontSize:9.5, fontWeight:700, color:r==='En el equipo'?C.tealText:C.muted, flexShrink:0 }}>{r}</span>:null })()}
               </div>
@@ -29256,7 +29259,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 <span style={{ width:24, height:24, borderRadius:'50%', background:CART_AV[p.responsable]||C.muted, color:'#fff', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' }}>{p.responsable||'—'}</span>
               </div>
               {!terminado&&tks.length>0&&(()=>{ const vh=tks.filter(t=>{ const d=daysLeft(t.due); return d!=null&&d<=0 }).length; return <span style={{ fontSize:10, fontWeight:600, color:vh>0?'#A32D2D':C.muted, whiteSpace:'nowrap' }}>{tks.length} tarea{tks.length!==1?'s':''}{vh>0?` · ${vh} vence`:''}</span> })()}
-              {!terminado&&(vista==='estudio'
+              {!terminado&&((selPer!=='all'&&selPer!==_soy)
                 ? <button onClick={e=>{ e.stopPropagation(); onSeguir&&onSeguir(p.id,true) }} style={{ fontSize:10, fontWeight:800, color:C.azulInfo, background:C.azulBg, border:'none', borderRadius:20, padding:'3px 10px', cursor:'pointer', whiteSpace:'nowrap' }}>+ Seguir</button>
                 : (_sigo(p.id)&&(p.responsable||'')!==_soy&&!_enEquipo(p.id)) ? <button onClick={e=>{ e.stopPropagation(); onSeguir&&onSeguir(p.id,false) }} title='Dejar de seguir — lo saca de tus proyectos' style={{ fontSize:10, fontWeight:700, color:C.muted, background:'none', border:'none', cursor:'pointer', whiteSpace:'nowrap' }}>Siguiendo ✓</button> : null)}
             </div>
@@ -29440,6 +29443,45 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     )
   }
 
+  // Icono contextual del próximo paso (según el texto del hito) — Opción A del render aprobado.
+  const stepIcon = cap => { const c=(cap||'').toLowerCase()
+    if(/firma|escritura/.test(c)) return <><path d="M3 21s3.5-.8 6-3.3l9.5-9.5-2.7-2.7L6.3 15C3.8 17.5 3 21 3 21z"/><path d="M14 6l4 4"/></>
+    if(/inscrip|cbr|conservador|registro/.test(c)) return <><rect x="5" y="20" width="14" height="2" rx="1"/><path d="M8 17h8l1-5a5 5 0 1 0-10 0z"/></>
+    if(/borrador|estatuto|redac|minuta|contrato|poder|mandato/.test(c)) return <><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/><path d="M10 13h5M10 17h3"/></>
+    if(/entrega|env[ií]o|remis/.test(c)) return <path d="M3 11l18-8-7 18-3-7-8-3z"/>
+    if(/due diligence|informe|an[aá]lisis|revis/.test(c)) return <><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></>
+    if(/junta|reuni|audiencia|comparendo/.test(c)) return <><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 6a3 3 0 0 1 0 6"/></>
+    return <><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></>
+  }
+  // Fila A+ del landing: nombre · cliente debajo · etapa en chip · próximo paso con icono+color · avatar responsable.
+  const filaProyecto = p => {
+    const _et = etapasDe(p)
+    const idx = _et ? Math.min(p.etapa_idx||0, _et.length-1) : 0
+    const etapaNm = _et ? _et[idx] : (TIPO_META[tipoDe(p)]?.l||'Encargo')
+    const nextH = hitosDe(p).find(h=>!h.hecho && h.fecha)   // hitosDe viene ordenado por fecha asc
+    const cap = nextH?.titulo || p.plazo_label || (p.plazo?'Próximo plazo':'Sin próximo paso')
+    const fecha = nextH?.fecha || p.plazo || null
+    const dd = fecha ? cartDiasPlazo(fecha) : null
+    const r = riesgoDe(p)
+    const tone = ((fecha && dd!=null && dd<0) || r?.nivel==='alto') ? 'late' : (dd!=null && dd<=7) ? 'soon' : 'ok'
+    const tc = tone==='late'?C.overdueText:tone==='soon'?C.soonText:C.greenText
+    const dc = tone==='late'?C.overdue:tone==='soon'?'#E09B2D':C.greenText
+    const due = fecha ? (dd<0?`venció ${fmtDia(fecha)}`:fmtDia(fecha)) : '—'
+    const resp = p.responsable || miInicial || 'CL'
+    return (
+      <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'flex-start', gap:13, background:'#fff', border:`1px solid ${openId===p.id?C.accent:C.border}`, borderRadius:11, padding:'13px 16px', marginBottom:8, cursor:'pointer' }}>
+        <span style={{ width:8, height:8, borderRadius:'50%', background:dc, flexShrink:0, marginTop:6 }}/>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:C.accent, letterSpacing:'-.01em', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nombre_proyecto}</div>
+          <div onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:12, color:C.muted, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', cursor:'pointer' }}>{cnm(p.cliente_id)||'—'}</div>
+          <div style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, fontWeight:600, color:C.muted, border:`1px solid ${C.border}`, borderRadius:7, padding:'3px 9px', marginTop:9, maxWidth:'100%', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{etapaNm}{_et&&<span style={{ color:C.done }}>· {idx+1} de {_et.length}</span>}</div>
+          <div style={{ display:'flex', alignItems:'center', gap:7, marginTop:8, fontSize:12.5, fontWeight:600, color:tc }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}>{stepIcon(cap)}</svg><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cap} · {due}</span></div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:11, flexShrink:0, marginTop:2 }}>{perAv(resp,24)}<span style={{ color:C.done, fontSize:15 }}>›</span></div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ maxWidth:isDesktop?1040:720, margin:'0 auto', padding:'0 14px 40px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
@@ -29581,7 +29623,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         </div>
       )}
 
-      {vista!=='semana'&&(()=>{ const scope=arr=> vista==='estudio' ? arr.filter(p=>!esMio(p)) : arr.filter(esMio)
+      {(()=>{ const scope=arr=> (selPer&&selPer!=='all') ? arr.filter(p=>esDePersona(p,selPer)) : arr
         const nCurso=scope((proyectos||[]).filter(p=>p.activo!==false&&!p.pausado)).length
         const nPausa=scope((proyectos||[]).filter(p=>p.activo!==false&&!!p.pausado)).length
         const nTerm=scope(archivados||[]).length
@@ -29597,83 +29639,34 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <option value='prioridad'>Prioridad</option>
           <option value='cliente'>Cliente</option>
         </select>}
-        {miInicial && (<>
-          <button onClick={()=>{setVista('semana');setOpenId(null)}} style={chipSty(vista==='semana',C.accent,C.azulBg)}>Mi semana</button>
-          {misRiesgo.length>0 && <button onClick={()=>{setVista('atencion');setOpenId(null)}} style={{ ...chipSty(vista==='atencion',C.coralText,C.ambarBg), display:'inline-flex', alignItems:'center', gap:5 }}>Atención<span style={{ fontSize:10, fontWeight:800, color:'#fff', background:vista==='atencion'?'rgba(255,255,255,.35)':C.overdue, borderRadius:10, padding:'0 6px', lineHeight:'15px' }}>{misRiesgo.length}</span></button>}
-          <button onClick={()=>{setVista('mios');setOpenId(null)}} style={chipSty(vista==='mios',C.accent,C.azulBg)}>Mis proyectos</button>
-          <button onClick={()=>{setVista('estudio');setOpenId(null)}} style={chipSty(vista==='estudio',C.muted,'#EEF1F3')}>Del estudio</button>
-        </>)}
+        <div style={{ position:'relative' }}>
+          <button onClick={()=>setPerOpen(o=>!o)} style={{ display:'inline-flex', alignItems:'center', gap:7, fontSize:12.5, fontWeight:600, color:C.text, background:'#fff', border:`1px solid ${C.border}`, borderRadius:9, padding:'5px 9px 5px 6px', cursor:'pointer' }}>
+            {selPer==='all' ? <span style={{ padding:'0 2px' }}>Todo el estudio</span> : <>{perAv(selPer,21)}{NOMBRE_DE_INI[selPer]||selPer}</>}
+            <span style={{ color:C.az3||C.done, fontSize:11 }}>▾</span>
+          </button>
+          {perOpen && <div style={{ position:'absolute', top:'calc(100% + 5px)', left:0, zIndex:30, background:'#fff', border:`1px solid ${C.border}`, borderRadius:10, boxShadow:'0 8px 26px rgba(8,34,45,.14)', padding:5, minWidth:190 }}>
+            <button onClick={()=>{ setSelPer('all'); setPerOpen(false); setOpenId(null) }} style={{ ...perItem, color:C.accent }}>Todo el estudio{selPer==='all'&&<span style={{ marginLeft:'auto', color:C.greenText, fontWeight:800 }}>✓</span>}</button>
+            <div style={{ height:1, background:C.border, margin:'4px 2px' }}/>
+            {['CL','EE','MC','MP','RD'].map(i=><button key={i} onClick={()=>{ setSelPer(i); setPerOpen(false); setOpenId(null) }} style={perItem}>{perAv(i)}{NOMBRE_DE_INI[i]||i}{selPer===i&&<span style={{ marginLeft:'auto', color:C.greenText, fontWeight:800 }}>✓</span>}</button>)}
+          </div>}
+        </div>
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{ marginLeft:'auto', fontSize:12, padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', width:110 }}/>
       </div>
 
-      {vista==='atencion' ? (()=>{
-          // ATENCIÓN (Fase 4): mis proyectos con señales de riesgo (rule-based), alto primero. Cada uno con sus motivos y un toque para abrirlo.
-          if(!misRiesgo.length) return <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>Nada pide atención ahora. Tus proyectos están al día.</div>
-          const nAlto=misRiesgo.filter(x=>x.r.nivel==='alto').length
-          return <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
-            <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, padding:'11px 14px 2px' }}>Para revisar · {misRiesgo.length}{nAlto?` · ${nAlto} urgente${nAlto!==1?'s':''}`:''}</div>
-            {misRiesgo.map(({p,r},i)=>{ const alto=r.nivel==='alto'; return (
-              <div key={p.id} onClick={()=>{ setVista('mios'); setFase('curso'); setOpenId(p.id); cargarUltContacto(p) }} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
-                <span style={{ width:9, height:9, borderRadius:'50%', background:alto?C.overdue:'#E09B2D', flexShrink:0, marginTop:4 }}/>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
-                  <div style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.nombre_proyecto}</div>
-                  <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:4 }}>{r.motivos.map((m,j)=><span key={j} style={{ fontSize:10, fontWeight:600, color:alto?C.overdueText:C.soonText, background:alto?C.overdueBg:C.ambarBg, borderRadius:20, padding:'2px 8px' }}>{m}</span>)}</div>
-                </div>
-                <span style={{ fontSize:13, color:C.muted, flexShrink:0, marginTop:2 }}>›</span>
-              </div>
-            )})}
-          </div>
-        })()
-      : vista==='semana' ? (()=>{
-          // MI SEMANA (Fase 3): cruza tareas + hitos + plazos de MIS proyectos que vencen en los próximos 7 días (o ya vencidos). "Qué tengo para la semana".
-          const weekEnd=(()=>{ const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10) })()
-          const misP=(proyectos||[]).filter(p=>p.activo!==false && esMio(p))
-          const idSet=new Set(misP.map(p=>String(p.id)))
-          const items=[]
-          ;(tasks||[]).forEach(t=>{ if(t.status==='Terminado'||t.archived||!t.due) return; const due=String(t.due).slice(0,10); if(due>weekEnd) return
-            const p = misP.find(x=>String(x.id)===String(t.project_id)) || misP.find(x=>!t.project_id && x.cliente_id && String(x.cliente_id)===String(t.client_id)); if(!p) return
-            items.push({ fecha:due, texto:t.title||'Tarea', proy:cnm(p.cliente_id)||p.nombre_proyecto||'', kind:'Tarea', pid:p.id }) })
-          ;(proyHitos||[]).forEach(h=>{ if(h.hecho||!h.fecha||!idSet.has(String(h.proyecto_id))) return; const f=String(h.fecha).slice(0,10); if(f>weekEnd) return; const p=misP.find(x=>String(x.id)===String(h.proyecto_id)); items.push({ fecha:f, texto:h.titulo, proy:p?(cnm(p.cliente_id)||p.nombre_proyecto):'', kind:'Hito', pid:h.proyecto_id }) })
-          ;misP.forEach(p=>{ if(!p.plazo) return; const f=String(p.plazo).slice(0,10); if(f>weekEnd) return; items.push({ fecha:f, texto:p.plazo_label||'Plazo del proyecto', proy:cnm(p.cliente_id)||p.nombre_proyecto, kind:'Plazo', pid:p.id }) })
-          items.sort((a,b)=> a.fecha.localeCompare(b.fecha) || (a.kind>b.kind?1:-1))
-          if(!items.length) return <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>Nada vence esta semana en tus proyectos. Semana despejada.</div>
-          const KIND={ Tarea:{c:C.azulInfo,bg:C.azulBg}, Hito:{c:C.accent,bg:C.azulBg}, Plazo:{c:'#A32D2D',bg:'#FCEBEB'} }
-          const dayLbl=f=>{ const dd=cartDiasPlazo(f); if(dd==null) return ''; if(dd<0) return `vencido ${-dd}d`; if(dd===0) return 'hoy'; if(dd===1) return 'mañana'; return new Date(f+'T12:00').toLocaleDateString('es-CL',{weekday:'short'}) }
-          const dayCol=f=>{ const dd=cartDiasPlazo(f); return dd==null?C.muted:dd<0?'#A32D2D':dd===0?'#993C1D':C.tealText }
-          return <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
-            <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, padding:'11px 14px 2px' }}>Esta semana · {items.length}</div>
-            {items.map((it,i)=>{ const k=KIND[it.kind]||KIND.Tarea; return (
-              <div key={i} onClick={()=>{ setVista('mios'); setFase('curso'); setOpenId(it.pid) }} style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
-                <span style={{ fontSize:10.5, fontWeight:800, color:'#fff', background:dayCol(it.fecha), borderRadius:7, padding:'3px 7px', minWidth:64, textAlign:'center', flexShrink:0 }}>{dayLbl(it.fecha)}</span>
-                <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.texto}</div>{it.proy&&<div style={{ fontSize:10.5, color:C.muted }}>{it.proy}</div>}</div>
-                <span style={{ fontSize:9.5, fontWeight:800, textTransform:'uppercase', letterSpacing:.3, color:k.c, background:k.bg, borderRadius:20, padding:'2px 8px', flexShrink:0 }}>{it.kind}</span>
-              </div>
-            )})}
-          </div>
-        })()
-      : grupos.length===0
-        ? <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>{proyectos.length?'Nada con este filtro.':'Aún no hay proyectos. Toca “+ Nuevo” o se irán creando desde tus ventas activas.'}</div>
-        : <div style={isDesktop?{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, alignItems:'start' }:{ display:'flex', flexDirection:'column', gap:10 }}>
-            {grupos.map(g=>{
-              const terminadoG = fase==='terminados'
-              if(g.proyectos.length===1) return <div key={g.cliente_id} style={{ background:'#fff', border:`1px solid ${g.fijado&&!terminadoG?C.accent:C.border}`, borderRadius:12, overflow:'hidden', gridColumn:(isDesktop&&openId===g.proyectos[0].id)?'1 / -1':undefined }}>{renderProyecto(g.proyectos[0],false)}</div>
-              const abiertoG = grpOpen[g.cliente_id]!==false
-              return (
-                <div key={g.cliente_id} style={{ background:'#fff', border:`1px solid ${g.fijado&&!terminadoG?C.accent:C.border}`, borderRadius:12, overflow:'hidden', gridColumn:(isDesktop&&g.proyectos.some(p=>String(p.id)===String(openId)))?'1 / -1':undefined }}>
-                  <div onClick={()=>setGrpOpen(o=>({...o,[g.cliente_id]:!abiertoG}))} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', cursor:'pointer' }}>
-                    {g.fijado&&!terminadoG&&CHINCHETA}
-                    <span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(g.cliente_id) }} style={{ fontSize:15, fontWeight:700, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:190 }}>{g.cliente}</span>
-                    <span style={{ fontSize:11, color:C.done, fontWeight:600, flexShrink:0 }}>{g.proyectos.length} proyectos</span>
-                    <div style={{ flex:1, minWidth:0, display:'flex', justifyContent:'flex-end' }}>{!terminadoG&&señalLine(g.mov)}</div>
-                    {!terminadoG&&<button onClick={e=>{ e.stopPropagation(); g.fijado?quitarFijarCliente(g):fijarCliente(g) }} title={g.fijado?'Quitar de arriba':'Fijar arriba'} style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:0, flexShrink:0 }}><svg width="15" height="15" viewBox="0 0 24 24" fill={g.fijado?C.accent:'none'} stroke={g.fijado?C.accent:C.done} strokeWidth="2"><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg></button>}
-                    <span style={{ fontSize:13, color:C.muted, flexShrink:0, transform:abiertoG?'rotate(90deg)':'none', transition:'transform .15s' }}>›</span>
-                  </div>
-                  {abiertoG&&<div>{g.proyectos.map((p)=><div key={p.id} style={{ borderTop:`1px solid ${C.border}` }}>{renderProyecto(p,true)}</div>)}</div>}
-                </div>
-              )
-            })}
-          </div>}
+      {(()=>{
+        // LANDING A+ (PMO): Prioritarios (riesgoDe) arriba, luego En curso/En pausa/Terminados. Fila A+; al abrir, detalle inline (reemplazo por página workspace en el próximo paso).
+        if(!rows.length) return <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>{proyectos.length?'Nada con este filtro.':'Aún no hay proyectos. Toca “+ Nuevo” o se irán creando desde tus ventas activas.'}</div>
+        const prio = fase==='curso' ? rows.filter(p=>riesgoDe(p)) : []
+        const resto = fase==='curso' ? rows.filter(p=>!riesgoDe(p)) : rows
+        const sech = (t,n,late)=> <div key={'h'+t} style={{ display:'flex', alignItems:'center', gap:6, margin:'16px 2px 7px', fontSize:9, fontWeight:700, letterSpacing:.5, textTransform:'uppercase', color:late?C.overdueText:C.done }}>{t}<span style={{ color:C.muted }}>· {n}</span></div>
+        const lista = p => openId===p.id
+          ? <div key={p.id} style={{ background:'#fff', border:`1px solid ${C.accent}`, borderRadius:12, overflow:'hidden', marginBottom:8 }}>{renderProyecto(p,false)}</div>
+          : filaProyecto(p)
+        return <div>
+          {prio.length>0 && [sech('Prioritarios',prio.length,true), ...prio.map(lista)]}
+          {resto.length>0 && [sech(fase==='pausa'?'En pausa':fase==='terminados'?'Terminados':'En curso',resto.length,false), ...resto.map(lista)]}
+        </div>
+      })()}
 
       {alcanceFor&&<CarteraAlcanceModal proyecto={alcanceFor} client={clients.find(c=>String(c.id)===String(alcanceFor.cliente_id))||null} onClose={()=>setAlcanceFor(null)} onApplied={(id,campos)=>{ setProyectos(prev=>prev.map(x=>x.id===id?{...x,...campos}:x)); if(openId===id) setDraft(d=>d) }}/>}
     </div>
