@@ -29716,6 +29716,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           const done = pasos.filter(h=>h.hecho).length
           // Fila de paso reutilizable (modo plano y agrupado por fase). i = índice GLOBAL en `pasos` (para reordenar). canReorder: solo en modo plano.
           const pasoRow = (h,i,canReorder) => { const dd=h.plazo?cartDiasPlazo(h.plazo):null; const subs=subsDe(h.id); const open=!!subAbierto[h.id]
+            const tareasPaso = (tks||[]).filter(t=>_docConfirma(t.title||'', h.titulo))   // OLA 4 — tareas que cuelgan de este paso (match por título)
             const plazoCol = h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted); const dnd=canReorder&&isDesktop
             return <div key={h.id} draggable={dnd} onDragStart={dnd?(()=>setDragPaso(i)):undefined} onDragEnd={dnd?(()=>setDragPaso(null)):undefined} onDragOver={dnd?(e=>e.preventDefault()):undefined} onDrop={dnd?(()=>{ reorder(dragPaso,i); setDragPaso(null) }):undefined}
                   style={{ borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', padding:'9px 0', opacity:dragPaso===i?.5:1 }}>
@@ -29728,6 +29729,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                         <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10.5, color:plazoCol }}>plazo<input type='date' value={h.plazo||''} onChange={e=>onUpdHito&&onUpdHito(h.id,{plazo:e.target.value||null})} style={{ fontSize:10.5, padding:'1px 4px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}/>{h.plazo&&!h.hecho&&dd!=null&&<span style={{ fontWeight:700 }}>{dd<0?`vencido ${-dd}d`:dd===0?'hoy':`en ${dd}d`}</span>}</span>
                         {h.hecho&&<span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10.5, color:C.greenText, fontWeight:600 }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 12l5 5L20 6"/></svg>{h.fecha?fmtDia(h.fecha):'hecho'}</span>}
                         <span onClick={()=>setSubAbierto(o=>({...o,[h.id]:!open}))} style={{ fontSize:10.5, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>{subs.length?`${subs.filter(s=>s.hecho).length}/${subs.length} etapas`:'+ etapas'}{subs.length?(open?' ▾':' ▸'):''}</span>
+                        {onAddTaskForProject && <span onClick={()=>onAddTaskForProject(p,{title:h.titulo})} title='Crear una tarea para este paso' style={{ fontSize:10.5, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>+ tarea</span>}
                       </div>
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
@@ -29746,6 +29748,14 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                     <input placeholder='+ etapa…' onKeyDown={ev=>{ if(ev.key==='Enter'&&ev.target.value.trim()){ onAddEntregable&&onAddEntregable(p.id,ev.target.value,null,h.id); ev.target.value='' } }} style={{ fontSize:11, padding:'4px 7px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff', marginTop:2 }}/>
                   </div>}
                   {open&&!subs.length&&<div style={{ paddingLeft:38, marginTop:6 }}><input placeholder='+ etapa…' onKeyDown={ev=>{ if(ev.key==='Enter'&&ev.target.value.trim()){ onAddEntregable&&onAddEntregable(p.id,ev.target.value,null,h.id); ev.target.value='' } }} style={{ fontSize:11, padding:'4px 7px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff' }}/></div>}
+                  {tareasPaso.length>0 && <div style={{ paddingLeft:38, marginTop:6, display:'flex', flexDirection:'column', gap:4 }}>
+                    {tareasPaso.map(t=>{ const td=daysLeft(t.due); return (
+                      <div key={t.id} style={{ display:'flex', alignItems:'center', gap:7 }}>
+                        <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar tarea terminada (avanza el plan)' style={{ width:13, height:13, borderRadius:4, border:`1.5px solid ${C.azulInfo}`, flexShrink:0, cursor:'pointer' }}/>
+                        <span onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, fontSize:11.5, color:C.text, cursor:'pointer', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</span>
+                        <span style={{ fontSize:9.5, fontWeight:600, color:td==null?C.muted:td<0?C.overdueText:td<=2?C.soonText:C.muted, flexShrink:0 }}>{t.due?(td<0?`vencida ${-td}d`:td===0?'hoy':`en ${td}d`):'tarea'}</span>
+                      </div> )})}
+                  </div>}
                 </div> }
           // OLA 2 — Fases colapsables (proyectos largos, ≥8 pasos): agrupa por fase en orden de aparición. Reordenar queda en el modo plano.
           const puedeAgrupar = pasos.length>=8; const agr = puedeAgrupar && faseAgr

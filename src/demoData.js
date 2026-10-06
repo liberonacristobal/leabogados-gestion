@@ -202,6 +202,7 @@ export const demoData = {
     { id:'pc3', user_name:'Demo',    amount:200000, delivered_at:'2026-09-01', delivered_by:'Cristóbal', notes:'Caja del mes' },
   ],
   tasks: [
+    { id:'tp1', title:'Redactar minuta para el CBR', client_id:'c3', project_id:'p2', project:'Regularización de servidumbre', status:'Activo', due:new Date(Date.now()+2*864e5).toISOString().slice(0,10), assignees:['Rodrigo'], assigned_by:'Erasmo', created_at:new Date(Date.now()-2*864e5).toISOString().slice(0,10) },
     { id:'t1', title:'Redactar contrato de prestación de servicios', client_id:'c1', project:'Asesoría permanente', status:'Activo', due:'2026-06-12', assignees:['Martín'],   assigned_by:'Cristóbal', created_at:'2026-06-05' },
     { id:'t2', title:'Preparar escrito de contestación',             client_id:'c3', project:'Litigio laboral',     status:'Activo', due:'2026-06-16', assignees:['Erasmo'],   assigned_by:'Cristóbal', created_at:'2026-06-06' },
     { id:'t3', title:'Revisar due diligence — carpeta laboral',      client_id:'c2', project:'Due diligence',       status:'Activo', due:'2026-06-20', assignees:['Martina'],  assigned_by:'Erasmo',    created_at:'2026-06-08' },
