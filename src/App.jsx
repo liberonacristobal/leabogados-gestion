@@ -29001,8 +29001,6 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const toggleCross = async()=>{ const nv=crossCfg==='on'?'off':'on'; setCrossCfg(nv); try{ await setLearningKV('config','pmo_cross_cartera',nv) }catch(_){} }
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
-  const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
-  const [pickOp,setPickOp] = useState('')          // operación a aplicar al agregar ventas desde el panel "Elegir"
   const [focoOpen,setFocoOpen] = useState(false)   // vista "Mi foco" (cross-proyecto: qué vence / siguiente paso / detenidos)
   const [metOpen,setMetOpen] = useState(false)     // vista "Métricas de proyectos" (Ola 4)
   const [metExp,setMetExp] = useState(null)        // fila expandida en Métricas (drill-down a su lista de proyectos)
@@ -29419,17 +29417,6 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     setNuevo(false); setNf(NF0); setClientQ('')
   }
 
-  // La app SUGIERE: ventas Activas que aún no tienen proyecto en el panel (para el backfill de un toque).
-  const activasSinProyecto = useMemo(()=>{ const have=new Set((proyectos||[]).map(p=>p.sale_id&&String(p.sale_id)).filter(Boolean)); return (sales||[]).filter(s=>s.status==='Activo'&&!s.deleted_at&&!have.has(String(s.id))) },[sales,proyectos])
-  // El usuario DECIDE qué venta vuelve proyecto — se agrega UNA a la vez (nada automático en bloque).
-  const agregarUno = async (s, operacionId) => {
-    const op = operacionId ? (pmoOps||[]).find(o=>String(o.id)===String(operacionId)) : null
-    const row = { sale_id:String(s.id), cliente_id:s.client_id?String(s.client_id):null, nombre_proyecto:s.title||'Proyecto', responsable:INICIALES_RESP[s.responsible||s.abogado_responsable]||null, estado:'verde', etapa_idx:0, origen:'venta', activo:true, ultima_actividad:HOY }
-    let created
-    if(DEMO){ created={id:'p'+Date.now()+Math.random(),...row}; setProyectos(prev=>[created,...prev]) }
-    else { const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single(); if(error){ appAlert('No se pudo agregar: '+error.message); return } created=data; setProyectos(prev=>[data,...prev]) }
-    if(op && created && onSeedPlan) onSeedPlan(created.id, op)
-  }
 
   // Fase 2B: escaneo del correo (client-side, tu buzón). Corre 1×/día al abrir (solo admin) + botón manual. Cache en localStorage.
   const NOV_KEY = 'cartera_nov_'+HOY
@@ -30262,31 +30249,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           : <div style={{ padding:'14px 0 12px' }}><div style={{ display:'flex', alignItems:'center', gap:8 }}>{titulo}</div><div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginTop:10 }}>{btns}</div></div>
       })()}
 
-      {esAdmin&&activasSinProyecto.length>0&&(
-        <div style={{ background:C.azulBg||'#E6F1FB', border:`1px solid ${C.border}`, borderRadius:10, marginBottom:10, overflow:'hidden' }}>
-          <div onClick={()=>setPickOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', cursor:'pointer' }}>
-            <span style={{ fontSize:12, color:C.accent, flex:1 }}>{activasSinProyecto.length} venta{activasSinProyecto.length!==1?'s':''} activa{activasSinProyecto.length!==1?'s':''} sin proyecto — tú eliges cuáles agregar</span>
-            <span style={{ fontSize:12, fontWeight:600, color:C.accent, whiteSpace:'nowrap' }}>{pickOpen?'Cerrar':'Elegir →'}</span>
-          </div>
-          {pickOpen&&(()=>{ const byCli={}; activasSinProyecto.forEach(s=>{ const k=s.client_id?String(s.client_id):'—'; (byCli[k]=byCli[k]||[]).push(s) })
-            const grupos=Object.entries(byCli).map(([cid,ss])=>({cid,nombre:cnm(cid)||'Sin cliente',ss})).sort((a,b)=>a.nombre.localeCompare(b.nombre))
-            return <div style={{ borderTop:`1px solid ${C.border}`, background:'#fff', maxHeight:380, overflowY:'auto' }}>
-              {(pmoOps||[]).length>0&&<div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderBottom:`1px solid ${C.bgSoft||'#F1EFE8'}` }}><span style={{ fontSize:11, color:C.muted }}>Plan al agregar:</span><select value={pickOp} onChange={e=>setPickOp(e.target.value)} style={{ flex:1, minWidth:0, fontSize:12, padding:'5px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}><option value=''>Sin plan por ahora</option>{(pmoOps||[]).map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}</select></div>}
-              {grupos.map(g=>(
-                <div key={g.cid} style={{ padding:'8px 12px', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}` }}>
-                  <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(g.cid)} style={{ fontSize:12.5, fontWeight:700, color:C.accent, marginBottom:4, cursor:'pointer' }}>{g.nombre}</div>
-                  {g.ss.map(s=>(
-                    <div key={s.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'5px 0' }}>
-                      <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:12.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.title||'Venta sin título'}</div><div style={{ fontSize:10, color:C.muted }}>{s.status||''}{s.responsible?` · ${INICIALES_RESP[s.responsible]||s.responsible}`:''}</div></div>
-                      <button onClick={()=>agregarUno(s, pickOp)} style={{ fontSize:11, fontWeight:700, color:'#fff', background:C.accent, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer', flexShrink:0 }}>Agregar</button>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          })()}
-        </div>
-      )}
+      {/* Banner "N ventas activas sin proyecto" retirado por instrucción del usuario: el alta de proyectos pasa por "+ Nuevo" (nace de cliente+venta). */}
 
       {/* "Resumen semanal por correo" retirado del header por instrucción del usuario (no más correos por ahora; se retoma después).
           El motor (semanal/toggleSemanal/enviarPrueba + edge resumen-lunes) queda intacto para reactivarlo cuando se decida. */}
