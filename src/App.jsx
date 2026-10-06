@@ -28909,7 +28909,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [hitoDraft,setHitoDraft] = useState('')   // Fase 2b: nuevo hito (título)
   const [hitoFecha,setHitoFecha] = useState('')   // Fase 2b: nuevo hito (fecha)
   const [addMiemOpen,setAddMiemOpen] = useState(false)  // Fase 2b: picker de integrante
-  const [openId,setOpenId] = usePersistedState('cartera_open',null)         // proyecto abierto
+  const [openId,setOpenId] = usePersistedState('cartera_open',null)         // proyecto abierto (como página workspace)
+  const [wsTab,setWsTab] = useState('resumen')                              // subpágina del workspace: resumen|plan|calendario|tareas|equipo|bitacora
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const NF0 = { cliente_id:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
@@ -29095,7 +29096,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     })
   },[proyectos,archivados,fase,esAdmin,miInicial,selPer,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
 
-  const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||''); cargarUltContacto(p) } }
+  const abrir = p => { setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p) }   // abre el proyecto como PÁGINA workspace (el "‹ Mis proyectos" lo cierra)
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
   useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||''); cargarUltContacto(p) } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
@@ -29217,231 +29218,6 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     return <div style={{ fontSize:12, display:'flex', alignItems:'center', gap:5, flexWrap:'wrap', ...style }}><span style={{ width:6, height:6, borderRadius:'50%', background:SEÑAL_COL[s.tipo]||C.muted, flexShrink:0 }}/><span style={{ color:C.text, fontWeight:600 }}>{s.texto}</span><span style={{ color:C.muted, fontWeight:600 }}>· {fecha}</span>{dd>1&&<span style={{ color:C.done, fontSize:10 }}>· hace {dd} d</span>}</div>
   }
 
-  // Un proyecto (tarjeta colapsada + detalle B3). nested=true cuando va bajo un grupo de cliente.
-  const renderProyecto = (p, nested) => {
-    const abierto = openId===p.id
-    const dP = cartDiasPlazo(p.plazo)
-    const _et = etapasDe(p)
-    const etapa = _et ? (_et[Math.min(p.etapa_idx||0,_et.length-1)]||_et[0]) : (TIPO_META[tipoDe(p)]?.l||'Encargo')
-    const m = mov(p)
-    const terminado = fase==='terminados'
-    const avancePct = _et ? Math.round(((Math.min(p.etapa_idx||0,_et.length-1))/Math.max(1,_et.length-1))*100) : 0
-    const tks = tareasDe(p)
-    const venceTk = tks.map(t=>daysLeft(t.due)).filter(d=>d!=null).sort((a,b)=>a-b)[0]
-    const inp = { fontSize:12, padding:'3px 6px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }
-    return (
-      <div key={p.id} style={{ opacity:terminado?.7:1 }}>
-        <div onClick={()=>abrir(p)} style={{ padding:nested?'10px 13px':'12px 13px', cursor:'pointer' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
-                <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
-                {!nested&&p.fijado&&!terminado&&CHINCHETA}
-                {nested
-                  ? <span style={{ fontSize:14, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:220 }}>{p.nombre_proyecto||etapa}</span>
-                  : <><span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:14, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:170 }}>{cnm(p.cliente_id)||'—'}</span><span style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>· {p.nombre_proyecto||etapa}</span></>}
-                {esPropAbierta(p)&&<span style={{ fontSize:10, fontWeight:700, color:C.accent, background:C.azulBg, borderRadius:20, padding:'1px 7px', flexShrink:0, textTransform:'uppercase', letterSpacing:.3 }}>Propuesta</span>}
-                {p.pausado&&fase!=='pausa'&&!terminado&&<span style={{ fontSize:10, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'1px 7px', flexShrink:0 }}>En pausa</span>}
-                {p.plazo&&dP!=null&&(dP<0||dP<=7)&&!terminado&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
-                {(()=>{ const tm=TIPO_META[tipoDe(p)]||TIPO_META.proyecto; return <span onClick={e=>{ e.stopPropagation(); const nx=_TIPO_ORDEN[(_TIPO_ORDEN.indexOf(tipoDe(p))+1)%_TIPO_ORDEN.length]; onSetTipo&&onSetTipo(p.id,nx) }} title='Tipo de encargo — toca para cambiar (puntual · permanente · proyecto)' style={{ fontSize:9.5, fontWeight:700, color:tm.c, background:tm.bg, borderRadius:20, padding:'1px 8px', flexShrink:0, cursor:'pointer' }}>{tm.l}</span> })()}
-                {(selPer!=='all'&&selPer!==_soy)
-                  ? <span style={{ fontSize:9.5, fontWeight:600, color:C.grisText, flexShrink:0 }}>Resp. {p.responsable||'—'}</span>
-                  : (()=>{ const r=razonMia(p); return (r&&r!=='Responsable')?<span style={{ fontSize:9.5, fontWeight:700, color:r==='En el equipo'?C.tealText:C.muted, flexShrink:0 }}>{r}</span>:null })()}
-              </div>
-              {!terminado&&señalLine(m,{ marginTop:4, paddingLeft:15 })}
-              {p.nota&&<div style={{ fontSize:12, color:C.muted, marginTop:3, paddingLeft:15, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nota}</div>}
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5, flexShrink:0 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                {terminado
-                  ? <button onClick={e=>{ e.stopPropagation(); reponer(p) }} style={{ fontSize:11, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'3px 10px', cursor:'pointer' }}>Reponer</button>
-                  : !nested&&<button onClick={e=>{ e.stopPropagation(); p.fijado?quitarFijar(p):fijar(p) }} title={p.fijado?'Quitar de arriba':'Fijar arriba'} style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:0 }}><svg width="15" height="15" viewBox="0 0 24 24" fill={p.fijado?C.accent:'none'} stroke={p.fijado?C.accent:C.done} strokeWidth="2"><path d="M14 2l8 8-5 1-4 4-1 6-3-3-6 6 6-6-3-3 6-1 4-4z"/></svg></button>}
-                <span style={{ width:24, height:24, borderRadius:'50%', background:CART_AV[p.responsable]||C.muted, color:'#fff', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' }}>{p.responsable||'—'}</span>
-              </div>
-              {!terminado&&tks.length>0&&(()=>{ const vh=tks.filter(t=>{ const d=daysLeft(t.due); return d!=null&&d<=0 }).length; return <span style={{ fontSize:10, fontWeight:600, color:vh>0?'#A32D2D':C.muted, whiteSpace:'nowrap' }}>{tks.length} tarea{tks.length!==1?'s':''}{vh>0?` · ${vh} vence`:''}</span> })()}
-              {!terminado&&((selPer!=='all'&&selPer!==_soy)
-                ? <button onClick={e=>{ e.stopPropagation(); onSeguir&&onSeguir(p.id,true) }} style={{ fontSize:10, fontWeight:800, color:C.azulInfo, background:C.azulBg, border:'none', borderRadius:20, padding:'3px 10px', cursor:'pointer', whiteSpace:'nowrap' }}>+ Seguir</button>
-                : (_sigo(p.id)&&(p.responsable||'')!==_soy&&!_enEquipo(p.id)) ? <button onClick={e=>{ e.stopPropagation(); onSeguir&&onSeguir(p.id,false) }} title='Dejar de seguir — lo saca de tus proyectos' style={{ fontSize:10, fontWeight:700, color:C.muted, background:'none', border:'none', cursor:'pointer', whiteSpace:'nowrap' }}>Siguiendo ✓</button> : null)}
-            </div>
-          </div>
-        </div>
-        {abierto&&(
-          <div style={{ padding:'0 13px 13px', background:C.bgSoft||'#FAFBFC' }}>
-            <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:11 }}>
-              <div style={{ fontSize:12, color:C.muted, marginBottom:10, lineHeight:1.4 }}>{resumenDe(p)}</div>
-              {/* ÚLTIMO CONTACTO por hilo (Gmail del usuario; admin). Lazy al abrir, cacheado por cliente. */}
-              {esAdmin&&(()=>{ const uc=ultCont[String(p.cliente_id)]; if(!uc) return null
-                if(uc.loading) return <div style={{ fontSize:11, color:C.grisText, marginBottom:10 }}>Buscando el último correo…</div>
-                if(uc.err) return uc.err==='sinpermiso' ? <div style={{ fontSize:11, color:C.grisText, marginBottom:10 }}>Conecta Google (cierra sesión y reingresa) para ver el último correo.</div> : null
-                if(uc.none) return <div style={{ fontSize:11, color:C.grisText, marginBottom:10 }}>Sin correos con este cliente{uc.noEmail?' · falta su correo en la ficha':''}.</div>
-                const dd=_dias(uc.fecha); const hace = dd==null?'' : dd<=0?'hoy' : dd===1?'ayer' : `hace ${dd} d`
-                const linkable = uc.threadId&&uc.threadId!=='demo'
-                return <div onClick={()=>linkable&&window.open('https://mail.google.com/mail/u/0/#all/'+uc.threadId,'_blank')} style={{ display:'flex', alignItems:'center', gap:9, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10, cursor:linkable?'pointer':'default' }}>
-                  <span style={{ width:8, height:8, borderRadius:'50%', background:uc.dir==='out'?C.azulInfo:C.greenText, flexShrink:0 }}/>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Último contacto · {uc.dir==='out'?'enviado':'recibido'}</div>
-                    <div style={{ fontSize:12.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uc.asunto}</div>
-                  </div>
-                  <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:dd!=null&&dd>45?C.coralText:C.accent }}>{hace}</div>
-                    {linkable&&<div style={{ fontSize:10, color:C.azulInfo }}>ver en Gmail ›</div>}
-                  </div>
-                </div>
-              })()}
-              {/* EN QUÉ ESTÁ — etapas solo para 'proyecto', con plantilla por tipo de asunto (no rígido). Permanente/puntual: sin etapas. */}
-              {_et ? <>
-                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:7, flexWrap:'wrap' }}>
-                  <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>En qué está</span>
-                  <select value={p.template||''} onChange={e=>setTemplate(p,e.target.value)} title='Plantilla de etapas — elige el tipo de asunto' style={{ ...inp, marginLeft:'auto' }}>{Object.keys(TEMPLATE_LABELS).map(k=><option key={k} value={k}>{TEMPLATE_LABELS[k]}</option>)}</select>
-                </div>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:5 }}><span style={{ fontSize:11, fontWeight:600, color:C.accent }}>Etapa {Math.min(p.etapa_idx||0,_et.length-1)+1} de {_et.length} · {etapa}</span><span style={{ fontSize:11, fontWeight:700, color:C.accent }}>{avancePct}%</span></div>
-                <div style={{ height:6, borderRadius:4, background:'#EAEEF1', overflow:'hidden', marginBottom:10 }}><div style={{ height:'100%', width:avancePct+'%', background:C.accent, borderRadius:4 }}/></div>
-              </> : <div style={{ fontSize:11, fontWeight:600, color:C.muted, marginBottom:10 }}>{tipoDe(p)==='permanente'?'Asesoría permanente — sin etapas; se sigue por temas abiertos y actividad.':'Encargo puntual — un entregable y un plazo.'}</div>}
-              <div style={{ display:'flex', gap:8, marginBottom:10 }}>
-                <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Próximo plazo</div><div style={{ fontSize:13, fontWeight:700, color:C.text, marginTop:2 }}>{p.plazo?fmtDia(p.plazo):'sin plazo'}</div>{p.plazo&&<div style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':dP<=7?'#854F0B':C.muted }}>{dP<0?`vencido ${-dP}d`:dP===0?'hoy':`en ${dP} días`}</div>}{p.plazo_label&&<div style={{ fontSize:10, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.plazo_label}</div>}</div>
-                <div style={{ flex:1, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}><div style={{ fontSize:10, color:C.muted }}>Tareas abiertas</div><div style={{ fontSize:13, fontWeight:700, color:C.text, marginTop:2 }}>{tks.length}</div>{venceTk!=null&&<div style={{ fontSize:10, color:venceTk<0?'#A32D2D':venceTk<=7?'#854F0B':C.muted }}>{venceTk<0?`1 vencida`:venceTk<=7?`próxima en ${venceTk}d`:`próxima en ${venceTk}d`}</div>}</div>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, flexWrap:'wrap' }}>
-                <span style={{ fontSize:11, color:C.muted }}>Resp.</span>
-                <select value={p.responsable||''} onChange={e=>patch(p,{responsable:e.target.value})} disabled={!esAdmin} style={inp}>{['CL','EE','MC','MP','RD'].map(i=><option key={i} value={i}>{i}</option>)}</select>
-                <span style={{ fontSize:11, color:C.muted, marginLeft:4 }}>Plazo</span>
-                <input type='date' value={p.plazo||''} onChange={e=>patch(p,{plazo:e.target.value||null})} style={inp}/>
-                {_et&&(()=>{ const fin=(p.etapa_idx||0)>=_et.length-1; return <button onClick={()=>avanzar(p)} disabled={fin} style={{ fontSize:11, fontWeight:600, color:fin?C.grisText:C.accent, background:'none', border:'none', cursor:fin?'default':'pointer', padding:0, marginLeft:'auto' }}>→ Avanzar etapa</button> })()}
-              </div>
-              {/* ALCANCE · ENTREGABLES (Fase 2b) — proyecto y puntual */}
-              {tipoDe(p)!=='permanente'&&(()=>{ const ents=entregablesDe(p); const done=ents.filter(e=>e.hecho).length; return (
-                <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10 }}>
-                  <div style={{ display:'flex', alignItems:'center', marginBottom:ents.length?6:4 }}><span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Alcance · entregables</span>{ents.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:C.muted }}>{done}/{ents.length}</span>}</div>
-                  {ents.map(e=>(
-                    <div key={e.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
-                      <span onClick={()=>onToggleEntregable&&onToggleEntregable(e.id,!e.hecho)} style={{ width:16, height:16, borderRadius:5, border:`1.5px solid ${e.hecho?C.greenText:C.done}`, background:e.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{e.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
-                      <span style={{ flex:1, fontSize:12.5, color:e.hecho?C.muted:C.text, textDecoration:e.hecho?'line-through':'none' }}>{e.texto}</span>
-                      <span onClick={()=>onDelEntregable&&onDelEntregable(e.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
-                    </div>
-                  ))}
-                  <input value={openId===p.id?entDraft:''} onChange={e=>setEntDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&entDraft.trim()){ onAddEntregable&&onAddEntregable(p.id,entDraft); setEntDraft('') } }} placeholder='+ Agregar entregable…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'6px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', marginTop:6 }}/>
-                </div>
-              )})()}
-              {/* HITOS (Fase 2b) — proyecto */}
-              {tipoDe(p)==='proyecto'&&(()=>{ const hs=hitosDe(p); return (
-                <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:hs.length?6:4 }}>Hitos</div>
-                  {hs.map(h=>{ const dd=h.fecha?cartDiasPlazo(h.fecha):null; return (
-                    <div key={h.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
-                      <span onClick={()=>onToggleHito&&onToggleHito(h.id,!h.hecho)} style={{ width:16, height:16, borderRadius:5, border:`1.5px solid ${h.hecho?C.greenText:C.done}`, background:h.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{h.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
-                      {h.fecha&&<span style={{ fontSize:10.5, fontWeight:700, color:h.hecho?C.muted:(dd!=null&&dd<0?'#A32D2D':dd!=null&&dd<=7?'#854F0B':C.accent), minWidth:58 }}>{fmtDia(h.fecha)}</span>}
-                      <span style={{ flex:1, fontSize:12.5, color:h.hecho?C.muted:C.text, textDecoration:h.hecho?'line-through':'none' }}>{h.titulo}</span>
-                      {h.responsable&&<span style={{ fontSize:10, color:C.muted }}>{h.responsable}</span>}
-                      <span onClick={()=>onDelHito&&onDelHito(h.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
-                    </div>
-                  )})}
-                  <div style={{ display:'flex', gap:6, marginTop:6 }}>
-                    <input value={openId===p.id?hitoDraft:''} onChange={e=>setHitoDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&hitoDraft.trim()){ onAddHito&&onAddHito(p.id,hitoDraft,hitoFecha||null); setHitoDraft(''); setHitoFecha('') } }} placeholder='+ Agregar hito…' style={{ flex:1, fontSize:12, padding:'6px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff' }}/>
-                    <input type='date' value={openId===p.id?hitoFecha:''} onChange={e=>setHitoFecha(e.target.value)} style={{ fontSize:12, padding:'5px 6px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff' }}/>
-                  </div>
-                </div>
-              )})()}
-              {/* EQUIPO (Fase 2b) — agregar integrante lo suma a SUS proyectos */}
-              {(()=>{ const eq=equipoDe(p); return (
-                <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10 }}>
-                  <div style={{ display:'flex', alignItems:'center', marginBottom:eq.length?6:4 }}><span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Equipo</span>{esAdmin&&<span onClick={()=>setAddMiemOpen(o=>!o)} style={{ marginLeft:'auto', fontSize:10.5, fontWeight:700, color:C.azulInfo, cursor:'pointer' }}>{addMiemOpen?'Cerrar':'+ Integrante'}</span>}</div>
-                  {eq.map(e=>(
-                    <div key={e.miembro} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
-                      <span style={{ width:22, height:22, borderRadius:'50%', background:CART_AV[e.miembro]||C.muted, color:'#fff', fontSize:9.5, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{e.miembro}</span>
-                      <span style={{ flex:1, fontSize:12.5, color:C.text }}>{NOMBRE_DE_INI[e.miembro]||e.miembro}</span>
-                      <span style={{ fontSize:10, fontWeight:700, color:C.muted, background:C.bgSoft, border:`1px solid ${C.border}`, borderRadius:20, padding:'1px 8px' }}>{ROL_LBL[e.rol]||e.rol}</span>
-                      {esAdmin&&e.rol!=='responsable'&&<span onClick={()=>onDelMiembro&&onDelMiembro(p.id,e.miembro)} title='Quitar del equipo' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>}
-                    </div>
-                  ))}
-                  {addMiemOpen&&esAdmin&&<div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:7 }}>{['CL','EE','MC','MP','RD'].filter(i=>!eq.some(e=>e.miembro===i)).map(i=><button key={i} onClick={()=>{ onAddMiembro&&onAddMiembro(p.id,i,'apoyo'); setAddMiemOpen(false) }} style={{ fontSize:11, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 11px', cursor:'pointer' }}>+ {i}</button>)}</div>}
-                </div>
-              )})()}
-              {/* RENTABILIDAD */}
-              {(()=>{ const r=rentabilidadDe(p); if(!r) return null; const busy=sugEsf[p.id]==='busy'
-                return <div style={{ border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', marginBottom:10, background:'#fff' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:r.horas?7:0, flexWrap:'wrap', gap:6 }}>
-                    <span style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Rentabilidad{r.rec?` · ${r.base==='ano'?'al año':r.base==='ytd'?'YTD':'por mes'}`:''}</span>
-                    <span style={{ fontSize:11, color:C.muted, display:'inline-flex', alignItems:'center', gap:4 }}>Esfuerzo
-                      <input type='number' value={p.esfuerzo_horas??''} onChange={e=>updP(p,{esfuerzo_horas:e.target.value===''?null:parseFloat(e.target.value)})} placeholder='—' style={{ width:46, padding:'2px 5px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/>h
-                      <span onClick={()=>!busy&&sugerirEsfuerzo(p)} style={{ marginLeft:4, color:C.azulInfo, fontWeight:600, cursor:busy?'default':'pointer' }}>{busy?'…':'Sugerir IA'}</span>
-                    </span>
-                  </div>
-                  {p.esfuerzo_horas ? <>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'2px 0' }}><span style={{ color:C.muted }}>Honorarios</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.honor)}</span></div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'2px 0' }}><span style={{ color:C.muted }}>− Terceros</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.terc)}</span></div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'2px 0' }}><span style={{ color:C.muted }}>− Esfuerzo · {r.horas}h × {r.vh} UF{r.perm?' (perm.)':''}</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.esf)}</span></div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700, padding:'6px 0 0', marginTop:3, borderTop:`1px solid ${C.border}`, color:r.margen>=0?C.greenText:C.overdue }}><span>Margen</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{fmt(r.margen)}{r.pct!=null?` · ${Math.round(r.pct*100)}%`:''}</span></div>
-                    {r.margen<0&&<div style={{ marginTop:7, background:C.ambarBg, borderRadius:8, padding:'6px 9px', fontSize:11, color:C.soonText, lineHeight:1.45 }}>El esfuerzo supera al honorario{r.rec?' en esta base':''} — conviene <b>reajustar el honorario</b> o revisar las horas cargadas.</div>}
-                  </> : <div style={{ fontSize:11, color:C.grisText }}>Ingresa las horas (o toca “Sugerir IA”) para ver el margen.</div>}
-                </div>
-              })()}
-              {p.alcance&&<div style={{ fontSize:12, color:C.text, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{p.alcance}</div>}
-              {tks.length>0&&<div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 10px', marginBottom:12 }}>{tks.slice(0,6).map((t,ti)=>{ const d=daysLeft(t.due); const col=d==null?C.muted:d<0?'#A32D2D':d<=2?'#854F0B':C.muted; return (
-                <div key={t.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'6px 0', borderTop:ti?`1px solid ${C.border}`:'none' }}>
-                  <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar terminada' style={{ width:17, height:17, borderRadius:6, border:`1.5px solid ${C.done}`, flexShrink:0, cursor:'pointer' }}/>
-                  <div onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, cursor:'pointer' }}><div style={{ fontSize:12, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div><div style={{ fontSize:10, color:col }}>{t.due?(d<0?`vencida ${-d}d`:d===0?'vence hoy':`en ${d}d`):'sin plazo'}{t.who?` · ${INICIALES_RESP[t.who]||t.who}`:''}</div></div>
-                </div>
-              )})}{onAddTaskForProject&&<div style={{ textAlign:'right', paddingTop:4 }}><span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span></div>}</div>}
-              {tks.length===0&&onAddTaskForProject&&<div style={{ marginBottom:12 }}><span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span></div>}
-
-              {/* SIGUIENTE PASO (Fase 4 · IA con compuerta): lee el estado real del proyecto y propone UNA acción; "Crear tarea" la precarga editable. */}
-              {(()=>{ const sp=sigPaso[p.id]; return (
-                <div style={{ marginBottom:12 }}>
-                  {!sp && <button onClick={()=>sugerirSiguientePaso(p)} style={{ fontSize:11.5, fontWeight:600, color:'#5B3E8E', background:'#EFEAF7', border:'none', borderRadius:8, padding:'7px 12px', cursor:'pointer' }}>Sugerir siguiente paso · IA</button>}
-                  {sp?.busy && <div style={{ fontSize:11, color:C.grisText }}>Analizando el estado del proyecto…</div>}
-                  {sp?.err && <div style={{ fontSize:11, color:C.coralText }}>No se pudo sugerir. <span onClick={()=>sugerirSiguientePaso(p)} style={{ color:C.azulInfo, cursor:'pointer', fontWeight:600 }}>Reintentar</span></div>}
-                  {sp && sp.texto!=null && <div style={{ background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:10, padding:'10px 12px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Siguiente paso</span>{sp.aldia&&<span style={{ fontSize:10, fontWeight:700, color:C.greenText, background:C.greenBg, borderRadius:20, padding:'1px 8px' }}>Al día</span>}{sp.fecha&&<span style={{ marginLeft:'auto', fontSize:11, fontWeight:700, color:C.accent }}>{fmtDia(sp.fecha)}</span>}</div>
-                    <div style={{ fontSize:12.5, color:C.text, lineHeight:1.45 }}>{sp.texto}</div>
-                    <div style={{ display:'flex', gap:14, marginTop:8, alignItems:'center' }}>
-                      {!sp.aldia && onAddTaskForProject && <button onClick={()=>{ onAddTaskForProject(p,{title:sp.texto,due:sp.fecha||null}); setSigPaso(o=>({...o,[p.id]:undefined})) }} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Crear tarea</button>}
-                      <span onClick={()=>setSigPaso(o=>({...o,[p.id]:undefined}))} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>Descartar</span>
-                    </div>
-                  </div>}
-                </div>
-              )})()}
-
-              {/* QUÉ PASÓ — bitácora */}
-              <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:7 }}>Qué pasó</div>
-              <input value={openId===p.id?notaDraft:''} onChange={e=>setNotaDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') agregarNota(p) }} placeholder='Agregar una nota a la bitácora…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:10 }}/>
-              {(()=>{ const bit=bitacoraDe(p); if(!bit.length) return <div style={{ fontSize:11, color:C.grisText, paddingLeft:2, marginBottom:12 }}>Sin movimientos aún.</div>
-                const full=!!bitFull[p.id]; const vis=full?bit:bit.slice(0,5)
-                return <div style={{ marginBottom:6 }}><div style={{ position:'relative', paddingLeft:18 }}>
-                  <div style={{ position:'absolute', left:5, top:4, bottom:6, width:2, background:C.border }}/>
-                  {vis.map((e,ei)=>{ const dd=_dias(e.iso); const cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} d`; const clickable=!!e.ref; const titulo=e.tipo==='nota'?'Nota':(e.count>1?`${e.texto} · ${e.count}`:e.texto); return (
-                    <div key={ei} onClick={clickable?()=>clickEvento(e):undefined} style={{ position:'relative', paddingBottom:10, cursor:clickable?'pointer':'default', display:'flex', gap:8, alignItems:'flex-start' }}>
-                      <span style={{ position:'absolute', left:-17, top:3, width:11, height:11, borderRadius:'50%', border:'2px solid #fff', background:SEÑAL_COL[e.tipo]||C.muted }}/>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:13, color:clickable?C.accent:C.text, fontWeight:600 }}>{titulo}</div>
-                        {e.tipo==='nota'&&<div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{e.texto}</div>}
-                        {e.autor&&<div style={{ fontSize:10, color:C.done, marginTop:1 }}>{e.autor}</div>}
-                      </div>
-                      <div style={{ textAlign:'right', flexShrink:0 }}>
-                        <div style={{ fontSize:11, fontWeight:600, color:C.muted, whiteSpace:'nowrap' }}>{fmtDia(e.iso)}</div>
-                        <div style={{ fontSize:9, color:C.done, whiteSpace:'nowrap' }}>{cu}</div>
-                      </div>
-                    </div>
-                  )})}
-                </div>
-                {bit.length>5&&<div onClick={()=>setBitFull(o=>({...o,[p.id]:!full}))} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', paddingLeft:18, marginTop:2 }}>{full?'Ver menos':`Ver toda la bitácora (${bit.length}) →`}</div>}
-                </div>
-              })()}
-
-              {/* ACCIONES */}
-              <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'center', borderTop:`1px solid ${C.border}`, paddingTop:10, marginTop:8 }}>
-                <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
-                {p.sale_id&&onOpenSale&&(()=>{ const v=sales.find(s=>String(s.id)===String(p.sale_id)); return v?<button onClick={()=>onOpenSale(v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver venta</button>:null })()}
-                {(()=>{ const cl=clients.find(c=>String(c.id)===String(p.cliente_id)); return cl?.drive_folder_id?<button onClick={()=>window.open('https://drive.google.com/drive/folders/'+cl.drive_folder_id,'_blank')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Carpeta en Drive</button>:null })()}
-                {!p.alcance&&<button onClick={()=>setAlcanceFor(p)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0 }}>Leer alcance (IA)</button>}
-                {!terminado&&<button onClick={()=>togglePausa(p)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>{p.pausado?'Reanudar':'Pausar'}</button>}
-                <button onClick={()=>terminado?reponer(p):archivar(p)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:terminado?'auto':0 }}>{terminado?'Reponer':'Terminar'}</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
 
   // Icono contextual del próximo paso (según el texto del hito) — Opción A del render aprobado.
   const stepIcon = cap => { const c=(cap||'').toLowerCase()
@@ -29482,6 +29258,265 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     )
   }
 
+  // WORKSPACE del proyecto — página completa con subpáginas (Resumen/Plan/Calendario/Tareas/Equipo/Bitácora). Reusa helpers/handlers; sin barras ni rentabilidad.
+  const renderWorkspace = (p) => {
+    const terminado = p.activo===false
+    const _et = etapasDe(p)
+    const idx = _et ? Math.min(p.etapa_idx||0,_et.length-1) : 0
+    const etapaNm = _et ? _et[idx] : (TIPO_META[tipoDe(p)]?.l||'Encargo')
+    const avancePct = _et ? Math.round((idx/Math.max(1,_et.length-1))*100) : null
+    const dP = cartDiasPlazo(p.plazo)
+    const tks = tareasDe(p)
+    const venceTk = tks.map(t=>daysLeft(t.due)).filter(d=>d!=null).sort((a,b)=>a-b)[0]
+    const ents = entregablesDe(p); const entsDone = ents.filter(e=>e.hecho).length
+    const hs = hitosDe(p); const hsPend = hs.filter(h=>!h.hecho).length
+    const eq = equipoDe(p)
+    const bit = bitacoraDe(p)
+    const cl = clients.find(c=>String(c.id)===String(p.cliente_id))
+    const tm = TIPO_META[tipoDe(p)]||TIPO_META.proyecto
+    const inp = { fontSize:12, padding:'4px 7px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }
+    const card = { background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, padding:'12px 14px', marginBottom:12 }
+    const secHd = t => <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:8 }}>{t}</div>
+    const TABS = [['resumen','Resumen'],['plan','Plan'],['calendario','Calendario'],['tareas','Tareas'],['equipo','Equipo'],['bitacora','Bitácora']]
+    const descargarCrono = () => {
+      const rows=[['Tipo','Detalle','Fecha','Estado']]
+      if(_et) _et.forEach((s,i)=>rows.push(['Etapa',s,'',i<idx?'Hecha':i===idx?'En curso':'Pendiente']))
+      hs.forEach(h=>rows.push(['Hito',h.titulo,h.fecha||'',h.hecho?'Hecho':'Pendiente']))
+      tks.forEach(t=>rows.push(['Tarea',t.title||'',t.due||'',t.status||'Abierta']))
+      const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
+      const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`cronograma_${(p.nombre_proyecto||'proyecto').replace(/[^\w]+/g,'_')}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),500)
+    }
+    // Métrica compacta (icono + valor + calificador), sin cajas con tinte
+    const mTile = (icon,label,val,qual,qcol) => (
+      <div style={{ padding:'10px 12px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, color:C.muted, marginBottom:5 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{icon}</svg><span style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:.3 }}>{label}</span></div>
+        <div style={{ fontSize:16, fontWeight:700, color:C.text, letterSpacing:'-.01em' }}>{val}</div>
+        {qual&&<div style={{ fontSize:10.5, fontWeight:600, color:qcol||C.muted, marginTop:1 }}>{qual}</div>}
+      </div>
+    )
+    const I_CAL=<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></>
+    const I_CHECK=<><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>
+    const I_DOC=<><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/></>
+    const I_FLAG=<><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></>
+    return (
+      <div style={{ maxWidth:isDesktop?880:720, margin:'0 auto', padding:'0 14px 48px' }}>
+        {/* HEADER */}
+        <div style={{ padding:'14px 0 10px' }}>
+          <button onClick={()=>setOpenId(null)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+            <span style={{ width:9, height:9, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0, marginTop:7 }}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <span style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>{p.nombre_proyecto||etapaNm}</span>
+                <span onClick={()=>{ const nx=_TIPO_ORDEN[(_TIPO_ORDEN.indexOf(tipoDe(p))+1)%_TIPO_ORDEN.length]; onSetTipo&&onSetTipo(p.id,nx) }} title='Tipo de encargo — toca para cambiar' style={{ fontSize:9.5, fontWeight:700, color:tm.c, background:tm.bg, borderRadius:20, padding:'2px 9px', cursor:'pointer' }}>{tm.l}</span>
+                {p.pausado&&<span style={{ fontSize:9.5, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 9px' }}>En pausa</span>}
+                {terminado&&<span style={{ fontSize:9.5, fontWeight:700, color:C.done, background:C.bgSoft, borderRadius:20, padding:'2px 9px' }}>Terminado</span>}
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:9, marginTop:4, flexWrap:'wrap' }}>
+                <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:13, fontWeight:600, color:C.muted, cursor:'pointer' }}>{cnm(p.cliente_id)||'—'} ›</span>
+                <span style={{ color:C.border }}>·</span>
+                <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:C.muted }}>{perAv(p.responsable||'—',20)}{NOMBRE_DE_INI[p.responsable]||p.responsable||'Sin responsable'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* RAIL de subpáginas */}
+        <div style={{ display:'flex', gap:4, overflowX:'auto', borderBottom:`1px solid ${C.border}`, marginBottom:14 }}>
+          {TABS.map(([k,l])=>{ const on=wsTab===k; return <button key={k} onClick={()=>setWsTab(k)} style={{ fontSize:13, fontWeight:on?700:600, color:on?C.accent:C.muted, background:'none', border:'none', borderBottom:`2px solid ${on?C.accent:'transparent'}`, padding:'8px 12px', cursor:'pointer', whiteSpace:'nowrap', marginBottom:-1 }}>{l}</button> })}
+        </div>
+
+        {/* RESUMEN */}
+        {wsTab==='resumen' && <>
+          <div style={{ ...card, padding:0, overflow:'hidden' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px', borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ flexShrink:0 }}>
+                {avancePct!=null ? <><div style={{ fontSize:30, fontWeight:800, color:C.accent, letterSpacing:'-.02em', lineHeight:1 }}>{avancePct}%</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>avance</div></> : <><div style={{ fontSize:19, fontWeight:700, color:C.accent, lineHeight:1.1 }}>{tipoDe(p)==='permanente'?'Permanente':'Puntual'}</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>{tipoDe(p)==='permanente'?'sin etapas':'un entregable'}</div></>}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:C.text }}>{_et?`Etapa ${idx+1} de ${_et.length} · ${etapaNm}`:etapaNm}</div>
+                <div style={{ fontSize:12, color:C.muted, marginTop:3, lineHeight:1.4 }}>{resumenDe(p)}</div>
+              </div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:isDesktop?'repeat(4,1fr)':'repeat(2,1fr)' }}>
+              {[0,1,2,3].map(i=><div key={i} style={{ borderRight:(isDesktop?(i<3):(i%2===0))?`1px solid ${C.border}`:'none', borderTop:(!isDesktop&&i>1)?`1px solid ${C.border}`:'none' }}>
+                {i===0&&mTile(I_CAL,'Próximo plazo', p.plazo?fmtDia(p.plazo):'—', p.plazo?(dP<0?`vencido ${-dP}d`:dP===0?'hoy':`en ${dP} días`):null, dP<0?C.overdueText:dP<=7?C.soonText:C.muted)}
+                {i===1&&mTile(I_CHECK,'Tareas', tks.length, venceTk!=null?(venceTk<0?'1 vencida':`próxima en ${venceTk}d`):'al día', venceTk!=null&&venceTk<0?C.overdueText:C.muted)}
+                {i===2&&mTile(I_DOC,'Entregables', tipoDe(p)==='permanente'?'—':`${entsDone}/${ents.length}`, tipoDe(p)==='permanente'?null:(ents.length?`${ents.length-entsDone} por cerrar`:'sin definir'), C.muted)}
+                {i===3&&mTile(I_FLAG,'Hitos', tipoDe(p)==='proyecto'?hs.length:'—', tipoDe(p)==='proyecto'?(hsPend?`${hsPend} pendientes`:'todos hechos'):null, C.muted)}
+              </div>)}
+            </div>
+          </div>
+          {/* ÚLTIMO CONTACTO (Gmail del usuario; admin) */}
+          {esAdmin&&(()=>{ const uc=ultCont[String(p.cliente_id)]; if(!uc) return null
+            if(uc.loading) return <div style={{ fontSize:11, color:C.grisText, marginBottom:12 }}>Buscando el último correo…</div>
+            if(uc.err) return uc.err==='sinpermiso' ? <div style={{ fontSize:11, color:C.grisText, marginBottom:12 }}>Conecta Google (cierra sesión y reingresa) para ver el último correo.</div> : null
+            if(uc.none) return <div style={{ fontSize:11, color:C.grisText, marginBottom:12 }}>Sin correos con este cliente{uc.noEmail?' · falta su correo en la ficha':''}.</div>
+            const dd=_dias(uc.fecha); const hace = dd==null?'' : dd<=0?'hoy' : dd===1?'ayer' : `hace ${dd} d`; const linkable = uc.threadId&&uc.threadId!=='demo'
+            return <div onClick={()=>linkable&&window.open('https://mail.google.com/mail/u/0/#all/'+uc.threadId,'_blank')} style={{ display:'flex', alignItems:'center', gap:9, ...card, cursor:linkable?'pointer':'default' }}>
+              <span style={{ width:8, height:8, borderRadius:'50%', background:uc.dir==='out'?C.azulInfo:C.greenText, flexShrink:0 }}/>
+              <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Último contacto · {uc.dir==='out'?'enviado':'recibido'}</div><div style={{ fontSize:12.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uc.asunto}</div></div>
+              <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:11, fontWeight:700, color:dd!=null&&dd>45?C.coralText:C.accent }}>{hace}</div>{linkable&&<div style={{ fontSize:10, color:C.azulInfo }}>ver en Gmail ›</div>}</div>
+            </div>
+          })()}
+          {/* SIGUIENTE PASO · IA (compuerta) */}
+          {(()=>{ const sp=sigPaso[p.id]; return (
+            <div style={{ marginBottom:12 }}>
+              {!sp && <button onClick={()=>sugerirSiguientePaso(p)} style={{ fontSize:11.5, fontWeight:600, color:'#5B3E8E', background:'#EFEAF7', border:'none', borderRadius:8, padding:'8px 13px', cursor:'pointer' }}>Sugerir siguiente paso · IA</button>}
+              {sp?.busy && <div style={{ fontSize:11, color:C.grisText }}>Analizando el estado del proyecto…</div>}
+              {sp?.err && <div style={{ fontSize:11, color:C.coralText }}>No se pudo sugerir. <span onClick={()=>sugerirSiguientePaso(p)} style={{ color:C.azulInfo, cursor:'pointer', fontWeight:600 }}>Reintentar</span></div>}
+              {sp && sp.texto!=null && <div style={{ background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:12, padding:'11px 13px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Siguiente paso</span>{sp.aldia&&<span style={{ fontSize:10, fontWeight:700, color:C.greenText, background:C.greenBg, borderRadius:20, padding:'1px 8px' }}>Al día</span>}{sp.fecha&&<span style={{ marginLeft:'auto', fontSize:11, fontWeight:700, color:C.accent }}>{fmtDia(sp.fecha)}</span>}</div>
+                <div style={{ fontSize:12.5, color:C.text, lineHeight:1.45 }}>{sp.texto}</div>
+                <div style={{ display:'flex', gap:14, marginTop:8, alignItems:'center' }}>
+                  {!sp.aldia && onAddTaskForProject && <button onClick={()=>{ onAddTaskForProject(p,{title:sp.texto,due:sp.fecha||null}); setSigPaso(o=>({...o,[p.id]:undefined})) }} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Crear tarea</button>}
+                  <span onClick={()=>setSigPaso(o=>({...o,[p.id]:undefined}))} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>Descartar</span>
+                </div>
+              </div>}
+            </div>
+          )})()}
+        </>}
+
+        {/* PLAN */}
+        {wsTab==='plan' && <>
+          {_et ? <div style={card}>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10, flexWrap:'wrap' }}>
+              {secHd('Etapas')}
+              <select value={p.template||''} onChange={e=>setTemplate(p,e.target.value)} title='Plantilla de etapas' style={{ ...inp, marginLeft:'auto' }}>{Object.keys(TEMPLATE_LABELS).map(k=><option key={k} value={k}>{TEMPLATE_LABELS[k]}</option>)}</select>
+            </div>
+            {_et.map((s,i)=>{ const st=i<idx?'hecha':i===idx?'curso':'pend'; return (
+              <div key={i} onClick={()=>esAdmin&&patch(p,{etapa_idx:i})} style={{ display:'flex', alignItems:'center', gap:11, padding:'8px 0', borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', cursor:esAdmin?'pointer':'default' }}>
+                <span style={{ width:20, height:20, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9.5, fontWeight:700, background:st==='hecha'?C.greenText:st==='curso'?C.accent:'#fff', color:st==='pend'?C.done:'#fff', border:st==='pend'?`1.5px solid ${C.border}`:'none' }}>{st==='hecha'?<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>:i+1}</span>
+                <span style={{ flex:1, fontSize:13, fontWeight:st==='curso'?700:600, color:st==='pend'?C.muted:C.text }}>{s}</span>
+                {st==='curso'&&<span style={{ fontSize:9.5, fontWeight:700, color:C.accent, background:C.azulBg, borderRadius:20, padding:'1px 8px' }}>En curso</span>}
+              </div>
+            )})}
+            {esAdmin&&(()=>{ const fin=idx>=_et.length-1; return <div style={{ textAlign:'right', marginTop:8 }}><button onClick={()=>avanzar(p)} disabled={fin} style={{ fontSize:12, fontWeight:600, color:fin?C.grisText:C.accent, background:'none', border:'none', cursor:fin?'default':'pointer', padding:0 }}>→ Avanzar etapa</button></div> })()}
+          </div> : <div style={{ ...card, fontSize:12, color:C.muted }}>{tipoDe(p)==='permanente'?'Asesoría permanente — sin etapas; se sigue por temas abiertos y actividad.':'Encargo puntual — un entregable y un plazo.'}</div>}
+
+          {/* ENTREGABLES */}
+          {tipoDe(p)!=='permanente'&&<div style={card}>
+            <div style={{ display:'flex', alignItems:'center', marginBottom:ents.length?6:4 }}>{secHd('Alcance · entregables')}{ents.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:C.muted }}>{entsDone}/{ents.length}</span>}</div>
+            {ents.map(e=>(
+              <div key={e.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
+                <span onClick={()=>onToggleEntregable&&onToggleEntregable(e.id,!e.hecho)} style={{ width:16, height:16, borderRadius:5, border:`1.5px solid ${e.hecho?C.greenText:C.done}`, background:e.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{e.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
+                <span style={{ flex:1, fontSize:12.5, color:e.hecho?C.muted:C.text, textDecoration:e.hecho?'line-through':'none' }}>{e.texto}</span>
+                <span onClick={()=>onDelEntregable&&onDelEntregable(e.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
+              </div>
+            ))}
+            <input value={entDraft} onChange={e=>setEntDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&entDraft.trim()){ onAddEntregable&&onAddEntregable(p.id,entDraft); setEntDraft('') } }} placeholder='+ Agregar entregable…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'6px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', marginTop:6 }}/>
+          </div>}
+
+          {/* HITOS + CRONOGRAMA */}
+          {tipoDe(p)==='proyecto'&&<div style={card}>
+            <div style={{ display:'flex', alignItems:'center', marginBottom:hs.length?6:4 }}>{secHd('Hitos')}{hs.length>0&&<span onClick={descargarCrono} style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>Descargar cronograma</span>}</div>
+            {hs.map(h=>{ const dd=h.fecha?cartDiasPlazo(h.fecha):null; return (
+              <div key={h.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
+                <span onClick={()=>onToggleHito&&onToggleHito(h.id,!h.hecho)} style={{ width:16, height:16, borderRadius:5, border:`1.5px solid ${h.hecho?C.greenText:C.done}`, background:h.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{h.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
+                {h.fecha&&<span style={{ fontSize:10.5, fontWeight:700, color:h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.accent), minWidth:58 }}>{fmtDia(h.fecha)}</span>}
+                <span style={{ flex:1, fontSize:12.5, color:h.hecho?C.muted:C.text, textDecoration:h.hecho?'line-through':'none' }}>{h.titulo}</span>
+                {h.responsable&&<span style={{ fontSize:10, color:C.muted }}>{h.responsable}</span>}
+                <span onClick={()=>onDelHito&&onDelHito(h.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
+              </div>
+            )})}
+            <div style={{ display:'flex', gap:6, marginTop:6 }}>
+              <input value={hitoDraft} onChange={e=>setHitoDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&hitoDraft.trim()){ onAddHito&&onAddHito(p.id,hitoDraft,hitoFecha||null); setHitoDraft(''); setHitoFecha('') } }} placeholder='+ Agregar hito…' style={{ flex:1, fontSize:12, padding:'6px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff' }}/>
+              <input type='date' value={hitoFecha} onChange={e=>setHitoFecha(e.target.value)} style={{ fontSize:12, padding:'5px 6px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff' }}/>
+            </div>
+          </div>}
+        </>}
+
+        {/* CALENDARIO */}
+        {wsTab==='calendario' && (()=>{
+          const items=[]
+          hs.forEach(h=>{ if(!h.hecho&&h.fecha) items.push({ fecha:String(h.fecha).slice(0,10), texto:h.titulo, kind:'Hito' }) })
+          tks.forEach(t=>{ if(t.due) items.push({ fecha:String(t.due).slice(0,10), texto:t.title||'Tarea', kind:'Tarea', t }) })
+          if(p.plazo) items.push({ fecha:String(p.plazo).slice(0,10), texto:p.plazo_label||'Plazo del proyecto', kind:'Plazo' })
+          items.sort((a,b)=>a.fecha.localeCompare(b.fecha))
+          if(!items.length) return <div style={{ ...card, fontSize:12, color:C.muted, textAlign:'center' }}>Sin fechas en este proyecto. Agrega hitos o plazos de tareas y aparecerán aquí.</div>
+          const KIND={ Tarea:{c:C.azulInfo,bg:C.azulBg}, Hito:{c:C.accent,bg:C.azulBg}, Plazo:{c:C.overdueText,bg:C.overdueBg} }
+          return <div style={{ ...card, padding:0, overflow:'hidden' }}>
+            {items.map((it,i)=>{ const dd=cartDiasPlazo(it.fecha); const k=KIND[it.kind]||KIND.Tarea; const dc=dd==null?C.muted:dd<0?C.overdue:dd<=7?'#E09B2D':C.greenText
+              return <div key={i} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:i?`1px solid ${C.border}`:'none' }}>
+                <div style={{ textAlign:'center', minWidth:40, flexShrink:0 }}><div style={{ fontSize:15, fontWeight:700, color:dc, lineHeight:1 }}>{new Date(it.fecha+'T12:00').getDate()}</div><div style={{ fontSize:9, color:C.muted, textTransform:'uppercase' }}>{new Date(it.fecha+'T12:00').toLocaleDateString('es-CL',{month:'short'})}</div></div>
+                <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.texto}</div><div style={{ fontSize:10.5, fontWeight:600, color:dc }}>{dd==null?'':dd<0?`vencido ${-dd}d`:dd===0?'hoy':`en ${dd} días`}</div></div>
+                <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:k.c, background:k.bg, borderRadius:20, padding:'2px 8px', flexShrink:0 }}>{it.kind}</span>
+              </div>
+            })}
+          </div>
+        })()}
+
+        {/* TAREAS */}
+        {wsTab==='tareas' && <div style={card}>
+          {secHd(`Tareas · ${tks.length}`)}
+          {tks.length===0 && <div style={{ fontSize:12, color:C.grisText, marginBottom:8 }}>Sin tareas abiertas.</div>}
+          {tks.map((t,ti)=>{ const d=daysLeft(t.due); const col=d==null?C.muted:d<0?C.overdueText:d<=2?C.soonText:C.muted; return (
+            <div key={t.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'7px 0', borderTop:ti?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none' }}>
+              <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar terminada' style={{ width:17, height:17, borderRadius:6, border:`1.5px solid ${C.done}`, flexShrink:0, cursor:'pointer' }}/>
+              <div onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, cursor:'pointer' }}><div style={{ fontSize:12.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div><div style={{ fontSize:10, color:col }}>{t.due?(d<0?`vencida ${-d}d`:d===0?'vence hoy':`en ${d}d`):'sin plazo'}{t.who?` · ${INICIALES_RESP[t.who]||t.who}`:''}</div></div>
+            </div>
+          )})}
+          {onAddTaskForProject&&<div style={{ textAlign:'right', paddingTop:8 }}><span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:12, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span></div>}
+        </div>}
+
+        {/* EQUIPO */}
+        {wsTab==='equipo' && <>
+          <div style={card}>
+            <div style={{ display:'flex', alignItems:'center', marginBottom:eq.length?6:4 }}>{secHd('Equipo')}{esAdmin&&<span onClick={()=>setAddMiemOpen(o=>!o)} style={{ marginLeft:'auto', fontSize:10.5, fontWeight:700, color:C.azulInfo, cursor:'pointer' }}>{addMiemOpen?'Cerrar':'+ Integrante'}</span>}</div>
+            {eq.map(e=>(
+              <div key={e.miembro} style={{ display:'flex', alignItems:'center', gap:9, padding:'5px 0' }}>
+                {perAv(e.miembro,22)}
+                <span style={{ flex:1, fontSize:12.5, color:C.text }}>{NOMBRE_DE_INI[e.miembro]||e.miembro}</span>
+                <span style={{ fontSize:10, fontWeight:700, color:C.muted, background:C.bgSoft, border:`1px solid ${C.border}`, borderRadius:20, padding:'1px 8px' }}>{ROL_LBL[e.rol]||e.rol}</span>
+                {esAdmin&&e.rol!=='responsable'&&<span onClick={()=>onDelMiembro&&onDelMiembro(p.id,e.miembro)} title='Quitar del equipo' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>}
+              </div>
+            ))}
+            {addMiemOpen&&esAdmin&&<div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:7 }}>{['CL','EE','MC','MP','RD'].filter(i=>!eq.some(e=>e.miembro===i)).map(i=><button key={i} onClick={()=>{ onAddMiembro&&onAddMiembro(p.id,i,'apoyo'); setAddMiemOpen(false) }} style={{ fontSize:11, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 11px', cursor:'pointer' }}>+ {i}</button>)}</div>}
+          </div>
+          <div style={card}>
+            {secHd('Cliente')}
+            <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ display:'flex', alignItems:'center', gap:9, cursor:'pointer' }}>
+              <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:C.accent }}>{cnm(p.cliente_id)||'—'}</div>{cl?.email&&<div style={{ fontSize:11, color:C.muted }}>{cl.email}</div>}</div>
+              <span style={{ color:C.done, fontSize:15 }}>›</span>
+            </div>
+            {cl?.email&&<div style={{ marginTop:8 }}><a href={`mailto:${cl.email}`} style={{ fontSize:12, fontWeight:600, color:C.azulInfo, textDecoration:'none' }}>Escribir correo ›</a></div>}
+          </div>
+        </>}
+
+        {/* BITÁCORA */}
+        {wsTab==='bitacora' && <div style={card}>
+          {secHd('Qué pasó')}
+          <input value={notaDraft} onChange={e=>setNotaDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') agregarNota(p) }} placeholder='Agregar una nota a la bitácora…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:12 }}/>
+          {bit.length===0 ? <div style={{ fontSize:11, color:C.grisText }}>Sin movimientos aún.</div> : (()=>{ const full=!!bitFull[p.id]; const vis=full?bit:bit.slice(0,8)
+            return <><div style={{ position:'relative', paddingLeft:18 }}>
+              <div style={{ position:'absolute', left:5, top:4, bottom:6, width:2, background:C.border }}/>
+              {vis.map((e,ei)=>{ const dd=_dias(e.iso); const cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':`hace ${dd} d`; const clickable=!!e.ref; const titulo=e.tipo==='nota'?'Nota':(e.count>1?`${e.texto} · ${e.count}`:e.texto); return (
+                <div key={ei} onClick={clickable?()=>clickEvento(e):undefined} style={{ position:'relative', paddingBottom:10, cursor:clickable?'pointer':'default', display:'flex', gap:8, alignItems:'flex-start' }}>
+                  <span style={{ position:'absolute', left:-17, top:3, width:11, height:11, borderRadius:'50%', border:'2px solid #fff', background:SEÑAL_COL[e.tipo]||C.muted }}/>
+                  <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:clickable?C.accent:C.text, fontWeight:600 }}>{titulo}</div>{e.tipo==='nota'&&<div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{e.texto}</div>}{e.autor&&<div style={{ fontSize:10, color:C.done, marginTop:1 }}>{e.autor}</div>}</div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:11, fontWeight:600, color:C.muted, whiteSpace:'nowrap' }}>{fmtDia(e.iso)}</div><div style={{ fontSize:9, color:C.done, whiteSpace:'nowrap' }}>{cu}</div></div>
+                </div>
+              )})}
+            </div>
+            {bit.length>8&&<div onClick={()=>setBitFull(o=>({...o,[p.id]:!full}))} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', paddingLeft:18, marginTop:2 }}>{full?'Ver menos':`Ver toda la bitácora (${bit.length}) →`}</div>}
+            </>
+          })()}
+        </div>}
+
+        {/* ACCIONES */}
+        <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'center', borderTop:`1px solid ${C.border}`, paddingTop:12, marginTop:4 }}>
+          <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
+          {p.sale_id&&onOpenSale&&(()=>{ const v=sales.find(s=>String(s.id)===String(p.sale_id)); return v?<button onClick={()=>onOpenSale(v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver venta</button>:null })()}
+          {cl?.drive_folder_id&&<button onClick={()=>window.open('https://drive.google.com/drive/folders/'+cl.drive_folder_id,'_blank')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Carpeta en Drive</button>}
+          {!terminado&&<button onClick={()=>togglePausa(p)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>{p.pausado?'Reanudar':'Pausar'}</button>}
+          <button onClick={()=>{ terminado?reponer(p):archivar(p); setOpenId(null) }} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:terminado?'auto':0 }}>{terminado?'Reponer':'Terminar'}</button>
+        </div>
+      </div>
+    )
+  }
+
+  const wsP = openId ? ((proyectos||[]).find(x=>String(x.id)===String(openId)) || (archivados||[]).find(x=>String(x.id)===String(openId))) : null
+  if(wsP) return renderWorkspace(wsP)
+
   return (
     <div style={{ maxWidth:isDesktop?1040:720, margin:'0 auto', padding:'0 14px 40px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
@@ -29515,53 +29550,6 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <button onClick={toggleSemanal} title={semanalOn?'Apagar':'Encender'} style={{ width:38, height:22, borderRadius:12, border:'none', background:semanalOn?C.normal:C.done, position:'relative', cursor:'pointer', flexShrink:0, padding:0 }}>
             <span style={{ position:'absolute', top:2, left:semanalOn?18:2, width:18, height:18, borderRadius:'50%', background:'#fff', transition:'left .15s' }}/>
           </button>
-        </div>
-      )}
-
-      {esAdmin&&(
-        <div style={{ display:'flex', alignItems:'center', gap:7, fontSize:11, color:C.muted, marginBottom:10, flexWrap:'wrap' }}>
-          <span style={{ fontWeight:600, color:C.accent }}>Valor hora (para el margen)</span>
-          <input key={'vhg'+valorHora.general} type='number' step='0.5' defaultValue={valorHora.general} onBlur={e=>saveVH('general',e.target.value)} style={{ width:52, padding:'3px 6px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/> UF general
-          <span style={{ color:C.done }}>·</span>
-          <input key={'vhp'+valorHora.permanente} type='number' step='0.5' defaultValue={valorHora.permanente} onBlur={e=>saveVH('permanente',e.target.value)} style={{ width:52, padding:'3px 6px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:11, textAlign:'right', color:C.text }}/> UF asesorías permanentes
-        </div>
-      )}
-
-      {esAdmin&&(
-        <div style={{ border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden', marginBottom:10, background:C.surface }}>
-          <div onClick={()=>setRentOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', cursor:'pointer' }}>
-            <span style={{ fontSize:12, fontWeight:600, color:C.accent, flex:1 }}>Rentabilidad · margen por {rentBy==='abogado'?'abogado':'cliente'}</span>
-            <span style={{ fontSize:12, color:C.muted }}>{rentOpen?'▾':'▸'}</span>
-          </div>
-          {rentOpen&&(()=>{
-            const activos=(proyectos||[]).filter(p=>p.activo!==false&&!p.pausado)
-            const agg={}; let cov=0, tot=0
-            activos.forEach(p=>{ const r=rentabilidadDe(p); if(!r) return; tot++; const has=(parseFloat(p.esfuerzo_horas)||0)>0; if(has)cov++
-              const key=rentBy==='abogado'?(p.responsable||'—'):String(p.cliente_id||'—')
-              const m=agg[key]=agg[key]||{honor:0,terc:0,esf:0,margen:0,n:0,sinEsf:0}
-              m.honor+=r.honor;m.terc+=r.terc;m.esf+=r.esf;m.margen+=r.margen;m.n++;if(!has)m.sinEsf++ })
-            const rows=Object.entries(agg).map(([k,v])=>({k,...v,pct:v.honor>0?v.margen/v.honor:null,label:rentBy==='abogado'?k:(cnm(k)||'—')})).sort((a,b)=>b.margen-a.margen)
-            return <div style={{ padding:'0 12px 12px' }}>
-              <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap', alignItems:'center' }}>
-                {[['abogado','Por abogado'],['cliente','Por cliente']].map(([k,l])=><button key={k} onClick={()=>setRentBy(k)} style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'3px 11px', border:`1px solid ${rentBy===k?C.accent:C.border}`, background:rentBy===k?C.accent:'#fff', color:rentBy===k?'#fff':C.muted, cursor:'pointer' }}>{l}</button>)}
-                <span style={{ width:1, height:16, background:C.border, margin:'0 2px' }}/>
-                {[['mes','Mes'],['ano','Año'],['ytd','YTD']].map(([k,l])=><button key={k} onClick={()=>setRentBase(k)} style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'3px 11px', border:`1px solid ${rentBase===k?C.accent:C.border}`, background:rentBase===k?C.accent:'#fff', color:rentBase===k?'#fff':C.muted, cursor:'pointer' }} title='Base para asesorías recurrentes'>{l}</button>)}
-              </div>
-              {!rows.length ? <div style={{ fontSize:12, color:C.grisText }}>Sin ventas vinculadas en estos proyectos.</div> : rows.map(r=>(
-                <div key={r.k} onClick={()=>rentBy==='cliente'&&onOpenClientFicha&&onOpenClientFicha(r.k)} style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 0', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}`, cursor:rentBy==='cliente'?'pointer':'default' }}>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.label}</div>
-                    <div style={{ fontSize:10, color:C.muted }}>{r.n} proy · {fmt(r.honor)} honorarios{r.sinEsf?` · ${r.sinEsf} sin esfuerzo`:''}</div>
-                  </div>
-                  <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:r.margen>=0?C.greenText:C.overdue, fontVariantNumeric:'tabular-nums' }}>{fmt(r.margen)}</div>
-                    <div style={{ fontSize:10, color:C.muted }}>{r.pct!=null?`${Math.round(r.pct*100)}% margen`:''}</div>
-                  </div>
-                </div>
-              ))}
-              <div style={{ fontSize:10, color:C.grisText, marginTop:8, lineHeight:1.4 }}>Esfuerzo estimado en {cov} de {tot} proyectos. Donde falta, el margen aún no descuenta horas (queda optimista).</div>
-            </div>
-          })()}
         </div>
       )}
 
@@ -29659,9 +29647,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         const prio = fase==='curso' ? rows.filter(p=>riesgoDe(p)) : []
         const resto = fase==='curso' ? rows.filter(p=>!riesgoDe(p)) : rows
         const sech = (t,n,late)=> <div key={'h'+t} style={{ display:'flex', alignItems:'center', gap:6, margin:'16px 2px 7px', fontSize:9, fontWeight:700, letterSpacing:.5, textTransform:'uppercase', color:late?C.overdueText:C.done }}>{t}<span style={{ color:C.muted }}>· {n}</span></div>
-        const lista = p => openId===p.id
-          ? <div key={p.id} style={{ background:'#fff', border:`1px solid ${C.accent}`, borderRadius:12, overflow:'hidden', marginBottom:8 }}>{renderProyecto(p,false)}</div>
-          : filaProyecto(p)
+        const lista = p => filaProyecto(p)   // abrir un proyecto navega a su página workspace (early-return arriba), ya no expande inline
         return <div>
           {prio.length>0 && [sech('Prioritarios',prio.length,true), ...prio.map(lista)]}
           {resto.length>0 && [sech(fase==='pausa'?'En pausa':fase==='terminados'?'Terminados':'En curso',resto.length,false), ...resto.map(lista)]}
