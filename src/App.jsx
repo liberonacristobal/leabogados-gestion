@@ -4328,7 +4328,7 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
         const enPausa=(proyectosCartera||[]).filter(p=>p.activo!==false && !!p.pausado && isMine(p))
         const term = verTodosProy ? (terminadosProy||[]) : []
         if(!enCurso.length && !enPausa.length && !term.length) return null
-        const movByP={}; enCurso.forEach(p=>{ movByP[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) })
+        const movByP={}; enCurso.forEach(p=>{ movByP[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses,hitos:proyHitos}) })
         const sorted=[...enCurso].sort((a,b)=>(movByP[b.id].score)-(movByP[a.id].score))
         const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
         const nm=p=>clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'
@@ -27302,7 +27302,7 @@ const eventosCliente = (clientId, { billing=[], tasks=[], anticipos=[], expenses
 }
 // FUENTE ÚNICA del movimiento de un proyecto (la usan Cartera y el strip "Mis proyectos" del Inicio).
 // Barre eventos REALES (pagos, facturas EMITIDAS, tareas, anticipos, gastos) + un resumen del plan de cobro → última señal + score 30d + eventos (ref clickeable).
-const carteraMovimiento = (p, { billing=[], tasks=[], anticipos=[], expenses=[] }={}) => {
+const carteraMovimiento = (p, { billing=[], tasks=[], anticipos=[], expenses=[], hitos=[] }={}) => {
   const _d = iso => iso==null?null:Math.round((Date.now()-new Date(String(iso).slice(0,10)+'T12:00').getTime())/86400000)
   const cid = String(p.cliente_id||''); const sid = p.sale_id?String(p.sale_id):null
   const evs = []; const linkCli = x => cid && String(x)===cid
@@ -27322,6 +27322,11 @@ const carteraMovimiento = (p, { billing=[], tasks=[], anticipos=[], expenses=[] 
     else push(t.created_at,'tarea','Tarea nueva',2,{kind:'task',id:t.id}) })
   anticipos.forEach(a=>{ if(!linkCli(a.client_id)) return; push(a.fecha,'anticipo',`Anticipo recibido${a.monto?` · ${fmt(a.monto)}`:''}`,3,fichaRef) })
   expenses.forEach(e=>{ if(!linkCli(e.client_id)) return; push(e.rendered_at||e.date||e.created_at,'gasto','Movimiento de gastos',1,fichaRef) })
+  // Avanzar el PLAN también es movimiento (integración): un paso completado (fecha) y la última edición del plan (created_at del paso más nuevo).
+  const hMine = hitos.filter(h=>String(h.proyecto_id)===String(p.id))
+  hMine.forEach(h=>{ if(h.hecho && h.fecha) push(h.fecha,'plan',`Paso completado${h.titulo?` · ${h.titulo}`:''}`,3,null) })
+  const ultPaso = hMine.map(h=>String(h.created_at||'').slice(0,10)).filter(f=>f.length>=10).sort().slice(-1)[0]
+  if(ultPaso) push(ultPaso,'plan','Plan actualizado',1,null)
   if(p.created_at) push(p.created_at,'genesis','Proyecto iniciado',0,null)   // ancla del inicio de la línea de tiempo
   if(!evs.length && p.ultima_actividad) push(p.ultima_actividad,'nota','Actualización manual',1)
   if(!evs.length) return { ultima:null, dias:null, score:0, eventos:[] }
@@ -29142,7 +29147,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   }
 
   // Movimiento por proyecto (fuente única). Se recomputa cuando cambian los datos reales.
-  const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
+  const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses,hitos:proyHitos}) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses,proyHitos])
   const mov = p => movMap[p.id] || { ultima:null, dias:null, score:0 }
   // CADENCIA ADAPTATIVA: cada cuánto conviene revisar un proyecto, según su horizonte (último plazo pendiente).
   // Proyecto corto → se revisa seguido; largo → menos (sin ruido). "Frío" = pasó el intervalo sin avance real.
@@ -29349,7 +29354,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     })
   },[proyectos,archivados,fase,esAdmin,miInicial,selPer,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
 
-  const abrir = p => { setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p); cargarDocsProy(p); cargarCorreosProy(p); cargarCalProy(p) }   // abre el proyecto como PÁGINA workspace (el "‹ Mis proyectos" lo cierra)
+  const abrir = p => { setFocoOpen(false); setMetOpen(false); setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p); cargarDocsProy(p); cargarCorreosProy(p); cargarCalProy(p) }   // abre el proyecto como PÁGINA workspace (cierra Mi foco/Métricas; el "‹ Mis proyectos" lo cierra)
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
   useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||''); cargarUltContacto(p) } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
