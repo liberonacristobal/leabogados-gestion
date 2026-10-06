@@ -29409,7 +29409,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     supabase.from('proyectos_cartera').select('*').eq('activo',false).order('updated_at',{ascending:false}).limit(50).then(({data})=>{ if(data) setArchivados(data) },()=>{})
   },[])   // eslint-disable-line
   const crear = async () => {
-    if(!nf.cliente_id||!nf.nombre.trim()){ appAlert('Elige un cliente y escribe el nombre del proyecto.'); return }
+    if(!nf.cliente_id||!nf.sale_id||!nf.nombre.trim()){ appAlert('Un proyecto nace de un cliente y una venta. Elige la venta y, si quieres, cámbiale el nombre.'); return }
     const op = nf.operacionId ? (pmoOps||[]).find(o=>String(o.id)===String(nf.operacionId)) : null
     const row = { cliente_id:nf.cliente_id, sale_id:nf.sale_id||null, nombre_proyecto:nf.nombre.trim(), responsable:nf.responsable||null, nota:nf.nota.trim()||null, plazo:nf.plazo||null, estado:'verde', etapa_idx:0, origen:nf.sale_id?'venta':'manual', activo:true, ultima_actividad:HOY }
     let created
@@ -30121,7 +30121,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <div style={{ padding:'14px 0 10px' }}>
           <button onClick={()=>setMetOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Métricas de proyectos</div>
+            <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Cumplimiento</div>
             {conPlan.length>0 && <span onClick={exportar} style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Exportar CSV ↓</span>}
           </div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · {conPlan.length} proyecto{conPlan.length!==1?'s':''} con plan</div>
@@ -30218,7 +30218,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <div style={{ padding:'14px 0 10px' }}>
           <button onClick={()=>setFocoOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}>‹ Mis proyectos</button>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Mi foco</div>
+            <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Pendientes</div>
             {conPlan.length>0 && <span onClick={descargarGanttPortafolio} title='Todos los proyectos en un mismo eje de tiempo' style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Carta Gantt del portafolio ↓</span>}
           </div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · lo que pide tu acción, de un vistazo</div>
@@ -30252,10 +30252,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   return (
     <div style={{ maxWidth:isDesktop?1040:720, margin:'0 auto', padding:'0 14px 40px' }}>
       {(()=>{ const btns = <>
-          <button onClick={()=>setFocoOpen(true)} title='Mi foco — lo que pide tu acción, de un vistazo' style={{ fontSize:12, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>Mi foco</button>
-          {esAdmin&&<button onClick={()=>setMetOpen(true)} title='Métricas de proyectos: cumplimiento de plazos, por operación, dónde se atasca' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Métricas</button>}
-          {esAdmin&&<button onClick={()=>{ setBibSel((pmoOps||[])[0]?.id||null); setBibOpen(true) }} title='Editar la biblioteca de pasos por operación' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Biblioteca</button>}
-          {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
+          <button onClick={()=>setFocoOpen(true)} title='Pendientes — lo que pide tu acción, de un vistazo' style={{ fontSize:12, fontWeight:700, color:C.accent, background:C.azulBg, border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>Pendientes</button>
+          {esAdmin&&<button onClick={()=>setMetOpen(true)} title='Cumplimiento: plazos cumplidos, por operación, dónde se atasca' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:'4px 6px' }}>Cumplimiento</button>}
           <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
         </>
         const titulo = <><button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button><div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:17, fontWeight:600, color:C.accent }}>Mis proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</div><div style={{ fontSize:10, color:C.muted, fontWeight:500, marginTop:1 }}>seguimiento de proyectos activos</div></div></>
@@ -30290,25 +30288,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         </div>
       )}
 
-      {esAdmin&&(
-        <div style={{ display:'flex', alignItems:'center', gap:10, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:'10px 12px', marginBottom:10, flexWrap:'wrap' }}>
-          <div style={{ flex:1, minWidth:150 }}>
-            <div style={{ fontSize:12, fontWeight:600, color:C.accent }}>Resumen semanal por correo</div>
-            <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>Cada lunes, con sus proyectos de la semana. {semanalOn?(semanalTodos?'Activo para todo el equipo.':'Activo solo para ti.'):'Apagado.'}</div>
-          </div>
-          {semanalOn&&(
-            <div style={{ display:'inline-flex', border:`1px solid ${C.border}`, borderRadius:20, overflow:'hidden', flexShrink:0 }}>
-              <button onClick={()=>setSemanal(miIniSemanal)} style={{ fontSize:11, fontWeight:600, color:semanalTodos?C.muted:'#fff', background:semanalTodos?'transparent':C.accent, border:'none', padding:'4px 11px', cursor:'pointer' }}>Solo tú</button>
-              <button onClick={()=>setSemanal('on')} style={{ fontSize:11, fontWeight:600, color:semanalTodos?'#fff':C.muted, background:semanalTodos?C.accent:'transparent', border:'none', padding:'4px 11px', cursor:'pointer' }}>Todo el equipo</button>
-            </div>
-          )}
-          {pruebaMsg&&<span style={{ fontSize:11, color:C.muted }}>{pruebaMsg}</span>}
-          <button onClick={enviarPrueba} style={{ fontSize:11, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'4px 12px', cursor:'pointer', whiteSpace:'nowrap' }}>Enviarme una prueba</button>
-          <button onClick={toggleSemanal} title={semanalOn?'Apagar':'Encender'} style={{ width:38, height:22, borderRadius:12, border:'none', background:semanalOn?C.normal:C.done, position:'relative', cursor:'pointer', flexShrink:0, padding:0 }}>
-            <span style={{ position:'absolute', top:2, left:semanalOn?18:2, width:18, height:18, borderRadius:'50%', background:'#fff', transition:'left .15s' }}/>
-          </button>
-        </div>
-      )}
+      {/* "Resumen semanal por correo" retirado del header por instrucción del usuario (no más correos por ahora; se retoma después).
+          El motor (semanal/toggleSemanal/enviarPrueba + edge resumen-lunes) queda intacto para reactivarlo cuando se decida. */}
 
       {esAdmin&&novedades.length>0&&(
         <div style={{ marginBottom:12, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', background:'#fff' }}>
@@ -30366,13 +30347,16 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                     {ya&&<span style={{ fontSize:9.5, fontWeight:700, color:C.done, flexShrink:0 }}>ya tiene proyecto</span>}
                   </button>
                 )})}
-                <button onClick={()=>setNf(f=>({...f,sale_id:''}))} style={{ textAlign:'left', background:!nf.sale_id?C.azulBg:'#fff', border:`1px solid ${!nf.sale_id?C.accent:C.border}`, borderRadius:8, padding:'8px 10px', cursor:'pointer', fontSize:12, color:C.muted }}>Sin venta — proyecto suelto</button>
+                {cliSales.length===0&&<div style={{ fontSize:11.5, color:C.muted, background:'#fff', border:`1px dashed ${C.border}`, borderRadius:8, padding:'9px 10px' }}>Este cliente no tiene ventas. Crea la venta primero — el proyecto nace de ella.</div>}
               </div>
             </div>
           })()}
-          <input value={nf.nombre} onChange={e=>setNf(f=>({...f,nombre:e.target.value}))} placeholder='Nombre del proyecto' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
+          <input value={nf.nombre} onChange={e=>setNf(f=>({...f,nombre:e.target.value}))} placeholder='Nombre del proyecto (por defecto, el de la venta — cámbialo si quieres)' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
           <input value={nf.nota} onChange={e=>setNf(f=>({...f,nota:e.target.value}))} placeholder='¿En qué está? (tema abierto)' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
-          {(pmoOps||[]).length>0&&<select value={nf.operacionId} onChange={e=>setNf(f=>({...f,operacionId:e.target.value}))} title='Nace con los pasos de esta operación' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text, marginBottom:8 }}><option value=''>Plan del asunto — sin plan por ahora</option>{(pmoOps||[]).map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}</select>}
+          {(pmoOps||[]).length>0&&<div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
+            <select value={nf.operacionId} onChange={e=>setNf(f=>({...f,operacionId:e.target.value}))} title='Nace con los pasos de esta operación' style={{ flex:1, minWidth:0, boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}><option value=''>Plan del asunto — sin plan por ahora</option>{(pmoOps||[]).map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}</select>
+            {esAdmin&&<button onClick={()=>{ setBibSel(nf.operacionId||(pmoOps||[])[0]?.id||null); setBibOpen(true) }} title='Ver y editar el paso a paso de esta operación' style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 11px', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>Editar pasos ›</button>}
+          </div>}
           <div style={{ display:'flex', gap:8, marginBottom:10 }}>
             <select value={nf.responsable} onChange={e=>setNf(f=>({...f,responsable:e.target.value}))} disabled={!esAdmin} style={{ fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}>
               {['CL','EE','MC','MP','RD'].map(i=><option key={i} value={i}>{i}</option>)}
