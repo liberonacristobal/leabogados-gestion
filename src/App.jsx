@@ -28803,7 +28803,7 @@ function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], curre
     </div>
   )
 }
-function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], onSeguir, onSetTipo, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
@@ -28812,6 +28812,15 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const HOY = new Date().toISOString().slice(0,10)
   const esAdmin = userRole==='admin'
   const miInicial = INICIALES_RESP[currentUserName] || null
+  // Opt-in por abogado: un proyecto es MÍO si soy responsable, estoy en el equipo o lo sigo. Nada ajeno por default.
+  const _soy = miInicial
+  const _enEquipo = pid => (proyEquipo||[]).some(e=>String(e.proyecto_id)===String(pid)&&e.miembro===_soy)
+  const _sigo = pid => (proySeguidores||[]).some(e=>String(e.proyecto_id)===String(pid)&&e.miembro===_soy)
+  const esMio = p => !_soy || (p.responsable||'')===_soy || _enEquipo(p.id) || _sigo(p.id)
+  const razonMia = p => (p.responsable||'')===_soy ? 'Responsable' : _enEquipo(p.id) ? 'En el equipo' : _sigo(p.id) ? 'Siguiendo' : null
+  const TIPO_META = { puntual:{l:'Puntual',c:C.greenText,bg:C.greenBg}, permanente:{l:'Permanente',c:C.tealText,bg:C.tealBg}, proyecto:{l:'Proyecto',c:C.accent,bg:C.azulBg} }
+  const tipoDe = p => p.tipo || 'proyecto'
+  const _TIPO_ORDEN = ['puntual','permanente','proyecto']
   const cnm = id => { const c=clients.find(x=>String(x.id)===String(id)); return c?.name || '' }
   const fmtDia = iso => iso ? fmtFechaDMY(iso) : ''   // unificado a DD-MM-AAAA (antes "10 sept" sin año)
   const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${nDias(d)}` }
@@ -28834,7 +28843,8 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const [fase,setFase] = usePersistedState('cartera_fase','curso')   // curso | pausa | terminados
   const [sortBy,setSortBy] = usePersistedState('cartera_sort2','movimiento')   // movimiento | sinmover | plazo | prioridad | cliente (recuerda al volver)
   const [estadoF,setEstadoF] = usePersistedState('cartera_estadoF','todos') // todos | rojo | ambar | verde
-  const [soloMios,setSoloMios] = usePersistedState('cartera_solomios2',true) // admin: por defecto ver solo donde soy responsable
+  const [soloMios,setSoloMios] = usePersistedState('cartera_solomios2',true) // (legado) — reemplazado por 'vista'
+  const [vista,setVista] = usePersistedState('cartera_vista','mios')          // mios | estudio (opt-in por abogado)
   const [openId,setOpenId] = usePersistedState('cartera_open',null)         // proyecto abierto
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
@@ -28957,8 +28967,9 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const rows = useMemo(()=>{
     // Pestaña: En curso (activa, no pausada) · En pausa (activa, pausada) · Terminados (archivados = activo:false)
     let arr = fase==='terminados' ? (archivados||[]) : (proyectos||[]).filter(p=> p.activo!==false && (fase==='pausa' ? !!p.pausado : !p.pausado))
-    if(!esAdmin) arr = arr.filter(p=>(p.responsable||'')===miInicial)
-    else if(soloMios && miInicial) arr = arr.filter(p=>(p.responsable||'')===miInicial)
+    // Mis proyectos (responsable ∪ equipo ∪ seguidor) vs Del estudio (los demás, para seguir). Nada ajeno por default.
+    if(vista==='estudio') arr = arr.filter(p=>!esMio(p))
+    else arr = arr.filter(esMio)
     if(estadoF!=='todos') arr = arr.filter(p=>(p.estado||'verde')===estadoF)
     if(q){ const s=q.toLowerCase(); arr = arr.filter(p=>(cnm(p.cliente_id)+' '+(p.nombre_proyecto||'')+' '+(p.nota||'')).toLowerCase().includes(s)) }
     const key = p => { const d=mov(p).dias; return d==null?Infinity:d }
@@ -28972,7 +28983,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
       if(sortBy==='cliente') return cnm(a.cliente_id).localeCompare(cnm(b.cliente_id),'es')
       return 0
     })
-  },[proyectos,archivados,fase,esAdmin,miInicial,soloMios,estadoF,q,sortBy,clients,sales,movMap])
+  },[proyectos,archivados,fase,esAdmin,miInicial,vista,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
 
   const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||'') } }
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
@@ -29115,6 +29126,10 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
                 {esPropAbierta(p)&&<span style={{ fontSize:10, fontWeight:700, color:C.accent, background:C.azulBg, borderRadius:20, padding:'1px 7px', flexShrink:0, textTransform:'uppercase', letterSpacing:.3 }}>Propuesta</span>}
                 {p.pausado&&fase!=='pausa'&&!terminado&&<span style={{ fontSize:10, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'1px 7px', flexShrink:0 }}>En pausa</span>}
                 {p.plazo&&dP!=null&&(dP<0||dP<=7)&&!terminado&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
+                {(()=>{ const tm=TIPO_META[tipoDe(p)]||TIPO_META.proyecto; return <span onClick={e=>{ e.stopPropagation(); const nx=_TIPO_ORDEN[(_TIPO_ORDEN.indexOf(tipoDe(p))+1)%_TIPO_ORDEN.length]; onSetTipo&&onSetTipo(p.id,nx) }} title='Tipo de encargo — toca para cambiar (puntual · permanente · proyecto)' style={{ fontSize:9.5, fontWeight:700, color:tm.c, background:tm.bg, borderRadius:20, padding:'1px 8px', flexShrink:0, cursor:'pointer' }}>{tm.l}</span> })()}
+                {vista==='estudio'
+                  ? <span style={{ fontSize:9.5, fontWeight:600, color:C.grisText, flexShrink:0 }}>Resp. {p.responsable||'—'}</span>
+                  : (()=>{ const r=razonMia(p); return (r&&r!=='Responsable')?<span style={{ fontSize:9.5, fontWeight:700, color:r==='En el equipo'?C.tealText:C.muted, flexShrink:0 }}>{r}</span>:null })()}
               </div>
               {!terminado&&señalLine(m,{ marginTop:4, paddingLeft:15 })}
               {p.nota&&<div style={{ fontSize:12, color:C.muted, marginTop:3, paddingLeft:15, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nota}</div>}
@@ -29127,6 +29142,9 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
                 <span style={{ width:24, height:24, borderRadius:'50%', background:CART_AV[p.responsable]||C.muted, color:'#fff', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' }}>{p.responsable||'—'}</span>
               </div>
               {!terminado&&tks.length>0&&(()=>{ const vh=tks.filter(t=>{ const d=daysLeft(t.due); return d!=null&&d<=0 }).length; return <span style={{ fontSize:10, fontWeight:600, color:vh>0?'#A32D2D':C.muted, whiteSpace:'nowrap' }}>{tks.length} tarea{tks.length!==1?'s':''}{vh>0?` · ${vh} vence`:''}</span> })()}
+              {!terminado&&(vista==='estudio'
+                ? <button onClick={e=>{ e.stopPropagation(); onSeguir&&onSeguir(p.id,true) }} style={{ fontSize:10, fontWeight:800, color:C.azulInfo, background:C.azulBg, border:'none', borderRadius:20, padding:'3px 10px', cursor:'pointer', whiteSpace:'nowrap' }}>+ Seguir</button>
+                : (_sigo(p.id)&&(p.responsable||'')!==_soy&&!_enEquipo(p.id)) ? <button onClick={e=>{ e.stopPropagation(); onSeguir&&onSeguir(p.id,false) }} title='Dejar de seguir — lo saca de tus proyectos' style={{ fontSize:10, fontWeight:700, color:C.muted, background:'none', border:'none', cursor:'pointer', whiteSpace:'nowrap' }}>Siguiendo ✓</button> : null)}
             </div>
           </div>
         </div>
@@ -29358,7 +29376,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
         </div>
       )}
 
-      {(()=>{ const scope=arr=>{ let a=arr; if(!esAdmin) a=a.filter(p=>(p.responsable||'')===miInicial); else if(soloMios&&miInicial) a=a.filter(p=>(p.responsable||'')===miInicial); return a }
+      {(()=>{ const scope=arr=> vista==='estudio' ? arr.filter(p=>!esMio(p)) : arr.filter(esMio)
         const nCurso=scope((proyectos||[]).filter(p=>p.activo!==false&&!p.pausado)).length
         const nPausa=scope((proyectos||[]).filter(p=>p.activo!==false&&!!p.pausado)).length
         const nTerm=scope(archivados||[]).length
@@ -29374,9 +29392,9 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
           <option value='prioridad'>Prioridad</option>
           <option value='cliente'>Cliente</option>
         </select>}
-        {esAdmin && miInicial && (<>
-          <button onClick={()=>setSoloMios(true)} style={chipSty(soloMios,C.accent,C.azulBg)}>Míos</button>
-          <button onClick={()=>setSoloMios(false)} style={chipSty(!soloMios,C.muted,'#EEF1F3')}>Todos</button>
+        {miInicial && (<>
+          <button onClick={()=>{setVista('mios');setOpenId(null)}} style={chipSty(vista==='mios',C.accent,C.azulBg)}>Mis proyectos</button>
+          <button onClick={()=>{setVista('estudio');setOpenId(null)}} style={chipSty(vista==='estudio',C.muted,'#EEF1F3')}>Del estudio</button>
         </>)}
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{ marginLeft:'auto', fontSize:12, padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', width:110 }}/>
       </div>
@@ -33197,6 +33215,8 @@ export default function App() {
   const [clients,setClients]=useState([])
   const [sales,setSales]=useState([])
   const [proyectosCartera,setProyectosCartera]=useState([])
+  const [proyEquipo,setProyEquipo]=useState([])          // proyecto_equipo: {proyecto_id, miembro, rol} — quién trabaja en cada proyecto
+  const [proySeguidores,setProySeguidores]=useState([])  // proyecto_seguidores: {proyecto_id, miembro} — opt-in "lo sigo en mis proyectos"
   const [billing,setBilling]=useState([])
   // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
   const vencFlipDone=useRef(false)
@@ -33526,6 +33546,8 @@ export default function App() {
     supabase.from('expense_audit').select('*').order('created_at',{ascending:false}).limit(200).then(({data})=>{ if(data) setExpenseAudit(data) },()=>{})
     // Panel de Cartera: carga silenciosa (tolera tabla ausente hasta que se corra el SQL).
     supabase.from('proyectos_cartera').select('*').eq('activo',true).order('ultima_actividad',{ascending:true,nullsFirst:true}).then(({data})=>{ if(data) setProyectosCartera(data) },()=>{})
+    supabase.from('proyecto_equipo').select('proyecto_id,miembro,rol').then(({data})=>{ if(data) setProyEquipo(data) },()=>{})
+    supabase.from('proyecto_seguidores').select('proyecto_id,miembro').then(({data})=>{ if(data) setProySeguidores(data) },()=>{})
     // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
   },[session?.user?.id])
 
@@ -33537,9 +33559,29 @@ export default function App() {
     if(!sale || sale.status!=='Activo' || !sale.id) return
     if(proyCarteraRef.current.some(p=>String(p.sale_id)===String(sale.id))) return
     const resp = INICIALES_RESP[sale.responsible||sale.abogado_responsable] || null
-    const row = { sale_id:String(sale.id), cliente_id:sale.client_id?String(sale.client_id):null, nombre_proyecto:sale.title||'Proyecto', responsable:resp, estado:'verde', etapa_idx:0, origen:'venta', activo:true, ultima_actividad:new Date().toISOString().slice(0,10) }
+    const tipo = sale.cobro_type==='mensual' ? 'permanente' : 'proyecto'   // default blando, cambiable de un toque en la UI
+    const row = { sale_id:String(sale.id), cliente_id:sale.client_id?String(sale.client_id):null, nombre_proyecto:sale.title||'Proyecto', responsable:resp, tipo, estado:'verde', etapa_idx:0, origen:'venta', activo:true, ultima_actividad:new Date().toISOString().slice(0,10) }
     const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single()
-    if(!error && data) setProyectosCartera(prev=> prev.some(p=>String(p.sale_id)===String(sale.id))?prev:[data,...prev])
+    if(!error && data){
+      setProyectosCartera(prev=> prev.some(p=>String(p.sale_id)===String(sale.id))?prev:[data,...prev])
+      if(resp){   // el responsable queda sembrado en equipo + seguidores (así SU proyecto aparece en SUS proyectos; nadie más por default)
+        supabase.from('proyecto_equipo').insert({proyecto_id:data.id,miembro:resp,rol:'responsable'}).then(()=>{},()=>{})
+        supabase.from('proyecto_seguidores').insert({proyecto_id:data.id,miembro:resp}).then(()=>{},()=>{})
+        setProyEquipo(prev=>[...prev,{proyecto_id:data.id,miembro:resp,rol:'responsable'}])
+        setProySeguidores(prev=>[...prev,{proyecto_id:data.id,miembro:resp}])
+      }
+    }
+  }
+  // Opt-in: seguir / dejar de seguir un proyecto (lo suma o saca de "Mis proyectos"). miembro = inicial del usuario.
+  const handleSeguirProyecto = (proyectoId, miembro, follow) => {
+    if(!miembro) return
+    if(follow){ setProySeguidores(p=> p.some(x=>String(x.proyecto_id)===String(proyectoId)&&x.miembro===miembro)?p:[...p,{proyecto_id:proyectoId,miembro}]); if(!DEMO) supabase.from('proyecto_seguidores').insert({proyecto_id:proyectoId,miembro}).then(()=>{},()=>{}) }
+    else { setProySeguidores(p=> p.filter(x=>!(String(x.proyecto_id)===String(proyectoId)&&x.miembro===miembro))); if(!DEMO) supabase.from('proyecto_seguidores').delete().eq('proyecto_id',proyectoId).eq('miembro',miembro).then(()=>{},()=>{}) }
+  }
+  // Cambiar el tipo de encargo (puntual/permanente/proyecto) — define cuánta estructura se muestra.
+  const handleSetProyectoTipo = (proyectoId, tipo) => {
+    setProyectosCartera(p=> p.map(x=>String(x.id)===String(proyectoId)?{...x,tipo}:x))
+    if(!DEMO) supabase.from('proyectos_cartera').update({tipo,updated_at:new Date().toISOString()}).eq('id',proyectoId).then(()=>{},()=>{})
   }
 
   // Carpeta en Drive por cliente ACTIVO (best-effort, idempotente). Se dispara cuando un cliente queda Activo.
@@ -35403,7 +35445,7 @@ export default function App() {
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
-            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
