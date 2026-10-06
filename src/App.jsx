@@ -8214,7 +8214,7 @@ const ROLES_DEF = [
   { id:'limited', label:'Abogado', desc:'Equipo · trabajo diario' },
 ]
 const CAP_ROWS = [
-  ['dashboard','Inicio'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],
+  ['dashboard','Inicio'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],
   ['clients','Clientes'],['expenses','Gastos'],['cajachica','Caja chica'],
   ['sales','Ventas'],['billing','Facturación'],['cobranza','Cobranza'],
   ['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],
@@ -29444,7 +29444,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     <div style={{ maxWidth:isDesktop?1040:720, margin:'0 auto', padding:'0 14px 40px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
         <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
-        <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:17, fontWeight:600, color:C.accent }}>Proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</div><div style={{ fontSize:10, color:C.muted, fontWeight:500, marginTop:1 }}>seguimiento de proyectos activos</div></div>
+        <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:17, fontWeight:600, color:C.accent }}>Mis proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</div><div style={{ fontSize:10, color:C.muted, fontWeight:500, marginTop:1 }}>seguimiento de proyectos activos</div></div>
         {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
         <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.done||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
       </div>
@@ -33102,10 +33102,11 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
+const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
+// nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['miCarga','Mi carga']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['miCarga','Mi carga']],
   limited:[['tasks','Tareas'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
