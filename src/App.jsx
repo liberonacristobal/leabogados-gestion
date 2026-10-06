@@ -19557,15 +19557,16 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
 
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onClose,saving,preClient,preProject,preDue,user,task}) {
+function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onClose,saving,preClient,preProject,preDue,preTitle,user,task}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient || (task ? clients.find(c=>c.id===task.client_id)||null : null))
   // preDue: fecha precargada (string 'YYYY-MM-DD') al crear desde el calendario
   // preProject: {id,name} al crear desde un proyecto de Cartera → enlace firme project_id + nombre precargado
+  // preTitle: título precargado (p. ej. el "siguiente paso" sugerido por IA desde Cartera) — editable antes de guardar.
   const initAssignees = task ? (task.assignees?.length?task.assignees:(task.who?[task.who]:[])) : [user?.name||'Cristóbal']
   const [f,setF] = useState(task
     ? {id:task.id,title:task.title||'',assignees:initAssignees,entity_id:task.entity_id||null,due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by,project_id:task.project_id||null}
-    : {title:'',assignees:initAssignees,entity_id:null,due:(typeof preDue==='string'?preDue:'')||'',status:'Activo',note:'',sale_id:'',project:preProject?.name||'',subproject:'',project_id:preProject?.id||null})
+    : {title:preTitle||'',assignees:initAssignees,entity_id:null,due:(typeof preDue==='string'?preDue:'')||'',status:'Activo',note:'',sale_id:'',project:preProject?.name||'',subproject:'',project_id:preProject?.id||null})
   const [showProjects,setShowProjects] = useState(false)
   const [subNew,setSubNew] = useState(false)
   const [showDate,setShowDate] = useState(false)
@@ -29004,6 +29005,34 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     }catch(e){ appAlert('No se pudo sugerir: '+(e?.message||'reintenta')) }
     setSugEsf(o=>({...o,[p.id]:null}))
   }
+  // Fase 4 — SIGUIENTE PASO (IA, compuerta). Toma el estado REAL del proyecto y propone UNA acción concreta. No inventa; si está al día, lo dice.
+  const sugerirSiguientePaso = async (p) => {
+    setSigPaso(o=>({...o,[p.id]:{busy:true}}))
+    if(DEMO){ setTimeout(()=>setSigPaso(o=>({...o,[p.id]:{texto:'Agendar la firma ante notario y confirmar la fecha con los dos socios.', fecha:new Date(Date.now()+5*864e5).toISOString().slice(0,10), aldia:false}})),500); return }
+    const s=saleDe(p); const _et=etapasDe(p)
+    const etapaTxt=_et?`${_et[Math.min(p.etapa_idx||0,_et.length-1)]} (etapa ${Math.min(p.etapa_idx||0,_et.length-1)+1} de ${_et.length})`:(tipoDe(p)==='permanente'?'asesoría permanente':'encargo puntual')
+    const ents=entregablesDe(p).filter(e=>!e.hecho).map(e=>e.texto)
+    const hs=hitosDe(p).filter(h=>!h.hecho).map(h=>`${h.titulo}${h.fecha?` (${h.fecha})`:''}`)
+    const tks=tareasDe(p).map(t=>`${t.title}${t.due?` (vence ${String(t.due).slice(0,10)})`:''}`)
+    const m=mov(p); const uc=ultCont[String(p.cliente_id)]
+    const notas=bitacoraDe(p).filter(e=>e.tipo==='nota').slice(0,3).map(e=>e.texto)
+    const hoyISO=new Date().toISOString().slice(0,10)
+    const brief=[`Proyecto: ${p.nombre_proyecto||s?.title||''}`,`Cliente: ${cnm(p.cliente_id)||'—'}`,`Tipo/etapa: ${etapaTxt}`,
+      p.plazo?`Próximo plazo: ${p.plazo}${p.plazo_label?` (${p.plazo_label})`:''}`:'Sin plazo fijado',
+      `En qué está (nota): ${p.nota||'—'}`,
+      ents.length?`Entregables pendientes: ${ents.join('; ')}`:'Sin entregables pendientes',
+      hs.length?`Hitos pendientes: ${hs.join('; ')}`:'Sin hitos pendientes',
+      tks.length?`Tareas abiertas: ${tks.join('; ')}`:'Sin tareas abiertas',
+      m?.dias!=null?`Último movimiento interno: ${m.ultima?.texto||'actividad'} hace ${m.dias}d`:'Sin movimiento registrado',
+      uc&&uc.fecha?`Último correo con el cliente: ${uc.dir==='out'?'enviado por nosotros':'recibido del cliente'} "${uc.asunto}" (${uc.fecha})`:'',
+      notas.length?`Últimas notas de bitácora: ${notas.join(' | ')}`:''
+    ].filter(Boolean).join('\n')
+    const prompt=`Eres un abogado senior de un estudio chileno revisando este encargo. Con SOLO los datos de abajo (no inventes nada), dime el SIGUIENTE PASO concreto para mover el proyecto: una sola acción, clara y accionable, en 1 frase (español de Chile, trato "tú"). Si procede, sugiere una fecha límite realista (a partir de hoy ${hoyISO}). Si el proyecto está al día y no hay nada urgente, dilo claramente. Devuelve SOLO un JSON (sin markdown): {"paso":"la acción en 1 frase","fecha":"YYYY-MM-DD o null","aldia":true/false}.\n\nDATOS:\n${brief}`
+    try{ const data=await claudeCall({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
+      const j=JSON.parse((data?.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
+      setSigPaso(o=>({...o,[p.id]:{texto:String(j.paso||'').slice(0,240), fecha:/^\d{4}-\d{2}-\d{2}$/.test(j.fecha||'')?j.fecha:null, aldia:!!j.aldia}}))
+    }catch(e){ setSigPaso(o=>({...o,[p.id]:{err:true}})) }
+  }
   // Resumen del proyecto de un vistazo (rule-based, datos reales): etapa · tareas abiertas · estado de facturación.
   const resumenDe = p => {
     const bMine = (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && (String(b.client_id)===String(p.cliente_id) || (p.sale_id&&String(b.sale_id)===String(p.sale_id))))
@@ -29024,6 +29053,24 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   // Movimiento por proyecto (fuente única). Se recomputa cuando cambian los datos reales.
   const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
   const mov = p => movMap[p.id] || { ultima:null, dias:null, score:0 }
+  // Fase 4 — RADAR DE ATENCIÓN (rule-based, datos reales; umbrales alineados al correo semanal). Anticipa, no proyecta plata ni fechas inventadas.
+  // Devuelve {nivel:'alto'|'medio', motivos:[], orden} o null si el proyecto está al día. Solo proyectos en curso.
+  const riesgoDe = p => {
+    if(p.activo===false || p.pausado) return null
+    const motivos=[]; let sev=0   // 2=alto, 1=medio
+    const dP = cartDiasPlazo(p.plazo)
+    if(dP!=null && dP<0){ motivos.push(`Plazo vencido ${-dP}d`); sev=Math.max(sev,2) }
+    else if(dP!=null && dP<=3){ motivos.push(dP===0?'Plazo vence hoy':`Plazo en ${dP}d`); sev=Math.max(sev,1) }
+    hitosDe(p).forEach(h=>{ if(h.hecho||!h.fecha) return; const d=cartDiasPlazo(h.fecha); if(d!=null&&d<0){ motivos.push(`Hito vencido: ${h.titulo}`); sev=Math.max(sev,2) } else if(d!=null&&d<=3){ motivos.push(`Hito ${d===0?'hoy':`en ${d}d`}: ${h.titulo}`); sev=Math.max(sev,1) } })
+    const tks=tareasDe(p); const venc=tks.filter(t=>{ const d=daysLeft(t.due); return d!=null&&d<0 }).length
+    if(venc>0){ motivos.push(`${venc} tarea${venc!==1?'s':''} vencida${venc!==1?'s':''}`); sev=Math.max(sev,2) }
+    const md=mov(p).dias
+    if(md!=null && md>45){ motivos.push(`Sin movimiento ${md}d`); sev=Math.max(sev,2) }
+    else if(md!=null && md>21){ motivos.push(`Sin movimiento ${md}d`); sev=Math.max(sev,1) }
+    if(!motivos.length) return null
+    return { nivel: sev>=2?'alto':'medio', motivos, orden: sev*1000 + (dP!=null&&dP<0?-dP:0) + (md||0) }
+  }
+  const [sigPaso,setSigPaso] = useState({})   // Siguiente paso IA por proyecto: {busy}|{texto,fecha}|{err}
   const rows = useMemo(()=>{
     // Pestaña: En curso (activa, no pausada) · En pausa (activa, pausada) · Terminados (archivados = activo:false)
     let arr = fase==='terminados' ? (archivados||[]) : (proyectos||[]).filter(p=> p.activo!==false && (fase==='pausa' ? !!p.pausado : !p.pausado))
@@ -29151,6 +29198,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
 
   const nCrit = rows.filter(p=>(p.estado||'verde')==='rojo').length
   const chipSty = (on,col,bg) => ({ fontSize:12, fontWeight:500, color:on?'#fff':col, background:on?C.accent:bg, borderRadius:20, padding:'4px 12px', border:'none', cursor:'pointer' })
+  // Fase 4 — mis proyectos que piden atención (rule-based), alto primero. Alimenta el contador del toggle y la vista "Atención".
+  const misRiesgo = (proyectos||[]).filter(p=>p.activo!==false && !p.pausado && esMio(p)).map(p=>({p,r:riesgoDe(p)})).filter(x=>x.r).sort((a,b)=>b.r.orden-a.r.orden)
 
   // Fijar a nivel CLIENTE (toca todos sus proyectos activos a la vez).
   const fijarCliente = g => g.proyectos.forEach(p=>{ if(!p.fijado) fijar(p) })
@@ -29331,6 +29380,23 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 </div>
               )})}{onAddTaskForProject&&<div style={{ textAlign:'right', paddingTop:4 }}><span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span></div>}</div>}
               {tks.length===0&&onAddTaskForProject&&<div style={{ marginBottom:12 }}><span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span></div>}
+
+              {/* SIGUIENTE PASO (Fase 4 · IA con compuerta): lee el estado real del proyecto y propone UNA acción; "Crear tarea" la precarga editable. */}
+              {(()=>{ const sp=sigPaso[p.id]; return (
+                <div style={{ marginBottom:12 }}>
+                  {!sp && <button onClick={()=>sugerirSiguientePaso(p)} style={{ fontSize:11.5, fontWeight:600, color:'#5B3E8E', background:'#EFEAF7', border:'none', borderRadius:8, padding:'7px 12px', cursor:'pointer' }}>Sugerir siguiente paso · IA</button>}
+                  {sp?.busy && <div style={{ fontSize:11, color:C.grisText }}>Analizando el estado del proyecto…</div>}
+                  {sp?.err && <div style={{ fontSize:11, color:C.coralText }}>No se pudo sugerir. <span onClick={()=>sugerirSiguientePaso(p)} style={{ color:C.azulInfo, cursor:'pointer', fontWeight:600 }}>Reintentar</span></div>}
+                  {sp && sp.texto!=null && <div style={{ background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:10, padding:'10px 12px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Siguiente paso</span>{sp.aldia&&<span style={{ fontSize:10, fontWeight:700, color:C.greenText, background:C.greenBg, borderRadius:20, padding:'1px 8px' }}>Al día</span>}{sp.fecha&&<span style={{ marginLeft:'auto', fontSize:11, fontWeight:700, color:C.accent }}>{fmtDia(sp.fecha)}</span>}</div>
+                    <div style={{ fontSize:12.5, color:C.text, lineHeight:1.45 }}>{sp.texto}</div>
+                    <div style={{ display:'flex', gap:14, marginTop:8, alignItems:'center' }}>
+                      {!sp.aldia && onAddTaskForProject && <button onClick={()=>{ onAddTaskForProject(p,{title:sp.texto,due:sp.fecha||null}); setSigPaso(o=>({...o,[p.id]:undefined})) }} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Crear tarea</button>}
+                      <span onClick={()=>setSigPaso(o=>({...o,[p.id]:undefined}))} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>Descartar</span>
+                    </div>
+                  </div>}
+                </div>
+              )})()}
 
               {/* QUÉ PASÓ — bitácora */}
               <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:7 }}>Qué pasó</div>
@@ -29533,13 +29599,33 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         </select>}
         {miInicial && (<>
           <button onClick={()=>{setVista('semana');setOpenId(null)}} style={chipSty(vista==='semana',C.accent,C.azulBg)}>Mi semana</button>
+          {misRiesgo.length>0 && <button onClick={()=>{setVista('atencion');setOpenId(null)}} style={{ ...chipSty(vista==='atencion',C.coralText,C.ambarBg), display:'inline-flex', alignItems:'center', gap:5 }}>Atención<span style={{ fontSize:10, fontWeight:800, color:'#fff', background:vista==='atencion'?'rgba(255,255,255,.35)':C.overdue, borderRadius:10, padding:'0 6px', lineHeight:'15px' }}>{misRiesgo.length}</span></button>}
           <button onClick={()=>{setVista('mios');setOpenId(null)}} style={chipSty(vista==='mios',C.accent,C.azulBg)}>Mis proyectos</button>
           <button onClick={()=>{setVista('estudio');setOpenId(null)}} style={chipSty(vista==='estudio',C.muted,'#EEF1F3')}>Del estudio</button>
         </>)}
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{ marginLeft:'auto', fontSize:12, padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', width:110 }}/>
       </div>
 
-      {vista==='semana' ? (()=>{
+      {vista==='atencion' ? (()=>{
+          // ATENCIÓN (Fase 4): mis proyectos con señales de riesgo (rule-based), alto primero. Cada uno con sus motivos y un toque para abrirlo.
+          if(!misRiesgo.length) return <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>Nada pide atención ahora. Tus proyectos están al día.</div>
+          const nAlto=misRiesgo.filter(x=>x.r.nivel==='alto').length
+          return <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, padding:'11px 14px 2px' }}>Para revisar · {misRiesgo.length}{nAlto?` · ${nAlto} urgente${nAlto!==1?'s':''}`:''}</div>
+            {misRiesgo.map(({p,r},i)=>{ const alto=r.nivel==='alto'; return (
+              <div key={p.id} onClick={()=>{ setVista('mios'); setFase('curso'); setOpenId(p.id); cargarUltContacto(p) }} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
+                <span style={{ width:9, height:9, borderRadius:'50%', background:alto?C.overdue:'#E09B2D', flexShrink:0, marginTop:4 }}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
+                  <div style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.nombre_proyecto}</div>
+                  <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:4 }}>{r.motivos.map((m,j)=><span key={j} style={{ fontSize:10, fontWeight:600, color:alto?C.overdueText:C.soonText, background:alto?C.overdueBg:C.ambarBg, borderRadius:20, padding:'2px 8px' }}>{m}</span>)}</div>
+                </div>
+                <span style={{ fontSize:13, color:C.muted, flexShrink:0, marginTop:2 }}>›</span>
+              </div>
+            )})}
+          </div>
+        })()
+      : vista==='semana' ? (()=>{
           // MI SEMANA (Fase 3): cruza tareas + hitos + plazos de MIS proyectos que vencen en los próximos 7 días (o ya vencidos). "Qué tengo para la semana".
           const weekEnd=(()=>{ const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10) })()
           const misP=(proyectos||[]).filter(p=>p.activo!==false && esMio(p))
@@ -35629,7 +35715,7 @@ export default function App() {
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
-            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
@@ -35796,7 +35882,7 @@ export default function App() {
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} onClose={()=>setModal(null)}/>}
         {modal?.type==='report'&&<Modal fullscreenOnMobile title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
+        {modal?.type==='task'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} preTitle={modal.data?.preTitle||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal fullscreenOnMobile title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
         {modal?.type==='cierreTarea'&&<Modal fullscreenOnMobile title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>{ const t=modal.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/></Modal>}
         {/* "Editar/Nuevo cliente" ya NO es modal: es la página navegable editCliente (ver render arriba). */}
