@@ -26851,6 +26851,30 @@ async function escanearCarteraGmail(clients=[], proyectos=[], onProgress){
   return out
 }
 
+// Último contacto con un cliente por HILO (Gmail, client-side con el token del usuario). Devuelve el hilo más reciente
+// enviado o recibido con ese correo/dominio. firmDom = dominio de correo del estudio (para marcar enviado vs recibido).
+// Busca por dominio corporativo (capta a cualquier contacto de la empresa); si es proveedor gratuito, por el correo exacto.
+async function ultimoContactoGmail(email, firmDom){
+  const token=await driveToken()
+  if(!token){ const e=new Error('Sin token de Google'); e.code=401; throw e }
+  const dom=(String(email).split('@')[1]||'').toLowerCase()
+  const free=/^(gmail|hotmail|outlook|yahoo|live|icloud|me|proton|protonmail|aol|gmx|yopmail)\./.test(dom+'.')
+  const target=(dom && !free) ? `@${dom}` : email
+  const q=encodeURIComponent(`(from:${target} OR to:${target}) -in:spam -in:trash`)
+  const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${q}&maxResults=1`,{headers:{Authorization:'Bearer '+token}})
+  if(!r.ok){ const e=new Error('Gmail '+r.status); e.code=r.status; throw e }
+  const j=await r.json(); const th=(j.threads||[])[0]; if(!th) return null
+  const tr=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${th.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,{headers:{Authorization:'Bearer '+token}})
+  if(!tr.ok) return null
+  const tj=await tr.json(); const msgs=tj.messages||[]; const last=msgs[msgs.length-1]; if(!last) return null
+  const H={}; (last.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
+  const fromRaw=(H['from']||''); const mm=fromRaw.match(/<(.+?)>/); const fromEmail=(mm?mm[1]:fromRaw).trim().toLowerCase()
+  const dir=(firmDom && fromEmail.endsWith('@'+firmDom)) ? 'out' : 'in'
+  const ms=last.internalDate ? Number(last.internalDate) : (H['date']?Date.parse(H['date']):NaN)
+  const iso=isFinite(ms) ? new Date(ms).toISOString().slice(0,10) : null
+  return { fecha:iso, asunto:(H['subject']||'(sin asunto)').slice(0,140), dir, threadId:th.id, cuenta:fromEmail }
+}
+
 // Fase 2C — Calendar → hitos de CARTERA (client-side, scope calendar.events ya concedido). Liga eventos próximos a proyectos.
 async function escanearCarteraCalendario(clients=[], proyectos=[]){
   const token=await driveToken()
@@ -28841,6 +28865,19 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const NOMBRE_DE_INI={CL:'Cristóbal',EE:'Erasmo',MC:'Martín',MP:'Martina',RD:'Rodrigo'}
   const cnm = id => { const c=clients.find(x=>String(x.id)===String(id)); return c?.name || '' }
   const fmtDia = iso => iso ? fmtFechaDMY(iso) : ''   // unificado a DD-MM-AAAA (antes "10 sept" sin año)
+  // Último contacto por hilo (Gmail): caché por cliente_id {loading|none|err|{...}}; dominio del estudio desde BRAND (configurable).
+  const FIRM_MAIL_DOM = (String((BRAND?.pago?.gastos?.email)||'').split('@')[1]||'').toLowerCase()
+  const [ultCont,setUltCont] = useState({})
+  const resolverEmailCli = async(clientId)=>{ const cl=clients.find(c=>String(c.id)===String(clientId)); let to=(cl?.email||'').trim()
+    if(!to){ try{ const {data}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(clientId)).maybeSingle(); if(data?.value) to=String(data.value).split(/[,;]/)[0].trim() }catch(_){} }
+    if(!to){ try{ const {data}=await supabase.from('contacts').select('email,principal').eq('client_id',clientId); const c=(data||[]).find(x=>x.principal&&x.email)||(data||[]).find(x=>x.email); if(c) to=String(c.email).trim() }catch(_){} }
+    return to }
+  const cargarUltContacto = async(p)=>{ if(!esAdmin||!p?.cliente_id) return; const cid=String(p.cliente_id); if(ultCont[cid]) return
+    if(DEMO){ setUltCont(m=>({...m,[cid]:{fecha:new Date(Date.now()-3*864e5).toISOString().slice(0,10),asunto:'RE: Borradores de la reorganización',dir:'in',threadId:'demo',cuenta:'gerencia@cliente.cl'}})); return }
+    setUltCont(m=>({...m,[cid]:{loading:true}}))
+    try{ const email=await resolverEmailCli(cid); if(!email){ setUltCont(m=>({...m,[cid]:{none:true,noEmail:true}})); return }
+      const res=await ultimoContactoGmail(email, FIRM_MAIL_DOM); setUltCont(m=>({...m,[cid]:res||{none:true}})) }
+    catch(e){ setUltCont(m=>({...m,[cid]:{err:(e?.code===401||e?.code===403)?'sinpermiso':'error'}})) } }
   const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${nDias(d)}` }
   const haceCol = iso => { const d=cartDias(iso); return d==null?C.grisText:d>=21?'#A32D2D':d>=14?'#854F0B':C.muted }
   // Propuesta abierta = proyecto cuya venta vinculada sigue en 'Propuesta' (pipeline no cerrado) → se mantiene visible arriba.
@@ -29008,9 +29045,9 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     })
   },[proyectos,archivados,fase,esAdmin,miInicial,vista,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
 
-  const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||'') } }
+  const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||''); cargarUltContacto(p) } }
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
-  useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||'') } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
+  useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||''); cargarUltContacto(p) } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
   const patch = async (p,campos) => {
     const upd = { ...campos, ultima_actividad:HOY, updated_at:new Date().toISOString() }
@@ -29180,6 +29217,25 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <div style={{ padding:'0 13px 13px', background:C.bgSoft||'#FAFBFC' }}>
             <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:11 }}>
               <div style={{ fontSize:12, color:C.muted, marginBottom:10, lineHeight:1.4 }}>{resumenDe(p)}</div>
+              {/* ÚLTIMO CONTACTO por hilo (Gmail del usuario; admin). Lazy al abrir, cacheado por cliente. */}
+              {esAdmin&&(()=>{ const uc=ultCont[String(p.cliente_id)]; if(!uc) return null
+                if(uc.loading) return <div style={{ fontSize:11, color:C.grisText, marginBottom:10 }}>Buscando el último correo…</div>
+                if(uc.err) return uc.err==='sinpermiso' ? <div style={{ fontSize:11, color:C.grisText, marginBottom:10 }}>Conecta Google (cierra sesión y reingresa) para ver el último correo.</div> : null
+                if(uc.none) return <div style={{ fontSize:11, color:C.grisText, marginBottom:10 }}>Sin correos con este cliente{uc.noEmail?' · falta su correo en la ficha':''}.</div>
+                const dd=_dias(uc.fecha); const hace = dd==null?'' : dd<=0?'hoy' : dd===1?'ayer' : `hace ${dd} d`
+                const linkable = uc.threadId&&uc.threadId!=='demo'
+                return <div onClick={()=>linkable&&window.open('https://mail.google.com/mail/u/0/#all/'+uc.threadId,'_blank')} style={{ display:'flex', alignItems:'center', gap:9, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10, cursor:linkable?'pointer':'default' }}>
+                  <span style={{ width:8, height:8, borderRadius:'50%', background:uc.dir==='out'?C.azulInfo:C.greenText, flexShrink:0 }}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3 }}>Último contacto · {uc.dir==='out'?'enviado':'recibido'}</div>
+                    <div style={{ fontSize:12.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uc.asunto}</div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:dd!=null&&dd>45?C.coralText:C.accent }}>{hace}</div>
+                    {linkable&&<div style={{ fontSize:10, color:C.azulInfo }}>ver en Gmail ›</div>}
+                  </div>
+                </div>
+              })()}
               {/* EN QUÉ ESTÁ — etapas solo para 'proyecto', con plantilla por tipo de asunto (no rígido). Permanente/puntual: sin etapas. */}
               {_et ? <>
                 <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:7, flexWrap:'wrap' }}>
