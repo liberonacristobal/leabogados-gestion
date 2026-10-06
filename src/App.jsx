@@ -28955,6 +28955,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [dragCol,setDragCol] = useState(null)                               // columna (etapa) sobre la que se está soltando
   const [dragPaso,setDragPaso] = useState(null)                             // índice del paso que se arrastra (tablero de pasos/carta Gantt)
   const [subAbierto,setSubAbierto] = useState({})                           // pasos con sus sub-etapas expandidas
+  const [faseAgr,setFaseAgr] = useState(false)                              // Plan: agrupar pasos por fase (proyectos largos)
+  const [faseCol,setFaseCol] = useState({})                                 // fases colapsadas (por key); default = fase completa colapsada
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
@@ -29426,6 +29428,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     {k:'sii',           l:'SII e impuestos',             o:6, re:/\bsii\b|\brut\b|inicio de actividades|impuesto|efectos/},
     {k:'cierre',        l:'Cierre y entrega',            o:7, re:/cierre|entrega|carpeta|cumplimiento/},
   ]
+  const faseDePaso = t => { const s=(t||'').toLowerCase(); return FASE_DEFS.find(x=>x.re.test(s)) || {k:'otro',l:'Otros pasos',o:90} }
   const faseDe = p => { const pasos=hitosDe(p); if(!pasos.length) return {k:'sinplan',l:'Sin plan',o:98}
     const next=pasos.filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
     if(!next) return {k:'aldia',l:'Plan al día',o:97}
@@ -29673,15 +29676,13 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>{opSelect('Elegir operación…')}<button onClick={()=>onAddHito&&onAddHito(p.id,'Nuevo paso')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', cursor:'pointer' }}>+ Paso suelto</button></div>
           </div>
           const done = pasos.filter(h=>h.hecho).length
-          return <>
-            <div style={{ ...card }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' }}>{secHd('Plan de pasos')}<span style={{ fontSize:10, fontWeight:700, color:C.muted }}>{done}/{pasos.length}</span><span style={{ marginLeft:'auto', display:'flex', gap:12, alignItems:'center' }}><span onClick={descargarGantt} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>Carta Gantt</span><span onClick={descargarCrono} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>CSV</span></span></div>
-              {pasos.map((h,i)=>{ const dd=h.plazo?cartDiasPlazo(h.plazo):null; const subs=subsDe(h.id); const open=!!subAbierto[h.id]
-                const plazoCol = h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted)
-                return <div key={h.id} draggable={isDesktop} onDragStart={isDesktop?(()=>setDragPaso(i)):undefined} onDragEnd={isDesktop?(()=>setDragPaso(null)):undefined} onDragOver={isDesktop?(e=>e.preventDefault()):undefined} onDrop={isDesktop?(()=>{ reorder(dragPaso,i); setDragPaso(null) }):undefined}
+          // Fila de paso reutilizable (modo plano y agrupado por fase). i = índice GLOBAL en `pasos` (para reordenar). canReorder: solo en modo plano.
+          const pasoRow = (h,i,canReorder) => { const dd=h.plazo?cartDiasPlazo(h.plazo):null; const subs=subsDe(h.id); const open=!!subAbierto[h.id]
+            const plazoCol = h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted); const dnd=canReorder&&isDesktop
+            return <div key={h.id} draggable={dnd} onDragStart={dnd?(()=>setDragPaso(i)):undefined} onDragEnd={dnd?(()=>setDragPaso(null)):undefined} onDragOver={dnd?(e=>e.preventDefault()):undefined} onDrop={dnd?(()=>{ reorder(dragPaso,i); setDragPaso(null) }):undefined}
                   style={{ borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', padding:'9px 0', opacity:dragPaso===i?.5:1 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-                    {isDesktop && <span title='Arrastra para reordenar' style={{ cursor:'grab', color:C.done, fontSize:13, lineHeight:1, userSelect:'none' }}>⠿</span>}
+                    {dnd && <span title='Arrastra para reordenar' style={{ cursor:'grab', color:C.done, fontSize:13, lineHeight:1, userSelect:'none' }}>⠿</span>}
                     <span onClick={()=>onToggleHito&&onToggleHito(h.id,!h.hecho)} style={{ width:18, height:18, borderRadius:6, border:`1.5px solid ${h.hecho?C.greenText:C.done}`, background:h.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{h.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
                     <div style={{ flex:1, minWidth:0 }}>
                       <input defaultValue={h.titulo} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==h.titulo) onUpdHito&&onUpdHito(h.id,{titulo:v}) }} style={{ width:'100%', boxSizing:'border-box', fontSize:13, fontWeight:600, color:h.hecho?C.muted:C.text, textDecoration:h.hecho?'line-through':'none', border:'none', background:'none', padding:'1px 2px' }}/>
@@ -29692,7 +29693,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                       </div>
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
-                      {!isDesktop && <><span onClick={()=>reorder(i,i-1)} style={{ cursor:i>0?'pointer':'default', color:i>0?C.done:C.border, fontSize:10, lineHeight:1 }}>▲</span><span onClick={()=>reorder(i,i+1)} style={{ cursor:i<pasos.length-1?'pointer':'default', color:i<pasos.length-1?C.done:C.border, fontSize:10, lineHeight:1 }}>▼</span></>}
+                      {canReorder && !isDesktop && <><span onClick={()=>reorder(i,i-1)} style={{ cursor:i>0?'pointer':'default', color:i>0?C.done:C.border, fontSize:10, lineHeight:1 }}>▲</span><span onClick={()=>reorder(i,i+1)} style={{ cursor:i<pasos.length-1?'pointer':'default', color:i<pasos.length-1?C.done:C.border, fontSize:10, lineHeight:1 }}>▼</span></>}
                     </div>
                     <span onClick={()=>onDelHito&&onDelHito(h.id)} title='Quitar paso' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
                   </div>
@@ -29707,8 +29708,23 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                     <input placeholder='+ etapa…' onKeyDown={ev=>{ if(ev.key==='Enter'&&ev.target.value.trim()){ onAddEntregable&&onAddEntregable(p.id,ev.target.value,null,h.id); ev.target.value='' } }} style={{ fontSize:11, padding:'4px 7px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff', marginTop:2 }}/>
                   </div>}
                   {open&&!subs.length&&<div style={{ paddingLeft:38, marginTop:6 }}><input placeholder='+ etapa…' onKeyDown={ev=>{ if(ev.key==='Enter'&&ev.target.value.trim()){ onAddEntregable&&onAddEntregable(p.id,ev.target.value,null,h.id); ev.target.value='' } }} style={{ fontSize:11, padding:'4px 7px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff' }}/></div>}
-                </div>
-              })}
+                </div> }
+          // OLA 2 — Fases colapsables (proyectos largos, ≥8 pasos): agrupa por fase en orden de aparición. Reordenar queda en el modo plano.
+          const puedeAgrupar = pasos.length>=8; const agr = puedeAgrupar && faseAgr
+          const faseGroups=[]; if(agr){ const idx={}; pasos.forEach((h,gi)=>{ const f=faseDePaso(h.titulo); if(!idx[f.k]){ idx[f.k]={f,items:[]}; faseGroups.push(idx[f.k]) } idx[f.k].items.push({h,gi}) }) }
+          return <>
+            <div style={{ ...card }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' }}>{secHd('Plan de pasos')}<span style={{ fontSize:10, fontWeight:700, color:C.muted }}>{done}/{pasos.length}</span><span style={{ marginLeft:'auto', display:'flex', gap:12, alignItems:'center' }}>{puedeAgrupar&&<span onClick={()=>setFaseAgr(v=>!v)} title='Agrupar en fases colapsables' style={{ fontSize:11, fontWeight:600, color:agr?C.accent:C.muted, cursor:'pointer' }}>Por fase{agr?' ✓':''}</span>}<span onClick={descargarGantt} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>Carta Gantt</span><span onClick={descargarCrono} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>CSV</span></span></div>
+              {!agr && pasos.map((h,i)=>pasoRow(h,i,true))}
+              {agr && faseGroups.map((g,gIdx)=>{ const gdone=g.items.filter(x=>x.h.hecho).length; const full=gdone===g.items.length; const colapsada=faseCol[g.f.k]!=null?faseCol[g.f.k]:full
+                return <div key={g.f.k} style={{ borderTop:gIdx?`1px solid ${C.border}`:'none' }}>
+                  <div onClick={()=>setFaseCol(o=>({...o,[g.f.k]:!colapsada}))} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 0 4px', cursor:'pointer' }}>
+                    <span style={{ fontSize:10, color:C.muted, width:10 }}>{colapsada?'▸':'▾'}</span>
+                    <span style={{ fontSize:11, fontWeight:700, color:C.accent, textTransform:'uppercase', letterSpacing:.3 }}>{g.f.l}</span>
+                    <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:full?C.greenText:C.muted }}>{gdone}/{g.items.length}</span>
+                  </div>
+                  {!colapsada && g.items.map(({h,gi})=>pasoRow(h,gi,false))}
+                </div> })}
               <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:12, flexWrap:'wrap', borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
                 <button onClick={()=>onAddHito&&onAddHito(p.id,'Nuevo paso')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>+ Paso</button>
                 {opSelect('+ Sumar operación…')}
