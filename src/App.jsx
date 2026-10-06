@@ -26836,14 +26836,15 @@ async function escanearCarteraGmail(clients=[], proyectos=[], onProgress){
   const hoyISO=new Date().toISOString().slice(0,10); const out=[]
   for(let i=0;i<correos.length;i+=20){
     const batch=correos.slice(i,i+20)
-    const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, preview), la lista de CLIENTES y la de PROYECTOS activos (con su "estado_actual" = en qué está). Para cada correo con relevancia real para un proyecto o cliente decide: (a) actualiza un PROYECTO existente → {"tipo":"update","proyecto_id":"<id de la lista>","sugerencia":"nuevo 'en qué está' en 1 frase","fuente":"Remitente — Asunto"}; (b) tema NUEVO de un cliente SIN proyecto → {"tipo":"nuevo","cliente_id":"<id o null>","sugerencia":"tema/nombre del proyecto en pocas palabras","fuente":"Remitente — Asunto"}. Ignora newsletters, notificaciones, publicidad y lo irrelevante. Sé conservador: solo lo que claramente mueve un proyecto. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
+    const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, preview), la lista de CLIENTES y la de PROYECTOS activos (con su "estado_actual" = en qué está). Para cada correo con relevancia real para un proyecto o cliente decide UNA de estas tres: (a) actualiza un PROYECTO existente → {"tipo":"update","proyecto_id":"<id de la lista>","sugerencia":"nuevo 'en qué está' en 1 frase","fuente":"Remitente — Asunto"}; (b) tema NUEVO de un cliente SIN proyecto → {"tipo":"nuevo","cliente_id":"<id o null>","sugerencia":"tema/nombre del proyecto en pocas palabras","fuente":"Remitente — Asunto"}; (c) COMPROMISO o PLAZO concreto con FECHA cierta para un PROYECTO existente (una entrega acordada, un vencimiento, una reunión o audiencia fijada por el correo) → {"tipo":"hito","proyecto_id":"<id de la lista>","titulo":"compromiso en pocas palabras","fecha":"YYYY-MM-DD","fuente":"Remitente — Asunto"}. Solo usa "hito" si el correo fija una fecha real y concreta (no un "a la brevedad"). Ignora newsletters, notificaciones, publicidad y lo irrelevante. Sé conservador: solo lo que claramente mueve un proyecto. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas ni fechas que no estén en el correo.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
     try{
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
       const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
       ;(Array.isArray(arr)?arr:[]).forEach(x=>{
-        if(!x||!x.tipo||!x.sugerencia) return
-        if(x.tipo==='update'){ if(proyList.some(p=>p.id===String(x.proyecto_id))) out.push({tipo:'update',proyecto_id:String(x.proyecto_id),sugerencia:String(x.sugerencia).slice(0,240),fuente:String(x.fuente||'')}) }
-        else if(x.tipo==='nuevo'){ const cid=(x.cliente_id&&clientList.some(c=>c.id===String(x.cliente_id)))?String(x.cliente_id):null; out.push({tipo:'nuevo',cliente_id:cid,sugerencia:String(x.sugerencia).slice(0,120),fuente:String(x.fuente||'')}) }
+        if(!x||!x.tipo) return
+        if(x.tipo==='update'){ if(x.sugerencia&&proyList.some(p=>p.id===String(x.proyecto_id))) out.push({tipo:'update',proyecto_id:String(x.proyecto_id),sugerencia:String(x.sugerencia).slice(0,240),fuente:String(x.fuente||'')}) }
+        else if(x.tipo==='nuevo'){ if(!x.sugerencia) return; const cid=(x.cliente_id&&clientList.some(c=>c.id===String(x.cliente_id)))?String(x.cliente_id):null; out.push({tipo:'nuevo',cliente_id:cid,sugerencia:String(x.sugerencia).slice(0,120),fuente:String(x.fuente||'')}) }
+        else if(x.tipo==='hito'){ if(x.titulo&&/^\d{4}-\d{2}-\d{2}$/.test(x.fecha||'')&&proyList.some(p=>p.id===String(x.proyecto_id))) out.push({tipo:'hito',proyecto_id:String(x.proyecto_id),titulo:String(x.titulo).slice(0,160),fecha:x.fecha,fuente:String(x.fuente||'')}) }
       })
     }catch(_){}
   }
@@ -29096,7 +29097,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     else if(n.tipo==='hito'){
       const p=proyectos.find(x=>String(x.id)===String(n.proyecto_id)); if(!p){ appAlert('Ese proyecto ya no está.'); return }
       await patch(p,{ plazo:n.fecha, plazo_label:n.titulo })
-      if(p.cliente_id) supabase.from('plazos').insert({client_id:String(p.cliente_id),titulo:n.titulo,fecha:n.fecha,tipo:'hito',fuente:'calendario'}).then(()=>{},()=>{})
+      // Cae como hito del proyecto (panel Hitos + Mi semana), salvo que ya exista uno igual (dedup por título+fecha).
+      const yaHito=(proyHitos||[]).some(h=>String(h.proyecto_id)===String(p.id)&&String(h.fecha||'').slice(0,10)===n.fecha&&_normTxt(h.titulo||'')===_normTxt(n.titulo||''))
+      if(!yaHito&&onAddHito) onAddHito(p.id,n.titulo,n.fecha)
+      if(p.cliente_id) supabase.from('plazos').insert({client_id:String(p.cliente_id),titulo:n.titulo,fecha:n.fecha,tipo:'hito',fuente:'correo/calendario'}).then(()=>{},()=>{})
       cerrarNov(idx)
     }
     else if(n.tipo==='nuevo'){
@@ -29302,6 +29306,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'center', borderTop:`1px solid ${C.border}`, paddingTop:10, marginTop:8 }}>
                 <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
                 {p.sale_id&&onOpenSale&&(()=>{ const v=sales.find(s=>String(s.id)===String(p.sale_id)); return v?<button onClick={()=>onOpenSale(v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver venta</button>:null })()}
+                {(()=>{ const cl=clients.find(c=>String(c.id)===String(p.cliente_id)); return cl?.drive_folder_id?<button onClick={()=>window.open('https://drive.google.com/drive/folders/'+cl.drive_folder_id,'_blank')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Carpeta en Drive</button>:null })()}
                 {!p.alcance&&<button onClick={()=>setAlcanceFor(p)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0 }}>Leer alcance (IA)</button>}
                 {!terminado&&<button onClick={()=>togglePausa(p)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>{p.pausado?'Reanudar':'Pausar'}</button>}
                 <button onClick={()=>terminado?reponer(p):archivar(p)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:terminado?'auto':0 }}>{terminado?'Reponer':'Terminar'}</button>
@@ -29413,6 +29418,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
                   {tag&&<span style={{ fontSize:10, fontWeight:700, color:C.azulInfo||'#185FA5', background:C.azulBg||'#E6F1FB', borderRadius:20, padding:'1px 7px' }}>{tag}</span>}
                   <span style={{ fontSize:13, fontWeight:600, color:C.accent }}>{cli||'Sin cliente'}</span>
+                  {n.tipo==='hito'&&n.fecha&&<span style={{ marginLeft:'auto', fontSize:11, fontWeight:700, color:C.accent }}>{fmtDia(n.fecha)}</span>}
                 </div>
                 <div style={{ fontSize:13, color:C.text, marginBottom:3 }}>{texto}</div>
                 {n.fuente&&<div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>{n.fuente}</div>}
