@@ -28838,7 +28838,7 @@ function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], curre
     </div>
   )
 }
-function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onMoverEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onUpdHito, onReorderHitos, onSeedPlan, pmoOps=[], onSaveOperacion, onDelOperacion, onAddMiembro, onDelMiembro, pmoSug=[], onAplicarTramite, onDescartarTramite, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onMoverEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onUpdHito, onReorderHitos, onSeedPlan, pmoOps=[], onSaveOperacion, onDelOperacion, onAddMiembro, onDelMiembro, pmoSug=[], onAplicarEvidencia, onDescartarEvidencia, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
@@ -28871,6 +28871,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   // Último contacto por hilo (Gmail): caché por cliente_id {loading|none|err|{...}}; dominio del estudio desde BRAND (configurable).
   const FIRM_MAIL_DOM = (String((BRAND?.pago?.gastos?.email)||'').split('@')[1]||'').toLowerCase()
   const [ultCont,setUltCont] = useState({})
+  const [docsProy,setDocsProy] = useState({})   // cache de documentos de Drive por proyecto (para confirmar pasos del plan)
   const resolverEmailCli = async(clientId)=>{ const cl=clients.find(c=>String(c.id)===String(clientId)); let to=(cl?.email||'').trim()
     if(!to){ try{ const {data}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(clientId)).maybeSingle(); if(data?.value) to=String(data.value).split(/[,;]/)[0].trim() }catch(_){} }
     if(!to){ try{ const {data}=await supabase.from('contacts').select('email,principal').eq('client_id',clientId); const c=(data||[]).find(x=>x.principal&&x.email)||(data||[]).find(x=>x.email); if(c) to=String(c.email).trim() }catch(_){} }
@@ -29094,9 +29095,51 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       const h = pendientesPlan.find(x=>!usados.has(x.id) && _normC(x.titulo)===_normC(titulo))   // ¿calza con un hito del plan?
       if(!h) return   // no está en el plan → contexto, sin tarjeta
       usados.add(h.id)
-      out.push({ expenseId:e.id, concept:e.concept||'', conceptKey:(glosaKey&&glosaKey(e.concept||''))||_normC(e.concept), hitoId:h.id, hitoTitulo:h.titulo, fecha:e.date||null })
+      out.push({ source:'gasto', origenId:e.id, label:e.concept||'', conceptKey:(glosaKey&&glosaKey(e.concept||''))||_normC(e.concept), hitoId:h.id, hitoTitulo:h.titulo, fecha:e.date||null })
     })
     return out
+  }
+  // DOCUMENTOS de Drive que confirman un paso del plan: escaneo de la carpeta del cliente (nombres), match por tokens significativos del hito, hacia adelante (modifiedTime). Compuerta → aprende → se libera.
+  const _STOP = new Set(['de','en','el','la','los','las','del','por','con','una','uno','ante','para','segun','sobre','entre','desde','hasta','este','esta','su','sus','al','y','e','o'])
+  const _sigTok = s => _normC(s).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=3 && !_STOP.has(w))
+  const _docConfirma = (fileName, hitoTitulo) => {
+    const ht=_sigTok(hitoTitulo); if(!ht.length) return false
+    const fnTok=new Set(_sigTok(String(fileName).replace(/\.[a-z0-9]{2,5}$/,'')))
+    const overlap=ht.filter(w=>fnTok.has(w)); if(!overlap.length) return false
+    if(ht.length===1) return overlap[0].length>=5                     // hito de una sola palabra fuerte (Firma, Audiencia…)
+    return overlap.length>=2 && overlap.some(w=>w.length>=6)          // ≥2 palabras en común y al menos una fuerte (evita falsos positivos)
+  }
+  const docSugDe = p => {
+    if(tipoDe(p)!=='proyecto' || !p.cliente_id) return []
+    const dd = docsProy[String(p.id)]; const files = dd&&dd.files; if(!files||!files.length) return []
+    const desc = new Set((pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='documento'&&s.estado==='descartada').map(s=>String(s.origen_id)))
+    const pendientesPlan = hitosDe(p).filter(h=>!h.hecho)
+    const usados=new Set(); const out=[]
+    files.forEach(f=>{ if(desc.has(String(f.id))) return; const fe=String(f.modifiedTime||'').slice(0,10); if(fe&&fe<_TRAMITE_DESDE) return   // hacia adelante
+      const h = pendientesPlan.find(x=>!usados.has(x.id) && _docConfirma(f.name, x.titulo)); if(!h) return
+      usados.add(h.id)
+      out.push({ source:'documento', origenId:f.id, label:f.name, conceptKey:_normC((f.name||'').replace(/\.[a-z0-9]{2,5}$/,'')), hitoId:h.id, hitoTitulo:h.titulo, fecha:fe||null })
+    })
+    return out
+  }
+  // Escaneo perezoso de la carpeta de Drive del cliente (admin). Cachea por proyecto. Carpeta = clients.drive_folder_id; escanea el folder + subcarpetas (1 nivel).
+  const cargarDocsProy = async (p) => {
+    if(!esAdmin || !p.cliente_id || docsProy[String(p.id)]) return
+    if(DEMO){ const hoy=new Date().toISOString().slice(0,10); setDocsProy(o=>({...o,[String(p.id)]:{ files:[
+      { id:'d1', name:'Escritura de constitución Pehuén SpA.docx', mimeType:'application/vnd.google-apps.document', modifiedTime:hoy },
+      { id:'d2', name:'Publicación Diario Oficial - extracto.pdf', mimeType:'application/pdf', modifiedTime:hoy },
+      { id:'d3', name:'Minuta reunión cliente.docx', mimeType:'application/vnd.google-apps.document', modifiedTime:hoy },
+    ] }})); return }
+    const cl = clients.find(c=>String(c.id)===String(p.cliente_id)); const fid = cl?.drive_folder_id
+    if(!fid){ setDocsProy(o=>({...o,[String(p.id)]:{none:true,noFolder:true}})); return }
+    setDocsProy(o=>({...o,[String(p.id)]:{loading:true}}))
+    try{
+      const top = await driveCall({ action:'search', q:`'${fid}' in parents and trashed=false`, pageSize:100 })
+      let files = (top.files||[]).filter(f=>f.mimeType!=='application/vnd.google-apps.folder')
+      const subs = (top.files||[]).filter(f=>f.mimeType==='application/vnd.google-apps.folder').slice(0,12)
+      for(const s of subs){ try{ const r=await driveCall({ action:'search', q:`'${s.id}' in parents and trashed=false`, pageSize:100 }); files=files.concat((r.files||[]).filter(f=>f.mimeType!=='application/vnd.google-apps.folder')) }catch(_){} }
+      setDocsProy(o=>({...o,[String(p.id)]:{ files }}))
+    }catch(e){ setDocsProy(o=>({...o,[String(p.id)]:{ err:(e&&(e.code===401||e.code===403))?'sinpermiso':'error' }})) }
   }
   // Fase 4 — RADAR DE ATENCIÓN (rule-based, datos reales; umbrales alineados al correo semanal). Anticipa, no proyecta plata ni fechas inventadas.
   // Devuelve {nivel:'alto'|'medio', motivos:[], orden} o null si el proyecto está al día. Solo proyectos en curso.
@@ -29136,7 +29179,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     })
   },[proyectos,archivados,fase,esAdmin,miInicial,selPer,proyEquipo,proySeguidores,estadoF,q,sortBy,clients,sales,movMap])
 
-  const abrir = p => { setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p) }   // abre el proyecto como PÁGINA workspace (el "‹ Mis proyectos" lo cierra)
+  const abrir = p => { setOpenId(p.id); setWsTab('resumen'); setDraft(p.nota||''); cargarUltContacto(p); cargarDocsProy(p) }   // abre el proyecto como PÁGINA workspace (el "‹ Mis proyectos" lo cierra)
   // Entrar directo a un proyecto desde el Inicio ("Mis proyectos"): abre su detalle y ajusta la pestaña.
   useEffect(()=>{ if(!focusId) return; const p=(proyectos||[]).find(x=>String(x.id)===String(focusId)); if(p){ setFase(p.pausado?'pausa':'curso'); setOpenId(focusId); setDraft(p.nota||''); cargarUltContacto(p) } onFocusHandled&&onFocusHandled() },[focusId])   // eslint-disable-line
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
@@ -29422,16 +29465,16 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             </div>
           </div>
           {/* AGENTE PMO · se refleja solo — gastos de trámite del cliente → hito, con compuerta (bloque 2) */}
-          {(()=>{ const sug=tramiteSugDe(p); if(!sug.length) return null
+          {(()=>{ const sug=[...tramiteSugDe(p), ...docSugDe(p)]; if(!sug.length) return null
             return <div style={{ background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:12, padding:'11px 13px', marginBottom:12 }}>
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO · evidencia del plan</span><span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span></div>
               {sug.map((s,i)=>(
-                <div key={s.expenseId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
-                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>Un trámite confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
-                  <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{s.concept}</div>
+                <div key={s.source+'_'+s.origenId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
+                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span></div>
                   <div style={{ display:'flex', gap:12, marginTop:6, alignItems:'center' }}>
-                    <button onClick={()=>onAplicarTramite&&onAplicarTramite(p,s)} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Marcar hecho</button>
-                    <span onClick={()=>onDescartarTramite&&onDescartarTramite(p,s)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>No corresponde</span>
+                    <button onClick={()=>onAplicarEvidencia&&onAplicarEvidencia(p,s)} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Marcar hecho</button>
+                    <span onClick={()=>onDescartarEvidencia&&onDescartarEvidencia(p,s)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>No corresponde</span>
                   </div>
                 </div>
               ))}
@@ -34048,26 +34091,29 @@ export default function App() {
     if(subs.length){ const { data:es } = await supabase.from('proyecto_entregables').insert(subs).select(); if(es) setProyEntregables(p=>[...p,...es]) }
   }
   // BLOQUE 2 — "se refleja solo": aplicar una sugerencia de trámite (gasto→hito). Crea el hito HECHO (el gasto implica que el trámite ocurrió), enlaza el gasto al proyecto, aprende el mapeo y audita. Compuerta → aprende → se libera.
-  // Resuelve (o crea) la fila de pmo_sugerencias para un gasto: si el Agente PMO (edge) ya dejó una 'pendiente', la actualiza en vez de duplicar.
+  // EVIDENCIA que confirma un paso del plan: gasto de trámite (origen='gasto') o documento de Drive (origen='documento'). sug = {source, origenId, hitoId, hitoTitulo, fecha, conceptKey?, label?}.
+  // Resuelve (o crea) la fila de pmo_sugerencias: si el Agente (edge) ya dejó una 'pendiente', la actualiza en vez de duplicar.
   const _resolverSug = async (p, sug, estado) => {
-    const prev = (pmoSug||[]).find(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='gasto'&&String(s.origen_id)===String(sug.expenseId)&&s.estado==='pendiente')
+    const origen = sug.source||'gasto'; const oid = String(sug.origenId!=null?sug.origenId:sug.expenseId)
+    const prev = (pmoSug||[]).find(s=>String(s.proyecto_id)===String(p.id)&&s.origen===origen&&String(s.origen_id)===oid&&s.estado==='pendiente')
     const patch = { estado, resolved_at:new Date().toISOString() }
-    if(DEMO){ if(prev) setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)); else setPmoSug(s=>[...s,{id:'s'+Date.now(),proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',estado}]); return }
+    if(DEMO){ if(prev) setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)); else setPmoSug(s=>[...s,{id:'s'+Date.now()+Math.random(),proyecto_id:p.id,origen,origen_id:oid,tipo:'hito',estado}]); return }
     if(prev){ await supabase.from('pmo_sugerencias').update(patch).eq('id',prev.id); setPmoSug(s=>s.map(x=>x.id===prev.id?{...x,...patch}:x)) }
-    else { const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',payload:{concepto:sug.concept,hito:sug.hitoTitulo,fecha:sug.fecha||null},...patch}).select().single(); if(s) setPmoSug(x=>[...x,s]) }
+    else { const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen,origen_id:oid,tipo:'hito',payload:{hito:sug.hitoTitulo,fecha:sug.fecha||null,detalle:sug.label||sug.concept||''},...patch}).select().single(); if(s) setPmoSug(x=>[...x,s]) }
   }
-  // El trámite CONFIRMA el hito del plan: lo marca HECHO (con la fecha del gasto si la tiene) + enlaza el gasto al proyecto + aprende + resuelve la sugerencia.
-  const handleAplicarTramite = async (p, sug) => {
+  // Aplica la evidencia: marca el hito HECHO (con la fecha del gasto/documento) + (si es gasto) lo enlaza al proyecto + aprende el mapeo + resuelve.
+  const handleAplicarEvidencia = async (p, sug) => {
     const patchHito = { hecho:true, ...(sug.fecha?{fecha:sug.fecha}:{}) }
-    if(DEMO){ setProyHitos(h=>h.map(x=>x.id===sug.hitoId?{...x,...patchHito}:x)); setExpenses(xs=>xs.map(x=>x.id===sug.expenseId?{...x,proyecto_id:p.id}:x)); _resolverSug(p,sug,'aceptada'); return }
+    const esGasto = (sug.source||'gasto')==='gasto'
+    if(DEMO){ setProyHitos(h=>h.map(x=>x.id===sug.hitoId?{...x,...patchHito}:x)); if(esGasto) setExpenses(xs=>xs.map(x=>x.id===sug.origenId?{...x,proyecto_id:p.id}:x)); _resolverSug(p,sug,'aceptada'); return }
     try{
       await supabase.from('proyecto_hitos').update(patchHito).eq('id',sug.hitoId); setProyHitos(x=>x.map(h=>h.id===sug.hitoId?{...h,...patchHito}:h))
-      await supabase.from('expenses').update({proyecto_id:p.id}).eq('id',sug.expenseId); setExpenses(xs=>xs.map(x=>x.id===sug.expenseId?{...x,proyecto_id:p.id}:x))
-      if(sug.conceptKey) learnPut('pmo_tramite_hito', sug.conceptKey, sug.hitoTitulo)
+      if(esGasto){ await supabase.from('expenses').update({proyecto_id:p.id}).eq('id',sug.origenId); setExpenses(xs=>xs.map(x=>x.id===sug.origenId?{...x,proyecto_id:p.id}:x)); if(sug.conceptKey) learnPut('pmo_tramite_hito', sug.conceptKey, sug.hitoTitulo) }
+      else if(sug.conceptKey) learnPut('pmo_doc_hito', sug.conceptKey, sug.hitoTitulo)
       await _resolverSug(p,sug,'aceptada')
     }catch(e){ appAlert('No se pudo aplicar: '+(e.message||e)) }
   }
-  const handleDescartarTramite = async (p, sug) => { try{ await _resolverSug(p,sug,'descartada') }catch(e){} }
+  const handleDescartarEvidencia = async (p, sug) => { try{ await _resolverSug(p,sug,'descartada') }catch(e){} }
   // Biblioteca de pasos configurable (pmo_operaciones): guardar/crear y eliminar operaciones. Vendible: cada estudio arma la suya.
   const handleSaveOperacion = async (op) => {
     const esNueva = !op.id || String(op.id).startsWith('new_')
@@ -35948,7 +35994,7 @@ export default function App() {
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
-            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onSaveOperacion={handleSaveOperacion} onDelOperacion={handleDelOperacion} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarTramite={handleAplicarTramite} onDescartarTramite={handleDescartarTramite} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onSaveOperacion={handleSaveOperacion} onDelOperacion={handleDelOperacion} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarEvidencia={handleAplicarEvidencia} onDescartarEvidencia={handleDescartarEvidencia} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
