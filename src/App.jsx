@@ -28838,7 +28838,7 @@ function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], curre
     </div>
   )
 }
-function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onMoverEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onAddMiembro, onDelMiembro, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onMoverEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onAddMiembro, onDelMiembro, pmoSug=[], onAplicarTramite, onDescartarTramite, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
@@ -29061,6 +29061,25 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   // Movimiento por proyecto (fuente única). Se recomputa cuando cambian los datos reales.
   const movMap = useMemo(()=>{ const m={}; (proyectos||[]).concat(archivados||[]).forEach(p=>{ m[p.id]=carteraMovimiento(p,{billing,tasks,anticipos,expenses}) }); return m },[proyectos,archivados,billing,tasks,anticipos,expenses])
   const mov = p => movMap[p.id] || { ultima:null, dias:null, score:0 }
+  // BLOQUE 2 — "el proyecto se alimenta solo": gastos de TRÁMITE del cliente (CBR/Conservador/Diario Oficial/Reg.Civil) → hito del proyecto, con compuerta. Solo hitos REALES (inscripción/publicación/posesión), nunca copias/vigencias/certificados. Conservador: no enlaza a ciegas, el humano confirma dentro del proyecto.
+  const _TRAMITE_CATS = new Set(['CBR','Conservador','Diario Oficial','Registro Civil'])
+  const _normC = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
+  const _tramiteHito = (cat, concept) => { const c=_normC(concept)
+    if(/publicac/.test(c)) return 'Publicación en Diario Oficial'
+    if(/posesion efectiva/.test(c)) return 'Posesión efectiva inscrita'
+    if(/inscrip/.test(c)) return cat==='Diario Oficial' ? 'Publicación en Diario Oficial' : 'Inscripción en CBR'
+    return null }
+  const tramiteSugDe = p => {
+    if(tipoDe(p)!=='proyecto' || !p.cliente_id) return []
+    const desc = new Set((pmoSug||[]).filter(s=>String(s.proyecto_id)===String(p.id)&&s.origen==='gasto'&&s.estado==='descartada').map(s=>String(s.origen_id)))
+    const yaHito = new Set(hitosDe(p).map(h=>_normC(h.titulo)))
+    const seen=new Set(); const out=[]
+    ;(expenses||[]).forEach(e=>{ if(e.deleted_at||e.proyecto_id||String(e.client_id||'')!==String(p.cliente_id)||!_TRAMITE_CATS.has(e.category)) return
+      const titulo=_tramiteHito(e.category,e.concept); if(!titulo) return
+      if(desc.has(String(e.id))||yaHito.has(_normC(titulo))||seen.has(titulo)) return
+      seen.add(titulo); out.push({ expenseId:e.id, concept:e.concept||'', conceptKey:(glosaKey&&glosaKey(e.concept||''))||_normC(e.concept), hitoTitulo:titulo, fecha:e.date||null, monto:e.amount }) })
+    return out
+  }
   // Fase 4 — RADAR DE ATENCIÓN (rule-based, datos reales; umbrales alineados al correo semanal). Anticipa, no proyecta plata ni fechas inventadas.
   // Devuelve {nivel:'alto'|'medio', motivos:[], orden} o null si el proyecto está al día. Solo proyectos en curso.
   const riesgoDe = p => {
@@ -29390,6 +29409,22 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
               </div>)}
             </div>
           </div>
+          {/* AGENTE PMO · se refleja solo — gastos de trámite del cliente → hito, con compuerta (bloque 2) */}
+          {(()=>{ const sug=tramiteSugDe(p); if(!sug.length) return null
+            return <div style={{ background:'#F7F4FC', border:'1px solid #E3DAF2', borderRadius:12, padding:'11px 13px', marginBottom:12 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}><span style={{ fontSize:10, fontWeight:700, color:'#5B3E8E', textTransform:'uppercase', letterSpacing:.3 }}>Agente PMO · se refleja solo</span><span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 8px' }}>{sug.length} por confirmar</span></div>
+              {sug.map((s,i)=>(
+                <div key={s.expenseId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
+                  <div style={{ fontSize:12.5, color:C.text, fontWeight:600 }}>Marcar hito «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
+                  <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>Gasto de trámite: {s.concept}</div>
+                  <div style={{ display:'flex', gap:12, marginTop:6, alignItems:'center' }}>
+                    <button onClick={()=>onAplicarTramite&&onAplicarTramite(p,s)} style={{ fontSize:11.5, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Confirmar</button>
+                    <span onClick={()=>onDescartarTramite&&onDescartarTramite(p,s)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, cursor:'pointer' }}>No corresponde</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          })()}
           {/* ÚLTIMO CONTACTO (Gmail del usuario; admin) */}
           {esAdmin&&(()=>{ const uc=ultCont[String(p.cliente_id)]; if(!uc) return null
             if(uc.loading) return <div style={{ fontSize:11, color:C.grisText, marginBottom:12 }}>Buscando el último correo…</div>
@@ -33558,6 +33593,7 @@ export default function App() {
   const [proySeguidores,setProySeguidores]=useState([])  // proyecto_seguidores: {proyecto_id, miembro} — opt-in "lo sigo en mis proyectos"
   const [proyEntregables,setProyEntregables]=useState([])// proyecto_entregables: {id, proyecto_id, texto, hecho, orden}
   const [proyHitos,setProyHitos]=useState([])            // proyecto_hitos: {id, proyecto_id, titulo, fecha, hecho, responsable}
+  const [pmoSug,setPmoSug]=useState([])                  // pmo_sugerencias: propuestas del Agente PMO (gasto/correo→hito) con compuerta
   const [billing,setBilling]=useState([])
   // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
   const vencFlipDone=useRef(false)
@@ -33891,6 +33927,7 @@ export default function App() {
     supabase.from('proyecto_seguidores').select('proyecto_id,miembro').then(({data})=>{ if(data) setProySeguidores(data) },()=>{})
     supabase.from('proyecto_entregables').select('*').then(({data})=>{ if(data) setProyEntregables(data) },()=>{})
     supabase.from('proyecto_hitos').select('*').then(({data})=>{ if(data) setProyHitos(data) },()=>{})
+    supabase.from('pmo_sugerencias').select('*').then(({data})=>{ if(data) setPmoSug(data) },()=>{})
     // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
   },[session?.user?.id])
 
@@ -33933,6 +33970,20 @@ export default function App() {
   const handleDelEntregable = (id) => { setProyEntregables(p=>p.filter(x=>x.id!==id)); if(!DEMO) supabase.from('proyecto_entregables').delete().eq('id',id).then(()=>{},()=>{}) }
   const handleAddHito = async (proyectoId, titulo, fecha, responsable) => { const t=(titulo||'').trim(); if(!t) return; if(DEMO){ setProyHitos(p=>[...p,{id:'h'+Date.now(),proyecto_id:proyectoId,titulo:t,fecha:fecha||null,hecho:false,responsable:responsable||null}]); return } const { data } = await supabase.from('proyecto_hitos').insert({proyecto_id:proyectoId,titulo:t,fecha:fecha||null,responsable:responsable||null}).select().single(); if(data) setProyHitos(p=>[...p,data]) }
   const handleToggleHito = (id, hecho) => { setProyHitos(p=>p.map(x=>x.id===id?{...x,hecho}:x)); if(!DEMO) supabase.from('proyecto_hitos').update({hecho}).eq('id',id).then(()=>{},()=>{}) }
+  // BLOQUE 2 — "se refleja solo": aplicar una sugerencia de trámite (gasto→hito). Crea el hito HECHO (el gasto implica que el trámite ocurrió), enlaza el gasto al proyecto, aprende el mapeo y audita. Compuerta → aprende → se libera.
+  const handleAplicarTramite = async (p, sug) => {
+    if(DEMO){ setProyHitos(h=>[...h,{id:'h'+Date.now(),proyecto_id:p.id,titulo:sug.hitoTitulo,fecha:sug.fecha||null,hecho:true,responsable:null}]); setExpenses(xs=>xs.map(x=>x.id===sug.expenseId?{...x,proyecto_id:p.id}:x)); setPmoSug(s=>[...s,{id:'s'+Date.now(),proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',estado:'aceptada'}]); return }
+    try{
+      const { data:h } = await supabase.from('proyecto_hitos').insert({proyecto_id:p.id,titulo:sug.hitoTitulo,fecha:sug.fecha||null,hecho:true}).select().single(); if(h) setProyHitos(x=>[...x,h])
+      await supabase.from('expenses').update({proyecto_id:p.id}).eq('id',sug.expenseId); setExpenses(xs=>xs.map(x=>x.id===sug.expenseId?{...x,proyecto_id:p.id}:x))
+      if(sug.conceptKey) learnPut('pmo_tramite_hito', sug.conceptKey, sug.hitoTitulo)
+      const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',payload:{concepto:sug.concept,hito:sug.hitoTitulo,fecha:sug.fecha||null},estado:'aceptada',resolved_at:new Date().toISOString()}).select().single(); if(s) setPmoSug(x=>[...x,s])
+    }catch(e){ appAlert('No se pudo aplicar: '+(e.message||e)) }
+  }
+  const handleDescartarTramite = async (p, sug) => {
+    if(DEMO){ setPmoSug(s=>[...s,{id:'s'+Date.now(),proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',estado:'descartada'}]); return }
+    try{ const { data:s } = await supabase.from('pmo_sugerencias').insert({proyecto_id:p.id,origen:'gasto',origen_id:String(sug.expenseId),tipo:'hito',payload:{concepto:sug.concept},estado:'descartada',resolved_at:new Date().toISOString()}).select().single(); if(s) setPmoSug(x=>[...x,s]) }catch(e){}
+  }
   const handleDelHito = (id) => { setProyHitos(p=>p.filter(x=>x.id!==id)); if(!DEMO) supabase.from('proyecto_hitos').delete().eq('id',id).then(()=>{},()=>{}) }
   // Agregar integrante al equipo → también lo suma a SUS proyectos (seguidor). Así "me involucran".
   const handleAddMiembro = (proyectoId, miembro, rol) => { if(!miembro) return
@@ -35802,7 +35853,7 @@ export default function App() {
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
-            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarTramite={handleAplicarTramite} onDescartarTramite={handleDescartarTramite} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}

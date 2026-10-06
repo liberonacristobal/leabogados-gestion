@@ -131,6 +131,7 @@ export const demoData = {
     { id:'x6', client_id:'c6', type:'gasto', amount:60000,  concept:'Certificados',             category:'Registro Civil', date:'2026-05-20', created_by:'Martina', },
     // Caja chica (gastos por persona, varios sin liquidar)
     { id:'x7',  client_id:'c3', type:'gasto', amount:140000, concept:'Diario Oficial — publicación', category:'Diario Oficial', date:'2026-06-02', created_by:'Martín',  rendered_at:null },
+    { id:'x7b', client_id:'c3', type:'gasto', amount:210000, concept:'Inscripción de extracto en CBR', category:'CBR',            date:'2026-06-04', created_by:'Martín',  rendered_at:null },
     { id:'x8',  client_id:'c3', type:'gasto', amount:90000,  concept:'Fotocopias y trámites',        category:'Otro',           date:'2026-06-05', created_by:'Martín',  rendered_at:null },
     { id:'x9',  client_id:'c7', type:'gasto', amount:75000,  concept:'Notaría — poder',              category:'Notaria',        date:'2026-06-08', created_by:'Martín',  rendered_at:null },
     { id:'x10', client_id:'c5', type:'gasto', amount:40000,  concept:'Estacionamiento y traslados',  category:'Otro',           date:'2026-06-10', created_by:'Martina', rendered_at:null },
