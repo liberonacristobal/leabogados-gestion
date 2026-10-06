@@ -30173,7 +30173,6 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       .filter(x=>x.nx&&x.dd!=null&&x.dd>=0&&x.dd<=7&&x.frio).sort((a,b)=>a.dd-b.dd)
     const riesgoIds = new Set(riesgo.map(x=>String(x.p.id)))
     const nVenc = pend.filter(x=>x.dd!=null&&x.dd<0).length, nSem = pend.filter(x=>x.dd!=null&&x.dd>=0&&x.dd<=7).length, nDet = foco.filter(esDetenido).length
-    const stat = (n,l,col) => <div style={{ flex:1, padding:'11px 8px', textAlign:'center' }}><div style={{ fontSize:20, fontWeight:800, color:n>0?col:C.muted, letterSpacing:'-.02em' }}>{n}</div><div style={{ fontSize:9.5, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginTop:1 }}>{l}</div></div>
     const filaPaso = (x) => { const dc = x.dd<0?C.overdue:x.dd<=2?'#E09B2D':C.soonText; const tc = x.dd<0?C.overdueText:x.dd<=2?C.soonText:C.greenText
       return <div key={x.p.id+'_'+x.h.id} onClick={()=>abrir(x.p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'10px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:dc, flexShrink:0 }}/>
@@ -30210,19 +30209,42 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           </div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · lo que pide tu acción, de un vistazo</div>
         </div>
-        <div style={{ ...card, display:'flex' }}>
-          {stat(nVenc,'Vencidos',C.overdueText)}<div style={{ width:1, background:C.border }}/>{stat(nSem,'Vencen 7 días',C.soonText)}<div style={{ width:1, background:C.border }}/>{stat(nDet,'Sin mover',C.grisText)}<div style={{ width:1, background:C.border }}/>{stat(sinPlan.length,'Sin plan',C.muted)}
-        </div>
-        {riesgo.length>0 && <>{secHd('En riesgo de atraso',riesgo.length,'#E09B2D')}<div style={card}>{riesgo.map(filaRiesgo)}</div></>}
-        {urgentes.length>0 && <>{secHd('Pasos que vencen',urgentes.length,C.overdueText)}<div style={card}>{urgentes.map(filaPaso)}</div></>}
-        {conPlan.length>0 && <>{secHd('Tus proyectos · siguiente paso',conPlan.length)}<div style={card}>{conPlan.slice().sort((a,b)=>{ const na=nextDe(a),nb=nextDe(b); const da=na&&na.plazo?cartDiasPlazo(na.plazo):9999, db=nb&&nb.plazo?cartDiasPlazo(nb.plazo):9999; const aa=((da<=7)||esDetenido(a))?0:1, ab=((db<=7)||esDetenido(b))?0:1; return aa!==ab?aa-ab:da-db }).map(filaProy)}</div></>}
-        {sinPlan.length>0 && <>{secHd('Sin plan — ármalo',sinPlan.length,C.muted)}<div style={card}>{sinPlan.map(p=>(
+        {/* La foto (canon): un protagonista "Por atender" (pasos con plazo), con Vencido/Por vencer anidados; debajo, lo que es de PROYECTOS (sin mover / sin plan). Cada cifra baja a su lista. */}
+        {(()=>{ const irA = id => { const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}) }
+          const nAtender = urgentes.length
+          if(nAtender===0 && riesgo.length===0 && nDet===0 && sinPlan.length===0) return (
+            <div style={{ ...card, display:'flex', alignItems:'center', gap:12, padding:'16px 18px' }}>
+              <span style={{ width:34, height:34, borderRadius:'50%', background:C.greenBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><SIcon n='check' s={18} c={C.greenText}/></span>
+              <div><div style={{ fontSize:14, fontWeight:700, color:C.accent }}>Todo al día</div><div style={{ fontSize:12, color:C.muted, marginTop:1 }}>Nada vence pronto y cada proyecto tiene su plan.</div></div>
+            </div>)
+          const heroCol = nVenc>0?C.overdueText:nAtender>0?C.soonText:C.muted
+          const tile = (n,lbl,bg,col,id) => <div onClick={e=>{ e.stopPropagation(); irA(id) }} style={{ flex:1, background:n>0?bg:C.bgSoft, borderRadius:10, padding:'8px 11px', cursor:'pointer' }}><div style={{ fontSize:17, fontWeight:800, color:n>0?col:C.muted, lineHeight:1.1 }}>{n}</div><div style={{ fontSize:10, fontWeight:600, color:n>0?col:C.muted, marginTop:1 }}>{lbl}</div></div>
+          const mini = (n,lbl,col,id) => <div onClick={()=>irA(id)} style={{ flex:1, padding:'9px 14px', display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}><span style={{ fontSize:15, fontWeight:800, color:n>0?col:C.muted }}>{n}</span><span style={{ fontSize:11, color:C.muted }}>{lbl}</span><span style={{ marginLeft:'auto', color:C.done, fontSize:13 }}>›</span></div>
+          return <div style={card}>
+            <div onClick={()=>irA(riesgo.length?'foco-riesgo':'foco-pasos')} style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 16px', cursor:'pointer' }}>
+              <div style={{ flexShrink:0 }}><div style={{ fontSize:32, fontWeight:800, color:heroCol, lineHeight:1, letterSpacing:'-.02em' }}>{nAtender}</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:3 }}>pasos por atender</div></div>
+              <div style={{ flex:1, display:'flex', gap:9, minWidth:0 }}>
+                {tile(nVenc,'Vencido',C.overdueBg,C.overdueText,'foco-pasos')}
+                {tile(nSem,'Por vencer · 7 días',C.soonBg,C.soonText,'foco-pasos')}
+              </div>
+              <span style={{ color:C.done, fontSize:16, flexShrink:0 }}>›</span>
+            </div>
+            <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
+              {mini(nDet,'proyectos sin mover',C.grisText,'foco-proys')}<div style={{ width:1, background:C.border }}/>{mini(sinPlan.length,'sin plan',C.accent,'foco-sinplan')}
+            </div>
+          </div>
+        })()}
+        {riesgo.length>0 && <div id='foco-riesgo'>{secHd('En riesgo de atraso',riesgo.length,'#E09B2D')}<div style={card}>{riesgo.map(filaRiesgo)}</div></div>}
+        {(()=>{ const lista = urgentes.filter(x=>!riesgoIds.has(String(x.p.id))); if(!lista.length) return null; const col = lista.some(x=>x.dd<0)?C.overdueText:C.soonText
+          return <div id='foco-pasos'>{secHd('Pasos por atender',lista.length,col)}<div style={card}>{lista.map(filaPaso)}</div></div> })()}
+        {conPlan.length>0 && <div id='foco-proys'>{secHd('Tus proyectos · siguiente paso',conPlan.length)}<div style={card}>{conPlan.slice().sort((a,b)=>{ const na=nextDe(a),nb=nextDe(b); const da=na&&na.plazo?cartDiasPlazo(na.plazo):9999, db=nb&&nb.plazo?cartDiasPlazo(nb.plazo):9999; const aa=((da<=7)||esDetenido(a))?0:1, ab=((db<=7)||esDetenido(b))?0:1; return aa!==ab?aa-ab:da-db }).map(filaProy)}</div></div>}
+        {sinPlan.length>0 && <div id='foco-sinplan'>{secHd('Sin plan — ármalo',sinPlan.length,C.muted)}<div style={card}>{sinPlan.map(p=>(
           <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:C.faint||C.done, flexShrink:0 }}/>
             <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div><div style={{ fontSize:11, color:C.muted }}>Elige la operación y nace con sus pasos</div></div>
             <span style={{ color:C.done, fontSize:14 }}>›</span>
           </div>
-        ))}</div></>}
+        ))}</div></div>}
         {!foco.length && <div style={{ ...card, textAlign:'center', fontSize:13, color:C.muted, padding:'32px 16px' }}>No hay proyectos activos con este filtro.</div>}
       </div>
     )
