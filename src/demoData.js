@@ -304,4 +304,30 @@ export const demoData = {
     { id:'sn2', tipo:'oficio', numero:'1892', titulo:'Tratamiento tributario de indemnizaciones por término de contrato', url:'https://www.sii.cl', areas:['Laboral','Tributario'], prioridad:'media', resumen:'Aclara la tributación de pagos por años de servicio sobre el tope legal. Relevante para clientes con desvinculaciones recientes.', brief:'', fecha:new Date(Date.now()-11*864e5).toISOString().slice(0,10), vigente:true },
     { id:'sn3', tipo:'resolucion', numero:'112', titulo:'Obligación de informar contratos con partes relacionadas', url:'https://www.sii.cl', areas:['Corporativo'], prioridad:'media', resumen:'Nueva declaración jurada anual para operaciones entre empresas relacionadas. Puede requerir revisar la estructura de holdings de los clientes.', brief:'', fecha:new Date(Date.now()-20*864e5).toISOString().slice(0,10), vigente:true },
   ],
+  pmo_operaciones: [
+    { id:'op1', nombre:'Constitución de sociedad por aporte', hint:'Constitución con aporte de bienes (inmuebles / acciones).', orden:1, activo:true, pasos:[
+      {t:'Due diligence del aportante y de los bienes', m:false, subs:['Recopilar títulos de dominio','Certificados: dominio vigente, gravámenes','Verificar vigencia y poderes del aportante']},
+      {t:'Diseño de estructura y estatutos', m:false, subs:['Elegir tipo social (SpA / Ltda)','Redactar borrador de estatutos']},
+      {t:'Escritura pública de constitución', m:true, subs:['Agendar notaría','Firma de los comparecientes']},
+      {t:'Publicación en el Diario Oficial (≤60 días)', m:true, subs:[]},
+      {t:'Inscripción del extracto en el CBR (≤60 días)', m:true, subs:[]},
+      {t:'RUT e inicio de actividades en el SII', m:true, subs:[]},
+      {t:'Inscripción de los inmuebles aportados (CBR)', m:true, subs:[]},
+      {t:'Cierre y entrega', m:false, subs:['Armar carpeta societaria']},
+    ]},
+    { id:'op2', nombre:'Reorganización / reestructuración patrimonial', hint:'Holding, división, fusión, aportes + opinión tributaria.', orden:2, activo:true, pasos:[
+      {t:'Diagnóstico tributario y patrimonial', m:false, subs:['Levantar estructura actual','Identificar contingencias']},
+      {t:'Diseño + informe tributario', m:false, subs:['Definir figura','Razón de negocio (art. 64 LIR)']},
+      {t:'Escrituras de los actos', m:true, subs:[]},
+      {t:'Publicaciones e inscripciones', m:true, subs:[]},
+      {t:'Efectos en el SII', m:true, subs:[]},
+      {t:'Cierre y cumplimiento', m:false, subs:[]},
+    ]},
+    { id:'op3', nombre:'Contrato (partes relacionadas)', hint:'Confección y negociación de contratos.', orden:3, activo:true, pasos:[
+      {t:'Levantamiento de la operación', m:false, subs:[]},
+      {t:'Borrador del contrato', m:false, subs:['Objeto, precio, garantías']},
+      {t:'Revisión / negociación', m:false, subs:[]},
+      {t:'Firma', m:true, subs:[]},
+    ]},
+  ],
 }

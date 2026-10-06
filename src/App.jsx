@@ -27250,15 +27250,6 @@ const STAGE_TEMPLATES = {
   juicio: ['Demanda','Contestación','Prueba','Sentencia','Apelación'],
   informe: ['Antecedentes','Análisis','Informe','Entrega'],
 }
-// Plan de HITOS esperados por tipo de asunto = la OBRA con la que nace el proyecto. El trámite (CBR/D.Oficial/Notaría) luego CONFIRMA (marca hecho) el que calce; no es la fuente del plan.
-// Los títulos que un trámite puede confirmar coinciden EXACTO con los que produce el radar (Escritura de constitución / Publicación en Diario Oficial / Inscripción en CBR / Posesión efectiva inscrita / Escritura de compraventa).
-const STAGE_HITOS = {
-  reorg: ['Escritura de constitución','Publicación en Diario Oficial','Inscripción en CBR','Inicio de actividades en SII'],
-  sucesorio: ['Posesión efectiva inscrita','Inscripción de bienes','Adjudicación'],
-  compraventa: ['Promesa firmada','Escritura de compraventa','Inscripción en CBR','Pago de impuestos'],
-  juicio: ['Demanda presentada','Notificación','Audiencia','Sentencia'],
-  informe: ['Recopilación de antecedentes','Borrador de informe','Informe final entregado'],
-}
 const TEMPLATE_LABELS = { reorg:'Reorganización / holding', sucesorio:'Sucesorio', compraventa:'Compraventa', juicio:'Juicio', informe:'Informe / opinión', '':'Genérico' }
 const CART_DOT = { rojo:'#E24B4A', ambar:'#EF9F27', verde:'#1D9E75' }   // semáforo (eje nuevo: salud del proyecto)
 const CART_AV  = (()=>{ const N={CL:'Cristóbal',EE:'Erasmo',MC:'Martín',MP:'Martina',RD:'Rodrigo'}; const o={}; for(const i in N) o[i]=personChip(N[i]).color; return o })()  // color por persona: DERIVA de PERSON_CHIP (fuente única, no duplicar)
@@ -28847,7 +28838,7 @@ function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], curre
     </div>
   )
 }
-function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onMoverEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onSeedHitos, onAddMiembro, onDelMiembro, pmoSug=[], onAplicarTramite, onDescartarTramite, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
+function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores=[], proyEntregables=[], proyHitos=[], onSeguir, onSetTipo, onAddEntregable, onToggleEntregable, onMoverEntregable, onDelEntregable, onAddHito, onToggleHito, onDelHito, onUpdHito, onReorderHitos, onSeedPlan, pmoOps=[], onAddMiembro, onDelMiembro, pmoSug=[], onAplicarTramite, onDescartarTramite, clients=[], sales=[], tasks=[], billing=[], expenses=[], rendiciones=[], anticipos=[], terceros=[], focusId=null, onFocusHandled, currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
@@ -28922,6 +28913,8 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [wsTab,setWsTab] = useState('resumen')                              // subpágina del workspace: resumen|plan|calendario|tareas|equipo|bitacora
   const [dragEnt,setDragEnt] = useState(null)                               // id del entregable que se está arrastrando (tablero de etapas)
   const [dragCol,setDragCol] = useState(null)                               // columna (etapa) sobre la que se está soltando
+  const [dragPaso,setDragPaso] = useState(null)                             // índice del paso que se arrastra (tablero de pasos/carta Gantt)
+  const [subAbierto,setSubAbierto] = useState({})                           // pasos con sus sub-etapas expandidas
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const [pickOpen,setPickOpen] = useState(false)   // panel para elegir qué ventas sin proyecto agregar (opt-in, una a una)
@@ -29273,14 +29266,14 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     if(/junta|reuni|audiencia|comparendo/.test(c)) return <><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 6a3 3 0 0 1 0 6"/></>
     return <><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></>
   }
-  // Fila A+ del landing: nombre · cliente debajo · etapa en chip · próximo paso con icono+color · avatar responsable.
+  // Fila A+ del landing: nombre · cliente debajo · avance en pasos (chip) · próximo paso pendiente con icono+color · avatar responsable.
   const filaProyecto = p => {
-    const _et = etapasDe(p)
-    const idx = _et ? Math.min(p.etapa_idx||0, _et.length-1) : 0
-    const etapaNm = _et ? _et[idx] : (TIPO_META[tipoDe(p)]?.l||'Encargo')
-    const nextH = hitosDe(p).find(h=>!h.hecho && h.fecha)   // hitosDe viene ordenado por fecha asc
-    const cap = nextH?.titulo || p.plazo_label || (p.plazo?'Próximo plazo':'Sin próximo paso')
-    const fecha = nextH?.fecha || p.plazo || null
+    const pasosF = hitosDe(p)
+    const pDone = pasosF.filter(h=>h.hecho).length
+    const nextH = pasosF.filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
+    const etapaNm = pasosF.length ? `${pDone} de ${pasosF.length} pasos` : (TIPO_META[tipoDe(p)]?.l||'Encargo')
+    const cap = nextH?.titulo || p.plazo_label || (p.plazo?'Próximo plazo':(pasosF.length?'Plan al día':'Sin plan aún'))
+    const fecha = nextH?.plazo || nextH?.fecha || p.plazo || null
     const dd = fecha ? cartDiasPlazo(fecha) : null
     const r = riesgoDe(p)
     const tone = ((fecha && dd!=null && dd<0) || r?.nivel==='alto') ? 'late' : (dd!=null && dd<=7) ? 'soon' : 'ok'
@@ -29294,7 +29287,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:15, fontWeight:700, color:C.accent, letterSpacing:'-.01em', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nombre_proyecto}</div>
           <div onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:12, color:C.muted, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', cursor:'pointer' }}>{cnm(p.cliente_id)||'—'}</div>
-          <div style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, fontWeight:600, color:C.muted, border:`1px solid ${C.border}`, borderRadius:7, padding:'3px 9px', marginTop:9, maxWidth:'100%', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{etapaNm}{_et&&<span style={{ color:C.done }}>· {idx+1} de {_et.length}</span>}</div>
+          <div style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, fontWeight:600, color:C.muted, border:`1px solid ${C.border}`, borderRadius:7, padding:'3px 9px', marginTop:9, maxWidth:'100%', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{etapaNm}</div>
           <div style={{ display:'flex', alignItems:'center', gap:7, marginTop:8, fontSize:12.5, fontWeight:600, color:tc }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}>{stepIcon(cap)}</svg><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cap} · {due}</span></div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:11, flexShrink:0, marginTop:2 }}>{perAv(resp,24)}<span style={{ color:C.done, fontSize:15 }}>›</span></div>
@@ -29306,14 +29299,14 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const renderWorkspace = (p) => {
     const terminado = p.activo===false
     const _et = etapasDe(p)
-    const idx = _et ? Math.min(p.etapa_idx||0,_et.length-1) : 0
-    const etapaNm = _et ? _et[idx] : (TIPO_META[tipoDe(p)]?.l||'Encargo')
-    const avancePct = _et ? Math.round((idx/Math.max(1,_et.length-1))*100) : null
-    const dP = cartDiasPlazo(p.plazo)
+    const hs = hitosDe(p); const hsPend = hs.filter(h=>!h.hecho).length; const hsDone = hs.length - hsPend
+    const avancePct = hs.length ? Math.round((hsDone/hs.length)*100) : null   // avance = PASOS hechos / total
+    const nextPaso = hs.filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
+    const proxPlazo = nextPaso?.plazo || p.plazo || null
+    const dP = cartDiasPlazo(proxPlazo)
     const tks = tareasDe(p)
     const venceTk = tks.map(t=>daysLeft(t.due)).filter(d=>d!=null).sort((a,b)=>a-b)[0]
     const ents = entregablesDe(p); const entsDone = ents.filter(e=>e.hecho).length
-    const hs = hitosDe(p); const hsPend = hs.filter(h=>!h.hecho).length
     const eq = equipoDe(p)
     const bit = bitacoraDe(p)
     const cl = clients.find(c=>String(c.id)===String(p.cliente_id))
@@ -29322,52 +29315,46 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     const card = { background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, padding:'12px 14px', marginBottom:12 }
     const secHd = t => <div style={{ fontSize:10, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, marginBottom:8 }}>{t}</div>
     const TABS = [['resumen','Resumen'],['plan','Plan'],['calendario','Calendario'],['tareas','Tareas'],['equipo','Equipo'],['bitacora','Bitácora']]
+    const _pasosOrd = () => hs.slice().sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))
     const descargarCrono = () => {
-      const rows=[['Tipo','Detalle','Fecha','Estado']]
-      if(_et) _et.forEach((s,i)=>rows.push(['Etapa',s,'',i<idx?'Hecha':i===idx?'En curso':'Pendiente']))
-      hs.forEach(h=>rows.push(['Hito',h.titulo,h.fecha||'',h.hecho?'Hecho':'Pendiente']))
-      tks.forEach(t=>rows.push(['Tarea',t.title||'',t.due||'',t.status||'Abierta']))
+      const rows=[['Tipo','Detalle','Plazo','Fecha real','Estado']]
+      _pasosOrd().forEach(h=>{ rows.push(['Paso',h.titulo,h.plazo||'',h.fecha||'',h.hecho?'Hecho':'Pendiente']); ents.filter(e=>String(e.hito_id||'')===String(h.id)).forEach(e=>rows.push(['· etapa',e.texto,'','',e.hecho?'Hecha':'Pendiente'])) })
+      tks.forEach(t=>rows.push(['Tarea',t.title||'',t.due||'','',t.status||'Abierta']))
       const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
       const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`cronograma_${(p.nombre_proyecto||'proyecto').replace(/[^\w]+/g,'_')}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),500)
     }
-    // Carta Gantt descargable (imprimible → PDF): secuencia de etapas (estado) + línea de tiempo de hitos/plazo/tareas con fechas REALES. Para reunión/cliente. (Las barras van en el PDF, no en la UI — regla "no barras" es para pantalla.)
+    // Carta Gantt descargable (imprimible → PDF): un paso por fila, con PLANIFICADO (plazo, rombo contorno) vs REAL (fecha hecha, rombo verde) sobre un eje de meses. Para reunión/cliente. (Barras/marcadores van en el PDF, no en la UI — regla "no barras" es para pantalla.)
     const descargarGantt = () => {
       const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      const dated=[]
-      hs.forEach(h=>{ if(h.fecha) dated.push({f:String(h.fecha).slice(0,10),t:h.titulo,k:'Hito',done:!!h.hecho}) })
-      tks.forEach(t=>{ if(t.due) dated.push({f:String(t.due).slice(0,10),t:t.title||'Tarea',k:'Tarea',done:false}) })
-      if(p.plazo) dated.push({f:String(p.plazo).slice(0,10),t:p.plazo_label||'Plazo del proyecto',k:'Plazo',done:false})
-      dated.sort((a,b)=>a.f.localeCompare(b.f))
+      const pasos=_pasosOrd()
       const hoy=new Date().toISOString().slice(0,10)
-      const allF=[...dated.map(d=>d.f),hoy]
+      const allF=[hoy]; pasos.forEach(h=>{ if(h.plazo) allF.push(String(h.plazo).slice(0,10)); if(h.fecha) allF.push(String(h.fecha).slice(0,10)) })
       const minF=allF.reduce((a,b)=>a<b?a:b), maxF=allF.reduce((a,b)=>a>b?a:b)
       const d0=new Date(minF+'T12:00'), d1=new Date(maxF+'T12:00')
-      // meses del eje
       const months=[]; { const c=new Date(d0.getFullYear(),d0.getMonth(),1); const end=new Date(d1.getFullYear(),d1.getMonth(),1); while(c<=end){ months.push(new Date(c)); c.setMonth(c.getMonth()+1) } }
-      const span=Math.max(1,(d1-d0)); const pos=f=>{ const d=new Date(f+'T12:00'); return Math.max(0,Math.min(100,((d-d0)/span)*100)) }
-      const KCOL={Hito:'#003C50',Tarea:'#537281',Plazo:'#E24B4A'}
+      const span=Math.max(1,(d1-d0)); const pos=f=>{ const d=new Date(String(f).slice(0,10)+'T12:00'); return Math.max(0,Math.min(100,((d-d0)/span)*100)) }
       const monthCols=months.map(m=>`<div style="flex:1;border-left:1px solid #E4E8EB;padding:3px 4px;font-size:9px;color:#537281;text-transform:uppercase">${m.toLocaleDateString('es-CL',{month:'short'})} ${String(m.getFullYear()).slice(2)}</div>`).join('')
       const hoyPos=pos(hoy)
-      const filas = dated.length? dated.map(d=>`<div style="display:flex;align-items:center;border-top:1px solid #EEF1F3">
-        <div style="width:230px;flex-shrink:0;padding:7px 10px;font-size:11px;color:#3D3D3D">${esc(d.t)} <span style="color:#99ABB4;font-size:9px">· ${esc(d.f)}${d.done?' · hecho':''}</span></div>
+      const filas = pasos.length? pasos.map((h,i)=>{ const plan=h.plazo?pos(h.plazo):null, real=h.fecha?pos(h.fecha):null
+        const metaTxt = [h.plazo?`plazo ${String(h.plazo).slice(0,10)}`:null, h.fecha?`hecho ${String(h.fecha).slice(0,10)}`:null].filter(Boolean).join(' · ')
+        return `<div style="display:flex;align-items:center;border-top:1px solid #EEF1F3">
+        <div style="width:250px;flex-shrink:0;padding:7px 10px;font-size:11px;color:#3D3D3D">${i+1}. ${esc(h.titulo)}${metaTxt?` <span style="color:#99ABB4;font-size:9px">· ${esc(metaTxt)}</span>`:''}</div>
         <div style="flex:1;position:relative;height:26px;border-left:1px solid #E4E8EB">
           <div style="position:absolute;left:${hoyPos}%;top:0;bottom:0;width:1px;background:#99ABB4"></div>
-          <div style="position:absolute;left:${pos(d.f)}%;top:50%;transform:translate(-50%,-50%);width:11px;height:11px;background:${d.done?'#1D9E75':KCOL[d.k]};transform:translate(-50%,-50%) rotate(45deg)"></div>
-        </div></div>`).join('') : '<div style="padding:12px;color:#99ABB4;font-size:11px">Sin fechas registradas.</div>'
-      const etapasStrip = _et? `<div style="display:flex;gap:4px;margin:10px 0 16px">${_et.map((s,i)=>{ const st=i<idx?'#1D9E75':i===idx?'#003C50':'#E4E8EB'; const tc=i<=idx?'#fff':'#537281'; return `<div style="flex:1;background:${st};color:${tc};border-radius:5px;padding:6px 7px;font-size:9.5px;font-weight:700;text-align:center">${esc(s)}</div>` }).join('')}</div>` : ''
-      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Carta Gantt — ${esc(p.nombre_proyecto||'Proyecto')}</title><style>@media print{.no-print{display:none}}body{margin:0;font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;background:#fff}</style></head><body><div style="max-width:900px;margin:0 auto;padding:22px 26px">
+          ${plan!=null?`<div title="plazo" style="position:absolute;left:${plan}%;top:50%;width:11px;height:11px;border:1.5px solid #003C50;background:#fff;transform:translate(-50%,-50%) rotate(45deg)"></div>`:''}
+          ${real!=null?`<div title="hecho" style="position:absolute;left:${real}%;top:50%;width:11px;height:11px;background:#1D9E75;transform:translate(-50%,-50%) rotate(45deg)"></div>`:''}
+        </div></div>`}).join('') : '<div style="padding:12px;color:#99ABB4;font-size:11px">Aún sin pasos en el plan.</div>'
+      const done=pasos.filter(h=>h.hecho).length
+      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Carta Gantt — ${esc(p.nombre_proyecto||'Proyecto')}</title><style>@media print{.no-print{display:none}}body{margin:0;font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;background:#fff}</style></head><body><div style="max-width:940px;margin:0 auto;padding:22px 26px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #003C50;padding-bottom:10px;margin-bottom:14px">
-          <div><div style="font-size:16px;font-weight:800;color:#003C50">${esc(p.nombre_proyecto||'Proyecto')}</div><div style="font-size:11px;color:#537281;margin-top:2px">${esc(cnm(p.cliente_id)||'')} · Carta Gantt</div></div>
+          <div><div style="font-size:16px;font-weight:800;color:#003C50">${esc(p.nombre_proyecto||'Proyecto')}</div><div style="font-size:11px;color:#537281;margin-top:2px">${esc(cnm(p.cliente_id)||'')} · Carta Gantt · ${done} de ${pasos.length} pasos</div></div>
           <div style="font-size:10px;color:#537281;text-align:right">${esc(BRAND?.nombre||'')}<br>${esc(hoy)}</div>
         </div>
-        <div style="font-size:9.5px;font-weight:700;color:#537281;text-transform:uppercase;letter-spacing:.3px">Secuencia de etapas${_et?` · ${idx+1} de ${_et.length}`:''}</div>
-        ${etapasStrip}
-        <div style="font-size:9.5px;font-weight:700;color:#537281;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Línea de tiempo · hitos, plazo y tareas</div>
         <div style="border:1px solid #E4E8EB;border-radius:8px;overflow:hidden">
-          <div style="display:flex;background:#F5F7F9"><div style="width:230px;flex-shrink:0;padding:3px 10px;font-size:9px;color:#537281;text-transform:uppercase">Ítem</div>${monthCols}</div>
+          <div style="display:flex;background:#F5F7F9"><div style="width:250px;flex-shrink:0;padding:3px 10px;font-size:9px;color:#537281;text-transform:uppercase">Paso</div>${monthCols}</div>
           ${filas}
         </div>
-        <div style="margin-top:10px;font-size:9.5px;color:#537281">◆ Hito · ◆ Tarea · ◆ Plazo · ◆ Hecho · línea gris = hoy. Fechas reales registradas en el proyecto.</div>
+        <div style="margin-top:10px;font-size:9.5px;color:#537281">◇ plazo planificado · ◆ realizado (verde) · línea gris = hoy. Fechas reales registradas en el proyecto.</div>
         <button class="no-print" onclick="window.print()" style="margin-top:16px;background:#003C50;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer">Imprimir / Guardar PDF</button>
       </div></body></html>`
       const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
@@ -29416,19 +29403,19 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           <div style={{ ...card, padding:0, overflow:'hidden' }}>
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px', borderBottom:`1px solid ${C.border}` }}>
               <div style={{ flexShrink:0 }}>
-                {avancePct!=null ? <><div style={{ fontSize:30, fontWeight:800, color:C.accent, letterSpacing:'-.02em', lineHeight:1 }}>{avancePct}%</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>avance</div></> : <><div style={{ fontSize:19, fontWeight:700, color:C.accent, lineHeight:1.1 }}>{tipoDe(p)==='permanente'?'Permanente':'Puntual'}</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>{tipoDe(p)==='permanente'?'sin etapas':'un entregable'}</div></>}
+                {avancePct!=null ? <><div style={{ fontSize:30, fontWeight:800, color:C.accent, letterSpacing:'-.02em', lineHeight:1 }}>{avancePct}%</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>avance</div></> : <><div style={{ fontSize:17, fontWeight:700, color:C.muted, lineHeight:1.1 }}>Sin plan</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>ármalo en Plan</div></>}
               </div>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13.5, fontWeight:700, color:C.text }}>{_et?`Etapa ${idx+1} de ${_et.length} · ${etapaNm}`:etapaNm}</div>
+                <div style={{ fontSize:13.5, fontWeight:700, color:C.text }}>{hs.length ? (nextPaso?`Siguiente: ${nextPaso.titulo}`:'Plan al día') : 'Aún sin pasos — ármalo en la pestaña Plan'}</div>
                 <div style={{ fontSize:12, color:C.muted, marginTop:3, lineHeight:1.4 }}>{resumenDe(p)}</div>
               </div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:isDesktop?'repeat(4,1fr)':'repeat(2,1fr)' }}>
               {[0,1,2,3].map(i=><div key={i} style={{ borderRight:(isDesktop?(i<3):(i%2===0))?`1px solid ${C.border}`:'none', borderTop:(!isDesktop&&i>1)?`1px solid ${C.border}`:'none' }}>
-                {i===0&&mTile(I_CAL,'Próximo plazo', p.plazo?fmtDia(p.plazo):'—', p.plazo?(dP<0?`vencido ${-dP}d`:dP===0?'hoy':`en ${dP} días`):null, dP<0?C.overdueText:dP<=7?C.soonText:C.muted)}
+                {i===0&&mTile(I_CAL,'Próximo plazo', proxPlazo?fmtDia(proxPlazo):'—', proxPlazo?(dP<0?`vencido ${-dP}d`:dP===0?'hoy':`en ${dP} días`):'sin plazo', dP==null?C.muted:dP<0?C.overdueText:dP<=7?C.soonText:C.muted)}
                 {i===1&&mTile(I_CHECK,'Tareas', tks.length, venceTk!=null?(venceTk<0?'1 vencida':`próxima en ${venceTk}d`):'al día', venceTk!=null&&venceTk<0?C.overdueText:C.muted)}
-                {i===2&&mTile(I_DOC,'Entregables', tipoDe(p)==='permanente'?'—':`${entsDone}/${ents.length}`, tipoDe(p)==='permanente'?null:(ents.length?`${ents.length-entsDone} por cerrar`:'sin definir'), C.muted)}
-                {i===3&&mTile(I_FLAG,'Hitos', tipoDe(p)==='proyecto'?hs.length:'—', tipoDe(p)==='proyecto'?(hsPend?`${hsPend} pendientes`:'todos hechos'):null, C.muted)}
+                {i===2&&mTile(I_FLAG,'Pasos', hs.length?`${hsDone}/${hs.length}`:'—', hs.length?(hsPend?`${hsPend} por hacer`:'todos hechos'):'sin plan', C.muted)}
+                {i===3&&mTile(I_DOC,'Sub-etapas', ents.length?`${entsDone}/${ents.length}`:'—', ents.length?`${ents.length-entsDone} por cerrar`:'—', C.muted)}
               </div>)}
             </div>
           </div>
@@ -29478,81 +29465,66 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           )})()}
         </>}
 
-        {/* PLAN */}
-        {wsTab==='plan' && <>
-          {_et ? <div style={card}>
-            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10, flexWrap:'wrap' }}>
-              {secHd('Etapas')}
-              <select value={p.template||''} onChange={e=>setTemplate(p,e.target.value)} title='Plantilla de etapas' style={{ ...inp, marginLeft:'auto' }}>{Object.keys(TEMPLATE_LABELS).map(k=><option key={k} value={k}>{TEMPLATE_LABELS[k]}</option>)}</select>
+        {/* PLAN — tablero de PASOS tipo carta Gantt: plazo (planificado) + fecha real + sub-etapas; arrastrar para reordenar, marcar hecho, agregar/quitar. */}
+        {wsTab==='plan' && (()=>{
+          const pasos = hitosDe(p).slice().sort((a,b)=> ((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)) || String(a.titulo||'').localeCompare(String(b.titulo||'')))
+          const subsDe = hid => ents.filter(e=>String(e.hito_id||'')===String(hid)).sort((a,b)=>((a.orden||0)-(b.orden||0)))
+          const reorder = (from,to) => { if(from===to||from==null) return; const ids=pasos.map(x=>x.id); const [m]=ids.splice(from,1); ids.splice(to,0,m); onReorderHitos&&onReorderHitos(ids) }
+          // Selector de operación (siembra el plan desde la biblioteca) — para proyectos sin plan o para sumar otra operación.
+          const opSelect = (label) => (pmoOps&&pmoOps.length)
+            ? <select value='' onChange={e=>{ const op=(pmoOps||[]).find(o=>String(o.id)===e.target.value); if(op){ onSeedPlan&&onSeedPlan(p.id,op) } e.target.value='' }} style={{ ...inp, maxWidth:220 }}>
+                <option value=''>{label}</option>{(pmoOps||[]).map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}
+              </select>
+            : null
+          if(!pasos.length) return <div style={{ ...card, textAlign:'center' }}>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:4 }}>Arma el plan del proyecto</div>
+            <div style={{ fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.45 }}>Elige el tipo de operación y se cargan sus pasos (los editas, mueves y marcas hechos). O agrega un paso suelto.</div>
+            <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>{opSelect('Elegir operación…')}<button onClick={()=>onAddHito&&onAddHito(p.id,'Nuevo paso')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', cursor:'pointer' }}>+ Paso suelto</button></div>
+          </div>
+          const done = pasos.filter(h=>h.hecho).length
+          return <>
+            <div style={{ ...card }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' }}>{secHd('Plan de pasos')}<span style={{ fontSize:10, fontWeight:700, color:C.muted }}>{done}/{pasos.length}</span><span style={{ marginLeft:'auto', display:'flex', gap:12, alignItems:'center' }}><span onClick={descargarGantt} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>Carta Gantt</span><span onClick={descargarCrono} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>CSV</span></span></div>
+              {pasos.map((h,i)=>{ const dd=h.plazo?cartDiasPlazo(h.plazo):null; const subs=subsDe(h.id); const open=!!subAbierto[h.id]
+                const plazoCol = h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted)
+                return <div key={h.id} draggable={isDesktop} onDragStart={isDesktop?(()=>setDragPaso(i)):undefined} onDragEnd={isDesktop?(()=>setDragPaso(null)):undefined} onDragOver={isDesktop?(e=>e.preventDefault()):undefined} onDrop={isDesktop?(()=>{ reorder(dragPaso,i); setDragPaso(null) }):undefined}
+                  style={{ borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', padding:'9px 0', opacity:dragPaso===i?.5:1 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+                    {isDesktop && <span title='Arrastra para reordenar' style={{ cursor:'grab', color:C.done, fontSize:13, lineHeight:1, userSelect:'none' }}>⠿</span>}
+                    <span onClick={()=>onToggleHito&&onToggleHito(h.id,!h.hecho)} style={{ width:18, height:18, borderRadius:6, border:`1.5px solid ${h.hecho?C.greenText:C.done}`, background:h.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{h.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <input defaultValue={h.titulo} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==h.titulo) onUpdHito&&onUpdHito(h.id,{titulo:v}) }} style={{ width:'100%', boxSizing:'border-box', fontSize:13, fontWeight:600, color:h.hecho?C.muted:C.text, textDecoration:h.hecho?'line-through':'none', border:'none', background:'none', padding:'1px 2px' }}/>
+                      <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:3, flexWrap:'wrap', paddingLeft:2 }}>
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10.5, color:plazoCol }}>plazo<input type='date' value={h.plazo||''} onChange={e=>onUpdHito&&onUpdHito(h.id,{plazo:e.target.value||null})} style={{ fontSize:10.5, padding:'1px 4px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}/>{h.plazo&&!h.hecho&&dd!=null&&<span style={{ fontWeight:700 }}>{dd<0?`vencido ${-dd}d`:dd===0?'hoy':`en ${dd}d`}</span>}</span>
+                        {h.hecho&&<span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10.5, color:C.greenText, fontWeight:600 }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 12l5 5L20 6"/></svg>{h.fecha?fmtDia(h.fecha):'hecho'}</span>}
+                        <span onClick={()=>setSubAbierto(o=>({...o,[h.id]:!open}))} style={{ fontSize:10.5, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>{subs.length?`${subs.filter(s=>s.hecho).length}/${subs.length} etapas`:'+ etapas'}{subs.length?(open?' ▾':' ▸'):''}</span>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
+                      {!isDesktop && <><span onClick={()=>reorder(i,i-1)} style={{ cursor:i>0?'pointer':'default', color:i>0?C.done:C.border, fontSize:10, lineHeight:1 }}>▲</span><span onClick={()=>reorder(i,i+1)} style={{ cursor:i<pasos.length-1?'pointer':'default', color:i<pasos.length-1?C.done:C.border, fontSize:10, lineHeight:1 }}>▼</span></>}
+                    </div>
+                    <span onClick={()=>onDelHito&&onDelHito(h.id)} title='Quitar paso' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
+                  </div>
+                  {(open||!subs.length&&false)&&subs.length>0&&<div style={{ paddingLeft:38, marginTop:6, display:'flex', flexDirection:'column', gap:4 }}>
+                    {subs.map(e=>(
+                      <div key={e.id} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span onClick={()=>onToggleEntregable&&onToggleEntregable(e.id,!e.hecho)} style={{ width:14, height:14, borderRadius:4, border:`1.5px solid ${e.hecho?C.greenText:C.done}`, background:e.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{e.hecho&&<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
+                        <span style={{ flex:1, fontSize:11.5, color:e.hecho?C.muted:C.text, textDecoration:e.hecho?'line-through':'none' }}>{e.texto}</span>
+                        <span onClick={()=>onDelEntregable&&onDelEntregable(e.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:13, flexShrink:0, lineHeight:1 }}>×</span>
+                      </div>
+                    ))}
+                    <input placeholder='+ etapa…' onKeyDown={ev=>{ if(ev.key==='Enter'&&ev.target.value.trim()){ onAddEntregable&&onAddEntregable(p.id,ev.target.value,null,h.id); ev.target.value='' } }} style={{ fontSize:11, padding:'4px 7px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff', marginTop:2 }}/>
+                  </div>}
+                  {open&&!subs.length&&<div style={{ paddingLeft:38, marginTop:6 }}><input placeholder='+ etapa…' onKeyDown={ev=>{ if(ev.key==='Enter'&&ev.target.value.trim()){ onAddEntregable&&onAddEntregable(p.id,ev.target.value,null,h.id); ev.target.value='' } }} style={{ fontSize:11, padding:'4px 7px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff' }}/></div>}
+                </div>
+              })}
+              <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:12, flexWrap:'wrap', borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
+                <button onClick={()=>onAddHito&&onAddHito(p.id,'Nuevo paso')} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>+ Paso</button>
+                {opSelect('+ Sumar operación…')}
+              </div>
             </div>
-            {_et.map((s,i)=>{ const st=i<idx?'hecha':i===idx?'curso':'pend'; return (
-              <div key={i} onClick={()=>esAdmin&&patch(p,{etapa_idx:i})} style={{ display:'flex', alignItems:'center', gap:11, padding:'8px 0', borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', cursor:esAdmin?'pointer':'default' }}>
-                <span style={{ width:20, height:20, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9.5, fontWeight:700, background:st==='hecha'?C.greenText:st==='curso'?C.accent:'#fff', color:st==='pend'?C.done:'#fff', border:st==='pend'?`1.5px solid ${C.border}`:'none' }}>{st==='hecha'?<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>:i+1}</span>
-                <span style={{ flex:1, fontSize:13, fontWeight:st==='curso'?700:600, color:st==='pend'?C.muted:C.text }}>{s}</span>
-                {st==='curso'&&<span style={{ fontSize:9.5, fontWeight:700, color:C.accent, background:C.azulBg, borderRadius:20, padding:'1px 8px' }}>En curso</span>}
-              </div>
-            )})}
-            {esAdmin&&(()=>{ const fin=idx>=_et.length-1; return <div style={{ textAlign:'right', marginTop:8 }}><button onClick={()=>avanzar(p)} disabled={fin} style={{ fontSize:12, fontWeight:600, color:fin?C.grisText:C.accent, background:'none', border:'none', cursor:fin?'default':'pointer', padding:0 }}>→ Avanzar etapa</button></div> })()}
-          </div> : <div style={{ ...card, fontSize:12, color:C.muted }}>{tipoDe(p)==='permanente'?'Asesoría permanente — sin etapas; se sigue por temas abiertos y actividad.':'Encargo puntual — un entregable y un plazo.'}</div>}
-
-          {/* ENTREGABLES — tablero por etapa (arrastre en desktop, mover con selector en móvil) para 'proyecto'; lista plana para 'puntual' */}
-          {tipoDe(p)==='proyecto'&&_et&&(()=>{
-            const colIdxDe = e => (e.etapa_idx==null||e.etapa_idx<0||e.etapa_idx>=_et.length) ? 'x' : e.etapa_idx
-            const cols = [{ k:'x', label:'Por asignar', idx:null }, ..._et.map((s,i)=>({ k:i, label:s, idx:i }))]
-            const porCol = k => ents.filter(e=>String(colIdxDe(e))===String(k))
-            const entCard = (e,draggable) => (
-              <div key={e.id} draggable={draggable} onDragStart={draggable?(ev=>{ ev.stopPropagation(); setDragEnt(e.id) }):undefined} onDragEnd={draggable?(()=>{ setDragEnt(null); setDragCol(null) }):undefined}
-                style={{ display:'flex', alignItems:'center', gap:7, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'7px 9px', marginBottom:6, cursor:draggable?'grab':'default', opacity:dragEnt===e.id?.5:1 }}>
-                <span onClick={()=>onToggleEntregable&&onToggleEntregable(e.id,!e.hecho)} style={{ width:15, height:15, borderRadius:5, border:`1.5px solid ${e.hecho?C.greenText:C.done}`, background:e.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{e.hecho&&<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
-                <span style={{ flex:1, fontSize:12, color:e.hecho?C.muted:C.text, textDecoration:e.hecho?'line-through':'none' }}>{e.texto}</span>
-                {!draggable&&<select value={colIdxDe(e)==='x'?'x':colIdxDe(e)} onChange={ev=>onMoverEntregable&&onMoverEntregable(e.id, ev.target.value==='x'?null:parseInt(ev.target.value,10))} style={{ fontSize:10, padding:'2px 3px', borderRadius:6, border:`1px solid ${C.border}`, background:'#fff', color:C.muted, maxWidth:96 }}>{cols.map(c=><option key={c.k} value={c.k}>{c.label}</option>)}</select>}
-                <span onClick={()=>onDelEntregable&&onDelEntregable(e.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:14, flexShrink:0, lineHeight:1 }}>×</span>
-              </div>
-            )
-            const colBox = c => { const items=porCol(c.k); const on=String(dragCol)===String(c.k); return (
-              <div key={c.k} onDragOver={isDesktop?(ev=>{ ev.preventDefault(); if(String(dragCol)!==String(c.k)) setDragCol(c.k) }):undefined} onDrop={isDesktop?(()=>{ if(dragEnt!=null&&onMoverEntregable) onMoverEntregable(dragEnt, c.idx); setDragEnt(null); setDragCol(null) }):undefined}
-                style={{ flex:isDesktop?'0 0 200px':'none', width:isDesktop?200:'auto', background:on?C.azulBg:(C.bgSoft||'#F5F7F9'), border:`1px solid ${on?C.accent:C.border}`, borderRadius:10, padding:8, marginBottom:isDesktop?0:8 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:7, padding:'0 2px' }}><span style={{ fontSize:10.5, fontWeight:700, color:c.k==='x'?C.grisText:C.accent, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.label}</span><span style={{ fontSize:9.5, fontWeight:700, color:C.muted }}>{items.length}</span></div>
-                {items.map(e=>entCard(e,isDesktop))}
-                {items.length===0&&<div style={{ fontSize:10.5, color:C.grisText, textAlign:'center', padding:'8px 0' }}>{isDesktop?'Arrastra aquí':'—'}</div>}
-              </div>
-            )}
-            return <div style={card}>
-              <div style={{ display:'flex', alignItems:'center', marginBottom:8 }}>{secHd('Tablero · entregables por etapa')}<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:C.muted }}>{entsDone}/{ents.length}</span></div>
-              <div style={{ display:'flex', flexDirection:isDesktop?'row':'column', gap:10, overflowX:isDesktop?'auto':'visible', paddingBottom:isDesktop?4:0 }}>{cols.map(colBox)}</div>
-              <input value={entDraft} onChange={e=>setEntDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&entDraft.trim()){ onAddEntregable&&onAddEntregable(p.id,entDraft,null); setEntDraft('') } }} placeholder='+ Agregar entregable (entra en «Por asignar»)…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'7px 9px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginTop:10 }}/>
-            </div>
-          })()}
-          {tipoDe(p)==='puntual'&&<div style={card}>
-            <div style={{ display:'flex', alignItems:'center', marginBottom:ents.length?6:4 }}>{secHd('Alcance · entregables')}{ents.length>0&&<span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:C.muted }}>{entsDone}/{ents.length}</span>}</div>
-            {ents.map(e=>(
-              <div key={e.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
-                <span onClick={()=>onToggleEntregable&&onToggleEntregable(e.id,!e.hecho)} style={{ width:16, height:16, borderRadius:5, border:`1.5px solid ${e.hecho?C.greenText:C.done}`, background:e.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{e.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
-                <span style={{ flex:1, fontSize:12.5, color:e.hecho?C.muted:C.text, textDecoration:e.hecho?'line-through':'none' }}>{e.texto}</span>
-                <span onClick={()=>onDelEntregable&&onDelEntregable(e.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
-              </div>
-            ))}
-            <input value={entDraft} onChange={e=>setEntDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&entDraft.trim()){ onAddEntregable&&onAddEntregable(p.id,entDraft); setEntDraft('') } }} placeholder='+ Agregar entregable…' style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'6px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', marginTop:6 }}/>
-          </div>}
-
-          {/* HITOS + CRONOGRAMA + CARTA GANTT */}
-          {tipoDe(p)==='proyecto'&&<div style={card}>
-            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:hs.length?6:4 }}>{secHd('Hitos')}<span style={{ marginLeft:'auto' }}/><span onClick={descargarGantt} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>Carta Gantt</span><span onClick={descargarCrono} style={{ fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer' }}>Cronograma CSV</span></div>
-            {hs.map(h=>{ const dd=h.fecha?cartDiasPlazo(h.fecha):null; return (
-              <div key={h.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'4px 0' }}>
-                <span onClick={()=>onToggleHito&&onToggleHito(h.id,!h.hecho)} style={{ width:16, height:16, borderRadius:5, border:`1.5px solid ${h.hecho?C.greenText:C.done}`, background:h.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{h.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
-                {h.fecha&&<span style={{ fontSize:10.5, fontWeight:700, color:h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.accent), minWidth:58 }}>{fmtDia(h.fecha)}</span>}
-                <span style={{ flex:1, fontSize:12.5, color:h.hecho?C.muted:C.text, textDecoration:h.hecho?'line-through':'none' }}>{h.titulo}</span>
-                {h.responsable&&<span style={{ fontSize:10, color:C.muted }}>{h.responsable}</span>}
-                <span onClick={()=>onDelHito&&onDelHito(h.id)} title='Quitar' style={{ color:C.grisText, cursor:'pointer', fontSize:15, flexShrink:0, lineHeight:1 }}>×</span>
-              </div>
-            )})}
-            <div style={{ display:'flex', gap:6, marginTop:6 }}>
-              <input value={hitoDraft} onChange={e=>setHitoDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&hitoDraft.trim()){ onAddHito&&onAddHito(p.id,hitoDraft,hitoFecha||null); setHitoDraft(''); setHitoFecha('') } }} placeholder='+ Agregar hito…' style={{ flex:1, fontSize:12, padding:'6px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff' }}/>
-              <input type='date' value={hitoFecha} onChange={e=>setHitoFecha(e.target.value)} style={{ fontSize:12, padding:'5px 6px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff' }}/>
-            </div>
-          </div>}
-        </>}
+          </>
+        })()}
 
         {/* CALENDARIO */}
         {wsTab==='calendario' && (()=>{
@@ -33617,6 +33589,7 @@ export default function App() {
   const [proyEntregables,setProyEntregables]=useState([])// proyecto_entregables: {id, proyecto_id, texto, hecho, orden}
   const [proyHitos,setProyHitos]=useState([])            // proyecto_hitos: {id, proyecto_id, titulo, fecha, hecho, responsable}
   const [pmoSug,setPmoSug]=useState([])                  // pmo_sugerencias: propuestas del Agente PMO (gasto/correo→hito) con compuerta
+  const [pmoOps,setPmoOps]=useState(DEMO?(demoData.pmo_operaciones||[]):[])   // pmo_operaciones: biblioteca configurable de pasos por tipo de operación
   const [billing,setBilling]=useState([])
   // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
   const vencFlipDone=useRef(false)
@@ -33951,6 +33924,7 @@ export default function App() {
     supabase.from('proyecto_entregables').select('*').then(({data})=>{ if(data) setProyEntregables(data) },()=>{})
     supabase.from('proyecto_hitos').select('*').then(({data})=>{ if(data) setProyHitos(data) },()=>{})
     supabase.from('pmo_sugerencias').select('*').then(({data})=>{ if(data) setPmoSug(data) },()=>{})
+    supabase.from('pmo_operaciones').select('*').eq('activo',true).order('orden').then(({data})=>{ if(data) setPmoOps(data) },()=>{})
     // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
   },[session?.user?.id])
 
@@ -33987,12 +33961,27 @@ export default function App() {
     if(!DEMO) supabase.from('proyectos_cartera').update({tipo,updated_at:new Date().toISOString()}).eq('id',proyectoId).then(()=>{},()=>{})
   }
   // Fase 2b — entregables (checklist del alcance), hitos múltiples y equipo con roles.
-  const handleAddEntregable = async (proyectoId, texto, etapaIdx=null) => { const t=(texto||'').trim(); if(!t) return; const ei=(etapaIdx==null?null:etapaIdx); if(DEMO){ setProyEntregables(p=>[...p,{id:'e'+Date.now(),proyecto_id:proyectoId,texto:t,hecho:false,etapa_idx:ei}]); return } const { data } = await supabase.from('proyecto_entregables').insert({proyecto_id:proyectoId,texto:t,etapa_idx:ei,orden:(proyEntregables||[]).filter(x=>String(x.proyecto_id)===String(proyectoId)).length}).select().single(); if(data) setProyEntregables(p=>[...p,data]) }
+  const handleAddEntregable = async (proyectoId, texto, etapaIdx=null, hitoId=null) => { const t=(texto||'').trim(); if(!t) return; const ei=(etapaIdx==null?null:etapaIdx); if(DEMO){ setProyEntregables(p=>[...p,{id:'e'+Date.now()+Math.random(),proyecto_id:proyectoId,texto:t,hecho:false,etapa_idx:ei,hito_id:hitoId||null}]); return } const { data } = await supabase.from('proyecto_entregables').insert({proyecto_id:proyectoId,texto:t,etapa_idx:ei,hito_id:hitoId||null,orden:(proyEntregables||[]).filter(x=>String(x.proyecto_id)===String(proyectoId)).length}).select().single(); if(data) setProyEntregables(p=>[...p,data]) }
   const handleToggleEntregable = (id, hecho) => { setProyEntregables(p=>p.map(x=>x.id===id?{...x,hecho}:x)); if(!DEMO) supabase.from('proyecto_entregables').update({hecho}).eq('id',id).then(()=>{},()=>{}) }
   const handleMoverEntregable = (id, etapaIdx) => { const ei=(etapaIdx==null?null:etapaIdx); setProyEntregables(p=>p.map(x=>x.id===id?{...x,etapa_idx:ei}:x)); if(!DEMO) supabase.from('proyecto_entregables').update({etapa_idx:ei}).eq('id',id).then(()=>{},()=>{}) }
   const handleDelEntregable = (id) => { setProyEntregables(p=>p.filter(x=>x.id!==id)); if(!DEMO) supabase.from('proyecto_entregables').delete().eq('id',id).then(()=>{},()=>{}) }
-  const handleAddHito = async (proyectoId, titulo, fecha, responsable) => { const t=(titulo||'').trim(); if(!t) return; if(DEMO){ setProyHitos(p=>[...p,{id:'h'+Date.now(),proyecto_id:proyectoId,titulo:t,fecha:fecha||null,hecho:false,responsable:responsable||null}]); return } const { data } = await supabase.from('proyecto_hitos').insert({proyecto_id:proyectoId,titulo:t,fecha:fecha||null,responsable:responsable||null}).select().single(); if(data) setProyHitos(p=>[...p,data]) }
-  const handleToggleHito = (id, hecho) => { setProyHitos(p=>p.map(x=>x.id===id?{...x,hecho}:x)); if(!DEMO) supabase.from('proyecto_hitos').update({hecho}).eq('id',id).then(()=>{},()=>{}) }
+  const handleAddHito = async (proyectoId, titulo, fecha=null, responsable=null, extra={}) => { const t=(titulo||'').trim(); if(!t) return null
+    const row={ proyecto_id:proyectoId, titulo:t, fecha:fecha||null, responsable:responsable||null, plazo:extra.plazo||null, orden: extra.orden!=null?extra.orden:(proyHitos||[]).filter(x=>String(x.proyecto_id)===String(proyectoId)).length }
+    if(DEMO){ const d={id:'h'+Date.now()+Math.random(),hecho:false,...row}; setProyHitos(p=>[...p,d]); return d }
+    const { data } = await supabase.from('proyecto_hitos').insert(row).select().single(); if(data) setProyHitos(p=>[...p,data]); return data||null }
+  const handleToggleHito = (id, hecho) => { const h=(proyHitos||[]).find(x=>x.id===id); const patch={hecho}; if(hecho&&h&&!h.fecha) patch.fecha=new Date().toISOString().slice(0,10); setProyHitos(p=>p.map(x=>x.id===id?{...x,...patch}:x)); if(!DEMO) supabase.from('proyecto_hitos').update(patch).eq('id',id).then(()=>{},()=>{}) }
+  const handleUpdHito = (id, patch) => { setProyHitos(p=>p.map(x=>x.id===id?{...x,...patch}:x)); if(!DEMO) supabase.from('proyecto_hitos').update(patch).eq('id',id).then(()=>{},()=>{}) }
+  const handleReorderHitos = (orderedIds) => { const pos={}; orderedIds.forEach((id,i)=>pos[String(id)]=i); setProyHitos(p=>p.map(x=>pos[String(x.id)]!=null?{...x,orden:pos[String(x.id)]}:x)); if(!DEMO) orderedIds.forEach((id,i)=>supabase.from('proyecto_hitos').update({orden:i}).eq('id',id).then(()=>{},()=>{})) }
+  // Siembra el PLAN (pasos de una operación) como hitos ordenados + sub-etapas (entregables colgando del hito). La OBRA con la que nace el proyecto.
+  const handleSeedPlan = async (proyectoId, operacion) => {
+    const pasos = operacion?.pasos||[]; if(!pasos.length) return
+    const base = (proyHitos||[]).filter(x=>String(x.proyecto_id)===String(proyectoId)).length
+    if(DEMO){ const nh=[], ne=[]; pasos.forEach((ps,i)=>{ const hid='h'+Date.now()+'_'+i; nh.push({id:hid,proyecto_id:proyectoId,titulo:ps.t,fecha:null,plazo:null,hecho:false,orden:base+i,responsable:null}); (ps.subs||[]).forEach((s,j)=>ne.push({id:'e'+Date.now()+'_'+i+'_'+j,proyecto_id:proyectoId,texto:s,hecho:false,hito_id:hid,etapa_idx:null,orden:j})) }); setProyHitos(p=>[...p,...nh]); setProyEntregables(p=>[...p,...ne]); return }
+    const { data:hs } = await supabase.from('proyecto_hitos').insert(pasos.map((ps,i)=>({proyecto_id:proyectoId,titulo:ps.t,orden:base+i}))).select()
+    if(!hs) return; setProyHitos(p=>[...p,...hs])
+    const subs=[]; pasos.forEach((ps,i)=>{ const h=hs[i]; if(!h) return; (ps.subs||[]).forEach((s,j)=>subs.push({proyecto_id:proyectoId,texto:s,hito_id:h.id,orden:j})) })
+    if(subs.length){ const { data:es } = await supabase.from('proyecto_entregables').insert(subs).select(); if(es) setProyEntregables(p=>[...p,...es]) }
+  }
   // BLOQUE 2 — "se refleja solo": aplicar una sugerencia de trámite (gasto→hito). Crea el hito HECHO (el gasto implica que el trámite ocurrió), enlaza el gasto al proyecto, aprende el mapeo y audita. Compuerta → aprende → se libera.
   // Resuelve (o crea) la fila de pmo_sugerencias para un gasto: si el Agente PMO (edge) ya dejó una 'pendiente', la actualiza en vez de duplicar.
   const _resolverSug = async (p, sug, estado) => {
@@ -34015,15 +34004,6 @@ export default function App() {
   }
   const handleDescartarTramite = async (p, sug) => { try{ await _resolverSug(p,sug,'descartada') }catch(e){} }
   const handleDelHito = (id) => { setProyHitos(p=>p.filter(x=>x.id!==id)); if(!DEMO) supabase.from('proyecto_hitos').delete().eq('id',id).then(()=>{},()=>{}) }
-  // Siembra el PLAN de hitos esperados del tipo de asunto (la obra con la que nace el proyecto). Planificados (no hechos); omite los que ya existen.
-  const handleSeedHitos = async (proyectoId, titulos) => {
-    const ya = new Set((proyHitos||[]).filter(h=>String(h.proyecto_id)===String(proyectoId)).map(h=>(h.titulo||'').toLowerCase().trim()))
-    const nuevos = (titulos||[]).filter(t=>t&&!ya.has(String(t).toLowerCase().trim()))
-    if(!nuevos.length) return
-    if(DEMO){ setProyHitos(p=>[...p,...nuevos.map(t=>({id:'h'+Date.now()+Math.random(),proyecto_id:proyectoId,titulo:t,fecha:null,hecho:false,responsable:null}))]); return }
-    const { data } = await supabase.from('proyecto_hitos').insert(nuevos.map(t=>({proyecto_id:proyectoId,titulo:t,fecha:null}))).select()
-    if(data) setProyHitos(p=>[...p,...data])
-  }
   // Agregar integrante al equipo → también lo suma a SUS proyectos (seguidor). Así "me involucran".
   const handleAddMiembro = (proyectoId, miembro, rol) => { if(!miembro) return
     setProyEquipo(p=> p.some(x=>String(x.proyecto_id)===String(proyectoId)&&x.miembro===miembro)?p:[...p,{proyecto_id:proyectoId,miembro,rol:rol||'apoyo'}])
@@ -35892,7 +35872,7 @@ export default function App() {
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
-            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onSeedHitos={handleSeedHitos} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarTramite={handleAplicarTramite} onDescartarTramite={handleDescartarTramite} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarTramite={handleAplicarTramite} onDescartarTramite={handleDescartarTramite} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
