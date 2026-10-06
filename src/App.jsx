@@ -29774,7 +29774,10 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           const done = pasos.filter(h=>h.hecho).length
           // Fila de paso reutilizable (modo plano y agrupado por fase). i = índice GLOBAL en `pasos` (para reordenar). canReorder: solo en modo plano.
           const pasoRow = (h,i,canReorder) => { const dd=h.plazo?cartDiasPlazo(h.plazo):null; const subs=subsDe(h.id); const open=!!subAbierto[h.id]
-            const tareasPaso = (tks||[]).filter(t=>_docConfirma(t.title||'', h.titulo))   // OLA 4 — tareas que cuelgan de este paso (match por título)
+            // OLA 4 — tareas que cuelgan de este paso (match por título). tAll = todas (abiertas+cerradas) para saber si ya se completaron todas → proponer avanzar el plan.
+            const _mt = t => t && !t.archived && t.title && _docConfirma(t.title, h.titulo) && ((String(t.project_id||'')===String(p.id)) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id)))
+            const tAll = (tasks||[]).filter(_mt); const tareasPaso = tAll.filter(t=>t.status!=='Terminado')
+            const tareasListas = !h.hecho && tAll.length>0 && tareasPaso.length===0   // todas las tareas del paso cerradas → compuerta para marcarlo hecho
             const plazoCol = h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted); const dnd=canReorder&&isDesktop
             return <div key={h.id} draggable={dnd} onDragStart={dnd?(()=>setDragPaso(i)):undefined} onDragEnd={dnd?(()=>setDragPaso(null)):undefined} onDragOver={dnd?(e=>e.preventDefault()):undefined} onDrop={dnd?(()=>{ reorder(dragPaso,i); setDragPaso(null) }):undefined}
                   style={{ borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', padding:'9px 0', opacity:dragPaso===i?.5:1 }}>
@@ -29809,11 +29812,12 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
                   {tareasPaso.length>0 && <div style={{ paddingLeft:38, marginTop:6, display:'flex', flexDirection:'column', gap:4 }}>
                     {tareasPaso.map(t=>{ const td=daysLeft(t.due); return (
                       <div key={t.id} style={{ display:'flex', alignItems:'center', gap:7 }}>
-                        <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar tarea terminada (avanza el plan)' style={{ width:13, height:13, borderRadius:4, border:`1.5px solid ${C.azulInfo}`, flexShrink:0, cursor:'pointer' }}/>
+                        <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar tarea terminada' style={{ width:13, height:13, borderRadius:4, border:`1.5px solid ${C.azulInfo}`, flexShrink:0, cursor:'pointer' }}/>
                         <span onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, fontSize:11.5, color:C.text, cursor:'pointer', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</span>
                         <span style={{ fontSize:9.5, fontWeight:600, color:td==null?C.muted:td<0?C.overdueText:td<=2?C.soonText:C.muted, flexShrink:0 }}>{t.due?(td<0?`vencida ${-td}d`:td===0?'hoy':`en ${td}d`):'tarea'}</span>
                       </div> )})}
                   </div>}
+                  {tareasListas && <div style={{ paddingLeft:38, marginTop:5 }}><span onClick={()=>onToggleHito&&onToggleHito(h.id,true)} style={{ fontSize:11, fontWeight:600, color:C.greenText, cursor:'pointer' }}>Tareas listas · marcar hecho ›</span></div>}
                 </div> }
           // OLA 2 — Fases colapsables (proyectos largos, ≥8 pasos): agrupa por fase en orden de aparición. Reordenar queda en el modo plano.
           const puedeAgrupar = pasos.length>=8; const agr = puedeAgrupar && faseAgr
@@ -35274,18 +35278,25 @@ export default function App() {
   },[expenses,rendiciones])
 
   const handleSaveTask=useCallback(async(f,opts={})=>{
+    // _isNew: marca "tarea nueva" aunque traiga id (caso borrador finalizado al adjuntar archivos)
+    const {_isNew, ...rest} = f
+    const esNueva = _isNew || !rest.id
+    const completed = rest.status==='Terminado' ? (rest.completed_at || new Date().toISOString()) : null
+    if(DEMO){   // demo: actualiza el estado local sin tocar supabase (evita data null → crash en el updater)
+      if(esNueva){ const d={id:'t'+Date.now()+Math.random(), ...rest, completed_at:completed}; setTasks(p=>[d,...p]) }
+      else setTasks(p=>p.map(x=>String(x.id)===String(rest.id)?{...x,...rest,completed_at:completed}:x))
+      setModal(null); return
+    }
     setSaving(true)
     try{
-      // _isNew: marca "tarea nueva" aunque traiga id (caso borrador finalizado al adjuntar archivos)
-      const {_isNew, ...rest} = f
-      const esNueva = _isNew || !rest.id
       const prevTask = rest.id ? (tasks||[]).find(t=>t.id===rest.id) : null   // estado anterior: detectar transición a Terminado
       const taskPayload={...rest,sale_id:rest.sale_id||null,client_id:rest.client_id||null}
       // Sella la fecha de termino al completar; la limpia al reabrir. No sobreescribe si ya estaba.
-      taskPayload.completed_at = taskPayload.status==='Terminado' ? (taskPayload.completed_at || new Date().toISOString()) : null
+      taskPayload.completed_at = completed
       if(esNueva && !taskPayload.assigned_by) taskPayload.assigned_by = user?.name || null
       const{data,error}=await supabase.from('tasks').upsert(taskPayload).select().single()
       if(error)throw error
+      if(!data){ setModal(null); setSaving(false); return }   // guarda defensiva: sin fila → no toca tasks (evita null.id en el updater)
       setTasks(p=>p.some(x=>x.id===data.id)?p.map(x=>x.id===data.id?data:x):[data,...p])
       // Alerta email solo en tarea NUEVA con quien asignado (incluye borrador finalizado)
       if(esNueva && data.who){
