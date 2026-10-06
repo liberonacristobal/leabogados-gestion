@@ -40,6 +40,8 @@ export const demoData = {
     { id:'p4', cliente_id:'c5', nombre_proyecto:'Contrato de distribución', estado:'verde', etapa_idx:3, responsable:'MP', nota:'Enviado a revisión del cliente', plazo_label:null, plazo:new Date(Date.now()+21*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-2*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
     { id:'p5', cliente_id:'c4', nombre_proyecto:'Due diligence de compra', estado:'verde', etapa_idx:1, responsable:'MC', nota:'Revisando carpeta tributaria en Drive', plazo_label:null, plazo:null, ultima_actividad:new Date(Date.now()-1*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
   ],
+  // OLA 3 auto-confirmar: mapeos concepto→paso ya aprendidos ≥2 veces (conceptKey = glosaKey del gasto). "extracto inscripcion" = Inscripción en CBR (x7b).
+  pmo_learn_count: { 'extracto inscripcion': 2 },
   // PLAN de pasos (carta Gantt) de algunos proyectos — para que "Mi foco" muestre el mapa de un vistazo.
   proyecto_hitos: [
     // p1 Reestructuración (frío 18d, con un paso vencido)
