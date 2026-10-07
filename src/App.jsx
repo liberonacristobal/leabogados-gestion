@@ -2616,10 +2616,10 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
               </select>
             </div>}
             {projPorAbogado.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin montos por cobrar al 31 dic.</div>}
-            {(()=>{ const maxV=Math.max(...projPorAbogado.map(x=>x.v),1); return projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
+            {(()=>{ const tot=projPorAbogado.reduce((a,x)=>a+(x.v||0),0); return projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
               <div key={r} onClick={()=>setProjResp(on?null:r)} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 2px',cursor:'pointer',opacity:projResp&&!on?.4:1}}>
-                <span style={{width:64,flexShrink:0,fontSize:12,color:on?(pc.color||C.accent):C.text,fontWeight:on?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
-                <div style={{flex:1,height:8.5,borderRadius:6,background:C.bgSoft,overflow:'hidden'}}><div style={{width:`${Math.max(3,Math.round(v/maxV*100))}%`,height:'100%',background:pc.color||C.muted,borderRadius:6}}/></div>
+                <span style={{width:8,height:8,borderRadius:'50%',background:pc.color||C.muted,flexShrink:0}}/><span style={{width:64,flexShrink:0,fontSize:12,color:on?(pc.color||C.accent):C.text,fontWeight:on?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
+                <span style={{flex:1}}/><span style={{fontSize:11,fontWeight:700,color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{tot>0?Math.round(v/tot*100):0}%</span>
                 <span style={{width:62,flexShrink:0,textAlign:'right',fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(v)}</span>
               </div>
             )})})()}
@@ -2726,10 +2726,10 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:3}}>
               {projPorAbogado.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin montos por cobrar al 31 dic.</div>}
-              {(()=>{ const maxV=Math.max(...projPorAbogado.map(x=>x.v),1); return projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
+              {(()=>{ const tot=projPorAbogado.reduce((a,x)=>a+(x.v||0),0); return projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
                 <div key={r} onClick={()=>setProjResp(on?null:r)} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 2px',cursor:'pointer',opacity:projResp&&!on?.4:1}}>
-                  <span style={{width:64,flexShrink:0,fontSize:12,color:on?(pc.color||C.accent):C.text,fontWeight:on?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
-                  <div style={{flex:1,height:8.5,borderRadius:6,background:C.bgSoft,overflow:'hidden'}}><div style={{width:`${Math.max(3,Math.round(v/maxV*100))}%`,height:'100%',background:pc.color||C.muted,borderRadius:6}}/></div>
+                  <span style={{width:8,height:8,borderRadius:'50%',background:pc.color||C.muted,flexShrink:0}}/><span style={{width:64,flexShrink:0,fontSize:12,color:on?(pc.color||C.accent):C.text,fontWeight:on?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
+                  <span style={{flex:1}}/><span style={{fontSize:11,fontWeight:700,color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{tot>0?Math.round(v/tot*100):0}%</span>
                   <span style={{width:62,flexShrink:0,textAlign:'right',fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(v)}</span>
                 </div>
               )})})()}
@@ -5206,10 +5206,9 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               <div onClick={()=>setOpenArea(open?null:s.area)} style={{cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
                   <span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.area}</span>
-                  <span style={{fontSize:13,fontWeight:600,color:C.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:6,flexShrink:0}}><span style={{fontSize:10,fontWeight:800,borderRadius:20,padding:'2px 8px',background:C.bgSoft,color:C.muted,whiteSpace:'nowrap'}}>{Math.round(w)}% del total</span><span style={{fontSize:13,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span></span>
                 </div>
-                <div style={{height:8.5,borderRadius:6,background:C.bgWarm,overflow:'hidden',margin:'6px 0 5px'}}><div style={{width:`${Math.max(2,w)}%`,height:'100%',background:C.accent,borderRadius:6}}/></div>
-                <div style={{fontSize:11,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct}% recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
+                                <div style={{fontSize:11,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct}% recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
               </div>
               {open&&s.clientes.slice(0,8).map(c=>(
                 <div key={c.cid} onClick={()=>c.cid&&onOpenClientFicha&&onOpenClientFicha(c.cid)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0 6px 14px',borderTop:`0.5px solid ${C.track}`,cursor:'pointer'}}>
@@ -5234,8 +5233,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             {!repr&&<div style={{background:C.ambarBg,borderRadius:10,padding:'8px 11px',marginBottom:10}}><div style={{fontSize:11,color:C.soonText,lineHeight:1.4}}>El margen aún no es representativo: falta cargar el costo de terceros en <b>{serviciosTot.nTotal-serviciosTot.conCosto} ventas</b>. Cárgalo abajo y se enciende con cifras reales.</div></div>}
             {areasCon.map(s=>{ const mp=Math.round(s.margenPct); const cp=Math.max(0,100-mp); return (
               <div key={s.area} style={{marginBottom:9}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.done,fontWeight:500}}>· {s.conCosto}/{s.n} con costo</span></span><span style={{fontWeight:700,color:C.greenText}}>{mp}% <span style={{fontSize:10,color:C.muted,fontWeight:500}}>Margen</span></span></div>
-                <div style={{height:9,borderRadius:6,background:C.track,display:'flex',overflow:'hidden'}}><div style={{width:`${Math.max(1,mp)}%`,background:C.normal}}/><div style={{width:`${cp}%`,background:C.soon}}/></div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.done,fontWeight:500}}>· {s.conCosto}/{s.n} con costo</span></span></div>
+                <div style={{display:'flex',gap:6}}><span style={{fontSize:10,fontWeight:800,borderRadius:20,padding:'2px 8px',background:C.greenBg,color:C.greenText}}>{mp}% margen</span><span style={{fontSize:10,fontWeight:800,borderRadius:20,padding:'2px 8px',background:C.soonBg,color:C.soonText}}>{cp}% terceros</span></div>
               </div>
             )})}
             {areasCon.length===0&&<div style={{fontSize:11,color:C.grisText,marginBottom:8}}>Aún ninguna área con costo cargado.</div>}
@@ -21086,8 +21085,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:8,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div><div style={{fontSize:15,fontWeight:800,color:pen>0?C.accent:C.greenText,lineHeight:1,marginTop:1}}>{pen>0?fmtShort(pen):'$0'}</div></div>
                 {hasBills&&<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>}
               </div>
-              {fac>0&&<><div style={{height:5,background:C.border,borderRadius:4,marginTop:8,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:C.normal,borderRadius:4}}/></div>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:4}}><span>Facturado {fmtShort(fac)}</span><span>Cobrado {fmtShort(cob)}</span></div></>}
+              {fac>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:8}}><span style={{fontSize:10,color:C.muted}}>Facturado <b style={{color:C.text}}>{fmtShort(fac)}</b> · Cobrado <b style={{color:C.text}}>{fmtShort(cob)}</b></span><span style={{fontSize:10,fontWeight:800,borderRadius:20,padding:'2px 8px',background:pct>=80?C.greenBg:C.soonBg,color:pct>=80?C.greenText:C.soonText,whiteSpace:'nowrap'}}>{pct}% cobrado</span></div>}
             </div>
             {hasBills&&open&&<div style={{padding:'0 11px 11px'}}>
               <CotejoVenta sale={s} saleBills={sb} orphans={onReplaceProgramada?cotejoOrphansFor(s):[]} isDesktop={isDesktop} client={client} entities={entities} nested onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?cotejoAsociar:undefined}/>
@@ -27722,7 +27720,7 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
                 </div>
               )
             })}
-            <div style={{width:36,flexShrink:0,display:'flex',alignItems:'center',paddingLeft:2}}><div style={{height:6,borderRadius:4,background:C.track,flex:1,overflow:'hidden'}}><div style={{height:'100%',width:`${Math.min(100,total/9*100)}%`,background:total>=7?'#E24B4A':total>=4?'#E0A93B':total>0?'#1D9E75':'transparent'}}/></div></div>
+            <div style={{width:36,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'flex-end',paddingLeft:2}}>{total>0&&<span style={{fontSize:10,fontWeight:800,borderRadius:20,padding:'2px 7px',background:total>=7?C.overdueBg:total>=4?C.soonBg:C.greenBg,color:total>=7?C.overdueText:total>=4?C.soonText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{total}</span>}</div>
           </div>
         )
       })}
@@ -28607,7 +28605,6 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
               </div>
               {tope>0
                 ? <>
-                  <div style={{height:8,borderRadius:6,background:C.border,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:`${Math.min(100,pct)}%`,background:barCol,borderRadius:6}}/></div>
                   <div style={{fontSize:10,color:C.muted,marginTop:5}}>{fh(cons)} de {tope} h/{periodo==='total'?'total':'mes'}{isAdmin?` · ${tarifa} UF/h · facturable ≈ ${fmtUF(facturableUF)}`:''}{over?` · ${fh(cons-tope)} sobre el tope`:near?` · quedan ${fh(tope-cons)}`:''}</div>
                 </>
                 : <div style={{fontSize:10,color:C.muted,marginTop:6}}>{fh(cons)} este {periodo==='total'?'proyecto':'mes'}{isAdmin?` · ${tarifa} UF/h · facturable ≈ ${fmtUF(facturableUF)}`:''}{isAdmin?' · sin tope':''}</div>}
