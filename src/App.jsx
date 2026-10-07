@@ -19225,7 +19225,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
 const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Movilización','Archivo Judicial','Otro']
-function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient}) {
+function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
   const hoy = new Date().toISOString().slice(0,10)
@@ -19284,7 +19284,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 
   return (
     <>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,marginBottom:16}}>
+      {!sinCabecera&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,marginBottom:16}}>
         <div style={{display:'flex',alignItems:'flex-start',gap:9,minWidth:0}}>
           <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
           <div style={{minWidth:0}}>
@@ -19293,7 +19293,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
           </div>
         </div>
         <button className='qt-close' onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:4,width:40,height:44,display:'flex',alignItems:'center',justifyContent:'center'}}>x</button>
-      </div>
+      </div>}
       {!selectedClient&&(
         <Fld label='Cliente'>
           <div style={{position:'relative'}}>
@@ -22966,6 +22966,106 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
 
 // Editar/Nuevo cliente como PÁGINA navegable (no modal): header "‹ Volver" + ClientForm centrado.
 // Móvil = columna única (idéntico al form de antes); escritorio = ClientForm en 2 columnas (ancho mayor).
+// ─── PÁGINAS (no modales): Tarea y Gasto ─────────────────────────────────────
+// Molde de EditClientePage: header sticky "‹ {origen} | Título | Cliente" + cuerpo en columna (escritorio: columna 680 + lateral 340).
+// Reusan los formularios tal cual; solo se oculta su cabecera propia (.pg-form .qt-head) porque el header lo pone la página.
+function PageHeader({origen,onBack,titulo,ctx}){
+  return (
+    <div style={{padding:'14px 16px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+        <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer',flexShrink:0}}><span style={{fontSize:17,lineHeight:1}}>‹</span> {origen}</span>
+        <span style={{color:C.done,fontWeight:400}}>|</span>
+        <span style={{fontSize:16,fontWeight:800,color:C.accent,flexShrink:0}}>{titulo}</span>
+        {ctx&&<><span style={{color:C.done,fontWeight:400}}>|</span><span style={{fontSize:13,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctx}</span></>}
+      </div>
+    </div>
+  )
+}
+// Tarea = ver (TaskPreview) · editar (QuickTaskForm) · terminar (CierreTareaModal) en UNA página (tab 'tarea'). `pagina` es el mismo objeto
+// que antes recibía el modal ({type,data}); la tarea se lee SIEMPRE viva desde `tasks` por id.
+function TareaPage({pagina,tasks,clients,sales,clientEntities,user,saving,origen,onBack,onSaveTask,onDelegate,onCierre,onEdit,onComplete,onPreview,onOpenClientFicha}){
+  const isDesktop=useIsDesktop()
+  const data=pagina?.data||null
+  const task=(data?.id&&tasks.find(t=>String(t.id)===String(data.id)))||data
+  const client=task?.client_id?clients.find(c=>String(c.id)===String(task.client_id)):null
+  const modo=pagina?.type==='task'?'editar':pagina?.type==='cierreTarea'?'terminar':'ver'
+  const titulo=modo==='ver'?'Tarea':modo==='terminar'?'Terminar tarea':(task?.id?'Editar tarea':'Nueva tarea')
+  const hoy=new Date().toISOString().slice(0,10)
+  const relacionadas=(modo==='ver'&&task?.id)?tasks.filter(t=>String(t.id)!==String(task.id)&&t.status!=='Terminado'&&String(t.client_id||'')===String(task.client_id||'')&&(task.project?t.project===task.project:true)).slice(0,6):[]
+  const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12}
+  const cuerpo = modo==='ver'
+    ? (task?<div style={{...card,padding:'14px 16px'}}><TaskPreview task={task} clients={clients} onClose={onBack} onEdit={onEdit} onComplete={onComplete}/></div>:<div style={{color:C.muted,fontSize:13,padding:20}}>La tarea ya no existe.</div>)
+    : modo==='terminar'
+    ? <div style={{...card,padding:'14px 16px'}}><CierreTareaModal task={task} clients={clients} saving={saving} onConfirm={onCierre} onClose={onBack}/></div>
+    : <div className='pg-form' style={{...card,overflow:'hidden'}}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={onSaveTask} onDelegate={onDelegate} onClose={onBack} saving={saving} preClient={data?.preClient||null} preProject={data?.preProject||null} preDue={data?.preDue||null} preTitle={data?.preTitle||null} user={user} task={data?.id?task:null}/></div>
+  const lateral = isDesktop&&modo==='ver'&&task ? (
+    <div style={{width:340,flexShrink:0,display:'flex',flexDirection:'column',gap:12}}>
+      {client&&<div style={{...card,padding:'12px 14px'}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Cliente</div>
+        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(client.id)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</span><span style={{fontSize:12.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>Ver ficha ›</span></div>
+      </div>}
+      {relacionadas.length>0&&<div style={{...card,padding:'12px 14px'}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Tareas del proyecto · {relacionadas.length}</div>
+        {relacionadas.map(t=>(
+          <div key={t.id} onClick={()=>onPreview&&onPreview(t)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+            <span style={{width:8,height:8,borderRadius:'50%',background:(t.due&&t.due<hoy)?C.overdue:C.done,flexShrink:0}}/>
+            <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}<div style={{fontSize:11,color:C.muted,fontWeight:400}}>{taskAssignees(t).join(', ')||'—'}{t.due?` · ${fmtDate(t.due)}`:''}</div></span>
+            <span style={{color:C.done,fontSize:17}}>›</span>
+          </div>))}
+      </div>}
+    </div>) : null
+  return (
+    <div>
+      <PageHeader origen={pagina?.prev?'Tarea':origen} onBack={onBack} titulo={titulo} ctx={client?.name||null}/>
+      <div style={{display:'flex',alignItems:'flex-start',gap:18,padding:isDesktop?'18px 28px 40px':'14px 16px 40px',maxWidth:isDesktop?1060:640,margin:'0 auto'}}>
+        <div style={{flex:1,minWidth:0,maxWidth:isDesktop?680:undefined}}>{cuerpo}</div>
+        {lateral}
+      </div>
+    </div>
+  )
+}
+// Gasto = registrar gasto (GastosForm) · registrar fondo (FondoForm) · editar (ExpenseEditForm) en UNA página (tab 'gasto').
+// La foto "Fondos" del cliente (fgCliente, fuente única) acompaña al formulario: arriba en móvil, lateral alineado en escritorio.
+function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendiciones,saving,user,origen,onBack,onSwitch,onSaveExpense,onSaveFondo,onDeleteExpense,onAttachChange}){
+  const isDesktop=useIsDesktop()
+  const tipo=pagina?.type
+  const data=pagina?.data||null
+  const expense=tipo==='expenseEdit'?data:null
+  const preClient=tipo==='expenseEdit'?null:(data||null)
+  const clientId=expense?.client_id||preClient?.id||null
+  const client=clientId?clients.find(c=>String(c.id)===String(clientId)):null
+  const titulo=tipo==='expenseEdit'?(expense?.type==='fondo'?'Editar fondo':'Editar gasto'):'Registrar gastos'
+  const fg=clientId?fgCliente(expenses,clientId):null
+  const chips=tipo!=='expenseEdit'&&(
+    <div style={{display:'flex',gap:6,marginBottom:12}}>
+      {[['gastos','Gasto'],['fondo','Fondo']].map(([k,l])=>{ const on=tipo===k; return <span key={k} onClick={()=>!on&&onSwitch(k)} style={{fontSize:11.5,fontWeight:600,borderRadius:20,padding:'5px 11px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.card,color:on?'#fff':C.text,cursor:'pointer'}}>{l}</span> })}
+    </div>)
+  const foto=fg&&(
+    <div style={{background:C.azulBg,border:`1px solid ${C.tileLineOn}`,borderRadius:12,padding:'12px 14px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.5,marginBottom:3}}>Fondos</div>
+      <div style={{fontSize:22,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(fg.saldo)}</div>
+      <div style={{fontSize:11.5,color:C.muted}}>{client?.name}{fg.fondos>0?` · recibidos ${fmt(fg.fondos)} · gastos ${fmt(fg.gastos)}`:''}</div>
+    </div>)
+  const form = tipo==='fondo'
+    ? <FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={onSaveFondo} onClose={onBack} saving={saving} preClient={preClient} preDev={!!pagina?.dev}/>
+    : tipo==='expenseEdit'
+    ? <div className='qt-body'><ExpenseEditForm expense={expense} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={onSaveExpense} onClose={onBack} onDelete={onDeleteExpense} saving={saving} user={user} onAttachChange={onAttachChange}/></div>
+    : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} sinCabecera/></div>
+  return (
+    <div>
+      <PageHeader origen={origen} onBack={onBack} titulo={titulo} ctx={client?.name||null}/>
+      <div style={{padding:isDesktop?'18px 28px 40px':'14px 16px 40px',maxWidth:isDesktop?1060:640,margin:'0 auto'}}>
+        {chips}
+        <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12}}>
+          {!isDesktop&&foto}
+          <div className='pg-form' style={{flex:1,minWidth:0,maxWidth:isDesktop?680:undefined,width:'100%',boxSizing:'border-box',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{form}</div>
+          {isDesktop&&foto&&<div style={{width:340,flexShrink:0}}>{foto}</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function EditClientePage({client, sales, clients, saving, onSave, onDelete, onOpenExisting, onLinkDriveFolder, onBack}){
   const isDesktop=useIsDesktop()
   const esNuevo=!client?.id
@@ -24771,7 +24871,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
   )
 }
 
-function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName,setTab,navTo,isAdmin,onOpenClientFicha}) {
+function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,onPreview,currentUserName,setTab,navTo,isAdmin,onOpenClientFicha}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const hoy = new Date()
   const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
@@ -24882,7 +24982,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
     const client=clients.find(c=>c.id===t.client_id)
     const bs=bsCard(t.due)
     return (
-      <div onClick={()=>setPreview(t)} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:'pointer'}}>
+      <div onClick={()=>(onPreview||setPreview)(t)} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:'pointer'}}>
         <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
           {bigDate(t.due,done?C.muted:urgencyColor(t.due,t.status))}
           <div style={{flex:1,minWidth:0}}>
@@ -25118,7 +25218,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
               <button onClick={()=>setSelDay(null)} style={{marginLeft:'auto',background:'none',border:'none',color:C.done,cursor:'pointer',fontSize:16,lineHeight:1,padding:0}}>×</button>
             </div>
             {ts.map(t=>{ const u=_urgCal(t.due); const cl=clients.find(x=>x.id===t.client_id); return (
-              <div key={t.id} onClick={()=>setPreview(t)} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+              <div key={t.id} onClick={()=>(onPreview||setPreview)(t)} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
                 <span style={{width:7,height:7,borderRadius:'50%',background:u.dot,flexShrink:0,marginTop:4}}/>
                 <div style={{minWidth:0,flex:1}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div><div style={{fontSize:11,color:C.muted}}>{cl?cl.name:'Sin cliente'}{taskAssignees(t).length?` · ${taskAssignees(t).join(', ')}`:''}</div></div>
               </div>
@@ -33874,7 +33974,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
+const TAB_LABELS = {tarea:'Tarea',gasto:'Gasto',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
@@ -34275,7 +34375,9 @@ export default function App() {
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
   const isDesktop = useIsDesktop()   // Fase 1: shell de escritorio (sidebar + ancho) vs móvil actual
-  const [modal,setModal]=useState(null)
+  const [modal,_setModal]=useState(null)
+  const [pagina,setPagina]=useState(null)        // página activa (tabs 'tarea'/'gasto'): mismo objeto {type,data} que antes recibía el modal, + prev (estado anterior dentro de la misma página)
+  const pageClosingRef=useRef(false)             // evita doble goBack cuando un guardado llama setModal(null) dos veces (handler + handleSaveX)
   const [devEmail,setDevEmail]=useState(null)   // {client,amount,fecha,rend,rendN} → abre DevolucionEmailModal tras guardar una devolución
   const [openFichaId,setOpenFichaId]=useState(null)   // abrir la Ficha→Financiero de un cliente desde otra vista (ej. Facturación)
   const [carteraFocus,setCarteraFocus]=useState(null)   // abrir un proyecto puntual en Cartera desde el Inicio ("Mis proyectos")
@@ -34301,6 +34403,22 @@ export default function App() {
     setTab(dest.tab); setTimeout(()=>restoreScroll({w:0,d:0}),0)
   },[tab,openFichaId])
   const goBack=useCallback(()=>{ if(navStack.length) handleBackOrigin(); else setTab(userRole==='admin'?'dashboard':'tasks') },[navStack,userRole,handleBackOrigin])
+  // Tarea y Gasto son PÁGINAS (no modales). Se intercepta setModal para que TODOS los puntos de apertura existentes (setModal({type:'task'|...}))
+  // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
+  // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
+  const setModal=useCallback((m)=>{
+    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto'}
+    const pg=m&&m.type?PAGE_OF[m.type]:null
+    if(pg){ _setModal(null); pageClosingRef.current=false
+      if(tab===pg){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
+      else { setPagina({...m,prev:null}); navTo({tab:pg}) }
+      return }
+    if(m==null&&(tab==='tarea'||tab==='gasto')){ if(pageClosingRef.current) return; pageClosingRef.current=true
+      if(pagina?.prev){ setPagina(pagina.prev); setTimeout(()=>restoreScroll({w:0,d:0}),0) } else goBack()
+      return }
+    _setModal(m)
+  },[tab,navTo,goBack,pagina])
+  useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
   // Cerrar el editor de cliente: si está como PÁGINA (tab editCliente) vuelve al lugar exacto (goBack); si aún fuera un modal, lo cierra.
   const closeClientEditor=useCallback(()=>{ if(tab==='editCliente') goBack(); else setModal(null) },[tab,goBack])
   const recordRecent=useCallback((item)=>{ if(!item||!item.id||item.type==='view') return; setNavRecents(p=>{ const next=[{type:item.type,id:item.id,label:item.label},...p.filter(x=>!(x.type===item.type&&String(x.id)===String(item.id)))].slice(0,6); try{localStorage.setItem('nav_recents',JSON.stringify(next))}catch(_){} return next }) },[])
@@ -34510,12 +34628,14 @@ export default function App() {
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
-    if(userRole==='limited' && tab!=='editCliente' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')   // editCliente = página de edición (drill fuera de la barra)
+    const esPagina=tab==='editCliente'||tab==='tarea'||tab==='gasto'   // páginas de edición (drill fuera de la barra)
+    if((tab==='tarea'||tab==='gasto')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
+    if(userRole==='limited' && !esPagina && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
-    if(userRole==='admin' && tab!=='facturasDelMes' && tab!=='editCliente' && tab!=='socios' && tab!=='resultadoAnio' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
+    if(userRole==='admin' && tab!=='facturasDelMes' && !esPagina && tab!=='socios' && tab!=='resultadoAnio' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
     // Módulo apagado (entitlements): si la vista actual pertenece a un módulo no contratado, redirige. Para LEA (todo ON) es inerte.
     if(VIEW_MODULO[tab] && !moduloOn(VIEW_MODULO[tab])) setTab(userRole==='admin'?'dashboard':'tasks')
-  },[userRole,tab,modVer])
+  },[userRole,tab,modVer,pagina])
 
   const [clientEntities,setClientEntities] = useState([])
   // Suma conciliada por factura (respaldo bancario) — fuente única del badge en Facturación y la ficha.
@@ -36458,6 +36578,7 @@ export default function App() {
         .modal-fs .qt-body{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
         .qt-volver{display:none}
         .modal-fs .qt-volver{display:inline-flex}
+        .pg-form .qt-head,.pg-form .qt-close,.pg-form .qt-volver{display:none!important}   /* páginas Tarea/Gasto: el header lo pone la página, no el formulario (los forms traen display inline) */
         .modal-fs .qt-close{display:none!important}
         .cc-body{display:flex;align-items:center;gap:10px}
         .cc-stats{flex:1;min-width:0;border-left:1px solid ${C.border};padding-left:11px;display:flex;flex-direction:column;gap:4px}
@@ -36572,11 +36693,13 @@ export default function App() {
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
+            {tab==='tarea'&&pagina&&<TareaPage pagina={pagina} tasks={tasks} clients={clients} sales={sales} clientEntities={clientEntities} user={user} saving={saving} origen={TAB_LABELS[navStack[navStack.length-1]?.tab]||'Volver'} onBack={()=>setModal(null)} onSaveTask={handleSaveTask} onDelegate={handleDelegateTask} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onOpenClientFicha={handleOpenClientFicha} onCierre={({estado,detalle,files})=>{ const t=pagina.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/>}
+            {tab==='gasto'&&pagina&&<GastoPage pagina={pagina} clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} rendiciones={rendiciones} saving={saving} user={user} origen={TAB_LABELS[navStack[navStack.length-1]?.tab]||'Volver'} onBack={()=>setModal(null)} onSwitch={k=>setPagina(p=>({...p,type:k}))} onSaveExpense={handleSaveExpense} onDeleteExpense={handleDeleteExpense} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))} onSaveFondo={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }}/>}
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha} onIngestPropuesta={handleIngestPropuestaDrive}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} onReclasificarTercero={handleReclasificarTercero} onBuscarSII={handleBuscarSII} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
-            {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
+            {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
             {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onSaveOperacion={handleSaveOperacion} onDelOperacion={handleDelOperacion} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarEvidencia={handleAplicarEvidencia} onDescartarEvidencia={handleDescartarEvidencia} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
@@ -36700,15 +36823,13 @@ export default function App() {
           </div>
         </div></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
-        {modal?.type==='gastos'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)}><div className='qt-body' style={{paddingTop:'calc(env(safe-area-inset-top,0px) + 18px)'}}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></div></Modal>}
+        {/* 'gastos' / 'fondo' / 'expenseEdit' ya NO son modales: viven en la página navegable 'gasto' (GastoPage, ver render de tabs). setModal los redirige. */}
         {modal?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
         <Modal fullscreenOnMobile fullscreen fsMaxWidth={980} title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={cerrar} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>
         )})()}
         {modal?.type==='clientLimited'&&<Modal fullscreenOnMobile title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){appAlert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
-        {modal?.type==='fondo'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null} preDev={!!modal?.dev}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
         {modal?.type==='ajuste'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='expenseEdit'&&<Modal fullscreen fsMaxWidth={660} title={(()=>{ const cn=modal.data?.client_id?(clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||null):null; const tipo=modal.data?.type==='fondo'?'Editar fondo':'Editar gasto'; return <><span style={{color:C.accent}}>{tipo}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal fullscreenOnMobile title='Sincronización con Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onChanged={async()=>{const c=await getClients();setClients(c)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal fullscreenOnMobile title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal fullscreenOnMobile title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
@@ -36746,9 +36867,7 @@ export default function App() {
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} onClose={()=>setModal(null)}/>}
         {modal?.type==='report'&&<Modal fullscreenOnMobile title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} preTitle={modal.data?.preTitle||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
-        {modal?.type==='taskPreview'&&<Modal fullscreenOnMobile title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
-        {modal?.type==='cierreTarea'&&<Modal fullscreenOnMobile title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>{ const t=modal.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/></Modal>}
+        {/* 'task' / 'taskPreview' / 'cierreTarea' ya NO son modales: viven en la página navegable 'tarea' (TareaPage, ver render de tabs). setModal los redirige. */}
         {/* "Editar/Nuevo cliente" ya NO es modal: es la página navegable editCliente (ver render arriba). */}
       </div>
       {undoToast&&(
