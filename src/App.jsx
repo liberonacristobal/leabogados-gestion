@@ -4501,7 +4501,7 @@ function ComparativoSocios({socios=[], heroData=null, year=new Date().getFullYea
         </div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,fontSize:16,fontWeight:800,color:'#fff'}}><span style={{width:12,height:12,borderRadius:'50%',background:rc}}/>{s.abo}</div>
-      <div style={{fontSize:12,color:'#B9CEDB',fontFamily:MONO,textAlign:'center'}}>{fmtShort(s.cobradoNeto)} deja · de {fmtShort(s.vendido)}</div>
+      <div style={{fontSize:12,color:'#B9CEDB',fontVariantNumeric:'tabular-nums',textAlign:'center'}}>{fmtShort(s.cobradoNeto)} deja · de {fmtShort(s.vendido)}</div>
     </div>
   )}
   // Barras espejo con FUENTE ÚNICA (vendido/facturado, mismas cifras que Inicio). El "cobrado a caja" se reconectará a la fuente de Inicio (banco/conciliación); NO se calcula aquí para no divergir.
@@ -4514,10 +4514,10 @@ function ComparativoSocios({socios=[], heroData=null, year=new Date().getFullYea
     <div style={{marginTop:15}}>
       <div style={{fontSize:9,fontWeight:800,letterSpacing:.6,textTransform:'uppercase',color:'#9FC4DE',textAlign:'center',marginBottom:6}}>{lab}</div>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span style={{fontFamily:MONO,fontSize:13,fontWeight:800,minWidth:54,textAlign:'right',color:'#fff'}}>{cTxt}</span>
+        <span style={{fontVariantNumeric:'tabular-nums',fontSize:13,fontWeight:800,minWidth:54,textAlign:'right',color:'#fff'}}>{cTxt}</span>
         <span style={{flex:1,height:16,background:'rgba(255,255,255,.1)',borderRadius:6,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,right:0,width:cPct+'%',background:heroCol('Cristóbal'),borderRadius:6}}/></span>
         <span style={{flex:1,height:16,background:'rgba(255,255,255,.1)',borderRadius:6,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,left:0,width:ePct+'%',background:heroCol('Erasmo'),borderRadius:6}}/></span>
-        <span style={{fontFamily:MONO,fontSize:13,fontWeight:800,minWidth:54,textAlign:'left',color:'#fff'}}>{eTxt}</span>
+        <span style={{fontVariantNumeric:'tabular-nums',fontSize:13,fontWeight:800,minWidth:54,textAlign:'left',color:'#fff'}}>{eTxt}</span>
       </div>
     </div>
   )
@@ -4592,13 +4592,13 @@ function ComparativoSocios({socios=[], heroData=null, year=new Date().getFullYea
         return (
           <div key={r.k} style={{display:'grid',gridTemplateColumns:`1fr ${midW}px 1fr`,alignItems:'center',gap:10,padding:'8px 16px'}}>
             <div style={{display:'flex',flexDirection:'row-reverse',alignItems:'center',gap:9,minWidth:0}}>
-              <span style={{fontFamily:MONO,fontSize:13,fontWeight:cBet?800:600,minWidth:valW,textAlign:'left',color:C.text}}>{_cmpFmt(C1[r.k],r.f)}</span>
+              <span style={{fontVariantNumeric:'tabular-nums',fontSize:13,fontWeight:cBet?800:600,minWidth:valW,textAlign:'left',color:C.text}}>{_cmpFmt(C1[r.k],r.f)}</span>
               <span style={{height:11,borderRadius:6,flex:1,background:C.bgSoft,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,right:0,width:wa+'%',background:cCol,borderRadius:6}}/></span>
             </div>
             <span style={{textAlign:'center',fontSize:10,color:C.muted,fontWeight:600}}>{r.l}</span>
             <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
               <span style={{height:11,borderRadius:6,flex:1,background:C.bgSoft,position:'relative',overflow:'hidden'}}><span style={{position:'absolute',top:0,bottom:0,left:0,width:wb+'%',background:eCol,borderRadius:6}}/></span>
-              <span style={{fontFamily:MONO,fontSize:13,fontWeight:eBet?800:600,minWidth:valW,textAlign:'right',color:C.text}}>{_cmpFmt(E1[r.k],r.f)}</span>
+              <span style={{fontVariantNumeric:'tabular-nums',fontSize:13,fontWeight:eBet?800:600,minWidth:valW,textAlign:'right',color:C.text}}>{_cmpFmt(E1[r.k],r.f)}</span>
             </div>
           </div>
         )})}
@@ -5089,7 +5089,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Seguimiento',sub:`${cartera.riesgo.length+cartera.dormido.length} sin avanzar · toca empujar`,ct:cartera.riesgo.length+cartera.dormido.length,ctCol:(cartera.riesgo.length+cartera.dormido.length)>0?C.soonText:C.greenText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
             {k:'servicios',bg:C.ambarBg,fg:C.soonText,t:'Servicios y precios',sub:serviciosTot.areas&&servicios[0]?`Top: ${servicios[0].area}`:'',ct:serviciosTot.areas,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3.5 3.5h7l9.5 9.5-7 7L3.5 10.5z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>},
             {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot}%`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
-            {k:'socios',bg:C.azulBg,fg:C.accent,t:'Socios · la foto',sub:'todos los KPIs por abogado',ct:socios.length||null,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="8" cy="8" r="3"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 19a4 4 0 0 1 6.5-3.1"/></svg>},
+            {k:'socios',bg:C.azulBg,fg:C.accent,t:'Socios · la foto',sub:'todas las cifras por abogado',ct:socios.length||null,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="8" cy="8" r="3"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 19a4 4 0 0 1 6.5-3.1"/></svg>},
             {k:'ia',bg:'#EFEAF7',fg:'#5B3E8E',t:'Asesor IA · Foco y Plan',sub:'Pregúntale · Foco semana · Plan del Año',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>},
           ]; return SECS.map((s)=>{ const open=biSec===s.k; return (
             <div key={s.k} onClick={()=>setBiSec(open?null:s.k)} style={{cursor:'pointer',background:open?C.bgSoft:C.surface,border:`1px solid ${open?s.fg:C.border}`,borderRadius:12,padding:'13px 14px'}}>
@@ -5822,7 +5822,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
                             <span style={{fontSize:10,color:iv.revisar.has(String(b.id))?C.soonText:C.muted,fontVariantNumeric:'tabular-nums',fontWeight:iv.revisar.has(String(b.id))?700:400}}>{b.due?fmtFechaDMY(b.due).slice(0,5):'—'}</span>
                             <span style={{minWidth:0,overflow:'hidden'}}>
                               <span style={{fontSize:12,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'block'}}>{cn}</span>
-                              {iv.revisar.has(String(b.id))?<span style={{fontSize:10,fontWeight:700,color:C.soonText}} title='Fecha anterior al año de la venta — revisar'>⚠ revisar fecha</span>:<span style={{fontSize:10,fontWeight:600,color:est.text}}>{est.label}</span>}
+                              {iv.revisar.has(String(b.id))?<span style={{fontSize:10,fontWeight:700,color:C.soonText}} title='Fecha anterior al año de la venta — revisar'>Revisar fecha</span>:<span style={{fontSize:10,fontWeight:600,color:est.text}}>{est.label}</span>}
                             </span>
                             <span style={{fontSize:12,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmtShort(montoFactura(b))}</span>
                           </div>
@@ -8217,7 +8217,7 @@ function parseDTE(d){
 }
 // Módulos del estudio (entitlements): qué tiene contratado el estudio. Apagar uno lo oculta de la nav para todos.
 // Fuente de verdad: learnings 'fd_modulo_off' (value 'off'/'on'). Para LEA: sin filas = todo ON = sin cambio.
-const MODULOS_DESC = { nucleo:'Clientes, tareas, dashboard', horas:'Timesheet, rentabilidad, repricing', finanzas:'Ventas, facturación, cobranza, conciliación', sii:'DTE, RCV, factura electrónica', gastos:'Rendición, caja chica, notaría', proyectos:'Cartera, plazos, calendario', bi:'Inteligencia, márgenes, oportunidades', ialegal:'Redacción, plazos, Drive', portal:'Portal externo del cliente' }
+const MODULOS_DESC = { nucleo:'Clientes, tareas, inicio', horas:'Timesheet, rentabilidad, repricing', finanzas:'Ventas, facturación, cobranza, conciliación', sii:'DTE, RCV, factura electrónica', gastos:'Rendición, caja chica, notaría', proyectos:'Cartera, plazos, calendario', bi:'Inteligencia, márgenes, oportunidades', ialegal:'Redacción, plazos, Drive', portal:'Portal externo del cliente' }
 function ModulosModal({ onChange }){
   const [off,setOff] = useState(()=>new Set(MODULOS_OFF))
   const [busy,setBusy] = useState(false)
@@ -8563,7 +8563,7 @@ function RetirosOficinaModal({ expenses=[], clients=[], billing=[], terceros=[],
         {cmp('Margen acumulado', margenYTD, 100, C.greenText)}
         {cmp('Ya retirado', d.total, margenYTD>0?d.total/margenYTD*100:0, C.tealText)}
         {cmp('Disponible para retirar', disponible, margenYTD>0?disponible/margenYTD*100:0, C.done)}
-        <div style={{padding:'4px 16px 12px',fontSize:11,color:disponible<0?C.overdueText:C.muted}}>{disponible<0?`⚠ Se ha retirado más que la utilidad del año (${fmt(-disponible)} sobre el margen).`:`Van ${pctRet}% del margen distribuido — control de que los retiros no superen la utilidad real.`}</div>
+        <div style={{padding:'4px 16px 12px',fontSize:11,color:disponible<0?C.overdueText:C.muted}}>{disponible<0?`Se ha retirado más que la utilidad del año (${fmt(-disponible)} sobre el margen).`:`Van ${pctRet}% del margen distribuido — control de que los retiros no superen la utilidad real.`}</div>
       </div>) })()}
     {d.rows.length>0 && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginTop:12}}>
       <div style={{padding:'12px 16px 4px',fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>Movimientos</div>
@@ -9674,7 +9674,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
           <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(prog.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(prog.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {prog.concept||sale?.title||'—'}</span></div>
           <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(monto)}</span>
         </div>
-        <div style={{fontSize:10.5,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:conf==='alta'?C.greenText:C.soonText}}>{conf==='alta'?'✓ alta confianza':'⚠ revisar'}</span> · {razones.join(' · ')}</div>
+        <div style={{fontSize:10.5,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:conf==='alta'?C.greenText:C.soonText}}>{conf==='alta'?'✓ alta confianza':'Revisar'}</span> · {razones.join(' · ')}</div>
         <div style={{display:'flex',gap:12,marginTop:5}}>
           {onOpenFactura&&<span onClick={()=>onOpenFactura(prog)} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer'}}>Ver ficha ›</span>}
           {onRetirarFantasmas&&<span onClick={async()=>{ if(!(await appConfirm(`Retirar esta cuota (ya emitida) por ${fmt(monto)}. Reversible. ¿Confirmas?`))) return; try{ await onRetirarFantasmas([{progId:prog.id, realId:posterior?.id||null, monto}]); setCfRetiradas(s=>new Set([...s,String(prog.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } }} style={{fontSize:11,fontWeight:600,color:C.greenText,cursor:'pointer'}}>Retirar</span>}
@@ -15670,7 +15670,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <span style={{fontSize:13,color:C.done,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           </span>
         </div>
-        {st&&<div style={{fontSize:11,fontWeight:600,color:st==='pagada'?C.overdueText:st==='rendida'?C.coralText:C.muted,padding:'0 12px 6px 38px'}}>{st==='pagada'?'⚠ Ya pagada a la notaría — no la cargues de nuevo':st==='rendida'?'⚠ Ya rendida al cliente':'Ya cargada — se omite al importar'}</div>}
+        {st&&<div style={{fontSize:11,fontWeight:600,color:st==='pagada'?C.overdueText:st==='rendida'?C.coralText:C.muted,padding:'0 12px 6px 38px'}}>{st==='pagada'?'Ya pagada a la notaría — no la cargues de nuevo':st==='rendida'?'Ya rendida al cliente':'Ya cargada — se omite al importar'}</div>}
         {open&&<div style={{padding:'2px 12px 12px 38px',background:sel?'#fff':C.bgSoft}}>
           <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}><tbody>
             <tr><td style={{color:C.muted,padding:'2px 0',width:96,verticalAlign:'top'}}>Trámite</td><td style={{padding:'2px 0',color:C.text}}>{r.materia||'—'}</td></tr>
@@ -18452,7 +18452,7 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
             <span style={{fontSize:11,fontWeight:700,color:r.err?C.overdueText:C.azulInfo,width:64,flexShrink:0}}>{fmtOt(r.e.ot_number)||'s/OT'}</span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.e.concept||'—'}{cnOf(r.e)?<span style={{color:C.muted}}> · {r.e.client_id&&onOpenClientFicha?<span onClick={()=>onOpenClientFicha(r.e.client_id)} style={{cursor:'pointer'}}>{cnOf(r.e)}</span>:cnOf(r.e)}</span>:''}</div>
-              {errTxt&&<div style={{fontSize:11,fontWeight:600,color:C.overdueText}}>⚠ {errTxt}</div>}
+              {errTxt&&<div style={{fontSize:11,fontWeight:600,color:C.overdueText}}>{errTxt}</div>}
             </div>
             <span style={{fontSize:9,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{lbl}</span>
             <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,minWidth:64,textAlign:'right'}}>{fmt(r.e.amount)}</span>
@@ -18488,7 +18488,7 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
               <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{otFilt.slice(0,3000).map((r,j)=>(
                 <div key={j} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:j?`0.5px solid ${C.track}`:'none'}}>
                   <span style={{fontSize:11,fontWeight:700,color:r.err?C.overdueText:C.azulInfo,width:64,flexShrink:0}}>{fmtOt(r.e.ot_number)||'s/OT'}</span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.e.concept||'—'}{cnOf(r.e)?<span style={{color:C.muted}}> · {cnOf(r.e)}</span>:''}</div><div style={{fontSize:10,color:C.done}}>{r.carga}{r.err?<span style={{color:C.overdueText,fontWeight:600}}> · ⚠ {r.err==='sincliente'?'sin cliente':'duplicado'}</span>:''}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.e.concept||'—'}{cnOf(r.e)?<span style={{color:C.muted}}> · {cnOf(r.e)}</span>:''}</div><div style={{fontSize:10,color:C.done}}>{r.carga}{r.err?<span style={{color:C.overdueText,fontWeight:600}}> · {r.err==='sincliente'?'sin cliente':'duplicado'}</span>:''}</div></div>
                   {(()=>{ const [lbl,col,bg]=estBadge(r.estado); return <span style={{fontSize:9,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{lbl}</span> })()}
                   <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,minWidth:64,textAlign:'right'}}>{fmt(r.e.amount)}</span>
                 </div>
