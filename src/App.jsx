@@ -950,6 +950,52 @@ const alertasCajaChica = (pettyCash, expenses, umbral=BRAND.cajaChicaUmbral) => 
     .filter(a=>a.tipo).sort((a,b)=>a.saldo-b.saldo)
 }
 
+// ── BITÁCORA GENERAL (activity_log): toda acción relevante deja registro consultable (regla "bitácora siempre").
+// action = 'area.verbo' (p.ej. 'revision.retirar_cuota', 'fondos.pedido_enviado'); detalle = objeto chico (se guarda como JSON).
+let _actorBitacora = null
+function setActorBitacora(email){ _actorBitacora = email||null }
+function resumenBitacora(x){
+  if(x==null||typeof x!=='object') return x
+  if(Array.isArray(x)) return x.slice(0,10).map(resumenBitacora)
+  const o={}; ['id','folio','invoice_no','title','concept','name','client_id','monto','amount','persona','rut'].forEach(k=>{ if(x[k]!=null) o[k]=x[k] })
+  return Object.keys(o).length?o:'[obj]'
+}
+async function logActividad(action, {tabla=null, id=null, detalle=null}={}){
+  if(DEMO) return
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id||''))?String(id):null
+  try{ await supabase.from('activity_log').insert({ user_email:_actorBitacora, action, table_name:tabla, record_id:uuid, detail:detalle==null?null:JSON.stringify(resumenBitacora(detalle)) }) }catch(_){}
+}
+// Nombres de los miembros del estudio por email (de `miembros`, no cableados). Cacheado por sesión.
+let _nombresMiembrosCache=null, _nombresMiembrosP=null
+function nombresMiembros(){
+  if(_nombresMiembrosCache) return Promise.resolve(_nombresMiembrosCache)
+  if(DEMO) return Promise.resolve({})
+  if(!_nombresMiembrosP) _nombresMiembrosP=supabase.from('miembros').select('email,nombre').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.email) m[String(r.email).toLowerCase()]=String(r.nombre||'').split(' (')[0]||r.email }); _nombresMiembrosCache=m; return m }).catch(()=>({}))
+  return _nombresMiembrosP
+}
+// Lista de la bitácora para un área (prefijo de action). Cada fila: qué · detalle · quién · cuándo.
+function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, vacio='Aún no hay registros.'}){
+  const [rows,setRows]=useState(null)
+  useEffect(()=>{ let vivo=true; if(DEMO){ setRows([]); return }
+    supabase.from('activity_log').select('id,action,detail,user_email,created_at').like('action',prefijo+'%').order('created_at',{ascending:false}).limit(limite)
+      .then(({data})=>{ if(vivo) setRows(data||[]) }).catch(()=>{ if(vivo) setRows([]) })
+    return ()=>{ vivo=false } },[prefijo,limite])
+  const [nombres,setNombres]=useState(_nombresMiembrosCache||{})
+  useEffect(()=>{ nombresMiembros().then(m=>setNombres(m)) },[])
+  const quien=e=>nombres[String(e||'').toLowerCase()]||(String(e||'').split('@')[0]||'—')
+  const det=d=>{ try{ const o=JSON.parse(d); if(o==null) return ''; if(typeof o!=='object') return String(o); const a=Array.isArray(o)?o:[o]; return a.map(x=>typeof x==='object'&&x?[x.folio||x.invoice_no?`N° ${folioN(x.folio||x.invoice_no)}`:null,x.title||x.concept||x.name||x.persona||null].filter(Boolean).join(' · '):String(x)).filter(Boolean).join(' · ') }catch(_){ return String(d||'') } }
+  return (
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px 6px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>{titulo}</div>
+      {rows===null?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Cargando…</div>
+       :rows.length===0?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>{vacio}</div>
+       :rows.map((r,i)=><div key={r.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{etiquetas[r.action]||r.action}</div>{det(r.detail)&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{det(r.detail)}</div>}</div>
+          <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ try{ const o=JSON.parse(r.detail); const m=o&&!Array.isArray(o)&&typeof o==='object'?(o.monto??o.amount):(Array.isArray(o)?o.reduce((a,x)=>a+(Number(x?.monto??x?.amount)||0),0)||null:null); return m!=null?<div style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(m)}</div>:null }catch(_){ return null } })()}<div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{fmtFechaHora(r.created_at)}</div><div style={{fontSize:10.5,color:C.done}}>{quien(r.user_email)}</div></div>
+        </div>)}
+    </div>)
+}
+
 // Bitácora de cargas del SII (sii_import_batches): TODA carga deja registro (XML lo hace vía ensureBatch; PDF/Drive/Excel pasan por aquí). Nunca bloquea.
 async function logCargaSII({tipo, n=0, user, period=null, files=[]}){
   if(DEMO) return
@@ -1802,7 +1848,8 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       const clientesIds = [...new Set(gastosSel.map(e=>e.client_id).filter(Boolean))]
       const otNumsLiq = [...new Set(gastosSel.map(e=>e.ot_number).filter(Boolean))].join(', ')   // OT de notaría incluidas
       // Registrar la liquidación PRIMERO — si falla, ningún gasto queda marcado
-      const {error:rErr} = await supabase.from('rendiciones').insert({ id: renderId, user_name: me, periodo, total: totalLiq, n_gastos: gastosSel.length, n_clientes: clientesIds.length, ot_numbers: otNumsLiq||null })
+      const _fondo=miCaja.reduce((a,p)=>a+(p.amount||0),0)   // foto de la caja AL LIQUIDAR (fuente: saldoCajaChica)
+      const {error:rErr} = await supabase.from('rendiciones').insert({ id: renderId, user_name: me, periodo, total: totalLiq, n_gastos: gastosSel.length, n_clientes: clientesIds.length, ot_numbers: otNumsLiq||null, fondo_recibido: Math.round(_fondo), gastado: Math.round(_fondo-saldoCaja), saldo_caja: Math.round(saldoCaja) })
       if(rErr) throw rErr
       // Marcar gastos — registrar cuáles SÍ se marcaron (marcados) para no inflar la rendición ante fallas parciales
       const erroresMarcado = [], marcados = []
@@ -1820,7 +1867,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       }
       // Estado local: usar SOLO los marcados (los que fallaron siguen en pendientes sin recargar)
       const marcadosIds = new Set(marcados.map(e=>e.id))
-      setRendiciones(p=>[{id:renderId,user_name:me,periodo,total:totalReal,n_gastos:marcados.length,n_clientes:[...new Set(marcados.map(e=>e.client_id).filter(Boolean))].length,created_at:now,ot_numbers:otNumsLiq||null},...p])
+      setRendiciones(p=>[{id:renderId,user_name:me,periodo,total:totalReal,n_gastos:marcados.length,n_clientes:[...new Set(marcados.map(e=>e.client_id).filter(Boolean))].length,created_at:now,ot_numbers:otNumsLiq||null,fondo_recibido:Math.round(miCaja.reduce((a,p)=>a+(p.amount||0),0)),gastado:Math.round(miCaja.reduce((a,p)=>a+(p.amount||0),0)-saldoCaja),saldo_caja:Math.round(saldoCaja)},...p])
       if(setExpenses) setExpenses(p=>p.map(e=>marcadosIds.has(e.id)?{...e,rendered_at:now,render_id:renderId,rendered_by:me}:e))
       // Trazabilidad: avisar a los admin cuando un limited liquida su caja chica (no cuando liquida un admin). No bloquea.
       // Resumen de caja para la liquidación (fuente única saldoCajaChica): fondo recibido · gastado · saldo; si es negativo, lo puso de su bolsillo → a reembolsar.
@@ -9487,6 +9534,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const [ahBusy,setAhBusy]=useState(null)        // sale_id en proceso de "actualizar honorario"
   const [ahDone,setAhDone]=useState(()=>new Set()) // honorarios ya alineados en esta sesión
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
+  const isDesk=useIsDesktop()   // hook ANTES de cualquier return temprano
   const [fixing,setFixing]=useState(null)   // id de la factura cuyo vencimiento se está corrigiendo
   const [ctBusy,setCtBusy]=useState(null)   // sale_id de la cuota↔tramo que se está resolviendo
   const [ctDone,setCtDone]=useState(()=>new Set())  // sale_id ya resueltos/ignorados en esta sesión
@@ -9624,49 +9672,54 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9,padding:'1px 7px'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
+  // Cifras SIEMPRE a la derecha: monto principal + (opcional) secundario debajo, alineados.
+  const amt=(main,sub,col)=><div style={{textAlign:'right',flexShrink:0,marginLeft:10}}><div style={{fontSize:13,fontWeight:700,color:col||C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{main}</div>{sub&&<div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',marginTop:1}}>{sub}</div>}</div>
+  const fila={display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}
+  const secBox={breakInside:'avoid',display:'inline-block',width:'100%',boxSizing:'border-box',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px 8px',marginBottom:12}
   return <div>
-    <div style={{fontSize:12,color:C.muted,marginBottom:2}}>{total} cosa{total!==1?'s':''} por revisar. Toca cada una para abrir su ficha o factura.</div>
-    {folioDup.length>0&&<div style={{marginTop:14}}>{sh('Folio duplicado','#C0392B',folioDup.length)}
+    <div style={{background:C.soonBg,borderRadius:12,padding:'12px 14px',marginBottom:12}}><div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Por revisar</div><div style={{fontSize:24,fontWeight:800,color:C.soonText,letterSpacing:-.4,fontVariantNumeric:'tabular-nums'}}>{total}</div><div style={{fontSize:11.5,color:C.soonText}}>Toca cada una para abrir su ficha o factura · cada resolución queda registrada.</div></div>
+    <div style={isDesk?{columnCount:2,columnGap:12}:undefined}>
+    {folioDup.length>0&&<div style={secBox}>{sh('Folio duplicado','#C0392B',folioDup.length)}
       {folioDup.map(({folio,rows})=><div key={folio} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N°{folio} · {rows.length} filas</div>
-        {rows.map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:11,color:C.muted,marginTop:3,paddingLeft:10,cursor:'pointer'}}>{cName(b.client_id)} · {b.concept||'—'} · {fmt(b.amount||0)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
+        {rows.map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{...fila,fontSize:11,color:C.muted,marginTop:3,paddingLeft:10,cursor:'pointer'}}><span style={{minWidth:0}}>{cName(b.client_id)} · {b.concept||'—'} {lk(()=>onOpenFactura&&onOpenFactura(b))}</span>{amt(fmt(b.amount||0))}</div>)}
       </div>)}
     </div>}
-    {facDup.length>0&&<div style={{marginTop:14}}>{sh('Facturas posiblemente duplicadas','#C0392B',facDup.length)}
+    {facDup.length>0&&<div style={secBox}>{sh('Facturas posiblemente duplicadas','#C0392B',facDup.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>misma entidad (RUT/RS) · mismo concepto · mismo monto · sin nota de crédito</div>
       {facDup.map((g,i)=><div key={i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.text}}>{g.rs||cName(g.cid)}{g.rut?<span style={{color:C.muted,fontWeight:400}}> · {g.rut}</span>:''}</div>
-        <div style={{fontSize:10,color:C.muted,marginTop:1}}>{g.concept||'—'} · {fmt(g.amount||0)}</div>
+        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{g.rs||cName(g.cid)}{g.rut?<span style={{color:C.muted,fontWeight:400}}> · {g.rut}</span>:''}</div>
+        <div style={{fontSize:10,color:C.muted,marginTop:1}}>{g.concept||'—'}</div></div>{amt(fmt(g.amount||0))}</div>
         {g.rows.map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:11,color:C.muted,marginTop:3,paddingLeft:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}><span style={{fontWeight:600,color:C.accent}}>{b.invoice_no?`N° ${folioN(b.invoice_no)}`:'Programada'}</span><span>· {b.status} · {b.due?new Date(b.due+'T12:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'—'}</span>{lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
       </div>)}
     </div>}
-    {rutMulti.length>0&&<div style={{marginTop:14}}>{sh('RUT repetido en fichas',C.coralText,rutMulti.length)}
+    {rutMulti.length>0&&<div style={secBox}>{sh('RUT repetido en fichas',C.coralText,rutMulti.length)}
       {rutMulti.map(({rut,rs,clientIds})=><div key={rut} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={{fontSize:12,fontWeight:600,color:C.text}}>RUT {rut}{rs?` · ${rs}`:''}</div>
         <div style={{fontSize:11,color:C.muted,marginTop:2}}>En {clientIds.length} fichas: {clientIds.map((id,i)=><span key={id}>{i>0?' · ':''}<span onClick={()=>onOpenClientFicha&&onOpenClientFicha(id)} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>{cName(id)}</span></span>)}</div>
       </div>)}
     </div>}
-    {montoNeDte.length>0&&<div style={{marginTop:14}}>{sh('Monto distinto al DTE',C.soonText,montoNeDte.length)}
-      {montoNeDte.map(({b,dte})=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}>{cName(b.client_id)} · Factura N°{folioN(b.invoice_no)} — en el sistema {fmt(b.amount)} · en el DTE {fmt(dte)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
+    {montoNeDte.length>0&&<div style={secBox}>{sh('Monto distinto al DTE',C.soonText,montoNeDte.length)}
+      {montoNeDte.map(({b,dte})=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{...fila,fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}><span style={{minWidth:0}}>{cName(b.client_id)} · Factura N°{folioN(b.invoice_no)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</span>{amt(`DTE ${fmt(dte)}`,`sistema ${fmt(b.amount)}`)}</div>)}
     </div>}
-    {ventasDup.length>0&&<div style={{marginTop:14}}>{sh('Ventas que podrían estar duplicadas',C.muted,ventasDup.length)}
+    {ventasDup.length>0&&<div style={secBox}>{sh('Ventas que podrían estar duplicadas',C.muted,ventasDup.length)}
       {ventasDup.map((arr,i)=><div key={i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(arr[0].client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer'}}>{cName(arr[0].client_id)}</div>
-        {arr.map(s=><div key={s.id} style={{fontSize:11,color:C.muted,marginTop:2,paddingLeft:10}}>{s.title||'—'} · {s.amount_uf?`${s.amount_uf} UF`:fmt(s.amount_clp||0)} · {s.year}</div>)}
+        {arr.map(s=><div key={s.id} style={{...fila,fontSize:11,color:C.muted,marginTop:2,paddingLeft:10}}><span style={{minWidth:0}}>{s.title||'—'} · {s.year}</span>{amt(s.amount_uf?`${s.amount_uf} UF`:fmt(s.amount_clp||0))}</div>)}
       </div>)}
     </div>}
-    {cuotaTramo.filter(x=>!ctDone.has(x.s.id)).length>0&&<div style={{marginTop:14}}>{sh('Cuota programada + tramo ya emitido',C.overdueText,cuotaTramo.filter(x=>!ctDone.has(x.s.id)).length)}
+    {cuotaTramo.filter(x=>!ctDone.has(x.s.id)).length>0&&<div style={secBox}>{sh('Cuota programada + tramo ya emitido',C.overdueText,cuotaTramo.filter(x=>!ctDone.has(x.s.id)).length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>la programada no se redujo al emitir el tramo → se cuenta dos veces (excluye ventas recurrentes)</div>
       {cuotaTramo.filter(x=>!ctDone.has(x.s.id)).map(({s,venta,prog,emit,exceso})=><div key={s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'}</span></div>
-        <div style={{fontSize:11,color:C.muted,marginTop:2}}>Venta {fmt(venta)} · programado {fmt(prog)} + emitido {fmt(emit)} → <span style={{color:C.overdueText,fontWeight:700}}>se cuenta de más {fmt(exceso)}</span></div>
+        <div style={fila}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'}</span><div style={{fontSize:11,color:C.muted,fontWeight:400,marginTop:2}}>se cuenta de más</div></div>{amt(fmt(exceso),null,C.overdueText)}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginTop:6}}>{[['Venta',venta],['Programado',prog],['Emitido',emit]].map(([l,v])=><div key={l} style={{background:C.bgSoft,borderRadius:8,padding:'5px 8px',textAlign:'right'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</div><div style={{fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div></div>)}</div>
         {onResolverCuotaTramo&&<div style={{display:'flex',gap:8,marginTop:8}}>
           <button disabled={ctBusy===s.id} onClick={async()=>{ if(!(await appConfirm(`Voy a reducir la cuota programada de ${cName(s.client_id)} en ${fmt(exceso)}, para que el tramo ya emitido no se cuente dos veces. Es reversible. ¿Confirmas?`))) return; setCtBusy(s.id); try{ await onResolverCuotaTramo(s,'reducir',exceso); setCtDone(d=>new Set([...d,s.id])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) }; setCtBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:ctBusy===s.id?'default':'pointer',opacity:ctBusy===s.id?.6:1}}>{ctBusy===s.id?'Aplicando…':'Reducir la programada'}</button>
           <button disabled={ctBusy===s.id} onClick={async()=>{ setCtDone(d=>new Set([...d,s.id])); try{ await onResolverCuotaTramo(s,'ignorar') }catch(_){}}} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>No es doble conteo</button>
         </div>}
       </div>)}
     </div>}
-    {cuotasFantasma.length>0&&<div style={{marginTop:14}}>{sh('Cuotas ya emitidas que figuran por facturar',C.overdueText,cuotasFantasma.length)}
+    {cuotasFantasma.length>0&&<div style={secBox}>{sh('Cuotas ya emitidas que figuran por facturar',C.overdueText,cuotasFantasma.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:6}}>cruce exacto · mismo período o mes de vencimiento + monto, o cobertura por anticipo · {fmt(cfTotal)} en total</div>
       {onRetirarFantasmas&&cfAlta.length>0&&<button disabled={cfBusy} onClick={async()=>{ if(!(await appConfirm(`Voy a retirar ${cfAlta.length} cuota(s) programada(s) que ya están emitidas (alta confianza), por ${fmt(cfAlta.reduce((a,x)=>a+(x.monto||0),0))}. Cada una queda enlazada a su factura y es REVERSIBLE (undo). ¿Confirmas?`))) return; setCfBusy(true); try{ await onRetirarFantasmas(cfAlta.map(x=>({progId:x.prog.id, realId:x.posterior?.id||null, monto:x.monto}))); setCfRetiradas(s=>new Set([...s,...cfAlta.map(x=>String(x.prog.id))])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setCfBusy(false) }} style={{width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:cfBusy?'default':'pointer',opacity:cfBusy?.6:1,marginBottom:4}}>{cfBusy?'Retirando…':`Retirar las ${cfAlta.length} de alta confianza · ${fmt(cfAlta.reduce((a,x)=>a+(x.monto||0),0))}`}</button>}
       {cuotasFantasma.slice(0,40).map(({prog,sale,monto,razones,conf,posterior})=><div key={prog.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
@@ -9683,7 +9736,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       </div>)}
       {cuotasFantasma.length>40&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {cuotasFantasma.length-40} más…</div>}
     </div>}
-    {glosaConflict.filter(x=>!glDone.has(x.key)).length>0&&<div style={{marginTop:14}}>{sh('Glosa con dos categorías (Retiro/Sueldo)',C.overdueText,glosaConflict.filter(x=>!glDone.has(x.key)).length)}
+    {glosaConflict.filter(x=>!glDone.has(x.key)).length>0&&<div style={secBox}>{sh('Glosa con dos categorías (Retiro/Sueldo)',C.overdueText,glosaConflict.filter(x=>!glDone.has(x.key)).length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>la misma glosa enseñó categorías distintas → la sugerencia sale no determinista · define cuál es</div>
       {glosaConflict.filter(x=>!glDone.has(x.key)).map(({key,votos})=>{ const sel=glPick[key]||votos[0].cat; return <div key={key} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>«{key}»</div>
@@ -9692,11 +9745,11 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         <button disabled={glBusy===key} onClick={async()=>{ if(!(await appConfirm(`Definir esta glosa como ${sel}. Cambia cómo se clasifican los próximos movimientos (y con eso el margen y las comisiones). ¿Confirmas?`))) return; setGlBusy(key); try{ await onResolverGlosa(key,sel); setGlDone(d=>new Set([...d,key])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) }; setGlBusy(null) }} style={{marginTop:8,padding:'8px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:glBusy===key?'default':'pointer',opacity:glBusy===key?.6:1}}>{glBusy===key?'Guardando…':`Definir como ${sel}`}</button></>}
       </div> })}
     </div>}
-    {huerfanas.length>0&&<div style={{marginTop:14}}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
-      {huerfanas.slice(0,30).map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(b.invoice_no)} · {b.receptor_name||b.concept||'—'} · {fmt(b.amount||0)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
+    {huerfanas.length>0&&<div style={secBox}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
+      {huerfanas.slice(0,30).map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{...fila,fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(b.invoice_no)} · {b.receptor_name||b.concept||'—'} {lk(()=>onOpenFactura&&onOpenFactura(b))}</span>{amt(fmt(b.amount||0))}</div>)}
       {huerfanas.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {huerfanas.length-30} más…</div>}
     </div>}
-    {vencIncoh.length>0&&<div style={{marginTop:14}}>{sh('Vencimiento anterior a la emisión',C.soonText,vencIncoh.length)}
+    {vencIncoh.length>0&&<div style={secBox}>{sh('Vencimiento anterior a la emisión',C.soonText,vencIncoh.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>emitida hoy pero con vencimiento en el pasado (se ve "vencida" sin serlo) · el plazo debe correr desde la emisión</div>
       {vencIncoh.map(b=><div key={b.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',display:'flex',alignItems:'center',gap:8,justifyContent:'space-between'}}>
         <div style={{minWidth:0,flex:1}}>
@@ -9705,7 +9758,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         </div>
         {onFixVencimiento&&<button onClick={async()=>{ setFixing(b.id); try{ await onFixVencimiento(b) }catch(_){}; setFixing(null) }} disabled={fixing===b.id} style={{flexShrink:0,background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:fixing===b.id?'default':'pointer',opacity:fixing===b.id?.6:1}}>{fixing===b.id?'Corrigiendo…':'Corregir'}</button>}</div>)}
     </div>}
-    {antDup.length>0&&<div style={{marginTop:14}}>{sh('Anticipos posibles duplicados',C.soonText,antDup.length)}
+    {antDup.length>0&&<div style={secBox}>{sh('Anticipos posibles duplicados',C.soonText,antDup.length)}
       {antDup.map(({manual,banks,suma})=><div key={manual.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
         <div style={{fontSize:13,fontWeight:700,color:C.text}}><span onClick={()=>onOpenClientFicha&&onOpenClientFicha(manual.client_id)} style={{cursor:'pointer'}}>{cName(manual.client_id)}</span><span style={{fontSize:9,fontWeight:700,color:'#fff',background:C.soonText,borderRadius:20,padding:'1px 7px',marginLeft:7}}>calce exacto</span></div>
         <div style={{display:'flex',gap:8,marginTop:6}}>
@@ -9718,36 +9771,35 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         </div>
       </div>)}
     </div>}
-    {cuotasSinGen.length>0&&<div style={{marginTop:14}}>{sh('Cuotas sin generar',C.azulInfo,cuotasSinGen.length)}
+    {cuotasSinGen.length>0&&<div style={secBox}>{sh('Cuotas sin generar',C.azulInfo,cuotasSinGen.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>ventas Activas a cuotas con menos cuotas que el plan · solo formato "cuotas" (excluye personalizada/mensual)</div>
       {cuotasSinGen.map(v=><div key={v.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:'pointer'}}>
         <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}</span></div>
         <div style={{fontSize:11,color:C.muted,marginTop:2}}>plan {v.nplan} · generadas {Number(v.n_cuotas)} · <span style={{color:C.azulInfo,fontWeight:700}}>faltan {v.nplan-Number(v.n_cuotas)}</span> {lk(()=>onOpenClientFicha&&onOpenClientFicha(v.client_id))}</div>
       </div>)}
     </div>}
-    {honorarioDesc.filter(v=>!ahDone.has(String(v.id))).length>0&&(()=>{ const hd=honorarioDesc.filter(v=>!ahDone.has(String(v.id))); return <div style={{marginTop:14}}>{sh('Honorario ≠ lo facturado',C.soonText,hd.length)}
+    {honorarioDesc.filter(v=>!ahDone.has(String(v.id))).length>0&&(()=>{ const hd=honorarioDesc.filter(v=>!ahDone.has(String(v.id))); return <div style={secBox}>{sh('Honorario ≠ lo facturado',C.soonText,hd.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>el honorario registrado no coincide con la suma facturada · higiene de dato (lo facturado es la realidad)</div>
       {hd.map(v=>{ const fact=Math.round(Number(v.suma_cuotas)||0); return <div key={v.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}{v.status!=='Activo'?` · ${v.status}`:''}</span></div>
-        <div style={{fontSize:11,color:C.muted,marginTop:2}}>registrado {fmt(v.amount_clp||0)} · facturado <span style={{fontWeight:700,color:C.text}}>{fmt(fact)}</span></div>
+        <div style={fila}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}{v.status!=='Activo'?` · ${v.status}`:''}</span></div>{amt(`facturado ${fmt(fact)}`,`registrado ${fmt(v.amount_clp||0)}`)}</div>
         {onActualizarHonorario&&<div style={{display:'flex',gap:8,marginTop:7}}>
           <button disabled={ahBusy===v.id} onClick={async()=>{ if(!(await appConfirm(`Voy a fijar el honorario de "${v.title||'—'}" de ${cName(v.client_id)} en ${fmt(fact)} (lo facturado), en vez de ${fmt(v.amount_clp||0)}. Ajusta "Vendido"${v.year?' '+v.year:''} a la realidad. Es reversible. ¿Confirmas?`))) return; setAhBusy(v.id); try{ await onActualizarHonorario(v.id, fact); setAhDone(d=>new Set([...d,String(v.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setAhBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:ahBusy===v.id?'default':'pointer',opacity:ahBusy===v.id?.6:1}}>{ahBusy===v.id?'Ajustando…':`Honorario = ${fmt(fact)}`}</button>
           <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Abrir ficha</button>
         </div>}
       </div> })}
     </div> })()}
-    {ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))).length>0&&(()=>{ const vbc=ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))); return <div style={{marginTop:14}}>{sh('Ventas cobradas en borrador',C.overdueText,vbc.length)}
+    {ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))).length>0&&(()=>{ const vbc=ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))); return <div style={secBox}>{sh('Ventas cobradas en borrador',C.overdueText,vbc.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>tienen facturas pagadas pero siguen en Borrador/Propuesta → quedan FUERA de "Vendido" (solo cuenta Activo/Terminado) · pásalas a Terminado</div>
       {vbc.map(({s,emitido,pagado,n})=><div key={s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'} · {s.status}</span></div>
-        <div style={{fontSize:11,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:C.overdueText}}>{fmt(pagado)}</span> cobrado{emitido!==pagado?` · ${fmt(emitido)} emitido`:''} · {n} factura{n!==1?'s':''} fuera de Vendido</div>
+        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'} · {s.status}</span></div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>{n} factura{n!==1?'s':''} fuera de Vendido</div></div>{amt(`cobrado ${fmt(pagado)}`,emitido!==pagado?`emitido ${fmt(emitido)}`:null,C.overdueText)}</div>
         {onPasarTerminado&&<div style={{display:'flex',gap:8,marginTop:7}}>
           <button disabled={ptBusy===s.id} onClick={async()=>{ if(!(await appConfirm(`Voy a pasar "${s.title||'—'}" de ${cName(s.client_id)} a Terminado y fijar su honorario en ${fmt(emitido)} (lo facturado). Así suma en Vendido ${s.year}. Es reversible. ¿Confirmas?`))) return; setPtBusy(s.id); try{ await onPasarTerminado(s, emitido); setPtDone(d=>new Set([...d,String(s.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setPtBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:ptBusy===s.id?'default':'pointer',opacity:ptBusy===s.id?.6:1}}>{ptBusy===s.id?'Pasando…':`Pasar a Terminado · honorario ${fmt(emitido)}`}</button>
           <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Abrir ficha</button>
         </div>}
       </div>)}
     </div> })()}
-    {siiRows.length>0&&<div style={{marginTop:14}}>{sh('DTE del SII sin enlazar',C.tealText,siiRows.length)}
+    {siiRows.length>0&&<div style={secBox}>{sh('DTE del SII sin enlazar',C.tealText,siiRows.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>facturas emitidas en el SII que la app aún no vinculó a una venta · se cargan en Facturación</div>
       {siiRows.slice(0,30).map((v,i)=>{ const cl=v.client_id; return <div key={(v.folio||'')+'-'+i} onClick={cl?(()=>onOpenClientFicha&&onOpenClientFicha(cl)):undefined} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:cl?'pointer':'default',display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
         <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {v.folio} · {v.receptor_name||'—'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{fmtFechaDMY(v.fecha_emision)} · {cl?'con cliente':'sin cliente'}</div></div>
@@ -9755,13 +9807,13 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       </div> })}
       {siiRows.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {siiRows.length-30} más…</div>}
     </div>}
-    {bancoRut.length>0&&<div style={{marginTop:14}}>{sh('Clientes sin RUT · el banco sugiere uno',C.azulInfo,bancoRut.length)}
+    {bancoRut.length>0&&<div style={secBox}>{sh('Clientes sin RUT · el banco sugiere uno',C.azulInfo,bancoRut.length)}
       <div style={{fontSize:10,color:C.done,marginBottom:2}}>el RUT no está en la ficha ni en una razón social, pero aparece en un movimiento del banco con el mismo nombre · revisa la evidencia y confirma</div>
       {bancoRut.map(p=><div key={p.client.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
         <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.client.id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.client.name} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {p.nFact} factura{p.nFact!==1?'s':''}</span></div>
         <div style={{display:'flex',gap:8,marginTop:6,background:C.azulBg,borderRadius:9,padding:'8px 10px',alignItems:'flex-start'}}>
           <SIcon n='bank' s={14} c={C.azulInfo}/>
-          <div style={{fontSize:11,color:C.text,lineHeight:1.4,minWidth:0}}>Banco: <span style={{color:C.muted}}>{p.bankName}</span> · <b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{p.rut}</b><div style={{fontSize:10,color:C.muted,marginTop:2}}>{p.nMovs} movimiento{p.nMovs!==1?'s':''} · {fmt(Math.round(p.total))}</div></div>
+          <div style={{fontSize:11,color:C.text,lineHeight:1.4,minWidth:0,flex:1}}>Banco: <span style={{color:C.muted}}>{p.bankName}</span> · <b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{p.rut}</b><div style={{fontSize:10,color:C.muted,marginTop:2}}>{p.nMovs} movimiento{p.nMovs!==1?'s':''}</div></div>{amt(fmt(Math.round(p.total)))}
         </div>
         <div style={{display:'flex',gap:8,marginTop:8}}>
           <button disabled={brBusy===p.client.id} onClick={async()=>{ if(!(await appConfirm(`Voy a guardar el RUT ${p.rut} en la ficha de ${p.client.name}. Lo tomé del banco (${p.bankName}). Es reversible. ¿Confirmas?`))) return; setBrBusy(p.client.id); try{ onGuardarClientRut&&await onGuardarClientRut(p.client.id,p.rut); setRutDone(d=>new Set([...d,String(p.client.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setBrBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:brBusy===p.client.id?'default':'pointer',opacity:brBusy===p.client.id?.6:1}}>{brBusy===p.client.id?'Guardando…':'Es el mismo · guardar RUT'}</button>
@@ -9770,6 +9822,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         </div>
       </div>)}
     </div>}
+    </div>
   </div>
 }
 // Fila del historial de cargas del SII: fecha, quién, mes de la tanda, totales, y despliegue por archivo.
@@ -11794,8 +11847,102 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
   const [tblSort,setTblSort] = usePersisted('fd_bill_tblsort',{col:'fecha',dir:'desc'})   // Desktop "Todas": orden de la tabla, recordado entre sesiones
   const [porRevOpen,setPorRevOpen] = useState(false)   // hub: tarjeta "Por revisar" desplegada
 
+  const xmlHubPage = xmlHub ? (()=>{
+          const sinXml=billing.filter(b=>!b.deleted_at && esEmitida(b) && !b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
+          const conXml=billing.filter(b=>!b.deleted_at && b.dte_xml && String(b.issued_at||'').startsWith(mesKey)).length
+          const pend=(sinRegN||0)+sinXml.length
+          const svg=d=><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
+          const fila=(icon,ic,titulo,sub,onClick,right)=>(
+            <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}>
+              <span style={{width:36,height:36,borderRadius:10,background:ic.bg,color:ic.fg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:12,fontWeight:800}}>{icon}</span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.accent}}>{titulo}</div><div style={{fontSize:11,color:C.muted}}>{sub}</div></div>
+              {right||<span style={{color:C.done,fontSize:18,flexShrink:0}}>›</span>}
+            </div>)
+          const chip=(txt,onClick)=><span key={txt} onClick={e=>{e.stopPropagation();onClick&&onClick()}} style={{display:'inline-block',fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',margin:'3px 4px 0 0',background:C.card,color:C.text,cursor:'pointer'}}>{txt}</span>
+          const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px 8px'}
+          return (<div>
+            <PageHeader origen='Facturas del mes' onBack={()=>setXmlHub(false)} titulo='Cargar del SII'/>
+            <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12,padding:isDesktop?'18px 28px 40px':'14px 16px 40px',maxWidth:isDesktop?1120:640,margin:'0 auto'}}>
+              <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:12,width:'100%'}}>
+                {pend>0
+                  ? <div style={{background:C.soonBg,borderRadius:12,padding:'14px 16px'}}><div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Por cargar</div><div style={{fontSize:26,fontWeight:800,color:C.soonText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{pend}</div><div style={{fontSize:11.5,color:C.soonText}}>{sinRegN>0?`${sinRegN} emitida${sinRegN!==1?'s':''} en el SII sin registrar`:''}{sinRegN>0&&sinXml.length>0?' · ':''}{sinXml.length>0?`${sinXml.length} emitida${sinXml.length!==1?'s':''} sin XML`:''}</div></div>
+                  : <div style={{background:C.greenBg,borderRadius:12,padding:'14px 16px'}}><div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5}}>Por cargar</div><div style={{fontSize:20,fontWeight:800,color:C.greenText}}>Todo cargado</div><div style={{fontSize:11.5,color:C.greenText}}>{conXml} factura{conXml!==1?'s':''} de este mes con XML</div></div>}
+                {pend>0&&<div style={card}>
+                  {sinRegN>0&&<>
+                    {fila(String(sinRegN),{bg:C.soonBg,fg:C.soonText},'Emitidas en el SII sin registrar','Están en el SII y no en el sistema — cárgalas para registrarlas',()=>{ if(cargandoStage) return; cargarSinRegistrar() },<span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Cargarlas ›</span>)}
+                    <div style={{padding:'0 0 8px 48px'}}>{(sinRegDocs||[]).slice(0,12).map(d=>chip(`N° ${d.folio}${d.receptor_name?' · '+String(d.receptor_name).slice(0,22):''}${d.monto?' · '+fmt(d.monto):''}`,()=>{ if(cargandoStage) return; cargarSinRegistrar() }))}{(sinRegDocs||[]).length>12&&<span style={{fontSize:11,color:C.muted}}> +{(sinRegDocs||[]).length-12}</span>}</div>
+                  </>}
+                  {sinXml.length>0&&<>
+                    {fila(String(sinXml.length),{bg:C.overdueBg,fg:C.overdueText},'Emitidas sin XML este mes','No se pueden enviar hasta cargar su XML',()=>{ respaldoRef.current&&respaldoRef.current.click() },<span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Cargar XML ›</span>)}
+                    <div style={{padding:'0 0 4px 48px'}}>{sinXml.slice(0,12).map(b=>chip(`N° ${folioN(b.invoice_no)}`,()=>onEdit&&onEdit(b)))}{sinXml.length>12&&<span style={{fontSize:11,color:C.muted}}> +{sinXml.length-12}</span>}</div>
+                  </>}
+                </div>}
+                <div style={card}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0 2px'}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Historial de cargas</span>{pend>0&&conXml>0&&<span style={{fontSize:11,color:C.muted}}>{conXml} de este mes con XML</span>}</div>
+                  {histPage==null||histPage==='loading'
+                    ? <div style={{padding:'14px 0',color:C.muted,fontSize:12}}>Cargando…</div>
+                    : histPage.length===0 ? <div style={{padding:'14px 0',color:C.muted,fontSize:12}}>Aún no hay cargas registradas.</div>
+                    : histPage.map(b=><CargaHistRow key={b.id} b={b}/>)}
+                </div>
+              </div>
+              <div style={isDesktop?{width:380,flexShrink:0}:{width:'100%'}}>
+                <div style={card}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,padding:'8px 0 2px'}}>Cargar</div>
+                  {fila(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar XML','El respaldo .xml del SII (uno o varios)',()=>{ respaldoRef.current&&respaldoRef.current.click() })}
+                  {onImportExcel&&fila(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>),{bg:C.tealBg,fg:C.tealText},'Importar Excel','El detalle .xls / .xlsx del SII (o una planilla)',()=>{ onImportExcel() })}
+                  {onUpload&&fila(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></>),{bg:C.overdueBg,fg:C.overdueText},'Cargar PDF','El PDF de la factura',()=>{ onUpload() })}
+                  {onImport&&fila(svg(<><path d='M22 12.5V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></>),{bg:C.azulBg,fg:C.accent},'Desde Drive','Importar facturas de Drive',()=>{ onImport() })}
+                  <div style={{fontSize:11.5,color:C.muted,padding:'8px 0 4px'}}>Lo cargado queda guardado aunque salgas. Lo registras cuando quieras.</div>
+                </div>
+              </div>
+            </div>
+          </div>) })() : null
+  const cierrePage = cierreOpen ? <FlujoPagina origen='Facturación' titulo='Cierre de mes' onBack={()=>setCierreOpen(false)} maxW={1180}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>onEdit&&onEdit(b)} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></FlujoPagina> : null
+  // Facturas por enviar = PÁGINA (antes modal). Foto + tabla (escritorio) / lista (móvil) con la cifra a la derecha + historial de envíos (bitácora en billing: email_sent_at/sent_to/sent_by).
+  const porEnviarPage = bandejaEnvio ? (()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null
+    const tot=porEnviar.reduce((a,b)=>a+(montoFactura(b)||0),0)
+    const enviadas=(billing||[]).filter(b=>!b.deleted_at&&(b.email_sent_at||b.sent_at)).sort((x,y)=>String(y.email_sent_at||y.sent_at).localeCompare(String(x.email_sent_at||x.sent_at))).slice(0,15)
+    const cliN=b=>clients.find(c=>String(c.id)===String(b.client_id))?.name||'—'
+    const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px 8px'}
+    const enviarBtn=b=><button onClick={()=>setFacturaEmail(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Enviar</button>
+    return <FlujoPagina origen='Facturación' titulo='Facturas por enviar' onBack={()=>setBandejaEnvio(false)} maxW={1120}>
+      <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12}}>
+        <div style={{flex:1,minWidth:0,width:'100%',display:'flex',flexDirection:'column',gap:12}}>
+          {porEnviar.length>0
+            ? <div style={{background:C.soonBg,borderRadius:12,padding:'12px 14px'}}><div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Por enviar al cliente</div><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}><span style={{fontSize:24,fontWeight:800,color:C.soonText,letterSpacing:-.4}}>{porEnviar.length}</span><span style={{fontSize:20,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span></div><div style={{fontSize:11.5,color:C.soonText}}>Emitidas que aún no se mandan al cliente · adjunta el PDF</div></div>
+            : <div style={{background:C.greenBg,borderRadius:12,padding:'12px 14px'}}><div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5}}>Por enviar al cliente</div><div style={{fontSize:20,fontWeight:800,color:C.greenText}}>Todo enviado</div></div>}
+          {porEnviar.length>0&&<label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'9px 11px',background:C.bgSoft,borderRadius:9}}><input type='checkbox' checked={masivoSaldo} onChange={e=>setMasivoSaldo(e.target.checked)} style={{cursor:'pointer',marginTop:1,flexShrink:0}}/><span style={{fontSize:11.5,color:C.text,lineHeight:1.4}}>Recordar saldo pendiente<span style={{color:C.muted}}> — si el cliente tiene otra factura por cobrar, se agrega al correo la línea con el detalle (factura completa o saldo parcial).</span></span></label>}
+          {porEnviar.length>0&&<div style={card}>
+            {isDesktop
+              ? <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5}}><thead><tr>{['Factura','Cliente','Para','Monto',''].map((h,i)=><th key={i} style={{textAlign:i>=3?'right':'left',fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,padding:'8px 8px 6px',borderBottom:`1px solid ${C.border}`}}>{h}</th>)}</tr></thead>
+                  <tbody>{porEnviar.map(b=>{ const dest=contactoDe(b); return <tr key={b.id}>
+                    <td onClick={()=>onEdit&&onEdit(b)} style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,fontWeight:600,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>N° {folioN(b.invoice_no)||b.invoice_no||'—'}</td>
+                    <td onClick={()=>onOpenClientFicha&&onOpenClientFicha(b.client_id)} style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}>{cliN(b)}</td>
+                    <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,color:dest?C.muted:C.overdueText,fontSize:11.5}}>{dest||'sin correo — lo eliges al enviar'}</td>
+                    <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right',fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</td>
+                    <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right'}}>{enviarBtn(b)}</td></tr> })}</tbody></table>
+              : porEnviar.map((b,i)=>{ const dest=contactoDe(b); return <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+                  <div onClick={()=>onEdit&&onEdit(b)} style={{flex:1,minWidth:0,cursor:'pointer'}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(b.invoice_no)||b.invoice_no||'—'} · {cliN(b)}</div><div style={{fontSize:10.5,color:dest?C.muted:C.overdueText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest||'sin correo — lo eliges al enviar'}</div></div>
+                  <span style={{fontSize:12.5,fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span>{enviarBtn(b)}</div> })}
+            <div style={{display:'flex',alignItems:'center',gap:8,paddingTop:10}}><span style={{fontSize:11,color:C.muted,flex:1,minWidth:0}}>{porEnviar.length} por enviar{(()=>{ const c=porEnviar.filter(b=>factToMap[String(b.client_id)]).length; return c?` · ${c} con correo recordado`:'' })()}</span><button disabled={envioMasivoBusy} onClick={enviarTodas} style={{fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:10,padding:'9px 14px',cursor:'pointer',opacity:envioMasivoBusy?.6:1}}>{envioMasivoBusy?'Enviando…':'Enviar todas'}</button></div>
+          </div>}
+        </div>
+        <div style={isDesktop?{width:360,flexShrink:0}:{width:'100%'}}>
+          <div style={card}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,padding:'8px 0 2px'}}>Enviadas · historial</div>
+            {enviadas.length===0?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Aún no hay envíos registrados.</div>
+             :enviadas.map((b,i)=><div key={b.id} onClick={()=>onEdit&&onEdit(b)} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
+               <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(b.invoice_no)||'—'} · {cliN(b)}</div><div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtFechaHora(b.email_sent_at||b.sent_at)}{b.sent_to?` · a ${b.sent_to}`:''}{b.sent_by?` · ${b.sent_by}`:''}</div></div>
+               <span style={{fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span></div>)}
+          </div>
+        </div>
+      </div>
+    </FlujoPagina> })() : null
+  const billingPage = cierrePage || porEnviarPage || xmlHubPage
+  useEffect(()=>{ if(cierreOpen||bandejaEnvio||xmlHub) restoreScroll({w:0,d:0}) },[cierreOpen,bandejaEnvio,xmlHub])
   return (
     <div>
+      {billingPage}
+      <div style={billingPage?{display:'none'}:undefined}>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
@@ -12028,58 +12175,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
-        {/* "Cargar del SII" = PÁGINA (antes modal). La foto primero: lo pendiente (emitidas en el SII sin registrar · emitidas sin XML), luego las formas de cargar y la bitácora. Todo clickeable. */}
-        {xmlHub&&(()=>{
-          const sinXml=billing.filter(b=>!b.deleted_at && esEmitida(b) && !b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
-          const conXml=billing.filter(b=>!b.deleted_at && b.dte_xml && String(b.issued_at||'').startsWith(mesKey)).length
-          const pend=(sinRegN||0)+sinXml.length
-          const svg=d=><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
-          const fila=(icon,ic,titulo,sub,onClick,right)=>(
-            <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}>
-              <span style={{width:36,height:36,borderRadius:10,background:ic.bg,color:ic.fg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:12,fontWeight:800}}>{icon}</span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.accent}}>{titulo}</div><div style={{fontSize:11,color:C.muted}}>{sub}</div></div>
-              {right||<span style={{color:C.done,fontSize:18,flexShrink:0}}>›</span>}
-            </div>)
-          const chip=(txt,onClick)=><span key={txt} onClick={e=>{e.stopPropagation();onClick&&onClick()}} style={{display:'inline-block',fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',margin:'3px 4px 0 0',background:C.card,color:C.text,cursor:'pointer'}}>{txt}</span>
-          const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px 8px'}
-          // Portal al body: dentro del shell (ancestro con transform) un fixed queda atrapado bajo el header. Regla: overlay fixed = portal al body.
-          return createPortal(<div style={{position:'fixed',inset:0,zIndex:1000,background:C.bg,overflowY:'auto'}}>
-            <PageHeader origen='Facturas del mes' onBack={()=>setXmlHub(false)} titulo='Cargar del SII'/>
-            <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12,padding:isDesktop?'18px 28px 40px':'14px 16px 40px',maxWidth:isDesktop?1120:640,margin:'0 auto'}}>
-              <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:12,width:'100%'}}>
-                {pend>0
-                  ? <div style={{background:C.soonBg,borderRadius:12,padding:'14px 16px'}}><div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Por cargar</div><div style={{fontSize:26,fontWeight:800,color:C.soonText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{pend}</div><div style={{fontSize:11.5,color:C.soonText}}>{sinRegN>0?`${sinRegN} emitida${sinRegN!==1?'s':''} en el SII sin registrar`:''}{sinRegN>0&&sinXml.length>0?' · ':''}{sinXml.length>0?`${sinXml.length} emitida${sinXml.length!==1?'s':''} sin XML`:''}</div></div>
-                  : <div style={{background:C.greenBg,borderRadius:12,padding:'14px 16px'}}><div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5}}>Por cargar</div><div style={{fontSize:20,fontWeight:800,color:C.greenText}}>Todo cargado</div><div style={{fontSize:11.5,color:C.greenText}}>{conXml} factura{conXml!==1?'s':''} de este mes con XML</div></div>}
-                {pend>0&&<div style={card}>
-                  {sinRegN>0&&<>
-                    {fila(String(sinRegN),{bg:C.soonBg,fg:C.soonText},'Emitidas en el SII sin registrar','Están en el SII y no en el sistema — cárgalas para registrarlas',()=>{ if(cargandoStage) return; cargarSinRegistrar() },<span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Cargarlas ›</span>)}
-                    <div style={{padding:'0 0 8px 48px'}}>{(sinRegDocs||[]).slice(0,12).map(d=>chip(`N° ${d.folio}${d.receptor_name?' · '+String(d.receptor_name).slice(0,22):''}${d.monto?' · '+fmt(d.monto):''}`,()=>{ if(cargandoStage) return; cargarSinRegistrar() }))}{(sinRegDocs||[]).length>12&&<span style={{fontSize:11,color:C.muted}}> +{(sinRegDocs||[]).length-12}</span>}</div>
-                  </>}
-                  {sinXml.length>0&&<>
-                    {fila(String(sinXml.length),{bg:C.overdueBg,fg:C.overdueText},'Emitidas sin XML este mes','No se pueden enviar hasta cargar su XML',()=>{ respaldoRef.current&&respaldoRef.current.click() },<span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Cargar XML ›</span>)}
-                    <div style={{padding:'0 0 4px 48px'}}>{sinXml.slice(0,12).map(b=>chip(`N° ${folioN(b.invoice_no)}`,()=>onEdit&&onEdit(b)))}{sinXml.length>12&&<span style={{fontSize:11,color:C.muted}}> +{sinXml.length-12}</span>}</div>
-                  </>}
-                </div>}
-                <div style={card}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0 2px'}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Historial de cargas</span>{pend>0&&conXml>0&&<span style={{fontSize:11,color:C.muted}}>{conXml} de este mes con XML</span>}</div>
-                  {histPage==null||histPage==='loading'
-                    ? <div style={{padding:'14px 0',color:C.muted,fontSize:12}}>Cargando…</div>
-                    : histPage.length===0 ? <div style={{padding:'14px 0',color:C.muted,fontSize:12}}>Aún no hay cargas registradas.</div>
-                    : histPage.map(b=><CargaHistRow key={b.id} b={b}/>)}
-                </div>
-              </div>
-              <div style={isDesktop?{width:380,flexShrink:0}:{width:'100%'}}>
-                <div style={card}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,padding:'8px 0 2px'}}>Cargar</div>
-                  {fila(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar XML','El respaldo .xml del SII (uno o varios)',()=>{ respaldoRef.current&&respaldoRef.current.click() })}
-                  {onImportExcel&&fila(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>),{bg:C.tealBg,fg:C.tealText},'Importar Excel','El detalle .xls / .xlsx del SII (o una planilla)',()=>{ onImportExcel() })}
-                  {onUpload&&fila(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></>),{bg:C.overdueBg,fg:C.overdueText},'Cargar PDF','El PDF de la factura',()=>{ onUpload() })}
-                  {onImport&&fila(svg(<><path d='M22 12.5V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></>),{bg:C.azulBg,fg:C.accent},'Desde Drive','Importar facturas de Drive',()=>{ onImport() })}
-                  <div style={{fontSize:11.5,color:C.muted,padding:'8px 0 4px'}}>Lo cargado queda guardado aunque salgas. Lo registras cuando quieras.</div>
-                </div>
-              </div>
-            </div>
-          </div>, document.body) })()}
+
         {recPreview&&(()=>{ const rPrev=recordatorioCobro(recPreview.b, recNota); return <Modal fullscreenOnMobile fsMaxWidth={640} title='Recordatorio de cobro' onClose={()=>setRecPreview(null)}>
           <div style={{fontSize:12,color:C.muted,marginBottom:9,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {recPreview.to} · <b style={{color:C.text}}>Nivel:</b> {rPrev.nivel} · <b style={{color:C.text}}>Asunto:</b> {rPrev.subject}</div>
           <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,marginBottom:5}}>Nota para este cliente · opcional</div>
@@ -12099,7 +12195,6 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               : cargasHist.map(b=><CargaHistRow key={b.id} b={b}/>)}
         </Modal>}
         {depurarRows&&<Modal title='Marcar como pagadas' onClose={()=>setDepurarRows(null)} closeOnBackdrop={false}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></Modal>}
-        {cierreOpen&&<Modal title='Cierre de mes' fullscreen fsMaxWidth={1160} onClose={()=>setCierreOpen(false)}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>{setCierreOpen(false);onEdit&&onEdit(b)}} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></Modal>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='rechazadas'&&filter!=='porcompletar'&&filter!=='sinemitir'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:10,padding:'7px 9px',border:`1px solid ${on?C.accent:C.border}`,cursor:'pointer',minWidth:0}}>
@@ -13093,24 +13188,6 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
       {/* FAB "Nueva factura" retirado a pedido del usuario (alta manual de cobros queda en la ficha del cliente → Financiero) */}
       {facturaEmail&&<FacturaEmailModal factura={facturaEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
       {facturasEmail&&facturasEmail.length>0&&<FacturaEmailModal factura={facturasEmail[0]} facturas={facturasEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturasEmail[0].client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturasEmail[0].sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturasEmail(null)}/>}
-      {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
-        <Modal title='Facturas por enviar' fullscreenOnMobile onClose={()=>setBandejaEnvio(false)} footer={<div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:11,color:C.muted,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{porEnviar.length} por enviar{(()=>{ const c=porEnviar.filter(b=>factToMap[String(b.client_id)]).length; return c?` · ${c} con correo recordado`:'' })()}</span><button disabled={envioMasivoBusy} onClick={enviarTodas} style={{fontSize:12,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.accent}`,borderRadius:8,padding:'8px 13px',cursor:'pointer',opacity:envioMasivoBusy?.6:1}}>{envioMasivoBusy?'Enviando…':'Enviar todas'}</button></div>}>
-            <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Emitidas que aún no se mandan al cliente · adjunta el PDF</div>
-            {porEnviar.length>0&&<label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'9px 11px',background:C.bgSoft,borderRadius:9,marginBottom:13}}><input type='checkbox' checked={masivoSaldo} onChange={e=>setMasivoSaldo(e.target.checked)} style={{cursor:'pointer',marginTop:1,flexShrink:0}}/><span style={{fontSize:11.5,color:C.text,lineHeight:1.4}}>Recordar saldo pendiente<span style={{color:C.muted}}> — si el cliente tiene otra factura por cobrar, se agrega al correo la línea con el detalle (factura completa o saldo parcial).</span></span></label>}
-            {porEnviar.length===0?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'22px 0',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><SIcon n='check' s={14} c={C.greenText}/>Todo enviado</div>:(
-              <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-                {porEnviar.map((b,i)=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); const dest=contactoDe(b); return (
-                  <div key={b.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?<><Copyable text={String(folioN(b.invoice_no)||b.invoice_no)} title='Copiar folio' style={{color:C.text,fontWeight:600}}>Factura N° {folioN(b.invoice_no)||b.invoice_no}</Copyable> · </>:''}{cli?.name||'—'}{(()=>{ const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); return (rs.name&&rs.name!==cli?.name)||rs.rut ? <span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</span> : null })()}</div>
-                      <div style={{fontSize:10,color:dest?C.done:C.overdueText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest||'sin correo — lo eliges al enviar'}</div>
-                    </div>
-                    <button onClick={()=>{ setBandejaEnvio(false); setFacturaEmail(b) }} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Enviar</button>
-                  </div>) })}
-              </div>
-            )}
-        </Modal>
-      ) })()}
       {siiPanel&&(
         <div onClick={()=>setSiiPanel(null)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:540,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
@@ -13156,6 +13233,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
@@ -17696,7 +17774,9 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
     const nombre=(grupo.abg||'').split(' ')[0]||grupo.abg||''
     setPedirSent(s=>({...s,[email]:'sending'}))
     try{ const via=await enviarComoUsuario({to:email,subject:`Pedir fondos — ${grupo.clientes.length} cliente${grupo.clientes.length!==1?'s':''} (${fmt(grupo.total)})`,html:emailPedirFondos(nombre,grupo.clientes),text:`Tienes ${grupo.clientes.length} cliente(s) sin fondos por ${fmt(grupo.total)}. Pídeles provisión.`})
-      setPedirSent(s=>({...s,[email]:via?'ok':'skip'})); return !!via }
+      setPedirSent(s=>({...s,[email]:via?'ok':'skip'}))
+      if(via) logActividad('fondos.pedido_enviado',{detalle:{persona:grupo.abg,title:`${grupo.clientes.length} cliente${grupo.clientes.length!==1?'s':''} · ${grupo.clientes.slice(0,4).map(c=>c.name).join(', ')}`,monto:Math.round(grupo.total)}})
+      return !!via }
     catch(e){ setPedirSent(s=>({...s,[email]:'err'})); return false }
   }
   const enviarPedirTodos=async()=>{
@@ -17805,9 +17885,14 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
   },[isDesktop,hubOpen,selectedClient,filteredClients,balances,saldoFilter,q,rendicionClient,attachExpense,liqDetail,emailRend,devEmailRend,showNotaria,showHistorial,showOrphans,showClasificar,showRevision])
   useEffect(()=>{ if(!isDesktop||!selectedClient) return; try{ document.querySelector('aside [data-cid="'+String(selectedClient.id)+'"]')?.scrollIntoView({block:'nearest'}) }catch(_){} },[selectedClient,isDesktop])
   const pedirModal = pedirOpen&&(()=>{ const groups=Object.entries(pedirFondosGrupos); const conAbg=groups.filter(([k])=>k!=='__sin__').sort((a,b)=>b[1].total-a[1].total); const sin=pedirFondosGrupos['__sin__']; const totalGral=conAbg.reduce((a,[,g])=>a+g.total,0)
-    return <Modal fullscreenOnMobile title='Pedir fondos a los abogados' onClose={()=>setPedirOpen(false)}>
-      <div style={{padding:'4px 2px 0'}}>
-        <div style={{fontSize:13,color:C.muted,lineHeight:1.5,marginBottom:14}}>Cada abogado recibe un correo con SUS clientes sin fondos y el detalle de los gastos que la oficina adelantó. Se envía desde tu correo.</div>
+    const nCli=conAbg.reduce((a,[,g])=>a+g.clientes.length,0)+(sin?.clientes?.length||0), totAll=totalGral+(sin?.total||0)
+    return <FlujoPagina origen='Gastos' titulo='Pedir fondos a los abogados' onBack={()=>setPedirOpen(false)} maxW={1120}>
+      <div>
+        {totAll>0
+          ? <div style={{background:C.soonBg,borderRadius:12,padding:'12px 14px',marginBottom:12}}><div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Adelantado por la oficina</div><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}><span style={{fontSize:13,color:C.soonText}}>{nCli} cliente{nCli!==1?'s':''} sin fondos · {conAbg.length} abogado{conAbg.length!==1?'s':''}</span><span style={{fontSize:22,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(totAll)}</span></div></div>
+          : null}
+        <div style={{fontSize:13,color:C.muted,lineHeight:1.5,marginBottom:12}}>Cada abogado recibe un correo con SUS clientes sin fondos y el detalle de los gastos que la oficina adelantó. Se envía desde tu correo.</div>
+        <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,alignItems:'start'}:undefined}>
         {conAbg.map(([email,g])=>{ const pc=personChip(g.abg); const st=pedirSent[email]; return (
           <div key={email} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',marginBottom:10,background:'#fff'}}>
             <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:9}}>
@@ -17816,11 +17901,12 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
               <b style={{fontSize:14,color:C.overdueText}}>{fmt(g.total)}</b>
             </div>
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
-              {g.clientes.map((c,i)=>(<div key={c.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'7px 11px',borderTop:i?`0.5px solid ${C.border}`:'none'}}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</div><div style={{fontSize:11,color:C.muted}}>{c.gastos.length} gasto{c.gastos.length!==1?'s':''}</div></div><b style={{fontSize:13,color:C.overdueText,whiteSpace:'nowrap'}}>{fmt(c.deuda)}</b></div>))}
+              {g.clientes.map((c,i)=>(<div key={c.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'7px 11px',borderTop:i?`0.5px solid ${C.border}`:'none'}}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}}>{c.name}</div><div style={{fontSize:11,color:C.muted}}>{c.gastos.length} gasto{c.gastos.length!==1?'s':''}</div></div><b style={{fontSize:13,color:C.overdueText,whiteSpace:'nowrap'}}>{fmt(c.deuda)}</b></div>))}
             </div>
             <button disabled={st==='sending'||st==='ok'} onClick={()=>enviarPedir1(email,g)} style={{width:'100%',border:'none',borderRadius:10,padding:'9px 12px',fontSize:13,fontWeight:700,cursor:st==='ok'?'default':'pointer',background:st==='ok'?C.greenBg:(st==='err'||st==='skip')?C.overdueBg:C.accent,color:st==='ok'?C.greenText:(st==='err'||st==='skip')?C.overdueText:'#fff'}}>{st==='sending'?'Enviando…':st==='ok'?'Enviado ✓':st==='err'?'Falló — reintentar':st==='skip'?'No se envió — reintentar':`Enviar a ${(g.abg||'').split(' ')[0]}`}</button>
           </div>
         )})}
+        </div>
         {sin&&sin.clientes.length>0&&(
           <div style={{border:`1px dashed ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:10,background:C.bgWarm}}>
             <div style={{fontSize:12,fontWeight:700,color:C.grisText,marginBottom:3}}>{sin.clientes.length} cliente{sin.clientes.length!==1?'s':''} sin abogado — {fmt(sin.total)}</div>
@@ -17831,8 +17917,9 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
         {conAbg.length>1&&(
           <button onClick={enviarPedirTodos} style={{width:'100%',border:`1px solid ${C.accent}`,borderRadius:12,padding:'11px',fontSize:13,fontWeight:700,cursor:'pointer',background:'#fff',color:C.accent,marginTop:2}}>Enviar a todos ({conAbg.length}) · {fmt(totalGral)}</button>
         )}
+        <div style={{marginTop:12}}><BitacoraLista prefijo='fondos.' titulo='Pedidos enviados' etiquetas={{'fondos.pedido_enviado':'Pedido de fondos enviado'}} limite={12} vacio='Aún no hay pedidos enviados.'/></div>
       </div>
-    </Modal>
+    </FlujoPagina>
   })()
   const body = (
     <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
@@ -19116,25 +19203,44 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
         )})()}
         <Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/>
       </Modal>}
-      {liqDetail&&(()=>{ const gs=(expenses||[]).filter(e=>String(e.render_id)===String(liqDetail.id)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const tot=gs.reduce((a,e)=>a+(e.amount||0),0); return (
-        <Modal title='Liquidación de caja chica' onClose={()=>setLiqDetail(null)}>
-          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{liqDetail.user_name||''} · {liqDetail.periodo||''} · {liqDetail.created_at?fmtFechaTS(liqDetail.created_at):''}</div>
-          {gs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin gastos en esta liquidación.</div>}
-          {gs.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; return (
-            <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'7px 0',borderBottom:`0.5px solid ${C.border}`}}>
-              <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:10,color:C.done}}>{cn} · {RENDCAT(e.category)} · {fmtFechaDMY(e.date)}</div></div>
-              <span style={{fontSize:13,fontWeight:600,color:C.overdue,whiteSpace:'nowrap'}}>-{fmt(e.amount)}</span>
-            </div>
-          )})}
-          <div style={{display:'flex',justifyContent:'space-between',marginTop:10,paddingTop:8,borderTop:`1.5px solid ${C.muted}`}}><span style={{fontSize:13,fontWeight:600,color:C.text}}>TOTAL</span><span style={{fontSize:13,fontWeight:600,color:C.overdue}}>-{fmt(tot)}</span></div>
-        </Modal>
-      )})()}
       {rendicionClient&&<Modal fullscreen fsMaxWidth={isDesktop?980:640} title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
       {devEmailRend&&<DevolucionEmailModal client={devEmailRend.client} rend={devEmailRend.rend} rendN={devEmailRend.rend?.correlativo} amount={devEmailRend.amount} fecha={devEmailRend.fecha} user={currentUser} setRendiciones={setRendiciones} onClose={()=>setDevEmailRend(null)}/>}
       {pedirModal}
     </div>
   )
+  // Detalle de una liquidación de caja chica = PÁGINA (antes modal): foto guardada al liquidar (fondo · gastado · cubierto) + gastos por cliente.
+  if(liqDetail){ const r=liqDetail; const gs=(expenses||[]).filter(e=>String(e.render_id)===String(r.id)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const tot=gs.reduce((a,e)=>a+(e.amount||0),0)
+    const porCli={}; gs.forEach(e=>{ const k=e.client_id||'__sin__'; (porCli[k]=porCli[k]||[]).push(e) })
+    const cub=r.saldo_caja!=null?Math.max(0,-r.saldo_caja):null
+    const saldoHoy=r.user_name?saldoCajaChica(pettyCash,expenses,r.user_name):null
+    const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px 6px'}
+    const fila=(e)=>(<div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:10.5,color:C.muted}}>{RENDCAT(e.category)} · {fmtFechaDMY(e.date)}</div></div><span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span></div>)
+    const page=<FlujoPagina origen='Gastos' titulo='Liquidación de caja chica' ctx={r.user_name||null} onBack={()=>setLiqDetail(null)} maxW={1120}>
+      <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12}}>
+        <div style={{flex:1,minWidth:0,width:'100%',display:'flex',flexDirection:'column',gap:12}}>
+          {cub>0
+            ? <div style={{background:C.overdueBg,borderRadius:12,padding:'12px 14px'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}><span style={{fontSize:10,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.5}}>Cubierto por {r.user_name} — a reembolsar</span><span style={{fontSize:22,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(cub)}</span></div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:'4px 14px',marginTop:4,fontSize:11.5,color:C.overdueText}}><span>Fondo recibido <b>{fmt(r.fondo_recibido)}</b></span><span>Gastado <b>{fmt(r.gastado)}</b></span><span>{gs.length} gasto{gs.length!==1?'s':''}</span></div></div>
+            : <div style={{background:C.azulBg,borderRadius:12,padding:'12px 14px'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}><span style={{fontSize:10,fontWeight:700,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.5}}>Total liquidado</span><span style={{fontSize:22,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span></div>
+                {r.saldo_caja!=null&&<div style={{display:'flex',flexWrap:'wrap',gap:'4px 14px',marginTop:4,fontSize:11.5,color:C.muted}}><span>Fondo recibido <b style={{color:C.text}}>{fmt(r.fondo_recibido)}</b></span><span>Gastado <b style={{color:C.text}}>{fmt(r.gastado)}</b></span><span>Saldo de caja <b style={{color:C.text}}>{fmt(r.saldo_caja)}</b></span></div>}</div>}
+          {gs.length===0&&<div style={{fontSize:12,color:C.muted}}>Sin gastos en esta liquidación.</div>}
+          {Object.entries(porCli).map(([k,arr])=>{ const cn=k==='__sin__'?'Sin cliente':(clients.find(c=>String(c.id)===String(k))?.name||'—'); const sub=arr.reduce((a,e)=>a+(e.amount||0),0); return (
+            <div key={k} style={card}><div onClick={()=>k!=='__sin__'&&onOpenClientFicha&&onOpenClientFicha(k)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,paddingBottom:4,cursor:k!=='__sin__'?'pointer':'default'}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{cn}</span><span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(sub)}</span></div>{arr.map(fila)}</div>) })}
+          {gs.length>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'4px 14px'}}><span style={{fontSize:13,fontWeight:700,color:C.text}}>Total</span><span style={{fontSize:13,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span></div>}
+        </div>
+        <div style={isDesktop?{width:340,flexShrink:0}:{width:'100%'}}>
+          <div style={card}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,paddingBottom:4}}>Liquidación</div>
+            <div style={{display:'flex',justifyContent:'space-between',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`}}><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{r.user_name||'—'} · {r.periodo||''}</div><div style={{fontSize:10.5,color:C.muted}}>Liquidada {r.created_at?fmtFechaTS(r.created_at):'—'}</div></div><span style={{fontSize:12.5,fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(tot)}</span></div>
+            {r.ot_numbers&&<div style={{padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,fontSize:11,color:C.muted}}>OT {r.ot_numbers}</div>}
+            {saldoHoy!=null&&saldoHoy<0&&<div onClick={()=>onEntregarCaja&&onEntregarCaja(r.user_name,-saldoHoy)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.overdueText}}>Reembolso pendiente</div><div style={{fontSize:10.5,color:C.muted}}>Saldo de caja hoy</div></div><span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Entregar caja {fmt(-saldoHoy)} ›</span></div>}
+            {saldoHoy!=null&&saldoHoy>=0&&cub>0&&<div style={{display:'flex',justifyContent:'space-between',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`}}><span style={{fontSize:12.5,fontWeight:600,color:C.greenText}}>Reembolsado</span><span style={{fontSize:11,color:C.muted}}>saldo de caja hoy {fmt(saldoHoy)}</span></div>}
+          </div>
+        </div>
+      </div>
+    </FlujoPagina>
+    return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{page}</div>:page }
+  if(pedirOpen) return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pedirModal}</div>:pedirModal
   // ── HUB de Gastos (cara de entrada). Presentación pura: mismas cifras auditadas, sin recalcular nada.
   const showHub = hubOpen && !selectedClient && !showOrphans && !showNotaria && !showHistorial
   if(showHub){
@@ -23073,6 +23179,17 @@ function PageHeader({origen,onBack,titulo,ctx}){
     </div>
   )
 }
+// Página genérica para flujos que antes eran modales (Carga masiva, Generar reporte, Redactar con IA, Plazos, Revisión de datos):
+// mismo header que Tarea/Gasto y el cuerpo a todo el ancho útil (escritorio) o columna (móvil).
+function FlujoPagina({origen,titulo,ctx,onBack,maxW=1060,children}){
+  const isDesktop=useIsDesktop()
+  return (
+    <div>
+      <PageHeader origen={origen} onBack={onBack} titulo={titulo} ctx={ctx}/>
+      <div style={{padding:isDesktop?'18px 28px 48px':'14px 16px 48px',maxWidth:isDesktop?maxW:640,margin:'0 auto'}}>{children}</div>
+    </div>
+  )
+}
 // Tarea = ver (TaskPreview) · editar (QuickTaskForm) · terminar (CierreTareaModal) en UNA página (tab 'tarea'). `pagina` es el mismo objeto
 // que antes recibía el modal ({type,data}); la tarea se lee SIEMPRE viva desde `tasks` por id.
 function TareaPage({pagina,tasks,clients,sales,clientEntities,user,saving,origen,onBack,onSaveTask,onDelegate,onCierre,onEdit,onComplete,onPreview,onOpenClientFicha}){
@@ -24554,7 +24671,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
     return d.startsWith(`${selYear}-${String(selMonth).padStart(2,'0')}`)
   })
 
-  const generatePDF=()=>{
+  // buildHtml = FUENTE ÚNICA del reporte: la misma página alimenta la vista previa (iframe) y la impresión.
+  const buildHtml=()=>{
     const label=getPeriodLabel()
     const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
     const A='#003C50', A2='#537281', A3='#99ABB4', A4='#E4E8EB', G='#3D3D3D'
@@ -24745,17 +24863,24 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
     html+=`<div class="footer"><span>${BRAND.nombre} · ${BRAND.web}</span><span>Reporte ${label} · ${now}</span><span>CONFIDENCIAL</span></div>`
     html+=`<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>`
     html+=`</body></html>`
-
+    return html
+  }
+  const generatePDF=()=>{
+    const html=buildHtml()
     const win=window.open('','_blank')
     win.document.write(html)
     win.document.close()
     setTimeout(()=>win.focus(),300)
+    logActividad('reporte.generado',{detalle:{title:`${getPeriodLabel()} · ${Object.entries(sections).filter(([,v])=>v).map(([k])=>k).join(', ')}`}})
   }
+  const isDesk=useIsDesktop()
 
   const anySelected=Object.values(sections).some(Boolean)
 
+  const preview=anySelected?buildHtml():null
   return (
-    <div>
+    <div style={isDesk?{display:'flex',alignItems:'flex-start',gap:18}:undefined}>
+    <div style={isDesk?{width:360,flexShrink:0}:undefined}>
       <div style={{marginBottom:16}}>
         <Lbl>Período</Lbl>
         <div style={{display:'flex',gap:6,marginBottom:10}}>
@@ -24804,9 +24929,15 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={!anySelected} onClick={generatePDF} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!anySelected?.6:1}}>
-          Ver reporte
+          Imprimir / Guardar PDF
         </button>
       </div>
+      <div style={{marginTop:12}}><BitacoraLista prefijo='reporte.' titulo='Reportes generados' etiquetas={{'reporte.generado':'Reporte generado'}} limite={8}/></div>
+    </div>
+    {preview&&<div style={{flex:1,minWidth:0,marginTop:isDesk?0:14}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Vista previa</div>
+      <iframe title='Vista previa del reporte' srcDoc={preview} style={{width:'100%',height:isDesk?'calc(100vh - 190px)':520,border:`1px solid ${C.border}`,borderRadius:12,background:'#fff'}}/>
+    </div>}
     </div>
   )
 }
@@ -26191,6 +26322,7 @@ async function leerDriveTexto(file){   // lee un archivo de Drive a texto plano 
 }
 function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[], onClose}){
   const [tipo,setTipo] = useState('propuesta')
+  const isDesk = useIsDesktop()
   const [cliente,setCliente] = useState('')
   const [datos,setDatos] = useState('')
   const [draft,setDraft] = useState('')
@@ -26356,6 +26488,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
       if(cliDocTxt&&cliDocSel){ content+=`\n\nDOCUMENTO DEL CLIENTE ("${cliDocSel.name}", de su carpeta en Drive): úsalo como fuente de datos y contexto REAL de este caso (partes, RUT, montos, fechas, cláusulas). Extrae lo pertinente; no lo copies textual.\n---\n${cliDocTxt}\n---` }
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:t.max,system:t.sys,messages:[{role:'user',content}]})
       setDraft(data?.content?.[0]?.text||'(sin respuesta)')
+      logActividad('redaccion.generado',{detalle:{title:(TIPOS_REDACCION.find(t=>t.k===tipo)?.lbl||tipo),name:cliente||null}})
     }catch(e){ setErr(e?.message||'No se pudo generar.') }
     setLoading(false)
   }
@@ -26392,6 +26525,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     return slides.filter(s=>s.title||s.bullets.length)
   }
   const descargarPPTX = async()=>{
+    logActividad('redaccion.pptx',{detalle:{title:(TIPOS_REDACCION.find(t=>t.k===tipo)?.lbl||tipo),name:cliente||null}})
     if(!draft) return
     const P = (await import('https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/+esm')).default
     const pptx = new P(); pptx.layout='LAYOUT_WIDE'
@@ -26405,6 +26539,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     await pptx.writeFile({fileName:fn+'.pptx'})
   }
   const descargarWord = ()=>{
+    logActividad('redaccion.word',{detalle:{title:(TIPOS_REDACCION.find(t=>t.k===tipo)?.lbl||tipo),name:cliente||null}})
     if(!draft) return
     const t=TIPOS_REDACCION.find(x=>x.k===tipo)
     const html=`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><style>@page{margin:2.5cm} body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1a1a1a;line-height:1.45} h1{font-size:15pt;margin:14pt 0 6pt} h2{font-size:13pt;margin:12pt 0 5pt} h3{font-size:12pt;margin:10pt 0 4pt} p{margin:0 0 8pt} ul,ol{margin:0 0 8pt 18pt} hr{border:none;border-top:1px solid #999;margin:10pt 0}</style></head><body>${mdToHtml(draft)}</body></html>`
@@ -26422,12 +26557,14 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
       const name=(`${t?.lbl||'Documento'}${cliente.trim()?' - '+cliente.trim():''}`).replace(/[^\w\sáéíóúñÁÉÍÓÚÑ.\-]/g,'').trim()||'Documento'
       const d=await driveCall({action:'upload', folderId:cliFolder.id, name, html})
       setGuardadoUrl(d.url||null)
+      logActividad('redaccion.drive',{detalle:{title:(TIPOS_REDACCION.find(t=>t.k===tipo)?.lbl||tipo),name:cliente||null}})
     }catch(e){ const m=e?.message||''; setGuardadoErr(/No hay conexión|No autorizado|Failed to fetch|GOOGLE_OAUTH/i.test(m)?'Conecta Drive desde el menú ☰ para guardar.':(m||'No se pudo guardar en Drive.')) }
     setGuardando(false)
   }
   const inp = {width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
   return (
-    <div style={{padding:'2px 2px 6px'}}>
+    <div style={{padding:'2px 2px 6px',...(isDesk?{display:'flex',alignItems:'flex-start',gap:18}:{})}}>
+    <div style={isDesk?{width:420,flexShrink:0}:undefined}>
       <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.5}}>La IA redacta en el formato del estudio. <b>Tú validas y editas</b> antes de usarlo — nada se envía solo.</div>
       <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
         {TIPOS_REDACCION.map(t=>(<button key={t.k} onClick={()=>setTipo(t.k)} style={{fontSize:12,fontWeight:600,padding:'5px 12px',borderRadius:20,border:`1px solid ${tipo===t.k?C.accent:C.border}`,background:tipo===t.k?C.azulBg:'#fff',color:tipo===t.k?C.accent:C.muted,cursor:'pointer'}}>{t.lbl}</button>))}
@@ -26525,7 +26662,10 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
       )}
       <button onClick={generar} disabled={loading||!datos.trim()} style={{width:'100%',height:44,background:(loading||!datos.trim())?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(loading||!datos.trim())?'default':'pointer'}}>{loading?'Redactando…':<><Sparkle/> Generar borrador</>}</button>
       {err&&<div style={{fontSize:11,color:C.overdueText,marginTop:8}}>{err}</div>}
-      {draft&&<div style={{marginTop:14}}>
+    </div>
+    <div style={isDesk?{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:12}:{marginTop:14,display:'flex',flexDirection:'column',gap:12}}>
+      {!draft&&isDesk&&<div style={{border:`1px dashed ${C.border}`,borderRadius:12,padding:'40px 20px',textAlign:'center',fontSize:12.5,color:C.muted}}>{loading?'Redactando…':'El borrador aparece aquí. Tú validas y editas antes de usarlo.'}</div>}
+      {draft&&<div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
           <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Borrador · edítalo</span>
           <div style={{display:'flex',gap:8}}>
@@ -26535,13 +26675,15 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
             <button onClick={copiar} style={{fontSize:11,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'3px 11px',cursor:'pointer'}}>{copiado?'Copiado ✓':'Copiar'}</button>
           </div>
         </div>
-        <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={16} style={{...inp,resize:'vertical',fontSize:13,lineHeight:1.5}}/>
+        <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={isDesk?26:16} style={{...inp,resize:'vertical',fontSize:13,lineHeight:1.5}}/>
         {cliFolder&&<div style={{marginTop:8,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
           <button type='button' onClick={guardarEnDrive} disabled={guardando} style={{fontSize:11,fontWeight:600,color:'#fff',background:guardando?C.done:C.accent,border:'none',borderRadius:8,padding:'5px 11px',cursor:guardando?'default':'pointer'}}>{guardando?'Guardando…':`Guardar en la carpeta de ${cliFolder.name}`}</button>
           {guardadoUrl&&<a href={guardadoUrl} target='_blank' rel='noopener' style={{fontSize:11,color:C.normal,fontWeight:600}}>Guardado ✓ · abrir en Drive</a>}
           {guardadoErr&&<span style={{fontSize:11,color:C.overdueText}}>{guardadoErr}</span>}
         </div>}
       </div>}
+      <BitacoraLista prefijo='redaccion.' titulo='Redactados' etiquetas={{'redaccion.generado':'Borrador generado','redaccion.word':'Descargado en Word','redaccion.pptx':'Descargado en PPTX','redaccion.drive':'Guardado en el Drive del cliente'}} limite={8}/>
+    </div>
     </div>
   )
 }
@@ -26549,6 +26691,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
 const PLAZO_TIPO_COL = { 'plazo':C.azulInfo, 'obligación':C.soonText||C.soon, 'hito':C.normal }
 function PlazosModal({clients=[], onClose, onOpenClientFicha}){
   const [rows,setRows]=useState(null)
+  const isDesk=useIsDesktop()
   const [cliente,setCliente]=useState('')
   const cliObj=(clients||[]).find(c=>c.name&&c.name.trim()===cliente.trim())||(cliente.trim().length>=3?(clients||[]).find(c=>c.name&&(c.name||'').toLowerCase().includes(cliente.trim().toLowerCase())):null)
   const [mostrarPicker,setMostrarPicker]=useState(false)
@@ -26581,18 +26724,20 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
     try{
       const ins=extracted.items.map(x=>({client_id:String(cliObj.id),titulo:x.titulo,descripcion:x.descripcion||null,tipo:x.tipo,fecha:x.fecha,fuente:extracted.file.name,file_id:extracted.file.id}))
       const {error}=await supabase.from('plazos').insert(ins); if(error) throw error
+      logActividad('plazos.extraidos',{detalle:{name:cliObj.name,title:`${ins.length} plazos de ${extracted.file.name}`}})
       setExtracted(null); await cargar()
     }catch(e){ setExtErr(/relation .*plazos.*does not exist|Could not find the table/i.test(e?.message||'')?'Falta crear la tabla: corre docs/sql_plazos.sql en Supabase.':(e?.message||'No se pudo guardar.')) }
     setSaving(false)
   }
-  const marcar=async(p)=>{ const nv=p.estado==='cumplido'?'pendiente':'cumplido'; try{ await supabase.from('plazos').update({estado:nv}).eq('id',p.id) }catch(_){}; setRows(rs=>(rs||[]).map(x=>x.id===p.id?{...x,estado:nv}:x)) }
-  const borrar=async(p)=>{ if(!(await appConfirm('¿Borrar este plazo?'))) return; try{ await supabase.from('plazos').delete().eq('id',p.id) }catch(_){}; setRows(rs=>(rs||[]).filter(x=>x.id!==p.id)) }
+  const marcar=async(p)=>{ const nv=p.estado==='cumplido'?'pendiente':'cumplido'; try{ await supabase.from('plazos').update({estado:nv}).eq('id',p.id); logActividad(nv==='cumplido'?'plazos.cumplido':'plazos.reabierto',{tabla:'plazos',id:p.id,detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(_){}; setRows(rs=>(rs||[]).map(x=>x.id===p.id?{...x,estado:nv}:x)) }
+  const borrar=async(p)=>{ if(!(await appConfirm('¿Borrar este plazo?'))) return; try{ await supabase.from('plazos').delete().eq('id',p.id); logActividad('plazos.borrado',{detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(_){}; setRows(rs=>(rs||[]).filter(x=>x.id!==p.id)) }
   const agregarManual=async()=>{
     if(!mF.titulo.trim()||mSaving) return
     setMSaving(true); setExtErr(null)
     try{
       const {error}=await supabase.from('plazos').insert({client_id:cliObj?String(cliObj.id):null, titulo:mF.titulo.trim(), tipo:mF.tipo, fecha:/^\d{4}-\d{2}-\d{2}$/.test(mF.fecha)?mF.fecha:null, fuente:'manual'})
       if(error) throw error
+      logActividad('plazos.agregado',{detalle:{title:mF.titulo.trim(),name:cliObj?.name||null}})
       setMF({titulo:'',fecha:'',tipo:'plazo'}); setMManual(false); await cargar()
     }catch(e){ setExtErr(/relation .*plazos.*does not exist|Could not find the table/i.test(e?.message||'')?'Falta crear la tabla: corre docs/sql_plazos.sql.':(e?.message||'No se pudo agregar.')) }
     setMSaving(false)
@@ -26621,9 +26766,15 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
       <button type='button' onClick={()=>borrar(p)} title='Borrar' style={{flexShrink:0,fontSize:14,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'0 2px'}}>×</button>
     </div>
   )
-  return (
-    <div style={{padding:'2px 2px 6px'}}>
-      <div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 10px',marginBottom:12}}>
+  const foto=buckets&&(()=>{ const v=buckets.vencidos.length, pr=buckets.prox.length; const ir=k=>setOpenB(new Set([k])); return (
+    <div style={{background:v>0?C.overdueBg:pr>0?C.soonBg:C.greenBg,borderRadius:12,padding:'12px 14px',marginBottom:12}}>
+      <div onClick={()=>v>0&&ir('vencidos')} style={{cursor:v>0?'pointer':'default'}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:v>0?C.overdueText:pr>0?C.soonText:C.greenText}}>{v>0?'Vencidos':pr>0?'Próximos 30 días':'Al día'}</div><div style={{fontSize:24,fontWeight:800,letterSpacing:-.4,color:v>0?C.overdueText:pr>0?C.soonText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{v>0?v:pr>0?pr:'Sin plazos vencidos'}</div></div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:'4px 14px',marginTop:4,fontSize:11.5,color:C.muted}}>
+        {[['prox','Próximos 30 días'],['futuro','Más adelante'],['sinfecha','Sin fecha cierta'],['cumplidos','Cumplidos']].filter(([k])=>buckets[k].length&&!(k==='prox'&&v===0)).map(([k,l])=><span key={k} onClick={()=>ir(k)} style={{cursor:'pointer'}}>{l} <b style={{color:C.text}}>{buckets[k].length}</b></span>)}
+      </div>
+    </div>) })()
+  const altaBox=(
+      <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',background:C.card}}>
         <div style={{fontSize:11,color:C.muted,marginBottom:7}}>Extrae los plazos y obligaciones de un contrato del cliente — la IA los lee y tú los agendas.</div>
         <div style={{position:'relative',marginBottom:7}}>
           <input value={cliente} onChange={e=>setCliente(e.target.value)} placeholder='Buscar cliente…' style={inp}/>
@@ -26665,8 +26816,14 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
           {extErr&&<div style={{fontSize:11,color:C.overdueText,marginTop:6}}>{extErr}</div>}
         </div>}
       </div>
+  )
+  return (
+    <div style={{padding:'2px 2px 6px'}}>
+      {foto}
+      <div style={isDesk?{display:'flex',alignItems:'flex-start',gap:18}:{display:'flex',flexDirection:'column',gap:12}}>
+        <div style={{flex:1,minWidth:0}}>
       {buckets===null?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:16}}>Cargando…</div>
-       :BUCK.every(([k])=>!buckets[k].length)?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:16}}>No hay plazos agendados. Extrae de un contrato arriba.</div>
+       :BUCK.every(([k])=>!buckets[k].length)?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:16}}>No hay plazos agendados. Agrega uno a mano o extráelo de un contrato.</div>
        :BUCK.filter(([k])=>buckets[k].length).map(([k,lbl,col])=>{ const op=openB.has(k); return (
         <div key={k} style={{marginBottom:8,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
           <div onClick={()=>togB(k)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',cursor:'pointer',background:op?C.bgPanel:'transparent'}}>
@@ -26678,6 +26835,12 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
           {op&&<div style={{padding:'0 11px 6px'}}>{buckets[k].map(p=><Fila key={p.id} p={p}/>)}</div>}
         </div>
       )})}
+        </div>
+        <div style={isDesk?{width:360,flexShrink:0,display:'flex',flexDirection:'column',gap:12}:{display:'flex',flexDirection:'column',gap:12}}>
+          {altaBox}
+          <BitacoraLista prefijo='plazos.' titulo='Historial de plazos' etiquetas={{'plazos.agregado':'Plazo agregado','plazos.extraidos':'Plazos leídos de un documento','plazos.cumplido':'Plazo cumplido','plazos.reabierto':'Plazo reabierto','plazos.borrado':'Plazo borrado'}} limite={12}/>
+        </div>
+      </div>
     </div>
   )
 }
@@ -30961,8 +31124,9 @@ function ConciliarLoteModal({ rows=[], cmap={}, clients=[], onClose, onConfirm }
   const total = selRows.reduce((a,x)=>a+(Number(x.m.monto)||0),0)
   const nom = m => cmap[m.cliente_id] || m.nombre_contraparte || (clients.find(c=>String(c.id)===String(m.cliente_id))?.name) || 'Sin cliente'
   return (<>
+    <div style={{background:C.greenBg,borderRadius:12,padding:'12px 14px',marginBottom:12}}><div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5}}>Calces exactos</div><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}><span style={{fontSize:22,fontWeight:800,color:C.greenText}}>{selRows.length} de {rows.length} pago{rows.length!==1?'s':''}</span><span style={{fontSize:20,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(total)}</span></div></div>
     <div style={{padding:'0 2px 10px',fontSize:13,color:C.muted,lineHeight:1.5}}>Cada pago calza <b style={{color:C.text}}>Exacto en pesos</b> con el saldo de su factura y comparte el <b style={{color:C.text}}>RUT</b>. Destilda el que no quieras conciliar. Es reversible.</div>
-    <div style={{maxHeight:'52vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:6}}>
+    <div style={{display:'flex',flexDirection:'column',gap:6}}>
       {rows.map(({m,f})=>{ const on=sel.has(String(m.id))
         return <div key={m.id} onClick={()=>toggle(String(m.id))} style={{display:'flex',gap:10,alignItems:'flex-start',padding:'9px 11px',border:`1px solid ${on?C.greenText:C.border}`,borderRadius:10,background:on?C.greenBg:'#fff',cursor:'pointer'}}>
           <span style={{width:18,height:18,borderRadius:6,border:`1.5px solid ${on?C.greenText:C.done}`,background:on?C.greenText:'#fff',flexShrink:0,marginTop:1,display:'flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
@@ -31711,6 +31875,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
     if(loteBusy||!exactos.length) return
     setLoteBusy(true); setLoteProg(0)
     for(let i=0;i<exactos.length;i++){ try{ await reconciliar(exactos[i].m, exactos[i].f, 'lote') }catch(_){}; setLoteProg(i+1) }
+    logActividad('banco.conciliar_varias',{detalle:exactos.map(x=>({folio:x.f?.invoice_no,name:x.m?.nombre_contraparte||null,monto:x.m?.monto}))})
     setLoteBusy(false); setLoteOpen(false); setLoteConfirm(null)
   }
 
@@ -32984,6 +33149,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const ccAutoRef = useRef(new Set())
   const traspasosAuto = useMemo(()=> (movs||[]).filter(m=>{ const s=traspasoSweep(m); return s && s.gap<=7 }), [movs,concByMov])   // eslint-disable-line
   useEffect(()=>{ if(DEMO) return; traspasosAuto.forEach(m=>{ if(!ccAutoRef.current.has(m.id)){ ccAutoRef.current.add(m.id); marcarTraspasoInterno(m) } }) }, [traspasosAuto])   // eslint-disable-line
+  // Conciliar varias = PÁGINA (antes modal): misma compuerta antes de tocar plata, con la foto de los calces y la bitácora del banco.
+  if(loteConfirm) return <div style={isDesktop?{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}:undefined}><FlujoPagina origen='Banco' titulo='Conciliar varias' onBack={()=>!loteBusy&&setLoteConfirm(null)} maxW={900}>
+    {loteBusy&&<div style={{background:C.azulBg,color:C.accent,borderRadius:10,padding:'9px 12px',fontSize:12.5,fontWeight:600,marginBottom:10}}>Conciliando {loteProg} de {loteConfirm.length}…</div>}
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>!loteBusy&&setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></div>
+    <div style={{marginTop:12}}><BitacoraLista prefijo='banco.' titulo='Historial de conciliaciones en lote' etiquetas={{'banco.conciliar_varias':'Pagos conciliados en lote'}} limite={10}/></div>
+  </FlujoPagina></div>
   if(cobradasOpen) return <CobradasSinRespaldoPage billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onOpenClientFicha={onOpenClientFicha} onClose={()=>setCobradasOpen(false)}/>   // ← movido aquí: después de TODOS los hooks (igual que hubOpen); evita "fewer hooks"
   if(hubOpen) return concHub   // ← movido aquí: recién después de TODOS los hooks (ver nota arriba). Nunca poner un return entre hooks.
   // "Por resolver" accionable: acción por fila en el abono CERRADO según su etapa (sin cliente → Es X ✓ / Asignar; por confirmar → Conciliar N°X; sin factura → Imputar). Reusa sugMov/identificar/crearFondoPersonal/reconciliar/mejorCandidato. El buscador vive detrás de "Asignar"/"Otro" (abre la fila).
@@ -33092,7 +33263,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   )
   const interiorEl = (
     <div style={{paddingBottom:80,...(isDesktop?{maxWidth:980,margin:'0 auto'}:{})}}>
-      {loteConfirm&&<Modal title='Conciliar varias' onClose={()=>!loteBusy&&setLoteConfirm(null)} closeOnBackdrop={false}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></Modal>}
       <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button onClick={()=>setHubOpen(true)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
@@ -34126,7 +34296,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {tarea:'Tarea',gasto:'Gasto',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
+const TAB_LABELS = {tarea:'Tarea',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
@@ -34528,6 +34698,8 @@ export default function App() {
   const [tab,setTab]=useState('dashboard')
   const isDesktop = useIsDesktop()   // Fase 1: shell de escritorio (sidebar + ancho) vs móvil actual
   const [modal,_setModal]=useState(null)
+  useEffect(()=>{ setActorBitacora(user?.email||null) },[user])   // bitácora: quién hizo cada acción
+  const rdLog=(accion,fn)=>async(...a)=>{ const r=await fn(...a); logActividad(accion,{detalle:a}); return r }   // Revisión de datos: cada resolución queda en la bitácora
   const [pagina,setPagina]=useState(null)        // página activa (tabs 'tarea'/'gasto'): mismo objeto {type,data} que antes recibía el modal, + prev (estado anterior dentro de la misma página)
   const pageClosingRef=useRef(false)             // evita doble goBack cuando un guardado llama setModal(null) dos veces (handler + handleSaveX)
   const [devEmail,setDevEmail]=useState(null)   // {client,amount,fecha,rend,rendN} → abre DevolucionEmailModal tras guardar una devolución
@@ -34536,15 +34708,15 @@ export default function App() {
   // Pila de navegación cross-link: cada salto apila {tab,fichaId,scroll}; el ← desapila y restaura la posición exacta.
   // DEBE ir antes de handleBackOrigin (su dep array se evalúa en render → TDZ/pantalla negra si va después).
   const [navStack,setNavStack]=useState([])
-  const handleOpenClientFicha=useCallback((cid)=>{ if(cid){ setNavStack(s=>[...s,{tab,fichaId:tab==='clients'?openFichaId:null,scroll:getScroll()}]); setOpenFichaId(cid); setTab('clients'); setTimeout(()=>restoreScroll({w:0,d:0}),0) } },[tab,openFichaId])
-  const handleBackOrigin=useCallback(()=>{ if(!navStack.length) return; const e=navStack[navStack.length-1]; setTab(e.tab); setOpenFichaId(e.fichaId||null); setNavStack(s=>s.slice(0,-1)); if(e.scroll){ setTimeout(()=>restoreScroll(e.scroll),60); setTimeout(()=>restoreScroll(e.scroll),220) } },[navStack])
+  const handleOpenClientFicha=useCallback((cid)=>{ if(cid){ setNavStack(s=>[...s,{tab,fichaId:tab==='clients'?openFichaId:null,scroll:getScroll(),pagina:['tarea','gasto','flujo'].includes(tab)?pagina:null}]); setOpenFichaId(cid); setTab('clients'); setTimeout(()=>restoreScroll({w:0,d:0}),0) } },[tab,openFichaId,pagina])
+  const handleBackOrigin=useCallback(()=>{ if(!navStack.length) return; const e=navStack[navStack.length-1]; if(e.pagina) setPagina(e.pagina); setTab(e.tab); setOpenFichaId(e.fichaId||null); setNavStack(s=>s.slice(0,-1)); if(e.scroll){ setTimeout(()=>restoreScroll(e.scroll),60); setTimeout(()=>restoreScroll(e.scroll),220) } },[navStack])
   // Navegación unificada bajo navStack: navTo(destino) apila SIEMPRE el estado actual (tab+ficha+scroll) y salta al lugar EXACTO (con foco opcional);
   // goBack() vuelve a la página inmediatamente anterior (restaura pestaña+scroll+ficha), con fallback al Inicio si la pila está vacía.
   // Antes solo "abrir ficha de cliente" apilaba; el resto usaba setTab crudo y los "Volver" iban al dashboard → poca fluidez.
   const navTo=useCallback((dest)=>{ if(!dest||!dest.tab) return
     // returnFichaId: al saltar a una página (ej. editCliente) desde una ficha abierta, guardar a qué ficha volver
     // (openFichaId ya es null porque ClientsView lo consume) → "Volver" reabre la ficha exacta, no la lista.
-    setNavStack(s=>[...s,{tab,fichaId:('returnFichaId' in dest)?dest.returnFichaId:(tab==='clients'?openFichaId:null),scroll:getScroll()}])
+    setNavStack(s=>[...s,{tab,fichaId:('returnFichaId' in dest)?dest.returnFichaId:(tab==='clients'?openFichaId:null),scroll:getScroll(),pagina:['tarea','gasto','flujo'].includes(tab)?pagina:null}])
     if('conc' in dest) setConcFocus(dest.conc??null)
     if('concBuscar' in dest) setConcBuscar(dest.concBuscar??null)
     if('cartera' in dest) setCarteraFocus(dest.cartera??null)
@@ -34553,24 +34725,27 @@ export default function App() {
     if('editClientId' in dest) setEditClientId(dest.editClientId??null)
     if(dest.fichaId!=null) setOpenFichaId(dest.fichaId)
     setTab(dest.tab); setTimeout(()=>restoreScroll({w:0,d:0}),0)
-  },[tab,openFichaId])
+  },[tab,openFichaId,pagina])
   const goBack=useCallback(()=>{ if(navStack.length) handleBackOrigin(); else setTab(userRole==='admin'?'dashboard':'tasks') },[navStack,userRole,handleBackOrigin])
   // Tarea y Gasto son PÁGINAS (no modales). Se intercepta setModal para que TODOS los puntos de apertura existentes (setModal({type:'task'|...}))
   // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
   // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
   const setModal=useCallback((m)=>{
-    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto'}
+    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo'}
     const pg=m&&m.type?PAGE_OF[m.type]:null
     if(pg){ _setModal(null); pageClosingRef.current=false
-      if(tab===pg){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
+      if(tab===pg&&pg!=='flujo'){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
+      else if(tab===pg){ navTo({tab:pg}); setPagina({...m,prev:null}) }   // flujo → otro flujo: se apila (volver regresa al flujo anterior)
       else { setPagina({...m,prev:null}); navTo({tab:pg}) }
       return }
-    if(m==null&&(tab==='tarea'||tab==='gasto')){ if(pageClosingRef.current) return; pageClosingRef.current=true
+    if(m==null&&(tab==='tarea'||tab==='gasto'||tab==='flujo')){ if(pageClosingRef.current) return; pageClosingRef.current=true
       if(pagina?.prev){ setPagina(pagina.prev); setTimeout(()=>restoreScroll({w:0,d:0}),0) } else goBack()
       return }
     _setModal(m)
   },[tab,navTo,goBack,pagina])
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
+  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos'}
+  const origenNav=(fb)=>{ const t=navStack[navStack.length-1]; if(!t) return fb; if(t.tab==='flujo') return FLUJO_TIT[t.pagina?.type]||fb; if(t.tab==='tarea') return 'Tarea'; if(t.tab==='gasto') return 'Gastos'; return TAB_LABELS[t.tab]||fb }
   // Entregar caja chica a un miembro desde el aviso (Inicio/Gastos). Mismo registro que "Nueva Caja" (petty_cash); el barrido diario cierra el aviso al recuperarse el saldo.
   const handleEntregarCaja=useCallback(async(row)=>{
     if(!row?.user_name||!(row.amount>0)) return
@@ -34789,8 +34964,8 @@ export default function App() {
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
-    const esPagina=tab==='editCliente'||tab==='tarea'||tab==='gasto'   // páginas de edición (drill fuera de la barra)
-    if((tab==='tarea'||tab==='gasto')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
+    const esPagina=tab==='editCliente'||tab==='tarea'||tab==='gasto'||tab==='flujo'   // páginas de edición (drill fuera de la barra)
+    if((tab==='tarea'||tab==='gasto'||tab==='flujo')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
     if(userRole==='limited' && !esPagina && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
     if(userRole==='admin' && tab!=='facturasDelMes' && !esPagina && tab!=='socios' && tab!=='resultadoAnio' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
@@ -36854,8 +37029,28 @@ export default function App() {
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
-            {tab==='tarea'&&pagina&&<TareaPage pagina={pagina} tasks={tasks} clients={clients} sales={sales} clientEntities={clientEntities} user={user} saving={saving} origen={TAB_LABELS[navStack[navStack.length-1]?.tab]||'Volver'} onBack={()=>setModal(null)} onSaveTask={handleSaveTask} onDelegate={handleDelegateTask} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onOpenClientFicha={handleOpenClientFicha} onCierre={({estado,detalle,files})=>{ const t=pagina.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/>}
-            {tab==='gasto'&&pagina&&<GastoPage pagina={pagina} pettyCash={pettyCash} me={user?.name} onSaveCaja={handleEntregarCaja} clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} rendiciones={rendiciones} saving={saving} user={user} origen={TAB_LABELS[navStack[navStack.length-1]?.tab]||'Volver'} onBack={()=>setModal(null)} onSwitch={k=>setPagina(p=>({...p,type:k}))} onSaveExpense={handleSaveExpense} onDeleteExpense={handleDeleteExpense} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))} onSaveFondo={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }}/>}
+        {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
+        <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={980}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={handleCreateOccasional} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
+        )})()}
+        {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='redaccion'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Redactar con IA' onBack={()=>setModal(null)} maxW={1120}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='plazos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Plazos y obligaciones' onBack={()=>setModal(null)} maxW={1120}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='revisionDatos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisión de datos' onBack={()=>setModal(null)} maxW={1120}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={rdLog('revision.resolverDupAnticipo',handleResolverDupAnticipo)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={rdLog('revision.guardarClientRut',async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) })} onPasarTerminado={rdLog('revision.pasarTerminado',async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) })} onActualizarHonorario={rdLog('revision.actualizarHonorario',async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) })} onFixVencimiento={rdLog('revision.fixVencimiento',async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) })} onResolverCuotaTramo={rdLog('revision.resolverCuotaTramo',async(s,mode,exceso)=>{
+          if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
+          // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
+          const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
+          let rem=Math.round(exceso||0); const changes=[]
+          for(const b of progs){ if(rem<=0) break; const cur=Math.round(montoFactura(b)); const cut=Math.min(rem,cur); const na=cur-cut; rem-=cut; changes.push({id:b.id, from:cur, to:na, del:na<=0}) }
+          if(!changes.length) return
+          if(!DEMO){ for(const c of changes){ await supabase.from('billing').update(c.del?{deleted_at:new Date().toISOString()}:{amount:c.to,updated_at:new Date().toISOString()}).eq('id',c.id) }
+            try{ await setLearningKV('data_health','cuotatramo_undo:'+s.id,JSON.stringify(changes)) }catch(_){} }
+          setBilling(p=>p.map(x=>{ const c=changes.find(cc=>String(cc.id)===String(x.id)); return c?(c.del?{...x,deleted_at:new Date().toISOString()}:{...x,amount:c.to}):x }))
+        })} onResolverGlosa={rdLog('revision.resolverGlosa',async(key,categoria)=>{ if(DEMO) return
+          // deja la clave con UN solo valor canónico: borra las filas en conflicto e inserta la elegida. No toca gastos ya clasificados; corrige la sugerencia futura.
+          try{ await supabase.from('learnings').delete().eq('kind','costo_oficina').eq('key',key); await supabase.from('learnings').insert({kind:'costo_oficina',key,value:categoria,updated_at:new Date().toISOString()}) }catch(_){}
+        })} onRetirarFantasmas={rdLog('revision.retirarFantasmas',async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) })} onDismissFantasma={rdLog('revision.dismissFantasma',async(progId)=>{ if(DEMO) return; try{ await setLearningKV('fantasma_no',String(progId),'1') }catch(_){} })}/><div style={{marginTop:12}}><BitacoraLista prefijo='revision.' titulo='Resueltas · historial' etiquetas={{'revision.resolverDupAnticipo':'Anticipo duplicado resuelto','revision.guardarClientRut':'RUT guardado en la ficha','revision.pasarTerminado':'Venta pasada a Terminado','revision.actualizarHonorario':'Honorario ajustado a lo facturado','revision.fixVencimiento':'Vencimiento corregido','revision.resolverCuotaTramo':'Cuota programada + tramo resuelto','revision.resolverGlosa':'Glosa definida','revision.retirarFantasmas':'Cuotas ya emitidas retiradas','revision.dismissFantasma':'Cuota marcada como pendiente'}} vacio='Aún no hay resoluciones registradas.'/></div></FlujoPagina>}
+            {tab==='tarea'&&pagina&&<TareaPage pagina={pagina} tasks={tasks} clients={clients} sales={sales} clientEntities={clientEntities} user={user} saving={saving} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSaveTask={handleSaveTask} onDelegate={handleDelegateTask} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onOpenClientFicha={handleOpenClientFicha} onCierre={({estado,detalle,files})=>{ const t=pagina.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/>}
+            {tab==='gasto'&&pagina&&<GastoPage pagina={pagina} pettyCash={pettyCash} me={user?.name} onSaveCaja={handleEntregarCaja} clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} rendiciones={rendiciones} saving={saving} user={user} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSwitch={k=>setPagina(p=>({...p,type:k}))} onSaveExpense={handleSaveExpense} onDeleteExpense={handleDeleteExpense} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))} onSaveFondo={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }}/>}
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha} onIngestPropuesta={handleIngestPropuestaDrive}/>}
@@ -36985,9 +37180,7 @@ export default function App() {
         </div></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {/* 'gastos' / 'fondo' / 'expenseEdit' ya NO son modales: viven en la página navegable 'gasto' (GastoPage, ver render de tabs). setModal los redirige. */}
-        {modal?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
-        <Modal fullscreenOnMobile fullscreen fsMaxWidth={980} title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={cerrar} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>
-        )})()}
+        {/* 'cargaMasiva' ya NO es modal: página 'flujo' (ver render de tabs). */}
         {modal?.type==='clientLimited'&&<Modal fullscreenOnMobile title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){appAlert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
         {modal?.type==='ajuste'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
@@ -36997,8 +37190,8 @@ export default function App() {
         {modal?.type==='importExcel'&&<Modal fullscreenOnMobile title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const antes=billing.length; const {data:nb}=await getBilling(); if(nb){ setBilling(nb); logCargaSII({tipo:'excel', n:Math.max(0,nb.length-antes), user}) }}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal fullscreenOnMobile title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='aprendizaje'&&<Modal fullscreenOnMobile title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='redaccion'&&<Modal fullscreenOnMobile title='Redactar con IA' onClose={()=>setModal(null)}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='plazos'&&<Modal fullscreenOnMobile title='Plazos y obligaciones' onClose={()=>setModal(null)}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}}/></Modal>}
+        {/* 'redaccion' ya NO es modal: página 'flujo'. */}
+        {/* 'plazos' ya NO es modal: página 'flujo'. */}
         {modal?.type==='gmailContactos'&&<Modal fullscreenOnMobile title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal fullscreenOnMobile title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal fullscreenOnMobile title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
@@ -37009,25 +37202,12 @@ export default function App() {
             supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
-        {modal?.type==='revisionDatos'&&<Modal fullscreenOnMobile title='Revisión de datos' maxWidth={560} onClose={()=>setModal(null)}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onOpenClientFicha={(id)=>{setModal(null);handleOpenClientFicha(id)}} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) }} onPasarTerminado={async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) }} onActualizarHonorario={async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) }} onFixVencimiento={async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) }} onResolverCuotaTramo={async(s,mode,exceso)=>{
-          if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
-          // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
-          const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
-          let rem=Math.round(exceso||0); const changes=[]
-          for(const b of progs){ if(rem<=0) break; const cur=Math.round(montoFactura(b)); const cut=Math.min(rem,cur); const na=cur-cut; rem-=cut; changes.push({id:b.id, from:cur, to:na, del:na<=0}) }
-          if(!changes.length) return
-          if(!DEMO){ for(const c of changes){ await supabase.from('billing').update(c.del?{deleted_at:new Date().toISOString()}:{amount:c.to,updated_at:new Date().toISOString()}).eq('id',c.id) }
-            try{ await setLearningKV('data_health','cuotatramo_undo:'+s.id,JSON.stringify(changes)) }catch(_){} }
-          setBilling(p=>p.map(x=>{ const c=changes.find(cc=>String(cc.id)===String(x.id)); return c?(c.del?{...x,deleted_at:new Date().toISOString()}:{...x,amount:c.to}):x }))
-        }} onResolverGlosa={async(key,categoria)=>{ if(DEMO) return
-          // deja la clave con UN solo valor canónico: borra las filas en conflicto e inserta la elegida. No toca gastos ya clasificados; corrige la sugerencia futura.
-          try{ await supabase.from('learnings').delete().eq('kind','costo_oficina').eq('key',key); await supabase.from('learnings').insert({kind:'costo_oficina',key,value:categoria,updated_at:new Date().toISOString()}) }catch(_){}
-        }} onRetirarFantasmas={async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) }} onDismissFantasma={async(progId)=>{ if(DEMO) return; try{ await setLearningKV('fantasma_no',String(progId),'1') }catch(_){} }}/></Modal>}
+        {/* 'revisionDatos' ya NO es modal: página 'flujo'. */}
         {modal?.type==='fusionarClientes'&&<Modal fullscreenOnMobile title={modal.pending?'Confirmar fusión':'Fusionar clientes'} maxWidth={560} onClose={()=>setModal(null)}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={modal.pending||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></Modal>}
         {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} onClose={()=>setModal(null)}/>}
-        {modal?.type==='report'&&<Modal fullscreenOnMobile title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
+        {/* 'report' ya NO es modal: página 'flujo'. */}
         {/* 'task' / 'taskPreview' / 'cierreTarea' ya NO son modales: viven en la página navegable 'tarea' (TareaPage, ver render de tabs). setModal los redirige. */}
         {/* "Editar/Nuevo cliente" ya NO es modal: es la página navegable editCliente (ver render arriba). */}
       </div>
