@@ -7330,8 +7330,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </>
         )
       })()}
-      {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={[sale].filter(Boolean)} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
-      {facturarAntS&&<FacturarBloqueModal anticipo={facturarAntS} billing={billing} sales={[sale].filter(Boolean)} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAntS,d)} onClose={()=>setFacturarAntS(null)}/>}
+      {cubrirAnt&&<PaginaSobre origen='Venta' titulo='Cubrir cuotas con anticipo' ctx={sale?.title||null} onBack={()=>setCubrirAnt(null)}><CubrirCuotasModal asPage anticipo={cubrirAnt} sales={[sale].filter(Boolean)} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/></PaginaSobre>}
+      {facturarAntS&&<PaginaSobre origen='Venta' titulo='Facturar anticipo en bloque' ctx={sale?.title||null} onBack={()=>setFacturarAntS(null)}><FacturarBloqueModal asPage anticipo={facturarAntS} billing={billing} sales={[sale].filter(Boolean)} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAntS,d)} onClose={()=>setFacturarAntS(null)}/></PaginaSobre>}
 
       {/* 10. Actualizar honorarios (solo ventas activas guardadas) */}
       {sale?.id&&!propBorr&&(
@@ -10045,7 +10045,7 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
   )
 }
 
-function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],initialMes,onOpenClientFicha}) {
+function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],initialMes,onOpenClientFicha,asPage=false}) {
   const isDesktop = useIsDesktop()
   const hoy = new Date()
   const [mes,setMes] = useState((/^\d{4}-\d{2}$/.test(initialMes||'')?initialMes:`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`))
@@ -10206,16 +10206,16 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const CheckVerde = () => <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><polyline points='20 6 9 17 4 12'/></svg>
   // Portal al body (igual que Modal, ver createPortal en su def): sin esto el overlay queda ATRAPADO en el contexto de apilamiento
   // del header sticky (z:10) de Facturación y el apphead (z:20) lo tapa, pese a su z:200 (body{zoom} desktop convierte a body en el contexto).
-  return createPortal(
-    <div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,background:C.bg,zIndex:200,overflowY:'auto'}}>
-      <div style={{background:'#fff',maxWidth:isDesktop?960:'100%',width:'100%',margin:'0 auto',minHeight:'100%',boxShadow:isDesktop?'0 0 40px rgba(0,0,0,.06)':'none'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:2}}>
+  // Página (asPage): el encabezado lo pone FlujoPagina; sin capa propia.
+  const _inner = (
+      <div style={asPage?{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}:{background:'#fff',maxWidth:isDesktop?960:'100%',width:'100%',margin:'0 auto',minHeight:'100%',boxShadow:isDesktop?'0 0 40px rgba(0,0,0,.06)':'none'}}>
+        {!asPage&&        <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:2}}>
           <button onClick={onClose} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}>
             <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>
             {isDesktop&&'Volver'}
           </button>
           <span style={{fontSize:16,fontWeight:700,color:C.accent}}>Cuadrar con SII</span>
-        </div>
+        </div>}
         <div style={{display:'flex',gap:10,padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB'}}>
           <div style={{display:'flex',border:'0.5px solid #E4E8EB',borderRadius:8,overflow:'hidden',flex:1,height:36}}>
             <button onClick={()=>cambiarMes(-1)} style={{width:32,border:'none',background:'none',color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg></button>
@@ -10464,7 +10464,9 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
           </>}
         </>}
       </div>
-    </div>
+  )
+  return asPage ? _inner : createPortal(
+    <div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,background:C.bg,zIndex:200,overflowY:'auto'}}>{_inner}</div>
   , document.body)
 }
 
@@ -11929,6 +11931,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
     supabase.from('sii_import_batches').select('*').order('created_at',{ascending:false}).limit(40).then(({data})=>setHistPage(data||[])).catch(()=>setHistPage([]))
   },[xmlHub])   // eslint-disable-line
   const [tblSort,setTblSort] = usePersisted('fd_bill_tblsort',{col:'fecha',dir:'desc'})   // Desktop "Todas": orden de la tabla, recordado entre sesiones
+  const [ordPC,setOrdPC] = useState({k:'nombre',dir:1})   // Por cliente (escritorio): columna de orden
   const [porRevOpen,setPorRevOpen] = useState(false)   // hub: tarjeta "Por revisar" desplegada
 
   const xmlHubPage = xmlHub ? (()=>{
@@ -12021,8 +12024,62 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
         </div>
       </div>
     </FlujoPagina> })() : null
-  const billingPage = cierrePage || porEnviarPage || xmlHubPage
-  useEffect(()=>{ if(cierreOpen||bandejaEnvio||xmlHub) restoreScroll({w:0,d:0}) },[cierreOpen,bandejaEnvio,xmlHub])
+  // Flujos de Facturación = PÁGINAS (antes ventanas): mismo patrón que Cierre de mes. Volver deja la vista tal cual (lista, filtro, factura desplegada).
+  const origenFact = bandejaEnvio?'Facturas por enviar':xmlHub?'Cargar XML':filter==='checklist'?'Facturas del mes':filter==='anticipos'?'Anticipos':filter==='clientes'?'Por cliente':filter==='all'?'Facturas':'Facturación'
+  const emailPage = (facturasEmail&&facturasEmail.length>0)||facturaEmail ? (()=>{ const lista=(facturasEmail&&facturasEmail.length>0)?facturasEmail:null; const f0=lista?lista[0]:facturaEmail; const cli=clients.find(c=>String(c.id)===String(f0.client_id)); const cerrar=()=>{ if(lista) setFacturasEmail(null); else setFacturaEmail(null) }
+    return <FlujoPagina origen={origenFact} titulo={lista?'Enviar facturas':'Enviar factura'} ctx={[lista?`${lista.length} facturas`:(f0.invoice_no?`N° ${folioN(f0.invoice_no)}`:null), cli?.name].filter(Boolean).join(' · ')||null} onBack={cerrar} maxW={1120}>
+      <FacturaEmailModal asPage factura={f0} facturas={lista||undefined} sales={sales} client={cli} sale={(sales||[]).find(s=>String(s.id)===String(f0.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={cerrar}/>
+    </FlujoPagina> })() : null
+  const recPage = recPreview ? (()=>{ const rPrev=recordatorioCobro(recPreview.b, recNota); const cli=clients.find(c=>String(c.id)===String(recPreview.b.client_id))
+    return <FlujoPagina origen={origenFact} titulo='Recordatorio de cobro' ctx={[recPreview.b.invoice_no?`N° ${folioN(recPreview.b.invoice_no)}`:null, cli?.name].filter(Boolean).join(' · ')||null} onBack={()=>setRecPreview(null)} maxW={1120}>
+      <div style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) minmax(0,1.2fr)':'1fr',gap:isDesktop?20:12,alignItems:'start'}}>
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.6}}><b style={{color:C.text}}>Para:</b> {recPreview.to}<br/><b style={{color:C.text}}>Nivel:</b> {rPrev.nivel}<br/><b style={{color:C.text}}>Asunto:</b> {rPrev.subject}</div>
+          <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,marginBottom:5}}>Nota para este cliente · opcional</div>
+          <textarea value={recNota} onChange={e=>setRecNota(e.target.value)} rows={3} placeholder='Ej. Cualquier consulta sobre esta factura, con gusto les ayudamos. ¡Gracias!' style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:12.5,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:5}}/>
+          <div style={{fontSize:10.5,color:C.muted,marginBottom:12}}>Va dentro del correo y se recuerda para este cliente. Las cifras del cobro se arman solas.</div>
+          <ActBtn variant='primary' size='lg' full onClick={()=>enviarRecordatorio({b:recPreview.b, to:recPreview.to, nota:recNota})}>Enviar recordatorio</ActBtn>
+        </div>
+        <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,padding:'9px 12px',borderBottom:`1px solid ${C.bgSoft}`}}>Vista previa</div><div style={{padding:12}} dangerouslySetInnerHTML={{__html:rPrev.html}}/></div>
+      </div>
+    </FlujoPagina> })() : null
+  const cargasPage = cargasHist!==null ? <FlujoPagina origen={origenFact} titulo='Cargas del SII' onBack={()=>setCargasHist(null)} maxW={720}>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px'}}>
+        {cargasHist==='loading'
+          ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Cargando…</div>
+          : cargasHist.length===0
+            ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Aún no hay cargas registradas.</div>
+            : cargasHist.map(b=><CargaHistRow key={b.id} b={b}/>)}
+      </div>
+    </FlujoPagina> : null
+  const depurarPage = depurarRows ? <FlujoPagina origen={origenFact} titulo='Marcar como pagadas' ctx={`${depurarRows.length} factura${depurarRows.length!==1?'s':''}`} onBack={()=>setDepurarRows(null)} maxW={860}>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></div>
+    </FlujoPagina> : null
+  const cubrirPage = cubrirAnt ? <FlujoPagina origen={origenFact} titulo='Cubrir cuotas con anticipo' ctx={clients.find(c=>String(c.id)===String(cubrirAnt.client_id))?.name||null} onBack={()=>setCubrirAnt(null)} maxW={640}>
+      <CubrirCuotasModal asPage anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>
+    </FlujoPagina> : null
+  const facturarPage = facturarAnt ? <FlujoPagina origen={origenFact} titulo='Facturar anticipo en bloque' ctx={clients.find(c=>String(c.id)===String(facturarAnt.client_id))?.name||null} onBack={()=>setFacturarAnt(null)} maxW={640}>
+      <FacturarBloqueModal asPage anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>
+    </FlujoPagina> : null
+  const siiCotejoPage = siiOpen ? <FlujoPagina origen={siiPageOpen?'Facturación electrónica':origenFact} titulo='Cuadrar con SII' onBack={()=>{setSiiOpen(false);setCotejoMes(null)}} maxW={1000}>
+      <SiiSyncModal asPage onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>
+    </FlujoPagina> : null
+  const regPage = regReview ? (()=>{ const items=regReview; const total=items.reduce((a,r)=>a+(r.monto||0),0)
+    return <FlujoPagina origen={origenFact} titulo={`Registrar ${items.length} factura${items.length!==1?'s':''}`} onBack={()=>!regBusy&&setRegReview(null)} maxW={720}>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
+        <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:10}}><div style={{flex:1,fontSize:12,color:C.muted,lineHeight:1.5}}>El SII ya las emitió. Esto las <b style={{color:C.text}}>registra en tu sistema</b> (pasan de programadas a por cobrar) — no las vuelve a emitir.</div><b style={{fontSize:15,color:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(total)}</b></div>
+        <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+          {items.map((r,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'1fr auto',columnGap:10,padding:'9px 11px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+            <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div><div style={{fontSize:10.5,color:C.muted}}>Factura N° {r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}</div></div>
+            <span style={{fontSize:12.5,fontWeight:700,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
+          </div>)}
+        </div>
+        <div style={{marginTop:12}}><ActBtn variant='primary' size='lg' full disabled={!!regBusy} onClick={()=>doRegistrarLote(items)}>{regBusy==='lote'?'Registrando…':`Registrar ${items.length}`}</ActBtn></div>
+      </div>
+    </FlujoPagina> })() : null
+  const billingPage = emailPage || recPage || depurarPage || cubrirPage || facturarPage || siiCotejoPage || regPage || cargasPage || cierrePage || porEnviarPage || xmlHubPage
+  const _pgKey = [!!facturaEmail,!!(facturasEmail&&facturasEmail.length),!!recPreview,!!depurarRows,!!cubrirAnt,!!facturarAnt,!!siiOpen,!!regReview,cargasHist!==null].join('')
+  useEffect(()=>{ if(cierreOpen||bandejaEnvio||xmlHub||/true/.test(_pgKey)) restoreScroll({w:0,d:0}) },[cierreOpen,bandejaEnvio,xmlHub,_pgKey])
   return (
     <div>
       {billingPage}
@@ -12221,21 +12278,6 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                   </div>
                   </div>
                   </div>, document.body) })()}
-              {regReview&&(()=>{ const items=regReview; const total=items.reduce((a,r)=>a+(r.monto||0),0); return (
-                <Modal title={`Registrar ${items.length} factura${items.length!==1?'s':''}`} onClose={()=>!regBusy&&setRegReview(null)}>
-                  <div style={{fontSize:12,color:C.muted,marginBottom:8}}>El SII ya las emitió. Esto las <b style={{color:C.text}}>registra en tu sistema</b> (pasan de programadas a por cobrar) — no las vuelve a emitir. Total <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(total)}</b>.</div>
-                  <div style={{maxHeight:'46vh',overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10}}>
-                    {items.map((r,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'1fr 84px',columnGap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
-                      <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.cliente||'—'}</div><div style={{fontSize:9,color:C.done}}>Factura N°{r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}</div></div>
-                      <span style={{fontSize:11,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</span>
-                    </div>)}
-                  </div>
-                  <div style={{display:'flex',gap:8,marginTop:12}}>
-                    <button disabled={!!regBusy} onClick={()=>setRegReview(null)} style={{flex:1,fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 0',cursor:'pointer'}}>Cancelar</button>
-                    <button disabled={!!regBusy} onClick={()=>doRegistrarLote(items)} style={{flex:1,fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'9px 0',cursor:'pointer',opacity:regBusy?.6:1}}>{regBusy==='lote'?'Registrando…':`Confirmar · ${items.length}`}</button>
-                  </div>
-                </Modal>
-              )})()}
               {ncConfirm&&(()=>{ const it=ncConfirm.item; return (
                 <div style={{position:'fixed',inset:0,zIndex:9999,background:C.bgSoft,overflowY:'auto'}}>
                   <div style={{maxWidth:560,margin:'0 auto',padding:'20px 16px 44px'}}>
@@ -12258,27 +12300,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             </div>
           </div>
         </div>
-        {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
 
-        {recPreview&&(()=>{ const rPrev=recordatorioCobro(recPreview.b, recNota); return <Modal fullscreenOnMobile fsMaxWidth={640} title='Recordatorio de cobro' onClose={()=>setRecPreview(null)}>
-          <div style={{fontSize:12,color:C.muted,marginBottom:9,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {recPreview.to} · <b style={{color:C.text}}>Nivel:</b> {rPrev.nivel} · <b style={{color:C.text}}>Asunto:</b> {rPrev.subject}</div>
-          <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,marginBottom:5}}>Nota para este cliente · opcional</div>
-          <textarea value={recNota} onChange={e=>setRecNota(e.target.value)} rows={2} placeholder='Ej. Cualquier consulta sobre esta factura, con gusto les ayudamos. ¡Gracias!' style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:12.5,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:5}}/>
-          <div style={{fontSize:10.5,color:C.muted,marginBottom:11}}>Va dentro del correo y se recuerda para este cliente. Las cifras del cobro se arman solas.</div>
-          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff',maxHeight:'48vh',overflowY:'auto',marginBottom:13}}><div style={{padding:12}} dangerouslySetInnerHTML={{__html:rPrev.html}}/></div>
-          <div style={{display:'flex',gap:9,justifyContent:'flex-end'}}>
-            <button onClick={()=>setRecPreview(null)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 16px',fontSize:13,color:C.muted,cursor:'pointer'}}>Cancelar</button>
-            <button onClick={()=>enviarRecordatorio({b:recPreview.b, to:recPreview.to, nota:recNota})} style={{background:C.accent,border:'none',borderRadius:10,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:'pointer'}}>Enviar recordatorio</button>
-          </div>
-        </Modal> })()}
-        {cargasHist!==null&&<Modal title='Cargas del SII' maxWidth={520} onClose={()=>setCargasHist(null)}>
-          {cargasHist==='loading'
-            ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Cargando…</div>
-            : cargasHist.length===0
-              ? <div style={{padding:'22px 0',textAlign:'center',color:C.muted,fontSize:12}}>Aún no hay cargas registradas.</div>
-              : cargasHist.map(b=><CargaHistRow key={b.id} b={b}/>)}
-        </Modal>}
-        {depurarRows&&<Modal title='Marcar como pagadas' onClose={()=>setDepurarRows(null)} closeOnBackdrop={false}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></Modal>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='rechazadas'&&filter!=='porcompletar'&&filter!=='sinemitir'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:10,padding:'7px 9px',border:`1px solid ${on?C.accent:C.border}`,cursor:'pointer',minWidth:0}}>
@@ -12444,8 +12466,6 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           </div>
         </div>}
         {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt} onFusionar={onFusionarAnticipos} onAbrir={onAbrirAnticipo} onConsume={onConsumeAnticipos} onOpenClientFicha={onOpenClientFicha} onOpenFactura={onEdit}/>}
-        {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
-        {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&filter!=='sinanio'&&filter!=='resumen'&&<>
         {showBuscar&&filter!=='porcompletar'&&(
           <div style={{display:'flex',gap:6,marginBottom:6}}>
@@ -12607,6 +12627,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 sinAnio.length>0&&{k:'Sin año', s:'facturas sin año de venta', n:sinAnio.length, col:C.soonText, on:()=>go('sinanio')},
               ].filter(Boolean)
               const revTotal=revisar.reduce((a,r)=>a+(r.n||0),0)
+              const revOpenEf = isDesktop ? !porRevOpen : porRevOpen   // escritorio: desplegado por defecto; móvil: plegado
               // "Facturas sin cliente / venta": unifica 3 poblaciones que NO suman en ventas ni ingresos hasta resolverlas.
               // (1) emitidas sin cliente · (2) emitidas con cliente pero sin venta/proyecto (solo las vivas: Pendiente/Vencido, para no inundar con pagos únicos ya cerrados) · (3) sinRegN = emitidas en el SII cargadas sin registrar.
               const facSinCliN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.client_id).length
@@ -12640,7 +12661,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                     <span style={{width:26,height:26,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:7}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span>
                     <div style={{...mesTop,color:C.accent}}>Cierre de mes</div>
                     <div style={{...mesN,color:C.accent}}>{MN[_pm.getMonth()].toUpperCase()}</div>
-                    {emi.length>0?<><div style={{...money,color:C.accent}}>{fmtShort(tCob)}</div><div style={{fontSize:10,color:'#3E6472',marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>de {fmtShort(tEmi)} pagado · {tasa}%</div></>:<div style={{fontSize:11,color:'#3E6472',marginTop:6}}>Quién pagó y quién no</div>}
+                    {emi.length>0?<><div style={{...money,color:C.accent}}>{fmtShort(tCob)}</div><div style={{fontSize:10,color:'#3E6472',marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>pagado de {fmtShort(tEmi)} facturado · {tasa}%</div></>:<div style={{fontSize:11,color:'#3E6472',marginTop:6}}>Quién pagó y quién no</div>}
                   </div>
                   <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:C.greenBg,border:'1px solid #C4E7D9',borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minHeight:96}}>
                     <span style={{position:'absolute',top:9,right:11,color:'#7FC4A9',fontSize:13}}>›</span>
@@ -12652,20 +12673,26 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                   </div>
                 </div>
                 {/* ACCESOS: tarjetas iguales. Orden pedido 2026-10-02: la tarjeta roja "Facturas sin cliente / venta" ocupa el lugar de "Por socio" (arriba-izq, lo más visible); Por socio baja al espacio libre (abajo-der). */}
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {/* POR REVISAR = aviso de acción a todo el ancho (antes 5ª tarjeta sola al final): sus acciones a la vista, plegable. */}
+                {revisar.length>0&&<div style={{border:`1px solid ${C.overdueText}`,borderRadius:12,overflow:'hidden',background:C.overdueBg}}>
+                  <div onClick={()=>setPorRevOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',cursor:'pointer'}}>
+                    <SIcon n='alert' s={16} c={C.overdueText}/>
+                    <span style={{fontSize:13,fontWeight:700,color:C.overdueText}}>Por revisar · {revTotal}</span>
+                    {isDesktop&&<span style={{fontSize:11,color:C.overdueText,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>acciones pendientes de la facturación</span>}
+                    <span style={{marginLeft:'auto',color:C.overdueText,fontSize:12,flexShrink:0}}>{revOpenEf?'▴':'▾'}</span>
+                  </div>
+                  {revOpenEf&&revisar.map((r,i)=><div key={i} onClick={r.on} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'9px 13px',background:'#fff',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+                    <span style={{width:26,textAlign:'center',fontSize:15,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.k}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.s}</div></div>
+                    <SIcon n='chevron' s={13} c={C.done}/>
+                  </div>)}
+                </div>}
+                <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'minmax(0,1fr) minmax(0,1fr)',gap:8}}>
                   {porCompletarN>0&&accCard('#fff',C.overdueText,P('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01'),'Facturas sin cliente / venta','No suman en ventas ni ingresos',()=>go('porcompletar'),{badge:porCompletarN,badgeCol:C.overdueText,cardBg:C.overdueBg,titCol:C.overdueText,subCol:C.overdueText})}
                   {accCard(C.soonBg,C.soonText,P('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01'),'Anticipos disponibles','a favor de clientes',()=>go('anticipos'),{value:antDisp>0?fmtShort(antDisp):'—',valCol:antDisp>0?C.soonText:C.done,dot:antDisp>0?'#EF9F27':null})}
                   {onIrCobranza&&accCard(C.greenBg,C.greenText,P('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0'),'Cobranza','Por cobrar · recordatorios de pago',()=>onIrCobranza())}
                   {onOpenPorSocio&&accCard(C.azulBg,C.accent,P('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7'),'Por socio','Facturado y caja · mes/año',onOpenPorSocio)}
-                  {revisar.length>0&&accCard(C.overdueBg,C.overdueText,P('M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01'),'Por revisar','rechazadas, sin marcar, sin año…',()=>setPorRevOpen(o=>!o),{badge:revTotal,badgeCol:C.overdueText})}
                 </div>
-                {porRevOpen&&revisar.length>0&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}>
-                  {revisar.map((r,i)=><div key={i} onClick={r.on} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',borderTop:i>0?`0.5px solid ${C.border}`:'none',cursor:'pointer'}}>
-                    <span style={{width:24,textAlign:'center',fontSize:15,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.k}</div><div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.s}</div></div>
-                    <span style={{color:C.done,fontSize:14,flexShrink:0}}>›</span>
-                  </div>)}
-                </div>}
               </div>
             )})()}
             {/* DTE rechazadas · Por enviar · Ya emitidas·vincular · Pagadas sin marcar · Sin año → ahora en la tira "Por revisar" (arriba). Cobranza → su vista. Proveedores fuera. */}
@@ -12686,13 +12713,9 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                     <span style={{color:C.done,fontSize:16,flexShrink:0}}>›</span>
                   </div>
                 </div>
-                {siiPageOpen&&<div style={{position:'fixed',inset:0,zIndex:1000,background:C.bg,overflowY:'auto'}}>
+                {siiPageOpen&&!billingPage&&createPortal(<div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,zIndex:200,background:C.bg,overflowY:'auto'}}>
+                  <PageHeader origen='Facturación' onBack={()=>setSiiPageOpen(false)} titulo='Facturación electrónica' right={<span style={{fontSize:10,fontWeight:700,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'3px 11px',whiteSpace:'nowrap'}}>{estTxt}</span>}/>
                   <div style={{maxWidth:isDesktop?900:560,margin:'0 auto',padding:'16px 16px 60px'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:13}}>
-                      <span onClick={()=>setSiiPageOpen(false)} style={{color:C.muted,fontSize:20,cursor:'pointer',lineHeight:1}}>←</span>
-                      <span style={{fontSize:18,fontWeight:800,color:C.accent}}>Facturación electrónica</span>
-                      <span style={{marginLeft:'auto',fontSize:10,fontWeight:700,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'3px 11px',whiteSpace:'nowrap'}}>{estTxt}</span>
-                    </div>
                     <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,alignItems:'start'}:{display:'flex',flexDirection:'column',gap:9}}>
                       {/* Estado + folios */}
                       <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px'}}>
@@ -12777,7 +12800,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                       </div>
                     </div>
                   </div>
-                </div>}
+                </div>, document.body)}
               </>)
             })()}
           </div>)
@@ -12793,14 +12816,22 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const matchEst=b=>{ if(agingF && bucketC(b)!==agingF) return false; if(estSel.size===0) return true; const er=estadoReal(b); return estSel.has(er)||(estSel.has('Pagado')&&er==='Anticipada') }
           let rows=bb.filter(b=>!b.deleted_at)
           if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
-          if(q.trim()) rows=rows.filter(b=>{ const c=clients.find(x=>x.id===b.client_id); const qq=_normTxt(q.trim()), qd=q.replace(/[^0-9kK]/g,'').toLowerCase(); return _normTxt(c?.name).includes(qq) || _normTxt(b.concept).includes(qq) || (qd.length>=3&&String(folioN(b.invoice_no)||'').includes(qd)) || (qd.length>=4&&String(b.receptor_rut||'').replace(/[^0-9kK]/g,'').toLowerCase().includes(qd)) })   // el placeholder promete N° de factura: nombre, concepto, N° y RUT
+          const pasaQ=b=>{ const c=clients.find(x=>x.id===b.client_id); const qq=_normTxt(q.trim()), qd=q.replace(/[^0-9kK]/g,'').toLowerCase(); return _normTxt(c?.name).includes(qq) || _normTxt(b.concept).includes(qq) || (qd.length>=3&&String(folioN(b.invoice_no)||'').includes(qd)) || (qd.length>=4&&String(b.receptor_rut||'').replace(/[^0-9kK]/g,'').toLowerCase().includes(qd)) }   // el placeholder promete N° de factura: nombre, concepto, N° y RUT
+          if(q.trim()) rows=rows.filter(pasaQ)
           if(soloSinEnviar) rows=rows.filter(sinEnviar)
+          // Cifras por cliente con las MISMAS reglas que las tarjetas de arriba (pending/programado/paid), sobre todas las facturas
+          // (el año entra por matchYM como en las tarjetas) → el total de cada columna = su tarjeta.
+          let rowsAll=bb.filter(b=>!b.deleted_at); if(q.trim()) rowsAll=rowsAll.filter(pasaQ); if(soloSinEnviar) rowsAll=rowsAll.filter(sinEnviar)
           // Cruce de información: una factura del SII/PDF trae el RUT del receptor. Si falta el link explícito (entity_id/client_id), se resuelve por ese RUT contra las razones sociales conocidas (client_entities). Así muestra a quién pertenece sin reasignar a mano.
           const nr=r=>String(r||'').replace(/[.\s-]/g,'').toUpperCase()
           const efEntity=b=>{ if(b.entity_id){ const e=clientEntities.find(x=>String(x.id)===String(b.entity_id)); if(e) return e } if(b.receptor_rut){ const k=nr(b.receptor_rut); if(k){ const e=clientEntities.find(x=>nr(x.rut)===k); if(e) return e } } return null }
           const efClientId=b=> b.client_id || efEntity(b)?.client_id || null
           const byC={}; rows.forEach(b=>{ const cid=efClientId(b)||'__none__'; (byC[cid]=byC[cid]||[]).push(b) })
-          const list=Object.entries(byC).map(([cid,arr])=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
+          const byCAll={}; rowsAll.forEach(b=>{ const cid=efClientId(b)||'__none__'; (byCAll[cid]=byCAll[cid]||[]).push(b) })
+          const metCid=cid=>{ const v=byCAll[cid]||[]; return {pc:v.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0), ve:v.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0), pf:v.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&!yaFacturadasIds.has(b.id)&&matchYM(kpiDate(b))).reduce((a,b)=>a+(b.amount||0),0), co:v.filter(b=>cobradoBill(b)>0&&matchYM(kpiDate(b))).reduce((a,b)=>a+cobradoBill(b),0)} }
+          const sinFiltroEst=estSel.size===0&&!agingF
+          const _cids=new Set([...Object.keys(byC), ...(sinFiltroEst?Object.keys(byCAll).filter(cid=>{ const m=metCid(cid); return m.pc>0||m.pf>0||m.co>0 }):[])])
+          const list=[..._cids].map(cid=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr:byC[cid]||[]})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
           const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conciliable}); const col=est.color; const ui=ufInfoDe(b); const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const rsN=(()=>{ const e=efEntity(b); if(e?.name) return rsDisplay(e.name); if(b.receptor_name) return rsDisplay(b.receptor_name); if(cli&&cli.id){ const rl=rsLabel(cli.id,clients,clientEntities); if(rl.multi) return 'Sin razón social'; if(rl.name&&rl.name!==cli.name) return rsDisplay(rl.name) } return null })(); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:5,overflow:'hidden'}}>
@@ -12867,15 +12898,20 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 ['Pagadas', b=>['Pagado','Anticipada'].includes(b.status), ESTADO_COBRO.cobrado.color, b=>b.amount||0, (a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||''), false],
                 ['Anuladas', b=>b.status==='Anulada', ESTADO_COBRO.anulada.color, b=>b.amount||0, ()=>0, false],
               ]
-              const cards=list.map(({c,arr})=>{
+              // UNA cifra por columna (antes el monto de la fila era por cobrar, o por facturar, o cobrado, según el cliente, sin rótulo).
+              const visN=({arr})=>arr.filter(matchEst).length
+              const metC=x=>({...metCid(x.c.id), n:(visN(x)>0||sinFiltroEst)?1:0})
+              const listO = ordPC.k==='nombre' ? (ordPC.dir===1?list:[...list].reverse()) : [...list].sort((x,y)=>((metC(x)[ordPC.k]-metC(y)[ordPC.k])*ordPC.dir)||(x.c.name||'').localeCompare(y.c.name||'','es'))
+              const totPC = list.reduce((t,x)=>{ if(!visN(x)&&!sinFiltroEst) return t; const m=metCid(x.c.id); t.pc+=m.pc; t.pf+=m.pf; t.co+=m.co; t.ve+=m.ve; t.n++; return t },{pc:0,pf:0,co:0,ve:0,n:0})
+              const W=128
+              const cards=listO.map(({c,arr})=>{
                 const visible=arr.filter(matchEst)
-                if(!visible.length) return null
+                if(!visible.length&&!sinFiltroEst) return null
                 const cOpen=openClients.has(c.id)
                 const porCobrar=visible.filter(esCobrar).reduce((a,b)=>a+saldoBill(b),0)
                 const porFacturar=visible.filter(esFacturar).reduce((a,b)=>a+montoDe(b),0)
                 const cobrado=visible.filter(b=>['Pagado','Anticipada'].includes(b.status)).reduce((a,b)=>a+cobradoBill(b),0)   // filtro "Pagadas": muestra lo cobrado, no saldo $0
-                const headMonto=porCobrar>0?porCobrar:(porFacturar>0?porFacturar:cobrado)
-                const headColor=porCobrar>0?C.accent:(porFacturar>0?C.muted:C.greenText)
+                const _mc=metCid(c.id), vencC=_mc.ve
                 const rsMap={}; visible.forEach(b=>{ const e=efEntity(b); const id=e?String(e.id):'sin'; if(!rsMap[id]) rsMap[id]={id,name:e?rsDisplay(e.name):(b.receptor_name?rsDisplay(b.receptor_name):'Sin razón social')} })
                 const rsArr=Object.values(rsMap)
                 const rsActiva=rsSel[c.id]||'all'
@@ -12886,13 +12922,19 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                     <span style={{color:C.done,fontSize:12,width:9,flexShrink:0}}>{cOpen?'▾':'▸'}</span>
                     <span style={{width:30,height:30,borderRadius:10,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='user' s={16} c={C.accent}/></span>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-                      {(rsHead.multi||rsHead.name!==c.name||rsHead.rut)&&<div style={{fontSize:9,color:rsHead.multi?C.soonText:C.muted,fontWeight:rsHead.multi?600:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{rsHead.multi?`${rsHead.multi} razones sociales`:`${rsDisplay(rsHead.name)}${rsHead.rut?` · ${rsHead.rut}`:''}`}</div>}
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span onClick={onOpenClientFicha&&c.id&&c.id!=='__none__'?(e=>{e.stopPropagation();onOpenClientFicha(c.id)}):undefined} title={onOpenClientFicha&&c.id&&c.id!=='__none__'?'Ver ficha del cliente':undefined} style={{cursor:onOpenClientFicha&&c.id&&c.id!=='__none__'?'pointer':'inherit'}}>{c.name}</span></div>
+                      {(rsHead.multi||(rsHead.name&&_normTxt(rsHead.name)!==_normTxt(c.name)))&&<div style={{fontSize:10,color:rsHead.multi?C.soonText:C.muted,fontWeight:rsHead.multi?600:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{rsHead.multi?`${rsHead.multi} razones sociales`:`${rsDisplay(rsHead.name)}${rsHead.rut?` · ${rsHead.rut}`:''}`}</div>}
+                      {!isDesktop&&(_mc.pf>0||_mc.co>0)&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{[_mc.pf>0?`por facturar ${fmt(_mc.pf)}`:'',_mc.co>0?`cobrado ${fmt(_mc.co)}`:''].filter(Boolean).join(' · ')}</div>}
                     </div>
-                    <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontSize:13,fontWeight:700,color:headColor,whiteSpace:'nowrap'}}>{fmt(headMonto)}</div>
-                      {onOpenClientFicha&&c.id&&c.id!=='__none__'&&<div onClick={(e)=>{e.stopPropagation();onOpenClientFicha(c.id)}} style={{fontSize:9,color:C.accent,fontWeight:700,cursor:'pointer'}}>Ver ficha ›</div>}
-                    </div>
+                    {isDesktop ? (<>
+                      <div style={{width:W,textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}><div style={{fontSize:13,fontWeight:700,color:_mc.pc>0?C.text:C.done}}>{_mc.pc>0?fmt(_mc.pc):'—'}</div>{vencC>0&&<div style={{fontSize:10,fontWeight:600,color:C.overdueText}}>vencido {fmt(vencC)}</div>}</div>
+                      <div style={{width:W,textAlign:'right',flexShrink:0,fontSize:13,fontWeight:_mc.pf>0?600:400,color:_mc.pf>0?C.muted:C.done,fontVariantNumeric:'tabular-nums'}}>{_mc.pf>0?fmt(_mc.pf):'—'}</div>
+                      <div style={{width:W,textAlign:'right',flexShrink:0,fontSize:13,fontWeight:_mc.co>0?700:400,color:_mc.co>0?C.greenText:C.done,fontVariantNumeric:'tabular-nums'}}>{_mc.co>0?fmt(_mc.co):'—'}</div>
+                    </>) : (
+                      <div style={{textAlign:'right',flexShrink:0}}>
+                        <div style={{fontSize:13,fontWeight:700,color:_mc.pc>0?C.text:C.done,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{_mc.pc>0?fmt(_mc.pc):'—'}</div>
+                        <div style={{fontSize:9.5,fontWeight:700,color:_mc.pc>0?(vencC>0?C.overdueText:C.accent):C.muted}}>{_mc.pc>0?(vencC>0?'vencido':'por cobrar'):'al día'}</div>
+                      </div>)}
                   </div>
                   {cOpen&&<div style={{marginTop:8}}>
                     {rsArr.length>=2&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8}}>
@@ -12913,8 +12955,19 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                   </div>}
                 </div>)
               }).filter(Boolean)
-              if(!cards.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
-              return cards
+               if(!cards.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
+               if(!isDesktop) return cards
+               const hcP=(k,l)=>{ const on=ordPC.k===k; return <span onClick={()=>setOrdPC(o=>o.k===k?{k,dir:-o.dir}:{k,dir:k==='nombre'?1:-1})} style={{width:k==='nombre'?undefined:W,flex:k==='nombre'?1:undefined,textAlign:k==='nombre'?'left':'right',flexShrink:0,cursor:'pointer',userSelect:'none',color:on?C.accent:C.muted}}>{l}{on?(ordPC.dir===1?' ▲':' ▼'):''}</span> }
+               return (<>
+                 <div style={{display:'flex',gap:10,padding:'0 13px 6px 62px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>{hcP('nombre','Cliente')}{hcP('pc','Por cobrar')}{hcP('pf','Por facturar')}{hcP('co','Cobrado')}</div>
+                 {cards}
+                 <div style={{display:'flex',gap:10,alignItems:'baseline',padding:'10px 13px 4px 62px',fontSize:12.5,fontWeight:700,borderTop:`1px solid ${C.border}`,marginTop:4}}>
+                   <span style={{flex:1}}>{totPC.n} cliente{totPC.n!==1?'s':''}</span>
+                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(totPC.pc)}{totPC.ve>0&&<div style={{fontSize:10,fontWeight:600,color:C.overdueText}}>vencido {fmt(totPC.ve)}</div>}</span>
+                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.muted}}>{fmt(totPC.pf)}</span>
+                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.greenText}}>{fmt(totPC.co)}</span>
+                 </div>
+               </>)
             })()}</div>)
         })()
         : filter==='anticipos' ? null
@@ -13270,8 +13323,6 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
         )}
       </div>
       {/* FAB "Nueva factura" retirado a pedido del usuario (alta manual de cobros queda en la ficha del cliente → Financiero) */}
-      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
-      {facturasEmail&&facturasEmail.length>0&&<FacturaEmailModal factura={facturasEmail[0]} facturas={facturasEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturasEmail[0].client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturasEmail[0].sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturasEmail(null)}/>}
       {siiPanel&&(
         <div onClick={()=>setSiiPanel(null)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:540,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
@@ -13720,7 +13771,7 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
 
 // ─── ANTICIPOS PANEL (tab Anticipos en Facturación, PP-15) ────────────────────
 // Emitir una sola factura por el bloque de cuotas que cubrió un anticipo.
-function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,onClose}) {
+function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,onClose,asPage=false}) {
   const hoy = new Date().toISOString().slice(0,10)
   const [invoiceNo,setInvoiceNo] = useState('')
   const [issued,setIssued] = useState(hoy)
@@ -13731,9 +13782,9 @@ function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
   const fl={fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:400,padding:18,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
-        <div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:3}}>Emitir una factura por el bloque</div>
+    <div style={asPage?undefined:{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={asPage?undefined:(e=>e.target===e.currentTarget&&onClose())}>
+      <div style={asPage?{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,width:'100%',maxWidth:560,margin:'0 auto',padding:18}:{background:'#fff',borderRadius:16,width:'100%',maxWidth:400,padding:18,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+        {!asPage&&<div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:3}}>Emitir una factura por el bloque</div>}
         <div style={{fontSize:12,color:C.done,marginBottom:12}}>{cliente?.name||'Cliente'} · {cuotas.length} cuota{cuotas.length!==1?'s':''} anticipada{cuotas.length!==1?'s':''}</div>
         <div style={{textAlign:'center',fontSize:26,fontWeight:600,letterSpacing:'-.5px',color:C.text,marginBottom:14}}>{fmt(monto)}</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
@@ -13751,7 +13802,7 @@ function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,
 }
 
 // Cubrir cuotas programadas con un anticipo. Sugiere por monto (consume desde la 1ª) y se puede ajustar a mano.
-function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,onClose}) {
+function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,onClose,asPage=false}) {
   const cliente = clients.find(c=>String(c.id)===String(anticipo.client_id))
   const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
   const cuotas = (billing||[]).filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&(anticipo.sale_id?String(b.sale_id)===String(anticipo.sale_id):String(b.client_id)===String(anticipo.client_id)))
@@ -13762,16 +13813,16 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
   const sumSel = cuotas.filter(c=>sel.has(c.id)).reduce((a,c)=>a+(c.amount||0),0)
   const venta = sales.find(s=>String(s.id)===String(anticipo.sale_id))
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:460,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+    <div style={asPage?undefined:{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={asPage?undefined:(e=>e.target===e.currentTarget&&onClose())}>
+      <div style={asPage?{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,width:'100%',maxWidth:560,margin:'0 auto'}:{background:'#fff',borderRadius:16,width:'100%',maxWidth:460,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
         <div style={{display:'flex',alignItems:'center',gap:9,padding:'16px 18px',borderBottom:`0.5px solid ${C.border}`}}>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:16,fontWeight:600,color:C.text}}>Cubrir cuotas con anticipo</div>
+            {!asPage&&<div style={{fontSize:16,fontWeight:600,color:C.text}}>Cubrir cuotas con anticipo</div>}
             <div style={{fontSize:12,color:C.done}}>{cliente?.name||'Cliente'}{venta?.title?` · ${venta.title}`:''} · anticipo {fmt(anticipo.monto)}</div>
           </div>
-          <button onClick={onClose} style={{marginLeft:'auto',width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+          {!asPage&&<button onClick={onClose} style={{marginLeft:'auto',width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
-          </button>
+          </button>}
         </div>
         <div style={{padding:'14px 18px'}}>
           {cuotas.length===0?(
@@ -22151,7 +22202,7 @@ function facturaCorreoShell(innerHtml, firma, lang='es'){
 function facturaCorreoHtml(body, firma, incPago, lang='es', fondoHtml=''){
   return facturaCorreoShell(`${_correoToP(body)}${incPago?DATOS_PAGO_HTML:''}${fondoHtml||''}`, firma, lang)
 }
-function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, billing=[], onSent, onClose}) {
+function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, billing=[], onSent, onClose, asPage=false}) {
   const myEmail=(user?.email||'').toLowerCase()
   const listF=(facturas&&facturas.length)?facturas:[factura]   // 1 o VARIAS facturas del MISMO cliente en un solo correo
   const multi=listF.length>1
@@ -22315,7 +22366,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const fInp={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}
   const lbl={fontSize:10,color:C.muted,fontWeight:600,marginBottom:3}
   const isDesktop = useIsDesktop()   // escritorio: dos columnas (redacción | panel de envío); móvil: una sola columna (idéntico)
-  return (<Modal fullscreen fsMaxWidth={isDesktop?1080:880} title={<><span style={{color:C.accent}}>Enviar {multi?'facturas':'factura'}</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}{multi?` · ${listF.length}`:''}</span></>}</>} onClose={onClose}>
+  const _body = (<>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.35fr 1fr':'1fr',gap:isDesktop?20:10,alignItems:'start'}}>
       <div style={{display:'flex',flexDirection:'column',gap:10,minWidth:0}}>
       <div><div style={lbl}>PARA</div><input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp}/>
@@ -22403,7 +22454,9 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?(lang==='en'?'Sending…':'Enviando…'):(lang==='en'?(multi?`Send ${listF.length} invoices`:'Send invoice'):(multi?`Enviar las ${listF.length} facturas`:'Enviar factura'))}</button>
       </div>
     </div>
-  </Modal>)
+  </>)
+  if(asPage) return _body   // página: el encabezado lo pone FlujoPagina ('‹ origen | Enviar factura | cliente')
+  return (<Modal fullscreen fsMaxWidth={isDesktop?1080:880} title={<><span style={{color:C.accent}}>Enviar {multi?'facturas':'factura'}</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}{multi?` · ${listF.length}`:''}</span></>}</>} onClose={onClose}>{_body}</Modal>)
 }
 // Solicitar fondos al cliente (#7): correo auto-redactado pidiendo provisión de fondo por rendir. PARA = contactos del cliente,
 // CC = abogado responsable (automático). Reusa enviarComoUsuario + la cuenta de gastos + los learnings factura_to/cc y la tabla
@@ -23664,6 +23717,12 @@ function FacturaPage({b,cli,origen,onBack,onOpenClientFicha,children}){
 }
 // Página genérica para flujos que antes eran modales (Carga masiva, Generar reporte, Redactar con IA, Plazos, Revisión de datos):
 // mismo header que Tarea/Gasto y el cuerpo a todo el ancho útil (escritorio) o columna (móvil).
+// Página superpuesta: un flujo que se abre desde otra ventana/página (p. ej. Asignar anticipo, la venta) se muestra como PÁGINA
+// a pantalla completa ('‹ origen | flujo'), sin tapar la barra lateral en escritorio.
+function PaginaSobre({origen,titulo,ctx,onBack,maxW=640,children}){
+  const isDesktop=useIsDesktop()
+  return createPortal(<div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,zIndex:650,background:C.bg,overflowY:'auto'}}><FlujoPagina origen={origen} titulo={titulo} ctx={ctx} onBack={onBack} maxW={maxW}>{children}</FlujoPagina></div>, document.body)
+}
 function FlujoPagina({origen,titulo,ctx,onBack,maxW=1060,children}){
   const isDesktop=useIsDesktop()
   return (
@@ -37797,7 +37856,7 @@ export default function App() {
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
         {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onAsignarFacturas={(a,facIds)=>handleAsignarAnticipoFacturas(a.id,facIds)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
-        {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
+        {cubrirAntApp&&<PaginaSobre origen='Anticipo' titulo='Cubrir cuotas con anticipo' ctx={clients.find(c=>String(c.id)===String(cubrirAntApp.client_id))?.name||null} onBack={()=>setCubrirAntApp(null)}><CubrirCuotasModal asPage anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/></PaginaSobre>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
         {modal?.type==='billing'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {emitirPreview&&(()=>{ const ep=emitirPreview
