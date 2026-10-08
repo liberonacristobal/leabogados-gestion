@@ -15030,6 +15030,15 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   const rowKeyHuella = r=>`${r.client_id||r.nombre||''}|${r.monto||0}|${(r.concepto||'').toLowerCase().replace(/\s+/g,' ').trim().slice(0,40)}`
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
+  // OT que ya marcaste como "no nuestra" en cargas anteriores (tabla notaria_no_nuestras): al volver en otra liquidación
+  // se reconocen solas (no se cargan ni hay que volver a marcarlas). "Volver a la revisión" la reactiva si sí era nuestra.
+  const [noNKnown,setNoNKnown] = useState(null)
+  useEffect(()=>{ if(DEMO) return; supabase.from('notaria_no_nuestras').select('ot,estado,resolucion,created_at,consultada_at').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.resolucion==='era_nuestra') return; const k=canonOtNN(r.ot); if(k) m[k]=r }); setNoNKnown(m) }).catch(()=>{}) },[])
+  useEffect(()=>{ if(!noNKnown||!rows||!rows.length) return
+    if(!rows.some(r=>!r._noNChk)) return
+    setRows(p=>(p||[]).map(r=>{ if(r._noNChk) return r; const kn=!r.noNuestra&&noNKnown[canonOtNN(r.ot)]
+      return kn ? {...r,_noNChk:true,noNuestra:true,noNPrev:kn,client_id:null,clientName:null,entity_id:null,personal_de:null,suggestion:null,candidates:null} : {...r,_noNChk:true} }))
+  },[noNKnown,rows])
   const [fileName,setFileName] = useState('')
   const [cargando,setCargando] = useState(false)
   const [guardando,setGuardando] = useState(false)
@@ -15895,7 +15904,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const oldY = fy && !isNaN(fy) && fy < new Date().getFullYear()   // OT de un año anterior
     const info = kind==='yacargadas'||kind==='sinefecto'||kind==='errores'||kind==='nonuestra'   // solo lectura
     const st = dupInfo[r.id]?.otState
-    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='nonuestra' ? 'No es nuestra — no se carga, se avisa a la notaría' : kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
+    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='nonuestra' ? (r.noNPrev?`Ya marcada como no nuestra el ${fmtFechaDMY(String(r.noNPrev.created_at||'').slice(0,10))} · ${r.noNPrev.estado==='consultada'?'consultada a la notaría':r.noNPrev.estado==='resuelta'?'la notaría respondió':'por consultar'}`:'No es nuestra — no se carga, se avisa a la notaría') : kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
     const prot = (kind==='listas'||kind==='personal') ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
     const sub  = kind==='listas' ? (cn||'') : kind==='personal' ? (noName?'':nomDe(r)) : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
@@ -16141,7 +16150,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const pendRows = target.filter(r=>!r.client_id&&!r.personal_de&&!r.error)
       const pagadores = target.filter(r=>(r.client_id||r.personal_de)&&!r.error)
       if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length; const noNs=(rows||[]).filter(r=>r.noNuestra)
-        notaResumen={ leidas:(rows||[]).length, cargadas:pagadores.length, pendientes:pendRows.length, error:errRows.length, omitidas, erroresDet:errRows.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), noNuestras:noNs.slice(0,80).map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||''})) } }
+        notaResumen={ leidas:(rows||[]).length, cargadas:pagadores.length, pendientes:pendRows.length, error:errRows.length, omitidas, erroresDet:errRows.map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), noNuestras:noNs.map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||'',fecha:_fechaISO(r.fecha),materia:r.materia||null,requirente:r.requirente||null,concepto:r.concepto||null,subconcepto:r.subconcepto||null})) } }
       const res = await onBulkImport(target, {tipo, filename:fileName, notaResumen})
       // Notaría: resumen REAL de lo cargado (usa lo efectivamente insertado tras dedup, no la intención pre-carga).
       if(notaria){ const conCli=pagadores.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
@@ -16848,6 +16857,24 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
 // habilitar presentaciones movil/desktop sobre la MISMA logica. Traslado verbatim: no cambia ninguna formula.
 // Volver al LUGAR EXACTO de Gastos tras abrir un gasto como página (la vista se desmonta al saltar): se guarda la sub-vista antes del salto
 // y se lee al volver a montar (una sola vez: el efecto de ExpensesView la borra). Caduca a los 30 min.
+// Notaría · OT que "no son nuestras": se guardan COMPLETAS y para siempre en `notaria_no_nuestras` (una fila por N° de OT, con
+// cargas e historial). Regla del usuario 2026-10-08: en notaría nunca se pierde información. canonOtNN = forma única del N° de OT.
+const canonOtNN = o => { const s=String(o||'').trim().toUpperCase(); if(!s||s==='S/OT') return ''; const d=s.replace(/\D/g,''); return d?'OT-'+d:s }
+const _fechaISO = f => { if(!f) return null; if(f instanceof Date) return isNaN(f)?null:f.toISOString().slice(0,10); const t=String(f).slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(t)?t:null }
+async function registrarNoNuestras(list,{batchId=null,filename=null,por=null}={}){
+  if(DEMO||!list||!list.length) return 0
+  const now=new Date().toISOString(), carga={id:batchId,filename:filename||null,fecha:now}
+  const ots=[...new Set(list.map(x=>canonOtNN(x.ot)).filter(Boolean))]; if(!ots.length) return 0
+  const {data:ex}=await supabase.from('notaria_no_nuestras').select('id,ot,cargas,historial').in('ot',ots)
+  const exMap={}; (ex||[]).forEach(r=>{ exMap[r.ot]=r })
+  let n=0, tot=0
+  for(const x of list){ const ot=canonOtNN(x.ot); if(!ot) continue; const e=exMap[ot]
+    if(e){ await supabase.from('notaria_no_nuestras').update({cargas:[...(e.cargas||[]),carga],historial:[...(e.historial||[]),{at:now,accion:'volvio',por,detalle:`Volvió en ${filename||'otra carga'}`}],updated_at:now}).eq('id',e.id) }
+    else { const {data:ins}=await supabase.from('notaria_no_nuestras').insert({ot,fecha:_fechaISO(x.fecha),materia:x.materia||x.motivo||null,requirente:x.requirente||x.nombre||null,concepto:x.concepto||null,subconcepto:x.subconcepto||null,monto:Number(x.monto)||0,motivo:x.motivo||null,datos:x,cargas:[carga],historial:[{at:now,accion:'marcada',por,detalle:'Marcada como no nuestra en la carga'}],created_by:por}).select('id').single(); if(ins) exMap[ot]={id:ins.id,ot,cargas:[carga],historial:[]} }
+    n++; tot+=Number(x.monto)||0 }
+  if(n) logActividad('notaria.nonuestra_registradas',{detalle:{title:`${n} OT · ${filename||'carga'}`,monto:tot}})
+  return n
+}
 // Volver al LUGAR EXACTO tras una página (factura, tarea…): la vista de origen se desmonta al saltar. Cada vista guarda su sub-estado en
 // memoria (_viewMem) y, si se vuelve a montar justo después de un 'volver' (handleBackOrigin marca _volviendoAt), lo retoma. Abrirla de nuevo
 // desde la barra NO lo retoma (pasaron más de 4 s desde el último 'volver').
@@ -17881,6 +17908,9 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
   const [cobrosVista,setCobrosVista] = useState('carga')   // Cobros: 'carga' (por carga masiva) | 'ot' (lista de OT)
   const [cobrosOpen,setCobrosOpen] = useState(null)        // lote de carga masiva expandido en Cobros
   const [cobrosQ,setCobrosQ] = useState('')                // buscador en Cobros (vista por OT)
+  const [noNQ,setNoNQ] = useState('')               // "No son nuestras": buscador
+  const [noNOpen,setNoNOpen] = useState(null)        // "No son nuestras": OT con su detalle desplegado
+  const [noNResOpen,setNoNResOpen] = useState(false) // "No son nuestras": sección Resueltas desplegada
   const [noNSel,setNoNSel] = useState(()=>new Set())        // "No son nuestras": OT seleccionadas para consultar a la notaría
   const [noNEstado,setNoNEstado] = useState({})             // "No son nuestras": estado por OT (learnings notaria_nonuestra) → 'consultada' | 'resuelta'
   const [noNConsult,setNoNConsult] = useState({})           // fecha de última consulta por OT (para el subtítulo)
@@ -17969,18 +17999,37 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
   // "No son nuestras": OT que en la carga marcaste como no reconocidas (OT correctas pero no las paga la oficina).
   // Ya viven persistidas en el resumen de cada carga (bulk_imports.resumen.noNuestras); acá se agregan para poder
   // consultarlas a la notaría cuando quieras, no solo durante la carga. El estado (consultada/resuelta) va en learnings.
+  const [noNRows,setNoNRows] = useState([])   // tabla notaria_no_nuestras (fuente: una fila por N° de OT, completa, con cargas e historial)
+  useEffect(()=>{ if(DEMO) return; supabase.from('notaria_no_nuestras').select('*').order('created_at',{ascending:false}).then(({data})=>setNoNRows(data||[])).catch(()=>{}) },[bulkImports])
   const notaNoNuestras = useMemo(()=>{
-    const items=[]
-    ;(bulkImports||[]).forEach(b=>{ if(b.status==='undone') return; (b.resumen?.noNuestras||[]).forEach((nn,i)=>{
-      const id=`${b.id}#${i}`; const estado=noNEstado[id]||'pendiente'
-      if(estado==='resuelta') return   // resueltas salen de la lista (sí era nuestra / la notaría respondió)
-      items.push({ id, ot:nn.ot||'', nombre:nn.nombre||'', monto:nn.monto||0, motivo:nn.motivo||'', carga:b.filename||'', fecha:b.created_at||null, estado, consultadaAt:noNConsult[id]||null })
-    }) })
-    items.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')))
-    const pend=items.filter(x=>x.estado==='pendiente')
-    return { items, n:items.length, total:items.reduce((a,x)=>a+(x.monto||0),0), nPend:pend.length, nConsult:items.length-pend.length,
+    const items=[], vistos=new Set()
+    ;(noNRows||[]).forEach(r=>{ const k=canonOtNN(r.ot); vistos.add(k)
+      items.push({ id:r.id, _row:r, ot:k||r.ot, fecha:r.fecha||null, materia:r.materia||r.motivo||'', requirente:r.requirente||'', concepto:r.concepto||'', subconcepto:r.subconcepto||'', monto:Number(r.monto)||0, estado:r.estado||'pendiente', resolucion:r.resolucion||null, consultadaAt:r.consultada_at||null, resueltaAt:r.resuelta_at||null, cargas:r.cargas||[], historial:r.historial||[], expense_id:r.expense_id||null }) })
+    // Respaldo: OT guardadas en el resumen de una carga que aún no están en la tabla (cargas antiguas) → nunca se pierden.
+    ;(bulkImports||[]).forEach(b=>{ (b.resumen?.noNuestras||[]).forEach((nn,i)=>{ const k=canonOtNN(nn.ot); if(!k||vistos.has(k)) return; vistos.add(k); const id=`${b.id}#${i}`
+      items.push({ id, _snap:{...nn, _batch:{id:b.id,filename:b.filename,created_at:b.created_at,created_by:b.created_by}}, ot:k, fecha:nn.fecha||null, materia:nn.materia||nn.motivo||'', requirente:nn.requirente||nn.nombre||'', concepto:nn.concepto||'', subconcepto:nn.subconcepto||'', monto:Number(nn.monto)||0, estado:noNEstado[id]||'pendiente', resolucion:null, consultadaAt:noNConsult[id]||null, resueltaAt:null, cargas:[{id:b.id,filename:b.filename,fecha:b.created_at}], historial:[], expense_id:null }) }) })
+    const ultCarga=x=>String((x.cargas||[]).map(c=>c.fecha).filter(Boolean).sort().slice(-1)[0]||'')
+    items.sort((a,b)=>ultCarga(b).localeCompare(ultCarga(a)))
+    const sum=a=>a.reduce((t,x)=>t+(x.monto||0),0)
+    const activos=items.filter(x=>x.estado!=='resuelta'), resueltas=items.filter(x=>x.estado==='resuelta')
+    const pend=activos.filter(x=>x.estado==='pendiente'), cons=activos.filter(x=>x.estado==='consultada')
+    return { items, activos, resueltas, n:activos.length, total:sum(activos), nPend:pend.length, nConsult:cons.length, totPend:sum(pend), totCons:sum(cons), totRes:sum(resueltas), totTodo:sum(items),
              ultConsulta: items.map(x=>x.consultadaAt).filter(Boolean).sort().slice(-1)[0]||null }
-  },[bulkImports,noNEstado,noNConsult])
+  },[noNRows,bulkImports,noNEstado,noNConsult])
+  // Cambia el estado de una OT "no nuestra" SIN perder nada: actualiza la fila (o la crea desde el respaldo), suma al historial y a la bitácora.
+  const noNUpdate = async(item, patch, ev) => {
+    const now=new Date().toISOString(), hEv={at:now,por:currentUserName||null,...ev}
+    if(DEMO){ setNoNRows(p=>{ const base=item._row||{id:item.id,ot:item.ot,monto:item.monto,materia:item.materia,requirente:item.requirente,cargas:item.cargas,historial:[]}; const nx={...base,...patch,historial:[...(base.historial||[]),hEv]}; return p.some(x=>x.id===nx.id)?p.map(x=>x.id===nx.id?nx:x):[nx,...p] }); return }
+    let row=item._row
+    if(!row){ const sn=item._snap||{}; const bt=sn._batch||{}
+      const {data,error}=await supabase.from('notaria_no_nuestras').insert({ot:item.ot,fecha:_fechaISO(item.fecha),materia:item.materia||null,requirente:item.requirente||null,concepto:item.concepto||null,subconcepto:item.subconcepto||null,monto:item.monto||0,motivo:sn.motivo||null,datos:sn,cargas:item.cargas,historial:[{at:bt.created_at||now,accion:'marcada',por:bt.created_by||null,detalle:'Marcada como no nuestra en la carga'}],created_by:bt.created_by||null}).select().single()
+      if(error) throw error; row=data }
+    const {data,error}=await supabase.from('notaria_no_nuestras').update({...patch,historial:[...(row.historial||[]),hEv],updated_at:now}).eq('id',row.id).select().single()
+    if(error) throw error
+    setNoNRows(p=>p.some(x=>x.id===data.id)?p.map(x=>x.id===data.id?data:x):[data,...p])
+    logActividad('notaria.nonuestra_'+ev.accion,{tabla:'notaria_no_nuestras',id:data.id,detalle:{title:`${data.ot}${data.materia?` · ${data.materia}`:''}`,monto:Number(data.monto)||0}})
+    return data
+  }
   // Carga el estado persistido de las "no son nuestras" (learnings notaria_nonuestra: value = "estado|fechaISO").
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_nonuestra').then(({data})=>{ const est={},at={}; (data||[]).forEach(r=>{ if(!r.key) return; const [e,d]=String(r.value||'').split('|'); if(e) est[r.key]=e; if(d) at[r.key]=d }); setNoNEstado(est); setNoNConsult(at) },()=>{}) },[])
   // Envía a la notaría la consulta por las OT no reconocidas seleccionadas (mismo texto que en la carga). Las marca "consultada".
@@ -18001,18 +18050,31 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
       const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject,html,text:texto})
       if(via===null){ setNoNSending(false); return }   // el usuario canceló la autorización de Gmail
       const now=new Date().toISOString()
-      const est={...noNEstado}, at={...noNConsult}
-      for(const it of items){ est[it.id]='consultada'; at[it.id]=now; if(!DEMO){ try{ await setLearningKV('notaria_nonuestra',it.id,`consultada|${now}`) }catch(_){} } }
-      setNoNEstado(est); setNoNConsult(at); setNoNSel(new Set())
+      for(const it of items){ try{ await noNUpdate(it,{estado:'consultada',consultada_at:now,consultada_por:currentUserName||null},{accion:'consultada',detalle:`Consultada a la notaría (${dest})`}) }catch(e){ console.error('noNUpdate',e) } }
+      setNoNSel(new Set())
       appAlert(`Consulta enviada a la notaría por ${items.length} OT${via==='oficina'?' (desde la cuenta de oficina)':''}.`)
     }catch(e){ appAlert('No se pudo enviar la consulta: '+(e.message||e)) }
     setNoNSending(false)
   }
-  // Marca una OT "no nuestra" como resuelta (sí era nuestra / la notaría respondió) → sale de la lista. Reversible.
-  const resolverNoNuestra = async(id) => {
-    const est={...noNEstado}; est[id]='resuelta'; setNoNEstado(est)
-    setNoNSel(p=>{ const n=new Set(p); n.delete(id); return n })
-    if(!DEMO){ try{ await setLearningKV('notaria_nonuestra',id,`resuelta|${noNConsult[id]||new Date().toISOString()}`) }catch(_){} }
+  // Resolver una OT "no nuestra" (NO se borra: pasa a "Resueltas" con su resolución). 'era_nuestra' crea el gasto de notaría
+  // con los datos de la OT (queda en Deuda › "Sin cliente ni persona" para asignarle cliente); 'respondida' solo la cierra.
+  const resolverNoNuestra = async(item, resolucion) => {
+    try{
+      const now=new Date().toISOString(); let expense_id=null
+      if(resolucion==='era_nuestra'){
+        if(!(await appConfirm(`¿${item.ot} sí era nuestra? Se carga el gasto de notaría por ${fmt(item.monto)} en Deuda › "Sin cliente ni persona", para asignarle cliente.`))) return
+        if(!DEMO){ const {data,error}=await supabase.from('expenses').insert({type:'gasto',client_id:null,amount:item.monto||0,concept:item.concepto||item.materia||'Notaría',subconcept:item.subconcepto||null,ot_number:item.ot,requirente:item.requirente||null,materia:item.materia||null,category:'Notaria',date:_fechaISO(item.fecha),paid_by_client:true}).select().single()
+          if(error) throw error; expense_id=data.id; setExpenses(p=>[data,...p]) }
+      }
+      await noNUpdate(item,{estado:'resuelta',resolucion,resuelta_at:now,resuelta_por:currentUserName||null,...(expense_id?{expense_id}:{})},{accion:resolucion==='era_nuestra'?'era_nuestra':'respondida',detalle:resolucion==='era_nuestra'?'Sí era nuestra · gasto cargado en Deuda':'La notaría respondió'})
+      setNoNSel(p=>{ const n=new Set(p); n.delete(item.id); return n })
+    }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) }
+  }
+  const reabrirNoNuestra = async(item) => {
+    try{
+      if(item.expense_id&&!(await appConfirm('Vuelve a la revisión. El gasto que se cargó en Deuda se mantiene; elimínalo allí si no corresponde.'))) return
+      await noNUpdate(item,{estado:item.consultadaAt?'consultada':'pendiente',resolucion:null,resuelta_at:null,resuelta_por:null},{accion:'reabierta',detalle:'Volvió a la revisión'})
+    }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) }
   }
   const csvDownload = (name, rows2d) => { try{ const csv=rows2d.map(r=>r.map(c=>{ const s=String(c==null?'':c); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }).join(';')).join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href) }catch(err){ appAlert('Error al exportar: '+err.message) } }
   // Parte B (desktop 2-panel): ↑/↓ recorren la lista de clientes (misma que el panel izq), Esc vuelve al dashboard. No dispara si escribes o hay un modal.
@@ -18097,7 +18159,7 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
             <div>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-                  {showCargaPag?'Carga masiva':showHistorial?'Historial':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Pagos realizados':notaTab==='pend'?'Deuda':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
+                  {showCargaPag?'Carga masiva':showHistorial?'Historial':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Pagos realizados':notaTab==='pend'?'Deuda':notaTab==='nonuestras'?'No son nuestras':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ver ficha ›</span>}
                 {selectedClient&&!esOficina(selectedClient.id)&&(()=>{
@@ -18659,10 +18721,10 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
                 <span style={{color:C.done,fontSize:14}}>›</span>
               </div>
             )})()}
-            {notaNoNuestras.n>0&&(
-              <div onClick={()=>{ setNoNSel(new Set(notaNoNuestras.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:C.overdueBg,border:`1px solid #F3C9C4`,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
+            {notaNoNuestras.items.length>0&&(
+              <div onClick={()=>{ setNoNSel(new Set(notaNoNuestras.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:notaNoNuestras.n>0?C.overdueBg:C.surface,border:`1px solid ${notaNoNuestras.n>0?C.overdueText+'44':C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
                 <span style={{width:30,height:30,borderRadius:10,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.overdueText}}>{notaNoNuestras.n} OT que no son nuestras{notaNoNuestras.nPend>0?` · ${notaNoNuestras.nPend} por consultar`:' · ya consultadas'}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>OT correctas pero no las paga la oficina — consúltalas a la notaría</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:notaNoNuestras.n>0?C.overdueText:C.text}}>{notaNoNuestras.n>0?<>{notaNoNuestras.n} OT que no son nuestras{notaNoNuestras.nPend>0?` · ${notaNoNuestras.nPend} por consultar`:' · ya consultadas'}</>:<>OT que no son nuestras · {notaNoNuestras.resueltas.length} resuelta{notaNoNuestras.resueltas.length!==1?'s':''}</>}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>OT correctas pero no las paga la oficina — consúltalas a la notaría</div></div>
                 <span style={{color:C.done,fontSize:14}}>›</span>
               </div>
             )}
@@ -18739,47 +18801,114 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
       })()}
       {/* Vista "No son nuestras": OT no reconocidas acumuladas de las cargas — se consultan a la notaría cuando quieras (no solo en la carga) */}
       {showNotaria&&notaTab==='nonuestras'&&(()=>{
+        // OT que no son nuestras (render aprobado 2026-10-08): se guardan completas por N° de OT, con historial; resolver NO las borra.
+        // Botones: UN solo estilo (nb) — mismo alto (34), tipografía (12.5/600), radio y alineación en toda la vista; el CTA del panel 38.
         const D=isDesktop
-        const items=notaNoNuestras.items
-        const sel=items.filter(x=>noNSel.has(x.id))
-        const allOn=sel.length===items.length&&items.length>0
-        const otL=r=>{ const o=String(r.ot||'').trim(); return o?(o.toUpperCase().startsWith('OT')?o.toUpperCase():'OT-'+o):'s/OT' }
-        const fmtF=iso=>{ try{ return new Date(iso).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'}) }catch(_){ return '' } }
-        return (
-          <div style={{padding:D?'8px 20px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
-            <button onClick={()=>setNotaTab('hub')} style={{fontSize:13,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'2px 0',marginBottom:8}}>‹ Notaría</button>
-            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-              <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-                <span style={{width:28,height:28,borderRadius:8,background:C.overdueBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg></span>
-                <div style={{minWidth:0,flex:1}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>OT que no son nuestras</div><div style={{fontSize:11,color:C.muted}}>correctas, pero no las paga la oficina · para consultar a la notaría</div></div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:C.overdueText}}>{fmt(notaNoNuestras.total)}</div><div style={{fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:'.3px'}}>{items.length} OT</div></div>
+        const NN=notaNoNuestras
+        const _n=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+        const qq=_n(noNQ.trim())
+        const match=x=>!qq||_n(`${x.ot} ${x.materia} ${x.requirente} ${x.concepto}`).includes(qq)
+        const activos=NN.activos.filter(match), resueltas=NN.resueltas.filter(match)
+        const sel=NN.activos.filter(x=>noNSel.has(x.id))
+        const selTot=sel.reduce((a,x)=>a+(x.monto||0),0)
+        const nb=(v='ghost',extra={})=>({minHeight:34,padding:'0 13px',borderRadius:8,fontSize:12.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,
+          ...(v==='pri'?{background:C.accent,color:'#fff',border:`1px solid ${C.accent}`}:v==='ok'?{background:C.greenText,color:'#fff',border:`1px solid ${C.greenText}`}:{background:C.surface,color:C.accent,border:`1px solid ${C.border}`}),...extra})
+        const lblK={fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}
+        const ln=(l,v,col)=><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,fontSize:12,padding:'2px 0'}}><span style={{color:col||C.muted,fontWeight:col?600:400}}>{l}</span><span style={{color:C.text,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>
+        const estPill=x=>{ const t=x.estado==='resuelta'?(x.resolucion==='era_nuestra'?'Era nuestra · cargada':'Respondida'):x.estado==='consultada'?`Consultada ${x.consultadaAt?fmtFechaDMY(String(x.consultadaAt).slice(0,10)):''}`:'Por consultar'
+          const st=x.estado==='resuelta'?{bg:C.greenBg,c:C.greenText}:x.estado==='consultada'?{bg:C.soonBg,c:C.soonText}:{bg:C.overdueBg,c:C.overdueText}
+          return <span style={{fontSize:10.5,fontWeight:700,padding:'2px 9px',borderRadius:20,background:st.bg,color:st.c,whiteSpace:'nowrap'}}>{t}</span> }
+        const ACC={marcada:'Marcada como no nuestra',volvio:'Volvió en otra liquidación',consultada:'Consultada a la notaría',era_nuestra:'Sí era nuestra · gasto cargado',respondida:'La notaría respondió',reabierta:'Volvió a la revisión'}
+        const toggleSel=x=>setNoNSel(p=>{ const n=new Set(p); n.has(x.id)?n.delete(x.id):n.add(x.id); return n })
+        const GRID=D?'18px 100px minmax(0,1fr) 150px 32px':'18px minmax(0,1fr) auto 32px'
+        const detalle=x=>{ const kv=(l,v)=>v?<div style={{display:'flex',justifyContent:'space-between',gap:12,fontSize:12,padding:'4px 0',borderBottom:`0.5px solid ${C.track}`}}><span style={{color:C.muted,flexShrink:0}}>{l}</span><span style={{fontWeight:600,color:C.text,textAlign:'right',minWidth:0}}>{v}</span></div>:null
+          const hist=[...(x.historial||[])].sort((a,b)=>String(a.at).localeCompare(String(b.at)))
+          const gasto=x.expense_id?(expenses||[]).find(e=>String(e.id)===String(x.expense_id)):null
+          return (
+          <div style={{background:C.bgSoft,borderTop:`0.5px solid ${C.border}`,padding:D?'12px 14px 14px 41px':'12px 13px 14px'}}>
+            <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr':'1fr',gap:D?18:12}}>
+              <div>
+                <div style={{...lblK,marginBottom:4}}>Datos de la OT</div>
+                {kv('OT',x.ot)}{kv('Fecha',x.fecha?fmtFechaDMY(String(x.fecha).slice(0,10)):'—')}{kv('Materia',x.materia)}{kv('Requirente',x.requirente)}{kv('Concepto',x.concepto)}{kv('Subconcepto',x.subconcepto)}{kv('Monto',fmt(x.monto))}
+                {(x.cargas||[]).map((c,i)=><Fragment key={i}>{kv(i===0?'Vino en':'',`${c.filename||'Carga'}${c.fecha?` · ${fmtFechaDMY(String(c.fecha).slice(0,10))}`:''}`)}</Fragment>)}
               </div>
-              {items.length>0&&(
-                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:C.bgSoft,borderBottom:`0.5px solid ${C.border}`,fontSize:11,color:C.muted}}>
-                  <span>{sel.length} seleccionada{sel.length!==1?'s':''}</span>
-                  <button onClick={()=>setNoNSel(allOn?new Set():new Set(items.map(x=>x.id)))} style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>{allOn?'Ninguna':'Todas'}</button>
-                </div>
-              )}
-              {items.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:'26px 16px',fontSize:13}}>Sin OT pendientes · todo consultado o resuelto.</div>}
-              {items.map(r=>{ const on=noNSel.has(r.id); const cons=r.estado==='consultada'; return (
-                <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-                  <span onClick={()=>setNoNSel(p=>{ const n=new Set(p); n.has(r.id)?n.delete(r.id):n.add(r.id); return n })} style={{width:18,height:18,borderRadius:4,border:`1.6px solid ${on?C.overdueText:C.done}`,background:on?C.overdueText:'#fff',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3'><path d='M5 13l4 4L19 7'/></svg>}</span>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{color:C.azulInfo,fontWeight:700}}>{otL(r)}</span>{r.motivo||r.nombre?<span style={{color:C.text}}> · {r.motivo||'—'}{r.nombre?<span style={{color:C.muted}}> · {r.nombre}</span>:''}</span>:''}</div>
-                    <div style={{fontSize:10,color:C.done,marginTop:1}}>{r.carga||'—'}{cons?<span style={{color:C.soonText,fontWeight:600}}> · consultada{r.consultadaAt?` el ${fmtF(r.consultadaAt)}`:''}</span>:''}</div>
-                  </div>
-                  <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(r.monto)}</span>
-                  <button onClick={()=>resolverNoNuestra(r.id)} title='Sí era nuestra, o la notaría ya respondió → sacar de la lista (reversible)' style={{fontSize:11,fontWeight:600,color:C.greenText,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'2px 0'}}>Resolver</button>
-                </div>
-              )})}
-              {items.length>0&&(
-                <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px'}}>
-                  <span style={{fontSize:11,color:C.muted}}>{notaNoNuestras.ultConsulta?`Última consulta: ${fmtF(notaNoNuestras.ultConsulta)}`:'Aún sin consultar'}</span>
-                  <button disabled={noNSending||!sel.length} onClick={()=>consultarNoNuestras(sel)} style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:'#fff',background:sel.length?C.overdue:C.done,border:'none',borderRadius:8,padding:'8px 13px',cursor:sel.length&&!noNSending?'pointer':'default',opacity:sel.length&&!noNSending?1:.6,display:'inline-flex',alignItems:'center',gap:7}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>{noNSending?'Enviando…':`Consultar a la notaría (${sel.length})`}</button>
-                </div>
-              )}
+              <div>
+                <div style={{...lblK,marginBottom:4}}>Historial</div>
+                {!hist.length&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Marcada como no nuestra en la carga.</div>}
+                {hist.map((h,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:12,padding:'4px 0',borderBottom:`0.5px solid ${C.track}`}}><span style={{minWidth:0}}><b style={{fontWeight:600}}>{ACC[h.accion]||h.detalle||h.accion}</b>{h.por?<span style={{color:C.muted}}> · {h.por}</span>:null}</span><span style={{color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtFechaDMY(String(h.at||'').slice(0,10))}</span></div>)}
+              </div>
             </div>
-            <div style={{fontSize:10,color:C.done,marginTop:9,textAlign:'center'}}>El correo va a {cleanNotaDest(notaEmail)||NOTARIA_DEFAULT}, dirigido a {NOTA_DIRIGIDO} · el estudio en copia.</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
+              {x.estado!=='resuelta'
+                ? <><button onClick={()=>resolverNoNuestra(x,'era_nuestra')} style={nb('ok')}>Sí era nuestra · cargar gasto</button><button onClick={()=>resolverNoNuestra(x,'respondida')} style={nb()}>La notaría respondió</button></>
+                : <><button onClick={()=>reabrirNoNuestra(x)} style={nb()}>Volver a la revisión</button>{gasto&&onEdit&&<button onClick={()=>onEdit(gasto)} style={nb()}>Ver gasto</button>}</>}
+            </div>
+          </div>) }
+        const fila=x=>{ const on=noNSel.has(x.id), open=noNOpen===x.id, res=x.estado==='resuelta'
+          return (
+          <Fragment key={x.id}>
+            <div onClick={()=>setNoNOpen(open?null:x.id)} style={{display:'grid',gridTemplateColumns:GRID,columnGap:10,rowGap:2,alignItems:'center',padding:D?'8px 8px 8px 13px':'9px 6px 9px 12px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.azulBg:C.surface}}>
+              <span onClick={e=>{ e.stopPropagation(); if(!res) toggleSel(x) }} style={{...(D?{}:{gridRow:'1 / 3'}),width:18,height:18,borderRadius:6,border:`1.5px solid ${res?C.border:(on?C.accent:C.done)}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:res?'default':'pointer'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
+              {D ? <>
+                <span style={{minWidth:0}}><span style={{display:'block',fontSize:12,fontWeight:700,color:C.azulInfo,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.ot}</span><span style={{display:'block',fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.fecha?fmtFechaDMY(String(x.fecha).slice(0,10)):'sin fecha'}</span></span>
+                <span style={{minWidth:0}}><span style={{display:'block',fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.materia||x.concepto||'—'}</span>{x.requirente&&<span style={{display:'block',fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.requirente}</span>}</span>
+                <span style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}><span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.monto)}</span>{estPill(x)}</span>
+              </> : <>
+                <span style={{gridColumn:2,gridRow:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.materia||x.concepto||'—'}</span>
+                <span style={{gridColumn:2,gridRow:2,fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.azulInfo,fontWeight:700}}>{x.ot}</b>{x.fecha?` · ${fmtFechaDMY(String(x.fecha).slice(0,10))}`:''}</span>
+                <span style={{gridColumn:3,gridRow:1,fontSize:13,fontWeight:700,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(x.monto)}</span>
+                <span style={{gridColumn:3,gridRow:2,justifySelf:'end'}}>{estPill(x)}</span>
+              </>}
+              <span style={{...(D?{}:{gridColumn:4,gridRow:'1 / 3'}),display:'inline-flex',justifyContent:'center',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={14} c={C.done}/></span>
+            </div>
+            {open&&detalle(x)}
+          </Fragment>) }
+        const hero=(
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
+            <div style={{...lblK,color:C.overdueText}}>No son nuestras</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:12,color:C.muted}}>{NN.items.length} OT</span><span style={{fontSize:22,fontWeight:800,color:C.overdueText,letterSpacing:-.4,fontVariantNumeric:'tabular-nums'}}>{fmt(NN.totTodo)}</span></div>
+            <div style={{borderTop:`1px solid ${C.track}`,paddingTop:6,marginTop:6}}>
+              {ln('Por consultar',fmt(NN.totPend),C.overdueText)}{ln('Consultadas',fmt(NN.totCons),C.soonText)}{ln('Resueltas',fmt(NN.totRes),C.greenText)}
+            </div>
+          </div>)
+        const consultar=(
+          <div style={{background:sel.length?C.azulBg:C.surface,border:`1px solid ${sel.length?C.accent:C.border}`,borderRadius:12,padding:'11px 13px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}><span style={{fontSize:13,fontWeight:700,color:sel.length?C.accent:C.muted}}>{sel.length} seleccionada{sel.length!==1?'s':''}</span><span style={{fontSize:15,fontWeight:800,color:sel.length?C.accent:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(selTot)}</span></div>
+            <div style={{display:'flex',gap:8,marginTop:9}}>
+              <button onClick={()=>setNoNSel(sel.length===NN.activos.length?new Set():new Set(NN.activos.map(x=>x.id)))} style={nb('ghost',{flex:1,minHeight:38})}>{sel.length===NN.activos.length&&sel.length?'Ninguna':'Todas'}</button>
+              <button disabled={noNSending||!sel.length} onClick={()=>consultarNoNuestras(sel.map(x=>({...x,motivo:x.materia,nombre:x.requirente})))} style={nb('pri',{flex:2,minHeight:38,opacity:(noNSending||!sel.length)?.55:1,cursor:(noNSending||!sel.length)?'default':'pointer'})}>{noNSending?'Enviando…':`Consultar a la notaría${sel.length?` (${sel.length})`:''}`}</button>
+            </div>
+            <div style={{fontSize:11,color:C.muted,marginTop:7,lineHeight:1.4}}>Va a {cleanNotaDest(notaEmail)||NOTARIA_DEFAULT}, dirigido a {NOTA_DIRIGIDO}, con el estudio en copia.{NN.ultConsulta?` Última consulta: ${fmtFechaDMY(String(NN.ultConsulta).slice(0,10))}.`:''}</div>
+          </div>)
+        const bit=<BitacoraLista prefijo='notaria.nonuestra' titulo='Bitácora' limite={8} vacio='Aún no hay registros.' etiquetas={{'notaria.nonuestra_registradas':'Registradas desde la carga','notaria.nonuestra_consultada':'Consultada a la notaría','notaria.nonuestra_era_nuestra':'Sí era nuestra · gasto cargado','notaria.nonuestra_respondida':'La notaría respondió','notaria.nonuestra_reabierta':'Volvió a la revisión'}}/>
+        const lista=(
+          <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:10}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,background:C.surface,border:`${qq?1.5:1}px solid ${qq?C.accent:C.border}`,borderRadius:10,padding:'0 11px'}}>
+              <SIcon n='search' s={14} c={C.muted}/>
+              <input value={noNQ} onChange={e=>setNoNQ(e.target.value)} placeholder='Buscar OT, requirente o materia…' style={{flex:1,minWidth:0,border:'none',outline:'none',background:'none',fontSize:13,color:C.text,padding:'10px 0'}}/>
+              {noNQ&&<button onClick={()=>setNoNQ('')} style={{border:'none',background:'none',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',minHeight:30}}>Limpiar</button>}
+            </div>
+            <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface}}>
+              {D&&<div style={{display:'grid',gridTemplateColumns:GRID,columnGap:10,padding:'7px 8px 7px 13px',background:C.bgSoft,...lblK}}><span/><span>OT · fecha</span><span>Materia · requirente</span><span style={{textAlign:'right'}}>Monto · estado</span><span/></div>}
+              {activos.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:'22px 16px',fontSize:13}}>{qq?`Ninguna OT calza con "${noNQ.trim()}".`:'Sin OT por consultar · todo consultado o resuelto.'}</div>}
+              {activos.map(fila)}
+            </div>
+            {resueltas.length>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface}}>
+              <div onClick={()=>setNoNResOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 13px',background:C.bgSoft,cursor:'pointer'}}>
+                <span style={{display:'inline-flex',transform:(noNResOpen||qq)?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={13} c={C.muted}/></span>
+                <span style={{fontSize:13,fontWeight:700,color:C.text}}>Resueltas · {resueltas.length}</span>
+                <span style={{fontSize:11,color:C.muted,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>quedan con su resolución</span>
+                <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(resueltas.reduce((a,x)=>a+(x.monto||0),0))}</span>
+              </div>
+              {(noNResOpen||qq)&&resueltas.map(fila)}
+            </div>}
+            {!D&&bit}
+          </div>)
+        return (
+          <div style={{padding:D?'8px 20px 44px':'6px 12px 30px',maxWidth:D?1240:undefined,margin:'0 auto'}}>
+            {D
+              ? <div style={{display:'flex',gap:18,alignItems:'flex-start'}}>{lista}<div style={{width:300,flexShrink:0,position:'sticky',top:12,display:'flex',flexDirection:'column',gap:10}}>{hero}{consultar}{bit}</div></div>
+              : <div style={{display:'flex',flexDirection:'column',gap:10}}>{hero}{NN.activos.length>0&&consultar}{lista}</div>}
           </div>
         )
       })()}
@@ -35937,9 +36066,10 @@ export default function App() {
       if(!row.date) sinFecha++
       payloads.push(row)
     }
+    if(notaResumen?.noNuestras?.length){ try{ await registrarNoNuestras(notaResumen.noNuestras,{batchId:payloads.length?batchId:null,filename,por:user?.name||null}) }catch(e){ console.error('registrarNoNuestras',e) } }   // nunca se pierden (aunque no haya nada que cargar)
     if(payloads.length===0) return {imported:0,dupOmit,otDupOmit,sinCliente:0,sinFecha:0,batchId:null,filename}
     // Resumen permanente de la carga (nada sin rastro): cargadas + con error (no entraron) + ya en la app; guarda las filas con error.
-    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:notaResumen.cargadas??payloads.length, pendientes:notaResumen.pendientes||0, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]).slice(0,80), noNuestras:(notaResumen.noNuestras||[]).slice(0,80), notaria:true } : null
+    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:notaResumen.cargadas??payloads.length, pendientes:notaResumen.pendientes||0, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]), noNuestras:(notaResumen.noNuestras||[]), notaria:true } : null
     const {error:bErr} = await supabase.from('bulk_imports').insert({id:batchId,created_by:user?.name||null,row_count:payloads.length,filename:filename||null,...(resumen?{resumen}:{})})
     if(bErr) throw bErr
     const inserted=[]
