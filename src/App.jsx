@@ -7615,16 +7615,19 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
   const rsDe = b => rsDeFactura(b, clientEntities)
   const abrirCli = (e,b) => { if(!onOpenClientFicha||!b.client_id) return; e.stopPropagation(); onOpenClientFicha(b.client_id) }
   const now = new Date()
-  const [year,setYear] = useState(String(now.getFullYear()))
-  const [month,setMonth] = useState(String(now.getMonth()+1).padStart(2,'0'))
+  const [year,setYear] = useState(()=>viewMemLeer('checklist')?.year||String(now.getFullYear()))
+  const [month,setMonth] = useState(()=>viewMemLeer('checklist')?.month||String(now.getMonth()+1).padStart(2,'0'))
   const [mesesEmitOpen,setMesesEmitOpen] = useState(()=>new Set())   // meses de "Emitidas" abiertos (colapsadas por defecto)
   const [aniosEmitOpen,setAniosEmitOpen] = useState(()=>new Set())   // años de "Emitidas" abiertos (colapsados por defecto)
   const [factOpen,setFactOpen] = useState(()=>new Set())             // facturas emitidas con acciones desplegadas
   const [emitExp,setEmitExp] = useState(()=>new Set())               // programadas con la comparación "ya emitida" desplegada
-  const [checklistTab,setChecklistTab] = useState(null)              // acordeón: null | 'emitir' | 'enviar' | 'adelantos'
+  const [checklistTab,setChecklistTab] = useState(()=>viewMemLeer('checklist')?.checklistTab??null)
+  useEffect(()=>{ viewMemGuardar('checklist',{year,month,checklistTab}) },[year,month,checklistTab])              // acordeón: null | 'emitir' | 'enviar' | 'adelantos'
   const [adelSel,setAdelSel] = useState(()=>new Set())               // adelantos marcados (ids de anticipo) para facturar
   const [adelOpen,setAdelOpen] = useState(()=>new Set())             // clientes desplegados en el panel de adelantos
   const [enviadasOpen,setEnviadasOpen] = useState(false)             // pie "ya enviadas este mes" desplegado (auditar cargadas = por enviar + ya enviadas)
+  const isDesktop = useIsDesktop()   // escritorio: Emitir y Enviar lado a lado (render aprobado 2026-10-08)
+  const [qMes,setQMes] = useState('')                                // buscador: cliente, N°, RUT o concepto (filtra Emitir y Enviar)
   const [expEnviar,setExpEnviar] = useState(()=>new Set())           // filas de "Por enviar" con el detalle desplegado (Ver PDF, destinatario, glosa)
   const [factTo,setFactTo] = useState({})                            // client_id → destinatario recordado (learnings factura_to) para saber a quién irá
   const [busy,setBusy] = useState(null)
@@ -7662,7 +7665,9 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
   const refStart = `${mesKey}-01`
   const refEnd = `${mesKey}-${String(new Date(Number(mesKey.slice(0,4)), Number(mesKey.slice(5,7)), 0).getDate()).padStart(2,'0')}`
   const dReal = b => String(b.due||b.issued_at||'').slice(0,10)
-  const porEmitir = billing.filter(b=> !b.deleted_at && b.status==='Programada' && !esEmitida(b) && b.billing_type!=='reembolso' && b.billing_type!=='nota_credito' && !(fantasmaIds&&fantasmaIds.has(String(b.id))) && dReal(b) && dReal(b)<=refEnd)
+  const _qMes=_normTxt(qMes.trim()), _qMesD=qMes.replace(/[^0-9kK]/g,'').toLowerCase()
+  const matchQ = b => !_qMes || _normTxt(clients.find(x=>x.id===b.client_id)?.name).includes(_qMes) || _normTxt(b.concept).includes(_qMes) || _normTxt(rsDe(b)).includes(_qMes) || (_qMesD.length>=3&&String(folioN(b.invoice_no)||'').includes(_qMesD)) || (_qMesD.length>=4&&String(b.receptor_rut||'').replace(/[^0-9kK]/g,'').toLowerCase().includes(_qMesD))
+  const porEmitir = billing.filter(b=> matchQ(b) && !b.deleted_at && b.status==='Programada' && !esEmitida(b) && b.billing_type!=='reembolso' && b.billing_type!=='nota_credito' && !(fantasmaIds&&fantasmaIds.has(String(b.id))) && dReal(b) && dReal(b)<=refEnd)
   const yaEmitidasFantasma = billing.filter(b=> !b.deleted_at && b.status==='Programada' && fantasmaIds&&fantasmaIds.has(String(b.id)) && dReal(b) && dReal(b)<=refEnd)
   const esMesB = b => dReal(b)>=refStart   // devengo del mes en curso (el <=refEnd ya está garantizado por porEmitir)
   const mmmDe = ym => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const p=String(ym||'').split('-'); return p.length>=2?`${M[+p[1]-1]} ${p[0].slice(2)}`:'' }
@@ -7755,7 +7760,7 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
   ))
   const cargadasXml = billing.filter(b=>!b.deleted_at && b.dte_xml && String(b.issued_at||'').startsWith(mesKey)).length   // respaldadas por XML este mes (trazabilidad de la carga)
   // Por enviar al cliente: emitidas con respaldo (XML/PDF) que aún no se envían por correo, del mes de emisión seleccionado.
-  const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
+  const porEnviar = billing.filter(b=> matchQ(b) && !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && !b.sent_at && (b.status==='Pendiente'||b.status==='Vencido') && String(b.issued_at||'').startsWith(mesKey))   // misma regla que sinEnviar (impaga): una pagada ya no se manda 'para que paguen'
     .sort((a,b)=>String(b.issued_at||b.due||'').localeCompare(String(a.issued_at||a.due||'')))
   const porEnviarTotal = porEnviar.reduce((a,b)=>a+montoFactura(b),0)
   // Emitidas del mes SIN XML: no se pueden enviar (falta el archivo) pero NO deben quedar invisibles → se avisan con su folio.
@@ -7909,7 +7914,7 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
           </div>
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
             <div style={{fontSize:compact?12.5:13,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
-            {onEnviar&&<button onClick={e=>{e.stopPropagation(); onEnviar(b)}} style={{background: sent?'#fff':C.accent,color: sent?C.accent:'#fff',border: sent?`1px solid ${C.accent}`:'none',borderRadius:8,padding: compact?'3px 11px':'5px 12px',fontSize: compact?10.5:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{sent?'Reenviar':'Enviar'}</button>}
+            <div style={{display:'flex',gap:6}}>{b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding: compact?'3px 9px':'5px 10px',fontSize: compact?10.5:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}{onEnviar&&<button onClick={e=>{e.stopPropagation(); onEnviar(b)}} style={{background: sent?'#fff':C.accent,color: sent?C.accent:'#fff',border: sent?`1px solid ${C.accent}`:'none',borderRadius:8,padding: compact?'3px 11px':'5px 12px',fontSize: compact?10.5:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{sent?'Reenviar':'Enviar'}</button>}</div>
           </div>
           <span style={{fontSize:12,color:C.muted,flexShrink:0}}>{open?'▾':'▸'}</span>
         </div>
@@ -7979,10 +7984,15 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
         <select value={year} onChange={e=>setYear(e.target.value)} style={selStyle}>
           {years.map(y=><option key={y} value={y}>{y}</option>)}
         </select>
+        <div style={{flex:'1 1 220px',display:'flex',alignItems:'center',gap:7,background:'#fff',border:`${qMes?1.5:1}px solid ${qMes?C.accent:C.border}`,borderRadius:9,padding:'0 10px',minWidth:0}}>
+          <SIcon n='search' s={13} c={C.muted}/>
+          <input value={qMes} onChange={e=>setQMes(e.target.value)} placeholder='Buscar cliente, N° o RUT…' style={{flex:1,minWidth:0,border:'none',outline:'none',background:'none',fontSize:12.5,color:C.text,padding:'8px 0'}}/>
+          {qMes&&<span onClick={()=>setQMes('')} style={{fontSize:11,color:C.muted,cursor:'pointer',fontWeight:600}}>Limpiar</span>}
+        </div>
       </div>
 
-      {/* NÚCLEO: Emitir + Enviar (las dos acciones que mueven plata hacia el cobro) */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,marginBottom:11}}>
+      {/* NÚCLEO: Emitir + Enviar (las dos acciones que mueven plata hacia el cobro). En escritorio las dos listas van abiertas lado a lado (sus encabezados reemplazan estas tarjetas). */}
+      {!isDesktop&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,marginBottom:11}}>
         <button onClick={()=>setChecklistTab(t=>t==='emitir'?null:'emitir')} title='Programadas del mes por emitir al SII' style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,background:checklistTab==='emitir'?C.overdueBg:'#fff',border:`1.5px solid ${checklistTab==='emitir'?C.overdueText:C.border}`,borderRadius:14,padding:'13px 14px',cursor:'pointer',textAlign:'left'}}>
           <span style={{width:34,height:34,borderRadius:9,background:C.overdueBg,display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 18v-6M9 15l3-3 3 3'/></svg></span>
           <div><div style={{fontSize:13,fontWeight:700,color:C.text}}>Emitir programadas</div><div style={{fontSize:10,color:C.muted}}>para este mes</div></div>
@@ -7993,7 +8003,7 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
           <div><div style={{fontSize:13,fontWeight:700,color:C.text}}>Enviar facturas</div><div style={{fontSize:10,color:C.muted}}>al cliente · para que paguen</div></div>
           <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:800,color:porEnviar.length?C.accent:C.done,fontVariantNumeric:'tabular-nums'}}>{porEnviar.length}</span><span style={{fontSize:11,color:C.muted,fontWeight:600}}>{porEnviar.length?'listas':'nada por enviar'}</span></div>
         </button>
-      </div>
+      </div>}
 
       {/* SOPORTE: facturar adelantos · cotejar SII · cargar XML */}
       <div style={{fontSize:9.5,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:.5,margin:'0 2px 7px'}}>Soporte</div>
@@ -8055,8 +8065,10 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
 
       {/* (acciones núcleo Emitir/Enviar + Soporte movidas arriba — jerarquía C) */}
 
-      {/* Acordeón · Por emitir */}
-      {checklistTab==='emitir'&&(<>
+      {/* Acordeón · Por emitir (escritorio: columna izquierda, siempre abierta) */}
+      <div style={isDesktop?{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:16,alignItems:'start',marginBottom:12}:undefined}>
+      {(isDesktop||checklistTab==='emitir')&&(<div style={{minWidth:0}}>
+      {isDesktop&&<div style={{display:'flex',alignItems:'baseline',gap:8,padding:'10px 13px',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,marginBottom:9}}><span style={{fontSize:13,fontWeight:700,color:C.text}}>Emitir programadas</span><span style={{fontSize:11,color:C.muted}}>para este mes · {nMes}</span><span style={{marginLeft:'auto',fontSize:15,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(totMes)}</span></div>}
       <div style={{display:'flex',alignItems:'stretch',gap:6,margin:'0 2px 9px',flexWrap:'wrap'}}>
         <div style={{flex:'1 1 150px',background:C.greenBg,border:'1px solid #CDE8D8',borderRadius:10,padding:'7px 10px'}}><div style={{fontSize:9,fontWeight:800,color:C.greenText,textTransform:'uppercase',letterSpacing:.4}}>A facturar este mes</div><div style={{fontSize:14,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(totMes)}</div><div style={{fontSize:9.5,color:C.muted,fontWeight:600}}>{nMes} cuota{nMes!==1?'s':''}</div></div>
         <div style={{flex:'1 1 110px',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 10px'}}><div style={{fontSize:9,fontWeight:800,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4}}>Atrasado</div><div style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(totAtr)}</div><div style={{fontSize:9.5,color:C.muted,fontWeight:600}}>plata no entró</div></div>
@@ -8084,12 +8096,14 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
       {g3.length>0&&<div style={{border:`1px solid ${C.tealText}33`,borderRadius:10,overflow:'hidden',marginBottom:12}}>{renderAtr(g3,'espera')}</div>}
       {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6,border:`1px solid ${C.border}`,borderRadius:10,marginBottom:12}}><SIcon n='check' s={15} c={C.greenText}/>Todo emitido este mes</div>}
       {yaEmitidasFantasma.length>0&&<div style={{background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:12,fontSize:11,color:C.muted,lineHeight:1.45}}><b style={{color:C.greenText}}>{yaEmitidasFantasma.length} cuota{yaEmitidasFantasma.length!==1?'s':''} ya emitida{yaEmitidasFantasma.length!==1?'s':''}</b> se excluye{yaEmitidasFantasma.length!==1?'n':''} de este listado (el motor las cruzó con su factura real). Retíralas en <b>Revisión de datos</b>.</div>}
-      </>)}
+      </div>)}
 
       {/* Acordeón · Por enviar al cliente — emitidas con respaldo, sin correo. Estilo aprobado: día grande + Factura N° + RS·RUT + Enviar navy bajo el monto. */}
-      {checklistTab==='enviar'&&(
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Por enviar al cliente · {porEnviar.length}{porEnviar.length?` · ${fmt(porEnviarTotal)}`:''}</div>
+      {(isDesktop||checklistTab==='enviar')&&(
+        <div style={{marginBottom:12,minWidth:0}}>
+          {isDesktop
+            ? <div style={{display:'flex',alignItems:'baseline',gap:8,padding:'10px 13px',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,marginBottom:9}}><span style={{fontSize:13,fontWeight:700,color:C.text}}>Enviar facturas</span><span style={{fontSize:11,color:C.muted}}>al cliente · {porEnviar.length}</span><span style={{marginLeft:'auto',fontSize:15,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(porEnviarTotal)}</span></div>
+            : <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Por enviar al cliente · {porEnviar.length}{porEnviar.length?` · ${fmt(porEnviarTotal)}`:''}</div>}
           {emitidasSinXml.length>0&&<div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:10,padding:'8px 11px',marginBottom:8,fontSize:11,color:C.soonText,lineHeight:1.45}}><b>{emitidasSinXml.length} emitida{emitidasSinXml.length!==1?'s':''} sin XML</b> — no se {emitidasSinXml.length!==1?'pueden':'puede'} enviar hasta cargar su XML (botón "Cargar XML"): {emitidasSinXml.slice(0,8).map(b=>'N° '+folioN(b.invoice_no)).join(' · ')}{emitidasSinXml.length>8?'…':''}</div>}
           <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {porEnviar.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><SIcon n='check' s={15} c={C.greenText}/>Todas enviadas</div>}
@@ -8143,6 +8157,7 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
           )}
         </div>
       )}
+      </div>
 
       {/* Emitidas — con folio (aparecen en el SII), COLAPSADAS POR AÑO → MES. Al abrir una factura: conciliar, asignar RS, enviar. */}
       {emitidasPorAnio.length>0&&(
@@ -10711,10 +10726,10 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [depurarRows,setDepurarRows] = useState(null)   // facturas saldadas a confirmar (modal detallado)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
-  const [filter,setFilter] = useState('resumen')
+  const [filter,setFilter] = useState(()=>viewMemLeer('billing')?.filter||'resumen')
   // Deep-link desde los accesos directos del Inicio: abre el cotejo SII o el checklist "Facturas del mes"
   const [cotejoMes,setCotejoMes] = useState(null)   // mes con el que abrir el cotejo (para buscar facturas antiguas del mes de un pago)
-  const [cierreOpen,setCierreOpen] = useState(false)
+  const [cierreOpen,setCierreOpen] = useState(()=>!!viewMemLeer('billing')?.cierreOpen)
   useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='sinemitir') setFilter('sinemitir'); else if(intent==='cierre') setCierreOpen(true); else if(intent==='sii') setSiiPageOpen(true); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
   useEffect(()=>{ contarSinRegistrar() },[])   // badge del hub: cargas sin registrar // eslint-disable-line
   const {uf:ufHoy} = useUF()
@@ -10739,7 +10754,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const respaldoSummaryRef = useRef(null)      // resumen del preview (period/files/counts) para crear el batch al registrar
   const [cargasHist,setCargasHist] = useState(null)        // historial de cargas del SII (modal); null = cerrado
   const [mesTandaReq,setMesTandaReq] = useState(null)   // {def, resolve} del modal "¿de qué mes es esta tanda?" (promesa)
-  const [xmlHub,setXmlHub] = useState(false)            // hub "Cargar XML": Cargar archivo · Cargadas sin registrar · Historial
+  const [xmlHub,setXmlHub] = useState(()=>!!viewMemLeer('billing')?.xmlHub)            // hub "Cargar XML": Cargar archivo · Cargadas sin registrar · Historial
   const [sinRegN,setSinRegN] = useState(0)
   const [sinRegDocs,setSinRegDocs] = useState([])   // las emitidas en el SII sin registrar (folios) — para la página Cargar del SII              // cuántas cargas quedaron sin registrar (badge del hub)
   const [siiSinCli,setSiiSinCli] = useState([])         // docs del SII sin cliente resuelto → se muestran en "Sin cliente" de la vista sin cliente/venta
@@ -11152,7 +11167,8 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const siiLibro = async()=>{ setSiiBusy(true); setSiiResult(null); try{ if(!/^\d{4}-\d{2}$/.test(siiPeriodo)) throw new Error('Período en formato AAAA-MM (ej. 2026-07).'); const det=(billing||[]).filter(b=>b.dte_track_id&&(b.dte_emitido_at||'').slice(0,7)===siiPeriodo&&!b.deleted_at).map(b=>{ const ent=(clientEntities||[]).find(e=>String(e.id)===String(b.entity_id)); return {tpoDoc:34,nroDoc:Number(b.folio)||0,fchDoc:(b.issued_at||'').slice(0,10),rutDoc:ent?.rut||b.receptor_rut||'',rznSoc:ent?.name||b.receptor_name||'',mntExe:Math.round(b.amount||0),mntTotal:Math.round(b.amount||0)} }); const d=await siiCall({action:'libro-ventas',periodo:siiPeriodo,detalle:det}); setSiiResult({...d,nDet:det.length}) }catch(e){ setSiiResult({error:e.message}) } setSiiBusy(false) }
   const siiDescargarXml = (xml,name)=>{ try{ const url=URL.createObjectURL(new Blob([xml],{type:'application/xml'})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),30000) }catch(_){} }
   // Bandeja de envío: facturas emitidas que aún no se mandaron por correo al cliente.
-  const [bandejaEnvio,setBandejaEnvio] = useState(false)
+  const [bandejaEnvio,setBandejaEnvio] = useState(()=>!!viewMemLeer('billing')?.bandejaEnvio)
+  useEffect(()=>{ viewMemGuardar('billing',{filter,cierreOpen,xmlHub,bandejaEnvio}) },[filter,cierreOpen,xmlHub,bandejaEnvio])
   const [masivoSaldo,setMasivoSaldo] = useState(false)   // en el envío masivo: incluir el recordatorio de saldo pendiente (opcional, off por defecto)
   const [factToMap,setFactToMap] = useState({})   // client_id → correo aprendido (learnings factura_to), para mostrar a quién va
   const abrirBandeja = async()=>{ setBandejaEnvio(true); try{ const {data}=await supabase.from('learnings').select('key,value').eq('kind','factura_to'); const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setFactToMap(m) }catch(_){} }
@@ -11340,7 +11356,10 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   // "Por enviar" = SOLO facturas EMITIDAS POR LA APP (tienen dte_track_id) que aún no se mandaron por correo.
   // Las facturas históricas (emitidas/enviadas fuera de la app, sin dte_track_id) YA fueron enviadas a sus clientes —
   // nunca cuentan como pendientes de envío (regla del usuario: nada del histórico pendiente).
-  const sinEnviar = b => !!b.dte_track_id && !b.email_sent_at && (b.status==='Pendiente'||b.status==='Vencido')
+  // REGLA ÚNICA "por enviar" (2026-10-08, verificada en prod): emitida con folio + XML del SII + sin correo registrado + impaga.
+  // Antes exigía dte_track_id (solo facturas emitidas DESDE la app): en prod ninguna lo tiene → la bandeja daba siempre 0.
+  // La lista de "Facturas del mes" (porEnviar) usa este mismo criterio, filtrado por mes de emisión.
+  const sinEnviar = b => esEmitida(b) && !!b.dte_xml && !b.email_sent_at && !b.sent_at && (b.status==='Pendiente'||b.status==='Vencido')
   // Estado de envío por correo de una factura emitida: null si no aplica; si no, {txt,col}.
   // Solo marcamos si ya se envió por la app (email_sent_at). Nunca "Sin enviar" (las facturas ya se enviaron fuera de la app; sería engañoso).
   const envioBadge = b => { if(!esEmitida(b)||!b.email_sent_at) return null; const d=Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000); return {txt:d>0?`Enviada · ${d}d`:'Enviada',col:C.greenText} }
@@ -12713,7 +12732,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const matchEst=b=>{ if(agingF && bucketC(b)!==agingF) return false; if(estSel.size===0) return true; const er=estadoReal(b); return estSel.has(er)||(estSel.has('Pagado')&&er==='Anticipada') }
           let rows=bb.filter(b=>!b.deleted_at)
           if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
-          if(q.trim()) rows=rows.filter(b=>{ const c=clients.find(x=>x.id===b.client_id); return (c?.name||'').toLowerCase().includes(q.toLowerCase()) })
+          if(q.trim()) rows=rows.filter(b=>{ const c=clients.find(x=>x.id===b.client_id); const qq=_normTxt(q.trim()), qd=q.replace(/[^0-9kK]/g,'').toLowerCase(); return _normTxt(c?.name).includes(qq) || _normTxt(b.concept).includes(qq) || (qd.length>=3&&String(folioN(b.invoice_no)||'').includes(qd)) || (qd.length>=4&&String(b.receptor_rut||'').replace(/[^0-9kK]/g,'').toLowerCase().includes(qd)) })   // el placeholder promete N° de factura: nombre, concepto, N° y RUT
           if(soloSinEnviar) rows=rows.filter(sinEnviar)
           // Cruce de información: una factura del SII/PDF trae el RUT del receptor. Si falta el link explícito (entity_id/client_id), se resuelve por ese RUT contra las razones sociales conocidas (client_entities). Así muestra a quién pertenece sin reasignar a mano.
           const nr=r=>String(r||'').replace(/[.\s-]/g,'').toUpperCase()
@@ -13253,7 +13272,13 @@ function printComprobante(bill, clientName){
   const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Comprobante ${bill.invoice_no||''}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:12px;background:#fff}.page{max-width:816px;margin:0 auto}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:22px 26px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:16px;font-weight:700'>${BRAND.nombre}</div><div style='font-size:10px;opacity:.7;margin-top:2px'>${BRAND.web}</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Comprobante de cobro</div>${bill.invoice_no?`<div style='font-size:11px;opacity:.85;margin-top:2px'>N° ${bill.invoice_no}</div>`:''}</div></div><div style='padding:24px 26px'><table style='width:100%;border-collapse:collapse;font-size:12px'>${row('Cliente', clientName||'—')}${bill.receptor_name?row('Razón social', bill.receptor_name+(bill.receptor_rut?` · ${bill.receptor_rut}`:'')):''}${row('Concepto', bill.concept||'—')}${row('Monto', n(bill.amount))}${row('Estado', bill.status||'—')}${row('Emisión', dmy(bill.issued_at))}${bill.status==='Pagado'?row('Fecha de pago', dmy(bill.paid_at)):row('Vencimiento', dmy(bill.due))}${bill.notes?row('Notas', bill.notes):''}</table><div style='margin-top:26px;padding-top:12px;border-top:1px solid ${GRAY};font-size:10px;color:${MUT};display:flex;justify-content:space-between'><span>${BRAND.direccionCalle} · ${BRAND.ciudad}</span><span>Documento interno — no es el DTE del SII</span></div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
   const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
 }
-function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSeries,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,onEmitirDTE,onActualizarEstado,saving,user,onAttachChange}) {
+function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSeries,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,onEmitirDTE,onActualizarEstado,saving,user,onAttachChange,pagina=false,onVerBanco}) {
+  // pagina = la factura abierta como PÁGINA (no modal): escritorio en 2 columnas (formulario | saldo · acciones · historial).
+  const isDesk = useIsDesktop()
+  const [concB,setConcB] = useState(null)   // conciliaciones bancarias de esta factura (para "Ver en Banco ›" e historial)
+  useEffect(()=>{ if(!pagina||!bill?.id||(typeof DEMO!=='undefined'&&DEMO)) return; let vivo=true
+    supabase.from('conciliacion').select('movimiento_id,monto_aplicado,created_at').eq('factura_id',bill.id).order('created_at',{ascending:true}).then(({data})=>{ if(vivo) setConcB(data||[]) }).catch(()=>{})
+    return ()=>{ vivo=false } },[pagina,bill?.id])
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
   const [nuevaRS,setNuevaRS] = useState(false)
@@ -13296,6 +13321,52 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
   // 'Pagado' NO es seleccionable a mano: un pago solo se marca conciliando contra el banco (o al aplicar un anticipo).
   // Una factura que ya está Pagada mantiene su opción (para poder revertirla), pero no se puede setear manualmente.
   const estados=(()=>{ const base=['Pendiente','Anulado']; return (f.status&&!base.includes(f.status))?[f.status,...base]:base })()
+  // Acciones según el estado: una factura EMITIDA (tiene folio) no muestra "Emitir al SII" ni "Eliminar" — su folio no se borra, se anula.
+  const esEmitidaF = !!(bill?.invoice_no) && bill?.status!=='Programada'
+  const guardarEl = (
+        <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave({...f,_terceroProv:terceroProv,_terceroPagado:terceroPagado})} style={{height:pagina?40:36,padding:'0 18px',width:pagina&&isDesk?'100%':undefined,borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
+          {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
+        </button>
+  )
+  const accionesEl = (<>
+        {bill?.id&&!esEmitidaF&&<button onClick={()=>onDelete(bill.id)} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:500,cursor:'pointer'}}>Eliminar</button>}
+        {bill?.id&&<button onClick={()=>printComprobante(f,clients.find(c=>String(c.id)===String(f.client_id))?.name)} title='Imprimir / Guardar PDF' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:500,cursor:'pointer'}}>Comprobante</button>}
+        {bill?.id&&onAnular&&f.status!=='Anulado'&&f.status!=='Anulada'&&<button onClick={()=>{setMotivoBaja('');setObsBaja('');setAnularOpen(true)}} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.soon}`,background:'#fff',color:C.soon,fontSize:13,fontWeight:500,cursor:'pointer'}}>Anular</button>}
+        {bill?.id&&onEmitirDTE&&f.status!=='Anulado'&&f.status!=='Anulada'&&!bill.dte_track_id&&!esEmitidaF&&<button onClick={()=>onEmitirDTE(bill)} title='Generar y enviar la factura electrónica al SII (con vista previa antes de emitir)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Emitir al SII</button>}
+        {bill?.id&&bill.dte_xml&&<button onClick={async()=>{ try{ const doc=splitSetDTE(bill.dte_xml)[0]||bill.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); descargarPdfU8(u8, facturaNombreArchivo(r)) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }} title='Descargar el PDF oficial (con timbre) de la factura emitida' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.tealText}`,background:'#fff',color:C.tealText,fontSize:13,fontWeight:600,cursor:'pointer'}}>{pagina?'Descargar PDF':'PDF'}</button>}
+        {bill?.id&&bill.dte_track_id&&onActualizarEstado&&(()=>{ const est=String(bill.dte_estado||'enviado'); const rech=/rech/i.test(est); const acep=/acep/i.test(est); return <button onClick={()=>onActualizarEstado(bill)} title='Re-consultar el estado del DTE en el SII (puede tardar en aceptarse o rechazarse)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${rech?C.overdue:acep?C.normal:C.soon}`,background:'#fff',color:rech?C.overdue:acep?C.greenText:C.soonText,fontSize:12,fontWeight:600,cursor:'pointer'}}>SII: {rech?'rechazada':acep?'aceptada':'enviado'} · actualizar</button> })()}
+  </>)
+  // Lado derecho (página): saldo con su fuente única (saldoBill/montoFactura/estadoCobro) + historial derivado de la propia factura y su conciliación.
+  const estF = bill?.id ? estadoCobro(bill) : null
+  const montoF = bill?.id ? montoFactura(bill) : 0, saldoF = bill?.id ? Math.max(0,saldoBill(bill)) : 0, pagadoF = Math.max(0,montoF-saldoF)
+  const lnF = (l,v,col) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,fontSize:12,padding:'2px 0'}}><span style={{color:C.muted}}>{l}</span><span style={{fontWeight:700,color:col||C.text,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>
+  const saldoEl = bill?.id ? (
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Saldo</span>{estF&&<span style={{fontSize:10.5,fontWeight:700,padding:'2px 9px',borderRadius:20,background:estF.bg,color:estF.text}}>{bill.status==='Programada'?'Programada':estF.label}</span>}</div>
+      <div style={{fontSize:24,fontWeight:800,color:saldoF>0?(estF?.text||C.text):C.greenText,textAlign:'right',fontVariantNumeric:'tabular-nums',margin:'2px 0 4px'}}>{fmt(saldoF)}</div>
+      <div style={{borderTop:`1px solid ${C.track}`,paddingTop:5}}>{lnF('Monto',fmt(montoF))}{lnF('Pagado',fmt(pagadoF),pagadoF>0?C.greenText:null)}</div>
+      {(concB||[]).length>0&&<div style={{marginTop:8,background:C.greenBg,borderRadius:9,padding:'8px 10px',display:'flex',alignItems:'center',gap:8,fontSize:12}}>
+        <span style={{flex:1,minWidth:0,color:C.greenText,fontWeight:600}}>Conciliada con el banco{bill.paid_at?` · pagada ${fmtFechaDMY(bill.paid_at)}`:''}</span>
+        {onVerBanco&&<span onClick={()=>onVerBanco(concB[concB.length-1].movimiento_id)} style={{color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ver en Banco ›</span>}
+      </div>}
+    </div>) : null
+  const historialEl = bill?.id ? (()=>{ const ev=[]
+    if(bill.invoice_no&&bill.issued_at) ev.push({d:bill.issued_at,t:`Emitida · N° ${folioN(bill.invoice_no)}`,m:montoF})
+    else if(bill.due) ev.push({d:bill.due,t:'Programada',m:montoF})
+    const env=bill.email_sent_at||bill.sent_at; if(env) ev.push({d:env,t:'Enviada al cliente',s:[bill.sent_to?`a ${bill.sent_to}`:null,bill.sent_by||null].filter(Boolean).join(' · ')})
+    ;(concB||[]).forEach(c=>ev.push({d:c.created_at,t:'Conciliada con el banco',m:c.monto_aplicado}))
+    if(bill.paid_at&&!(concB||[]).length) ev.push({d:bill.paid_at,t:'Pagada',m:pagadoF||null})
+    if(bill.anulada_at) ev.push({d:bill.anulada_at,t:'Anulada',s:[bill.anulada_por,bill.motivo_baja].filter(Boolean).join(' · ')})
+    ev.sort((x,y)=>String(y.d).localeCompare(String(x.d)))
+    return (
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px 6px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Historial de la factura</div>
+      {!ev.length&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin movimientos aún.</div>}
+      {ev.map((e,i)=><div key={i} style={{display:'flex',gap:10,padding:'7px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{e.t}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtFechaDMY(String(e.d).slice(0,10))}{e.s?` · ${e.s}`:''}</div></div>
+        {e.m!=null&&<div style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.m)}</div>}
+      </div>)}
+    </div>) })() : null
   return (
     <>
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
@@ -13310,6 +13381,9 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
+      <div style={pagina&&isDesk?{display:'grid',gridTemplateColumns:'minmax(0,1fr) 340px',gap:18,alignItems:'start'}:(pagina?{display:'flex',flexDirection:'column',gap:12}:undefined)}>
+      {pagina&&!isDesk&&saldoEl}
+      <div style={pagina?{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}:undefined}>
       <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:8}}>
         {!f.client_id&&(
           <div>
@@ -13465,17 +13539,14 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
           </div>
         </div>
       </div>
-      <div style={{display:'flex',gap:8,alignItems:'center',padding:'12px 18px',borderTop:`0.5px solid ${C.border}`}}>
-        {bill?.id&&<button onClick={()=>onDelete(bill.id)} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:500,cursor:'pointer'}}>Eliminar</button>}
-        {bill?.id&&<button onClick={()=>printComprobante(f,clients.find(c=>String(c.id)===String(f.client_id))?.name)} title='Imprimir / Guardar PDF' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:500,cursor:'pointer'}}>Comprobante</button>}
-        {bill?.id&&onAnular&&f.status!=='Anulado'&&f.status!=='Anulada'&&<button onClick={()=>{setMotivoBaja('');setObsBaja('');setAnularOpen(true)}} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.soon}`,background:'#fff',color:C.soon,fontSize:13,fontWeight:500,cursor:'pointer'}}>Anular</button>}
-        {bill?.id&&onEmitirDTE&&f.status!=='Anulado'&&f.status!=='Anulada'&&!bill.dte_track_id&&<button onClick={()=>onEmitirDTE(bill)} title='Generar y enviar la factura electrónica al SII (con vista previa antes de emitir)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Emitir al SII</button>}
-        {bill?.id&&bill.dte_xml&&<button onClick={async()=>{ try{ const doc=splitSetDTE(bill.dte_xml)[0]||bill.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); descargarPdfU8(u8, facturaNombreArchivo(r)) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }} title='Descargar el PDF oficial (con timbre) de la factura emitida' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.tealText}`,background:'#fff',color:C.tealText,fontSize:13,fontWeight:600,cursor:'pointer'}}>PDF</button>}
-        {bill?.id&&bill.dte_track_id&&onActualizarEstado&&(()=>{ const est=String(bill.dte_estado||'enviado'); const rech=/rech/i.test(est); const acep=/acep/i.test(est); return <button onClick={()=>onActualizarEstado(bill)} title='Re-consultar el estado del DTE en el SII (puede tardar en aceptarse o rechazarse)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${rech?C.overdue:acep?C.normal:C.soon}`,background:'#fff',color:rech?C.overdue:acep?C.greenText:C.soonText,fontSize:12,fontWeight:600,cursor:'pointer'}}>SII: {rech?'rechazada':acep?'aceptada':'enviado'} · actualizar</button> })()}
+      {!(pagina&&isDesk)&&<div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',padding:'12px 18px',borderTop:`0.5px solid ${C.border}`}}>
+        {accionesEl}
         <button onClick={onClose} style={{height:36,padding:'0 16px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
-        <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave({...f,_terceroProv:terceroProv,_terceroPagado:terceroPagado})} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
-          {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
-        </button>
+        {guardarEl}
+      </div>}
+      </div>
+      {pagina&&!isDesk&&historialEl}
+      {pagina&&isDesk&&<div style={{position:'sticky',top:72,display:'flex',flexDirection:'column',gap:12}}>{saldoEl}<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>{guardarEl}<div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{accionesEl}</div></div>{historialEl}</div>}
       </div>
       {anularOpen&&(
         <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setAnularOpen(false)}>
@@ -16777,6 +16848,12 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
 // habilitar presentaciones movil/desktop sobre la MISMA logica. Traslado verbatim: no cambia ninguna formula.
 // Volver al LUGAR EXACTO de Gastos tras abrir un gasto como página (la vista se desmonta al saltar): se guarda la sub-vista antes del salto
 // y se lee al volver a montar (una sola vez: el efecto de ExpensesView la borra). Caduca a los 30 min.
+// Volver al LUGAR EXACTO tras una página (factura, tarea…): la vista de origen se desmonta al saltar. Cada vista guarda su sub-estado en
+// memoria (_viewMem) y, si se vuelve a montar justo después de un 'volver' (handleBackOrigin marca _volviendoAt), lo retoma. Abrirla de nuevo
+// desde la barra NO lo retoma (pasaron más de 4 s desde el último 'volver').
+const _viewMem={}; let _volviendoAt=0
+const viewMemLeer = k => (Date.now()-_volviendoAt<4000) ? (_viewMem[k]||null) : null
+const viewMemGuardar = (k,v) => { _viewMem[k]=v }
 const _GASTOS_VOLVER='fd_gastos_volver'
 const gastosVolverLeer = () => { try{ const v=JSON.parse(sessionStorage.getItem(_GASTOS_VOLVER)||'null'); return v&&Date.now()-(v.t||0)<30*60*1000?v:null }catch(_){ return null } }
 const gastosVolverGuardar = v => { try{ sessionStorage.setItem(_GASTOS_VOLVER,JSON.stringify({...v,t:Date.now()})) }catch(_){} }
@@ -23273,7 +23350,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
 // ─── PÁGINAS (no modales): Tarea y Gasto ─────────────────────────────────────
 // Molde de EditClientePage: header sticky "‹ {origen} | Título | Cliente" + cuerpo en columna (escritorio: columna 680 + lateral 340).
 // Reusan los formularios tal cual; solo se oculta su cabecera propia (.pg-form .qt-head) porque el header lo pone la página.
-function PageHeader({origen,onBack,titulo,ctx}){
+function PageHeader({origen,onBack,titulo,ctx,right}){
   return (
     <div style={{padding:'14px 16px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
       <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
@@ -23281,7 +23358,21 @@ function PageHeader({origen,onBack,titulo,ctx}){
         <span style={{color:C.done,fontWeight:400}}>|</span>
         <span style={{fontSize:16,fontWeight:800,color:C.accent,flexShrink:0}}>{titulo}</span>
         {ctx&&<><span style={{color:C.done,fontWeight:400}}>|</span><span style={{fontSize:13,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctx}</span></>}
+        {right&&<span style={{marginLeft:'auto',flexShrink:0}}>{right}</span>}
       </div>
+    </div>
+  )
+}
+// Factura = PÁGINA (antes modal). Header "‹ origen | Factura N° X | cliente" + Descargar PDF; el cuerpo es BillingForm en modo página.
+function FacturaPage({b,cli,origen,onBack,onOpenClientFicha,children}){
+  const isDesktop=useIsDesktop()
+  const titulo = b?.invoice_no ? `Factura N° ${folioN(b.invoice_no)}` : (b?.id ? 'Cobro' : 'Nuevo cobro')
+  const ctx = cli ? <span onClick={onOpenClientFicha?()=>onOpenClientFicha(cli.id):undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{cursor:onOpenClientFicha?'pointer':'default',color:onOpenClientFicha?C.accent:C.muted,fontWeight:600}}>{cli.name}</span> : null
+  const right = b?.dte_xml ? <button onClick={()=>verFacturaPdf(b)} title='Descargar el PDF con timbre (desde el XML del SII)' style={{display:'inline-flex',alignItems:'center',gap:6,minHeight:32,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.accent,fontSize:12.5,fontWeight:700,cursor:'pointer'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3v12'/><polyline points='7 10 12 15 17 10'/><path d='M5 21h14'/></svg>{isDesktop?'Descargar PDF':'PDF'}</button> : null
+  return (
+    <div className='pg-form'>
+      <PageHeader origen={origen} onBack={onBack} titulo={titulo} ctx={ctx} right={right}/>
+      <div style={{padding:isDesktop?'16px 26px 48px':'12px 14px 40px',maxWidth:isDesktop?1120:640,margin:'0 auto'}}>{children}</div>
     </div>
   )
 }
@@ -28165,7 +28256,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose }){
 // Vista previa + flexibilidad del recordatorio de cobro: elegir qué facturas incluir (vencidas marcadas por
 // defecto; al día seleccionables), un solo correo con todas o uno por factura, y re-adjuntar el PDF. El preview
 // del correo está SIEMPRE visible (desplegable). El envío efectivo lo hace el padre vía onEnviar (fuente única).
-function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, nota:notaProp='', onClose, onEnviar }){
+function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, nota:notaProp='', onClose, onEnviar, asPage=false }){
   const isDesktop = useIsDesktop()
   const cand = grupo.items   // {b, acc, venc, diasVenc} — vencidas y al día
   const [sel,setSel] = useState(()=> new Set(cand.filter(x=>x.venc).map(x=>String(x.b.id))))
@@ -28188,8 +28279,7 @@ function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, nota
       <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{label}</div>{desc&&<div style={{fontSize:11,color:C.muted,lineHeight:1.4}}>{desc}</div>}</div>
     </div>
   )
-  return (
-    <Modal fullscreen fsMaxWidth={isDesktop?900:640} title='Recordatorio de cobro' onClose={onClose}>
+  const _body = (<>
       <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}><b style={{color:C.text}}>Para:</b> {to} · <b style={{color:C.text}}>{nombre}</b> · firma <b style={{color:C.text}}>Administración</b></div>
       <div style={{display:isDesktop?'grid':'block',gridTemplateColumns:isDesktop?'1fr 1fr':undefined,gap:18}}>
         {/* Columna 1: opciones */}
@@ -28232,8 +28322,8 @@ function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, nota
         <button onClick={onClose} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 16px',fontSize:13,color:C.muted,cursor:'pointer'}}>Cancelar</button>
         <button disabled={okDisabled} onClick={()=>onEnviar({bs:selBs, combinado:selBs.length>1?combinado:true, adjuntar, nota})} style={{background:okDisabled?C.done:C.accent,border:'none',borderRadius:10,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:okDisabled?'default':'pointer',display:'inline-flex',alignItems:'center',gap:7}}>{sending?<Spin/>:null}{sending?'Enviando…':`Enviar ${nCorreos>1?`(${nCorreos})`:'recordatorio'}`}</button>
       </div>
-    </Modal>
-  )
+  </>)
+  return asPage ? _body : <Modal fullscreen fsMaxWidth={isDesktop?900:640} title='Recordatorio de cobro' onClose={onClose}>{_body}</Modal>
 }
 
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
@@ -28247,10 +28337,12 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   const [autoCli,setAutoCli] = useState({})    // client_id → true si liberado a automático
   const [sending,setSending] = useState(null)  // client_id en envío
   const [recPrev,setRecPrev] = useState(null)  // vista previa del recordatorio antes de enviar
+  const [qCob,setQCob] = useState('')          // buscador: cliente, N° de factura, RUT o concepto
   const [recNotaMap,setRecNotaMap] = useState({})   // client_id → nota libre del recordatorio (persistente)
   const [autoGlobal,setAutoGlobal] = useState(false)   // interruptor GLOBAL: la app envía sola los recordatorios de los clientes liberados (config cobranza_auto; lo lee el edge fn cobranza-auto). Sin esto, "En automático" queda inerte.
-  const [sortBy,setSortBy] = useState({col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
-  const [expCli,setExpCli] = useState(null)   // escritorio: cliente con sus facturas desplegadas
+  const [sortBy,setSortBy] = useState(()=>viewMemLeer('cobranza')?.sortBy||{col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
+  const [expCli,setExpCli] = useState(()=>viewMemLeer('cobranza')?.expCli??null)
+  useEffect(()=>{ viewMemGuardar('cobranza',{sortBy,expCli}) },[sortBy,expCli])   // escritorio: cliente con sus facturas desplegadas
   const [aboFilter,setAboFilter] = useState(null)   // anillo de abogado seleccionado → filtra la lista de clientes (hero y anillos siguen globales)
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
@@ -28302,8 +28394,10 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   // Orden compartido (móvil y escritorio): por nombre / N° facturas / monto (deuda total) / vencido / mora, asc o desc.
   const gsort = useMemo(()=>{ const d=sortBy.dir==='desc'?-1:1
     const key={facturas:g=>g.items.length,total:g=>g.total,monto:g=>g.total,vencido:g=>g.vencido,mora:g=>g.maxDias}[sortBy.col]
-    return [...gruposView].sort((a,b)=> sortBy.col==='cliente' ? (sortBy.dir==='asc'?1:-1)*cn(a.cid).localeCompare(cn(b.cid),'es') : d*((key?key(a):a.total)-(key?key(b):b.total)) )
-  },[gruposView,sortBy])
+    const qq=_normTxt(qCob.trim()), qd=qCob.replace(/[^0-9kK]/g,'').toLowerCase()
+    const base = !qq ? gruposView : gruposView.filter(g=> _normTxt(cn(g.cid)).includes(qq) || g.items.some(({b})=> (qd.length>=3&&String(folioN(b.invoice_no)||'').includes(qd)) || _normTxt(b.concept).includes(qq) || (qd.length>=4&&String(b.receptor_rut||'').replace(/[^0-9kK]/g,'').toLowerCase().includes(qd)) || _normTxt(rsDeFactura(b,clientEntities)).includes(qq)))
+    return [...base].sort((a,b)=> sortBy.col==='cliente' ? (sortBy.dir==='asc'?1:-1)*cn(a.cid).localeCompare(cn(b.cid),'es') : d*((key?key(a):a.total)-(key?key(b):b.total)) )
+  },[gruposView,sortBy,qCob,clientEntities])
   // Contexto: "Por cobrar total" (todo lo emitido sin pagar, vencido + al día) para explicar la diferencia con Facturación. Cobranza actúa solo sobre lo vencido.
   const _cobr=b=>!b.deleted_at && b.invoice_no && !['reembolso','nota_credito'].includes(b.billing_type) && ['Pendiente','Vencido'].includes(b.status) && saldoBill(b)>0
   const nAlDia=(billing||[]).filter(b=>_cobr(b)&&!esVencidaB(b)).length   // "al día" por la FUENTE ÚNICA (emisión+30), no el due crudo → consistente con la lista
@@ -28387,7 +28481,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
     return (
     // Toda la fila abre la factura (→ su detalle con "Volver"); la fecha de emisión y los días de vencida son el foco.
     <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,borderTop:`1px solid ${C.bgSoft}`,padding:'9px 4px',cursor:onOpenFactura?'pointer':'default'}}>
-      <div style={{width:38,textAlign:'center',flexShrink:0,lineHeight:1.05}}>{dd?<><div style={{fontSize:15,fontWeight:800,color:sevCol}}>{dd[2]}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>{_MA[+dd[1]-1]} {dd[0].slice(2)}</div></>:<span style={{fontSize:11,color:C.done}}>—</span>}</div>
+      <div style={{width:38,textAlign:'center',flexShrink:0,lineHeight:1.05}}>{dd?<><div style={{fontSize:15,fontWeight:800,color:sevCol}}>{dd[2]}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>{_MA[+dd[1]-1]} {dd[0]}</div></>:<span style={{fontSize:11,color:C.done}}>—</span>}</div>
       <div style={{flex:1,minWidth:0}}>
         {showRs
           ? <><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{titleCase(rs)}</div>
@@ -28401,13 +28495,17 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
       <div style={{textAlign:'right',flexShrink:0}}>
         <div style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</div>
         {parcial&&<div style={{fontSize:9,color:C.done}}>abonado {f0(b.paid_amount)} de {f0(b.amount)}</div>}
-        {onIrConciliacion&&<div onClick={e=>{e.stopPropagation();onIrConciliacion(b)}} style={{fontSize:10,fontWeight:700,color:C.greenText,cursor:'pointer',marginTop:3,whiteSpace:'nowrap'}}>Buscar pago ›</div>}
+        <div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:5}}>
+          {b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}
+          {onIrConciliacion&&<button onClick={e=>{e.stopPropagation();onIrConciliacion(b)}} style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.greenBg,color:C.greenText,fontSize:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Buscar pago ›</button>}
+        </div>
       </div>
     </div>) }
 
+  // Recordatorio de cobro = PÁGINA (antes ventana encima): mismo contenido, con '‹ Cobranza' para volver. El envío sigue con su botón y confirmación.
+  if(recPrev) return <FlujoPagina origen='Cobranza' titulo='Recordatorio de cobro' ctx={cn(recPrev.g.cid)} onBack={()=>setRecPrev(null)} maxW={1000}><RecordatorioModal grupo={recPrev.g} to={recPrev.to} nombre={recPrev.nombre} nota={recPrev.nota} clientEntities={clientEntities} sending={sending===recPrev.g.cid} onClose={()=>setRecPrev(null)} onEnviar={({bs,combinado,adjuntar,nota})=>doEnviar({g:recPrev.g, to:recPrev.to, bs, combinado, adjuntar, nota})} asPage/></FlujoPagina>
   return (
     <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?1040:560,margin:'0 auto'}}>
-      {recPrev&&<RecordatorioModal grupo={recPrev.g} to={recPrev.to} nombre={recPrev.nombre} nota={recPrev.nota} clientEntities={clientEntities} sending={sending===recPrev.g.cid} onClose={()=>setRecPrev(null)} onEnviar={({bs,combinado,adjuntar,nota})=>doEnviar({g:recPrev.g, to:recPrev.to, bs, combinado, adjuntar, nota})}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         <div style={{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:'-.3px'}}>Cobranza</div>
         {onClose&&<span onClick={onClose} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer'}}>← Volver</span>}
@@ -28451,6 +28549,11 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
         </div>
       </div>}
       {grupos.length===0 && <div style={{fontSize:13,color:C.done,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
+      {grupos.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:`${qCob?1.5:1}px solid ${qCob?C.accent:C.border}`,borderRadius:10,padding:'0 11px',marginBottom:10}}>
+        <SIcon n='search' s={14} c={C.muted}/>
+        <input value={qCob} onChange={e=>setQCob(e.target.value)} placeholder='Buscar cliente, N° de factura o RUT…' style={{flex:1,minWidth:0,border:'none',outline:'none',background:'none',fontSize:13,color:C.text,padding:'10px 0'}}/>
+        {qCob&&<button onClick={()=>setQCob('')} style={{border:'none',background:'none',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',minHeight:30}}>Limpiar</button>}
+      </div>}
       {grupos.length>0 && (()=>{ const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]; return (
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:10}}>
           <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Ordenar</span>
@@ -28472,7 +28575,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
                 {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:13,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
                   <tr onClick={()=>setExpCli(open?null:g.cid)} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'} style={{cursor:'pointer',background:'#fff'}}>
-                    <td style={td}><span style={{color:C.done,marginRight:7,fontSize:11}}>{open?'▾':'▸'}</span><span style={{fontWeight:700,color:C.accent}}>{cn(g.cid)}</span></td>
+                    <td style={td}><span style={{display:'inline-flex',marginRight:7,verticalAlign:'middle',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={12} c={C.done}/></span><span onClick={onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{fontWeight:700,color:C.accent,cursor:'pointer'}}>{cn(g.cid)}</span></td>
                     <td style={{...td,color:C.muted}}>{g.items.length}</td>
                     <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:g.vencido>0?C.overdueText:C.done}}>{g.vencido>0?f0(g.vencido):'—'}</td>
@@ -28496,7 +28599,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
       })() : gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const conVenc=g.nAccion>0||g.vencido>0; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
         <div key={g.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-            <span onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{fontSize:14,fontWeight:700,color:C.accent,cursor:'pointer'}}>{cn(g.cid)}</span>
+            <span onClick={()=>onOpenClientFicha?onOpenClientFicha(g.cid):setExpCli(expCli===g.cid?null:g.cid)} style={{fontSize:14,fontWeight:700,color:C.accent,cursor:'pointer'}}>{cn(g.cid)}</span>
             <div style={{textAlign:'right',lineHeight:1.15,flexShrink:0}}>
               {g.vencido>0 && <><div style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Vencido</div><div style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{f0(g.vencido)}</div></>}
               <div style={{fontSize:g.vencido>0?11:15,fontWeight:g.vencido>0?600:800,color:g.vencido>0?C.muted:C.accent,fontVariantNumeric:'tabular-nums'}}>{g.vencido>0?`Total ${f0(g.total)}`:f0(g.total)}</div>
@@ -31269,7 +31372,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   const [verifRes,setVerifRes] = useState(null)  // resultado de "Verificar contra cartola oficial" (read-only, no inserta)
   const [verificando,setVerificando] = useState(false)
   const [aliases,setAliases] = useState([])
-  const [sub,setSub] = useState('abonos')        // 'abonos' | 'cargos'
+  const [sub,setSub] = useState(()=>viewMemLeer('concModel')?.sub||'abonos')        // 'abonos' | 'cargos'
   const [cobradasOpen,setCobradasOpen] = useState(false)   // modal de revisión histórica: cobradas sin respaldo ↔ cartola
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [anioF,setAnioF] = useState('todos')       // filtro por año
@@ -31298,7 +31401,8 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   const [otraFacFor,setOtraFacFor] = useState(null)  // "Otra factura" desplegado (estado de cuenta del cliente) — lista uniforme
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
   const [conc,setConc] = useState([])           // filas de conciliacion (factura/anticipo aplicados)
-  const [concView,setConcView] = useState('todos') // abonos: 'todos' | 'porconciliar' | 'conciliados'
+  const [concView,setConcView] = useState(()=>viewMemLeer('concModel')?.concView||'todos')
+  useEffect(()=>{ viewMemGuardar('concModel',{sub,concView}) },[sub,concView]) // abonos: 'todos' | 'porconciliar' | 'conciliados'
   const isDesktop = useIsDesktop()   // Fase 3: en desktop, columna de conciliación enfocada (ancho legible, no estirada)
   const [autoRun,setAutoRun] = useState(false)   // corriendo conciliación automática
   const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
@@ -33047,9 +33151,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const { EQUIPO_RUT, SOCIO_RUT, CONTADORA_RUT, movs, setMovs, loading, setLoading, importing, setImporting, prog, setProg, reportes, setReportes, cargaPreview, setCargaPreview, verifRes, setVerifRes, verificando, setVerificando, aliases, setAliases, sub, setSub, cobradasOpen, setCobradasOpen, cuentaF, setCuentaF, anioF, setAnioF, mesF, setMesF, concYCol, setConcYCol, concMOpen, setConcMOpen, respF, setRespF, facChip, setFacChip, facMyc, setFacMyc, devolFor, setDevolFor, devolSel, setDevolSel, respByCid, respDisp, q, setQ, orden, setOrden, verCartolas, setVerCartolas, verCarga, setVerCarga, verFiltros, setVerFiltros, editMov, setEditMov, tagFor, setTagFor, tipoAprendido, setTipoAprendido, splitMov, setSplitMov, splitAdel, setSplitAdel, fondoFor, setFondoFor, otroFor, setOtroFor, otraFacFor, setOtraFacFor, editForm, setEditForm, conc, setConc, concView, setConcView, isDesktop, autoRun, setAutoRun, pickFor, setPickFor, revSugOpen, setRevSugOpen, revSugSel, setRevSugSel, revSugBusy, setRevSugBusy, comboFor, setComboFor, reembFor, setReembFor, detFor, setDetFor, facBuscaQ, setFacBuscaQ, rsConcOpen, setRsConcOpen, modalMov, setModalMov, otrasSet, setOtrasSet, toggleOtras, verGlosa, setVerGlosa, busy, setBusy, costosOfi, setCostosOfi, costosClaudia, setCostosClaudia, valoresBusy, setValoresBusy, valoresInfo, setValoresInfo, leerValores, poolCostos, gcFor, setGcFor, gcCli, setGcCli, gcEnt, setGcEnt, ofiFor, setOfiFor, ofiCat, setOfiCat, ofiSub, setOfiSub, cargoCliLearn, setCargoCliLearn, costoOfiLearn, setCostoOfiLearn, ccFam, setCcFam, ccCat, setCcCat, ccQ, setCcQ, abFam, setAbFam, TOL, fmtM, mesAbbr, cargar, cmap, nameByRut, provByRut, _stripNom, _toksNom, tipoSugerido, costoOfiSugerido, _NOM_COMUN, nombreIdx, sugerencias, tipoContraparte, TAG_STY, CATS_CARGO, CATS_ABONO, RESUELTAS_ABO, ESTRUCT_ABO, setCategoria, marcarNoCliente, desmarcarInterno, resolver, resolverNombre, onFiles, confirmarCarga, onVerificar, identificar, guardarRut, origenInterno, espejoInterno, aplicadoByFactura, cartolaHasta, concByMov, saldoFactura, facturasConSaldo, facturasPorCliente, esConciliable, facturasCliente, _rutsCliente, _rutsFactura, facturasParaMov, mesDiff, candidatos, folioGlosa, mejorCandidato, candidatosMostrar, tieneCand, clientePorMonto, facturaPorMontoManual, sugeridosId, identificarLote, esDescalce, persistPagoFactura, marcaPago, marcaQuien, reconciliar, combos, comboExacto, comboExacto3, cidByMov, reembGastoByCliente, gastoPend, gastosReembolsables, facturaMasGastos, reconciliarCombo, loteOpen, setLoteOpen, loteBusy, setLoteBusy, loteProg, setLoteProg, loteConfirm, setLoteConfirm, siiBuscando, setSiiBuscando, siiResumen, setSiiResumen, siiMovBusy, setSiiMovBusy, siiMovHit, setSiiMovHit, siiMovIng, setSiiMovIng, buscarMovSII, ingresarYConciliar, buscarTodoSII, conciliarLote, grupoPago, reconciliarGrupo, reconciliarFacturaGastos, reconciliarReembolso, marcarGastosReembolsados, devolucionGastos, saldoAFavor, splitAdelantoFondo, fondoExistente, vincularFondo, anticipoExistente, vincularAnticipo, crearFondoProvision, crearFondoPersonal, gastoPorCuentaCliente, ofiCli, catsOficinaConc, costoOficina, costoOficinaSplit, ingresoOficina, ingFor, setIngFor, ingComFor, setIngComFor, ingProvQ, setIngProvQ, deshacer, CARGO_OFI_GRUPOS, CARGO_SUB_LABEL, cargoPersonas, cargoSugerencia, _glosaHas, matchPresupuesto, matchGrupoPresupuesto, cargoRachaHint, marcarCargoCliente, quitarCargoCliente, cajaChicaMatch, _cierraCaja, abonoCajaChica, deshacerCajaChica, marcarControlCargo, registrarCargoOficina, terc, setTerc, pagoSel, setPagoSel, provDeCargo, bDue, comisPorPagar, preselFifo, fFifoDate, conciliarComisiones, deshacerComisiones, renderPagoProveedor, renderCargoClasificar, conciliarAuto, resumenConc, G, cartolas, aniosDisp, lista, chipCounts, rolChip, estadoChip, tipoMov } = useConciliacionModel({ clients, clientEntities, billing, setBilling, anticipos, setAnticipos, expenses, setExpenses, proveedores, pettyCash, setPettyCash, user, focusMovId, onFocusConsumed, focusBuscar, onBuscarConsumed, openProp, onPropOpened, onClose, onOpenClientFicha, onCotejarSII, onBuscarSII, onIngresarSII, onFacturaPagada })
   // Hub de entrada (patrón del hub de Gastos): landing de tarjetas que rutea a las secciones ya existentes.
   // Pura presentación — no toca cifras (reusa resumenConc/G/cartolas y los predicados del modelo).
-  const [deskSel,setDeskSel] = useState(null)   // escritorio: movimiento elegido en la bandeja {id,idx}; si sale de la lista (se resolvió) pasa al que quedó en su lugar
+  const [deskSel,setDeskSel] = useState(()=>viewMemLeer('concView')?.deskSel??null)   // escritorio: movimiento elegido en la bandeja {id,idx}; si sale de la lista (se resolvió) pasa al que quedó en su lugar
   const [montoFacFor,setMontoFacFor] = useState(null)   // abono sin cliente con 2+ facturas del mismo monto: cuál tiene desplegadas sus opciones (antes no existía en esta vista → ReferenceError)
-  const [hubOpen,setHubOpen] = useState(!focusMovId&&!openProp&&!focusBuscar)
+  const [hubOpen,setHubOpen] = useState(()=>{ const vm=viewMemLeer('concView'); return vm?vm.hubOpen:(!focusMovId&&!openProp&&!focusBuscar) })
+  useEffect(()=>{ viewMemGuardar('concView',{hubOpen,deskSel}) },[hubOpen,deskSel])
   useEffect(()=>{ if(focusMovId||openProp||focusBuscar) setHubOpen(false) },[focusMovId,openProp,focusBuscar])
   // "Resolver de a uno" (opción 6): bandeja foco para "Sin identificar" — una tarjeta a la vez con la mejor sugerencia adelante.
   const [unoMode,setUnoMode] = useState(false)
@@ -34515,7 +34620,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {tarea:'Tarea',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
+const TAB_LABELS = {tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
@@ -34928,7 +35033,7 @@ export default function App() {
   // DEBE ir antes de handleBackOrigin (su dep array se evalúa en render → TDZ/pantalla negra si va después).
   const [navStack,setNavStack]=useState([])
   const handleOpenClientFicha=useCallback((cid)=>{ if(cid){ setNavStack(s=>[...s,{tab,fichaId:tab==='clients'?openFichaId:null,scroll:getScroll(),pagina:['tarea','gasto','flujo'].includes(tab)?pagina:null}]); setOpenFichaId(cid); setTab('clients'); setTimeout(()=>restoreScroll({w:0,d:0}),0) } },[tab,openFichaId,pagina])
-  const handleBackOrigin=useCallback(()=>{ if(!navStack.length) return; const e=navStack[navStack.length-1]; if(e.pagina) setPagina(e.pagina); setTab(e.tab); setOpenFichaId(e.fichaId||null); setNavStack(s=>s.slice(0,-1)); if(e.scroll){ setTimeout(()=>restoreScroll(e.scroll),60); setTimeout(()=>restoreScroll(e.scroll),220) } },[navStack])
+  const handleBackOrigin=useCallback(()=>{ if(!navStack.length) return; _volviendoAt=Date.now(); const e=navStack[navStack.length-1]; if(e.pagina) setPagina(e.pagina); setTab(e.tab); setOpenFichaId(e.fichaId||null); setNavStack(s=>s.slice(0,-1)); if(e.scroll){ setTimeout(()=>restoreScroll(e.scroll),60); setTimeout(()=>restoreScroll(e.scroll),220) } },[navStack])
   // Navegación unificada bajo navStack: navTo(destino) apila SIEMPRE el estado actual (tab+ficha+scroll) y salta al lugar EXACTO (con foco opcional);
   // goBack() vuelve a la página inmediatamente anterior (restaura pestaña+scroll+ficha), con fallback al Inicio si la pila está vacía.
   // Antes solo "abrir ficha de cliente" apilaba; el resto usaba setTab crudo y los "Volver" iban al dashboard → poca fluidez.
@@ -34950,21 +35055,21 @@ export default function App() {
   // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
   // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
   const setModal=useCallback((m)=>{
-    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo'}
+    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',billing:'factura'}
     const pg=m&&m.type?PAGE_OF[m.type]:null
     if(pg){ _setModal(null); pageClosingRef.current=false
-      if(tab===pg&&pg!=='flujo'){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
-      else if(tab===pg){ navTo({tab:pg}); setPagina({...m,prev:null}) }   // flujo → otro flujo: se apila (volver regresa al flujo anterior)
+      if(tab===pg&&pg!=='flujo'&&pg!=='factura'){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
+      else if(tab===pg){ navTo({tab:pg}); setPagina({...m,prev:null}) }   // flujo → otro flujo / factura → otra factura: se apila (volver regresa al flujo anterior)
       else { setPagina({...m,prev:null}); navTo({tab:pg}) }
       return }
-    if(m==null&&(tab==='tarea'||tab==='gasto'||tab==='flujo')){ if(pageClosingRef.current) return; pageClosingRef.current=true
+    if(m==null&&(tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura')){ if(pageClosingRef.current) return; pageClosingRef.current=true
       if(pagina?.prev){ setPagina(pagina.prev); setTimeout(()=>restoreScroll({w:0,d:0}),0) } else goBack()
       return }
     _setModal(m)
   },[tab,navTo,goBack,pagina])
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
   const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos'}
-  const origenNav=(fb)=>{ const t=navStack[navStack.length-1]; if(!t) return fb; if(t.tab==='flujo') return FLUJO_TIT[t.pagina?.type]||fb; if(t.tab==='tarea') return 'Tarea'; if(t.tab==='gasto') return 'Gastos'; return TAB_LABELS[t.tab]||fb }
+  const origenNav=(fb)=>{ const t=navStack[navStack.length-1]; if(!t) return fb; if(t.tab==='flujo') return FLUJO_TIT[t.pagina?.type]||fb; if(t.tab==='tarea') return 'Tarea'; if(t.tab==='factura') return 'Factura'; if(t.tab==='gasto') return 'Gastos'; return TAB_LABELS[t.tab]||fb }
   // Entregar caja chica a un miembro desde el aviso (Inicio/Gastos). Mismo registro que "Nueva Caja" (petty_cash); el barrido diario cierra el aviso al recuperarse el saldo.
   const handleEntregarCaja=useCallback(async(row)=>{
     if(!row?.user_name||!(row.amount>0)) return
@@ -35183,8 +35288,8 @@ export default function App() {
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
-    const esPagina=tab==='editCliente'||tab==='tarea'||tab==='gasto'||tab==='flujo'   // páginas de edición (drill fuera de la barra)
-    if((tab==='tarea'||tab==='gasto'||tab==='flujo')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
+    const esPagina=tab==='editCliente'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'   // páginas de edición (drill fuera de la barra)
+    if((tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
     if(userRole==='limited' && !esPagina && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
     if(userRole==='admin' && tab!=='facturasDelMes' && !esPagina && tab!=='socios' && tab!=='resultadoAnio' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
@@ -37269,6 +37374,8 @@ export default function App() {
           try{ await supabase.from('learnings').delete().eq('kind','costo_oficina').eq('key',key); await supabase.from('learnings').insert({kind:'costo_oficina',key,value:categoria,updated_at:new Date().toISOString()}) }catch(_){}
         })} onRetirarFantasmas={rdLog('revision.retirarFantasmas',async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) })} onDismissFantasma={rdLog('revision.dismissFantasma',async(progId)=>{ if(DEMO) return; try{ await setLearningKV('fantasma_no',String(progId),'1') }catch(_){} })}/><div style={{marginTop:12}}><BitacoraLista prefijo='revision.' titulo='Resueltas · historial' etiquetas={{'revision.resolverDupAnticipo':'Anticipo duplicado resuelto','revision.guardarClientRut':'RUT guardado en la ficha','revision.pasarTerminado':'Venta pasada a Terminado','revision.actualizarHonorario':'Honorario ajustado a lo facturado','revision.fixVencimiento':'Vencimiento corregido','revision.resolverCuotaTramo':'Cuota programada + tramo resuelto','revision.resolverGlosa':'Glosa definida','revision.retirarFantasmas':'Cuotas ya emitidas retiradas','revision.dismissFantasma':'Cuota marcada como pendiente'}} vacio='Aún no hay resoluciones registradas.'/></div></FlujoPagina>}
             {tab==='tarea'&&pagina&&<TareaPage pagina={pagina} tasks={tasks} clients={clients} sales={sales} clientEntities={clientEntities} user={user} saving={saving} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSaveTask={handleSaveTask} onDelegate={handleDelegateTask} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onOpenClientFicha={handleOpenClientFicha} onCierre={({estado,detalle,files})=>{ const t=pagina.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/>}
+            {tab==='factura'&&pagina&&(()=>{ const b0=pagina.data; const b=(b0&&b0.id)?((billing||[]).find(x=>String(x.id)===String(b0.id))||b0):b0; const cli=b?.client_id?clients.find(c=>String(c.id)===String(b.client_id)):null
+              return <FacturaPage key={b?.id||'nuevo'} b={b} cli={cli} origen={origenNav('Volver')} onBack={()=>setModal(null)} onOpenClientFicha={handleOpenClientFicha}><BillingForm bill={b} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))} pagina onVerBanco={id=>navTo({tab:'conciliacion',conc:id})}/></FacturaPage> })()}
             {tab==='gasto'&&pagina&&<GastoPage pagina={pagina} pettyCash={pettyCash} me={user?.name} onSaveCaja={handleEntregarCaja} clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} rendiciones={rendiciones} saving={saving} user={user} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSwitch={k=>setPagina(p=>({...p,type:k}))} onSaveExpense={handleSaveExpense} onDeleteExpense={handleDeleteExpense} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))} onSaveFondo={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }}/>}
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
