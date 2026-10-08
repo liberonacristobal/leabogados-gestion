@@ -22765,6 +22765,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   // Chevron de affordance (fila clickeable) — paleta corporativa, hover lo oscurece vía .lf-row:hover
   const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
 
+  // Correo de rendición = PÁGINA (igual que en Gastos): "‹ cliente" vuelve a la ficha. Va después de todos los hooks.
+  if(emailRend) return <FlujoPagina origen={client.name} titulo='Enviar rendición' ctx={emailRend.correlativo?`N° ${emailRend.correlativo}`:null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal asPage r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/></FlujoPagina>
+
   return (
     <div style={{paddingBottom:100}}>
       {/* Header */}
@@ -22863,7 +22866,6 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields} clientBilling={clientBilling} onOpenFinanciero={()=>setFtab('financiero')}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onAddSale={onAddSale} onConciliar={()=>onConciliar&&onConciliar(client)} onOpenConciliacion={onOpenConciliacion} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onReplaceProgramada={onReplaceProgramada} onOpenSale={onOpenSale}/>}
       {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onAjuste={onAjuste}/>}
-      {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
@@ -22901,6 +22903,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   const [selected,setSelected] = useState(null)
   const [forceFtab,setForceFtab] = useState(null)
   const [rendicionClient,setRendicionClient] = useState(null)
+  const [emailRendCV,setEmailRendCV] = useState(null)   // correo de la rendición recién generada (antes llamaba a setEmailRend, que no existía en esta vista → error al 'Enviar al cliente')
   const [rendEdit,setRendEdit] = useState(null)   // rendición en edición (RendicionModal modo edición)
   // Abrir la ficha de un cliente (en Financiero) cuando llega la señal desde otra vista (ej. Facturación → Ficha).
   const [extOpen,setExtOpen] = useState(false)   // ficha abierta por cross-link desde otra vista → el ← vuelve al origen
@@ -22978,7 +22981,12 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         onRendicionSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))}
       />
   ) : null
-  const rendModal = rendicionClient?(<Modal fullscreen fsMaxWidth={isDesktop?980:640} title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>):null
+  // Rendición y su correo = PÁGINAS (como en Gastos): '‹ cliente' vuelve a la ficha. Después de todos los hooks.
+  const rendModal = null
+  if(rendicionClient){ const cerrar=()=>{setRendicionClient(null);setRendEdit(null)}
+    return <FlujoPagina origen={rendicionClient.name||'Clientes'} titulo={rendEdit?'Editar rendición':'Rendición'} onBack={cerrar} maxW={1180}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRendCV(r)}} asPage/></FlujoPagina> }
+  if(emailRendCV){ const cli=clients.find(c=>String(c.id)===String(emailRendCV.client_id))
+    return <FlujoPagina origen={cli?.name||'Clientes'} titulo='Enviar rendición' ctx={emailRendCV.correlativo?`N° ${emailRendCV.correlativo}`:null} onBack={()=>setEmailRendCV(null)} maxW={1180}><RendicionEmailModal asPage r={emailRendCV} client={cli} user={user} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRendCV(null)}/></FlujoPagina> }
 
   // DESKTOP: 2-paneles maestro-detalle — lista (izq) + ficha (der). Reusa cl/balances/ClientFicha; el móvil no cambia.
   // DESKTOP: al elegir un cliente su ficha ocupa toda la pantalla (como Colaboradores); si no, DIRECTORIO alfabético
