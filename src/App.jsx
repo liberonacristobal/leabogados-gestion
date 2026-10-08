@@ -14600,7 +14600,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling}) {
+function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling, asPage=false}) {
   const esEdicion = !!editRend
   const isDesktop = useIsDesktop()
   const [selected, setSelected] = useState(()=> editRend ? new Set((expenses||[]).filter(e=>String(e.client_render_id)===String(editRend.id)).map(e=>e.id)) : new Set())
@@ -14879,20 +14879,15 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         </div>}
         </>)
       })()
+  // Cifras de la rendición en UNA tarjeta, filas con el monto a la derecha (antes 3 tarjetas + un resumen aparte): lo seleccionado, fondos, ya rendido y el saldo que resulta.
+  const lnR=(l,v,col,big)=><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'3px 0'}}><span style={{fontSize:12,color:big?col:C.muted,fontWeight:big?700:400}}>{l}</span><span style={{fontSize:big?15:12.5,fontWeight:700,color:col||C.text,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>
   const bKPIs = (
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
-        <div style={{background:fK.bg,borderRadius:10,padding:'10px 12px'}}>
-          <div style={lblG}>Fondos</div>
-          <div style={{fontSize:13,fontWeight:600,color:fK.c}}>{fmtN(fondosDisp)}</div>
-        </div>
-        <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}>
-          <div style={lblG}>Ya rendido</div>
-          <div style={{fontSize:13,fontWeight:600,color:C.muted}}>{fmtN(gastosYaRend)}</div>
-        </div>
-        <div style={{background:sK.bg,borderRadius:10,padding:'10px 12px'}}>
-          <div style={lblG}>Saldo</div>
-          <div style={{fontSize:13,fontWeight:600,color:sK.c}}>{saldoActual<0?'−':''}{fmtN(saldoActual)}</div>
-        </div>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px',marginBottom:12}}>
+        <div style={{...lblG,marginBottom:4}}>Esta rendición</div>
+        {lnR(`${selected.size} gasto${selected.size!==1?'s':''} seleccionado${selected.size!==1?'s':''}`, fmtN(totalSel), selected.size?C.overdue:C.muted)}
+        {lnR('Fondos', fmtN(fondosDisp))}
+        {lnR('Ya rendido', fmtN(gastosYaRend))}
+        <div style={{borderTop:`1px solid ${C.track}`,marginTop:4,paddingTop:5}}>{lnR(saldoTrasRendicion<0?'Saldo a cargo del cliente':'Saldo a favor del cliente', fmtN(Math.abs(saldoTrasRendicion)), saldoTrasRendicion<0?C.overdueText:C.greenText, true)}</div>
       </div>
   )
   const bLista = (<>
@@ -14942,25 +14937,11 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         })}
       </div>
   </>)
-  {/* Resumen seleccion */}
-  const bResumen = selected.size>0&&(
-        <div style={{background:'#F4F6F7',borderRadius:8,padding:'10px 12px',marginBottom:12}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-            <span style={{fontSize:11,color:C.muted}}>{selected.size} gasto{selected.size!==1?'s':''} seleccionado{selected.size!==1?'s':''}</span>
-            <span style={{fontSize:13,fontWeight:600,color:C.overdue}}>-{fmtN(totalSel)}</span>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between'}}>
-            <span style={{fontSize:11,color:C.muted}}>Saldo tras rendición</span>
-            <span style={{fontSize:12,fontWeight:600,color:saldoTrasRendicion>=0?C.normal:C.overdue}}>
-              {saldoTrasRendicion<0?'−':''}{fmtN(saldoTrasRendicion)}{saldoTrasRendicion<0?' (nos deben)':' (a favor cliente)'}
-            </span>
-          </div>
-        </div>
-      )
+  const bResumen = null
   const bIA = selected.size>0&&<button onClick={mejorarDescripcionesIA} disabled={limpiandoIA} style={{...chipBtn('soft'),width:'100%',marginBottom:8,opacity:limpiandoIA?.6:1}}>{limpiandoIA?'Mejorando descripciones…':'Mejorar descripciones con IA'}</button>
   const bBotones = (
       <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        {!asPage&&<button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
         {esEdicion ? (
           <button disabled={!selected.size||saving} onClick={handleGuardarEdicion}
             style={{flex:3,padding:'9px 14px',borderRadius:10,border:'none',background:selected.size?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
@@ -14969,7 +14950,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         ) : (<>
         <button disabled={!selected.size||saving} onClick={()=>handleGenerar('pdf')}
           style={{flex:1.3,padding:'9px 14px',borderRadius:10,border:`1px solid ${selected.size?C.accent:C.done}`,background:'#fff',color:selected.size?C.accent:C.done,fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
-          {saving?'…':'↓ PDF'}
+          {saving?'…':'Descargar PDF'}
         </button>
         <button disabled={!selected.size||saving} onClick={()=>handleGenerar('enviar')}
           style={{flex:1.7,padding:'9px 14px',borderRadius:10,border:'none',background:selected.size?C.normal:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
@@ -16992,6 +16973,8 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     } catch(err){ appAlert('Error: '+err.message) }
   }
   // Marcar un gasto de notaría como pagado a la notaría (sale de "por pagar" y de caja chica). Toggle: vuelve a tocar el badge para deshacer.
+  // Bitácora de acciones que cambian el saldo de un cliente (quién, qué gasto, cuánto). Prefijo 'gastos.'.
+  const _detG = e => ({title:[e.ot_number?String(e.ot_number):null,e.concept].filter(Boolean).join(' · ')||null, name:(clients||[]).find(c=>String(c.id)===String(e.client_id))?.name||null, monto:e.amount})
   const marcarNotariaPagado = async(e, ev) => {
     ev?.stopPropagation()
     const nuevo = e.notaria_liquidado_at ? null : new Date().toISOString()
@@ -16999,6 +16982,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const {error} = await supabase.from('expenses').update({notaria_liquidado_at:nuevo}).eq('id',e.id)
       if(error) throw error
       if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,notaria_liquidado_at:nuevo}:x))
+      logActividad(nuevo?'gastos.notaria_pagado':'gastos.notaria_pagado_deshecho',{tabla:'expenses',id:e.id,detalle:_detG(e)})
     } catch(err){ appAlert('Error: '+err.message) }
   }
   const [estadoFor,setEstadoFor] = useState(null)   // id del gasto con el menú "Estado" abierto
@@ -17011,6 +16995,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const {error} = await supabase.from('expenses').update(patch).eq('id',e.id)
       if(error) throw error
       if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
+      logActividad('gastos.estado_'+(modo||'deshecho'),{tabla:'expenses',id:e.id,detalle:_detG(e)})
     } catch(err){ appAlert('Error: '+err.message) }
   }
   // Clasifica en lote los gastos seleccionados en el overlay "Clasificar pagos".
@@ -17021,6 +17006,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const {error}=await supabase.from('expenses').update(patch).in('id',ids)
       if(error) throw error
       if(setExpenses) setExpenses(p=>p.map(x=>ids.includes(x.id)?{...x,...patch}:x))
+      logActividad('gastos.clasificados_'+modo,{tabla:'expenses',detalle:(expenses||[]).filter(x=>ids.includes(x.id)).map(_detG)})
       setSelClasif(new Set())
     } catch(err){ appAlert('Error: '+err.message) }
   }
@@ -17329,7 +17315,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   const catsOficina = useMemo(()=>{ const s=new Set(CATS_OFICINA_NUEVAS); (expenses||[]).forEach(e=>{ if(esOficina(e.client_id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(catOficinaNueva(e.category)) }); return [...s] },[expenses,clients])
   const setCatOficina = async(e,cat)=>{ setCatMenu(null); const patch={category:cat}; if(!(SUBCATS_OFICINA[cat]||[]).includes(e.subcategory)) patch.subcategory=null; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); const gk=glosaKey(e.concept||''); if(gk&&cat) learnPut('gasto_categoria',gk,cat) }catch(err){ appAlert('No se pudo guardar la categoría: '+err.message) } }
   const setSubcatOficina = async(e,sub)=>{ setSubMenu(null); try{ await supabase.from('expenses').update({subcategory:sub||null}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,subcategory:sub||null}:x)) }catch(err){ appAlert('No se pudo guardar el desglose: '+err.message) } }
-  const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at){ appAlert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)) }catch(err){appAlert('Error: '+err.message)} }
+  const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at){ appAlert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ const {error}=await supabase.from('expenses').update(patch).eq('id',e.id); if(error) throw error; setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); logActividad('gastos.personal',{tabla:'expenses',id:e.id,detalle:{..._detG(e),persona:persona||null}}) }catch(err){appAlert('Error: '+err.message)} }
   // Fila de OT (Deuda notaría). Escritorio: casilla · OT · fecha · trámite · monto · ›. Móvil: trámite arriba, OT · fecha abajo, monto a la derecha.
   // Tocar la fila la marca (como siempre); › abre el gasto. hlq = texto buscado (se resalta).
   const notaRow = (e, bloqueado=false, adelanto=false, hlq='') => { const on=selNota.has(e.id)
@@ -17584,10 +17570,10 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   const AdjuntoIcon = ({e}) => {
     const n=(expenseAttachments||[]).filter(a=>a.expense_id===e.id).length
     return n>0
-      ? <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title={`${n} adjunto(s)`} style={{display:'flex',alignItems:'center',gap:3,padding:'3px 8px',borderRadius:6,border:'1px solid #003C50',background:C.azulBg,color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0}}>
+      ? <button onClick={ev=>{ev.stopPropagation();onEdit&&onEdit(e)}} title={`${n} adjunto(s)`} style={{display:'flex',alignItems:'center',gap:3,padding:'3px 8px',borderRadius:6,border:'1px solid #003C50',background:C.azulBg,color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0}}>
           <span style={{width:8,height:11,border:'1.5px solid #003C50',borderRadius:4,display:'inline-block',transform:'rotate(35deg)'}}/>{n}
         </button>
-      : <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title='Adjuntar comprobante' style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:24,borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer',flexShrink:0,fontSize:13,lineHeight:1}}>↑</button>
+      : <button onClick={ev=>{ev.stopPropagation();onEdit&&onEdit(e)}} title='Adjuntar comprobante' style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:24,borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer',flexShrink:0,fontSize:13,lineHeight:1}}>↑</button>
   }
 
   // Fila de movimiento (sin línea de razón social): badge + concepto + fecha; ícono de adjunto solo en gastos
@@ -19398,6 +19384,7 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
                   </div>) }
                 return (<>{agrupar(liq).map(g=><div key={g.k}>{mesHdr(g)}{cardWrap(g.items.map(notaRow))}</div>)}</>)
               })()}
+              <div style={{marginTop:16}}><BitacoraLista prefijo='gastos.' titulo='Bitácora de gastos' limite={12} vacio='Aún no hay registros.' etiquetas={{'gastos.eliminado':'Gasto eliminado (a la papelera)','gastos.personal':'Marcado como personal','gastos.notaria_pagado':'Marcado pagado a la notaría','gastos.notaria_pagado_deshecho':'Pago a la notaría desmarcado','gastos.estado_historico':'Marcado histórico (no descuenta saldo)','gastos.estado_descuenta':'Marcado que descuenta saldo','gastos.estado_deshecho':'Estado del gasto deshecho','gastos.clasificados_historico':'Clasificados como histórico','gastos.clasificados_descuenta':'Clasificados que descuentan'}}/></div>
             </div>
           )}
         </div>
@@ -19500,25 +19487,18 @@ function ExpensesView({onEntregarCaja,expenses,clients,clientEntities,sales=[],o
 
       {/* Barras inferiores de rendir eliminadas — se usa el botón "↓ Rendir" del encabezado */}
 
-      {attachExpense&&<Modal title='Respaldos' onClose={()=>setAttachExpense(null)}>
-        {(()=>{ const ae=attachExpense; const cli=clients.find(c=>String(c.id)===String(ae.client_id)); const nav=cli&&onOpenClientFicha&&!esOficina(ae.client_id); return (
-          <div onClick={nav?()=>{setAttachExpense(null);onOpenClientFicha(ae.client_id)}:undefined} title={nav?'Ver ficha del cliente':undefined} style={{background:C.azulBg,borderRadius:10,padding:'9px 11px',marginBottom:12,cursor:nav?'pointer':'default'}}>
-            <div style={{fontSize:9,fontWeight:700,color:C.azulInfo,textTransform:'uppercase',letterSpacing:'.3px'}}>Respaldo de</div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:2}}>
-              <span style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ae.concept||'Gasto'}</span>
-              <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(ae.amount||0)}</span>
-            </div>
-            <div style={{fontSize:11,color:C.muted,marginTop:1}}>{cli?.name||(ae.personal_de?`Personal · ${ae.personal_de}`:'Sin cliente')}{ae.date?` · ${fechaConAnio(ae.date)}`:''}{nav&&<span style={{color:C.accent,fontWeight:600,marginLeft:6}}>Ver ficha ›</span>}</div>
-          </div>
-        )})()}
-        <Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/>
-      </Modal>}
-      {rendicionClient&&<Modal fullscreen fsMaxWidth={isDesktop?980:640} title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}}/></Modal>}
-      {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
-      {devEmailRend&&<DevolucionEmailModal client={devEmailRend.client} rend={devEmailRend.rend} rendN={devEmailRend.rend?.correlativo} amount={devEmailRend.amount} fecha={devEmailRend.fecha} user={currentUser} setRendiciones={setRendiciones} onClose={()=>setDevEmailRend(null)}/>}
+      {/* Respaldos: ya no es ventana aparte — el ícono abre el gasto, cuyo formulario tiene sus respaldos */}
       {pedirModal}
     </div>
   )
+  // Rendición · Enviar rendición · Enviar devolución = PÁGINAS (antes ventanas a pantalla completa): "‹ origen" vuelve al cliente o a Rendiciones.
+  const _origenRend = showRendiciones?'Rendiciones':(selectedClient?.name||'Gastos')
+  const _envPag = el => isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{el}</div>:el
+  if(rendicionClient){ const cerrar=()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}
+    return _envPag(<FlujoPagina origen={_origenRend} titulo={rendEdit?'Editar rendición':'Rendición'} ctx={rendicionClient.name&&rendicionClient.name!==_origenRend?rendicionClient.name:null} onBack={cerrar} maxW={1180}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}} asPage/></FlujoPagina>) }
+  if(emailRend){ const cli=clients.find(c=>c.id===emailRend.client_id)
+    return _envPag(<FlujoPagina origen={_origenRend} titulo='Enviar rendición' ctx={[cli?.name!==_origenRend?cli?.name:null,emailRend.correlativo?`N° ${emailRend.correlativo}`:null].filter(Boolean).join(' · ')||null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)} asPage/></FlujoPagina>) }
+  if(devEmailRend) return _envPag(<FlujoPagina origen={_origenRend} titulo='Enviar devolución' ctx={devEmailRend.client?.name&&devEmailRend.client.name!==_origenRend?devEmailRend.client.name:null} onBack={()=>setDevEmailRend(null)} maxW={1180}><DevolucionEmailModal client={devEmailRend.client} rend={devEmailRend.rend} rendN={devEmailRend.rend?.correlativo} amount={devEmailRend.amount} fecha={devEmailRend.fecha} user={currentUser} setRendiciones={setRendiciones} onClose={()=>setDevEmailRend(null)} asPage/></FlujoPagina>)
   // Detalle de una liquidación de caja chica = PÁGINA (antes modal): foto guardada al liquidar (fondo · gastado · cubierto) + gastos por cliente.
   if(liqDetail){ const r=liqDetail; const gs=(expenses||[]).filter(e=>String(e.render_id)===String(r.id)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const tot=gs.reduce((a,e)=>a+(e.amount||0),0)
     const porCli={}; gs.forEach(e=>{ const k=e.client_id||'__sin__'; (porCli[k]=porCli[k]||[]).push(e) })
@@ -21716,7 +21696,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
 // Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
 // Correo de DEVOLUCIÓN de fondos: mismo motor/formato que la rendición (logo, firma, destinatarios desde
 // contactos + CC aprendido), pero adjuntando el COMPROBANTE de transferencia en vez del PDF de rendición.
-function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose, setRendiciones}){
+function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose, setRendiciones, asPage=false}){
   const isDesktop=useIsDesktop()
   const myEmail=(user?.email||'').toLowerCase()
   const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
@@ -21781,8 +21761,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const flabel={fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
   const sugCc=fichaContacts.filter(c=>c.email&&c.email.toLowerCase()!==(para||'').toLowerCase()&&!cc.includes(c.email.toLowerCase()))
-  return (
-    <Modal fullscreen fsMaxWidth={isDesktop?960:720} title={<><span style={{color:C.accent}}>Enviar devolución</span>{client&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>
+  const _body = (<>
         {!rend&&<div style={{fontSize:11,color:C.soonText,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:12}}>No encontré la rendición de este cliente para sacar el destinatario — agrégalo a mano abajo.</div>}
         <div style={isDesktop?{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:20,alignItems:'start'}:undefined}>
         <div>
@@ -21822,11 +21801,12 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
         {isDesktop&&<div><label style={flabel}>Vista previa del correo</label><div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:12,maxHeight:'62vh',overflowY:'auto',background:'#fff'}} dangerouslySetInnerHTML={{__html:buildHtml(body,false)}}/></div>}
         </div>
         <div style={{display:'flex',gap:8,marginTop:14}}>
-          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          {!asPage&&<button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
           <button disabled={sending||!para.trim()} onClick={enviar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:para.trim()?'pointer':'not-allowed',opacity:(sending||!para.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{sending?<Spin/>:null}{sending?'Enviando...':'Enviar devolución'}</button>
         </div>
-    </Modal>
-  )
+      </>)
+  const _page = _body
+  return asPage ? _page : (<Modal fullscreen fsMaxWidth={isDesktop?960:720} title={<><span style={{color:C.accent}}>Enviar devolución</span>{client&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>{_body}</Modal>)
 }
 // Cuentas del estudio (fuente única). Honorarios: fija. Gastos: default editable/recordado por el usuario.
 const CUENTA_HONORARIOS = { razon:BRAND.nombreLegal, rut:BRAND.rut, banco:BRAND.pago.honorarios.banco, cuenta:BRAND.pago.honorarios.cuenta, email:BRAND.pago.honorarios.email }
@@ -22326,7 +22306,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
 // Solicitar fondos al cliente (#7): correo auto-redactado pidiendo provisión de fondo por rendir. PARA = contactos del cliente,
 // CC = abogado responsable (automático). Reusa enviarComoUsuario + la cuenta de gastos + los learnings factura_to/cc y la tabla
 // contacts → los correos ingresados se APRENDEN y se sugieren en TODO correo futuro al cliente (facturas, rendiciones, etc.). Linkeado al cliente.
-function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial, responsable, user, expenses=[], onClose}){
+function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial, responsable, user, expenses=[], onClose, asPage=false}){
   const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
   const [client,setClient]=useState(clientProp||null)   // si viene sin cliente (tarjeta del hub) se elige con el buscador
   const [cq,setCq]=useState('')
@@ -22401,7 +22381,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
   const lbl={fontSize:10,color:C.muted,fontWeight:600,marginBottom:3}
   const dz={display:'block',border:`1.5px dashed ${C.border}`,borderRadius:10,padding:'10px',textAlign:'center',cursor:'pointer'}
   const tabBtn=on=>({fontSize:13,fontWeight:700,color:on?C.accent:C.muted,background:'none',border:'none',borderBottom:`2px solid ${on?C.accent:'transparent'}`,padding:'7px 4px',marginBottom:-1,cursor:'pointer'})
-  return (<Modal fullscreen fsMaxWidth={(tab==='historial'||(client&&isDesktop))?980:640} title={<><span style={{color:C.accent}}>Solicitar fondos</span>{tab==='nueva'&&client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose}>
+  const _body = (<>
     <div style={{display:'flex',gap:16,marginBottom:14,borderBottom:`1px solid ${C.border}`}}>
       <button onClick={()=>setTab('nueva')} style={tabBtn(tab==='nueva')}>Nueva solicitud</button>
       <button onClick={()=>setTab('historial')} style={tabBtn(tab==='historial')}>Historial{reqs?.length?` · ${reqs.length}`:''}</button>
@@ -22466,9 +22446,11 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
           : <div style={{display:'flex',flexDirection:'column',gap:11}}>{formEl}<div style={{borderTop:`1px solid ${C.border}`,paddingTop:9}}><button type='button' onClick={()=>setPrevOpen(o=>!o)} style={{fontSize:12,fontWeight:700,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{prevOpen?'Ocultar vista previa ▴':'Ver cómo se verá el correo ▾'}</button>{prevOpen&&<div style={{marginTop:9}}>{previewEl}</div>}</div>{sendBtn}</div>
       })()
     }
-  </Modal>)
+    </>)
+  const _page = _body
+  return asPage ? _page : (<Modal fullscreen fsMaxWidth={(tab==='historial'||(client&&isDesktop))?980:640} title={<><span style={{color:C.accent}}>Solicitar fondos</span>{tab==='nueva'&&client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose}>{_body}</Modal>)
 }
-function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSent, onClose}) {
+function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSent, onClose, asPage=false}) {
   const isDesktop = useIsDesktop()
   const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
   const [attachSet,setAttachSet] = useState(new Set())   // gastos de esta rendición con comprobante de respaldo
@@ -22668,8 +22650,7 @@ Saludos cordiales,`
     }catch(e){ appAlert('Error: '+e.message) }
     setSending(false)
   }
-  return (
-    <Modal fullscreen fsMaxWidth={isDesktop?780:640} title={<><span style={{color:C.accent}}>Enviar rendición</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>
+  const _body = (<>
       {!para.trim() && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:C.soon,fontSize:12,marginBottom:12}}>Falta el destinatario. Escríbelo abajo o complétalo en la ficha del cliente.</div>}
       <div style={{fontSize:11,color:C.done,marginBottom:10}}>De <span style={{color:C.muted}}>{user?.email||''}</span></div>
       {/* Destinatarios: un solo bloque con chips (Para = principal navy, Cc = copias azules). Si Para está vacío, lo que escribes/eliges entra como Para. */}
@@ -22720,14 +22701,15 @@ Saludos cordiales,`
           ))}
         </div><div style={{fontSize:10,color:C.done,marginTop:6}}>Se guarda para tus próximos correos. El correo incluye el logo de Liberona Escala.</div></>}
       </div>
-      <details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></details>
+      {!(asPage&&isDesktop)&&<details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></details>}
       <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        {!asPage&&<button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
         <button onClick={verPDF} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
         <button onClick={enviar} disabled={sending||!para.trim()} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':'Enviar'}</button>
       </div>
-    </Modal>
-  )
+      </>)
+  const _page = (asPage&&isDesktop) ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,460px)',gap:22,alignItems:'start'}}><div style={{minWidth:0}}>{_body}</div><div style={{position:'sticky',top:72}}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Vista previa del correo</div><div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:12,background:'#fff',maxHeight:'calc(100vh - 170px)',overflowY:'auto'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></div></div> : _body
+  return asPage ? _page : (<Modal fullscreen fsMaxWidth={isDesktop?780:640} title={<><span style={{color:C.accent}}>Enviar rendición</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>{_body}</Modal>)
 }
 
 function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
@@ -35184,7 +35166,7 @@ export default function App() {
   // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
   // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
   const setModal=useCallback((m)=>{
-    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',billing:'factura'}
+    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',solicitarFondos:'flujo',billing:'factura'}
     const pg=m&&m.type?PAGE_OF[m.type]:null
     if(pg){ _setModal(null); pageClosingRef.current=false
       if(tab===pg&&pg!=='flujo'&&pg!=='factura'){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
@@ -35197,7 +35179,7 @@ export default function App() {
     _setModal(m)
   },[tab,navTo,goBack,pagina])
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
-  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos'}
+  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos'}
   const origenNav=(fb)=>{ const t=navStack[navStack.length-1]; if(!t) return fb; if(t.tab==='flujo') return FLUJO_TIT[t.pagina?.type]||fb; if(t.tab==='tarea') return 'Tarea'; if(t.tab==='factura') return 'Factura'; if(t.tab==='gasto') return 'Gastos'; return TAB_LABELS[t.tab]||fb }
   // Entregar caja chica a un miembro desde el aviso (Inicio/Gastos). Mismo registro que "Nueva Caja" (petty_cash); el barrido diario cierra el aviso al recuperarse el saldo.
   const handleEntregarCaja=useCallback(async(row)=>{
@@ -36185,6 +36167,7 @@ export default function App() {
     if((exp?.client_rendered_at||exp?.rendered_at) && !await appConfirm('Este gasto ya fue incluido en una rendición o liquidación.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?')) return
     const {error}=await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',id)
     if(error){ appAlert('No se pudo eliminar: '+error.message); return }
+    logActividad('gastos.eliminado',{tabla:'expenses',id,detalle:{title:[exp?.ot_number,exp?.concept].filter(Boolean).join(' · ')||null,name:clients.find(c=>String(c.id)===String(exp?.client_id))?.name||null,monto:exp?.amount}})   // va a la papelera (reversible) y queda en la bitácora
     // Ajusta el total/contador de la rendición a la que pertenece — sea del cliente (client_render_id) o de caja chica (render_id).
     let rendBackup=null
     const renderId = exp?.client_render_id || exp?.render_id
@@ -37486,6 +37469,7 @@ export default function App() {
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
         <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={handleCreateOccasional} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
         )})()}
+        {tab==='flujo'&&pagina?.type==='solicitarFondos'&&<FlujoPagina origen={origenNav('Gastos')} titulo='Solicitar fondos' ctx={pagina.data?.client?.name||null} onBack={()=>setModal(null)} maxW={1120}><SolicitarFondosModal asPage client={pagina.data?.client} clients={clients} sale={pagina.data?.sale} montoInicial={pagina.data?.monto} responsable={pagina.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='redaccion'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Redactar con IA' onBack={()=>setModal(null)} maxW={1120}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='plazos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Plazos y obligaciones' onBack={()=>setModal(null)} maxW={1120}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)}/></FlujoPagina>}
@@ -37564,7 +37548,6 @@ export default function App() {
 
         {modal?.type==='sale'&&<Modal fullscreen fsMaxWidth={(!modal.data?.id||['Propuesta','Borrador'].includes(modal.data?.status)||modal.data?._activandoPropuesta)?960:600} title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} title='Cargar un PDF y leerlo con IA para autocompletar' style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Lectura con IA</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
         {modal?.type==='rechazoMotivo'&&<Modal fullscreenOnMobile title={<span style={{color:C.accent}}>Rechazar propuesta</span>} onClose={()=>setModal(null)} closeOnBackdrop={false}><RechazoMotivoModal sale={modal.data} onConfirm={handleConfirmRechazo} onCancel={()=>setModal(null)}/></Modal>}
-        {modal?.type==='solicitarFondos'&&<SolicitarFondosModal client={modal.data?.client} clients={clients} sale={modal.data?.sale} montoInicial={modal.data?.monto} responsable={modal.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/>}
         {modal?.type==='primerasTareas'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Primeras tareas</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:400}}>{modal.data?.title||'Encargo'}</span></>} onClose={()=>setModal(null)} closeOnBackdrop={false} maxWidth={560}><PrimerasTareasModal sale={modal.data} clients={clients} clientEntities={clientEntities} user={user} onConfirm={handleCrearPrimerasTareas} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='conciliaHub'&&(()=>{ const mesA=new Date().toISOString().slice(0,7)
           // Contador de Duplicados = facturas (programadas emitidas + copias/folios repetidos) + anticipos a mano que calzan con el banco.
