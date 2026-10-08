@@ -16854,6 +16854,8 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
 // cargas e historial). Regla del usuario 2026-10-08: en notaría nunca se pierde información. canonOtNN = forma única del N° de OT.
 // Saldo con signo canónico: −$265.000 (no '$-265.000').
 const fmtSaldoG = v => (Number(v)<0?'−':'')+fmt(Math.abs(Number(v)||0))
+// Gastos del cliente aún no rendidos: fuente única (Gastos, ficha y Cartola).
+const gastosPorRendirCli = (expenses,cid) => (expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at)
 const canonOtNN = o => { const s=String(o||'').trim().toUpperCase(); if(!s||s==='S/OT') return ''; const d=s.replace(/\D/g,''); return d?'OT-'+d:s }
 const _fechaISO = f => { if(!f) return null; if(f instanceof Date) return isNaN(f)?null:f.toISOString().slice(0,10); const t=String(f).slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(t)?t:null }
 async function registrarNoNuestras(list,{batchId=null,filename=null,por=null}={}){
@@ -17281,7 +17283,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   // Triage de gasto de oficina (Liberona Escala) → personal de un miembro: lo saca del folder de la oficina y queda como personal.
   const esOficina = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
   // Gastos pendientes de rendir al cliente (única fuente, misma def que el botón Rendir): gasto, descuenta saldo, no rendido al cliente.
-  const gastosPorRendir = cid => (expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at)
+  const gastosPorRendir = cid => gastosPorRendirCli(expenses,cid)
   // Clientes con gastos sin rendir hace ≥30 días → aviso "Conviene rendir" (la app anticipa, no esperas a acordarte). La oficina queda fuera.
   const rendirPend = useMemo(()=>{
     const hoy=new Date(); hoy.setHours(0,0,0,0)
@@ -20996,7 +20998,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
 
 // Pestaña "Estado de cuenta" (ex Documentos): vista unificada y trazable del cliente. Lee conciliacion +
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
-function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste}){
+function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste, onRendicion}){
   const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
   const [sec,setSec]=useState({})   // secciones-icono (Honorarios/Fondos/Movimientos/Anticipos), colapsadas por defecto
   const secT=k=>setSec(s=>({...s,[k]:!s[k]}))
@@ -21161,7 +21163,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           </div>) })}
       </div>) })}
     </div>}
-    {Hdr({icon:'wallet',title:'Fondos y gastos',k:'fondos',summary:`saldo ${fmt(fg.saldo)}`,sumCol:fg.saldo<0?C.overdue:C.normal})}
+    {Hdr({icon:'wallet',title:'Fondos y gastos',k:'fondos',summary:`saldo ${fmtSaldoG(fg.saldo)}`,sumCol:fg.saldo<0?C.overdue:C.normal})}
     {sec.fondos&&(()=>{ const _sf=(a,b)=>{ const r=(a.date||'')<(b.date||'')?1:-1; return fgOrd==='desc'?r:-r }; const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort(_sf); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort(_sf)
       const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; const isDev=signo>0&&((e.amount||0)<0||/^\s*devoluci/i.test(e.concept||'')); return (
         <div key={e.id} style={{borderBottom:`1px solid ${C.border}`}}>
@@ -21187,9 +21189,10 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
         </div>) }
       return (<div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:8}}>
-        <div style={{fontSize:11,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?C.overdueText:C.greenText}}>{fmt(fg.saldo)}</b></div>
+        <div style={{fontSize:11,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?C.overdueText:C.greenText}}>{fmtSaldoG(fg.saldo)}</b></div>
         <button onClick={()=>setFgOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {fgOrd==='desc'?'↓':'↑'}</button>
       </div>
+      {onRendicion&&(()=>{ const pr=gastosPorRendirCli(expenses,client.id); if(!pr.length) return null; const m=pr.reduce((t,e)=>t+(Number(e.amount)||0),0); return <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,borderRadius:10,padding:'7px 8px 7px 13px',marginBottom:10}}><span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Por rendir · {pr.length} gasto{pr.length!==1?'s':''}</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(m)}</b><ActBtn variant='success' onClick={onRendicion}>Rendir</ActBtn></div> })()}
       <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:2}}>Fondos recibidos</div>
       {fondos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
       {fondos.map(e=>fila(e,1,C.greenText))}
@@ -22751,8 +22754,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const totalPorCobrar = porCobrarBills(clientBilling)   // fuente única (mismo helper que Financiero/lista/Dashboard)
   // Saldo del cliente: fuente única (fgCliente) — mismo criterio (todo lo no-fondo es gasto) que la lista de Gastos y el Dashboard.
   const {fondos, gastos, saldo:saldoFondos} = fgCliente(expenses, client.id)
+  const porRendir = gastosPorRendirCli(expenses, client.id).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1)
+  const porRendirTot = porRendir.reduce((a,e)=>a+(Number(e.amount)||0),0)
   // Embudo del cliente: cifras a UNA décima (resumen escaneable; el detalle de las filas va en fmt completo).
-  const fmtM1 = n => { const a=Math.abs(n||0),s=n<0?'-':''; if(a>=1e6) return s+'$'+(a/1e6).toFixed(1).replace('.',',')+'M'; if(a>=1e3) return s+'$'+Math.round(a/1e3)+'K'; return s+'$'+Math.round(a).toLocaleString('es-CL') }
+  const fmtM1 = n => { const a=Math.abs(n||0),s=n<0?'−':''; if(a>=1e6) return s+'$'+(a/1e6).toFixed(1).replace('.',',')+'M'; if(a>=1e3) return s+'$'+Math.round(a/1e3)+'K'; return s+'$'+Math.round(a).toLocaleString('es-CL') }
   const ufM1 = n => n>0 ? `UF ${Math.round(n).toLocaleString('es-CL')}` : '—'   // KPI hero: UF redonda (sin ",0" colgando)
   const nVencFicha = porCobrar.filter(b=>esVencidaB(b)).length
 
@@ -22820,8 +22825,23 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             {kc('Facturado', fmtM1(facturado), `${nFact} factura${nFact!==1?'s':''}`, C.accent, 'documentos')}
             {kc('Cobrado', fmtM1(cobrado), 'histórico', C.greenText, 'documentos')}
             {kc('Por cobrar', totalPorCobrar>0?fmtM1(totalPorCobrar):'$0', nVencFicha>0?`${nVencFicha} vencida${nVencFicha!==1?'s':''}`:'saldo vivo', totalPorCobrar>0?(nVencFicha>0?C.overdueText:C.accent):C.muted, 'financiero')}
-            {kc('Fondos', fmtM1(saldoFondos), saldoFondos<0?'por reponer':'disponibles', saldoFondos<0?C.overdueText:C.tealText, 'documentos')}
+            {kc('Fondos', fmtM1(saldoFondos), porRendir.length>0?`${porRendir.length} por rendir ›`:saldoFondos<0?'por reponer':'disponibles', saldoFondos<0?C.overdueText:C.tealText, 'documentos')}
           </div>
+          {porRendir.length>0&&onRendicion&&<div style={{background:C.surface,border:`1px solid ${C.greenText}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:`1px solid ${C.bgSoft}`}}>
+              <span style={{width:28,height:28,borderRadius:8,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={15} c={C.greenText}/></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Por rendir al cliente</div><div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{porRendir.length} gasto{porRendir.length!==1?'s':''}{porRendir[0]?.date?` · sin rendir desde ${fmtDate(porRendir[0].date)}`:''}</div></div>
+              <span style={{fontSize:13,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(porRendirTot)}</span>
+            </div>
+            {porRendir.slice(0,3).map(e=>(
+              <div key={e.id} onClick={onEditExpense?()=>onEditExpense(e):undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onEditExpense?'pointer':'default',fontSize:12}}>
+                <div style={{flex:1,minWidth:0,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||e.category||'Gasto'}</div>
+                <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtDate(e.date)}</span>
+                <span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0,minWidth:72,textAlign:'right'}}>{fmt(e.amount)}</span>
+              </div>))}
+            {porRendir.length>3&&<div onClick={()=>setFtab('documentos')} style={{padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.greenText,cursor:'pointer'}}>Ver los {porRendir.length} en Cartola ›</div>}
+            <div style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}><ActBtn variant='success' full onClick={()=>onRendicion(client)}>Rendir</ActBtn></div>
+          </div>}
           <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12,marginBottom:8,alignItems:'start'}}>
             {/* Vencidas (accionable) */}
             <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
@@ -22865,7 +22885,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields} clientBilling={clientBilling} onOpenFinanciero={()=>setFtab('financiero')}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onAddSale={onAddSale} onConciliar={()=>onConciliar&&onConciliar(client)} onOpenConciliacion={onOpenConciliacion} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onReplaceProgramada={onReplaceProgramada} onOpenSale={onOpenSale}/>}
-      {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onAjuste={onAjuste}/>}
+      {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onRendicion={onRendicion?()=>onRendicion(client):undefined} onAjuste={onAjuste}/>}
     </div>
   )
 }
