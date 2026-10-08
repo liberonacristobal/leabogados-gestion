@@ -1692,7 +1692,20 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
 }
 
 // ─── CAJA CHICA VIEW (limited) ─────────────────────────────────────────────
-function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUserEmail,pettyCash,setPettyCash,rendiciones,setRendiciones,onOpenClientFicha,onEditExpense}) {
+// Administradores del estudio desde `miembros` (rol admin), UNA dirección por persona: la más corta del dominio del estudio
+// (miembros trae alias: cl@ y cristobal.liberona@ y un gmail). Misma regla que la edge caja-chica-alerta. Cacheado por sesión.
+let _adminsEstudioCache=null, _adminsEstudioP=null
+function cargarAdminsEstudio(){
+  if(_adminsEstudioCache) return Promise.resolve(_adminsEstudioCache)
+  if(!_adminsEstudioP) _adminsEstudioP = Promise.resolve(supabase.from('miembros').select('email,rol,nombre').eq('rol','admin')).then(({data})=>{
+    const dom=String(BRAND.dominio||'').toLowerCase().replace(/^.*?@/,'').replace(/^gestion\./,'')
+    const por={}; (data||[]).forEach(a=>{ const em=String(a.email||'').toLowerCase(); if(!em.includes('@')) return; const k=String(a.nombre||em).split(' ')[0]; (por[k]=por[k]||[]).push(em) })
+    _adminsEstudioCache=Object.entries(por).map(([nombre,ems])=>{ const d=dom?ems.filter(e=>e.endsWith('@'+dom)):[]; return {nombre, email:(d.length?d:ems).sort((x,y)=>x.length-y.length)[0]} })
+    return _adminsEstudioCache }).catch(()=>[])
+  return _adminsEstudioP
+}
+function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserName,currentUserEmail,pettyCash,setPettyCash,rendiciones,setRendiciones,onOpenClientFicha,onEditExpense}) {
+  expenses = (expenses||[]).filter(Boolean)   // blindaje: una fila vacía no debe tumbar la vista
   const me = currentUserName || ''
   const isDesktop = useIsDesktop()   // escritorio: PENDIENTES y CAJA lado a lado; móvil: pestañas (idéntico a antes)
   const [tab,setTab] = useState(()=>{ try{ const v=sessionStorage.getItem('cc_tab'); if(v){ sessionStorage.removeItem('cc_tab'); return v } }catch(_){} return 'liquidar' }) // liquidar | caja (desde el resumen de Tareas puede llegar 'caja')
@@ -1706,7 +1719,13 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const [newMonto,setNewMonto] = useState('')
   const [newFecha,setNewFecha] = useState(new Date().toISOString().slice(0,10))
   const [newNota,setNewNota] = useState('')
-  const [newDeliveredBy,setNewDeliveredBy] = useState('Cristóbal')
+  const [admins,setAdmins] = useState([])   // administradores del estudio (miembros rol admin) → destinatarios y "Entregado por"
+  useEffect(()=>{ let vivo=true; cargarAdminsEstudio().then(a=>{ if(vivo) setAdmins(a||[]) }); return ()=>{ vivo=false } },[])
+  useEffect(()=>{ if(confirmLiq) restoreScroll({w:0,d:0}) },[confirmLiq])   // la página de liquidar parte arriba
+  const adminNombres = admins.length ? admins.map(a=>a.nombre) : (SOCIOS_CFG||[]).map(x=>String(x.nombre||'').split(' ')[0]).filter(Boolean)
+  // Último recurso si `miembros` no responde: las direcciones de siempre (nunca enviar a nadie).
+  const adminEmails = admins.length ? admins.map(a=>a.email).filter(Boolean) : ['cl@leabogados.cl','ee@leabogados.cl']
+  const [newDeliveredBy,setNewDeliveredBy] = useState('')
   const [showNuevaCaja,setShowNuevaCaja] = useState(false)
   const [editCajaId,setEditCajaId] = useState(null)   // caja entregada en edición (petty_cash)
   const [cajaOtra,setCajaOtra] = useState(false)
@@ -1735,6 +1754,14 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   // Caja actual del usuario
   const miCaja = pettyCash.filter(p=>p.user_name===me)
   const saldoCaja = saldoCajaChica(pettyCash, expenses, me)
+  const ultCaja = [...miCaja].sort((a,b)=>String(b.delivered_at||'').localeCompare(String(a.delivered_at||'')))[0]||null
+  // Ritmo de gasto: lo gastado en los últimos 90 días (mismo universo que el saldo) → cuántos días alcanza la caja. Solo con historia suficiente.
+  const _hace90 = new Date(Date.now()-90*86400000).toISOString().slice(0,10)
+  const _g90 = expenses.filter(e=>e.type==='gasto'&&e.created_by===me&&!e.paid_by_client&&e.date&&e.date>=_hace90)
+  const ritmoMes = _g90.length>=5 ? _g90.reduce((a,e)=>a+(e.amount||0),0)/3 : 0
+  const diasAlcanza = ritmoMes>0&&saldoCaja>0 ? Math.round(saldoCaja/(ritmoMes/30)) : null
+  const diasDe = d => d ? Math.floor((Date.now()-new Date(d+'T12:00').getTime())/86400000) : null
+  const faltaDe = e => !e.category ? 'categoría' : (!e.client_id&&e.category!=='Fondo') ? 'cliente' : null
 
   const toggleSelect = id => setSelected(prev=>{
     const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n
@@ -1890,12 +1917,12 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       // Trazabilidad: avisar a los admin cuando un limited liquida su caja chica (no cuando liquida un admin). No bloquea.
       // Resumen de caja para la liquidación (fuente única saldoCajaChica): fondo recibido · gastado · saldo; si es negativo, lo puso de su bolsillo → a reembolsar.
       const fondoTot=miCaja.reduce((a,p)=>a+(p.amount||0),0), gastadoTot=fondoTot-saldoCaja, cubierto=Math.max(0,-saldoCaja)
-      if(!['Cristóbal','Erasmo'].includes(me)){ try{ sendMailServer({to:['cl@leabogados.cl','ee@leabogados.cl'], subject:`${me} liquidó su caja chica · ${fmtCLP(totalReal)}`, html:`<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a"><b>${me}</b> liquidó su caja chica.<br>Período ${periodo} · ${marcados.length} gasto(s) · <b>${fmtCLP(totalReal)}</b>.${cubierto>0?`<br><b style="color:#A32D2D">Cubierto por ${me} — a reembolsar ${fmtCLP(cubierto)}</b>`:''}</div>`, text:`${me} liquidó su caja chica. Período ${periodo}, ${marcados.length} gastos, ${fmtCLP(totalReal)}.${cubierto>0?` Cubierto por ${me} — a reembolsar ${fmtCLP(cubierto)}.`:''}`}).catch(()=>{}) }catch(_){} }
+      if(!adminNombres.includes(me)){ try{ sendMailServer({to:adminEmails, subject:`${me} liquidó su caja chica · ${fmtCLP(totalReal)}`, html:`<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a"><b>${me}</b> liquidó su caja chica.<br>Período ${periodo} · ${marcados.length} gasto(s) · <b>${fmtCLP(totalReal)}</b>.${cubierto>0?`<br><b style="color:#A32D2D">Cubierto por ${me} — a reembolsar ${fmtCLP(cubierto)}</b>`:''}</div>`, text:`${me} liquidó su caja chica. Período ${periodo}, ${marcados.length} gastos, ${fmtCLP(totalReal)}.${cubierto>0?` Cubierto por ${me} — a reembolsar ${fmtCLP(cubierto)}.`:''}`}).catch(()=>{}) }catch(_){} }
       setSelected(new Set())
       setConfirmLiq(false)
       let correoOk = false
       if(abrirCorreo) {
-        const dest = (enviarA||'').trim() || 'ee@leabogados.cl,cl@leabogados.cl'
+        const dest = (enviarA||'').trim() || adminEmails.join(',')
         const asunto = 'Liquidación caja chica — ' + me + ' — ' + periodo
         const lineas = marcados.map(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; return '• '+fmtFechaDMY(e.date)+' · '+(e.concept||'—')+' · '+cn+' · '+(e.category||'Otro')+' · $'+(e.amount||0).toLocaleString('es-CL') }).join('\n')
         const texto = 'Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+me+'\nPeríodo: '+periodo+'\nN° de gastos: '+marcados.length+'\nFondo recibido: '+fmtCLP(fondoTot)+'\nGastado: '+fmtCLP(gastadoTot)+'\n'+(cubierto>0?'Cubierto por '+me+' — a reembolsar: '+fmtCLP(cubierto):'Saldo de caja: '+fmtCLP(saldoCaja))+'\n\nDetalle:\n'+lineas+'\n\nTOTAL: $'+totalReal.toLocaleString('es-CL')+'\n\nQuedo a disposición para cualquier consulta.'
@@ -2021,6 +2048,54 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
     const w=window.open('','_blank'); w.document.write(html); w.document.close()
   }
 
+  // LIQUIDAR = PÁGINA (antes ventana de 340px): gastos por cliente, cómo queda tu caja (misma fórmula del PDF y el correo) y a quién se envía.
+  if(confirmLiq){
+    const gastosSel = seleccionados
+    const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
+    const fondoTot = miCaja.reduce((a,p)=>a+(p.amount||0),0), gastadoTot = fondoTot-saldoCaja
+    const porCli = {}; gastosSel.forEach(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; (porCli[cn]=porCli[cn]||[]).push(e) })
+    const grupos = Object.entries(porCli).sort((a,b)=>a[0].localeCompare(b[0],'es'))
+    const inp = {width:'100%',boxSizing:'border-box',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,background:C.bgSoft,color:C.text,outline:'none'}
+    const ln = (l,v,col,b) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:b?'8px 0 2px':'4px 0',borderTop:b?`1px solid ${C.track}`:'none',marginTop:b?4:0,fontSize:b?13:12.5,fontWeight:b?700:500}}><span style={{color:b?C.text:C.muted}}>{l}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:700,color:col||C.text}}>{v}</span></div>
+    const lista = (
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,padding:'10px 14px 6px'}}>Gastos a liquidar · período {periodoDeGastos(gastosSel)}</div>
+        {grupos.map(([cn,gs])=>(<div key={cn}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'8px 14px 4px',borderTop:`1px solid ${C.track}`}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent}}>{cn}</span><span style={{fontSize:12,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(gs.reduce((a,e)=>a+(e.amount||0),0))}</span></div>
+          {gs.map(e=>(<div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 22px',fontSize:12}}>
+            <span style={{width:74,flexShrink:0,color:C.muted,fontSize:11}}>{fmtFechaDMY(e.date)}</span>
+            <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{e.concept||'—'}<span style={{color:C.muted}}> · {catLabel(e.category)}</span></span>
+            <span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmtCLP(e.amount)}</span>
+          </div>))}
+        </div>))}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.bgSoft,padding:'10px 14px',borderTop:`1px solid ${C.border}`}}><span style={{fontSize:12,fontWeight:700,color:C.text}}>Total · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span><span style={{fontSize:15,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(totalLiq)}</span></div>
+      </div>)
+    const panel = (
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Cómo queda tu caja</div>
+          {ln('Fondo recibido',fmtCLP(fondoTot))}
+          {ln('Gastado',fmtCLP(gastadoTot))}
+          {saldoCaja<0 ? ln('Cubierto por ti · a reembolsar',fmtCLP(-saldoCaja),C.overdueText,true) : ln('Saldo disponible',fmtCLP(saldoCaja),C.greenText,true)}
+        </div>
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Se envía a</div>
+          <input value={enviarA} onChange={e=>setEnviarA(e.target.value)} placeholder='correo@estudio.cl' style={inp}/>
+          <div style={{fontSize:10.5,color:C.muted,margin:'4px 0 8px'}}>Administradores del estudio (de la lista de miembros). Puedes cambiarlo.</div>
+          <input value={cc} onChange={e=>setCc(e.target.value)} placeholder='CC (opcional)' style={inp}/>
+        </div>
+        <ActBtn variant='primary' size='lg' full disabled={saving} onClick={()=>handleLiquidar(true)}>{saving?'Liquidando…':'Liquidar y enviar'}</ActBtn>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <ActBtn full disabled={saving} onClick={generatePDF} style={{color:C.accent}}>Descargar PDF</ActBtn>
+          <ActBtn full disabled={saving} onClick={()=>handleLiquidar(false)} style={{color:C.accent}}>Solo liquidar</ActBtn>
+        </div>
+      </div>)
+    return <FlujoPagina origen='Caja chica' titulo='Liquidar' ctx={`${gastosSel.length} gasto${gastosSel.length!==1?'s':''} · ${fmtCLP(totalLiq)}`} onBack={()=>{ if(!saving) setConfirmLiq(false) }} maxW={1060}>
+      {isDesktop
+        ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 340px',gap:18,alignItems:'start'}}>{lista}{panel}</div>
+        : <div style={{display:'flex',flexDirection:'column',gap:12}}>{panel.props.children[0]}{lista}{panel.props.children.slice(1)}</div>}
+    </FlujoPagina>
+  }
   return (
     <div style={{maxWidth:isDesktop?1120:820,margin:'0 auto'}}>{/* escritorio: PENDIENTES y CAJA lado a lado (1120). Móvil: columna + pestañas, idéntico. */}
       {/* Confirmación post-liquidación (PASO 3) */}
@@ -2099,9 +2174,9 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         </Modal>
       )}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bgSoft,zIndex:10}}>
-        <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja Chica</div>
+        <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja chica</div>
         {!isDesktop&&<div style={{display:'flex',background:C.bgSoft,borderRadius:10,padding:3,border:`1px solid ${C.border}`}}>
-          {[['liquidar','PENDIENTES'],['caja','CAJA']].map(([id,lbl])=>{ const on=tab===id; return (
+          {[['liquidar','POR LIQUIDAR'],['caja','HISTORIAL']].map(([id,lbl])=>{ const on=tab===id; return (
             <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'8px 0',borderRadius:8,border:'none',
               background:on?C.accent:'transparent',color:on?'#fff':C.muted,
               fontSize:12,fontWeight:700,letterSpacing:'.05em',cursor:'pointer',transition:'background .15s'}}>{lbl}</button>
@@ -2114,19 +2189,22 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={isDesktop?{flex:1,minWidth:0,padding:'0 0 40px'}:{padding:'0 0 130px'}}>
           {/* Resumen (canon): Saldo caja protagonista; Sin liquidar = chip de acción (el saldo ya descuenta todos los gastos) */}
           <div style={{padding:'2px 14px 10px'}}>
-            <div style={{background:saldoCaja<0?C.overdueBg:C.greenBg,borderRadius:10,padding:'12px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Saldo caja</div>
-                <div style={{fontSize:21,fontWeight:700,color:saldoCaja<0?C.overdue:C.normal,marginTop:1}}>{fmtCLP(saldoCaja)}</div>
-                {saldoCaja<0&&<div style={{fontSize:11.5,fontWeight:600,color:C.overdueText,marginTop:2}}>La oficina te debe {fmtCLP(-saldoCaja)}</div>}
+            {(()=>{ const sch = saldoCaja<0 ? {num:C.overdue,bg:C.overdueBg,bd:'#F2D5D5',label:C.muted} : saldoCaja<=(BRAND.cajaChicaUmbral||50000) ? {num:C.soon,bg:'#FEF6EE',bd:'#F5E2CC',label:C.soon} : {num:C.normal,bg:C.greenBg,bd:'#D4EDE0',label:C.muted}; return (
+            <div style={{background:sch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${sch.bd}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:'8px 12px',flexWrap:'wrap'}}>
+              <div style={{minWidth:0,flex:'1 1 200px'}}>
+                <div style={{fontSize:10,fontWeight:600,color:sch.label,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Saldo en tu caja{saldoCaja<0?' · te debemos':''}</div>
+                <div style={{fontSize:22,fontWeight:700,color:sch.num,lineHeight:1.1}}>{fmtSaldoG(saldoCaja)}</div>
+                {ultCaja&&<div style={{fontSize:10,color:C.muted,marginTop:4}}>Última caja recibida · {fmtFechaDMY(ultCaja.delivered_at)} · {fmtCLP(ultCaja.amount)}</div>}
+                {ritmoMes>0&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>Gastas ~{fmtCLP(Math.round(ritmoMes))}/mes (últimos 90 días){diasAlcanza!=null?` · tu caja alcanza ~${diasAlcanza} día${diasAlcanza!==1?'s':''}`:saldoCaja<0?' · conviene pedir reposición':''}</div>}
               </div>
-              {sinLiquidar>0&&<span style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,padding:'4px 10px',borderRadius:20}}>Sin liquidar {fmtCLP(sinLiquidar)}</span>}
-            </div>
+              {sinLiquidar>0&&<span style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.soon,background:'#fff',border:'0.5px solid #F5E2CC',padding:'5px 11px',borderRadius:20,whiteSpace:'nowrap'}}>{misPendientes.length} por liquidar · {fmtCLP(sinLiquidar)}</span>}
+            </div>) })()}
             {saldoCaja>=0&&saldoCaja<=(BRAND.cajaChicaUmbral||0)&&<div style={{marginTop:8,background:C.soonBg,borderRadius:10,padding:'9px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}><span style={{fontSize:13,fontWeight:700,color:C.soonText}}>Caja chica baja</span><span style={{fontSize:11.5,color:C.soonText}}>Quedan {fmtCLP(saldoCaja)} · aviso a la oficina</span></div>}
           </div>
           {/* MIS GASTOS + asistente IA + conteo */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'2px 14px 8px'}}>
-            <span style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase'}}>Mis gastos</span>
+            <span style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase'}}>Por liquidar · {misPendientes.length}</span>
+              {misPendientes.length>1&&<button onClick={()=>setSelected(prev=>prev.size===misPendientes.length?new Set():new Set(misPendientes.map(e=>e.id)))} style={{height:26,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{selected.size===misPendientes.length?'Quitar selección':'Seleccionar todos'}</button>}</span>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
               {misPendientes.length>0&&<button onClick={runAsistente} style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>
                 <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.6 4.6L18 9.2l-4.4 1.6L12 15l-1.6-4.2L6 9.2l4.4-1.6z'/><path d='M19 14l.7 2 2 .7-2 .7L19 19.4 18.3 17.4l-2-.7 2-.7z'/></svg>
@@ -2157,9 +2235,9 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               <tbody>{pendientes.map(e=>{ const client=clients.find(cl=>cl.id===e.client_id); const isSel=selected.has(e.id); const bdg=catBadge(e.category); return (
                 <tr key={e.id} onClick={()=>toggleSelect(e.id)} style={{cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,width:28}}><span style={{display:'inline-flex',width:17,height:17,borderRadius:6,alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>{isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span></td>
-                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,whiteSpace:'nowrap',color:C.muted}}>{fmtFechaDMY(e.date)}</td>
+                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,whiteSpace:'nowrap',color:C.muted}}>{fmtFechaDMY(e.date)}{(()=>{ const d=diasDe(e.date); return d!=null&&d>30?<div style={{fontSize:10,color:C.soonText,fontWeight:600}}>hace {d} días</div>:null })()}</td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,fontWeight:600,color:C.text}}>{e.concept||'—'}{onEditExpense&&<span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{marginLeft:8,fontSize:11,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>editar</span>}</td>
-                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?<span style={{color:C.done}}>—</span>:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>)}</td>
+                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?<span style={{color:C.done}}>—</span>:<span onClick={onEditExpense?(ev=>{ev.stopPropagation();onEditExpense(e)}):undefined} style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'1px 6px',cursor:onEditExpense?'pointer':'default',whiteSpace:'nowrap'}}>falta cliente{onEditExpense?' · completar ›':''}</span>)}</td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}>{e.category?<span style={{fontSize:10,padding:'1px 6px',borderRadius:4,fontWeight:500,background:bdg.bg,color:bdg.color}}>{catLabel(e.category)}</span>:<span style={{fontSize:10,color:C.soon,fontWeight:600}}>sin categoría</span>}</td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right',fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtCLP(e.amount)}</td>
                 </tr>) })}</tbody>
@@ -2168,19 +2246,21 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
             const client=clients.find(cl=>cl.id===e.client_id)
             const isSel=selected.has(e.id)
             const bdg=catBadge(e.category)
-            const _completo=!!e.category&&(!!e.client_id||e.category==='Fondo')
             return (
               <div key={e.id} onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
                 <div style={{width:17,height:17,borderRadius:6,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>
                   {isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                 </div>
                 {bigDate(e.date)}
-                {_completo
-                  ? <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.3' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><polyline points='20 6 9 17 4 12'/></svg>
-                  : <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soon} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M10.3 3.2 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0z'/><path d='M12 9v4M12 17h.01'/></svg>}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
-                  <div style={{fontSize:10,color:C.done,marginTop:2}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?null:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>)}{(client||e.category!=='Fondo')?' · ':''}{e.created_by||me}{!e.category?<span style={{color:C.soon,fontWeight:600}}> · sin categoría</span>:''}{onEditExpense&&<> · <span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>editar</span></>}</div>
+                  <div style={{fontSize:10,color:C.done,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                    {client&&<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>}
+                    {(()=>{ const d=diasDe(e.date); return d!=null&&d>30?<span style={{color:C.soonText,fontWeight:600}}>hace {d} días</span>:null })()}
+                    {faltaDe(e)
+                      ? <span onClick={onEditExpense?(ev=>{ev.stopPropagation();onEditExpense(e)}):undefined} style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'1px 6px',cursor:onEditExpense?'pointer':'default'}}>falta {faltaDe(e)}{onEditExpense?' · completar ›':''}</span>
+                      : onEditExpense&&<span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>editar</span>}
+                  </div>
                 </div>
                 <div style={{flexShrink:0,marginLeft:8,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
                   <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(e.amount)}</span>
@@ -2196,7 +2276,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 <div style={{fontSize:10,color:'rgba(255,255,255,.6)',letterSpacing:'.03em'}}>{selected.size} GASTO{selected.size!==1?'S':''} SELECCIONADO{selected.size!==1?'S':''}</div>
                 <div style={{fontSize:16,fontWeight:600,color:'#fff',marginTop:1}}>{fmtCLP(totalSel)}</div>
               </div>
-              <button onClick={()=>{ setEnviarA(''); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{height:24,padding:'0 16px',background:'#fff',color:C.accent,border:'none',borderRadius:8,fontSize:12,fontWeight:700,cursor:'pointer'}}>Liquidar</button>
+              <button onClick={()=>{ setEnviarA(adminEmails.join(', ')); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{minHeight:isDesktop?34:40,padding:'0 16px',background:'#fff',color:C.accent,border:'none',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Liquidar {selected.size} · {fmtCLP(totalSel)} ›</button>
             </div>
           )}
         </div>
@@ -2212,34 +2292,37 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
         return (
         <div style={{padding:'4px 0 100px'}}>
-          {/* KPIs (canon): Saldo protagonista (rótulo corto inline); Liquidado histórico = línea secundaria, no tile paralelo */}
+          {/* Historial: el saldo ya está arriba (una sola vez); aquí lo acumulado */}
           <div style={{padding:'4px 14px 10px'}}>
-            <div style={{background:saldoCaja<0?C.overdueBg:C.greenBg,borderRadius:10,padding:'12px 14px'}}>
-              <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Saldo{saldoCaja<0?' · te debemos':saldoCaja>0?' · disponible':''}</div>
-              <div style={{fontSize:21,fontWeight:700,color:saldoCaja<0?C.overdue:C.normal,marginTop:1}}>{fmtCLP(saldoCaja)}</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 2px'}}>
+              <span style={{fontSize:11,color:C.muted}}>Recibido a la fecha</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.muted}}>{fmtCLP(totalRecibido)}</span>
             </div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,padding:'0 2px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,padding:'0 2px'}}>
               <span style={{fontSize:11,color:C.muted}}>Liquidado a la fecha</span>
               <span style={{fontSize:13,fontWeight:600,color:C.muted}}>{fmtCLP(totalLiquidado)}</span>
             </div>
           </div>
-          {/* CAJAS ENTREGADAS */}
+          {/* CAJAS RECIBIDAS (las registra un administrador con "Entregar caja") */}
           <div style={{borderTop:`0.5px solid ${C.bgSoft}`,padding:'11px 14px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
-              <span style={secLbl}>Cajas entregadas</span>
-              <button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy('Cristóbal'); setCajaOtra(false); setShowNuevaCaja(true) }} style={chipBtn('primary')}>+ Nueva Caja</button>
+              <span style={secLbl}>Cajas recibidas</span>
+              {isAdmin&&<button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy(adminNombres.includes(me)?me:(adminNombres[0]||'')); setCajaOtra(false); setShowNuevaCaja(true) }} style={chipBtn('primary')}>+ Nueva Caja</button>}
             </div>
-            {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas.</div>}
-            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at; return (
-              <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||'Cristóbal'); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:editable?'pointer':'default'}}>
+            {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas{isAdmin?'':' — las registra un administrador'}.</div>}
+            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=isAdmin&&!p.rendered_at; return (
+              <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||adminNombres[0]||''); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:editable?'pointer':'default'}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmtCLP(p.amount)}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
-                  <div style={{fontSize:10,color:C.done,marginTop:1}}>Entregado por {p.delivered_by||'—'}{p.delivered_at?` · ${fmtD(p.delivered_at)}`:''}</div>
+                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{p.delivered_at?fmtD(p.delivered_at):'—'}{p.delivered_by?` · de ${p.delivered_by}`:''}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
+                  <div style={{fontSize:10,fontWeight:600,marginTop:1,color:p.movimiento_id?C.greenText:C.soonText}}>{p.movimiento_id?'transferencia conciliada ✓':'transferencia por conciliar'}</div>
                 </div>
-                <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,flexShrink:0,background:activa?C.greenBg:C.bgSoft,color:activa?C.normal:C.done}}>{activa?'Activa':'Cerrada'}</span>
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(p.amount)}</div>
+                  <span style={{fontSize:10,fontWeight:600,padding:'1px 8px',borderRadius:20,background:activa?C.greenBg:C.bgSoft,color:activa?C.normal:C.done}}>{activa?'Activa':'Cerrada'}</span>
+                </div>
               </div>
             )})}
-            {cajasOrd.length>0&&totRow('Total recibido',totalRecibido)}
+
           </div>
           {/* LIQUIDACIONES */}
           <div style={{borderTop:'0.5px solid #E4E8EB',marginTop:4,padding:'11px 14px'}}>
@@ -2283,7 +2366,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                       <button onClick={()=>{
                         const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
                         const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
-                        const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
+                        const mailLink=document.createElement('a'); mailLink.href='mailto:'+adminEmails.join(',')+'?subject='+a2+'&body='+b2; mailLink.click()
                       }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:C.bgSoft,color:C.muted,fontSize:11,fontWeight:500,cursor:'pointer'}}>Correo</button>
                       <button onClick={async()=>{
                         if(!await appConfirm('¿Reabrir esta liquidación? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
@@ -2310,47 +2393,6 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       </div>
 
       {/* Modal de liquidación (PP-12 commit 2): detalle compacto + PDF / Correo / Confirmar */}
-      {confirmLiq&&(()=>{
-        const gastosSel = seleccionados
-        const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
-        const secBtn = {height:40,borderRadius:8,background:C.bgSoft,color:C.accent,border:'0.5px solid #E4E8EB',fontSize:12,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6}
-        return (
-          <div onClick={()=>!saving&&setConfirmLiq(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:340,maxHeight:'85vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'15px 16px'}}>
-                <span style={{fontSize:15,fontWeight:600,color:C.accent}}>Liquidar caja chica</span>
-                <button onClick={()=>!saving&&setConfirmLiq(false)} style={{background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:0}}>
-                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
-                </button>
-              </div>
-              <div style={{overflowY:'auto',padding:'0 16px'}}>
-                {gastosSel.map(e=>(
-                  <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'0.5px solid #E4E8EB'}}>
-                    <span style={{fontSize:12,color:C.muted,maxWidth:200,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</span>
-                    <span style={{fontSize:12,fontWeight:500,color:C.text,flexShrink:0}}>{fmtCLP(e.amount)}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.bgSoft,borderRadius:10,padding:'10px 12px',margin:'12px 16px'}}>
-                <span style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.04em',textTransform:'uppercase'}}>Total · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
-                <span style={{fontSize:15,fontWeight:600,color:C.accent}}>{fmtCLP(totalLiq)}</span>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,padding:'0 16px 16px'}}>
-                <button onClick={generatePDF} disabled={saving} style={secBtn}>
-                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>PDF
-                </button>
-                <button onClick={()=>handleLiquidar(true)} disabled={saving} style={secBtn}>
-                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><polyline points='3 7 12 13 21 7'/></svg>Correo
-                </button>
-                <button onClick={()=>handleLiquidar(false)} disabled={saving} style={{gridColumn:'span 2',height:44,borderRadius:10,background:C.accent,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:7,opacity:saving?.6:1}}>
-                  {saving?<Spin/>:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}{saving?'Procesando...':'Confirmar liquidación'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
       {/* Modal Nueva Caja Chica (PP-12 commit 3) — diseño moderno, sin mensaje amarillo */}
       {showNuevaCaja&&(()=>{
         const hoyISO = new Date().toISOString().slice(0,10)
@@ -2383,7 +2425,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               <div style={{marginBottom:16}}>
                 <div style={lbl}>Entregado por</div>
                 <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                  {['Cristóbal','Erasmo'].map(n=>{ const on=newDeliveredBy===n; return (
+                  {adminNombres.map(n=>{ const on=newDeliveredBy===n; return (
                     <button key={n} onClick={()=>setNewDeliveredBy(n)} style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:12,fontWeight:on?600:400,padding:'6px 13px 6px 6px',borderRadius:20,border:on?'0.5px solid #003C50':'0.5px solid #E4E8EB',background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,cursor:'pointer'}}>
                       <span style={{width:24,height:24,borderRadius:'50%',background:on?C.accent:C.done,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{INICIALES_RESP[n]||n.slice(0,2).toUpperCase()}</span>{n}
                     </button>
@@ -36291,8 +36333,9 @@ export default function App() {
       // Movilización = siempre de la oficina (def. del usuario): si no se asignó cliente, va al cliente interno (Liberona Escala). No re-elegir cliente para cada Uber.
       if(p.type==='gasto' && p.category==='Movilización' && !p.client_id){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi) p.client_id=ofi.id }
       const prev = f.id ? (expenses||[]).find(x=>x.id===f.id) : null   // estado anterior: para reajustar la rendición si cambió el monto
-      const{data,error}=await supabase.from('expenses').upsert(p).select().single()
+      let{data,error}=await supabase.from('expenses').upsert(p).select().single()
       if(error)throw error
+      if(DEMO&&!data) data={...p,id:p.id||('demo-e-'+Date.now()),created_at:new Date().toISOString()}   // demo: la base simulada no devuelve la fila (antes quedaba un null en la lista)
       // Aprende glosa→proyecto: la próxima vez un gasto con la misma glosa sugiere este proyecto.
       if(p.type==='gasto' && p.project && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_proyecto', `${p.client_id}::${gk}`, p.project, {}) }
       // Aprende glosa→categoría: el Asistente IA de caja chica y la carga masiva la reusan (no repetir la clasificación).
@@ -37874,7 +37917,7 @@ export default function App() {
               <MiCargaModal tasks={tasks} proyectosCartera={proyectosCartera} setProyectosCartera={setProyectosCartera} clients={clients} user={user} onClose={goBack} onOpenClientFicha={handleOpenClientFicha}/>
             </div>}
             {tab==='expenses'&&<ExpensesView onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
-            {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
+            {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView isAdmin={userRole==='admin'} expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
           </ViewErrorBoundary></div>
