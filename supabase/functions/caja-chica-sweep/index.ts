@@ -52,6 +52,9 @@ serve(async (req) => {
       if ((cfg?.value || "off").trim() !== "on") return json({ ok: true, skipped: "apagado" });
     }
     const testTo = typeof body.testTo === "string" && body.testTo.includes("@") ? body.testTo : null;
+    // Muestra: arma el correo con las transferencias sin registrar más recientes (sin ventana de 30 días) y lo envía SOLO a testTo.
+    // No enlaza cajas ni marca transferencias como avisadas.
+    const muestra = !!testTo && !!body.muestra;
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
     const desde = new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
 
@@ -99,15 +102,15 @@ serve(async (req) => {
     // Avisos: transferencias de los últimos 30 días, con al menos 1 día (le damos el día para registrarla), sin caja, no sueldo, no avisadas.
     const avisos: Record<string, any[]> = {};
     for (const m of cargos) {
-      if (usados.has(String(m.id)) || yaAvisado.has(String(m.id))) continue;
+      if (usados.has(String(m.id)) || (!muestra && yaAvisado.has(String(m.id)))) continue;
       const d = dias(hoy, fechaReal(m)); const q = quien(m);
-      if (d < 1 || d > 30 || sueldos[nrm(q.nombre)]?.has(monto(m))) continue;
+      if ((muestra ? d < 0 : (d < 1 || d > 30)) || sueldos[nrm(q.nombre)]?.has(monto(m))) continue;
       (avisos[normRut(q.rut)] = avisos[normRut(q.rut)] || []).push(m);
     }
 
     const correos: any[] = [];
     if (!dry) {
-      for (const e of enlazadas) {
+      for (const e of (muestra ? [] : enlazadas)) {
         try {
           await sb.from("petty_cash").update({ notes: `${e.notesPrev} · mov:${e.movId}`.trim(), movimiento_id: e.movId }).eq("id", e.pettyId);
           await sb.from("cartola_movimientos").update({ estado: "conciliado", monto_conciliado: e.monto, categoria: "Caja chica" }).eq("id", e.movId);
@@ -134,7 +137,7 @@ serve(async (req) => {
     }
     enlazadas.forEach((e) => delete e.notesPrev);
     const resumenAvisos = Object.entries(avisos).map(([rk, l]) => ({ persona: porRut[rk].nombre, transferencias: l.map((m: any) => ({ fecha: fechaReal(m), monto: monto(m) })) }));
-    return json({ ok: true, modo: dry ? "simulacion" : "barrido", nEnlazadas: enlazadas.length, enlazadas, avisos: resumenAvisos, correos });
+    return json({ ok: true, modo: dry ? "simulacion" : (muestra ? "muestra" : "barrido"), nEnlazadas: enlazadas.length, enlazadas, avisos: resumenAvisos, correos });
   } catch (err) {
     return json({ error: (err as any).message }, 500);
   }
