@@ -401,6 +401,14 @@ function parseCuota(concept){
 // La tolerancia es clave para las recurrentes en UF: la programada se genera al UF de la venta y la factura
 // real se emite al UF del mes → casi nunca calzan al peso. Sin tolerancia, cada mes quedaba un duplicado.
 // Criterio conservador: si hay 0 o >1 candidatas (empate temporal), no toca nada (queda el botón manual "Ya emitida").
+// Al reemplazar una cuota programada por su factura emitida, las comisiones de proveedores ancladas a la programada se MUEVEN a la
+// factura real (si no, quedaban colgando de una cuota borrada y desaparecían de Proveedores). Devuelve los ids movidos (para deshacer).
+async function reanclarComisiones(progId, realId){
+  if(!progId||!realId||DEMO) return []
+  try{ const {data}=await supabase.from('terceros_pagos').update({billing_id:realId}).eq('billing_id',progId).select('id'); return (data||[]).map(r=>r.id) }catch(_){ return [] }
+}
+// Ordinal de cuota sin total ("cuota 1", "cobro 2", "pago 3"): identifica la cuota DENTRO de una misma venta cuando el concepto no trae "N/M".
+const cuotaOrdOf = c => { const m=String(c||'').toLowerCase().match(/\b(?:cuota|cobro|pago)\s*n?[°º]?\s*(\d{1,2})\b/); return m?+m[1]:null }
 async function reconcileProgramada(clientId, amount, issuedAt){
   try{
     if(!clientId || !amount || !issuedAt) return
@@ -458,11 +466,13 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
       // Solo período o cuota N/M pueden emparejarlas dentro de una misma venta (un verdadero duplicado trae esa etiqueta).
       const sameSaleMulti = p.sale_id && String(e.x.sale_id)===String(p.sale_id) && (cuotasPorVenta[String(p.sale_id)]||0)>1
       const okCu=sameCu&&dMonto<=0.25&&(samePer||dias<=75), okPer=samePer&&dMonto<=0.06, okRut=(rutMatch||sameCli)&&dMonto<=0.05&&dias<=45&&!sameSaleMulti
-      if(!okCu&&!okPer&&!okRut) continue
+      // Misma venta + mismo ordinal ('Cobro 1' ↔ 'cuota 1') + monto ±6%: es su factura aunque el concepto no traiga 'N/M'.
+      const oP=cuotaOrdOf(p.concept), oE=cuotaOrdOf(e.x.concept), okOrd=!!(p.sale_id&&String(e.x.sale_id)===String(p.sale_id)&&oP&&oE&&oP===oE&&dMonto<=0.06)
+      if(!okCu&&!okPer&&!okRut&&!okOrd) continue
       const rank=[okCu?0:1, okPer?0:1, dMonto, dias]
       if(!best||rank[0]<bestRank[0]||(rank[0]===bestRank[0]&&(rank[1]<bestRank[1]||(rank[1]===bestRank[1]&&(rank[2]<bestRank[2]||(rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank } }
     if(best){ usados.add(best.x.id); const dM=Math.abs((best.x.amount||0)-a)/a; const raz=[]
-      if(cu&&best.cu&&cu.n===best.cu.n) raz.push(`cuota ${cu.n}${cu.tot?'/'+cu.tot:''}`); else if(per&&best.per&&per===best.per) raz.push(`período ${per.slice(5)}-${per.slice(0,4)}`); else raz.push('mismo RUT/RS')
+      if(cu&&best.cu&&cu.n===best.cu.n) raz.push(`cuota ${cu.n}${cu.tot?'/'+cu.tot:''}`); else if(per&&best.per&&per===best.per) raz.push(`período ${per.slice(5)}-${per.slice(0,4)}`); else if(cuotaOrdOf(p.concept)&&cuotaOrdOf(p.concept)===cuotaOrdOf(best.x.concept)) raz.push(`cuota ${cuotaOrdOf(p.concept)} de la misma venta`); else raz.push('mismo RUT/RS')
       raz.push(dM<0.01?'mismo monto':`dif ${(dM*100).toFixed(1).replace(/\.0$/,'')}% (UF)`)
       out.push({prog:p, real:best.x, razones:raz}) } })
   return out
@@ -37332,7 +37342,9 @@ export default function App() {
       }
       await supabase.from('billing').update({deleted_at:new Date().toISOString(),replaced_by_id:realId||null}).eq('id',progId)
       setBilling(p=>p.filter(b=>b.id!==progId))
-      const u={msg:'Programada reemplazada por la factura emitida', onUndo: async()=>{ await supabase.from('billing').update({deleted_at:null,replaced_by_id:null}).eq('id',progId); if(row) setBilling(p=>p.some(x=>x.id===progId)?p:[row,...p]) }}
+      const movidas=await reanclarComisiones(progId,realId)
+      if(movidas.length) setTerceros(p=>p.map(t=>movidas.includes(t.id)?{...t,billing_id:realId}:t))
+      const u={msg:'Programada reemplazada por la factura emitida', onUndo: async()=>{ await supabase.from('billing').update({deleted_at:null,replaced_by_id:null}).eq('id',progId); if(movidas.length){ await supabase.from('terceros_pagos').update({billing_id:progId}).in('id',movidas); setTerceros(p=>p.map(t=>movidas.includes(t.id)?{...t,billing_id:progId}:t)) } if(row) setBilling(p=>p.some(x=>x.id===progId)?p:[row,...p]) }}
       if(opts.silent) return u
       setUndoToast(u)
     }catch(e){ appAlert('Error: '+e.message) }
@@ -37604,8 +37616,17 @@ export default function App() {
     }catch(e){ if(!/duplicate/i.test(e.message||'')) throw e }   // ya estaba: la buscamos abajo para conciliar con ella
     let nb=null; try{ nb=await getBilling(); if(nb)setBilling(nb) }catch(_){}
     const pool=nb||billing||[]
-    return pool.find(b=>String(b.invoice_no)===String(row.folio)&&(!row.rut||nr(b.receptor_rut)===nr(row.rut)))||created
-  },[clients,clientEntities,billing])
+    const fac=pool.find(b=>String(b.invoice_no)===String(row.folio)&&(!row.rut||nr(b.receptor_rut)===nr(row.rut)))||created
+    // Registrada con su VENTA elegida: retira sola la cuota programada que reemplaza = la más antigua de ESA venta con monto ±6%
+    // (las cuotas se emiten en orden). Reversible (soft-delete + replaced_by_id + deshacer) y mueve sus comisiones a la factura.
+    if(row.sale_id&&fac?.id){
+      const m=Number(fac.amount)||0
+      const twin=pool.filter(b=>!b.deleted_at&&b.status==='Programada'&&!b.invoice_no&&String(b.sale_id)===String(row.sale_id)&&b.id!==fac.id&&m>0&&Math.abs((Number(b.amount)||0)-m)/m<=0.06)
+        .sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))[0]
+      if(twin){ const u=await handleReplaceProgramada(twin.id,fac.id,{silent:true}); if(u) setUndoToast({...u,msg:`Se retiró la cuota programada "${String(twin.concept||'').split(' — ').pop()}": la reemplaza la factura N° ${row.folio}`}) }
+    }
+    return fac
+  },[clients,clientEntities,billing,handleReplaceProgramada])
   // Crea una VENTA (servicio único, Terminado) desde una factura "nueva" y registra la factura ligada a ella. Auto-llenado de la glosa; solo área+responsable extra.
   const handleCrearVentaRapida=useCallback(async(item, opts={})=>{
     const row=item.row||item; const clienteId=item.clienteId||opts.clienteId
