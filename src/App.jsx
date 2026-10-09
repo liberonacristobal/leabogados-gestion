@@ -14290,7 +14290,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const [enlP,setEnlP] = useState(null)                    // enlace a mano abierto: {mid} un pago · {tid} una comisión pagada · {did} una factura del SII
   const [enlSel,setEnlSel] = useState(()=>new Set())
   const [marcas,setMarcas] = useState({})                  // pagos marcados "trabajo por identificar" (learnings pago_prov_por_identificar: key = movimiento)
-  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','pago_prov_por_identificar').then(({data})=>{ const o={}; (data||[]).forEach(r=>{ o[r.key]=r.value||'Trabajo por identificar' }); setMarcas(o) },()=>{}) },[])
+  const [aportes,setAportes] = useState({})                // pagos que aportaron una PARTE a comisiones saldadas con otro pago (FIFO): learnings pago_prov_aporte, key = movimiento, value = {t:[ids],monto}
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('kind,key,value').in('kind',['pago_prov_por_identificar','pago_prov_aporte']).then(({data})=>{ const o={}, a={}; (data||[]).forEach(r=>{ if(r.kind==='pago_prov_aporte'){ try{ a[r.key]=JSON.parse(r.value) }catch(_){} } else o[r.key]=r.value||'Trabajo por identificar' }); setMarcas(o); setAportes(a) },()=>{}) },[])
   // Datos que no viven en App: facturas del SII de los proveedores, cargos del banco a sus RUT (con su conciliación) y la fecha
   // del abono del cliente para cada cuota con comisión (conciliación factura → movimiento).
   const [docs,setDocs] = useState([]), [cargos,setCargos] = useState([]), [concs,setConcs] = useState([]), [gastosCat,setGastosCat] = useState({}), [abonoCli,setAbonoCli] = useState({})
@@ -14419,7 +14420,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   // TRAZABILIDAD: un pago al proveedor debe quedar enlazado a las comisiones que paga o a la factura que salda. Lo previo a la app
   // (antes de APP_DESDE) es histórico: se puede enlazar, pero no se marca como pendiente. Al equipo (sueldo) no se le exige.
   const APP_DESDE='2026-06-01'
-  const pagoLibre = m => (m._cl==='proveedor'||m._cl==='sinclas') && !terceros.some(t=>String(t.movimiento_id)===String(m.id)) && !docs.some(d=>String(d.movimiento_id)===String(m.id))
+  const pagoLibre = m => (m._cl==='proveedor'||m._cl==='sinclas') && !aportes[m.id] && !terceros.some(t=>String(t.movimiento_id)===String(m.id)) && !docs.some(d=>String(d.movimiento_id)===String(m.id))
   const pagosLibresDe = id => cargosDe(id).filter(pagoLibre)
   const pagadasSinBancoDe = id => esEquipo(id) ? [] : tercDe(id).filter(t=>est(t)==='pagada'&&!t.movimiento_id)
   const marcar = async (m, prov, on, silencioso=false) => {
@@ -14812,7 +14813,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
           : c ? <>{pill(C.greenBg,C.greenText,`calza con el pago del ${dm(c.m.fecha)}`)}{link(busy?'…':'Enlazar ›',()=>enlazar([c]))}</>
           : nc ? null : <>{pill(C.bgSoft,C.muted,'sin pago enlazado')}{link('Enlazar con un pago… ›',()=>{setEnlP({did:d.id});setEnlSel(new Set())})}{link('Asignar a comisiones ›',()=>{ const pp=tercDe(sel.id).filter(t=>est(t)==='por_pagar'&&!t.factura_numero); setBol({ids:new Set(pp.map(t=>t.id)),numero:String(d.folio),fecha:String(d.fecha_emision||'').slice(0,10),monto:String(Math.abs(Number(d.monto)||0))}); setView('boleta') })}</> }
       else { const m=e.m; const tsM=terceros.filter(t=>String(t.movimiento_id)===String(m.id)); tit='Pago por transferencia'; monto=Math.abs(Number(m.monto)||0)
-        det = m._cl==='comision' ? `pagó ${tsM.length} ${tsM.length===1?'comisión':'comisiones'}` : m._cl==='sinclas' ? 'sin clasificar en Banco' : 'pago a proveedor'
+        const ap=aportes[m.id], apT=ap?terceros.filter(t=>(ap.t||[]).includes(t.id)):[]
+        det = tsM.length ? `pagó ${tsM.length} ${tsM.length===1?'comisión':'comisiones'}` : ap ? `aportó ${fmt(ap.monto||0)} a la comisión${apT[0]&&facDe(apT[0])?.invoice_no?' de la factura '+folioN(facDe(apT[0]).invoice_no):''} (FIFO)` : m._cl==='sinclas' ? 'sin clasificar en Banco' : 'pago a proveedor'
         const c=calceDeCargo(m.id); onRow=()=>onIrBanco&&onIrBanco(m.id)
         estado = c&&c.tipo==='com' ? <>{pill(C.greenBg,C.greenText,`calza con la comisión${facDe(c.t)?.invoice_no?' de la factura '+folioN(facDe(c.t).invoice_no):''}`)}{link(busy?'…':'Enlazar ›',()=>enlazar([c]))}</>
           : pagoLibre(m) ? <>{marcas[m.id]?pill(C.soonBg,C.soonText,'trabajo por identificar'):pill(C.bgSoft,C.muted,String(m.fecha)<APP_DESDE?'sin enlazar · histórico':'sin enlazar')}{link('Enlazar con… ›',()=>{setEnlP({mid:m.id});setEnlSel(new Set())})}{link('Banco ›',onRow)}</>
