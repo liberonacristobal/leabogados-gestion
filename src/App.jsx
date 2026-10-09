@@ -1985,6 +1985,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
         const {data,error} = await supabase.from('petty_cash').insert({user_name:me, ...patch}).select().single()
         if(error) throw error
         setPettyCash(p=>[data,...p])
+        logActividad('cajachica.registrada',{tabla:'petty_cash',id:data.id,detalle:{title:`Caja recibida · ${me}${patch.delivered_by?` · de ${patch.delivered_by}`:''}`,monto:patch.amount}})
       }
       setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setEditCajaId(null); setShowNuevaCaja(false)
     } catch(e) { appAlert('Error: '+e.message) }
@@ -2311,14 +2312,15 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
               <span style={{fontSize:13,fontWeight:600,color:C.muted}}>{fmtCLP(totalLiquidado)}</span>
             </div>
           </div>
-          {/* CAJAS RECIBIDAS (las registra un administrador con "Entregar caja") */}
+          {/* CAJAS RECIBIDAS: cada miembro registra lo que le transfieren (puede ser antes de la cartola); queda "por conciliar"
+              hasta que el banco la enlaza (barrido caja-chica-sweep o conciliación). Conciliada = bloqueada para el miembro. */}
           <div style={{borderTop:`0.5px solid ${C.bgSoft}`,padding:'11px 14px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
               <span style={secLbl}>Cajas recibidas</span>
-              {isAdmin&&<button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy(adminNombres.includes(me)?me:(adminNombres[0]||'')); setCajaOtra(false); setShowNuevaCaja(true) }} style={chipBtn('primary')}>+ Nueva Caja</button>}
+              <button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy(adminNombres.includes(me)?me:(adminNombres[0]||'')); setCajaOtra(false); setShowNuevaCaja(true) }} style={chipBtn('primary')}>+ Nueva Caja</button>
             </div>
-            {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas{isAdmin?'':' — las registra un administrador'}.</div>}
-            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=isAdmin&&!p.rendered_at; return (
+            {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas. Registra cada transferencia que recibas.</div>}
+            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at&&(isAdmin||!p.movimiento_id); return (
               <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||adminNombres[0]||''); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:editable?'pointer':'default'}}>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.text}}>{p.delivered_at?fmtD(p.delivered_at):'—'}{p.delivered_by?` · de ${p.delivered_by}`:''}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
