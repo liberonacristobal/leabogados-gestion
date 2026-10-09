@@ -5,7 +5,7 @@
 
 // SheetJS desde npm (el bundler de Supabase bloquea cdn.sheetjs.com). 0.18.5 lee el .xls binario de BICE idéntico (validado, dif 0).
 import * as XLSX from 'npm:xlsx@0.18.5'
-import { parseCartola, normRut } from './cartola.ts'
+import { parseCartola, normRut, huellaGlosa } from './cartola.ts'
 
 const SECRET = Deno.env.get('CARTOLA_SECRET') || ''
 const SB_URL = Deno.env.get('SUPABASE_URL') || ''
@@ -84,14 +84,24 @@ Deno.serve(async (req) => {
     const movs = parsed.movimientos || []
     if (!movs.length) return json({ inserted: 0, total: 0, error: parsed.error || 'Sin movimientos en el archivo' })
 
-    // --- Dedupe por hash, acotado al rango de fechas de la cartola ---
+    // --- Dedupe por hash y por huella de la glosa (fecha-hora real de la transferencia), ventana ±5 días ---
+    // La misma transferencia puede haber entrado por la carga manual (mensual) con otra fecha contable y sin n° de operación:
+    // el hash no calza, la huella sí (caso real: $1.215.000 a la notaría cargado 19-06 y 22-06).
     const fechas = movs.map(m => m.fecha).sort()
     const minF = fechas[0], maxF = fechas[fechas.length - 1]
-    const existentes: { hash: string }[] = await sbFetch(
-      `cartola_movimientos?select=hash&fecha=gte.${minF}&fecha=lte.${maxF}`,
+    const dd = (f: string, n: number) => { const d = new Date(f + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
+    const existentes: { hash: string, cuenta: string, tipo: string, monto: number, descripcion: string, fecha: string }[] = await sbFetch(
+      `cartola_movimientos?select=hash,cuenta,tipo,monto,descripcion,fecha&fecha=gte.${dd(minF, -5)}&fecha=lte.${dd(maxF, 5)}`,
     )
-    const yaHay = new Set(existentes.map(e => e.hash))
-    const nuevos = movs.filter(m => !yaHay.has(m.hash))
+    const yaHay = new Set(existentes.filter(e => e.fecha >= minF && e.fecha <= maxF).map(e => e.hash))
+    const huellas: Record<string, number> = {}
+    for (const e of existentes) { if (yaHay.has(e.hash)) continue; const h = huellaGlosa(e); if (h) huellas[h] = (huellas[h] || 0) + 1 }
+    const nuevos = movs.filter(m => {
+      if (yaHay.has(m.hash)) return false
+      const h = huellaGlosa(m)
+      if (h && huellas[h] > 0) { huellas[h]--; return false }
+      return true
+    })
 
     // --- Insert (con cliente_id resuelto por RUT, igual que la carga manual) ---
     let inserted = 0

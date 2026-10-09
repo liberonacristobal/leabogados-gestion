@@ -14,7 +14,7 @@ import {
   upsertBilling, updateBillingStatus, DEMO
 } from './supabase'
 import { demoData } from './demoData'
-import { parseCartola, normRut as crNormRut, rutValido, esRutPropio } from './cartola'
+import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa } from './cartola'
 import logoBlanco from './le-logo-blanco.png'
 
 // LA CLAVE ANÓNIMA NO IDENTIFICA A NADIE: viaja en este mismo paquete. Las
@@ -32573,9 +32573,15 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
           // los primeros min(N,M) ya están (soporta 2 movimientos idénticos el mismo día, ej. dos $5.000.000 el 19-08 de clientes distintos).
           let nuevosRows=rows
           if(rows.length && minF){
-            const {data:ex}=await supabase.from('cartola_movimientos').select('fecha,tipo,monto').eq('cuenta',res.cuenta).gte('fecha',minF).lte('fecha',maxF)
-            const cnt={}; (ex||[]).forEach(x=>{ const k=`${String(x.fecha).slice(0,10)}|${x.tipo}|${Math.round(x.monto||0)}`; cnt[k]=(cnt[k]||0)+1 })
-            nuevosRows=rows.filter(r=>{ const k=`${r.fecha}|${r.tipo}|${Math.round(r.monto||0)}`; if(cnt[k]>0){ cnt[k]--; return false } return true })
+            // Ventana ±5 días: la misma transferencia puede venir con otra fecha contable (glosa "el 19-06 a las 18:17" contabilizada el 22-06).
+            const _dd=(f,n)=>{ const d=new Date(f+'T12:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10) }
+            const {data:ex}=await supabase.from('cartola_movimientos').select('cuenta,fecha,tipo,monto,descripcion').eq('cuenta',res.cuenta).gte('fecha',_dd(minF,-5)).lte('fecha',_dd(maxF,5))
+            const usado=new Set()
+            // 1º por huella de la glosa (fecha y hora real de la transferencia); 2º por conteo cuenta|fecha|tipo|monto para lo que no trae hora.
+            const porHuella={}; (ex||[]).forEach((x,i)=>{ const h=huellaGlosa(x); if(h) (porHuella[h]=porHuella[h]||[]).push(i) })
+            const dupH=new Set(); rows.forEach((r,j)=>{ const h=huellaGlosa(r); if(!h) return; const i=(porHuella[h]||[]).find(i=>!usado.has(i)); if(i!==undefined){ usado.add(i); dupH.add(j) } })
+            const porDia={}; (ex||[]).forEach((x,i)=>{ if(usado.has(i)) return; const k=`${String(x.fecha).slice(0,10)}|${x.tipo}|${Math.round(x.monto||0)}`; (porDia[k]=porDia[k]||[]).push(i) })
+            nuevosRows=rows.filter((r,j)=>{ if(dupH.has(j)) return false; const k=`${r.fecha}|${r.tipo}|${Math.round(r.monto||0)}`; const l=porDia[k]; if(l&&l.length){ l.shift(); return false } return true })
           }
           const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
