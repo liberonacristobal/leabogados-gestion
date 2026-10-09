@@ -66,6 +66,18 @@ function cyrb53(str: string) {
 export function hashMovimiento(m: any) {
   return cyrb53(`${m.cuenta}|${m.fecha}|${m.tipo}|${m.monto}|${m.rut_contraparte || ''}|${m.n_operacion || ''}|${m.descripcion}`)
 }
+// Huella de la transferencia: fecha y hora REAL de la glosa ("el 19-06-2026 a las 18:17:32"). Igual que src/cartola.js:
+// la misma transferencia puede llegar con otra fecha contable y sin n° de operación → cuenta|tipo|monto|fecha-hora de la glosa|contraparte
+// (cuenta o RUT: dos retiros iguales al mismo minuto a socios distintos no son el mismo movimiento).
+// deno-lint-ignore no-explicit-any
+export function huellaGlosa(m: any) {
+  const s = String(m?.descripcion || '').replace(/\s+/g, '')
+  // Fecha con '-' (transferencias a terceros) o '/' (abonos y traspasos entre cuentas propias).
+  const g = s.match(/el(\d{2})[-/](\d{2})[-/](\d{4})alas(\d{2}):(\d{2})/i); if (!g) return null
+  const contra = (s.match(/acuenta(\d{4,})/i) || [])[1] || ((s.match(/haciacuentaN?°?([\d-]{6,})/i) || [])[1] || '').replace(/\D/g, '') || normRut((s.match(/Rut:?(\d{1,3}(?:\.?\d{3})+-?[\dkK])/i) || [])[1])
+  if (!contra) return null
+  return `${m.cuenta}|${m.tipo}|${Math.round(Number(m.monto) || 0)}|${g[3]}-${g[2]}-${g[1]} ${g[4]}:${g[5]}|${contra}`
+}
 
 const RUT_RE = String.raw`(\d{1,3}(?:\.?\d{3})+-?[\dkK])`
 const reAbono = new RegExp(`Abono por transferencia de (.+?)\\s*Rut\\s*${RUT_RE}`, 'i')
