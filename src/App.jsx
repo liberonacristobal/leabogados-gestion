@@ -167,6 +167,8 @@ const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-
 // Días en texto, plural correcto: 1 día · 72 días. Fuente única para etiquetas de tiempo relativo (no abreviar a "72 d"/"72d").
 const nDias = n => { const d=Math.abs(Math.round(Number(n)||0)); return d+' día'+(d===1?'':'s') }
 // Fecha destacada (día grande + "mes año") — formato estándar de listas. col opcional (urgencia).
+// Día grande de LISTAS (formato que eligió el usuario en Banco, 2026-10-09): día 18px + "mmm aa". Fuente única para Abonos, Cargos y caja chica.
+const diaGrande = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0}}/>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:18,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:10,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
 const bigDate = (d,col) => { /* año completo (canon de fecha: siempre con año de 4 dígitos) */ const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0}}/>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:16,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:9,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0]}</div></div> }
 // Saldo de una factura = lo que falta cobrar. FUENTE ÚNICA: lo abonado = el mayor entre paid_amount (campo de la factura) y los abonos CONCILIADOS del banco (_respaldoCache, suma de conciliacion.monto_aplicado). Así nunca cuenta doble ni ignora un abono que el banco ya respaldó. Pagada/Anulada = 0.
 let _respaldoCache = {}
@@ -2438,7 +2440,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
                 <div style={{fontSize:12,fontWeight:700,color:C.soonText,marginBottom:8}}>Te transfirieron y no está registrado · {items.length}</div>
                 {items.map(({cargo:m,sug})=>{ const b=ccBusy===m.id; return (
                   <div key={m.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:7}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>{bigDate(_glosaTransf(m.descripcion).fecha||m.fecha)}<div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>{diaGrande(_glosaTransf(m.descripcion).fecha||m.fecha)}<div style={{flex:1,minWidth:0}}>
                       {(()=>{ const g=_glosaTransf(m.descripcion); return <span style={{fontSize:12,fontWeight:600,color:C.text}}>Transferencia a ti{g.hora?<span style={{color:C.muted,fontWeight:400}}> · {g.hora}</span>:null}{g.cuenta?<span style={{color:C.muted,fontWeight:400}}> · cuenta ···{g.cuenta}</span>:null}</span> })()}</div>
                       <span style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(Math.abs(m.monto||0))}</span>
                     </div>
@@ -2466,7 +2468,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
             {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas. Registra cada transferencia que recibas.</div>}
             {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at&&(isAdmin||!p.movimiento_id); return (
               <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||adminNombres[0]||''); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:editable?'pointer':'default'}}>
-                <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>{bigDate(p.delivered_at)}<div style={{minWidth:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>{diaGrande(p.delivered_at)}<div style={{minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.text}}>{p.delivered_by?`De ${p.delivered_by}`:'Caja recibida'}{p.notes&&!String(p.notes).startsWith('Abono caja chica')&&!String(p.notes).startsWith('Registrada desde')?<span style={{color:C.muted}}> · {String(p.notes).replace(/\s*·\s*mov:[0-9a-f-]+/g,'')}</span>:null}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
                   {(()=>{ const d=p.delivered_at?_ccDias(new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),p.delivered_at):0; const sinBanco=!p.movimiento_id&&!p.rendered_at&&d>=5
                     const tm=p.movimiento_id&&misTransf.find(m=>m.id===p.movimiento_id); const tf=tm?(_glosaTransf(tm.descripcion).fecha||tm.fecha):null
@@ -33996,10 +33998,16 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
       // porresolver = unión: sin identificar + por conciliar + descalces (todos los abonos que faltan cruzar), sin duplicar como categorías separadas.
       else if(concView==='porresolver') l=l.filter(m=>keepOpen(m)||(!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m))))
     }
-    else if(sub==='cargos'&&concView==='clasificar'){
+    else if(sub==='cargos'&&concView!=='todos'){
       // Cargos que piden tu criterio: sin categoría, no internos, no conciliados. El foco "Por clasificar" (foto arriba) filtra a esta base.
+      // Chips de escritorio (mismo patrón que Abonos): sugeridas (la app propone por RUT), caja chica, clasificados, internos.
       const keepOpen=m=>String(m.id)===String(modalMov)
-      l=l.filter(m=>keepOpen(m)||(!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria))
+      const porClas=m=>!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria
+      if(concView==='clasificar') l=l.filter(m=>keepOpen(m)||porClas(m))
+      else if(concView==='c_sugeridas') l=l.filter(m=>keepOpen(m)||(porClas(m)&&!!cargoSugerencia(m)))
+      else if(concView==='c_caja') l=l.filter(m=>keepOpen(m)||m.categoria==='Caja chica')
+      else if(concView==='c_clasificados') l=l.filter(m=>keepOpen(m)||(!m.es_interno&&(concByMov[m.id]?.length||m.categoria)))
+      else if(concView==='c_internos') l=l.filter(m=>keepOpen(m)||m.es_interno)
     }
     // Búsqueda por RUT / nombre del banco / cliente resuelto.
     if(q.trim()){ const qq=q.trim().toLowerCase(), qd=q.replace(/[^0-9kK]/g,'').toLowerCase()
@@ -34012,6 +34020,16 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concView,concByMov,billing,q,orden,cmap,modalMov])
   // Contadores de los chips de estado sobre la MISMA base filtrada que la lista (cuenta/mes/año/resp) — evita mostrar "88" cuando la vista filtrada está vacía.
   const chipCounts = useMemo(()=>{
+    const _base=tipo=>{ let l=movs.filter(m=>m.tipo===tipo)
+      if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
+      if(anioF!=='todos') l=l.filter(m=>(m.fecha||'').slice(0,4)===anioF)
+      if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
+      return l }
+    const _h0=Date.now(), _viejo=m=>{ const t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; return !isNaN(t)&&(_h0-t)/86400000>90 }
+    if(sub==='cargos'){ const l=_base('cargo'), pc=l.filter(m=>!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria)
+      return { clasificar:pc.length, clasificarMonto:pc.reduce((a,m)=>a+Math.abs(m.monto||0),0), clasificar90:pc.filter(_viejo).reduce((a,m)=>a+Math.abs(m.monto||0),0),
+        sugeridas:pc.filter(m=>!!cargoSugerencia(m)).length, caja:l.filter(m=>m.categoria==='Caja chica').length,
+        clasificados:l.filter(m=>!m.es_interno&&(concByMov[m.id]?.length||m.categoria)).length, internos:l.filter(m=>m.es_interno).length } }
     if(sub!=='abonos') return {porresolver:0,porresolverMonto:0,porresolver90:0,porconciliar:0,descalces:0,sinid:0,conciliados:0}
     let l=movs.filter(m=>m.tipo==='abono')
     if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
@@ -34176,7 +34194,7 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
     return <span onClick={e=>{e.stopPropagation();verMovCC(c.id)}} style={{color:C.accent,fontWeight:600,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.border}}>transferencia {fmtFechaDMY(real?g.fecha:c.fecha)}{g.hora?` ${g.hora}`:''} {fmtM(c.monto)}{real?` (banco ${fmtFechaDMY(c.fecha)})`:''}</span> }
   const ccSugRow = (s,i)=>{ const p=s.cajas[0], lbl={exacto:'Es esta ✓',ajustar:'Ajustar y enlazar',fusionar:'Juntar y enlazar',dividir:'Dividir y enlazar'}[s.tipo]; const b=busy&&s.cargos.some(c=>c.id===busy); return (
     <div key={'s'+i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 11px',border:`1px solid ${C.border}`,background:'#fff',borderRadius:10,marginBottom:7}}>
-      {bigDate(p.delivered_at)}
+      {diaGrande(p.delivered_at)}
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.user_name} · {s.cajas.map(c=>`caja ${fmtM(c.amount)}${s.cajas.length>1?` (${fmtFechaDMY(c.delivered_at)})`:''}`).join(' + ')}</div>
         <div style={{fontSize:10,color:C.muted,marginTop:2}}>↔ {s.cargos.map((c,k)=><Fragment key={c.id}>{k?' + ':''}{ccTransfLbl(c)}</Fragment>)} <span style={{color:C.soonText,fontWeight:700}}>· {s.motivo}</span></div>
@@ -34185,7 +34203,7 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
     </div>) }
   const ccRow = (petty,cargo,kind,motivo)=> (
     <div key={petty.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 11px',border:`1px solid ${kind==='ok'?'#CFE9DD':C.border}`,background:'#fff',borderRadius:10,marginBottom:7}}>
-      {bigDate(petty.delivered_at)}
+      {diaGrande(petty.delivered_at)}
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:700,color:C.text}}>{petty.user_name} · caja chica <span style={{color:C.accent}}>{fmtM(petty.amount)}</span></div>
         <div style={{fontSize:10,color:C.muted,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:2}}>
@@ -34892,6 +34910,36 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
   // sus partes son los filtros, y "Listo para conciliar" es un aviso con su botón. Izquierda: lista corta; derecha: el movimiento elegido (detalleMov, fuente única).
   const _MESL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const quienMov = m => (m.cliente_id&&cmap[m.cliente_id])||(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))
+  // Escritorio · Cargos: misma vista que Abonos (foto + chips + lista por mes + detalle al lado), render aprobado 2026-10-09.
+  const deskFotoCargos = (isDesktop&&sub==='cargos') ? (()=>{
+    const tabs=[
+      {v:'clasificar',l:'Por clasificar',n:chipCounts.clasificar,c:C.soonText},
+      {v:'c_sugeridas',l:'Sugeridas por RUT',n:chipCounts.sugeridas,c:C.greenText},
+      {v:'c_caja',l:'Caja chica',n:chipCounts.caja,c:C.accent},
+      {v:'c_clasificados',l:'Clasificados',n:chipCounts.clasificados,c:C.greenText},
+      {v:'c_internos',l:'Internos',n:chipCounts.internos,c:C.muted},
+      {v:'todos',l:'Todos',n:null},
+    ]
+    const pc=chipCounts.clasificar
+    return (
+      <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:12}}>
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',minHeight:30}}>
+          {pc>0
+            ? <div onClick={()=>{setConcView('clasificar');setDeskSel(null)}} style={{display:'flex',alignItems:'baseline',gap:12,cursor:'pointer',flexWrap:'wrap'}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Por clasificar</span>
+                <span style={{fontSize:22,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums',letterSpacing:-.4}}>{fmt(chipCounts.clasificarMonto)}</span>
+                <span style={{fontSize:11.5,color:C.muted}}>{pc} cargo{pc!==1?'s':''}{chipCounts.clasificar90>0?` · ${fmt(chipCounts.clasificar90)} lleva +90 días`:''}</span>
+              </div>
+            : <span style={{display:'inline-flex',alignItems:'center',gap:8,fontSize:14,fontWeight:600,color:C.greenText}}><SIcon n='check' s={15} c={C.greenText}/>Todo clasificado</span>}
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+          {tabs.map(t=>{ const on=concView===t.v; return (
+            <button key={t.v} onClick={()=>{setConcView(t.v);setDeskSel(null)}} style={{display:'inline-flex',alignItems:'center',gap:6,minHeight:32,padding:'0 13px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.surface,color:on?'#fff':C.text,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
+              {t.l}{t.n!=null&&<b style={{fontVariantNumeric:'tabular-nums',color:on?'#fff':(t.n>0?t.c:C.muted)}}>{t.n}</b>}
+            </button>) })}
+        </div>
+      </div>)
+  })() : null
   const deskFoto = (isDesktop&&sub==='abonos') ? (()=>{
     const tabs=[
       {v:'porresolver',l:'Por resolver',n:chipCounts.porresolver,c:C.overdueText},
@@ -34926,12 +34974,14 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
         </div>
       </div>)
   })() : null
-  const deskPanes = (isDesktop&&sub==='abonos') ? (()=>{
+  const deskPanes = (isDesktop&&(sub==='abonos'||sub==='cargos')) ? (()=>{
     const found = deskSel ? lista.findIndex(m=>m.id===deskSel.id) : -1
     const selIdx = lista.length ? (found>=0 ? found : Math.min(deskSel?.idx||0, lista.length-1)) : -1
     const sel = selIdx>=0 ? lista[selIdx] : null
     const go = i => { const m=lista[i]; if(m){ setDeskSel({id:m.id,idx:i}); setVerGlosa(false) } }
     const TOPE=600
+    // Total neto por mes (tile del mes, opción B del render): suma de lo que muestra la lista en ese mes.
+    const totMes={}; lista.slice(0,TOPE).forEach(m=>{ const k=String(m.fecha||'').slice(0,7); totMes[k]=(totMes[k]||0)+(m.tipo==='abono'?1:-1)*Math.abs(m.monto||0) })
     return (
       <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
         <div style={{width:400,flexShrink:0,border:`1px solid ${C.border}`,borderRadius:12,background:C.surface,overflow:'hidden'}}>
@@ -34941,13 +34991,14 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
             const ec=estadoChip(m), on=i===selIdx
             return (
               <Fragment key={m.id}>
-                {(i===0||ym!==pym)&&<div style={{padding:'8px 14px 6px',fontSize:10.5,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,background:C.bgSoft,borderTop:i?`1px solid ${C.border}`:'none'}}>{_MESL[+ym.slice(5,7)-1]||ym} {ym.slice(0,4)}</div>}
-                <div onClick={()=>go(i)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer',background:on?C.azulBg:C.surface,boxShadow:on?`inset 0 0 0 1.5px ${C.accent}`:'none'}}>
-                  <span style={{width:8,height:8,borderRadius:'50%',background:ec.c,flexShrink:0}}/>
+                {(i===0||ym!==pym)&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 14px',fontSize:13,fontWeight:700,color:C.accent,background:C.toggleOff,borderTop:i?`1px solid ${C.border}`:'none'}}><span>{_MESL[+ym.slice(5,7)-1]||ym} {ym.slice(0,4)}</span><span style={{fontVariantNumeric:'tabular-nums',color:(totMes[ym]||0)<0?C.overdueText:C.greenText}}>{(totMes[ym]||0)<0?'−':'+'}{fmtM(Math.abs(totMes[ym]||0))}</span></div>}
+                <div onClick={()=>go(i)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer',background:on?C.azulBg:C.surface,boxShadow:on?`inset 0 0 0 1.5px ${C.accent}`:'none'}}>
+                  {diaGrande(m.fecha)}
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{quienMov(m)}</div>
-                    <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtFechaDMY(m.fecha)} · {ec.t}</div>
+                    <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ec.t}{m.tipo==='cargo'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria&&cargoSugerencia(m)?' · sugerida':''}</div>
                   </div>
+                  <span style={{width:8,height:8,borderRadius:'50%',background:ec.c,flexShrink:0}}/>
                   <span style={{fontSize:13,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',flexShrink:0}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                 </div>
               </Fragment>) })}
@@ -34959,6 +35010,7 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
             return (
             <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'16px 18px'}}>
               <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
+                {diaGrande(sel.fecha)}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:18,fontWeight:700,color:sel.cliente_id&&onOpenClientFicha?C.accent:C.text,cursor:sel.cliente_id&&onOpenClientFicha?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={sel.cliente_id&&onOpenClientFicha?()=>onOpenClientFicha(sel.cliente_id):undefined} title={sel.cliente_id&&onOpenClientFicha?'Ver ficha del cliente':undefined}>{quienMov(sel)}</div>
                   <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{fmtFechaDMY(sel.fecha)} · {rolChip(sel.rol_cuenta).t}{sel.rut_contraparte?` · ${sel.rut_contraparte}`:''}{sel.cliente_id&&sel.nombre_contraparte&&sel.nombre_contraparte!==quienMov(sel)?` · ${sel.nombre_contraparte}`:''}</div>
@@ -34982,11 +35034,11 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
       </div>)
   })() : null
   const interiorEl = (
-    <div style={{paddingBottom:80,...(isDesktop?{maxWidth:sub==='abonos'?1240:980,margin:'0 auto'}:{})}}>
+    <div style={{paddingBottom:80,...(isDesktop?{maxWidth:(sub==='abonos'||sub==='cargos')?1240:980,margin:'0 auto'}:{})}}>
       <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button onClick={()=>setHubOpen(true)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
-          {focused&&focoMeta&&!(isDesktop&&sub==='abonos')   // escritorio abonos: la foto de abajo ya dice el foco y su cifra (no repetir)
+          {focused&&focoMeta&&!(isDesktop&&(sub==='abonos'||sub==='cargos'))   // escritorio abonos: la foto de abajo ya dice el foco y su cifra (no repetir)
             ? <div style={{display:'flex',alignItems:'center',gap:9,flex:1,minWidth:0}}>
                 <span style={{width:30,height:30,borderRadius:8,background:focoMeta.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={focoMeta.ic} s={16} c={focoMeta.col}/></span>
                 <div style={{minWidth:0}}>
@@ -35270,7 +35322,8 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
         })()}
 
         {/* Cargos — foto "Por clasificar": los que piden tu criterio (sin categoría), simétrica al "Por resolver" de abonos. Toca para ver solo esos; cada fila ya trae su clasificación inline (cargoInlineSug). */}
-        {sub==='cargos'&&(()=>{
+        {isDesktop&&sub==='cargos'&&!unoMode&&deskFotoCargos}
+        {sub==='cargos'&&!isDesktop&&(()=>{
           if(!ccN) return null
           const n=ccN, tot=ccMonto, on=concView==='clasificar'
           return (
@@ -35441,9 +35494,9 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
           )
         })()}
         {isDesktop&&sub==='abonos'&&!unoMode&&deskFoto}
-        {isDesktop&&sub==='abonos'&&!unoMode&&deskPanes}
+        {isDesktop&&(sub==='abonos'||sub==='cargos')&&!unoMode&&deskPanes}
         {/* Título de la lista: separa el resumen (arriba) de los movimientos (abajo). Se oculta en modo bandeja. */}
-        {!unoMode&&!(isDesktop&&sub==='abonos')&&<>
+        {!unoMode&&!(isDesktop&&(sub==='abonos'||sub==='cargos'))&&<>
         <div style={{display:'flex',alignItems:'center',gap:8,margin:'2px 3px 6px'}}>
           <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Movimientos</span>
           <span onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:3}}>Fecha
@@ -35491,7 +35544,7 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
               {_yOpen&&_mOpen&&(
               <div id={'mov-'+m.id} style={{padding:'10px 12px',background:'#fff',borderTop:`1px solid #D7DEE3`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
                 <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer',display:'flex',gap:10,alignItems:'center'}}>
-                  <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}>{(()=>{const dp=String(m.fecha||'').slice(0,10).split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return <><div style={{fontSize:18,fontWeight:700,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:C.muted,fontWeight:600}}>{dp.length>=3?`${M[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></>})()}</div>
+                  {diaGrande(m.fecha)}
                   <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
                     <span onClick={m.cliente_id&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(m.cliente_id)}:undefined} title={m.cliente_id&&onOpenClientFicha?'Ver ficha del cliente':undefined} style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:m.cliente_id&&onOpenClientFicha?'pointer':'inherit'}}>{cliName||nomBanco}</span>
@@ -35562,11 +35615,11 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
           </div>}
           {revisionCC.cajasSinTransf.length>0 && <div>
             <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.overdueText,margin:'4px 0 7px'}}>Cajas sin transferencia en el banco</div>
-            {revisionCC.cajasSinTransf.map(({petty:p,dias})=> <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',border:`1px solid ${C.border}`,borderRadius:10,marginBottom:7}}>{bigDate(p.delivered_at)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{p.user_name} · caja{p.notes?` · ${String(p.notes).replace(/\s*·\s*mov:[0-9a-f-]+/g,'')}`:''}</div><div style={{fontSize:10,color:dias>=5?C.overdueText:C.muted,fontWeight:dias>=5?700:400}}>{dias>=5?`${nDias(dias)} sin transferencia que la respalde · ¿salió de otra cuenta?`:'esperando la cartola del banco'}</div></div><div style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtM(p.amount)}</div></div>)}
+            {revisionCC.cajasSinTransf.map(({petty:p,dias})=> <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',border:`1px solid ${C.border}`,borderRadius:10,marginBottom:7}}>{diaGrande(p.delivered_at)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{p.user_name} · caja{p.notes?` · ${String(p.notes).replace(/\s*·\s*mov:[0-9a-f-]+/g,'')}`:''}</div><div style={{fontSize:10,color:dias>=5?C.overdueText:C.muted,fontWeight:dias>=5?700:400}}>{dias>=5?`${nDias(dias)} sin transferencia que la respalde · ¿salió de otra cuenta?`:'esperando la cartola del banco'}</div></div><div style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtM(p.amount)}</div></div>)}
           </div>}
           {revisionCC.transfSinCaja.length>0 && <div>
             <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.done,margin:'4px 0 7px'}}>Transferencias sin caja registrada · el miembro recibe un aviso</div>
-            {revisionCC.transfSinCaja.map(({cargo:m,persona,dias,esCaja,posibleSueldo})=> <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',border:`1px solid ${C.border}`,borderRadius:10,marginBottom:7}}>{bigDate(_glosaTransf(m.descripcion).fecha||m.fecha)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{persona} · {ccTransfLbl(m)}</div><div style={{fontSize:10,color:C.muted}}>{posibleSueldo?'mismo monto que su sueldo':esCaja?'clasificada como caja chica':'sin clasificar'} · hace {nDias(dias)}</div></div>
+            {revisionCC.transfSinCaja.map(({cargo:m,persona,dias,esCaja,posibleSueldo})=> <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',border:`1px solid ${C.border}`,borderRadius:10,marginBottom:7}}>{diaGrande(_glosaTransf(m.descripcion).fecha||m.fecha)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{persona} · {ccTransfLbl(m)}</div><div style={{fontSize:10,color:C.muted}}>{posibleSueldo?'mismo monto que su sueldo':esCaja?'clasificada como caja chica':'sin clasificar'} · hace {nDias(dias)}</div></div>
               <button disabled={!!busy} onClick={()=>abonoCajaChica(m,persona)} style={{fontSize:11,fontWeight:700,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Crear caja</button>
               <button disabled={!!busy} onClick={()=>marcarNoCajaCC(m)} style={{fontSize:11,fontWeight:700,color:C.muted,background:'none',border:'none',padding:'5px 6px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>No es caja</button></div>)}
           </div>}
