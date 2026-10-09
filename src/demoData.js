@@ -228,12 +228,19 @@ export const demoData = {
     { id:'td7', title:'Revisar borrador de demanda',        client_id:'c3', project:'Litigio laboral',     status:'Activo', due:'2026-09-18', assignees:['Demo','Martín'], assigned_by:'Demo', created_at:'2026-09-10' },
   ],
   proveedores: [
-    { id:'pv1', nombre:'Notaría Edwards',     razon_social:'Notaría Edwards y Cía.', rut:'77.900.100-2' },
-    { id:'pv2', nombre:'Estudio Contable MJ', razon_social:'MJ Asesorías Ltda.',     rut:'76.500.300-4' },
+    { id:'pv1', nombre:'Andrés Rojas',    razon_social:'Rojas Abogados SpA',  rut:'77.900.100-2', datos_pago:'Banco de Chile · cuenta corriente 00-123-45678-90 · 77.900.100-2 · pagos@rojasabogados.cl' },
+    { id:'pv2', nombre:'María José Soto', razon_social:'MJ Asesorías Ltda.',  rut:'76.500.300-4' },
   ],
   terceros_pagos: [
-    { id:'tp1', billing_id:'b4',  proveedor_id:'pv1', proveedor:'Notaría Edwards',     monto:4000000, estado:'por_pagar', tipo_costo:'Notaría',      sale_id:'s7', created_at:'2026-03-22' },
-    { id:'tp2', billing_id:'b10', proveedor_id:'pv2', proveedor:'Estudio Contable MJ', monto:3000000, estado:'pendiente', tipo_costo:'Contabilidad', sale_id:'s6', created_at:'2026-05-28' },
+    { id:'tp1', billing_id:'b4',  proveedor_id:'pv1', proveedor:'Andrés Rojas',    monto:4000000, estado:'por_pagar', tipo_costo:'clp', sale_id:'s7', created_at:'2026-03-22' },
+    { id:'tp2', billing_id:'b10', proveedor_id:'pv2', proveedor:'María José Soto', monto:3000000, estado:'pendiente', tipo_costo:'clp', sale_id:'s6', created_at:'2026-05-28' },
+    { id:'tp3', billing_id:'b5',  proveedor_id:'pv1', proveedor:'Andrés Rojas',    monto:1500000, estado:'pagado', pagado_at:'2026-05-10', movimiento_id:'movpv2', tipo_costo:'clp', comision_pct:15, comision_monto:264706, created_at:'2026-04-05' },
+  ],
+  // Facturas que los proveedores le emiten al estudio (SII · registro de compras)
+  sii_compras_docs: [
+    { id:'dpv1', folio:'120', tipo_dte:33, fecha_emision:'2026-07-01', emisor_rut:'77.900.100-2', monto:4000000, proveedor_id:'pv1', movimiento_id:null },
+    { id:'dpv2', folio:'98',  tipo_dte:33, fecha_emision:'2026-05-02', emisor_rut:'77.900.100-2', monto:1500000, proveedor_id:'pv1', movimiento_id:null },
+    { id:'dpv3', folio:'55',  tipo_dte:34, fecha_emision:'2026-06-10', emisor_rut:'76.500.300-4', monto:3000000, proveedor_id:'pv2', movimiento_id:null },
   ],
   anticipos: [
     { id:'ant1', client_id:'c4', monto:1500000, fecha:'2026-06-10', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
@@ -243,6 +250,8 @@ export const demoData = {
   ],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.
   cartola_movimientos: [
+    { id:'movpv1', fecha:'2026-07-20', monto:4000000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'77.900.100-2', nombre_contraparte:'Rojas Abogados SpA', descripcion:'Transf. a terceros vía Internet', categoria:null },
+    { id:'movpv2', fecha:'2026-05-10', monto:1500000, tipo:'cargo', es_interno:false, estado:'conciliado', monto_conciliado:1500000, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'77.900.100-2', nombre_contraparte:'Rojas Abogados SpA', descripcion:'Transf. a terceros vía Internet', categoria:'Proveedor' },
     { id:'mov1', fecha:'2026-07-10', monto:40000000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:40000000, rol_cuenta:'honorarios', cliente_id:'c6', rut_contraparte:'77.444.555-6', nombre_contraparte:'Clínica San Rafael SpA', descripcion:'Abono por transferencia de Clinica San Rafael SpA Rut 77444555-6 desde BCI', n_operacion:'6618172' },
     { id:'mov2', fecha:'2026-06-28', monto:23400000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:23400000, rol_cuenta:'honorarios', cliente_id:'c5', rut_contraparte:'76.222.333-4', nombre_contraparte:'Viñedos del Maipo Ltda', descripcion:'Transferencia de Viñedos del Maipo Ltda', n_operacion:'4358120' },
     { id:'mov3', fecha:'2026-06-20', monto:4000000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:'77.777.888-9', nombre_contraparte:'Tech Araucanía SpA', descripcion:'Abono por transferencia de Tech Araucania SpA', n_operacion:'237500' },
@@ -276,6 +285,7 @@ export const demoData = {
   ],
   cliente_alias: [],
   conciliacion: [
+    { id:'conpv2', movimiento_id:'movpv2', tipo_destino:'tercero', factura_id:null, anticipo_id:null, monto_aplicado:1500000, origen:'demo' },
     { id:'con1', movimiento_id:'mov1', tipo_destino:'factura', factura_id:'b10', anticipo_id:null, monto_aplicado:40000000, origen:'demo', marco_pago:true },
     { id:'con2', movimiento_id:'mov2', tipo_destino:'factura', factura_id:'b11', anticipo_id:null, monto_aplicado:23400000, origen:'demo', marco_pago:true },
     { id:'conp20', movimiento_id:'movp20', tipo_destino:'factura', factura_id:'b1', anticipo_id:null, monto_aplicado:3510000, origen:'demo', marco_pago:true },
