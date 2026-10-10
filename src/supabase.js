@@ -94,12 +94,15 @@ export const getClients = async () => {
   return data
 }
 
+// Con id = editar (UPDATE); sin id = crear (INSERT). No upsert: Postgres trata el upsert como INSERT y la política
+// "solo admin crea clientes" bloquearía también las ediciones de los perfiles limitados.
 export const upsertClient = async (client) => {
-  const { data, error } = await supabase
-    .from('clients')
-    .upsert(client, { onConflict: 'id' })
-    .select()
-    .single()
+  if (DEMO) return { ...client, id: client.id || ('demo-c-' + Date.now()) }   // demo: la base es inerte (no devuelve filas)
+  const { id, ...rest } = client
+  const q = id
+    ? supabase.from('clients').update(rest).eq('id', id)
+    : supabase.from('clients').insert(rest)
+  const { data, error } = await q.select().single()
   if (error) throw error
   return data
 }
