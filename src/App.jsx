@@ -1018,7 +1018,7 @@ function calceCajaChica(petty, movs, {equipo, conciliados=new Set(), sueldos={},
   // 5) Monto distinto (±30%, ±3 días): la caja se ajusta a lo transferido (la diferencia suele ser lo que el miembro cubrió de su bolsillo).
   cajas.filter(p=>!usadosP.has(p.id)).forEach(p=>{ const c=libres(p).filter(m=>Math.abs(monto(m)-monto(p))<=0.3*Math.max(monto(m),monto(p))).sort((a,b)=>Math.abs(monto(a)-monto(p))-Math.abs(monto(b)-monto(p)))[0]; if(!c) return
     usadosM.add(c.id); usadosP.add(p.id); const dif=monto(c)-monto(p)
-    sugeridos.push({tipo:'ajustar',cajas:[p],cargos:[c],motivo:`se transfirió ${dif>0?'más':'menos'} (${dif>0?'+':'−'}${fmtCLP(Math.abs(dif))}) · la caja queda en lo transferido`}) })
+    sugeridos.push({tipo:'ajustar',cajas:[p],cargos:[c],motivo:`se transfirió ${dif>0?'más':'menos'} (${dif>0?'+':'−'}${fmtN(Math.abs(dif))}) · la caja queda en lo transferido`}) })
   const h=hoy||new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cajasSinTransf=cajas.filter(p=>!usadosP.has(p.id)).map(p=>({petty:p,dias:_ccDias(h,p.delivered_at)}))
   // Transferencias sin caja: solo las de los últimos 60 días (lo antiguo sin conciliar es historia, no un pendiente del miembro).
@@ -3378,7 +3378,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
   )
 }
 
-function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,onEntregarCaja,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
+function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,onEntregarCaja,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
   const go = t => navTo ? navTo({tab:t}) : setTab(t)   // salto que apila origen+scroll (navTo) para que "Volver" regrese al Inicio en su posición exacta
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   const [verTodosProy,setVerTodosProy] = useState(false)   // "Ver todos" en Mis proyectos: carga mis terminados y muestra los 3 grupos
@@ -17301,7 +17301,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               {k:'dup', t:'Duplicados del archivo · se omite 1', n:dups.length, col:C.soon, items:dups},
             ].filter(s=>s.n>0)
             const tileOpen = concilOpen==='act'||concilOpen==='new'
-            return (
+            const resto = (
             <div style={{marginBottom:10}}>
               <div style={{fontSize:12,color:'#26424E',background:C.azulBg,borderRadius:10,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{nCorr} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya cargadas</b></>:''}, <b>{nNuev} nuevas</b>{concil.posibles.length>0?<> y <b style={{color:'#9A5B12'}}>{concil.posibles.length} posibles duplicados</b> a revisar</>:''}. Destilda las que no quieras; haz una parte ahora y otra después — al re-subir retoma sin duplicar ni rehacer lo hecho.</div>
               {tipo!=='fondo'&&<div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
@@ -17355,7 +17355,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                 </div>}
               </div>}
               {avisos.length>0&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                {avisos.map((s,i)=>{ const open=concilOpen===s.k; const resto = (
+                {avisos.map((s,i)=>{ const open=concilOpen===s.k; return (
                   <div key={s.k} style={{borderTop:i?`0.5px solid ${C.border}`:'none'}}>
                     <div onClick={()=>setConcilOpen(open?null:s.k)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
                       <span style={{width:9,height:9,borderRadius:'50%',background:s.col,flexShrink:0}}/>
@@ -25310,7 +25310,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
 
       for(const yf of yearFolders){
         const resYear=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${yf.id}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
-        const yearClients=(resYear.files||[]).filter(f=>!existingNames.includes(nrmName(f.name)))
+        const yearClients=(resYear.files||[]).filter(f=>!existingNames.has(nrmCliente(f.name)))
         if(yf.name.includes('2024')) setTerminados2024(yearClients)
         if(yf.name.includes('2025')) setTerminados2025(yearClients)
       }
@@ -28380,7 +28380,7 @@ const ME_DOMAIN = BRAND.web
 // Buscador de cliente (escribe para filtrar) — para asignar contactos sin cliente claro.
 function ClientePicker({clients=[], onPick}){
   const [q,setQ]=useState(''); const [open,setOpen]=useState(false)
-  const matches = q.trim()? clients.filter(c=>String_normTxt(c.name).includes(_normTxt(q))).slice(0,8):[]
+  const matches = q.trim()? clients.filter(c=>_normTxt(c.name).includes(_normTxt(q))).slice(0,8):[]
   return (
     <div style={{position:'relative',marginTop:4}}>
       <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder='Buscar cliente…' style={{width:'100%',maxWidth:240,height:32,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:12,color:C.text,background:C.bgSoft,colorScheme:'light',WebkitTextFillColor:C.text,outline:'none',boxSizing:'border-box'}}/>
@@ -31313,7 +31313,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             <span style={{ width:9, height:9, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0, marginTop:7 }}/>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                <span style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>{p.nombre_proyecto||etapaNm}</span>
+                <span style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>{p.nombre_proyecto||'Proyecto'}</span>
                 <span onClick={()=>{ const nx=_TIPO_ORDEN[(_TIPO_ORDEN.indexOf(tipoDe(p))+1)%_TIPO_ORDEN.length]; onSetTipo&&onSetTipo(p.id,nx) }} title='Tipo de encargo — toca para cambiar' style={{ fontSize:9.5, fontWeight:700, color:tm.c, background:tm.bg, borderRadius:20, padding:'2px 9px', cursor:'pointer' }}>{tm.l}</span>
                 {p.pausado&&<span style={{ fontSize:9.5, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 9px' }}>En pausa</span>}
                 {terminado&&<span style={{ fontSize:9.5, fontWeight:700, color:C.done, background:C.bgSoft, borderRadius:20, padding:'2px 9px' }}>Terminado</span>}
@@ -34337,11 +34337,11 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
     const mt = x => Math.round(Math.abs(x.monto||0))
     try{
       if(s.tipo==='ajustar'){
-        const nota=`${p.notes||''} · ajustada de ${fmtCLP(p.amount)} a lo transferido`.trim()
+        const nota=`${p.notes||''} · ajustada de ${fmtN(p.amount)} a lo transferido`.trim()
         if(!DEMO){ const {error}=await supabase.from('petty_cash').update({amount:mt(c1),notes:nota}).eq('id',p.id); if(error) throw error }
         const p2={...p,amount:mt(c1),notes:nota}; setPettyCash&&setPettyCash(x=>x.map(y=>y.id===p.id?p2:y)); await enlazarCajaChica(c1,p2)
       } else if(s.tipo==='fusionar'){
-        const nota=`${p.notes||''} · + caja ${fmtFechaDMY(q.delivered_at)} ${fmtCLP(q.amount)}${q.notes?` (${q.notes})`:''}`.trim()
+        const nota=`${p.notes||''} · + caja ${fmtFechaDMY(q.delivered_at)} ${fmtN(q.amount)}${q.notes?` (${q.notes})`:''}`.trim()
         if(!DEMO){ const {error}=await supabase.from('petty_cash').update({amount:mt(c1),notes:nota}).eq('id',p.id); if(error) throw error
           const {error:e2}=await supabase.from('petty_cash').delete().eq('id',q.id); if(e2) throw e2 }
         const p2={...p,amount:mt(c1),notes:nota}; setPettyCash&&setPettyCash(x=>x.filter(y=>y.id!==q.id).map(y=>y.id===p.id?p2:y)); await enlazarCajaChica(c1,p2)
@@ -38656,7 +38656,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
         <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={handleCreateOccasional} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
