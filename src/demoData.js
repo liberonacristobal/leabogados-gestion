@@ -170,6 +170,10 @@ export const demoData = {
     { id:'x8',  client_id:'c3', type:'gasto', amount:90000,  concept:'Fotocopias y trámites',        category:'Otro',           date:'2026-06-05', created_by:'Martín',  rendered_at:null },
     { id:'x9',  client_id:'c7', type:'gasto', amount:75000,  concept:'Notaría — poder',              category:'Notaria',        date:'2026-06-08', created_by:'Martín',  rendered_at:null },
     { id:'x10', client_id:'c5', type:'gasto', amount:40000,  concept:'Estacionamiento y traslados',  category:'Otro',           date:'2026-06-10', created_by:'Martina', rendered_at:null },
+    // Gastos sin trabajo (página "Gastos sin trabajo"): un caso por texto, uno para IA y un fondo sin venta asignada.
+    { id:'xv1', client_id:'c5', type:'gasto', amount:95000,  concept:'Solicitud de registro de marca INAPI', category:'Otro', date:'2026-07-02', created_by:'Martina' },
+    { id:'xv2', client_id:'c2', type:'gasto', amount:45000,  concept:'Copias de escrituras para due diligence', category:'Notaria', ot_number:'48402', date:'2026-08-26', created_by:'Martina' },
+    { id:'xv3', client_id:'c2', type:'fondo', amount:500000, concept:'Provisión de fondos (conciliación bancaria)', category:'Fondo', date:'2026-08-12', created_by:'Cristóbal' },
     // Notaría — carga masiva "bi1" (por pagar): alimenta Notaría (Deuda / Cobros / Carga masiva).
     { id:'n1',  bulk_import_id:'bi1', client_id:'c1', type:'gasto', amount:80000,  ot_number:'48301', concept:'Gastos notariales — Compraventa',            category:'Notaria', date:'2026-08-18', created_by:'Martina', paid_by_client:false },
     { id:'n2',  bulk_import_id:'bi1', client_id:'c1', type:'gasto', amount:40000,  ot_number:'48305', concept:'Gastos notariales — Alzamiento de prenda',    category:'Notaria', date:'2026-08-18', created_by:'Martina', paid_by_client:false },

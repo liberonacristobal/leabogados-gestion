@@ -1086,16 +1086,42 @@ async function logCargaSII({tipo, n=0, user, period=null, files=[]}){
   try{ await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period, docs_total:n, skipped:0, files, counts:n?{cre:n}:{}, tipo }) }catch(_){}
 }
 
+// CORTE DE APERTURA: lo anterior al corte se resume en UN movimiento "Saldo de apertura" (category 'Apertura': fondo si queda
+// a favor del cliente, gasto si nos debe, $0 = cerrado) y los movimientos de antes quedan con apertura_id = esa fila → siguen
+// visibles e intactos, pero ya no suman al saldo ni se rinden. Deshacer = borrar la apertura (apertura_id vuelve a null).
+const CORTE_APERTURA = '2026-06-01'
+const cuentaEnSaldo = e => !e?.apertura_id
+// ¿Queda ANTES del corte? Lo vivo cruza: una OT de notaría con fecha previa que seguía impaga, o que se pagó con una
+// liquidación de la app, sigue viva después del corte (su pago salió del banco después).
+const antesDelCorte = (e, corte=CORTE_APERTURA) => {
+  if(!e || e.category==='Apertura') return false
+  const f = e.date ? String(e.date).slice(0,10) : null
+  if(f && f>=corte) return false
+  if(e.type!=='fondo' && e.category==='Notaria' && f && (e.notaria_render_id || !e.notaria_liquidado_at)) return false
+  return true
+}
+// Arrastre de un cliente al corte = fondos − gastos de antes (cuenta pareja: los históricos no_descuenta_saldo también rebajan;
+// antes los fondos de esa época sumaban y sus gastos no, y eso inflaba el saldo). Fuente única de la pantalla Corte de apertura.
+function arrastreCorte(expenses, clientId, corte=CORTE_APERTURA){
+  const mios = (expenses||[]).filter(e=>String(e.client_id)===String(clientId))
+  const apertura = mios.find(e=>e.category==='Apertura') || null
+  const pre = apertura ? mios.filter(e=>String(e.apertura_id)===String(apertura.id)) : mios.filter(e=>!e.apertura_id && antesDelCorte(e,corte))
+  let fondos=0, gastos=0
+  pre.forEach(e=>{ if(e.type==='fondo') fondos+=(e.amount||0); else gastos+=(e.amount||0) })
+  const aperturaMonto = apertura ? (apertura.type==='fondo' ? (apertura.amount||0) : -(apertura.amount||0)) : null
+  return { pre, fondos, gastos, arrastre: fondos-gastos, apertura, aperturaMonto }
+}
+
 // Fuente única para "fondos − gastos" de un cliente. Siempre con guarda ||0 (nunca NaN).
 function fgCliente(expenses, clientId){
   let fondos=0, gastos=0
-  ;(expenses||[]).forEach(e=>{ if(e.client_id!==clientId) return; if(e.type==='fondo') fondos+=(e.amount||0); else if(!e.no_descuenta_saldo) gastos+=(e.amount||0) })
+  ;(expenses||[]).forEach(e=>{ if(e.client_id!==clientId || !cuentaEnSaldo(e)) return; if(e.type==='fondo') fondos+=(e.amount||0); else if(!e.no_descuenta_saldo) gastos+=(e.amount||0) })
   return {fondos, gastos, saldo:fondos-gastos}
 }
 const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
 // Aporte de UN movimiento al saldo del cliente (fondo suma; gasto resta salvo histórico). FUENTE ÚNICA de la fórmula neta
 // que antes se repetía inline en el Dashboard y la lista de Clientes. Equivale a sumar esto = fgCliente().saldo.
-const saldoDelta = e => e.type==='fondo' ? (e.amount||0) : (e.no_descuenta_saldo ? 0 : -(e.amount||0))
+const saldoDelta = e => !cuentaEnSaldo(e) ? 0 : e.type==='fondo' ? (e.amount||0) : (e.no_descuenta_saldo ? 0 : -(e.amount||0))
 
 // FUENTE ÚNICA del saldo de un fondo de cliente para RENDICIONES (modal, PDF y correo usan ESTA).
 // saldo disponible = fondos recibidos − gastos YA RENDIDOS (de todas las rendiciones de la RS).
@@ -1130,7 +1156,7 @@ function rsBalances(clientId, expenses, entities){
   const buckets = ents.map(e=>({entity:e,fondos:0,gastos:0}))
   const byId={}; buckets.forEach(b=>byId[b.entity.id]=b)
   const sinRS={entity:null,fondos:0,gastos:0,n:0}
-  ;(expenses||[]).filter(e=>e.client_id===clientId).forEach(e=>{
+  ;(expenses||[]).filter(e=>e.client_id===clientId&&cuentaEnSaldo(e)).forEach(e=>{
     let b
     if(e.entity_id&&byId[e.entity_id]) b=byId[e.entity_id]
     else if(single&&buckets.length) b=buckets[0]
@@ -3767,12 +3793,12 @@ function Dashboard({sales,billing,fantasmaIds=new Set(),anticipos=[],clients,cli
     const tareasVenc = (tasks||[]).filter(t=>t.status!=='Terminado'&&t.due&&String(t.due)<today)
     const cajaUsers=['Martín','Martina']
     const cajaSinLiq = (expenses||[]).filter(e=>e.type==='gasto'&&cajaUsers.includes(e.created_by)&&!e.rendered_at&&!e.paid_by_client&&e.category!=='Notaria')
-    const rendCli = [...new Set((expenses||[]).filter(e=>e.type==='gasto'&&e.client_id&&!e.no_descuenta_saldo&&!e.client_rendered_at).map(e=>e.client_id))]
+    const rendCli = [...new Set((expenses||[]).filter(e=>e.type==='gasto'&&e.client_id&&!e.no_descuenta_saldo&&!e.client_rendered_at&&cuentaEnSaldo(e)&&e.category!=='Apertura').map(e=>e.client_id))]
     const propTardias = sales.filter(s=>s.status==='Propuesta'&&s.created_at&&Math.floor((Date.now()-new Date(s.created_at))/86400000)>14)
     const sum = arr => arr.reduce((a,b)=>a+(b.amount||0),0)
     const sumSaldo = arr => arr.reduce((a,b)=>a+saldoBill(b),0)
     const cnD = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
-    const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.no_descuenta_saldo&&!e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot,cid} }).sort((a,b)=>b.v-a.v)
+    const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.no_descuenta_saldo&&!e.client_rendered_at&&cuentaEnSaldo(e)&&e.category!=='Apertura').reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot,cid} }).sort((a,b)=>b.v-a.v)
     const en7plz = new Date(Date.now()+7*86400000).toISOString().slice(0,10)
     const plzVenc=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha<today)
     const plzProx=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha>=today&&p.fecha<=en7plz)
@@ -9001,6 +9027,233 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
   </div>)
 }
 // ── Página "Socios": retiros + sueldos. Socio = _SOCIO_RET (lee subcategory). Un RETIRO = transferencias de un socio dentro de una ventana de ≤ GAP días (consecutivos; una transferencia grande se parte por el límite diario del banco). Un mes puede tener varios retiros. Regla de oro: retiros parejos por retiro (ronda) → chip + auto-sugerencia. Trazable: cada retiro despliega sus transferencias con link a Banco. Página con navStack, responsive. ──
+// Saldos iniciales (render 39BwoQViVmFrRWn1U5SrgM): por cliente, lo de antes de CORTE_APERTURA se resume en un saldo inicial
+// ($0 · mantener el saldo anterior · ajustar). Cola = saldo anterior ≥ $12.000 sin decidir, de mayor a menor. Reversible.
+const CORTE_UMBRAL = 12000
+function CorteAperturaView({ expenses=[], clients=[], sales=[], billing=[], isDesktop=true, currentUserName, onBack, onOpenClientFicha, onIrBanco, setExpenses }){
+  const [chip,setChip] = useState('revisar')
+  const [sel,setSel] = useState(null)
+  const [q,setQ] = useState('')
+  const [ajuste,setAjuste] = useState('')
+  const [busy,setBusy] = useState(false)
+  const esOfi = c => !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||''))
+  const filas = useMemo(()=>{
+    const out=[]
+    ;(clients||[]).forEach(c=>{
+      if(esOfi(c)) return
+      const a = arrastreCorte(expenses, c.id)
+      if(!a.pre.length && !a.apertura) return
+      const preIds = new Set(a.pre.map(e=>e.id))
+      // Saldo vivo (desde el corte): todo lo del cliente que NO es de antes del corte ni la apertura.
+      let vivo=0; (expenses||[]).forEach(e=>{ if(String(e.client_id)!==String(c.id)||preIds.has(e.id)||e.category==='Apertura') return; vivo+= e.type==='fondo'?(e.amount||0):(e.no_descuenta_saldo?0:-(e.amount||0)) })
+      const estado = a.apertura ? 'hecho' : (Math.abs(a.arrastre)>=CORTE_UMBRAL ? 'revisar' : 'sin')
+      const va = (sales||[]).some(s=>String(s.client_id)===String(c.id)&&s.status==='Activo')
+      const fp = (billing||[]).some(b=>String(b.client_id)===String(c.id)&&!b.deleted_at&&['Pendiente','Vencido','Programada'].includes(b.status))
+      out.push({ c, a, vivo, estado, va, fp, nF:a.pre.filter(e=>e.type==='fondo').length, nG:a.pre.filter(e=>e.type!=='fondo').length })
+    })
+    return out
+  },[clients,expenses,sales,billing])
+  const grupo = k => filas.filter(f=>f.estado===k)
+  const suma = arr => arr.reduce((s,f)=>s+f.a.arrastre,0)
+  const hechos = grupo('hecho'), revisar = grupo('revisar').sort((x,y)=>Math.abs(y.a.arrastre)-Math.abs(x.a.arrastre)), sinArr = grupo('sin')
+  const porDec = k => hechos.filter(f=>(f.a.apertura?.subcategory||'')===k)
+  // Rango del saldo de clientes después del corte: mínimo si los por revisar quedan en $0, máximo si se mantienen.
+  const fin = f => f.estado==='hecho' ? f.vivo + (f.a.aperturaMonto||0) : f.estado==='sin' ? f.vivo + f.a.arrastre : null
+  const rango = (() => { let fMin=0,fMax=0,dMin=0,dMax=0
+    filas.forEach(f=>{ const v0 = f.estado==='revisar' ? f.vivo : fin(f); const v1 = f.estado==='revisar' ? f.vivo + f.a.arrastre : fin(f)
+      if(v0>0) fMin+=v0; else dMin+=v0; if(v1>0) fMax+=v1; else dMax+=v1 })
+    return {fMin,fMax,dMin,dMax} })()
+  const lista = (chip==='revisar'?revisar:chip==='hecho'?hechos:sinArr).filter(f=>!q || _norm(f.c.name).includes(_norm(q)))
+  const actual = filas.find(f=>String(f.c.id)===String(sel)) || (isDesktop ? lista[0] : null)
+  const idx = actual ? lista.findIndex(f=>f.c.id===actual.c.id) : -1
+
+  const decidir = async (f, modo) => {
+    if(busy || f.a.apertura) return
+    let monto = modo==='cerrar' ? 0 : modo==='mantener' ? f.a.arrastre : Number(String(ajuste).replace(/[^\d-]/g,''))
+    if(modo==='ajustar' && (!String(ajuste).trim() || isNaN(monto))) { appAlert('Escribe el saldo inicial (negativo si el cliente nos debe).'); return }
+    monto = Math.round(monto)
+    setBusy(true)
+    try{
+      const row = { client_id:f.c.id, type: monto>=0?'fondo':'gasto', amount: Math.abs(monto), date: CORTE_APERTURA, category:'Apertura', subcategory: modo,
+        concept: `Saldo inicial al ${fmtFechaDMY(CORTE_APERTURA)}`, notas: `Saldo anterior ${fmtSaldoG(f.a.arrastre)} · ${f.a.pre.length} movimientos de antes del ${fmtFechaDMY(CORTE_APERTURA)}`, created_by: currentUserName||null, paid_by_client:false }
+      const ids = f.a.pre.map(e=>e.id)
+      let ap = { ...row, id:'demo-'+Date.now() }
+      if(!DEMO){
+        const {data,error} = await supabase.from('expenses').insert(row).select().single(); if(error) throw error; ap=data
+        const {error:e2} = await supabase.from('expenses').update({apertura_id:ap.id}).in('id',ids); if(e2){ await supabase.from('expenses').delete().eq('id',ap.id); throw e2 }
+      }
+      setExpenses(p=>[ap, ...p.map(e=>ids.includes(e.id)?{...e,apertura_id:ap.id}:e)])
+      logActividad('gastos.corte_apertura',{tabla:'expenses',id:ap.id,detalle:{cliente:f.c.name,decision:modo,monto,arrastre:f.a.arrastre,movimientos:ids.length}})
+      setAjuste('')
+      if(isDesktop){ const sig = lista[idx+1] || lista[idx-1]; setSel(sig?sig.c.id:null) } else setSel(null)
+    }catch(err){ appAlert('No se pudo guardar: '+err.message) }
+    setBusy(false)
+  }
+  const deshacer = async f => {
+    if(busy || !f.a.apertura) return
+    if(!await appConfirm(`¿Deshacer el saldo inicial de ${f.c.name}? Sus movimientos de antes del ${fmtFechaDMY(CORTE_APERTURA)} vuelven a contar en el saldo.`)) return
+    setBusy(true)
+    try{
+      const apId = f.a.apertura.id
+      if(!DEMO){
+        const {error} = await supabase.from('expenses').update({apertura_id:null}).eq('apertura_id',apId); if(error) throw error
+        const {error:e2} = await supabase.from('expenses').delete().eq('id',apId); if(e2) throw e2
+      }
+      setExpenses(p=>p.filter(e=>e.id!==apId).map(e=>String(e.apertura_id)===String(apId)?{...e,apertura_id:null}:e))
+      logActividad('gastos.corte_apertura_deshecho',{tabla:'expenses',id:apId,detalle:{cliente:f.c.name,monto:f.a.aperturaMonto}})
+    }catch(err){ appAlert('No se pudo deshacer: '+err.message) }
+    setBusy(false)
+  }
+
+  const DEC = { cerrar:['Saldo inicial $0',C.border,C.accent], mantener:['Mantenido',C.greenBg,C.greenText], ajustar:['Ajustado',C.azulBg,C.azulInfo] }
+  const pill = (t,bg,col) => <span style={{fontSize:10.5,fontWeight:700,padding:'2px 8px',borderRadius:999,background:bg,color:col,whiteSpace:'nowrap'}}>{t}</span>
+  const amt = (v,extra={}) => <span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',fontWeight:700,color:v<0?C.overdue:C.text,...extra}}>{fmtSaldoG(v)}</span>
+  const parte = (k,label,arr,bg,col) => (
+    <div onClick={()=>{ if(['revisar','hecho','sin'].includes(k)){ setChip(k); setSel(null) } }} className='lf-row' style={{display:'flex',alignItems:'center',gap:10,padding:'6px 4px',borderRadius:8,fontSize:13,cursor:'pointer'}}>
+      {pill(label,bg,col)}<span style={{fontSize:11,color:C.muted}}>{arr.length} {arr.length===1?'cliente':'clientes'}</span><span style={{marginLeft:'auto'}}>{amt(suma(arr),{fontWeight:600})}</span>
+    </div>)
+  const foto = (
+    <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.35fr 1fr':'1fr',gap:isDesktop?16:10}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',display:'grid',gap:8}}>
+        <div style={{display:'flex',alignItems:'baseline',gap:10}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Saldo antes del {fmtFechaDMY(CORTE_APERTURA)} · {filas.length}</span><span style={{marginLeft:'auto',fontSize:isDesktop?28:24}}>{amt(suma(filas),{color:C.accent})}</span></div>
+        <div style={{borderTop:`1px solid ${C.border}`,paddingTop:6,display:'grid',gap:2}}>
+          {parte('revisar','Por revisar',revisar,C.soonBg,C.soonText)}
+          {parte('hecho','Saldo inicial $0',porDec('cerrar'),C.border,C.accent)}
+          {parte('hecho','Mantenido',porDec('mantener'),C.greenBg,C.greenText)}
+          {porDec('ajustar').length>0&&parte('hecho','Ajustado',porDec('ajustar'),C.azulBg,C.azulInfo)}
+          {parte('sin','Ajuste automático',sinArr,C.bgSoft,C.muted)}
+        </div>
+      </div>
+      {isDesktop&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',display:'grid',gap:8,alignContent:'start'}}>
+        <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Saldos de clientes desde el {fmtFechaDMY(CORTE_APERTURA)}</span>
+        <div style={{display:'flex',alignItems:'baseline',fontSize:13}}><span>A favor de clientes</span><span style={{marginLeft:'auto',fontWeight:700,fontSize:15,fontVariantNumeric:'tabular-nums'}}>{revisar.length?`${fmt(rango.fMin)} – ${fmt(rango.fMax)}`:fmt(rango.fMin)}</span></div>
+        <div style={{display:'flex',alignItems:'baseline',fontSize:13}}><span>Nos deben</span><span style={{marginLeft:'auto',fontWeight:700,fontSize:15,color:C.overdue,fontVariantNumeric:'tabular-nums'}}>{revisar.length?`${fmt(-rango.dMin)} – ${fmt(-rango.dMax)}`:fmt(-rango.dMin)}</span></div>
+      </div>}
+    </div>)
+  const chips = (
+    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      {[['revisar','Por revisar',revisar.length],['hecho','Decididos',hechos.length],['sin','Ajuste automático',sinArr.length]].map(([k,l,n])=>
+        <button key={k} onClick={()=>{setChip(k);setSel(null)}} style={{fontSize:12,fontWeight:600,padding:'5px 11px',borderRadius:999,border:`1px solid ${chip===k?C.accent:C.border}`,background:chip===k?C.accent:C.card,color:chip===k?C.surface:C.muted,cursor:'pointer'}}>{l} · {n}</button>)}
+    </div>)
+  const filaLista = f => {
+    const on = actual && f.c.id===actual.c.id && isDesktop
+    const meta = f.nG===0&&f.nF>0 ? 'fondos sin gastos en esa época' : f.a.arrastre<0 ? (f.nF? 'gastos superan fondos':'gastos sin fondos') : `${f.nF} ${f.nF===1?'fondo':'fondos'} · ${f.nG} ${f.nG===1?'gasto':'gastos'}`
+    const d = f.a.apertura ? DEC[f.a.apertura.subcategory]||DEC.ajustar : null
+    return (
+      <div key={f.c.id} onClick={()=>{ setSel(f.c.id); setAjuste('') }} className='lf-row' style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'2px 10px',padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:on?C.azulBg:'transparent'}}>
+        <span style={{fontSize:13.5,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.c.name}</span>
+        <span style={{textAlign:'right'}}>{amt(d?(f.a.aperturaMonto||0):f.a.arrastre,{fontSize:13.5})}</span>
+        <span style={{fontSize:11.5,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.c.abogado_responsable||'Sin responsable'} · {d?`saldo anterior ${fmtSaldoG(f.a.arrastre)}`:meta}</span>
+        <span style={{textAlign:'right'}}>{d?pill(d[0],d[1],d[2]):f.estado==='revisar'?<span style={{fontSize:11,color:C.soonText}}>Revisar</span>:null}</span>
+      </div>)
+  }
+  const mov = e => (
+    <div key={e.id} onClick={()=>{ if(e.type==='fondo'&&onIrBanco) onIrBanco(String(Math.round(e.amount||0))) }} className='lf-row' style={{display:'grid',gridTemplateColumns:'44px 1fr auto',gap:10,alignItems:'center',padding:'7px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:e.type==='fondo'?'pointer':'default'}}>
+      {e.date?diaGrande(e.date):<div style={{width:44,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:12,fontWeight:700,color:C.done}}>s/f</div><div style={{fontSize:10,color:C.muted}}>histórico</div></div>}
+      <div style={{minWidth:0}}><div style={{fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.description||e.category}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[e.category,e.ot_number?'OT '+e.ot_number:null,e.no_descuenta_saldo?'histórico':null].filter(Boolean).join(' · ')}</div></div>
+      <span style={{fontSize:12.5,fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
+    </div>)
+  const detalle = f => {
+    const fondos = f.a.pre.filter(e=>e.type==='fondo').sort((a,b)=>(a.date||'')<(b.date||'')?-1:1)
+    const gastos = f.a.pre.filter(e=>e.type!=='fondo').sort((a,b)=>(a.date||'9')<(b.date||'9')?-1:1)
+    const d = f.a.apertura ? DEC[f.a.apertura.subcategory]||DEC.ajustar : null
+    const eq = (l,v,st={}) => <div style={{display:'flex',alignItems:'baseline',gap:8,fontSize:13,padding:'3px 0',...st}}><span>{l}</span><span style={{marginLeft:'auto'}}>{amt(v,{fontWeight:st.fontWeight||600,fontSize:st.fontSize||13})}</span></div>
+    const box = (titulo,arr,tot) => (
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 0 4px',minWidth:0}}>
+        <div style={{display:'flex',alignItems:'baseline',padding:'0 14px 6px'}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>{titulo}</span><span style={{marginLeft:'auto'}}>{amt(tot,{fontSize:13})}</span></div>
+        {arr.length?arr.map(mov):<div style={{padding:'6px 14px',fontSize:12,color:C.muted}}>Ninguno</div>}
+      </div>)
+    return (
+      <div style={{display:'grid',gap:14,alignContent:'start',minWidth:0}}>
+        <div style={{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}}>
+          <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(f.c.id)} style={{fontSize:19,fontWeight:700,color:C.accent,textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3,cursor:'pointer'}}>{f.c.name}</span>
+          <span style={{fontSize:12,color:C.muted}}>{f.c.abogado_responsable||'Sin responsable'}</span>
+          {(f.va||f.fp)&&<span style={{fontSize:11.5,color:C.greenText,fontWeight:600}}>{[f.va?'Venta activa':null,f.fp?'facturación pendiente':null].filter(Boolean).join(' · ')}</span>}
+          {f.estado==='revisar'&&idx>=0&&<span style={{marginLeft:'auto'}}>{pill(`${idx+1} de ${lista.length}`,C.soonBg,C.soonText)}</span>}
+        </div>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'grid',gap:2}}>
+          <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.muted}}>Antes del {fmtFechaDMY(CORTE_APERTURA)}</span>
+          {eq(`Fondos recibidos (${fondos.length})`,f.a.fondos)}
+          {eq(`Gastos registrados (${gastos.length})`,-f.a.gastos)}
+          <div style={{borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:6}}>{eq(`Saldo antes del ${fmtFechaDMY(CORTE_APERTURA)}`,f.a.arrastre,{fontWeight:700,fontSize:16})}</div>
+          {eq(`Desde el ${fmtFechaDMY(CORTE_APERTURA)}`,f.vivo,{color:C.muted,fontSize:12})}
+          {d&&<div style={{borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:6,display:'flex',alignItems:'center',gap:8}}>{pill(d[0],d[1],d[2])}<span style={{fontSize:13}}>Saldo inicial</span><span style={{marginLeft:'auto'}}>{amt(f.a.aperturaMonto||0,{fontSize:15})}</span></div>}
+        </div>
+        {f.estado==='revisar'&&f.nG===0&&f.nF>0&&<div style={{background:C.soonBg,borderRadius:10,padding:'10px 12px',fontSize:12.5,lineHeight:1.45}}>Fondos sin gastos registrados en esa época.</div>}
+        <div style={{display:'grid',gridTemplateColumns:'1fr',gap:14,minWidth:0}}>
+          {box('Fondos',fondos,f.a.fondos)}
+          {box('Gastos de esa época',gastos,-f.a.gastos)}
+        </div>
+        {f.a.apertura
+          ? <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}><span style={{fontSize:12,color:C.muted}}>Decidido{f.a.apertura.created_by?` por ${f.a.apertura.created_by}`:''}{f.a.apertura.created_at?` el ${fmtFechaDMY(f.a.apertura.created_at)}`:''}</span><button disabled={busy} onClick={()=>deshacer(f)} style={{marginLeft:'auto',fontSize:13,fontWeight:700,borderRadius:10,padding:'9px 14px',border:`1px solid ${C.border}`,background:C.card,color:C.accent,cursor:'pointer'}}>Deshacer</button></div>
+          : <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+              <button disabled={busy} onClick={()=>decidir(f,'cerrar')} style={{flex:isDesktop?'0 0 auto':'1 1 auto',fontSize:13,fontWeight:700,borderRadius:10,padding:'10px 14px',border:`1px solid ${C.border}`,background:C.card,color:C.accent,cursor:'pointer'}}>Saldo inicial $0</button>
+              <button disabled={busy} onClick={()=>decidir(f,'mantener')} style={{flex:isDesktop?'0 0 auto':'1 1 auto',fontSize:13,fontWeight:700,borderRadius:10,padding:'10px 14px',border:`1px solid ${C.accent}`,background:C.accent,color:C.surface,cursor:'pointer'}}>Mantener {fmtSaldoG(f.a.arrastre)}</button>
+              <span style={{display:'flex',gap:6,alignItems:'center',flex:isDesktop?'0 0 auto':'1 1 100%'}}>
+                <input value={ajuste} onChange={e=>setAjuste(e.target.value)} inputMode='numeric' placeholder='Otro monto' aria-label='Saldo inicial' style={{width:isDesktop?120:'100%',fontSize:13,padding:'9px 10px',borderRadius:10,border:`1px solid ${C.border}`}}/>
+                <button disabled={busy} onClick={()=>decidir(f,'ajustar')} style={{fontSize:13,fontWeight:700,borderRadius:10,padding:'9px 14px',border:`1px solid ${C.border}`,background:C.card,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Ajustar</button>
+              </span>
+              {isDesktop&&idx>=0&&<span style={{marginLeft:'auto',fontSize:12,color:C.muted,display:'flex',gap:12}}>
+                <span onClick={()=>idx>0&&setSel(lista[idx-1].c.id)} style={{cursor:idx>0?'pointer':'default',opacity:idx>0?1:.4}}>← Anterior</span>
+                <span onClick={()=>idx<lista.length-1&&setSel(lista[idx+1].c.id)} style={{cursor:idx<lista.length-1?'pointer':'default',opacity:idx<lista.length-1?1:.4}}>Siguiente →</span></span>}
+            </div>}
+      </div>)
+  }
+  const volver = (label,fn) => <button onClick={fn} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>{label}</button>
+  const buscador = <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente' aria-label='Buscar cliente' style={{width:'100%',boxSizing:'border-box',fontSize:13,padding:'8px 11px',borderRadius:10,border:`1px solid ${C.border}`}}/>
+
+  if(!isDesktop && actual) return (
+    <div style={{padding:'12px 12px 90px',display:'grid',gap:12}}>
+      {volver('Saldos iniciales',()=>setSel(null))}
+      {detalle(actual)}
+    </div>)
+  return (
+    <div style={{padding:isDesktop?'18px 22px 40px':'12px 12px 90px',display:'grid',gap:isDesktop?16:12}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        {volver('Gastos',onBack)}
+        <span style={{fontSize:isDesktop?18:16,fontWeight:700,color:C.accent}}>Saldos iniciales</span>
+        <span style={{marginLeft:isDesktop?'auto':0,fontSize:12,color:C.muted}}>Al {fmtFechaDMY(CORTE_APERTURA)}</span>
+      </div>
+      {foto}
+      {isDesktop
+        ? <div style={{display:'grid',gridTemplateColumns:'400px 1fr',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.bg,minHeight:520}}>
+            <div style={{background:C.card,borderRight:`1px solid ${C.border}`,display:'grid',gridTemplateRows:'auto auto 1fr',minHeight:0}}>
+              <div style={{padding:'12px 14px 8px'}}>{chips}</div>
+              <div style={{padding:'0 14px 8px'}}>{buscador}</div>
+              <div style={{overflow:'auto',maxHeight:640}}>{lista.length?lista.map(filaLista):<div style={{padding:'14px',fontSize:12.5,color:C.muted}}>{chip==='revisar'?'No quedan clientes por revisar.':'Nada en esta lista.'}</div>}</div>
+            </div>
+            <div style={{padding:'18px 22px',minWidth:0}}>{actual?detalle(actual):<div style={{fontSize:13,color:C.muted}}>Elige un cliente de la lista.</div>}</div>
+          </div>
+        : <>
+            {chips}{buscador}
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{lista.length?lista.map(filaLista):<div style={{padding:'14px',fontSize:12.5,color:C.muted}}>{chip==='revisar'?'No quedan clientes por revisar.':'Nada en esta lista.'}</div>}</div>
+          </>}
+    </div>)
+}
+
+// TRABAJO DE CADA GASTO: el vínculo real es expenses.sale_id (project es solo el texto). Ventas candidatas = ventas reales del
+// cliente (no Propuesta/Rechazada/Borrador). Fuente única de la sugerencia: se vincula sola solo cuando no hay duda (aprendido,
+// única venta, única activa); lo demás se propone y se confirma. La razón social de la venta es la de FACTURACIÓN (puede no ser la
+// del requirente de la OT), por eso no es automática.
+const VENTA_REAL = s => !!s && !s.deleted_at && !['Propuesta','Rechazada','Borrador'].includes(s.status)
+const _STOP_TRAB = new Set(['gastos','gasto','notariales','notarial','notaria','para','sobre','desde','spa','ltda','limitada','sociedad','acciones','anonima','asesoria','legal','legales','servicios','permanente','provision','fondos','fondo','conciliacion','bancaria','copia','copias','certificado','autorizacion','poder','especial','mandato','escritura','publica','protocolizacion','documentos','contrato','grupo','trabajo','varios','cliente','cuota','reduccion','junta','extraordinaria','accionistas','socios'])
+const _toksTrab = s => _norm(s).split(/[^a-z0-9]+/).filter(t=>t.length>=4&&!_STOP_TRAB.has(t)).map(t=>t.slice(0,5))
+function sugerirVentaGasto(e, ventas, aprendidoSaleId){
+  if(aprendidoSaleId){ const v=ventas.find(s=>String(s.id)===String(aprendidoSaleId)); if(v) return {venta:v, regla:'aprendido', auto:true, porque:'Así lo vinculaste antes'} }
+  if(!ventas.length) return {venta:null, regla:'sinventa', auto:false, porque:'El cliente no tiene ventas'}
+  if(ventas.length===1) return {venta:ventas[0], regla:'unica', auto:true, porque:'Única venta del cliente'}
+  const act = ventas.filter(s=>s.status==='Activo')
+  if(act.length===1) return {venta:act[0], regla:'activa', auto:true, porque:'Única venta activa'}
+  const g = new Set(_toksTrab([e.concept,e.subconcept,e.materia,e.project].filter(Boolean).join(' ')))
+  const sc = ventas.map(s=>({s,hit:[...new Set(_toksTrab(s.title).filter(t=>g.has(t)))]})).sort((a,b)=>b.hit.length-a.hit.length)
+  if(sc[0].hit.length && (sc.length===1 || sc[0].hit.length>sc[1].hit.length)) return {venta:sc[0].s, regla:'texto', auto:false, porque:'El texto coincide con el trabajo'}
+  const f = e.date ? String(e.date).slice(0,10) : null
+  if(f){ const vig = ventas.filter(s=>{ const ini=String(s.activated_at||s.created_at||'').slice(0,10); const fin=s.status==='Activo'?'9999':String(s.updated_at||'').slice(0,10); return ini && ini<=f && fin>=f })
+    if(vig.length===1) return {venta:vig[0], regla:'vigente', auto:false, porque:`Única venta vigente el ${fmtFechaDMY(f)}`} }
+  if(e.entity_id){ const rs=(act.length?act:ventas).filter(s=>String(s.entity_id)===String(e.entity_id)); if(rs.length===1) return {venta:rs[0], regla:'rs', auto:false, porque:'Misma razón social'} }
+  return {venta:null, regla:'decidir', auto:false, porque:`${ventas.length} trabajos posibles`}
+}
+
 function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
   const GAP=3   // días: transferencias del mismo socio a ≤3 días = el mismo retiro
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
@@ -15308,6 +15561,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     if(e.type!=='gasto') return false
     const mine = esEdicion && String(e.client_render_id)===String(editRend.id)   // gasto que YA está en esta rendición: siempre visible (pre-marcado)
     if(e.no_descuenta_saldo && !mine) return false   // gasto histórico no se rinde
+    if((e.apertura_id || e.category==='Apertura') && !mine) return false   // resumido en el saldo de apertura: no se rinde
     if(e.client_rendered_at && !mine) return false   // gastos de OTRA rendición no entran
     if(!mine){   // los filtros de proyecto/fecha solo acotan los candidatos a AGREGAR, nunca esconden los propios
       if(proyecto){ const sid=proyToSale[proyecto]; const ok=!e.project || (e.project||'')===proyecto || (sid && String(e.sale_id)===String(sid)); if(!ok) return false }
@@ -17499,7 +17753,7 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
 // Saldo con signo canónico: −$265.000 (no '$-265.000').
 const fmtSaldoG = v => (Number(v)<0?'−':'')+fmt(Math.abs(Number(v)||0))
 // Gastos del cliente aún no rendidos: fuente única (Gastos, ficha y Cartola).
-const gastosPorRendirCli = (expenses,cid) => (expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at)
+const gastosPorRendirCli = (expenses,cid) => (expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at&&cuentaEnSaldo(e)&&e.category!=='Apertura')
 const canonOtNN = o => { const s=String(o||'').trim().toUpperCase(); if(!s||s==='S/OT') return ''; const d=s.replace(/\D/g,''); return d?'OT-'+d:s }
 const _fechaISO = f => { if(!f) return null; if(f instanceof Date) return isNaN(f)?null:f.toISOString().slice(0,10); const t=String(f).slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(t)?t:null }
 async function registrarNoNuestras(list,{batchId=null,filename=null,por=null}={}){
@@ -17663,12 +17917,20 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const m={}
     expenses.forEach(e=>{
       if(!m[e.client_id]) m[e.client_id]={fondos:0,gastos:0,sinAsignar:0}
+      if(!cuentaEnSaldo(e)) return   // resumido en el saldo de apertura
       if(e.type==='fondo') m[e.client_id].fondos+=(e.amount||0)
       else if(!e.no_descuenta_saldo) m[e.client_id].gastos+=(e.amount||0)   // saldo = fondos transferidos − gastos realizados. TODOS los gastos cuentan (notaría incluida, la pague quien la pague); solo se excluye no_descuenta_saldo (histórico ya saldado fuera de la app). NO excluir paid_by_client: la notaría es un gasto realizado que consume el fondo o genera deuda del cliente.
       if(!e.entity_id) m[e.client_id].sinAsignar+=1
     })
     return m
   },[expenses])
+
+  const corteRevisar = useMemo(()=>{
+    if(!isAdmin) return {n:0}
+    const ids=new Set((expenses||[]).filter(e=>e.client_id&&!e.apertura_id&&antesDelCorte(e)).map(e=>String(e.client_id)))
+    let n=0; ids.forEach(cid=>{ const c=clients.find(x=>String(x.id)===cid); if(!c||c.is_internal||/liberona\s+escala/i.test(c.name||'')) return; const a=arrastreCorte(expenses,cid); if(!a.apertura&&Math.abs(a.arrastre)>=CORTE_UMBRAL) n++ })
+    return {n}
+  },[expenses,clients,isAdmin])
 
   // Clientes con movimientos, ordenados: negativos primero, luego por nombre. EXCLUYE la oficina (Liberona Escala /
   // is_internal): sus costos reales (sueldos/arriendo/servicios) viven en la card "Costos de oficina", no en la lista operativa.
@@ -17907,8 +18169,8 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   // OTROS gastos pendientes del cliente (no la notaría que estás liquidando). Así el fondo se reparte entre todo lo que debe.
   const dispCliente = cid => {
     if(esOficina(cid)) return { fondo:0, pagado:0, reservado:0, resItems:[], disp:Infinity, oficina:true }   // Oficina = la firma: siempre cubre sus gastos
-    const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.no_descuenta_saldo)
-    const fondo=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+    const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&cuentaEnSaldo(e))
+    const fondo=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo'&&cuentaEnSaldo(e)).reduce((a,e)=>a+(e.amount||0),0)
     const pagado=g.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
     const esNotaPend=e=>e.category==='Notaria'&&!e.notaria_render_id&&!e.notaria_liquidado_at   // lo que se liquida ahora a la notaría (no se reserva)
     const resItems=g.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at&&!esNotaPend(e))
@@ -18542,11 +18804,11 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     </div>) }
   const gastosClasificar = (expenses||[]).filter(e=> e.type==='gasto' && e.bulk_import_id && e.client_id && !e.personal_de && !e.created_by && !esOficina(e.client_id) && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && !e.deleted_at)
   const isDesktop = useIsDesktop()   // Fase 3: desktop = 2-panel (lista de clientes izq + detalle/paneles der); movil = columna
-  return { catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen }
+  return { corteRevisar, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen }
 }
 
-function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,onMoverAOficina,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened,openGastosOfi,onGastosOfiOpened,costosOfiMes=0,onOpenCostosOfi,onIrConciliacion,bulkImports=[],onUndoImport,navTo,onNavDone,onSolicitarFondos}) {
-  const { catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
+function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onCorteApertura,expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,onMoverAOficina,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened,openGastosOfi,onGastosOfiOpened,costosOfiMes=0,onOpenCostosOfi,onIrConciliacion,bulkImports=[],onUndoImport,navTo,onNavDone,onSolicitarFondos}) {
+  const { corteRevisar, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
   // Hub de Gastos: cara de entrada (hero Por cobrar/A favor + 6 tarjetas). Al tocar una tarjeta se navega a la vista existente. Presentación pura — no toca cifras.
   const [hubOpen,setHubOpen] = useState(()=>{ const vm=viewMemLeer('gastos'); return vm ? vm.hubOpen : !gastosVolverLeer() })
   useEffect(()=>{ try{ sessionStorage.removeItem(_GASTOS_VOLVER) }catch(_){} },[])
@@ -18585,7 +18847,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,expenses
     const neg=(clientsWithMovs||[]).filter(c=>c.status!=='Terminado' && !esOficina(c.id) && saldoDe(c)<0)
     const g={}
     neg.forEach(c=>{ const abg=respByClienteFull[String(c.id)]||null; const email=abg?PEDIR_EMAILS[abg]:null; const key=email||'__sin__'
-      const gs=(expenses||[]).filter(e=>String(e.client_id)===String(c.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.deleted_at).sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0))
+      const gs=(expenses||[]).filter(e=>String(e.client_id)===String(c.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.deleted_at&&cuentaEnSaldo(e)&&e.category!=='Apertura').sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0))
       const o=g[key]||(g[key]={abg,email,clientes:[]}); o.clientes.push({id:c.id,name:c.name,deuda:-saldoDe(c),gastos:gs}) })
     Object.values(g).forEach(o=>{ o.clientes.sort((a,b)=>b.deuda-a.deuda); o.total=o.clientes.reduce((a,c)=>a+c.deuda,0) })
     return g
@@ -20248,6 +20510,13 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,expenses
                 <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Entregar caja{neg?` ${fmtN(-a.saldo)}`:''} ›</span>
               </div>) })}
           </div>) })()}
+        {/* Saldos iniciales (admin): clientes con saldo anterior ≥ umbral y sin saldo inicial decidido. */}
+        {isAdmin&&onCorteApertura&&corteRevisar.n>0&&(
+          <div onClick={onCorteApertura} className='lf-row' style={{display:'flex',alignItems:'center',gap:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 14px',marginBottom:10,cursor:'pointer'}}>
+            <span style={{width:30,height:30,borderRadius:8,background:C.soonBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={16} c={C.soonText}/></span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Saldos iniciales</div><div style={{fontSize:11,color:C.muted}}>{corteRevisar.n} {corteRevisar.n===1?'cliente':'clientes'} con saldo anterior al {fmtFechaDMY(CORTE_APERTURA)} por revisar</div></div>
+            <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Revisar ›</span>
+          </div>)}
         {/* Revisión de caja chica (admin): misma fila que en Banco › Cargos; aquí cuenta las cajas sin conciliar (fuente única calceCajaChica) y abre el panel. */}
         {isAdmin&&onRevisionCajaChica&&(()=>{ const sin=calceCajaChica(pettyCash,[],{}).cajasSinTransf; if(!sin.length) return null; const viejas=sin.filter(x=>x.dias>=5).length; return (
           <div onClick={onRevisionCajaChica} className='lf-row' style={{display:'flex',alignItems:'center',gap:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 14px',marginBottom:10,cursor:'pointer'}}>
@@ -20401,6 +20670,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const [project,setProject] = useState('')
   const [showProjects,setShowProjects] = useState(false)
   const [newProject,setNewProject] = useState(false)
+  const [subproject,setSubproject] = useState('')
   const clientProjects = useMemo(()=>{
     if(!selectedClient) return []
     const m={}
@@ -20408,7 +20678,14 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     ;(sales||[]).filter(s=>s.client_id===selectedClient.id&&s.title).forEach(s=>{ const d=s.created_at||s.date||''; if(!(s.title in m)||d>m[s.title]) m[s.title]=d })
     return Object.keys(m).sort((a,b)=>(m[b]||'').localeCompare(m[a]||''))   // más reciente primero
   },[tasks,sales,selectedClient])
-  useEffect(()=>{ setProject(clientProjects[0]||''); setNewProject(false) },[clientProjects])   // pre-poblar con el proyecto más reciente
+  const esOficina = !!selectedClient && (selectedClient.is_internal || /liberona\s+escala/i.test(selectedClient.name||''))
+  // Proyecto obligatorio (salvo oficina): se preselecciona solo si es claro (única venta o única activa); si no, se elige.
+  useEffect(()=>{ const vs=(sales||[]).filter(s=>selectedClient&&s.client_id===selectedClient.id&&VENTA_REAL(s)); const act=vs.filter(s=>s.status==='Activo')
+    setProject(vs.length===1?vs[0].title:(act.length===1?act[0].title:'')); setNewProject(false) },[clientProjects])
+  const ventaProj = (sales||[]).find(s=>selectedClient&&s.client_id===selectedClient.id&&s.title===project)
+  const subsCli = useMemo(()=>selectedClient?subproyectosCliente(selectedClient.id,tasks,expenses):[],[selectedClient,tasks,expenses])
+  // La razón social sigue al proyecto elegido cuando la venta la tiene.
+  useEffect(()=>{ const v=(sales||[]).find(s=>selectedClient&&s.client_id===selectedClient.id&&s.title===project); if(v?.entity_id&&rsList.some(e=>e.id===v.entity_id)) setEntityId(v.entity_id) },[project])
   const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>_normTxt(c.name).includes(_normTxt(q))).slice(0,6) },[clients,q])
   const balance = selectedClient ? saldoCliente(expenses, selectedClient.id) : null
   const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
@@ -20426,12 +20703,12 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 
   const saveAll = async() => {
     const valid = rows.filter(r=>r.amount&&parseInt(r.amount)>0)
-    if(!valid.length||!selectedClient) return
+    if(!valid.length||!selectedClient||(!esOficina&&!project.trim())) return
     setSaving(true)
     let count=0; const errores=[]
     for(const r of valid) {
       try {
-        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:r.category==='Notaria'?true:!!r.paid_by_client})
+        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subproject:esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:r.category==='Notaria'?true:!!r.paid_by_client})
         count++
       } catch(e){ errores.push(r.concept||r.category||'Fila') }
     }
@@ -20500,7 +20777,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
           )}
 
           <div style={{marginBottom:12}}>
-            <Lbl>Proyecto</Lbl>
+            <Lbl>Proyecto{!esOficina&&<span style={{color:C.overdue}}> *</span>}</Lbl>
             {clientProjects.length===0||newProject?(
               <Inp value={project} onChange={e=>setProject(e.target.value)} placeholder='Nombre del proyecto...' autoFocus={newProject}/>
             ):(
@@ -20520,6 +20797,11 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
               </div>
             )}
           </div>
+          {esPermanente(ventaProj)&&<div style={{marginBottom:12}}>
+            <Lbl>Subproyecto</Lbl>
+            <Inp value={subproject} onChange={e=>setSubproject(e.target.value)} list='gasto-subproy' placeholder='Ej: Campos, Marcas…'/>
+            <datalist id='gasto-subproy'>{subsCli.map(x=><option key={x} value={x}/>)}</datalist>
+          </div>}
 
           {/* Filas de gasto: layout en 2 líneas */}
           <div style={{marginBottom:8}}>
@@ -20527,10 +20809,10 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
               <div key={row.id} style={{marginBottom:12,paddingBottom:12,borderBottom:idx<rows.length-1?`1px solid ${C.border}`:'none'}}>
                 {/* Línea 1: Tipo | Fecha | Pago Cliente | eliminar */}
                 <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
-                  <select value={row.category} onChange={e=>updateRow(row.id,'category',e.target.value)} style={{...inS,fontSize:12,flex:'0 0 100px',width:'auto'}}>
+                  <select value={row.category} onChange={e=>updateRow(row.id,'category',e.target.value)} style={{...inS,fontSize:12,flex:'0 1 100px',minWidth:0,width:'auto'}}>
                     {CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
-                  <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11,flex:'0 0 130px',width:'auto'}}/>
+                  <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11,flex:'1 1 120px',minWidth:0,width:'auto'}}/>
                   <label title={row.category==='Notaria'?'Notaría siempre se rinde al cliente y no descuenta tu caja chica':undefined} style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto',cursor:row.category==='Notaria'?'default':'pointer',flexShrink:0}}>
                     <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>Pago Cliente</span>
                     <Switch on={row.category==='Notaria'||!!row.paid_by_client} disabled={row.category==='Notaria'} onToggle={()=>updateRow(row.id,'paid_by_client',!row.paid_by_client)}/>
@@ -20565,7 +20847,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
-        {selectedClient&&<button disabled={saving||!rows.some(r=>r.amount&&parseInt(r.amount)>0)} onClick={saveAll} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!rows.some(r=>r.amount)?.6:1}}>
+        {selectedClient&&<button disabled={saving||!rows.some(r=>r.amount&&parseInt(r.amount)>0)||(!esOficina&&!project.trim())} onClick={saveAll} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:C.surface,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!rows.some(r=>r.amount)||(!esOficina&&!project.trim()))?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar todo'}
         </button>}
       </div>
@@ -20675,6 +20957,8 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
             <FloatFld label='Proyecto' mb={0}><input list='exp-edit-projects' value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Proyecto (venta del cliente)…' style={fInp}/></FloatFld>
             <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
             {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
+            {esPermanente((sales||[]).find(s=>s.client_id===f.client_id&&s.title===f.project))&&<div style={{marginTop:6}}><FloatFld label='Subproyecto' mb={0}><input list='exp-edit-subproy' value={f.subproject||''} onChange={e=>up('subproject',e.target.value)} placeholder='Ej: Campos, Marcas…' style={fInp}/></FloatFld>
+              <datalist id='exp-edit-subproy'>{subproyectosCliente(f.client_id,[],expenses).map(x=><option key={x} value={x}/>)}</datalist></div>}
           </div>
           {expense?.id&&<div style={{display:'flex',alignItems:'center'}}><Attachments inline table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos' namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/></div>}
         </div>
@@ -21671,7 +21955,7 @@ function ConciliarFacturasModal({asPage=false, scope=[], sales=[], clients=[], c
 
 // Pestaña "Estado de cuenta" (ex Documentos): vista unificada y trazable del cliente. Lee conciliacion +
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
-function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste, onRendicion}){
+function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], tasks=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste, onRendicion, onAsociarTrabajo}){
   const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
   const [sec,setSec]=useState({})   // secciones-icono (Honorarios/Fondos/Movimientos/Anticipos), colapsadas por defecto
   const secT=k=>setSec(s=>({...s,[k]:!s[k]}))
@@ -21679,6 +21963,9 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [det,setDet]=useState(null); const [detG,setDetG]=useState(null)
   const [ord,setOrd]=useState('fecha')
   const [openRS,setOpenRS]=useState({})   // razones sociales desplegadas (por defecto plegadas)
+  const [ultAsig,setUltAsig]=useState(null)   // último proyecto/RS asignado: {ids, n, undo} — "deshacer" en línea
+  const asignar = onAsociarTrabajo ? async(lote,...r)=>{ const undo=await onAsociarTrabajo(lote,...r); if(undo) setUltAsig({ids:new Set(lote.map(x=>x.id)), n:lote.length, undo}) } : null
+  const deshacerAsig = async()=>{ const u=ultAsig; setUltAsig(null); if(u) await u.undo() }
   const [openProy,setOpenProy]=useState(null)  // proyecto/grupo "Por proyecto" desplegado (key o '_')
   const [porProyOpen,setPorProyOpen]=useState(false)   // el bloque "Por proyecto" arranca oculto
   const [openGrp,setOpenGrp]=useState({Activas:true})  // grupos de estado: Activas visible, Terminadas/Otras plegadas
@@ -21854,13 +22141,33 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           {open&&<div style={{padding:'8px 10px',background:C.bgSoft,borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
             <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:3}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto')}</div>
             <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto'}</b></span><span>Fecha: <b style={{color:C.text}}>{fmtFechaDMY(e.date)}</b></span><span>Monto: <b style={{color:isDev?C.muted:col}}>{isDev?'−'+fmt(Math.abs(e.amount)):fmt(e.amount)}</b></span>{e.category&&<span>Categoría: <b style={{color:C.text}}>{e.category}</b></span>}</div>
-            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Venta / proyecto · razón social</span><span style={{display:'flex',gap:10,flexShrink:0}}>{v&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}{onEditExpense&&<span onClick={(ev)=>{ev.stopPropagation();onEditExpense(e)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>{(v||e.project)?'editar':'asignar'} ↗</span>}</span></div>
-              <div onClick={v&&onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:v&&onOpenSale?'pointer':'default'}}>{v?<><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}</b>:<span style={{color:C.overdue}}>Sin proyecto asignado</span>)}</div>
-              <div style={{color:e.entity_id?C.muted:C.overdue,marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div></div>
+            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Venta / proyecto · razón social</span><span style={{display:'flex',gap:10,flexShrink:0}}>{v&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}{ultAsig?.ids.has(e.id)&&<span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span>}{onEditExpense&&<span onClick={(ev)=>{ev.stopPropagation();onEditExpense(e)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>{(v||e.project||onAsociarTrabajo)?'editar':'asignar'} ↗</span>}</span></div>
+              <div onClick={v&&onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:v&&onOpenSale?'pointer':'default'}}>{v?<><b>{v.title}</b>{e.subproject?<b>{` · ${e.subproject}`}</b>:null}{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}{e.subproject?` · ${e.subproject}`:''}</b>:(onAsociarTrabajo?null:<span style={{color:C.overdue}}>Sin proyecto asignado</span>))}</div>
+              {onAsociarTrabajo&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} onAsignar={asignar}/>}
+              {(e.entity_id||!onAsociarTrabajo||!(clientEntities||[]).length)&&<div style={{color:e.entity_id?C.muted:C.overdue,marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div>}</div>
+            {/* Pago / depósito: de dónde viene o a dónde fue la plata (banco, notaría, caja chica, rendición, fondo que lo cubre). Cada enlace lleva al dato. */}
+            {(()=>{ const links=[]
+              conc.filter(x=>String(x.gasto_id)===String(e.id)).forEach(c=>{ const mv=movById[c.movimiento_id]; links.push({k:'b'+c.movimiento_id, t:signo>0?'Depósito del banco':'Pagado desde el banco', d:[mv?fmtFechaDMY(mv.fecha):null, fmt(c.monto_aplicado), mv?.nombre_contraparte||null].filter(Boolean).join(' · '), on:onOpenConciliacion?()=>onOpenConciliacion(c.movimiento_id):null}) })
+              if(e.notaria_liquidado_at) links.push({k:'n', t:'Pagado a la notaría', d:`liquidación del ${fmtFechaDMY(e.notaria_liquidado_at)}`})
+              if(e.rendered_at) links.push({k:'cc', t:'Caja chica', d:`liquidada el ${fmtFechaDMY(e.rendered_at)}${e.created_by?` · ${e.created_by}`:''}`})
+              if(e.client_rendered_at) links.push({k:'r', t:'Rendido al cliente', d:fmtFechaDMY(e.client_rendered_at)})
+              if(e.reembolso_fondo_id){ const f=expenses.find(x=>String(x.id)===String(e.reembolso_fondo_id)); links.push({k:'f', t:'Cubierto con el fondo', d:f?`${fmtFechaDMY(f.date)} · ${fmt(f.amount)}`:'', on:f?()=>setDetG(f.id):null}) }
+              if(e.apertura_id) links.push({k:'a', t:'Resumido en el saldo inicial', d:`al ${fmtFechaDMY(CORTE_APERTURA)}`})
+              if(!links.length) return null
+              return <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}>
+                <span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>{signo>0?'Depósito':'Pago'}</span>
+                {links.map(l=><div key={l.k} onClick={l.on?(ev)=>{ev.stopPropagation();l.on()}:undefined} style={{display:'flex',gap:6,alignItems:'baseline',color:C.text,cursor:l.on?'pointer':'default'}}><b>{l.t}</b><span style={{color:C.muted}}>{l.d}</span>{l.on&&<span style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,flexShrink:0}}>Ver ›</span>}</div>)}
+              </div> })()}
             {(e.created_by||e.notas)&&<div style={{marginTop:3}}>{e.created_by?`Registrado por ${e.created_by}`:''}{e.notas?` · ${e.notas}`:''}</div>}
           </div>}
         </div>) }
+      const sinPR=[...fondos,...gastos].filter(e=>!e.sale_id||(!e.entity_id&&(clientEntities||[]).length>0)).filter(e=>!e.no_descuenta_saldo&&e.category!=='Apertura'&&cuentaEnSaldo(e))
       return (<div>
+      {ultAsig&&ultAsig.n>1&&<div style={{display:'flex',alignItems:'baseline',gap:8,background:C.bgSoft,borderRadius:8,padding:'8px 10px',marginBottom:8,fontSize:12}}><b style={{color:C.text}}>Asignado a {ultAsig.n}</b><span onClick={deshacerAsig} style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Deshacer</span></div>}
+      {onAsociarTrabajo&&sinPR.length>1&&<div style={{background:C.bgSoft,borderRadius:8,padding:'8px 10px',marginBottom:8}}>
+        <div style={{display:'flex',alignItems:'baseline',gap:8,fontSize:12}}><b style={{color:C.text}}>{sinPR.length} sin proyecto o razón social</b><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums',fontWeight:600}}>{fmt(sinPR.reduce((a,e)=>a+(e.amount||0),0))}</span></div>
+        <AsignarProyectoRS items={sinPR} ventas={(sales||[]).filter(s=>String(s.client_id)===String(client.id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(client.id,tasks,expenses)} onAsignar={asignar}/>
+      </div>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:8}}>
         <div style={{fontSize:11,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?C.overdueText:C.greenText}}>{fmtSaldoG(fg.saldo)}</b></div>
         <button onClick={()=>setFgOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {fgOrd==='desc'?'↓':'↑'}</button>
@@ -21908,6 +22215,67 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], onOpenFactura}){
       <CotejoVenta sale={sale} saleBills={bills} isDesktop={false} entities={ents} nested sinMetricas onOpenFactura={onOpenFactura}/>
     </div>}
   </>)
+}
+// Proyecto y razón social de un gasto/fondo (o de varios a la vez): muestra solo lo que falta, con lo sugerido preseleccionado.
+// Proyecto: sugerirVentaGasto. Razón social: la de ese proyecto, o la única del cliente. Se puede dejar uno de los dos en blanco.
+// Asesoría permanente (cobro mensual): sus gastos llevan subproyecto, igual que sus tareas. Sugerencias = los ya usados por el cliente.
+const esPermanente = v => !!v && v.cobro_type==='mensual'
+const subproyectosCliente = (clientId, tasks=[], expenses=[]) => [...new Set([...(tasks||[]),...(expenses||[])].filter(x=>String(x.client_id)===String(clientId)&&x.subproject).map(x=>x.subproject.trim()))].sort((a,b)=>a.localeCompare(b,'es'))
+function AsignarProyectoRS({e, items, ventas=[], ents=[], subs=[], onAsignar}){
+  const lote = items || (e ? [e] : [])
+  const faltaV = lote.some(x=>!x.sale_id), faltaRS = ents.length>0 && lote.some(x=>!x.entity_id)
+  const sug = e ? sugerirVentaGasto(e, ventas, null) : {venta: ventas.length===1 ? ventas[0] : (ventas.filter(s=>s.status==='Activo').length===1 ? ventas.find(s=>s.status==='Activo') : null)}
+  const [v,setV] = useState(sug.venta?String(sug.venta.id):'')
+  const rsDeV = id => { const s=ventas.find(x=>String(x.id)===String(id)); return s&&s.entity_id&&ents.some(en=>String(en.id)===String(s.entity_id)) ? String(s.entity_id) : (ents.length===1 ? String(ents[0].id) : '') }
+  const [rs,setRs] = useState(rsDeV(v))
+  const [sub,setSub] = useState('')
+  const vSel = ventas.find(x=>String(x.id)===String(v))
+  const pideSub = faltaV && esPermanente(vSel)
+  if(!faltaV && !faltaRS) return null
+  const sel = {flex:'1 1 170px',minWidth:0,fontSize:12,padding:'6px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.text}
+  const ok = (faltaV&&v) || (faltaRS&&rs)
+  return (
+    <div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:6,alignItems:'center',marginTop:5,flexWrap:'wrap'}}>
+      {faltaV&&ventas.length>0&&<select value={v} onChange={ev=>{ setV(ev.target.value); const r=rsDeV(ev.target.value); if(r) setRs(r) }} aria-label='Proyecto' style={sel}>
+        <option value=''>Proyecto…</option>
+        {ventas.map(s=><option key={s.id} value={s.id}>{s.title}{s.status!=='Activo'?` (${s.status.toLowerCase()})`:''}</option>)}
+      </select>}
+      {pideSub&&<><input value={sub} onChange={ev=>setSub(ev.target.value)} list='asig-subproy' placeholder='Subproyecto…' aria-label='Subproyecto' style={sel}/><datalist id='asig-subproy'>{subs.map(x=><option key={x} value={x}/>)}</datalist></>}
+      {faltaRS&&<select value={rs} onChange={ev=>setRs(ev.target.value)} aria-label='Razón social' style={sel}>
+        <option value=''>Razón social…</option>
+        {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
+      </select>}
+      <button disabled={!ok} onClick={()=>onAsignar(lote, faltaV?v:'', faltaRS?rs:'', pideSub?sub.trim():'')} style={{fontSize:12,fontWeight:700,borderRadius:8,padding:'6px 12px',border:'none',background:ok?C.accent:C.done,color:C.surface,cursor:ok?'pointer':'default',whiteSpace:'nowrap'}}>{lote.length>1?`Asignar a los ${lote.length}`:'Asignar'}</button>
+    </div>)
+}
+// Gastos y fondos de UNA venta (columna de la venta, bajo "Cobro de la venta"): el trabajo es el centro; cada movimiento abre su
+// detalle. Saldo del trabajo = fondos − gastos vinculados (misma regla que fgCliente, pero acotada a sale_id).
+function GastosVentaCard({sale, expenses=[], onOpenGasto}){
+  const [todos,setTodos] = useState(false)
+  const movs = (expenses||[]).filter(e=>String(e.sale_id)===String(sale.id)&&!e.deleted_at&&cuentaEnSaldo(e)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
+  const fondos = movs.filter(e=>e.type==='fondo'), gastos = movs.filter(e=>e.type!=='fondo')
+  const tF = fondos.reduce((a,e)=>a+(e.amount||0),0), tG = gastos.filter(e=>!e.no_descuenta_saldo).reduce((a,e)=>a+(e.amount||0),0)
+  const porRendir = gastos.filter(e=>!e.no_descuenta_saldo&&!e.client_rendered_at&&e.category!=='Apertura').reduce((a,e)=>a+(e.amount||0),0)
+  const saldo = tF - tG
+  const ln = (l,v,col,{sub=false,top=false,bold=false}={}) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:sub?'3px 0 3px 12px':'5px 0',borderTop:top?`1px solid ${C.track}`:'none',marginTop:top?4:0,fontSize:sub?12:13}}><span style={{color:sub?C.muted:C.text,fontWeight:bold?700:400}}>{l}</span><span style={{fontWeight:bold?700:600,color:col||C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
+  const vis = todos ? movs : movs.slice(0,5)
+  return (
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:10}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Gastos y fondos</div>
+      {ln(`Fondos recibidos${fondos.length?` (${fondos.length})`:''}`, fmt(tF), tF?C.greenText:C.muted)}
+      {ln(`Gastos${gastos.length?` (${gastos.length})`:''}`, tG?'−'+fmt(tG):fmt(0), tG?C.text:C.muted)}
+      {porRendir>0&&ln('Por rendir al cliente', fmt(porRendir), C.soonText, {sub:true})}
+      {ln('Saldo', fmtSaldoG(saldo), saldo<0?C.overdueText:C.accent, {top:true,bold:true})}
+      {movs.length>0&&<div style={{marginTop:6,borderTop:`1px solid ${C.track}`}}>
+        {vis.map(e=><div key={e.id} onClick={()=>onOpenGasto&&onOpenGasto(e)} className='lf-row' style={{display:'grid',gridTemplateColumns:'44px minmax(0,1fr) auto',gap:8,alignItems:'center',padding:'6px 0',borderBottom:`1px solid ${C.bgSoft}`,cursor:onOpenGasto?'pointer':'default'}}>
+          {diaGrande(e.date)}
+          <div style={{minWidth:0}}><div style={{fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.type==='fondo'?'Fondo · ':''}{e.concept||e.category}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[e.type!=='fondo'?e.category:null,e.ot_number?'OT '+e.ot_number:null,e.client_rendered_at?'rendido':null].filter(Boolean).join(' · ')}</div></div>
+          <span style={{fontSize:12.5,fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:e.type==='fondo'?C.greenText:C.text}}>{e.type==='fondo'?'+':'−'}{fmt(e.amount)}</span>
+        </div>)}
+        {movs.length>5&&<div onClick={()=>setTodos(t=>!t)} style={{fontSize:12,color:C.azulInfo,fontWeight:600,cursor:'pointer',paddingTop:6}}>{todos?'Ver menos':`Ver los ${movs.length}`}</div>}
+      </div>}
+      {!movs.length&&<div style={{fontSize:12,color:C.muted,marginTop:4}}>Sin gastos ni fondos.</div>}
+    </div>)
 }
 // La VENTA es página (antes ventana): '‹ origen | Venta | cliente'. Escritorio: formulario + columna 'Cobro de la venta'; móvil: el cobro va bajo el resumen.
 function VentaPage({origen, titulo, ctx, right, onBack, cobro, ancho=980, children}){
@@ -23431,7 +23799,7 @@ Saludos cordiales,`
   return asPage ? _page : (<Modal fullscreen fsMaxWidth={isDesktop?780:640} title={<><span style={{color:C.accent}}>Enviar rendición</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>{_body}</Modal>)
 }
 
-function ClientFicha({onToggleStatus,onOpenFusion,client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
+function ClientFicha({onAsociarTrabajo,onToggleStatus,onOpenFusion,client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
   const [emailRend,setEmailRend] = useState(null)
   const [menuMas,setMenuMas] = useState(false)
   // Volver a la misma pestaña de la ficha tras una página (gasto, factura, ajuste…).
@@ -23616,12 +23984,12 @@ function ClientFicha({onToggleStatus,onOpenFusion,client,clients,sales,billing,e
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields} clientBilling={clientBilling} onOpenFinanciero={()=>setFtab('financiero')}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onAddSale={onAddSale} onConciliar={()=>onConciliar&&onConciliar(client)} onOpenConciliacion={onOpenConciliacion} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onReplaceProgramada={onReplaceProgramada} onOpenSale={onOpenSale}/>}
-      {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onRendicion={onRendicion?()=>onRendicion(client):undefined} onAjuste={onAjuste}/>}
+      {ftab==='documentos'&&<EstadoCuentaTab onAsociarTrabajo={onAsociarTrabajo} tasks={tasks} client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onRendicion={onRendicion?()=>onRendicion(client):undefined} onAjuste={onAjuste}/>}
     </div>
   )
 }
 
-function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
+function ClientsView({onAsociarTrabajo,clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
   // Clientes creados por el último sync de Drive → tag "Nuevo · Drive" unos días.
   const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())
   useEffect(()=>{ if(DEMO){ setNuevosDrive(new Set(['tech araucanía spa'])); return } let alive=true
@@ -23726,6 +24094,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         onOpenSale={onOpenSale}
         onEditTask={onEditTask}
         onEditExpense={onEditExpense}
+        onAsociarTrabajo={onAsociarTrabajo}
         onConciliar={onConciliar}
         onOpenConciliacion={onOpenConciliacion}
         onAssignSeries={onAssignSeries}
@@ -32963,7 +33332,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],setBillin
   // Gastos pendientes de reembolso del cliente = (gastos − fondos del ledger) − lo ya reembolsado por conciliación.
   const gastoPend = cid => Math.max(0, -saldoCliente(expenses, cid) - (reembGastoByCliente[cid]||0))
   // 3.B — gastos del cliente AÚN no reembolsados (candidatos a marcar en una devolución), del más antiguo al más nuevo.
-  const gastosReembolsables = cid => (expenses||[]).filter(e=> e.type!=='fondo' && !e.no_descuenta_saldo && String(e.client_id)===String(cid) && !e.reembolso_fondo_id && !e.deleted_at).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1)
+  const gastosReembolsables = cid => (expenses||[]).filter(e=> e.type!=='fondo' && !e.no_descuenta_saldo && String(e.client_id)===String(cid) && !e.reembolso_fondo_id && !e.deleted_at && cuentaEnSaldo(e)).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1)
   // Caso "factura + gastos": el abono excede una factura y el exceso ≈ los gastos pendientes del cliente (reembolso junto a honorarios).
   const facturaMasGastos = (mov) => { if(!esConciliable(mov)) return null
     const pend = gastoPend(mov.cliente_id); if(pend<=0) return null
@@ -35692,7 +36061,7 @@ function AjusteModal({client, user, onSave, onClose, saving, asPage=false, expen
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
+const TAB_LABELS = {tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',corte:'Saldos iniciales',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
@@ -36104,6 +36473,24 @@ export default function App() {
   // Pila de navegación cross-link: cada salto apila {tab,fichaId,scroll}; el ← desapila y restaura la posición exacta.
   // DEBE ir antes de handleBackOrigin (su dep array se evalúa en render → TDZ/pantalla negra si va después).
   const [navStack,setNavStack]=useState([])
+  // Asigna proyecto (venta) y/o razón social a uno o varios gastos/fondos desde la ficha. Solo completa lo que falta (no pisa);
+  // aprende la glosa → proyecto (learnings gasto_venta); deshacer con el toast; bitácora.
+  const handleAsociarTrabajo=async(lote,saleId,entityId,subproject)=>{
+    const v=saleId?(sales||[]).find(s=>String(s.id)===String(saleId)):null
+    const cambios=(lote||[]).map(e=>({e, patch:{...(v&&!e.sale_id?{sale_id:v.id,project:v.title,...(subproject?{subproject}:{})}:{}), ...(entityId&&!e.entity_id?{entity_id:entityId}:{})}})).filter(c=>Object.keys(c.patch).length)
+    if(!cambios.length) return
+    const antes=cambios.map(c=>({id:c.e.id, sale_id:c.e.sale_id||null, project:c.e.project||null, subproject:c.e.subproject||null, entity_id:c.e.entity_id||null}))
+    try{
+      if(!DEMO){ for(const c of cambios){ const {error}=await supabase.from('expenses').update(c.patch).eq('id',c.e.id); if(error) throw error }
+        if(v) cambios.filter(c=>c.patch.sale_id).forEach(c=>learnPut('gasto_venta',`${c.e.client_id}::${glosaKey(c.e.concept||'')}`,v.id,{})) }
+      setExpenses(p=>p.map(x=>{ const c=cambios.find(y=>y.e.id===x.id); return c?{...x,...c.patch}:x }))
+      logActividad('gastos.proyecto_rs_asignado',{tabla:'expenses',detalle:{n:cambios.length,proyecto:v?.title||null,subproyecto:subproject||null,razon_social:entityId||null,monto:cambios.reduce((a,c)=>a+(c.e.amount||0),0)}})
+      return async()=>{
+        if(!DEMO) for(const a of antes){ await supabase.from('expenses').update({sale_id:a.sale_id,project:a.project,subproject:a.subproject,entity_id:a.entity_id}).eq('id',a.id) }
+        setExpenses(p=>p.map(x=>{ const a=antes.find(y=>y.id===x.id); return a?{...x,sale_id:a.sale_id,project:a.project,subproject:a.subproject,entity_id:a.entity_id}:x }))
+        logActividad('gastos.proyecto_rs_deshecho',{tabla:'expenses',detalle:{n:antes.length}}) }
+    }catch(err){ appAlert('No se pudo asignar: '+err.message) }
+  }
   const handleOpenClientFicha=useCallback((cid)=>{ if(cid){ setNavStack(s=>[...s,{tab,fichaId:tab==='clients'?openFichaId:null,scroll:getScroll(),pagina:['tarea','gasto','flujo'].includes(tab)?pagina:null}]); setOpenFichaId(cid); setTab('clients'); setTimeout(()=>restoreScroll({w:0,d:0}),0) } },[tab,openFichaId,pagina])
   const handleBackOrigin=useCallback(()=>{ if(!navStack.length) return; _volviendoAt=Date.now(); const e=navStack[navStack.length-1]; if(e.pagina) setPagina(e.pagina); setTab(e.tab); setOpenFichaId(e.fichaId||null); setNavStack(s=>s.slice(0,-1)); if(e.scroll){ setTimeout(()=>restoreScroll(e.scroll),60); setTimeout(()=>restoreScroll(e.scroll),220) } },[navStack])
   // Navegación unificada bajo navStack: navTo(destino) apila SIEMPRE el estado actual (tab+ficha+scroll) y salta al lugar EXACTO (con foco opcional);
@@ -36247,6 +36634,7 @@ export default function App() {
       try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
       // Vistas del equipo limitado (correo "Tu semana"): disponibles para todos.
       if(ir==='gastos'||ir==='notaria') return setTab('expenses')
+      if(ir==='saldos'&&userRole==='admin') return setTab('corte')
       if(ir==='cajachica') return setTab('cajachica')
       if(ir==='tareas') return setTab('tasks')
       // Vistas de conciliación: solo admin.
@@ -36370,7 +36758,7 @@ export default function App() {
     if((tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
     if(userRole==='limited' && !esPagina && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
-    if(userRole==='admin' && tab!=='facturasDelMes' && !esPagina && tab!=='socios' && tab!=='resultadoAnio' && tab!=='subarriendo' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
+    if(userRole==='admin' && tab!=='facturasDelMes' && !esPagina && tab!=='socios' && tab!=='corte' && tab!=='resultadoAnio' && tab!=='subarriendo' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')   // facturasDelMes/editCliente/socios = drill-down válidos, fuera de la paleta
     // Módulo apagado (entitlements): si la vista actual pertenece a un módulo no contratado, redirige. Para LEA (todo ON) es inerte.
     if(VIEW_MODULO[tab] && !moduloOn(VIEW_MODULO[tab])) setTab(userRole==='admin'?'dashboard':'tasks')
   },[userRole,tab,modVer,pagina])
@@ -38490,7 +38878,7 @@ export default function App() {
           const ctx=(cli&&d.id)?(desdeFicha?cambiar:<><span onClick={()=>handleOpenClientFicha(cli.id)} title='Ver ficha del cliente' style={{color:C.accent,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cli.name}</span> · {cambiar}</>):null
           const right=(!d.id&&!d._activandoPropuesta)?<div style={{display:'flex',gap:6}}><ActBtn variant='softNavy' onClick={()=>saleUploadRef.current?.()} title='Cargar un PDF y leerlo con IA para autocompletar'>Lectura con IA</ActBtn><ActBtn onClick={()=>saleDriveRef.current?.()} title='Propuestas en Drive' style={{padding:'0 9px'}}><DriveIcon size={16}/></ActBtn></div>:null
           return <VentaPage origen={origen} titulo={titulo} ctx={ctx} right={right} onBack={()=>setModal(null)} ancho={(!d.id||['Propuesta','Borrador'].includes(d.status)||d._activandoPropuesta)?980:680}
-            cobro={conCobro?<CobroVentaCard sale={live} billing={billing} clientEntities={clientEntities} onOpenFactura={b=>setModal({type:'billing',data:b})}/>:null}>
+            cobro={conCobro?<><CobroVentaCard sale={live} billing={billing} clientEntities={clientEntities} onOpenFactura={b=>setModal({type:'billing',data:b})}/><GastosVentaCard sale={live} expenses={expenses} onOpenGasto={e=>setModal({type:'expenseEdit',data:e})}/></>:null}>
             {after=><SaleForm asPage afterHero={after} sale={d.id?d:{...d}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} onPrimerasTareas={(s)=>setModal({type:'primerasTareas',data:s})} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/>}
           </VentaPage> })()}
             {tab==='tarea'&&pagina&&<TareaPage pagina={pagina} tasks={tasks} clients={clients} sales={sales} clientEntities={clientEntities} user={user} saving={saving} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSaveTask={handleSaveTask} onDelegate={handleDelegateTask} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onOpenClientFicha={handleOpenClientFicha} onCierre={({estado,detalle,files})=>{ const t=pagina.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/>}
@@ -38517,6 +38905,7 @@ export default function App() {
             </div>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onPagarBulk={handlePagarTercerosBulk} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack} origen={origenNav('Oficina')}/>}
+            {tab==='corte'&&userRole==='admin'&&<CorteAperturaView expenses={expenses} clients={clients} sales={sales} billing={billing} isDesktop={isDesktop} currentUserName={user?.name} onBack={goBack} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
             {tab==='estadoResultados'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:600,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
@@ -38540,10 +38929,10 @@ export default function App() {
               </div>
               <MiCargaModal tasks={tasks} proyectosCartera={proyectosCartera} setProyectosCartera={setProyectosCartera} clients={clients} user={user} onClose={goBack} onOpenClientFicha={handleOpenClientFicha}/>
             </div>}
-            {tab==='expenses'&&<ExpensesView onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} onRevisionCajaChica={()=>navTo({tab:'conciliacion',ccRev:true})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
+            {tab==='expenses'&&<ExpensesView onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} onRevisionCajaChica={()=>navTo({tab:'conciliacion',ccRev:true})} onCorteApertura={()=>navTo({tab:'corte'})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView isAdmin={userRole==='admin'} expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView onAsociarTrabajo={handleAsociarTrabajo} clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
           </ViewErrorBoundary></div>
         )}
         {!isDesktop&&userRole==='limited'&&tab==='tasks'&&(
