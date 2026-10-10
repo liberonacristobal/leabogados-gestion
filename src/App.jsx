@@ -7882,6 +7882,15 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
+// Factura emitida SIN CLIENTE ('cli') o SIN VENTA ('vta') — FUENTE ÚNICA de la tarjeta "Facturas sin cliente / venta" y de su vista.
+// Solo la vida de la app (desde 2026-06-06): lo anterior es histórico y se resuelve una vez, no queda pendiente para siempre.
+function catSinClienteVenta(b, tercerosByBilling){
+  if(!b||b.deleted_at||!(b.invoice_no||b.folio)||b.status==='Anulada'||b.billing_type==='reembolso') return null
+  if(String(b.issued_at||b.due||'').slice(0,10)<'2026-06-06') return null
+  if(!b.client_id) return 'cli'
+  if(!b.sale_id&&!(tercerosByBilling&&tercerosByBilling.has(b.id))&&['Pendiente','Vencido','Pagado'].includes(b.status)) return 'vta'
+  return null
+}
 function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), clients, clientEntities=[], sales=[], anticipos=[], onFacturarAdelantos, onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onEnviarVarias, onUnsend, onAssignSeries, onCotejar, onCargarXML, onReplaceProgramada}) {
   // Razón social a la que se emitió la factura — fuente única a nivel módulo (rsDeFactura).
   const rsDe = b => rsDeFactura(b, clientEntities)
@@ -12691,7 +12700,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             : filter==='sinemitir'
             ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.soonBg,color:C.soonText,flexShrink:0}}>Cuotas vencidas sin facturar</span>
             : filter==='porcompletar'
-            ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.overdueBg,color:C.overdueText,flexShrink:0}}>Por completar</span>
+            ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.overdueBg,color:C.overdueText,flexShrink:0}}>Sin cliente / venta</span>
             : <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
             {[['clientes','Por cliente'],['all','Todas']].map(([v,l])=><span key={v} onClick={()=>{setFilter(v);clearSel();setSoloSinEnviar(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 13px',cursor:'pointer',background:filter===v?C.accent:'transparent',color:filter===v?'#fff':C.muted}}>{l}</span>)}
           </div>}
@@ -12863,7 +12872,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
               const facSinXmlN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.dte_xml&&String(b.issued_at||'').slice(0,10)>='2026-06-09').length
               const revisar=[
-                facSinXmlN>0&&{k:'DTE emitidos sin XML', s:'emitidas en el SII sin el XML firmado · completar', n:facSinXmlN, col:C.soonText, on:()=>go('porcompletar')},
+                facSinXmlN>0&&{k:'DTE emitidos sin XML', s:'emitidas en el SII sin el XML firmado · completar', n:facSinXmlN, col:C.soonText, on:()=>go('checklist')},
                 sinEmitirN>0&&{k:'Cuotas vencidas sin facturar', s:'programadas de meses cerrados · por revisar', n:sinEmitirN, col:C.soonText, on:()=>go('sinemitir')},
                 rech.length>0&&{k:'DTE rechazadas por el SII', s:'revisar y volver a emitir', n:rech.length, col:C.overdueText, on:()=>go('rechazadas')},
                 dupN>0&&{k:'Ya emitidas · vincular', s:'enlazar emitidas ↔ programadas · en el Cotejo con SII', n:dupN, col:C.soonText, on:()=>setSiiOpen(true)},
@@ -12872,28 +12881,21 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 sinAnio.length>0&&{k:'Sin año', s:'facturas sin año de venta', n:sinAnio.length, col:C.soonText, on:()=>go('sinanio')},
               ].filter(Boolean)
               const revTotal=revisar.reduce((a,r)=>a+(r.n||0),0)
-              const revOpenEf = isDesktop ? !porRevOpen : porRevOpen   // escritorio: desplegado por defecto; móvil: plegado
-              // "Facturas sin cliente / venta": unifica 3 poblaciones que NO suman en ventas ni ingresos hasta resolverlas.
-              // (1) emitidas sin cliente · (2) emitidas con cliente pero sin venta/proyecto (solo las vivas: Pendiente/Vencido, para no inundar con pagos únicos ya cerrados) · (3) sinRegN = emitidas en el SII cargadas sin registrar.
-              const facSinCliN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.client_id).length
-              const facSinVtaN=(billing||[]).filter(b=>_emitBasePC(b)&&b.client_id&&!b.sale_id&&['Pendiente','Vencido'].includes(b.status)).length
-              // + sin razón social + pagadas sin proyecto (todas las categorías "por completar") en el badge de la tarjeta.
-              const facSinRSN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.entity_id).length
-              const facPagSinVtaN=(billing||[]).filter(b=>_emitBasePC(b)&&b.client_id&&!b.sale_id&&b.status==='Pagado').length
-              const porCompletarN=facSinCliN+facSinVtaN+(sinRegN||0)+facSinXmlN+facSinRSN+facPagSinVtaN
+              // "Facturas sin cliente / venta": la MISMA lista de su vista (catSinClienteVenta + docs del SII sin cliente reconocido).
+              const porCompletarN=(billing||[]).filter(b=>catSinClienteVenta(b,tercerosByBilling)).length+(siiSinCli||[]).length
               const mesTop={fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
               const mesN={fontSize:12,fontWeight:500,letterSpacing:.4,textTransform:'uppercase',marginTop:1}
               const money={fontSize:23,fontWeight:800,letterSpacing:-.6,marginTop:6,fontVariantNumeric:'tabular-nums',lineHeight:1}
               // Tarjeta de acceso uniforme: icono + titular MAYÚSCULAS + sub, y valor/badge/chevron a la derecha.
               const accCard=(sqbg,stroke,pathEl,titulo,sub,onClick,opts={})=>(
-                <div onClick={onClick} style={{background:opts.cardBg||'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',minHeight:66,display:'flex',flexDirection:'column',justifyContent:'center',gap:5}}>
+                <div onClick={onClick} style={{background:opts.cardBg||'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',minHeight:66,height:'100%',boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'center',gap:5}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{width:28,height:28,borderRadius:8,background:sqbg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={stroke} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'>{pathEl}</svg></span>
                     {opts.value?<span style={{marginLeft:'auto',fontSize:14,fontWeight:800,color:opts.valCol||C.text,fontVariantNumeric:'tabular-nums',display:'flex',alignItems:'center',gap:5}}>{opts.dot&&<span style={{width:6,height:6,borderRadius:'50%',background:opts.dot}}/>}{opts.value}</span>
                       :opts.badge!=null?<span style={{marginLeft:'auto',fontSize:15,fontWeight:800,color:opts.badgeCol||C.overdueText}}>{opts.badge}</span>
                       :<span style={{marginLeft:'auto',color:C.done,fontSize:12}}>›</span>}
                   </div>
-                  <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:opts.titCol||C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{titulo}</div>
+                  <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:opts.titCol||C.text,lineHeight:1.3}}>{titulo}</div>
                   <div style={{fontSize:10,color:opts.subCol||C.done,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
                 </div>)
               const P=d=><path d={d}/>
@@ -12918,26 +12920,22 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                   </div>
                 </div>
                 {/* ACCESOS: tarjetas iguales. Orden pedido 2026-10-02: la tarjeta roja "Facturas sin cliente / venta" ocupa el lugar de "Por socio" (arriba-izq, lo más visible); Por socio baja al espacio libre (abajo-der). */}
-                {/* POR REVISAR = aviso de acción a todo el ancho (antes 5ª tarjeta sola al final): sus acciones a la vista, plegable. */}
-                {revisar.length>0&&<div style={{border:`1px solid ${C.overdueText}`,borderRadius:12,overflow:'hidden',background:C.overdueBg}}>
-                  <div onClick={()=>setPorRevOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',cursor:'pointer'}}>
-                    <SIcon n='alert' s={16} c={C.overdueText}/>
-                    <span style={{fontSize:13,fontWeight:700,color:C.overdueText}}>Por revisar · {revTotal}</span>
-                    {isDesktop&&<span style={{fontSize:11,color:C.overdueText,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>acciones pendientes de la facturación</span>}
-                    <span style={{marginLeft:'auto',color:C.overdueText,fontSize:12,flexShrink:0}}>{revOpenEf?'▴':'▾'}</span>
-                  </div>
-                  {revOpenEf&&revisar.map((r,i)=><div key={i} onClick={r.on} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'9px 13px',background:'#fff',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
-                    <span style={{width:26,textAlign:'center',fontSize:15,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
+                {/* POR REVISAR = una tarjeta del grid (mismo formato que las demás); al tocarla, sus acciones se despliegan bajo las tarjetas. */}
+                {(()=>{ const tarjetas=[
+                  revisar.length>0&&accCard('#fff',C.overdueText,P('M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01'),'Por revisar',`${revisar.length} ${revisar.length===1?'acción':'acciones'} · ${porRevOpen?'ocultar':'ver'}`,()=>setPorRevOpen(o=>!o),{badge:revTotal,badgeCol:C.soonText,titCol:C.text}),
+                  porCompletarN>0&&accCard('#fff',C.overdueText,P('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01'),'Facturas sin cliente / venta','No suman en ventas ni ingresos',()=>go('porcompletar'),{badge:porCompletarN,badgeCol:C.overdueText,cardBg:C.overdueBg,titCol:C.overdueText,subCol:C.overdueText}),
+                  accCard(C.soonBg,C.soonText,P('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01'),'Anticipos disponibles','a favor de clientes',()=>go('anticipos'),{value:antDisp>0?fmtShort(antDisp):'—',valCol:antDisp>0?C.soonText:C.done,dot:antDisp>0?'#EF9F27':null}),
+                  onIrCobranza&&accCard(C.greenBg,C.greenText,P('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0'),'Cobranza','Por cobrar · recordatorios de pago',()=>onIrCobranza()),
+                  onOpenPorSocio&&accCard(C.azulBg,C.accent,P('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7'),'Por socio','Facturado y caja · mes/año',onOpenPorSocio),
+                  ].filter(Boolean); const nCol=isDesktop?tarjetas.length:2
+                  return <div style={{display:'grid',gridTemplateColumns:`repeat(${nCol},minmax(0,1fr))`,gap:8}}>{tarjetas.map((t,i)=><div key={i} style={{minWidth:0,gridColumn:(!isDesktop&&i===tarjetas.length-1&&tarjetas.length%2)?'1 / -1':undefined}}>{t}</div>)}</div> })()}
+                {porRevOpen&&revisar.length>0&&<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                  {revisar.map((r,i)=><div key={i} onClick={r.on} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'10px 13px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.k}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.s}</div></div>
+                    <span style={{fontSize:15,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
                     <SIcon n='chevron' s={13} c={C.done}/>
                   </div>)}
                 </div>}
-                <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'minmax(0,1fr) minmax(0,1fr)',gap:8}}>
-                  {porCompletarN>0&&accCard('#fff',C.overdueText,P('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01'),'Facturas sin cliente / venta','No suman en ventas ni ingresos',()=>go('porcompletar'),{badge:porCompletarN,badgeCol:C.overdueText,cardBg:C.overdueBg,titCol:C.overdueText,subCol:C.overdueText})}
-                  {accCard(C.soonBg,C.soonText,P('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01'),'Anticipos disponibles','a favor de clientes',()=>go('anticipos'),{value:antDisp>0?fmtShort(antDisp):'—',valCol:antDisp>0?C.soonText:C.done,dot:antDisp>0?'#EF9F27':null})}
-                  {onIrCobranza&&accCard(C.greenBg,C.greenText,P('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0'),'Cobranza','Por cobrar · recordatorios de pago',()=>onIrCobranza())}
-                  {onOpenPorSocio&&accCard(C.azulBg,C.accent,P('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7'),'Por socio','Facturado y caja · mes/año',onOpenPorSocio)}
-                </div>
               </div>
             )})()}
             {/* DTE rechazadas · Por enviar · Ya emitidas·vincular · Pagadas sin marcar · Sin año → ahora en la tira "Por revisar" (arriba). Cobranza → su vista. Proveedores fuera. */}
@@ -13323,7 +13321,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const matchTxt=(nm,folio,rut)=>!_q||`${folio||''} ${nm||''} ${rut||''}`.toLowerCase().includes(_q)
           const matchYrD=d=>!_yr||String(d||'').slice(0,4)===_yr
           // categoría primaria de una factura (una sola, para no duplicar entre secciones)
-          const catDe=b=>{ if(!_emitBase(b)) return null; if(!b.client_id) return 'cli'; if(!b.sale_id&&!tercerosByBilling.has(b.id)&&['Pendiente','Vencido','Pagado'].includes(b.status)) return 'vta'; if(faltaRS(b)||faltaXml(b)) return 'dat'; return null }
+          const catDe=b=>catSinClienteVenta(b,tercerosByBilling)
           // entradas unificadas: billing + docs del SII sin cliente (siiSinCli)
           const entries=[]
           ;(billing||[]).forEach(b=>{ const cat=catDe(b); if(!cat) return; const nm=nomDe(b); const rut=b.receptor_rut||''; if(!matchTxt(nm,folioN(b.invoice_no||b.folio),rut)||!matchYrD(b.issued_at||b.due)) return
@@ -13455,7 +13453,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 <option value='folioasc'>Folio ↑</option>
               </select>
             </div>
-            <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'-4px 2px 0'}}>{entries.length} factura{entries.length!==1?'s':''} sin cliente, sin venta o con un dato pendiente · <b style={{color:C.accent}}>{fmtMon(totMonto)}</b></div>
+            <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'-4px 2px 0'}}>{entries.length} factura{entries.length!==1?'s':''} sin cliente o sin venta · <b style={{color:C.accent}}>{fmtMon(totMonto)}</b></div>
             {sinRegN>0&&<div onClick={()=>cargarSinRegistrar()} style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
               <span style={{width:30,height:30,borderRadius:9,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg></span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{sinRegN} emitida{sinRegN!==1?'s':''} en el SII sin cargar</div><div style={{fontSize:11,color:C.muted}}>Cárgalas para registrarlas en el sistema</div></div>
@@ -13464,7 +13462,6 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             {entries.length===0&&sinRegN===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todo al día — no hay facturas por completar.</div>}
             {catSection('cli','Sin cliente',cliE)}
             {catSection('vta','Falta venta',vtaE)}
-            {catSection('dat','Datos por completar',datE)}
           </div>)
 })() : filter==='all' ? (()=>{
           const hoy=new Date().toISOString().slice(0,10)
@@ -20240,6 +20237,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       {t:'Historial', ic:'clock', s:'Rendiciones y pagos', col:C.accent, bg:C.azulBg, go:()=>setShowHistorial(true)},
       {t:'Solicitar fondos', ic:'mail', s:'Pedir provisión al cliente', col:C.soonText, bg:C.soonBg, go:()=>onSolicitarFondos&&onSolicitarFondos()},
     ]
+    // Caja chica del equipo ↔ banco: tarjeta como las demás (antes fila suelta); abre la revisión en Banco.
+    if(isAdmin&&onRevisionCajaChica){ const sinCC=calceCajaChica(pettyCash,[],{}).cajasSinTransf.length
+      cards.splice(4,0,{t:'Caja chica', ic:'wallet', s:sinCC?`${sinCC} sin conciliar`:'Conciliada', col:C.greenText, bg:C.greenBg, go:onRevisionCajaChica}) }
     // Tarjeta de navegación: blanca, plana, con ícono en cuadro (sin barra de color) — como el render autorizado.
     const navCard = c => (
       <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
@@ -20291,18 +20291,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Entregar caja{neg?` ${fmtN(-a.saldo)}`:''} ›</span>
               </div>) })}
           </div>) })()}
-        {/* Revisión de caja chica (admin): misma fila que en Banco › Cargos; aquí cuenta las cajas sin conciliar (fuente única calceCajaChica) y abre el panel. */}
-        {isAdmin&&onRevisionCajaChica&&(()=>{ const sin=calceCajaChica(pettyCash,[],{}).cajasSinTransf; if(!sin.length) return null; const viejas=sin.filter(x=>x.dias>=5).length; return (
-          <div onClick={onRevisionCajaChica} className='lf-row' style={{display:'flex',alignItems:'center',gap:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 14px',marginBottom:10,cursor:'pointer'}}>
-            <span style={{width:30,height:30,borderRadius:8,background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={16} c={C.greenText}/></span>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Revisión de caja chica</div><div style={{fontSize:11,color:C.muted}}>{sin.length} {sin.length===1?'caja':'cajas'} del equipo sin conciliar con el banco{viejas?` · ${viejas} hace 5+ días`:''}</div></div>
-            <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Revisar ›</span>
-          </div>) })()}
-        {Object.keys(pedirFondosGrupos).some(k=>k!=='__sin__')&&(
-          <button onClick={()=>{setPedirSent({});setPedirOpen(true)}} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:7,background:C.accent,color:'#fff',border:'none',borderRadius:12,padding:'11px 14px',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:D?16:11}}><SIcon n='mail' s={15} c='#fff'/>Pedir fondos a los abogados</button>
-        )}
         <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr':'1fr 1fr',gap:D?12:8}}>
-          {cards.map(navCard)}
+          {cards.map((c,i)=>(i===cards.length-1&&cards.length%(D?3:2))?<div key={c.t} style={{gridColumn:'1 / -1'}}>{navCard(c)}</div>:navCard(c))}
         </div>
       </div>
     )
@@ -35534,33 +35524,6 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
             </div>
           )
         })()}
-
-        {/* Revisión de caja chica: cruza transferencias a Martín/Martina con sus cargas de caja chica (±3 días). Abre el panel. */}
-        {sub==='cargos'&&(()=>{ const nL=revisionCC.listas.length, nR=revisionCC.porRevisar.length, nS=revisionCC.cajasSinTransf.filter(x=>x.dias>=5).length, nT=revisionCC.transfSinCaja.filter(x=>!x.posibleSueldo&&x.dias>=2).length; if(!(nL||nR||nS||nT)) return null; return (
-          <div onClick={()=>setCcRevOpen(true)} style={{cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',borderRadius:12,padding:'12px 14px',marginBottom:10}}>
-            <div style={{display:'flex',alignItems:'center',gap:9}}>
-              <span style={{width:30,height:30,borderRadius:8,background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={16} c={C.greenText}/></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent}}>Revisión de caja chica</div><div style={{fontSize:10,color:C.muted}}>transferencias al equipo ↔ sus cajas registradas</div></div>
-              <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
-                {nL>0&&<span style={{fontSize:11,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>{nL} para enlazar</span>}
-                {nR>0&&<span style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'3px 9px'}}>{nR} por confirmar</span>}
-                {nS+nT>0&&<span style={{fontSize:11,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'3px 9px'}}>{nS+nT} sin pareja</span>}
-                <span style={{fontSize:12,color:C.done}}>›</span>
-              </div>
-            </div>
-          </div>
-        )})()}
-
-        {/* Leer los "VALORES" de la contadora: la IA extrae los costos exactos del mes → alimentan el cruce cargo↔presupuesto (incl. pagos agrupados). Replegado por defecto: es herramienta secundaria. */}
-        {sub==='cargos'&&<div style={{background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:10}}>
-          <div style={{display:'flex',alignItems:'center',gap:9}}>
-            <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={15} c={C.accent}/></span>
-            <div onClick={valoresInfo&&!valoresInfo.err?()=>setVerValores(v=>!v):undefined} style={{flex:1,minWidth:0,cursor:valoresInfo&&!valoresInfo.err?'pointer':'default'}}><div style={{fontSize:12,fontWeight:700,color:C.accent}}>Valores del mes (contadora){valoresInfo&&!valoresInfo.err?<span style={{color:C.done,fontWeight:600}}> · {valoresInfo.items.length} {verValores?'▴':'▾'}</span>:''}</div><div style={{fontSize:10,color:C.muted}}>{costosClaudia.length?`${costosClaudia.length} costos leídos · cruzan con los cargos`:'lee el correo "VALORES" y cruza los montos del mes'}</div></div>
-            <button disabled={valoresBusy} onClick={leerValores} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:valoresBusy?'default':'pointer',flexShrink:0}}>{valoresBusy?'Leyendo…':'Leer valores'}</button>
-          </div>
-          {valoresInfo&&valoresInfo.err&&<div style={{fontSize:11,color:C.overdueText,marginTop:7}}>{valoresInfo.err}</div>}
-          {valoresInfo&&!valoresInfo.err&&verValores&&<div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:7}}>{valoresInfo.items.map((it,ix)=>(<div key={ix} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.text}}>{it.item} <span style={{color:C.done}}>· {it.categoria}</span>{it.vence?<span style={{color:C.soonText}}> · vence {it.vence}</span>:''}</span><span style={{fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtM(it.monto)}</span></div>))}<div style={{fontSize:9,color:C.done,marginTop:5}}>Ya cruzan con los cargos del banco (montos exactos + pagos agrupados).</div></div>}
-        </div>}
 
         {/* Conciliar en lote: calces exactos y únicos de una; el resto (varios candidatos / sin factura) se cuenta y se resuelve abajo. Solo en overview o en el foco "Por conciliar" (donde tiene sentido). */}
         {sub==='abonos'&&!isDesktop&&(concView==='todos'||concView==='porconciliar')&&(()=>{
