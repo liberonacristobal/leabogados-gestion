@@ -254,6 +254,9 @@ export const demoData = {
   ],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.
   cartola_movimientos: [
+    { id:'movn0', fecha:'2026-08-21', monto:320000, tipo:'cargo', es_interno:false, estado:'conciliado', monto_conciliado:320000, categoria:'Notaría', rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'8.215.914-2', nombre_contraparte:'MARÍA SOLEDAD LASCAR MERINO', descripcion:'Transf. a terceros vía Internet a cuenta 206659341 ItauChile, MARÍA SOLEDAD LASCAR MERINO' },
+    { id:'movn1', fecha:'2026-07-27', monto:180000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'8.215.914-2', nombre_contraparte:'MARÍA SOLEDAD LASCAR MERINO', descripcion:'Transf. a terceros vía Internet a cuenta 206659341 ItauChile, MARÍA SOLEDAD LASCAR MERINO' },
+    { id:'movn2', fecha:'2026-09-16', monto:240000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'8.215.914-2', nombre_contraparte:'MARÍA SOLEDAD LASCAR MERINO', descripcion:'Transf. a terceros vía Internet a cuenta 206659341 ItauChile, MARÍA SOLEDAD LASCAR MERINO' },
     { id:'movpv3', fecha:'2026-07-15', monto:500000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'77.900.100-2', nombre_contraparte:'Rojas Abogados SpA', descripcion:'Transf. a terceros vía Internet (primera transferencia, tope cuenta nueva)', categoria:null },
     { id:'movpv1', fecha:'2026-07-20', monto:3500000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'77.900.100-2', nombre_contraparte:'Rojas Abogados SpA', descripcion:'Transf. a terceros vía Internet', categoria:null },
     { id:'movpv2', fecha:'2026-05-10', monto:1500000, tipo:'cargo', es_interno:false, estado:'conciliado', monto_conciliado:1500000, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'77.900.100-2', nombre_contraparte:'Rojas Abogados SpA', descripcion:'Transf. a terceros vía Internet', categoria:'Proveedor' },
@@ -317,6 +320,8 @@ export const demoData = {
     { id:'conf40', movimiento_id:'movf40', tipo_destino:'factura', factura_id:'b40', anticipo_id:null, monto_aplicado:12000000, origen:'demo', marco_pago:true },
   ],
   rendiciones: [
+    { id:'rn0', tipo:'notaria', periodo:'agosto 2026', total:320000, n_gastos:5, ot_numbers:'48120, 48125, 48131, 48140, 48144', estado_envio:'enviada', sent_at:'2026-08-20', created_at:'2026-08-20T15:00:00', user_name:'Martina', movimiento_id:'movn0' },
+    { id:'rn2', tipo:'notaria', periodo:'septiembre 2026', total:250000, n_gastos:4, ot_numbers:'48330, 48334, 48340, 48352', estado_envio:'enviada', sent_at:'2026-09-15', created_at:'2026-09-15T15:00:00', user_name:'Martina' },
     { id:'rn1', tipo:'notaria', periodo:'julio 2026', total:180000, n_gastos:3, ot_numbers:'48210, 48215, 48220', estado_envio:'enviada', sent_at:'2026-07-25', created_at:'2026-07-25', user_name:'Martina' },
   ],
   retainers: [
