@@ -45,6 +45,9 @@ export function parseMonto(v: unknown) {
 }
 
 function parseDDMM(raw: unknown) {
+  // "Consulta de movimientos" de BICE trae la fecha como yyyymmdd ("20261009"), sin separadores.
+  const c = String(raw || '').trim().match(/^(20\d{2})(\d{2})(\d{2})$/)
+  if (c) return { d: c[3], mm: c[2], y: c[1] as string | null }
   const m = String(raw || '').match(/(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{2,4}))?/)
   if (!m) return null
   const y = m[3] ? (m[3].length === 2 ? '20' + m[3] : m[3]) : null
@@ -143,7 +146,9 @@ export function parseCartola(aoa: any[], { filename = '' }: { filename?: string 
   anioFallback = anioFallback || String(new Date().getFullYear())
   // Última fecha completa del encabezado (= "Hasta"): respaldo cuando una fila no trae fecha (antes caía al 1-ene).
   let fechaHeader: { d: string; mm: string; y: string } | null = null
-  for (let i = 0; i < Math.min(25, rows.length); i++) { for (const cell of rows[i]) { const f = fechaDesdeGlosa(_flat(cell)); if (f) fechaHeader = f } }
+  // Solo filas ANTES de la tabla de movimientos (si no, toma la fecha de la glosa de algún movimiento).
+  const _hdr = rows.findIndex(r => { const c = r.map(_norm); return c.some((x: string) => x.includes('descrip')) && c.some((x: string) => x.includes('abono')) })
+  for (let i = 0; i < Math.min(_hdr >= 0 ? _hdr : 25, rows.length); i++) { for (const cell of rows[i]) { const f = fechaDesdeGlosa(_flat(cell)); if (f) fechaHeader = f } }
   // Saldos del período (si vienen): saldo inicial + abonos − cargos = saldo final, y encadenan cartolas de la misma cuenta.
   const saldoDe = (rx: RegExp) => {
     for (let i = 0; i < Math.min(40, rows.length); i++) {
