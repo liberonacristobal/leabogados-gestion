@@ -14,7 +14,7 @@ import {
   upsertBilling, updateBillingStatus, DEMO
 } from './supabase'
 import { demoData } from './demoData'
-import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa } from './cartola'
+import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from './cartola'
 import logoBlanco from './le-logo-blanco.png'
 
 // LA CLAVE ANÓNIMA NO IDENTIFICA A NADIE: viaja en este mismo paquete. Las
@@ -32693,12 +32693,15 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],sales=[],
           const sinId=abo.filter(r=>!r.es_interno && !r.cliente_id).length
           // Cruce fecha↔glosa (tu regla: al cargar, siempre cruzar). La glosa suele traer la fecha real ("...el DD/MM/YYYY"); si la fecha del
           // movimiento quedó MUY lejos (≥30 días) de esa, es data sospechosa (bug de parseo / columna mal leída) → se avisa ANTES de confirmar.
-          const _fechaGlosa = desc => { const m=String(desc||'').match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/); return m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:null }
-          const sospechosos = nuevosRows.map(r=>{ const fg=_fechaGlosa(r.descripcion); if(!fg||!r.fecha) return null; const d=Math.abs((new Date(r.fecha+'T12:00')-new Date(fg+'T12:00'))/86400000); return d>=30?{fecha:r.fecha,fechaGlosa:fg,dias:Math.round(d),monto:r.monto,desc:(r.descripcion||'').slice(0,64)}:null }).filter(Boolean)
+          // Lee la glosa en dd-mm-yyyy y en ISO (yyyy-mm-dd): el ISO no se leía y 7 traspasos quedaron al 1-ene sin aviso.
+          // Filas sin fecha propia (ni columna ni glosa) también se avisan: tomaron la del encabezado.
+          const _incierta=new Set(res.movimientos.filter(m=>m.fechaIncierta).map(m=>m.hash))
+          const sospechosos = nuevosRows.map(r=>{ if(_incierta.has(r.hash)) return {fecha:r.fecha,fechaGlosa:null,dias:null,monto:r.monto,desc:(r.descripcion||'').slice(0,64)}
+            const fg=fechaGlosaISO(r.descripcion); if(!fg||!r.fecha) return null; const d=Math.abs((new Date(r.fecha+'T12:00')-new Date(fg+'T12:00'))/86400000); return d>=30?{fecha:r.fecha,fechaGlosa:fg,dias:Math.round(d),monto:r.monto,desc:(r.descripcion||'').slice(0,64)}:null }).filter(Boolean)
           reps.push({ file:file.name, cuenta:res.cuenta, rol:res.rol_cuenta, ok:!res.error, error:res.error||null,
             nAbonos:abo.length, sumAbonos:sumA, nCargos:car.length, sumCargos:sumC,
             internos:rows.filter(r=>r.es_interno).length, sinId, total:rows.length, nuevos:nuevosRows.length, dup:rows.length-nuevosRows.length,
-            minF, maxF, nuevosRows, sospechosos,
+            minF, maxF, nuevosRows, sospechosos, saldoInicial:res.saldoInicial??null, saldoFinal:res.saldoFinal??null, totalAbonos:res.totalAbonos??null, totalCargos:res.totalCargos??null,
             verA: res.totalAbonos!=null?{banco:res.totalAbonos,parsed:sumA,diff:sumA-res.totalAbonos}:null,
             verC: res.totalCargos!=null?{banco:res.totalCargos,parsed:sumC,diff:sumC-res.totalCargos}:null })
         }catch(e){ reps.push({ file:file.name, ok:false, error:e.message, nuevosRows:[] }) }
@@ -32719,9 +32722,13 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],sales=[],
         try{
           const nuevosRows=en.nuevosRows||[]
           for(let i=0;i<nuevosRows.length;i+=200){ const { error } = await supabase.from('cartola_movimientos').upsert(nuevosRows.slice(i,i+200),{onConflict:'hash',ignoreDuplicates:true}); if(error) throw error }
-          const {nuevosRows:_omit, minF:_a, maxF:_b, total:_c, ...rep}=en; reps.push(rep)
+          // Registro de la carga con su cuenta y saldos (la carga manual no lo dejaba): alimenta la alerta de cartolas por cuenta.
+          if(en.ok&&en.minF){ try{ await supabase.from('cartola_cargas').insert({ fecha_desde:en.minF, fecha_hasta:en.maxF, movimientos_n:en.total||0, origen:'manual', archivo:en.file||null, cuenta:en.cuenta||null, rol_cuenta:en.rol||null, saldo_inicial:en.saldoInicial, saldo_final:en.saldoFinal, total_cargos:en.totalCargos, total_abonos:en.totalAbonos, cargado_por:user?.email||null }) }catch(_){} }
+          const {nuevosRows:_omit, minF:_a, maxF:_b, total:_c, saldoInicial:_d, saldoFinal:_e, totalAbonos:_f, totalCargos:_g, ...rep}=en; reps.push(rep)
         }catch(e){ reps.push({ file:en.file, ok:false, error:e.message }) }
       }
+      // Traspasos entre cuentas propias: internos solo con su movimiento espejo en la otra cuenta (función de la base).
+      try{ await supabase.rpc('emparejar_traspasos_propios',{}) }catch(_){}
       setReportes(reps); setCargaPreview(null)
       await cargar()
     }catch(e){ appAlert('Error al guardar: '+e.message) }
@@ -35321,7 +35328,7 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
                     {(e.sospechosos||[]).length>0&&<div style={{marginTop:8,background:C.ambarBg,borderRadius:10,padding:'8px 10px'}}>
                       <div style={{fontSize:11,fontWeight:700,color:C.soonText,marginBottom:3,display:'flex',alignItems:'center',gap:5}}><SIcon n='alert' s={13} c={C.soonText}/>{e.sospechosos.length} con fecha distinta a su glosa — revisa antes de cargar</div>
                       {e.sospechosos.slice(0,3).map((sp,si)=>(
-                        <div key={si} style={{fontSize:10,color:C.soonText,padding:'2px 0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dmy(sp.fecha)} <span style={{opacity:.7}}>vs glosa</span> {dmy(sp.fechaGlosa)} <b>({sp.dias} días)</b> · {fmtM(sp.monto)}</div>
+                        <div key={si} style={{fontSize:10,color:C.soonText,padding:'2px 0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sp.fechaGlosa?<>{dmy(sp.fecha)} <span style={{opacity:.7}}>vs glosa</span> {dmy(sp.fechaGlosa)} <b>({sp.dias} días)</b></>:<>{dmy(sp.fecha)} <span style={{opacity:.7}}>· sin fecha propia, se usó la del período</span></>} · {fmtM(sp.monto)}</div>
                       ))}
                       {e.sospechosos.length>3&&<div style={{fontSize:10,color:C.soonText,opacity:.85,marginTop:2}}>y {e.sospechosos.length-3} más…</div>}
                     </div>}

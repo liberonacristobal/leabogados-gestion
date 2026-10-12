@@ -58,18 +58,20 @@ function parseDDMM(raw){
   let y = m[3] ? (m[3].length===2 ? '20'+m[3] : m[3]) : null
   return { d: m[1].padStart(2,'0'), mm: m[2].padStart(2,'0'), y }
 }
-// Año desde una fecha completa dentro de la glosa (dd/mm/yyyy o dd-mm-yyyy).
-function anioDesdeGlosa(desc){
-  const m = String(desc||'').match(/\b\d{1,2}[-/]\d{1,2}[-/](\d{4})\b/)
-  return m ? m[1] : null
+// Fecha COMPLETA dentro de la glosa, ej. "... desde Itau el 08/07/2026 a las 16:47". BICE usa dos formatos:
+// dd-mm-yyyy / dd/mm/yyyy (transferencias y abonos) y yyyy-mm-dd ("Transferencia de CLIENTE … el 2026-09-07 a las 00:24").
+// El ISO no se leía: 7 traspasos de sept-2026 quedaron al 1-ene por defecto (auditoría BICE 2026-10-13).
+export function fechaDesdeGlosa(desc){
+  const s = String(desc||'')
+  let m = s.match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/)
+  if(m) return { d: m[1].padStart(2,'0'), mm: m[2].padStart(2,'0'), y: m[3] }
+  m = s.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/)
+  if(m) return { d: m[3].padStart(2,'0'), mm: m[2].padStart(2,'0'), y: m[1] }
+  return null
 }
-// Fecha COMPLETA dentro de la glosa (dd/mm/yyyy o dd-mm-yyyy), ej. "... desde Itau el 08/07/2026 a las 16:47".
-// Cuando la fila NO trae fecha en su columna, esta es la fecha REAL del movimiento (evita que caiga al 1-ene por defecto).
-function fechaDesdeGlosa(desc){
-  const m = String(desc||'').match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/)
-  if(!m) return null
-  return { d: m[1].padStart(2,'0'), mm: m[2].padStart(2,'0'), y: m[3] }
-}
+// Misma fecha en 'YYYY-MM-DD' (para cruzar fecha contable vs fecha real al cargar).
+export const fechaGlosaISO = desc => { const f=fechaDesdeGlosa(desc); return f?`${f.y}-${f.mm}-${f.d}`:null }
+function anioDesdeGlosa(desc){ const f=fechaDesdeGlosa(desc); return f?f.y:null }
 
 // Hash estable (cyrb53) para dedup idempotente.
 function cyrb53(str){
@@ -89,7 +91,9 @@ export function hashMovimiento(m){
 export function huellaGlosa(m){
   const s=String(m?.descripcion||'').replace(/\s+/g,'')
   // Fecha con '-' (transferencias a terceros) o '/' (abonos y traspasos entre cuentas propias).
-  const g=s.match(/el(\d{2})[-/](\d{2})[-/](\d{4})alas(\d{2}):(\d{2})/i); if(!g) return null
+  let g=s.match(/el(\d{2})[-/](\d{2})[-/](\d{4})alas(\d{2}):(\d{2})/i)
+  if(!g){ const i=s.match(/el(\d{4})-(\d{2})-(\d{2})alas(\d{2}):(\d{2})/i); if(i) g=[i[0],i[3],i[2],i[1],i[4],i[5]] }   // formato ISO
+  if(!g) return null
   const contra=(s.match(/acuenta(\d{4,})/i)||[])[1] || ((s.match(/haciacuentaN?°?([\d-]{6,})/i)||[])[1]||'').replace(/\D/g,'') || normRut((s.match(/Rut:?(\d{1,3}(?:\.?\d{3})+-?[\dkK])/i)||[])[1])
   if(!contra) return null
   return `${m.cuenta}|${m.tipo}|${Math.round(Number(m.monto)||0)}|${g[3]}-${g[2]}-${g[1]} ${g[4]}:${g[5]}|${contra}`
@@ -158,6 +162,15 @@ export function parseCartola(aoa, { filename='' } = {}){
     if(ym) anioFallback = ym[ym.length-1]
   }
   anioFallback = anioFallback || String(new Date().getFullYear())
+  // Última fecha completa del encabezado (= "Hasta" del período): respaldo cuando una fila no trae fecha ni en columna ni en glosa.
+  // Antes caía al 1-ene del año, que manda el movimiento a otro mes y descuadra todo.
+  let fechaHeader=null
+  for(let i=0;i<Math.min(25,rows.length);i++){ for(const cell of rows[i]){ const f=fechaDesdeGlosa(_flat(cell)); if(f) fechaHeader=f } }
+  // --- Saldos del período (si la planilla los trae): permiten verificar que no falte ningún movimiento
+  //     (saldo inicial + abonos − cargos = saldo final) y encadenar cartolas sucesivas de la misma cuenta. ---
+  const saldoDe = rx => { for(let i=0;i<Math.min(40,rows.length);i++){ const cells=rows[i].map(_norm); const k=cells.findIndex(c=>rx.test(c)); if(k<0) continue
+    const v=parseMonto((rows[i+1]||[])[k]) || parseMonto(rows[i].slice(k+1).find(x=>parseMonto(x)>0)); if(v) return v } return null }
+  const saldoInicial = saldoDe(/^saldo inicial/), saldoFinal = saldoDe(/^saldo (final|contable)/)
   // --- Totales del "Resumen del Período": los labels (Total Cargos / Total Abonos) están en una
   //     fila y los valores en la fila siguiente, en la MISMA columna. ---
   let totalAbonos=null, totalCargos=null
@@ -202,9 +215,10 @@ export function parseCartola(aoa, { filename='' } = {}){
     // Fecha del movimiento: columna (forward-fill) > fecha COMPLETA en la glosa ("el 08/07/2026") > 1-ene como último recurso.
     // Antes, sin fecha de columna caía al 1-ene aunque la glosa trajera la fecha real (rompía la conciliación por fecha).
     const fg = fechaDesdeGlosa(desc)
-    const dm = fp || fg
+    const dm = fp || fg || fechaHeader
     const anio = anioDesdeGlosa(desc) || (dm&&dm.y) || anioFallback
     const fecha = dm ? `${anio}-${dm.mm}-${dm.d}` : `${anio}-01-01`
+    const fechaIncierta = !fp && !fg   // sin fecha propia: se tomó la del encabezado (o 1-ene si ni eso) → se avisa al cargar
     // RUT / nombre (mismos formatos para abono y cargo) + detección de interno (incluye auto-transferencia con RUT propio)
     const cp = extraerContraparte(desc)
     let rut = cp.rut ? formatRut(cp.rut) : null, nombre = cp.nombre
@@ -213,7 +227,8 @@ export function parseCartola(aoa, { filename='' } = {}){
     const n_operacion = _flat(iDoc>=0?row[iDoc]:'') || null
     const mov = { cuenta, rol_cuenta:rol, fecha, tipo, rut_contraparte:rut, nombre_contraparte:nombre, monto, n_operacion, descripcion:desc, es_interno:interno }
     mov.hash = hashMovimiento(mov)
+    if(fechaIncierta) Object.defineProperty(mov,'fechaIncierta',{value:true,enumerable:false})   // no viaja a la base
     movimientos.push(mov)
   }
-  return { cuenta, rol_cuenta:rol, anio:anioFallback, filename, totalAbonos, totalCargos, movimientos }
+  return { cuenta, rol_cuenta:rol, anio:anioFallback, filename, totalAbonos, totalCargos, saldoInicial, saldoFinal, movimientos }
 }

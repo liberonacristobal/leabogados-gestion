@@ -42,49 +42,58 @@ Deno.serve(async (req) => {
   const esCron = !!CRON_SECRET && (body.secret === CRON_SECRET || bearer === CRON_SECRET);
   if (!esCron) return json({ error: "No autorizado" }, 403);
 
-  // Feriados + coberturas + última fecha con datos
-  const [fer, cargasAll, ultMov] = await Promise.all([
+  // Feriados + coberturas POR CUENTA + última fecha con movimientos de cada cuenta.
+  // Antes era una sola cobertura global y solo miraba los días POSTERIORES a la última carga: no veía (a) un día que faltó en
+  // medio (29-09-2026: se perdió un cargo de $60.000) ni (b) que la cuenta de gastos dejó de llegar (solo entra a mano).
+  const CTAS = [{ rol: "honorarios", et: "01-40383-4", diaria: true }, { rol: "gastos", et: "01-38392-2", diaria: false }];
+  const [fer, cargasAll, ...ultMovs] = await Promise.all([
     sb("feriados?select=fecha"),
-    sb("cartola_cargas?select=fecha_desde,fecha_hasta"),
-    sb("cartola_movimientos?select=fecha&order=fecha.desc&limit=1"),
+    sb("cartola_cargas?select=fecha_desde,fecha_hasta,rol_cuenta,origen"),
+    ...CTAS.map((c) => sb(`cartola_movimientos?select=fecha&rol_cuenta=eq.${c.rol}&order=fecha.desc&limit=1`)),
   ]);
   const feriados = new Set((fer || []).map((f) => String(f.fecha).slice(0, 10)));
-  const cov = new Set<string>();
-  let maxCarga: string | null = null;
-  for (const r of cargasAll || []) {
-    let d = new Date(String(r.fecha_desde) + "T00:00:00"); const h = new Date(String(r.fecha_hasta) + "T00:00:00"); let g = 0;
-    while (d <= h && g++ < 400) { cov.add(iso(d)); d.setDate(d.getDate() + 1); }
-    const fh = String(r.fecha_hasta).slice(0, 10); if (!maxCarga || fh > maxCarga) maxCarga = fh;
-  }
-  const maxMov = ultMov?.[0]?.fecha ? String(ultMov[0].fecha).slice(0, 10) : null;
-  const lastCov = [maxCarga, maxMov].filter(Boolean).sort().pop() || null;
-  if (!lastCov) return json({ ok: true, gap: 0, motivo: "sin datos de cartola" });
-
   const esHabil = (d: Date) => { const w = d.getDay(); if (w === 0 || w === 6) return false; return !feriados.has(iso(d)); };
   const today = hoy();
-  const gap: string[] = [];
-  const d = new Date(lastCov + "T00:00:00"); d.setDate(d.getDate() + 1); let guard = 0;
-  while (d < today && guard++ < 60) { const s = iso(d); if (esHabil(d) && !cov.has(s)) gap.push(s); d.setDate(d.getDate() + 1); }
-  if (!gap.length) return json({ ok: true, gap: 0, ultima: lastCov });
+  const gap: string[] = [];          // días hábiles sin cartola de la cuenta con envío diario (honorarios), últimos 30 días
+  const atrasos: string[] = [];      // cuentas sin cartola hace más de 5 días hábiles
+  let lastCov: string | null = null;
+  CTAS.forEach((c, k) => {
+    const cov = new Set<string>(); let maxCarga: string | null = null;
+    // Cargas sin cuenta ('sin movimientos' marcados en la app) cubren ambas cuentas.
+    for (const r of (cargasAll || []).filter((r) => !r.rol_cuenta || r.rol_cuenta === c.rol)) {
+      let d = new Date(String(r.fecha_desde) + "T00:00:00"); const h = new Date(String(r.fecha_hasta) + "T00:00:00"); let g = 0;
+      while (d <= h && g++ < 400) { cov.add(iso(d)); d.setDate(d.getDate() + 1); }
+      if (r.rol_cuenta === c.rol) { const fh = String(r.fecha_hasta).slice(0, 10); if (!maxCarga || fh > maxCarga) maxCarga = fh; }
+    }
+    const maxMov = ultMovs[k]?.[0]?.fecha ? String(ultMovs[k][0].fecha).slice(0, 10) : null;
+    const ult = [maxCarga, maxMov].filter(Boolean).sort().pop() || null;
+    if (c.diaria) {
+      lastCov = ult;
+      const d = new Date(today); d.setDate(d.getDate() - 30); let guard = 0;
+      while (d < today && guard++ < 40) { const s = iso(d); if (esHabil(d) && !cov.has(s)) gap.push(s); d.setDate(d.getDate() + 1); }
+    }
+    if (ult) { let n = 0; const d = new Date(ult + "T00:00:00"); d.setDate(d.getDate() + 1); let guard = 0; while (d < today && guard++ < 90) { if (esHabil(d)) n++; d.setDate(d.getDate() + 1); } if (n > 5) atrasos.push(`Cuenta ${c.rol} ${c.et}: sin cartola desde el ${lindo(ult)} (${n} días hábiles)`); }
+  });
+  if (!gap.length && !atrasos.length) return json({ ok: true, gap: 0, ultima: lastCov });
 
   // Interruptor de envío (base): learnings config alerta_cartola = 'on'
   const cfg = await sb("learnings?select=value&kind=eq.config&key=eq.alerta_cartola");
   const ON = String(cfg?.[0]?.value || "off").trim().toLowerCase() === "on";
 
-  const asunto = gap.length === 1 ? `Falta la cartola BICE del ${lindo(gap[0])}` : `${gap.length} días sin cartola BICE`;
+  const asunto = gap.length === 1 ? `Falta la cartola BICE del ${lindo(gap[0])}` : gap.length ? `${gap.length} días sin cartola BICE` : `Cartola BICE atrasada`;
   const lista = gap.map(lindo).join(", ");
   const html = `<div style="font-family:-apple-system,Arial,sans-serif;max-width:520px;color:#3D3D3D;font-size:14px;line-height:1.55">
     <p>Hola:</p>
-    <p>El banco no reportó cartola de <b>${gap.length}</b> día hábil${gap.length !== 1 ? "es" : ""} que ya pasó${gap.length !== 1 ? "ron" : ""}:</p>
     <ul style="margin:8px 0 12px;padding-left:18px">
-      <li><b>Falta${gap.length !== 1 ? "n" : ""}:</b> ${lista}</li>
-      <li><b>Última cargada:</b> ${lindo(lastCov)}</li>
+      ${gap.length ? `<li><b>Cuenta honorarios, falta${gap.length !== 1 ? "n" : ""}:</b> ${lista}</li>` : ""}
+      ${atrasos.map((a) => `<li>${a}</li>`).join("")}
+      ${lastCov ? `<li><b>Última cargada (honorarios):</b> ${lindo(lastCov)}</li>` : ""}
     </ul>
     <p>Mientras falte, los pagos de esos días quedan <b>sin conciliar</b>. Carga la cartola en la app o pídela a BICE.</p>
     <p style="color:#99ABB4;font-size:12px;margin-top:20px">Liberona Escala Abogados &middot; aviso automático de cartolas</p>
   </div>`;
 
-  if (!ON) return json({ ok: true, gap: gap.length, dias: gap, ultima: lastCov, enviado: false, motivo: "interruptor apagado (learnings config alerta_cartola != on) — dry-run" });
+  if (!ON) return json({ ok: true, gap: gap.length, dias: gap, atrasos, ultima: lastCov, enviado: false, motivo: "interruptor apagado (learnings config alerta_cartola != on) — dry-run" });
 
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });

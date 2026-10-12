@@ -138,9 +138,15 @@ Deno.serve(async (req) => {
           movimientos_n: movs.length,
           origen: 'diaria',
           archivo: String(body.filename || '') || null,
+          // De qué cuenta es y con qué saldos: la alerta detecta una cuenta que dejó de llegar y cortes en la cadena de saldos.
+          cuenta: parsed.cuenta || null, rol_cuenta: parsed.rol_cuenta || null,
+          saldo_inicial: parsed.saldoInicial ?? null, saldo_final: parsed.saldoFinal ?? null,
+          total_cargos: parsed.totalCargos ?? null, total_abonos: parsed.totalAbonos ?? null,
         }]),
       })
     } catch (_) { /* el registro es best-effort: nunca debe romper la ingesta */ }
+    // Traspasos entre las dos cuentas propias: se marcan internos solo si existe el movimiento espejo en la otra cuenta.
+    try { await sbFetch('rpc/emparejar_traspasos_propios', { method: 'POST', body: JSON.stringify({}) }) } catch (_) { /* best-effort */ }
 
     return json({
       ok: true,
