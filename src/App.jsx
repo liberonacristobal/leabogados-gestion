@@ -775,7 +775,8 @@ const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').inse
 async function setLearningKV(kind,key,value){
   const v = value==null?null:String(value)
   const {data} = await supabase.from('learnings').select('id').eq('kind',kind).eq('key',String(key)).limit(1)
-  if(data&&data.length) await supabase.from('learnings').update({value:v}).eq('id',data[0].id)
+  // Actualiza TODAS las filas de la clave y marca updated_at: los lectores ordenan por updated_at (gana lo último).
+  if(data&&data.length) await supabase.from('learnings').update({value:v,updated_at:new Date().toISOString()}).eq('kind',kind).eq('key',String(key))
   else await supabase.from('learnings').insert({kind,key:String(key),value:v})
 }
 const logEvent = (area,action,detail,user) => { try{ supabase.from('usage_events').insert({area,action,detail:detail||{},user_name:user||null}).then(()=>{},()=>{}) }catch(e){} }
@@ -1959,8 +1960,8 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
       setAsistAttach(attach)
       const learnedCli={}, learnedCat={}
       const [{data:lc},{data:lk}] = await Promise.all([
-        supabase.from('learnings').select('key,value').eq('kind','gasto_cliente'),
-        supabase.from('learnings').select('key,value').eq('kind','gasto_categoria'),
+        supabase.from('learnings').select('key,value').eq('kind','gasto_cliente').order('updated_at',{ascending:true}),
+        supabase.from('learnings').select('key,value').eq('kind','gasto_categoria').order('updated_at',{ascending:true}),
       ])
       ;(lc||[]).forEach(r=>{ if(r.key&&r.value) learnedCli[r.key]=r.value })
       ;(lk||[]).forEach(r=>{ if(r.key&&r.value) learnedCat[r.key]=r.value })
@@ -5745,7 +5746,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],onEdit,onAdd,onAd
       const cid = m0?.client_id || saved?.client_id
       if(cid){ const direct=matchClientePropuesta(file.name, clients, clientEntities)
         if(!direct || String(direct.client_id)!==String(cid)){ const toks=_propTokens(file.name).filter(t=>t.length<=6)
-          for(const t of toks){ try{ const {data:ex}=await supabase.from('learnings').select('id').eq('kind','propuesta_alias').eq('key',t).limit(1); if(!(ex&&ex.length)) await supabase.from('learnings').insert({kind:'propuesta_alias',key:t,value:String(cid)}) }catch(_){} }
+          for(const t of toks){ try{ const {data:ex}=await supabase.from('learnings').select('id').eq('kind','propuesta_alias').eq('key',t).order('updated_at',{ascending:false}).limit(1); if(!(ex&&ex.length)) await supabase.from('learnings').insert({kind:'propuesta_alias',key:t,value:String(cid)}) }catch(_){} }
           if(toks.length) setDrvAlias(a=>{ const n={...a}; toks.forEach(t=>{ if(!n[t]) n[t]=String(cid) }); return n }) } } }
     setDrvBusy(null)
   }
@@ -8059,7 +8060,7 @@ function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), client
   const enviadasEnGrupo = new Set(porEnviarGrupos.flatMap(g=>g.sent.map(b=>b.id)))   // las ya enviadas que se muestran dentro de un grupo → no repetir en el pie
   const enviadasSueltas = enviadasXmlMes.filter(b=>!enviadasEnGrupo.has(b.id))         // el pie audita solo las de clientes ya 100% enviados
   useEffect(()=>{ const ids=[...new Set(porEnviar.map(b=>b.client_id).filter(Boolean).map(String))]; if(!ids.length){ setFactTo({}); return } let alive=true
-    supabase.from('learnings').select('key,value').eq('kind','factura_to').in('key',ids).then(({data})=>{ if(!alive) return; const mm={}; (data||[]).forEach(r=>{ mm[String(r.key)]=String(r.value||'').trim() }); setFactTo(mm) },()=>{})
+    supabase.from('learnings').select('key,value').eq('kind','factura_to').in('key',ids).order('updated_at',{ascending:true}).then(({data})=>{ if(!alive) return; const mm={}; (data||[]).forEach(r=>{ mm[String(r.key)]=String(r.value||'').trim() }); setFactTo(mm) },()=>{})
     return ()=>{alive=false} },[porEnviar.map(b=>b.id).join(',')])
   // Emitidas (con folio): archivo AGRUPADO POR AÑO → MES, todas, colapsado por defecto — no solo el mes seleccionado.
   // Emitidas: agrupar y ordenar por FECHA DE EMISIÓN (issued_at), no por vencimiento — así una factura emitida en julio
@@ -11385,7 +11386,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [tvBusy,setTvBusy] = useState(false)
   const [tvPct,setTvPct] = useState('')               // % que RETENEMOS de la factura del externo (el resto = cuenta por pagar)
   const [comisionTercMap,setComisionTercMap] = useState({})   // proveedor_id -> % de comisión aprendido (ej. Rodrigo = 15)
-  useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key,value').eq('kind','tercero_comision_pct').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ const v=parseFloat(r.value); if(r.key&&!isNaN(v)) m[String(r.key)]=v }); setComisionTercMap(m) },()=>{}) },[])   // % aprendido por externo
+  useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key,value').eq('kind','tercero_comision_pct').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ const v=parseFloat(r.value); if(r.key&&!isNaN(v)) m[String(r.key)]=v }); setComisionTercMap(m) },()=>{}) },[])   // % aprendido por externo
   // Registrar una programada como emitida: le pone folio + DTE + estado (Por cobrar) sobre la MISMA fila (no duplica). Monto = MntTotal del DTE (valor real emitido). Conserva su vencimiento planificado.
   const registrarProg = async(item)=>{
     if(!item.progId) throw new Error('sin programada')
@@ -11577,7 +11578,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [verCerradas,setVerCerradas] = useState(false)     // mostrar también ventas cerradas en el selector
   const [reprocBusy,setReprocBusy] = useState(false)
   const [anioLearned,setAnioLearned] = useState({})   // client_id → año aprendido (sugerencia)
-  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','venta_anio_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=Number(r.value) }); setAnioLearned(m) },()=>{}) },[])
+  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','venta_anio_cliente').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=Number(r.value) }); setAnioLearned(m) },()=>{}) },[])
   const saleYrById = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(s.year!=null) m[String(s.id)]=s.year }); return m },[sales])
   // Año de venta ESTRICTO (single source, igual que Inicio/CashflowProjection): venta enlazada (sale_id→sales.year) o año a mano (sale_year); NADA de respaldo por issued_at (eso enmascaraba facturas sin enlazar y desalineaba Inicio vs Facturación).
   const anioVentaDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:null)
@@ -11687,8 +11688,8 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [recordadoMap,setRecordadoMap] = useState({})
   const [recNotaMap,setRecNotaMap] = useState({})   // client_id → nota libre para el recordatorio de cobro (persistente)
   const [recNota,setRecNota] = useState('')         // nota en edición en la vista previa del recordatorio
-  useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','factura_recordado').then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ m[r.key]=r.value }); setRecordadoMap(m) } },()=>{}); return ()=>{alive=false} },[])
-  useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','recordatorio_nota').then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ if(r.value) m[r.key]=r.value }); setRecNotaMap(m) } },()=>{}); return ()=>{alive=false} },[])
+  useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','factura_recordado').order('updated_at',{ascending:true}).then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ m[r.key]=r.value }); setRecordadoMap(m) } },()=>{}); return ()=>{alive=false} },[])
+  useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','recordatorio_nota').order('updated_at',{ascending:true}).then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ if(r.value) m[r.key]=r.value }); setRecNotaMap(m) } },()=>{}); return ()=>{alive=false} },[])
   const diasDesde = iso => iso ? Math.floor((Date.now()-new Date(iso).getTime())/86400000) : null
   // "Buscar pago": trae los abonos del banco (cartola) a Facturación para conciliar cada factura desde aquí. Reusa el calce exacto (monto = saldo, TOL=0) + el RUT del receptor; la marca-pagada va por onStatusChange (probada).
   const nrG = crNormRut   // normalizador único de RUT
@@ -13643,7 +13644,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
   // "Retienes %": atajo para fijar monto_terceros = amount × (1 − %). Inicial desde el split guardado o la comisión aprendida del externo.
   const [retPct,setRetPct] = useState(()=>{ const t=tercerosBill.find(x=>x.comision_pct!=null); if(t) return String(t.comision_pct); const amt=Number(bill?.amount)||0, mt=Number(bill?.monto_terceros)||0; return (amt>0&&mt>0)?String(Math.round((amt-mt)/amt*100)):'' })
   const [comPctMap,setComPctMap] = useState({})
-  useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key,value').eq('kind','tercero_comision_pct').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ const v=parseFloat(r.value); if(r.key&&!isNaN(v)) m[String(r.key)]=v }); setComPctMap(m) },()=>{}) },[])
+  useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key,value').eq('kind','tercero_comision_pct').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ const v=parseFloat(r.value); if(r.key&&!isNaN(v)) m[String(r.key)]=v }); setComPctMap(m) },()=>{}) },[])
   const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
   const provsOrd = [...(proveedores||[])].sort((a,b)=>tituloProv(a).localeCompare(tituloProv(b),'es'))
   const [selAnt,setSelAnt] = useState(new Set())
@@ -15697,7 +15698,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   const [cajaOwner,setCajaOwner] = useState('')               // dueño de la caja chica: estos gastos van a su caja (created_by = su NOMBRE, igual que un gasto normal)
   // Categorías aprendidas (glosa→categoría, mismo learning que el Asistente IA): pre-rellena la carga cuando la planilla no trae categoría.
   const catLearnRef = useRef({})
-  useEffect(()=>{ let on=true; supabase.from('learnings').select('key,value').eq('kind','gasto_categoria').then(({data})=>{ if(!on)return; const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); catLearnRef.current=m }); return ()=>{on=false} },[])
+  useEffect(()=>{ let on=true; supabase.from('learnings').select('key,value').eq('kind','gasto_categoria').order('updated_at',{ascending:true}).then(({data})=>{ if(!on)return; const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); catLearnRef.current=m }); return ()=>{on=false} },[])
   const toggleForzar = id => setForzarNuevo(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Memoria del lote: persiste reasignaciones de calce y "forzar nuevo" por huella de fila (cliente+monto+glosa),
   // para que al re-subir el MISMO archivo se retomen tus decisiones (filosofía: la app aprende, no repite).
@@ -15942,10 +15943,10 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   const _NOTA_STOP = new Set(['sociedad','sociedades','anonima','compraventa','escritura','publica','poder','especial','copia','vigencia','constitucion','protocolizacion','acuerdo','mandato','contrato','notaria','notarial','inmobiliaria','comercial','servicios','inversiones','grupo','spa','ltda','limitada','eirl','para','por','con','del','los','las','una','uno','sobre','entre','este','esta'])
   const _toksNota = s => [...new Set(String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=4 && !_NOTA_STOP.has(w)))]
   const [notaAlias,setNotaAlias] = useState([])   // learnings kind 'notaria_alias': key (requirente/frase) → value (client_id)
-  useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_alias').then(({data})=>setNotaAlias(data||[]),()=>{}) },[notaria])
+  useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_alias').order('updated_at',{ascending:true}).then(({data})=>setNotaAlias(data||[]),()=>{}) },[notaria])
   // Glosas aprendidas por tipo de trámite (materia normalizada → glosa a rendir). Se aprende al editar una glosa en el preview.
   const glosaLearnedRef = useRef({})
-  useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_glosa').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); glosaLearnedRef.current=m },()=>{}) },[notaria])
+  useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_glosa').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); glosaLearnedRef.current=m },()=>{}) },[notaria])
   const notaIdx = useMemo(()=>{ const idx=[]
     clients.forEach(c=>{ if(c.status==='Terminado') return; const t=_toksNota(c.name); if(t.length) idx.push({cid:c.id,t}) })
     ;(clientEntities||[]).forEach(e=>{ if(e.name&&e.client_id){ const t=_toksNota(e.name); if(t.length) idx.push({cid:e.client_id,t}) } })
@@ -16370,7 +16371,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Consulta a la notaría por las OT que no reconocemos (marcadas "No es nuestra"): se seleccionan y se les pide detalle.
   const NOTA_DEST_DEFAULT='sdelgado@notarialascar.cl'
   const [notaDest,setNotaDest] = useState(NOTA_DEST_DEFAULT)
-  useEffect(()=>{ if(!notaria) return; supabase.from('learnings').select('value').eq('kind','notaria_email').limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaDest(v) },()=>{}) },[notaria])
+  useEffect(()=>{ if(!notaria) return; supabase.from('learnings').select('value').eq('kind','notaria_email').order('updated_at',{ascending:false}).limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaDest(v) },()=>{}) },[notaria])
   const [notaConsultaSel,setNotaConsultaSel] = useState(()=>new Set())
   const [consultando,setConsultando] = useState(false)
   const toggleConsulta = id => setNotaConsultaSel(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
@@ -17813,8 +17814,8 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const learned={}
       try{
         const [{data:lg},{data:lc}] = await Promise.all([
-          supabase.from('learnings').select('key,value').eq('kind','gasto_cliente'),
-          supabase.from('learnings').select('key,value').eq('kind','cargo_cliente'),
+          supabase.from('learnings').select('key,value').eq('kind','gasto_cliente').order('updated_at',{ascending:true}),
+          supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').order('updated_at',{ascending:true}),
         ])
         ;(lg||[]).forEach(r=>{ if(r.key&&r.value) learned[r.key]=r.value })
         ;(lc||[]).forEach(r=>{ if(r.key&&r.value&&!learned[r.key]) learned[r.key]=r.value })
@@ -17902,7 +17903,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   const cleanNotaDest = s => String(s||'').split(/[,;]/).map(x=>x.trim()).filter(x=>x.includes('@')&&!/@leabogados\.cl$/i.test(x)).join(', ')
   const [notaEmail,setNotaEmail] = useState(()=>{ try{return cleanNotaDest(localStorage.getItem('notaria_email'))||NOTARIA_DEFAULT}catch(_){return NOTARIA_DEFAULT} })
   // Correo(s) de la notaría: compartido para todo el equipo (no solo este dispositivo). Lo guardado manda sobre el localStorage.
-  useEffect(()=>{ supabase.from('learnings').select('value').eq('kind','notaria_email').limit(1).then(({data})=>{ const v=cleanNotaDest(data&&data[0]&&data[0].value); if(v) setNotaEmail(v) },()=>{}) },[])
+  useEffect(()=>{ supabase.from('learnings').select('value').eq('kind','notaria_email').order('updated_at',{ascending:false}).limit(1).then(({data})=>{ const v=cleanNotaDest(data&&data[0]&&data[0].value); if(v) setNotaEmail(v) },()=>{}) },[])
   const [notaSend,setNotaSend] = useState(null)   // rendición en la PÁGINA "Pagar a la notaría" (o null)
   const [compFile,setCompFile] = useState(null)   // comprobante de transferencia adjunto (File)
   const [notaTab,setNotaTab] = useState(()=>gastosVolverLeer()?.nota||viewMemLeer('gastos')?.notaTab||'hub')   // sub-hub de Notaría: hub | pend (Deuda) | cobros | pagados | enviar (Pagar a la notaría)
@@ -18719,7 +18720,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     return data
   }
   // Carga el estado persistido de las "no son nuestras" (learnings notaria_nonuestra: value = "estado|fechaISO").
-  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_nonuestra').then(({data})=>{ const est={},at={}; (data||[]).forEach(r=>{ if(!r.key) return; const [e,d]=String(r.value||'').split('|'); if(e) est[r.key]=e; if(d) at[r.key]=d }); setNoNEstado(est); setNoNConsult(at) },()=>{}) },[])
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_nonuestra').order('updated_at',{ascending:true}).then(({data})=>{ const est={},at={}; (data||[]).forEach(r=>{ if(!r.key) return; const [e,d]=String(r.value||'').split('|'); if(e) est[r.key]=e; if(d) at[r.key]=d }); setNoNEstado(est); setNoNConsult(at) },()=>{}) },[])
   // Envía a la notaría la consulta por las OT no reconocidas seleccionadas (mismo texto que en la carga). Las marca "consultada".
   const consultarNoNuestras = async(items) => {
     const dest=String(cleanNotaDest(notaEmail)||NOTARIA_DEFAULT).split(/[,;]/).map(x=>x.trim()).filter(x=>x.includes('@')&&!/@leabogados\.cl$/i.test(x)).join(', ')
@@ -20638,7 +20639,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
     if(isFondo || f.project || !f.concept || !f.client_id){ setSugProy(null); return }
     const gk=glosaKey(f.concept); if(!gk){ setSugProy(null); return }
     let alive=true
-    supabase.from('learnings').select('value').eq('kind','gasto_proyecto').eq('key',`${f.client_id}::${gk}`).limit(1).then(({data})=>{ if(alive) setSugProy(data&&data[0]?.value||null) },()=>{})
+    supabase.from('learnings').select('value').eq('kind','gasto_proyecto').eq('key',`${f.client_id}::${gk}`).order('updated_at',{ascending:false}).limit(1).then(({data})=>{ if(alive) setSugProy(data&&data[0]?.value||null) },()=>{})
     return ()=>{alive=false}
   },[f.concept,f.client_id,f.project,isFondo])
   // Aprendizaje glosa→subcategoría: la misma glosa recurrente (Jumbo, Uber) propone su subcategoría con un toque, sin re-tipear (regla "la app APRENDE").
@@ -20648,7 +20649,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
     if(!(f.category==='Otro'||CATS_OFICINA_ESTRUCTURAL.includes(f.category))){ setSugSub(null); return }
     const gk=glosaKey(f.concept); if(!gk){ setSugSub(null); return }
     let alive=true
-    supabase.from('learnings').select('value').eq('kind','gasto_subcategoria').eq('key',gk).order('created_at',{ascending:false}).limit(1).then(({data})=>{ if(alive) setSugSub(data&&data[0]?.value||null) },()=>{})
+    supabase.from('learnings').select('value').eq('kind','gasto_subcategoria').eq('key',gk).order('updated_at',{ascending:false}).limit(1).then(({data})=>{ if(alive) setSugSub(data&&data[0]?.value||null) },()=>{})
     return ()=>{alive=false}
   },[f.concept,f.subcategory,f.category,isFondo])
   // Proyecto = venta: sugerencias de los títulos de ventas del cliente + proyectos ya usados en otros gastos.
@@ -22542,7 +22543,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     return ()=>{alive=false}
   },[client?.id])
   useEffect(()=>{ if(!myEmail) return; let alive=true
-    supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setFirma(prev=>({...prev,...JSON.parse(data.value)})) }catch(_){} } },()=>{})
+    supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setFirma(prev=>({...prev,...JSON.parse(data.value)})) }catch(_){} } },()=>{})
     return ()=>{alive=false}
   },[myEmail])
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
@@ -22941,8 +22942,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
     supabase.from('learnings').select('value').eq('kind','factura_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(p=>[...new Set([...p,...ems])]) } },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value) setPara(String(data.value).trim()) },()=>{})   // destinatario de facturas aprendido (prima sobre client.email)
     return ()=>{alive=false} },[client?.id])
-  useEffect(()=>{ let alive=true; supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setFirma(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{}); return ()=>{alive=false} },[myEmail])
-  useEffect(()=>{ let alive=true; supabase.from('learnings').select('value').eq('kind','cuenta_gastos').eq('key','estudio').maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setCtaGastos(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{}); return ()=>{alive=false} },[])   // cuenta de gastos recordada (la ingresas una vez)
+  useEffect(()=>{ let alive=true; supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setFirma(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{}); return ()=>{alive=false} },[myEmail])
+  useEffect(()=>{ let alive=true; supabase.from('learnings').select('value').eq('kind','cuenta_gastos').eq('key','estudio').order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setCtaGastos(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{}); return ()=>{alive=false} },[])   // cuenta de gastos recordada (la ingresas una vez)
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
   const onFile=f=>{ if(!f) return; const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setPdf({name:f.name,base64:b}) }; r.readAsDataURL(f) }
@@ -23169,7 +23170,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
     supabase.from('contacts').select('nombre,email,principal').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data?.value&&!client?.email) setPara(String(data.value).trim()) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data?.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(p=>[...new Set([...p,...ems])]) } },()=>{})
-    supabase.from('learnings').select('value').eq('kind','cuenta_gastos').eq('key','estudio').maybeSingle().then(({data})=>{ if(alive&&data?.value){ try{ setCta(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{})
+    supabase.from('learnings').select('value').eq('kind','cuenta_gastos').eq('key','estudio').order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(alive&&data?.value){ try{ setCta(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{})
     return ()=>{alive=false} },[client?.id])   // eslint-disable-line
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
@@ -23302,7 +23303,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     return ()=>{alive=false}
   },[client?.id])
   useEffect(()=>{ let alive=true
-    supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ const ff=JSON.parse(data.value); setFirma(prev=>({...prev,...ff})) }catch(_){} } },()=>{})
+    supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ const ff=JSON.parse(data.value); setFirma(prev=>({...prev,...ff})) }catch(_){} } },()=>{})
     return ()=>{alive=false}
   },[myEmail])
   const addCc = em => { const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(prev=>[...prev,e]); setCcInput('') }
@@ -23729,7 +23730,7 @@ function ClientsView({onAsociarTrabajo,clients,sales,billing,setBilling,expenses
   // Clientes creados por el último sync de Drive → tag "Nuevo · Drive" unos días.
   const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())
   useEffect(()=>{ if(DEMO){ setNuevosDrive(new Set(['tech araucanía spa'])); return } let alive=true
-    supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; try{ const s=JSON.parse(data.value); if(s.at&&(Date.now()-new Date(s.at).getTime())<7*86400000&&Array.isArray(s.added)) setNuevosDrive(new Set(s.added.map(n=>String(n).toLowerCase().trim()))) }catch(_){} },()=>{})
+    supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; try{ const s=JSON.parse(data.value); if(s.at&&(Date.now()-new Date(s.at).getTime())<7*86400000&&Array.isArray(s.added)) setNuevosDrive(new Set(s.added.map(n=>String(n).toLowerCase().trim()))) }catch(_){} },()=>{})
     return ()=>{alive=false} },[clients])
 
   const handleAnularRendicion = async(r) => {
@@ -25228,8 +25229,8 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
 
   async function cargarSync(){
     if(DEMO){ setLastSync({at:new Date().toISOString(),addedN:2}); setAutoOn(false); return }
-    try{ const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync').maybeSingle(); setAutoOn((cfg?.value||'off').trim()==='on') }catch(_){}
-    try{ const {data:ls}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').maybeSingle(); if(ls?.value) setLastSync(JSON.parse(ls.value)) }catch(_){}
+    try{ const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync').order('updated_at',{ascending:false}).limit(1).maybeSingle(); setAutoOn((cfg?.value||'off').trim()==='on') }catch(_){}
+    try{ const {data:ls}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').order('updated_at',{ascending:false}).limit(1).maybeSingle(); if(ls?.value) setLastSync(JSON.parse(ls.value)) }catch(_){}
   }
   const syncNow=async()=>{
     setSyncing(true); setSyncMsg(null)
@@ -28137,7 +28138,7 @@ function LearningCenter({clients=[], onClose}){
   const guardar = async r => {
     const nv = (edVal||'').trim(); if(!nv) return
     const nm = r.kind==='costo_oficina' ? {...(r.meta||{}), subcategory:(edSub||'').trim()||undefined} : r.meta
-    if(!DEMO){ try{ await supabase.from('learnings').update({value:nv,meta:nm}).eq('id',r.id) }catch(_){} }
+    if(!DEMO){ try{ await supabase.from('learnings').update({value:nv,meta:nm,updated_at:new Date().toISOString()}).eq('id',r.id) }catch(_){} }
     setRows(p=>(p||[]).map(x=>x.id===r.id?{...x,value:nv,meta:nm}:x)); cancelar()
   }
   if(grupos===null) return <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>
@@ -28707,7 +28708,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   const domLearnedRef = useRef({})   // dominio → client_id aprendido (de asignaciones manuales previas)
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','contacto_descartado').then(({data})=>setDismissed(new Set((data||[]).map(r=>String(r.key)))),()=>{}) },[])
   // Carga dominios aprendidos, EXCLUYE proveedores genéricos y BORRA los que se hubieran aprendido mal (gmail.com→cliente).
-  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','dominio_cliente').then(({data})=>{ const m={}; const bad=[]; (data||[]).forEach(r=>{ if(!r.key||!r.value) return; if(PROV.test(String(r.key))) bad.push(String(r.key)); else m[String(r.key)]=String(r.value) }); domLearnedRef.current=m; if(bad.length) supabase.from('learnings').delete().eq('kind','dominio_cliente').in('key',bad).then(()=>{},()=>{}) },()=>{}) },[])
+  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','dominio_cliente').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; const bad=[]; (data||[]).forEach(r=>{ if(!r.key||!r.value) return; if(PROV.test(String(r.key))) bad.push(String(r.key)); else m[String(r.key)]=String(r.value) }); domLearnedRef.current=m; if(bad.length) supabase.from('learnings').delete().eq('kind','dominio_cliente').in('key',bad).then(()=>{},()=>{}) },()=>{}) },[])
 
   const parseAddrs = h => (h||'').split(',').map(s=>s.trim()).map(s=>{ const m=s.match(/^(.*?)<(.+?)>$/); if(m) return {name:m[1].replace(/["']/g,'').trim(), email:m[2].trim().toLowerCase()}; return {name:'', email:s.toLowerCase()} }).filter(x=>x.email.includes('@'))
   // Match por EXTENSIÓN/dominio: la palabra clave del dominio (ej. "tarragona" de @tarragona.cl) contra
@@ -29878,7 +29879,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const [metaUnit,setMetaUnit] = useState('semana')   // ajustable: la meta se ingresa en h/día o h/semana (se guarda semanal)
   useEffect(()=>{
     if(DEMO){ setMetas({'Cristóbal':40,'Erasmo':40,'Martín':40,'Martina':40,'Rodrigo':30}); return }
-    supabase.from('learnings').select('key,value').eq('kind','meta_horas').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setMetas(m) },()=>{})
+    supabase.from('learnings').select('key,value').eq('kind','meta_horas').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setMetas(m) },()=>{})
   },[])
   async function setMeta(name,val){ const v=Number(val)||0; setMetas(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','meta_horas').eq('key',name); await supabase.from('learnings').insert({kind:'meta_horas',key:name,value:String(v)}) }catch(_){} }
   const EQUIPO = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
@@ -29895,7 +29896,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   // Interruptor del recordatorio de viernes por correo (cron horas-recordatorio). 'off' · 'on' (equipo) · iniciales.
   const [recVal,setRecVal] = useState('off'); const [recMsg,setRecMsg] = useState('')
   const recOn = recVal!=='off'
-  useEffect(()=>{ if(DEMO){ setRecVal('on'); return } supabase.from('learnings').select('value').eq('kind','config').eq('key','recordatorio_horas').maybeSingle().then(({data})=>{ setRecVal((data?.value||'off').trim()||'off') },()=>{}) },[])
+  useEffect(()=>{ if(DEMO){ setRecVal('on'); return } supabase.from('learnings').select('value').eq('kind','config').eq('key','recordatorio_horas').order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ setRecVal((data?.value||'off').trim()||'off') },()=>{}) },[])
   const setRec = async v => { const prev=recVal; setRecVal(v); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','config').eq('key','recordatorio_horas'); await supabase.from('learnings').insert({kind:'config',key:'recordatorio_horas',value:v}) }catch(e){ setRecVal(prev); appAlert('No se pudo guardar: '+e.message) } }
   const enviarPruebaRec = async () => { setRecMsg('Enviando…'); if(DEMO){ setRecMsg('En demo no se envía.'); setTimeout(()=>setRecMsg(''),4000); return }
     try{ const {data:{session}}=await supabase.auth.getSession(); const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/horas-recordatorio',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(session?.access_token||''),'apikey':supabase.supabaseKey},body:JSON.stringify({})}); const j=await res.json().catch(()=>({})); if(!res.ok) throw new Error(j.error||('Error '+res.status)); setRecMsg('Listo — revisa tu correo.') }catch(e){ setRecMsg('No se pudo: '+(e?.message||'reintenta')) }
@@ -29917,7 +29918,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   // ── Apuesta 3 f1 — Margen real por cliente: ingreso (honorario) − costo (horas × costo/hora del abogado, en pesos). ──
   const [costoHora,setCostoHora] = useState({})   // nombre → costo/hora en pesos (lo define el usuario)
   const [costosOpen,setCostosOpen] = useState(false)
-  useEffect(()=>{ if(DEMO){ setCostoHora({'Cristóbal':18000,'Erasmo':18000,'Martín':11250,'Martina':6159}); return } supabase.from('learnings').select('key,value').eq('kind','costo_hora').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setCostoHora(m) },()=>{}) },[])
+  useEffect(()=>{ if(DEMO){ setCostoHora({'Cristóbal':18000,'Erasmo':18000,'Martín':11250,'Martina':6159}); return } supabase.from('learnings').select('key,value').eq('kind','costo_hora').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setCostoHora(m) },()=>{}) },[])
   async function setCosto(name,val){ const v=Math.max(0,Math.round(parseFloat(val)||0)); setCostoHora(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','costo_hora').eq('key',name); await supabase.from('learnings').insert({kind:'costo_hora',key:name,value:String(v)}) }catch(_){} }
   const hayCostos = Object.values(costoHora).some(v=>Number(v)>0)
   // ── Apuesta 3 f2 — Costo CARGADO: suma el overhead de oficina (Costos de Oficina, sin remuneraciones) prorrateado por hora. ──
@@ -30670,14 +30671,14 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     supabase.from('learnings').select('key').in('kind',['pmo_tramite_hito','pmo_doc_hito']).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ const k=String(r.key); m[k]=(m[k]||0)+1 }); setPmoAutoCount(m) },()=>{}) },[])
   const [pmoProyOp,setPmoProyOp] = useState({})                             // projectId → operacionId (de qué operación nació) — para que la biblioteca aprenda del uso
   useEffect(()=>{ if(DEMO){ setPmoProyOp(demoData.pmo_proy_op||{}); return }
-    supabase.from('learnings').select('key,value').eq('kind','pmo_proy_op').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[String(r.key)]=String(r.value) }); setPmoProyOp(m) },()=>{}) },[])
+    supabase.from('learnings').select('key,value').eq('kind','pmo_proy_op').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[String(r.key)]=String(r.value) }); setPmoProyOp(m) },()=>{}) },[])
   // OLA 4 — plazos legales del cliente (tabla `plazos`: audiencias, vencimientos, obligaciones) para integrarlos al Calendario del proyecto. Título propio del plazo, sin inventar.
   const [plazosAll,setPlazosAll] = useState([])
   useEffect(()=>{ if(DEMO){ setPlazosAll(demoData.plazos||[]); return }
     supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazosAll(data||[]),()=>{}) },[])
   // OLA 3 #4 — Agente proactivo cross-cartera (barrido diario de Drive, server-side). Apagado hasta que el admin lo encienda; "Probar" simula sin escribir.
   const [crossCfg,setCrossCfg] = useState('off'); const [crossBusy,setCrossBusy] = useState(false); const [crossRes,setCrossRes] = useState(null)
-  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','pmo_cross_cartera').limit(1).then(({data})=>{ if(data&&data[0]) setCrossCfg(String(data[0].value||'off').toLowerCase()) },()=>{}) },[])
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','pmo_cross_cartera').order('updated_at',{ascending:false}).limit(1).then(({data})=>{ if(data&&data[0]) setCrossCfg(String(data[0].value||'off').toLowerCase()) },()=>{}) },[])
   const probarCross = async()=>{ setCrossBusy(true); setCrossRes(null); try{ const {data,error}=await supabase.functions.invoke('agente-pmo',{body:{dryRun:true,preview:true}}); setCrossRes(error?{error:error.message}:(data||{})) }catch(e){ setCrossRes({error:e.message||'error'}) } setCrossBusy(false) }
   const toggleCross = async()=>{ const nv=crossCfg==='on'?'off':'on'; setCrossCfg(nv); try{ await setLearningKV('config','pmo_cross_cartera',nv) }catch(_){} }
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
@@ -30709,7 +30710,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const miIniSemanal = INICIALES_RESP[currentUserName] || 'CL'
   const semanalOn = semanalVal !== 'off'
   const semanalTodos = semanalVal === 'on'
-  useEffect(()=>{ if(DEMO){ return } supabase.from('learnings').select('value').eq('kind','config').eq('key','cartera_semanal').maybeSingle().then(({data})=>{ setSemanalVal((data?.value||'off').trim()||'off') },()=>{}) },[])
+  useEffect(()=>{ if(DEMO){ return } supabase.from('learnings').select('value').eq('kind','config').eq('key','cartera_semanal').order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ setSemanalVal((data?.value||'off').trim()||'off') },()=>{}) },[])
   const setSemanal = async (v) => {
     const prev = semanalVal; setSemanalVal(v)
     if(DEMO) return
@@ -30777,7 +30778,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     setSugEsf(o=>({...o,[p.id]:'busy'}))
     const s = saleDe(p); const area = s?.area||p.area||'General'
     let previo=null
-    try{ const {data}=await supabase.from('learnings').select('value').eq('kind','esfuerzo_area').eq('key',area).maybeSingle(); if(data?.value) previo=parseFloat(data.value) }catch(_){}
+    try{ const {data}=await supabase.from('learnings').select('value').eq('kind','esfuerzo_area').eq('key',area).order('updated_at',{ascending:false}).limit(1).maybeSingle(); if(data?.value) previo=parseFloat(data.value) }catch(_){}
     const prompt = `Eres socio de un estudio de abogados chileno. Estima en CUÁNTAS HORAS de trabajo total se hace este encargo, de principio a fin. Devuelve SOLO un número entero de horas, nada más.\n\nEncargo: "${p.nombre_proyecto||s?.title||''}"\nÁrea: ${area}\nHonorario: ${s?(s.moneda==='CLP'?fmt(s.amount_clp):`UF ${s.amount_uf}`):'—'}${previo?`\nEn casos anteriores de esta área estimaste alrededor de ${previo} horas.`:''}`
     try{ const data=await claudeCall({model:'claude-opus-4-8',max_tokens:20,messages:[{role:'user',content:prompt}]}); const n=parseInt(((data?.content?.[0]?.text||'').match(/\d+/)||[])[0])
       if(n>0){ updP(p,{esfuerzo_horas:n}); try{ await supabase.from('learnings').delete().eq('kind','esfuerzo_area').eq('key',area); await supabase.from('learnings').insert({kind:'esfuerzo_area',key:area,value:String(n)}) }catch(_){} }
@@ -32512,7 +32513,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],sales=[],
   const [ingComFor,setIngComFor] = useState(null)// "Comisión Recibida" desplegada (mov id) → picker de proveedor/tercero
   const [ingProvQ,setIngProvQ] = useState('')    // búsqueda del proveedor en Comisión Recibida
   const [cargoCliLearn,setCargoCliLearn] = useState({})  // glosaKey → client_id aprendido (cargo por cuenta de cliente)
-  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
+  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
   const [costoOfiLearn,setCostoOfiLearn] = useState({})  // glosaKey → {category, subcategory} aprendido (costo de oficina recurrente: arriendo/sueldos/servicios vienen del banco cada mes)
   // Lectura DETERMINISTA por voto de mayoría (antes: sin order-by + overwrite → la sugerencia salía al azar entre Retiro/Sueldo). Si el reparto NO tiene mayoría clara (≥62%), la clave queda AMBIGUA → no se auto-sugiere, va a la compuerta (Revisión de datos · glosa en conflicto).
   useEffect(()=>{ supabase.from('learnings').select('key,value,meta').eq('kind','costo_oficina').then(({data})=>{
@@ -32554,7 +32555,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],sales=[],
   // clientes y razones sociales del receptor de facturas EMITIDAS. Solo sugiere; el usuario confirma (y ahí aprende el RUT).
   const _stripNom = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(spa|ltda|limitada|sa|eirl|sociedad|comercial|servicios|inversiones|cia)\b/g,' ').replace(/\s+/g,' ').trim()
   const _toksNom = s => _stripNom(s).split(' ').filter(t=>t.length>=4)
-  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cartola_tipo').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setTipoAprendido(m) },()=>{}) },[])
+  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cartola_tipo').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setTipoAprendido(m) },()=>{}) },[])
   // Sugerencia de categoría aprendida (cartola_tipo) para un abono sin identificar: mismo RUT o mismo nombre.
   const tipoSugerido = m => { if(m.es_interno||m.categoria) return null; const k=crNormRut(m.rut_contraparte); if(k&&tipoAprendido[k]) return tipoAprendido[k]; const nk=m.nombre_contraparte?'n:'+_stripNom(m.nombre_contraparte):null; if(nk&&tipoAprendido[nk]) return tipoAprendido[nk]; return null }
   // Costo de oficina aprendido por glosa (el mismo arriendo/sueldo/servicio que vuelve cada mes) → categoría + subcategoría sugeridas.
@@ -34314,7 +34315,7 @@ function ConciliacionView({openCajaChicaRev=false,onCajaChicaRevConsumed,clients
   useEffect(()=>{ if(!openCajaChicaRev) return; setHubOpen(false); setSub('cargos'); setCcRevOpen(true); onCajaChicaRevConsumed&&onCajaChicaRevConsumed() },[openCajaChicaRev])   // eslint-disable-line
   const [ccBulk,setCcBulk] = useState(false)
   const [ccAuto,setCcAuto] = useState(false)   // interruptor del barrido diario (edge fn); persiste en learnings config 'caja_chica_auto'
-  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','caja_chica_auto').maybeSingle().then(({data})=>{ if(data&&String(data.value).trim()==='on') setCcAuto(true) },()=>{}) },[])
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','caja_chica_auto').order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(data&&String(data.value).trim()==='on') setCcAuto(true) },()=>{}) },[])
   const setCcAutoGlob = async(v)=>{ const prev=ccAuto; setCcAuto(v); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','config').eq('key','caja_chica_auto'); await supabase.from('learnings').insert({kind:'config',key:'caja_chica_auto',value:v?'on':'off'}) }catch(e){ setCcAuto(prev); appAlert('No se pudo guardar: '+e.message) } }
   const CC_PERSONAS = Object.values(EQUIPO_RUT||{})
   const [ccNoCaja,setCcNoCaja] = useState(()=>new Set())   // transferencias que el miembro (o el admin) marcó "no es caja chica" (learnings cc_no_caja)
@@ -36386,14 +36387,14 @@ export default function App() {
     return ()=>{alive=false} },[userRole,tab])
   const [menuOpen,setMenuOpen]=useState(false)
   const [modVer,setModVer]=useState(0)   // se incrementa al cambiar los módulos del estudio → refiltra nav y guard
-  useEffect(()=>{ if(DEMO) return; let alive=true; supabase.from('learnings').select('key,value').eq('kind','fd_modulo_off').then(({data})=>{ if(!alive) return; MODULOS_OFF.clear(); (data||[]).forEach(r=>{ if(String(r.value)==='off') MODULOS_OFF.add(String(r.key)) }); setModVer(v=>v+1) },()=>{}); return ()=>{alive=false} },[])
+  useEffect(()=>{ if(DEMO) return; let alive=true; supabase.from('learnings').select('key,value').eq('kind','fd_modulo_off').order('updated_at',{ascending:true}).then(({data})=>{ if(!alive) return; MODULOS_OFF.clear(); const ult={}; (data||[]).forEach(r=>{ ult[String(r.key)]=String(r.value) }); Object.keys(ult).forEach(k=>{ if(ult[k]==='off') MODULOS_OFF.add(k) }); setModVer(v=>v+1) },()=>{}); return ()=>{alive=false} },[])
   // Sync de clientes con Drive AL ABRIR (además del cron). Respeta el interruptor (solo si auto=on → mantiene el gate),
   // throttle 30min (no en cada recarga) y solo admin. La corrida de fondo del cron sigue igual.
   useEffect(()=>{ if(DEMO||userRole!=='admin') return; let alive=true
     ;(async()=>{ try{
-      const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync').maybeSingle()
+      const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync').order('updated_at',{ascending:false}).limit(1).maybeSingle()
       if((cfg?.value||'off').trim()!=='on') return   // auto apagado → no toca nada (gate hasta la 1ª corrida supervisada)
-      const {data:ls}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').maybeSingle()
+      const {data:ls}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','clientes_drive_sync_last').order('updated_at',{ascending:false}).limit(1).maybeSingle()
       let last=0; try{ if(ls?.value) last=new Date(JSON.parse(ls.value).at).getTime() }catch(_){}
       if(Date.now()-last < 30*60000) return          // ya sincronizó hace <30min → no repetir
       const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
@@ -36404,7 +36405,7 @@ export default function App() {
   // Confirmar fusión propuesta: el abogado responsable abre el link del correo (?merge=token) → revisa las dos fichas y aprueba/descarta.
   useEffect(()=>{ if(DEMO||!user) return; let done=false
     try{ const tok=new URLSearchParams(window.location.search).get('merge'); if(!tok) return
-      supabase.from('learnings').select('key,value').eq('kind','merge_pending').eq('key',tok).maybeSingle().then(({data})=>{
+      supabase.from('learnings').select('key,value').eq('kind','merge_pending').eq('key',tok).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{
         if(done) return
         try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
         if(data?.value){ try{ const p=JSON.parse(data.value); setModal({type:'fusionarClientes',pending:{...p,token:tok}}) }catch(_){ appAlert('No se pudo leer la propuesta de fusión.') } }
@@ -37967,8 +37968,8 @@ export default function App() {
       try{
         const hoyISO = new Date().toISOString().slice(0,10)
         const [{data:last},{data:off}] = await Promise.all([
-          supabase.from('learnings').select('value').eq('kind','config').eq('key','fantasma_barrido_last').maybeSingle(),
-          supabase.from('learnings').select('value').eq('kind','config').eq('key','fantasma_barrido').maybeSingle(),
+          supabase.from('learnings').select('value').eq('kind','config').eq('key','fantasma_barrido_last').order('updated_at',{ascending:false}).limit(1).maybeSingle(),
+          supabase.from('learnings').select('value').eq('kind','config').eq('key','fantasma_barrido').order('updated_at',{ascending:false}).limit(1).maybeSingle(),
         ])
         if(off?.value && String(off.value).trim()==='off') return
         if(last?.value && String(last.value).slice(0,10)===hoyISO) return   // ya corrió hoy
