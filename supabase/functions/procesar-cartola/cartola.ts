@@ -50,10 +50,17 @@ function parseDDMM(raw: unknown) {
   const y = m[3] ? (m[3].length === 2 ? '20' + m[3] : m[3]) : null
   return { d: m[1].padStart(2, '0'), mm: m[2].padStart(2, '0'), y }
 }
-function anioDesdeGlosa(desc: unknown) {
-  const m = String(desc || '').match(/\b\d{1,2}[-/]\d{1,2}[-/](\d{4})\b/)
-  return m ? m[1] : null
+// Fecha COMPLETA de la glosa: dd-mm-yyyy / dd/mm/yyyy o ISO yyyy-mm-dd ("Transferencia de CLIENTE … el 2026-09-07 a las 00:24").
+// Igual que src/cartola.js. Sin esto, una fila sin fecha de columna caía al 1-ene (7 traspasos sept-2026, auditoría 2026-10-13).
+export function fechaDesdeGlosa(desc: unknown) {
+  const s = String(desc || '')
+  let m = s.match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/)
+  if (m) return { d: m[1].padStart(2, '0'), mm: m[2].padStart(2, '0'), y: m[3] }
+  m = s.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/)
+  if (m) return { d: m[3].padStart(2, '0'), mm: m[2].padStart(2, '0'), y: m[1] }
+  return null
 }
+function anioDesdeGlosa(desc: unknown) { const f = fechaDesdeGlosa(desc); return f ? f.y : null }
 
 function cyrb53(str: string) {
   let h1 = 0xdeadbeef, h2 = 0x41c6ce57
@@ -73,7 +80,9 @@ export function hashMovimiento(m: any) {
 export function huellaGlosa(m: any) {
   const s = String(m?.descripcion || '').replace(/\s+/g, '')
   // Fecha con '-' (transferencias a terceros) o '/' (abonos y traspasos entre cuentas propias).
-  const g = s.match(/el(\d{2})[-/](\d{2})[-/](\d{4})alas(\d{2}):(\d{2})/i); if (!g) return null
+  let g = s.match(/el(\d{2})[-/](\d{2})[-/](\d{4})alas(\d{2}):(\d{2})/i)
+  if (!g) { const i = s.match(/el(\d{4})-(\d{2})-(\d{2})alas(\d{2}):(\d{2})/i); if (i) g = [i[0], i[3], i[2], i[1], i[4], i[5]] as unknown as RegExpMatchArray }   // formato ISO
+  if (!g) return null
   const contra = (s.match(/acuenta(\d{4,})/i) || [])[1] || ((s.match(/haciacuentaN?°?([\d-]{6,})/i) || [])[1] || '').replace(/\D/g, '') || normRut((s.match(/Rut:?(\d{1,3}(?:\.?\d{3})+-?[\dkK])/i) || [])[1])
   if (!contra) return null
   return `${m.cuenta}|${m.tipo}|${Math.round(Number(m.monto) || 0)}|${g[3]}-${g[2]}-${g[1]} ${g[4]}:${g[5]}|${contra}`
@@ -132,6 +141,18 @@ export function parseCartola(aoa: any[], { filename = '' }: { filename?: string 
     if (ym) anioFallback = ym[ym.length - 1]
   }
   anioFallback = anioFallback || String(new Date().getFullYear())
+  // Última fecha completa del encabezado (= "Hasta"): respaldo cuando una fila no trae fecha (antes caía al 1-ene).
+  let fechaHeader: { d: string; mm: string; y: string } | null = null
+  for (let i = 0; i < Math.min(25, rows.length); i++) { for (const cell of rows[i]) { const f = fechaDesdeGlosa(_flat(cell)); if (f) fechaHeader = f } }
+  // Saldos del período (si vienen): saldo inicial + abonos − cargos = saldo final, y encadenan cartolas de la misma cuenta.
+  const saldoDe = (rx: RegExp) => {
+    for (let i = 0; i < Math.min(40, rows.length); i++) {
+      const cells = rows[i].map(_norm); const k = cells.findIndex((c: string) => rx.test(c)); if (k < 0) continue
+      const v = parseMonto((rows[i + 1] || [])[k]) || parseMonto(rows[i].slice(k + 1).find((x: unknown) => parseMonto(x) > 0)); if (v) return v
+    }
+    return null
+  }
+  const saldoInicial = saldoDe(/^saldo inicial/), saldoFinal = saldoDe(/^saldo (final|contable)/)
   let totalAbonos: number | null = null, totalCargos: number | null = null
   for (let i = 0; i < rows.length; i++) {
     const cells = rows[i].map(_norm)
@@ -170,8 +191,10 @@ export function parseCartola(aoa: any[], { filename = '' }: { filename?: string 
     if (cargo === 0 && abono === 0) continue
     const tipo = abono > 0 ? 'abono' : 'cargo'
     const monto = abono > 0 ? abono : cargo
-    const anio = anioDesdeGlosa(desc) || (fp && fp.y) || anioFallback
-    const fecha = fp ? `${anio}-${fp.mm}-${fp.d}` : `${anio}-01-01`
+    // Fecha: columna (forward-fill) > fecha completa de la glosa > "Hasta" del encabezado > 1-ene (último recurso).
+    const dm = fp || fechaDesdeGlosa(desc) || fechaHeader
+    const anio = anioDesdeGlosa(desc) || (dm && dm.y) || anioFallback
+    const fecha = dm ? `${anio}-${dm.mm}-${dm.d}` : `${anio}-01-01`
     const cp = extraerContraparte(desc)
     let rut = cp.rut ? formatRut(cp.rut) : null, nombre = cp.nombre
     const interno = detectarInterno(desc, rut)
@@ -181,5 +204,5 @@ export function parseCartola(aoa: any[], { filename = '' }: { filename?: string 
     mov.hash = hashMovimiento(mov)
     movimientos.push(mov)
   }
-  return { cuenta, rol_cuenta: rol, anio: anioFallback, filename, totalAbonos, totalCargos, movimientos }
+  return { cuenta, rol_cuenta: rol, anio: anioFallback, filename, totalAbonos, totalCargos, saldoInicial, saldoFinal, movimientos }
 }
