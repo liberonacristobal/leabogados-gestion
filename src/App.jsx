@@ -18807,6 +18807,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   // Puentes tras cargar notaría: navegar directo a la sub-vista pedida desde la pantalla de resultado (orphans / deuda / rendir).
   useEffect(()=>{ if(!navTo) return
     setShowCargaPag(false); setNotaMenuOpen(false); setSelectedClient(null); setShowHistorial(false); setShowGastosOficina(false); setShowBuscarClientes(false); setShowReasignar(false); setShowRevision(false)
+    if(navTo&&navTo.cli){ const c=(clients||[]).find(x=>String(x.id)===String(navTo.cli)); if(c){ setHubOpen(false); if(isDesktop) setShowBuscarClientes(true); setSelectedClient(c) } }
     if(navTo==='orphans') setShowOrphans(true)
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
     else if(navTo==='rendir'){ setShowRendiciones(true); setRendSub(null) }
@@ -20591,7 +20592,7 @@ const _tokG = s => _normTxt(s).split(' ').filter(w=>w.length>=5)
 const _esOfiCli = c => !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||''))
 const _hoyLocal = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 
-function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName}) {
+function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName,onIrCliente,onLanding}) {
   const isDesktop = useIsDesktop()
   const hoy = _hoyLocal()
   const nuevaFila = date => ({id:Date.now()+Math.random(),category:null,concept:'',amount:'',date:date||hoy,paid_by_client:false,subcategory:'',cli:null,proj:'',resp:null,picking:false,pq:''})
@@ -20629,7 +20630,8 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     return ult?.project||''
   },[clients,sales,gastosVivos,projectsOf])
   const clientProjects = useMemo(()=>projectsOf(selectedClient?.id),[projectsOf,selectedClient])
-  useEffect(()=>{ const p=projDefault(selectedClient?.id); setProject(p); setProjAuto(!!p); setNewProject(false) },[selectedClient?.id])
+  const preProjRef = useRef(null)   // proyecto que trae "Repetir" (si sigue vigente para el cliente)
+  useEffect(()=>{ const pre=preProjRef.current; preProjRef.current=null; const p=(pre&&projectsOf(selectedClient?.id).includes(pre))?pre:projDefault(selectedClient?.id); setProject(p); setProjAuto(!!p); setNewProject(false) },[selectedClient?.id])
   const ventaProj = (sales||[]).find(s=>selectedClient&&s.client_id===selectedClient.id&&s.title===project)
   const subsCli = useMemo(()=>selectedClient?subproyectosCliente(selectedClient.id,tasks,expenses):[],[selectedClient,tasks,expenses])
   // La razón social sigue al proyecto elegido cuando la venta la tiene.
@@ -20642,7 +20644,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     const rec=(a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))
     const mios=gastosVivos.filter(e=>userName&&e.created_by===userName).sort(rec)
     const out=[]; const seen=new Set()
-    ;[...mios,...[...gastosVivos].sort(rec)].forEach(e=>{ if(out.length>=4||!e.client_id||seen.has(e.client_id)) return; const c=(clients||[]).find(x=>x.id===e.client_id); if(c){ seen.add(c.id); out.push(c) } })
+    ;[...mios,...[...gastosVivos].sort(rec)].forEach(e=>{ if(out.length>=6||!e.client_id||seen.has(e.client_id)) return; const c=(clients||[]).find(x=>x.id===e.client_id); if(c){ seen.add(c.id); out.push(c) } })
     return out
   },[gastosVivos,clients,userName])
 
@@ -20796,6 +20798,146 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       {saving?<Spin/>:null}{saving?'Guardando...':llenas.length>1?`Guardar ${llenas.length} gastos`:'Guardar gasto'}
     </button>)
 
+  // ── Inicio de la carga (aún sin cliente): repetir lo frecuente, clientes recientes y por tipo — todo desde los gastos de quien carga.
+  const misGastos = useMemo(()=>{ const m=gastosVivos.filter(e=>userName&&e.created_by===userName); return m.length?m:gastosVivos },[gastosVivos,userName])
+  const cliById = useMemo(()=>new Map((clients||[]).map(c=>[c.id,c])),[clients])
+  const nombreCli = c => _esOfiCli(c)?'Oficina':c.name
+  const iniciales = c => _esOfiCli(c)?'OF':((_normTxt(c.name).split(' ').filter(w=>w.length>2&&!_NOM_GENERICO.has(w)).slice(0,2).map(w=>w[0]).join(''))||String(c.name||'').slice(0,2)).toUpperCase()
+  const repetir = useMemo(()=>{
+    const lim=new Date(); lim.setDate(lim.getDate()-120); const limS=lim.toISOString().slice(0,10); const g={}
+    misGastos.forEach(e=>{ if(!e.client_id||!e.category||String(e.date||'')<limS) return; const c=cliById.get(e.client_id); if(!c) return; const k=e.client_id+'|'+e.category; (g[k]=g[k]||{c,cat:e.category,items:[]}).items.push(e) })
+    const ahora=Date.now()
+    // Frecuencia ponderada por cercanía: lo que más cargas y hace poco, primero.
+    return Object.values(g).filter(x=>x.items.length>=2).map(x=>{ x.items.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))); const ult=x.items[0]; const ams=x.items.map(i=>Number(i.amount)||0).sort((a,b)=>a-b); const dias=Math.max(1,(ahora-new Date(ult.date).getTime())/864e5); return {...x,ult,med:ams[Math.floor(ams.length/2)],score:x.items.length/Math.sqrt(dias)} }).sort((a,b)=>b.score-a.score).slice(0,6)
+  },[misGastos,cliById])
+  const tipos = useMemo(()=>{ const cnt={},top={}
+    misGastos.forEach(e=>{ if(!CATS_GASTO.includes(e.category)) return; cnt[e.category]=(cnt[e.category]||0)+1; if(e.client_id&&cliById.get(e.client_id)){ const t=top[e.category]||(top[e.category]={}); t[e.client_id]=(t[e.client_id]||0)+1 } })
+    const orden=CATS_GASTO.filter(c=>c!=='Otro').sort((a,b)=>(cnt[b]||0)-(cnt[a]||0)).slice(0,5).concat('Otro')
+    const clientesDe=cat=>Object.entries(top[cat]||{}).sort((a,b)=>b[1]-a[1]).map(([id])=>cliById.get(id)).filter(Boolean)
+    return {orden,clientesDe}
+  },[misGastos,cliById])
+  const ultFecha = useMemo(()=>{ const m={}; misGastos.forEach(e=>{ if(e.client_id&&String(e.date||'')>(m[e.client_id]||'')) m[e.client_id]=String(e.date).slice(0,10) }); return m },[misGastos])
+  // Gastos de clientes que cargó esta persona y siguen sin proyecto (regla: ningún gasto de cliente sin proyecto).
+  const sinProyecto = useMemo(()=>{ if(!userName) return []; const m={}
+    gastosVivos.forEach(e=>{ if(e.created_by!==userName||e.project||e.sale_id||!e.client_id) return; const c=cliById.get(e.client_id); if(!c||_esOfiCli(c)) return; (m[c.id]=m[c.id]||{c,n:0}).n++ })
+    return Object.values(m).sort((a,b)=>b.n-a.n) },[gastosVivos,cliById,userName])
+  const [tipo,setTipo] = useState(null)
+  const [verSinProy,setVerSinProy] = useState(false)
+  const buscRef = useRef(null)
+  useEffect(()=>{ if(!isDesktop||selectedClient) return; const h=e=>{ if(e.key==='/'&&!/input|textarea|select/i.test(document.activeElement?.tagName||'')){ e.preventDefault(); buscRef.current&&buscRef.current.focus() } }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h) },[isDesktop,selectedClient])
+  useEffect(()=>{ onLanding&&onLanding(!selectedClient) },[selectedClient])
+  const elegirCliente = (c,extra={}) => {
+    setSaved(0); setQ(''); setTipo(null)
+    if(extra.proj) preProjRef.current=extra.proj
+    const fila={...nuevaFila(),...(extra.cat?{category:extra.cat}:{}),...(extra.concept?{concept:extra.concept}:{})}
+    setRows(extra.concept?[fila,nuevaFila()]:[fila]); setSelectedClient(c)
+    setTimeout(()=>{ const el=document.querySelector(extra.concept?'input[inputmode=numeric]':'[data-gconcept]'); el&&el.focus() },80)
+  }
+  const ICO_CAT = {
+    'Movilización':<><path d='M5 17h14l-1.5-6h-11z'/><circle cx='8' cy='18' r='1.6'/><circle cx='16' cy='18' r='1.6'/><path d='M7 11l1.5-4h7l1.5 4'/></>,
+    'CBR':<path d='M3 21h18M5 21V10l7-5 7 5v11M9 21v-6h6v6'/>,
+    'Notaria':<><path d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/><path d='M14 3v5h5M9 14h6M9 17h4'/></>,
+    'Registro Civil':<><rect x='3' y='5' width='18' height='14' rx='2'/><circle cx='9' cy='12' r='2.2'/><path d='M14 10h4M14 14h3'/></>,
+    'Archivo Judicial':<path d='M4 7h16v13H4zM2 3h20v4H2zM10 12h4'/>,
+    'Diario Oficial':<><rect x='4' y='3' width='16' height='18' rx='2'/><path d='M8 7h8M8 11h8M8 15h5'/></>,
+    'Otro':<><circle cx='6' cy='12' r='1.5'/><circle cx='12' cy='12' r='1.5'/><circle cx='18' cy='12' r='1.5'/></>,
+  }
+  const icoCat = (k,s=18) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{ICO_CAT[k]||ICO_CAT.Otro}</svg>
+  const catLbl = k => k==='Notaria'?'Notaría':k
+  const secT = (t,extra) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,fontWeight:700,letterSpacing:.6,textTransform:'uppercase',color:C.muted,margin:'18px 0 8px'}}><span>{t}</span>{extra}</div>
+  const avatar = (c,s=46) => <div style={{width:s,height:s,borderRadius:'50%',background:_esOfiCli(c)?C.track:C.azulTenueOn,color:_esOfiCli(c)?C.muted:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:s>40?15:12,flexShrink:0}}>{iniciales(c)}</div>
+  const fechaCorta = d => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); return s.length===3?`${+s[2]} ${M[+s[1]-1]}`:'' }
+  const hov = (on,off) => ({onMouseEnter:e=>{e.currentTarget.style.background=on}, onMouseLeave:e=>{e.currentTarget.style.background=off}})
+  const btnReset = {border:'none',fontFamily:'inherit',cursor:'pointer',textAlign:'left'}
+  const listaCli = (lista) => (
+    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
+      {lista.map((c,i)=><button key={c.id} type='button' onClick={()=>elegirCliente(c,tipo?{cat:tipo}:{})} {...hov(C.bgSoft,C.surface)} style={{...btnReset,width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:C.surface,borderTop:i?`1px solid ${C.track}`:'none',minHeight:48}}>
+        {avatar(c,32)}<span style={{flex:1,minWidth:0,fontSize:14,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(c)}</span>
+        {ultFecha[c.id]&&<span style={{fontSize:11.5,color:C.done,whiteSpace:'nowrap'}}>{fechaCorta(ultFecha[c.id])}</span>}
+      </button>)}
+    </div>)
+  const buscador = (
+    <>
+      <div style={{display:'flex',alignItems:'center',gap:8,height:44,borderRadius:12,background:C.bgSoft,border:`1px solid ${C.border}`,padding:'0 14px',boxSizing:'border-box'}}>
+        <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.2' style={{flexShrink:0}}><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg>
+        <input ref={buscRef} value={q} onChange={e=>setQ(e.target.value)} placeholder='¿Para qué cliente?' style={{...fInp,fontSize:15,height:40}}/>
+        {isDesktop&&!q&&<span style={{fontSize:11,color:C.done,border:`1px solid ${C.border}`,borderRadius:6,padding:'1px 6px',background:C.surface}}>/</span>}
+      </div>
+      {q.trim()&&(matches.length?listaCli(matches):<div style={{fontSize:12.5,color:C.done,padding:'10px 4px'}}>Sin coincidencias</div>)}
+    </>)
+  const tipoVista = tipo&&(
+    <>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:14}}>
+        <span style={{display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 10px',borderRadius:8,background:C.azulTenue,color:C.accent,fontSize:13,fontWeight:700}}>{icoCat(tipo,15)}{catLbl(tipo)}</span>
+        <button type='button' onClick={()=>setTipo(null)} style={{...btnReset,background:'none',color:C.muted,fontSize:12.5,padding:'4px 6px'}}>Quitar</button>
+      </div>
+      {secT(`Clientes con ${catLbl(tipo)}`)}
+      {listaCli((tipos.clientesDe(tipo).length?tipos.clientesDe(tipo):recientes).slice(0,8))}
+    </>)
+  const totSP = sinProyecto.reduce((a,x)=>a+x.n,0)
+  const avisoSinProy = totSP>0&&onIrCliente&&(
+    <div style={{marginTop:14}}>
+      <button type='button' onClick={()=>setVerSinProy(v=>!v)} style={{...btnReset,width:'100%',display:'flex',alignItems:'center',gap:8,background:C.avisoBg,border:`1px solid ${C.avisoLine}`,color:C.avisoText,borderRadius:10,padding:'9px 12px',fontSize:12.5,minHeight:40}}>
+        <span>{totSP} gasto{totSP!==1?'s':''} tuyo{totSP!==1?'s':''} sin proyecto</span><b style={{marginLeft:'auto',whiteSpace:'nowrap'}}>{verSinProy?'Ocultar':'Completar ›'}</b>
+      </button>
+      {verSinProy&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,marginTop:6,overflow:'hidden'}}>
+        {sinProyecto.map((x,i)=><button key={x.c.id} type='button' onClick={()=>onIrCliente(x.c.id)} {...hov(C.bgSoft,C.surface)} style={{...btnReset,width:'100%',display:'flex',justifyContent:'space-between',gap:8,padding:'10px 12px',background:C.surface,borderTop:i?`1px solid ${C.track}`:'none',fontSize:13,color:C.text}}>
+          <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.c.name}</span><span style={{color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.n} ›</span>
+        </button>)}
+      </div>}
+    </div>)
+  const tarjetaRep = x => (
+    <button key={x.c.id+x.cat} type='button' onClick={()=>elegirCliente(x.c,{cat:x.cat,concept:x.ult.concept||'',proj:x.ult.project||null})} style={{...btnReset,background:C.azulTenue,borderRadius:14,padding:12,minHeight:86,display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>
+      <div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(x.c)}</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>{catLbl(x.cat)}</div></div>
+      <div style={{marginTop:6,minWidth:0}}>
+        <div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.ult.concept}</div>
+        <div style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:2}}>{fmt(x.med)}</div>
+      </div>
+    </button>)
+  const filaRep = (x,i) => (
+    <button key={x.c.id+x.cat} type='button' onClick={()=>elegirCliente(x.c,{cat:x.cat,concept:x.ult.concept||'',proj:x.ult.project||null})} {...hov(C.bgSoft,C.surface)} style={{...btnReset,width:'100%',display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1.5fr) 84px',gap:12,alignItems:'center',padding:'10px 14px',background:C.surface,borderTop:i?`1px solid ${C.track}`:'none'}}>
+      <span style={{fontWeight:600,color:C.accent,fontSize:13.5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(x.c)}</span>
+      <span style={{fontSize:12.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.ult.concept}<span style={{color:C.done}}> · {catLbl(x.cat)}</span></span>
+      <span style={{textAlign:'right',fontWeight:700,fontSize:13,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.med)}</span>
+    </button>)
+  const landing = isDesktop ? (
+    <>
+      {buscador}
+      {!q.trim()&&(tipo?tipoVista:(
+        <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.55fr) minmax(0,1fr)',gap:24}}>
+          <div style={{minWidth:0}}>
+            {repetir.length>0&&<>{secT('Repetir un gasto')}<div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{repetir.map(filaRep)}</div></>}
+            {secT('Por tipo')}
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {tipos.orden.map(k=>{ const tc=tipos.clientesDe(k)[0]; return <button key={k} type='button' onClick={()=>setTipo(k)} {...hov(C.azulTenueOn,C.azulTenue)} style={{...btnReset,display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 12px',borderRadius:8,background:C.azulTenue,color:C.accent,fontSize:12.5,fontWeight:700}}>{icoCat(k,14)}{catLbl(k)}{tc&&<span style={{fontWeight:500,color:C.muted}}>{nombreCli(tc)}</span>}</button> })}
+            </div>
+          </div>
+          <div style={{minWidth:0}}>
+            {recientes.length>0&&<>{secT('Clientes recientes')}{listaCli(recientes)}</>}
+            {avisoSinProy}
+          </div>
+        </div>))}
+    </>
+  ) : (
+    <>
+      {buscador}
+      {!q.trim()&&(tipo?tipoVista:(
+        <>
+          {repetir.length>0&&<>{secT('Repetir')}<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>{repetir.slice(0,4).map(tarjetaRep)}</div></>}
+          {recientes.length>0&&<>{secT('Clientes recientes')}
+            <div style={{display:'flex',gap:8,overflowX:'auto',paddingBottom:4,scrollbarWidth:'none',margin:'0 -4px'}}>
+              {recientes.map(c=><button key={c.id} type='button' onClick={()=>elegirCliente(c)} style={{...btnReset,background:'none',flex:'0 0 auto',width:70,display:'flex',flexDirection:'column',alignItems:'center',gap:5,padding:0}}>
+                {avatar(c)}<span style={{fontSize:11.5,color:C.text,textAlign:'center',lineHeight:1.2,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{nombreCli(c)}</span>
+              </button>)}
+            </div></>}
+          {secT('Por tipo')}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+            {tipos.orden.map(k=><button key={k} type='button' onClick={()=>setTipo(k)} style={{...btnReset,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:12,height:62,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,fontSize:12,fontWeight:600,color:C.accent,textAlign:'center'}}><span style={{color:C.muted,display:'flex'}}>{icoCat(k)}</span>{catLbl(k)}</button>)}
+          </div>
+          {avisoSinProy}
+        </>))}
+    </>)
+
   return (
     <>
       {!sinCabecera&&<div style={{display:'flex',alignItems:'center',gap:9,marginBottom:14}}>
@@ -20803,21 +20945,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
       </div>}
       {saved>0&&!selectedClient&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
-      {!selectedClient&&(
-        <>
-          <div style={{position:'relative'}}>
-            <FloatFld label='Cliente'><input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente' autoFocus={isDesktop} style={fInp}/></FloatFld>
-            {matches.length>0&&(
-              <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:8,maxHeight:260,overflowY:'auto'}}>
-                {matches.map(c=><div key={c.id} onMouseDown={()=>{setSelectedClient(c);setQ('');setSaved(0)}} style={{padding:'10px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,fontWeight:500}}>{c.name}</div>)}
-              </div>
-            )}
-          </div>
-          {recientes.length>0&&!q&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:4}}>
-            {recientes.map(c=><button key={c.id} type='button' onClick={()=>{setSelectedClient(c);setSaved(0)}} style={chip()}>{c.name}</button>)}
-          </div>}
-        </>
-      )}
+      {!selectedClient&&landing}
 
       {selectedClient&&(
         <>
@@ -24845,8 +24973,9 @@ function DetalleGasto({e, expenses, clientEntities, sales, onEditar}){
       {onEditar&&<button type='button' onClick={onEditar} style={{marginTop:18,height:38,padding:'0 18px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{fondo?'Editar fondo':'Editar gasto'}</button>}
     </div>)
 }
-function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendiciones,saving,user,origen,onBack,onSwitch,onSaveExpense,onSaveFondo,onDeleteExpense,onAttachChange,pettyCash=[],me,onSaveCaja}){
+function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendiciones,saving,user,origen,onBack,onSwitch,onSaveExpense,onSaveFondo,onDeleteExpense,onAttachChange,pettyCash=[],me,onSaveCaja,onIrGastosCliente}){
   const isDesktop=useIsDesktop()
+  const [landing,setLanding]=useState(false)   // inicio de la carga (sin cliente): usa el ancho completo en escritorio
   const tipo=pagina?.type
   const data=pagina?.data||null
   const expense=tipo==='expenseEdit'?data:null
@@ -24884,7 +25013,7 @@ function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendicion
     ? <DetalleGasto e={expense} expenses={expenses} clientEntities={clientEntities} sales={sales} onEditar={()=>setVer(false)}/>
     : tipo==='expenseEdit'
     ? <div className='qt-body'><ExpenseEditForm expense={expense} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={onSaveExpense} onClose={onBack} onDelete={onDeleteExpense} saving={saving} user={user} onAttachChange={onAttachChange}/></div>
-    : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} userName={user?.name} sinCabecera/></div>
+    : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} userName={user?.name} onIrCliente={onIrGastosCliente} onLanding={setLanding} sinCabecera/></div>
   return (
     <div>
       <PageHeader origen={origen} onBack={onBack} titulo={titulo} ctx={client?.name||personaCaja||null}/>
@@ -24892,7 +25021,7 @@ function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendicion
         {chips}
         <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12}}>
           {!isDesktop&&foto}
-          <div className='pg-form' style={{flex:1,minWidth:0,maxWidth:isDesktop?680:undefined,width:'100%',boxSizing:'border-box',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{form}</div>
+          <div className='pg-form' style={{flex:1,minWidth:0,maxWidth:isDesktop?(landing&&tipo==='gastos'?undefined:680):undefined,width:'100%',boxSizing:'border-box',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{form}</div>
           {isDesktop&&foto&&<div style={{width:340,flexShrink:0}}>{foto}</div>}
         </div>
       </div>
@@ -39075,7 +39204,7 @@ export default function App() {
             {tab==='tarea'&&pagina&&<TareaPage pagina={pagina} tasks={tasks} clients={clients} sales={sales} clientEntities={clientEntities} user={user} saving={saving} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSaveTask={handleSaveTask} onDelegate={handleDelegateTask} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onOpenClientFicha={handleOpenClientFicha} onCierre={({estado,detalle,files})=>{ const t=pagina.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/>}
             {tab==='factura'&&pagina&&(()=>{ const b0=pagina.data; const b=(b0&&b0.id)?((billing||[]).find(x=>String(x.id)===String(b0.id))||b0):b0; const cli=b?.client_id?clients.find(c=>String(c.id)===String(b.client_id)):null
               return <FacturaPage key={b?.id||'nuevo'} b={b} cli={cli} origen={origenNav('Volver')} onBack={()=>setModal(null)} onOpenClientFicha={handleOpenClientFicha}><BillingForm bill={b} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))} pagina onVerBanco={id=>navTo({tab:'conciliacion',conc:id})}/></FacturaPage> })()}
-            {tab==='gasto'&&pagina&&<GastoPage pagina={pagina} pettyCash={pettyCash} me={user?.name} onSaveCaja={handleEntregarCaja} clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} rendiciones={rendiciones} saving={saving} user={user} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSwitch={k=>setPagina(p=>({...p,type:k}))} onSaveExpense={handleSaveExpense} onDeleteExpense={handleDeleteExpense} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))} onSaveFondo={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }}/>}
+            {tab==='gasto'&&pagina&&<GastoPage onIrGastosCliente={cid=>{ setModal(null); setTimeout(()=>{ setTab('expenses'); setExpNav({cli:cid}) },0) }} pagina={pagina} pettyCash={pettyCash} me={user?.name} onSaveCaja={handleEntregarCaja} clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} rendiciones={rendiciones} saving={saving} user={user} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSwitch={k=>setPagina(p=>({...p,type:k}))} onSaveExpense={handleSaveExpense} onDeleteExpense={handleDeleteExpense} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))} onSaveFondo={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }}/>}
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha} onIngestPropuesta={handleIngestPropuestaDrive}/>}
