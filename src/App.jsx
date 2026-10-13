@@ -229,6 +229,8 @@ const _ICON_PATHS = {
   chevron:'M9 6l6 6-6 6',
   search:'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.35-4.35',
   download:'M12 3v12m0 0-4-4m4 4 4-4M4 20h16',
+  arrowUp:'M12 19V5M6 11l6-6 6 6',
+  arrowDown:'M12 5v14M6 13l6 6 6-6',
 }
 const SIcon = ({n,s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d={_ICON_PATHS[n]||''}/></svg>
 // Chispa (sugerido/aprendido/IA): reemplaza el glifo ✦ por un SVG nítido y consistente en toda plataforma. fill=currentColor → hereda el color del texto/botón donde va.
@@ -18680,7 +18682,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [deudaGroup,setDeudaGroup] = useState('cliente')         // Deuda notaría: agrupar clientes por 'cliente' | 'responsable' | 'estado'
   const [notaQ,setNotaQ] = useState('')   // Deuda notaría: buscador (OT, cliente o trámite)
   const [deudaGrpOpen,setDeudaGrpOpen] = useState(()=>new Set()) // Deuda: secciones (responsable/estado) plegadas
-  const [cliOrd,setCliOrd] = useState('nombre')                  // orden de la lista de clientes: nombre | saldo | actividad
+  const [cliOrd,setCliOrd] = usePersisted('fd_gastos_cliord','saldo')   // orden de la lista de clientes: saldo | saldoAsc | az | reciente | actividad | nombre (por abogado)
   // Abogado del cliente — MISMA fuente que la ficha de Clientes: abogado_responsable, y si no, el responsable de su venta más reciente.
   const respByClienteFull = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
   // Pedir fondos: clientes que la oficina financia (saldo<0), agrupados por su abogado a cargo, para pedirle provisión.
@@ -18907,61 +18909,78 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   }
   // Lista de clientes de Gastos (buscador · Por cobrar/A favor/Todos · por abogado · orden). FUENTE ÚNICA: pantalla "Buscar clientes"
   // y columna izquierda en escritorio cuando hay un cliente abierto (lista + detalle lado a lado; arrastrar un gasto a un cliente lo reasigna).
-  const renderListaClientes = () => {
+  const renderListaClientes = ({enHub=false}={}) => {
               const baseAll = verArchivadosG ? clientsWithMovs.filter(c=>c.status==='Terminado') : clientsWithMovs.filter(c=>c.status!=='Terminado')
               const saldoDe = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
-              const q2=q.trim().toLowerCase(); const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+              const q2=q.trim().toLowerCase(); const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
               const matchC = c => !q2 || nrm(c.name).includes(nrm(q2)) || (clientEntities||[]).some(e=>String(e.client_id)===String(c.id)&&(nrm(e.name).includes(nrm(q2))||String(e.rut||'').replace(/[.\s-]/g,'').includes(q2.replace(/[.\s-]/g,''))))
-              const list = baseAll.filter(matchC).filter(c=> saldoFilter==='neg'?saldoDe(c)<0 : saldoFilter==='pos'?saldoDe(c)>0 : true)   // filtro Por cobrar / A favor (desde el inicio de Gastos)
-              // Última actividad por cliente (máx fecha de gasto/fondo no borrado) → recencia + señal de inactividad.
+              const list = baseAll.filter(matchC).filter(c=> saldoFilter==='neg'?saldoDe(c)<0 : saldoFilter==='pos'?saldoDe(c)>0 : true)   // filtro Por cobrar / A favor (tiles)
+              // Último movimiento por cliente (máx fecha de gasto/fondo no borrado) → orden por fecha + señal de inactividad.
               const lastAct={}; (expenses||[]).forEach(e=>{ if(e.deleted_at)return; const k=String(e.client_id); const d=(e.date||e.created_at||'').slice(0,10); if(d&&(!lastAct[k]||d>lastAct[k])) lastAct[k]=d })
               const diasDe = c=>{ const d=lastAct[String(c.id)]; if(!d) return null; return Math.floor((Date.now()-new Date(d))/86400000) }
-              const sortCli = arr => [...arr].sort((a,b)=> cliOrd==='saldo' ? (Math.abs(saldoDe(b))-Math.abs(saldoDe(a))) : cliOrd==='actividad' ? ((lastAct[String(a.id)]||'')<(lastAct[String(b.id)]||'')?-1:1) : (a.name||'').localeCompare(b.name||'','es'))
-              const row = c => { const sal=saldoDe(c); const col=sal<0?C.overdue:(sal>0?C.normal:C.done); const ents=(clientEntities||[]).filter(x=>String(x.client_id)===String(c.id)); const rs=ents.length>1?`${ents.length} razones sociales`:(ents[0]?rsDisplay(ents[0].name):''); const nPR=gastosPorRendir(c.id).length; const dias=diasDe(c); const inact=dias!=null&&dias>=45; return (
-                <div key={c.id} data-cid={String(c.id)} onClick={()=>setSelectedClient(c)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid ${C.track}`,cursor:'pointer',...(String(selectedClient?.id)===String(c.id)?{background:C.azulBg,boxShadow:`inset 0 0 0 1.5px ${C.accent}`}:{})}}>
-                  <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
+              const sortCli = arr => [...arr].sort((a,b)=>{ const la=lastAct[String(a.id)]||'', lb=lastAct[String(b.id)]||''
+                if(cliOrd==='saldoAsc') return Math.abs(saldoDe(a))-Math.abs(saldoDe(b))
+                if(cliOrd==='az'||cliOrd==='nombre') return (a.name||'').localeCompare(b.name||'','es')
+                if(cliOrd==='reciente') return la<lb?1:la>lb?-1:0
+                if(cliOrd==='actividad') return la<lb?-1:la>lb?1:0
+                return Math.abs(saldoDe(b))-Math.abs(saldoDe(a)) })
+              // Desde el inicio de Gastos: en escritorio abre lista + detalle lado a lado; en móvil abre la ficha y "volver" regresa al inicio.
+              const pick = c => { setSelectedClient(c); if(enHub&&isDesktop){ setShowBuscarClientes(true); setHubOpen(false) } }
+              const row = c => { const sal=saldoDe(c); const colS=sal<0?C.overdueText:(sal>0?C.accent:C.done); const ents=(clientEntities||[]).filter(x=>String(x.client_id)===String(c.id)); const rs=ents.length>1?`${ents.length} razones sociales`:(ents[0]?rsDisplay(ents[0].name):''); const nPR=gastosPorRendir(c.id).length; const dias=diasDe(c); const inact=dias!=null&&dias>=45; const ult=lastAct[String(c.id)]; return (
+                <div key={c.id} data-cid={String(c.id)} onClick={()=>pick(c)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer',...(String(selectedClient?.id)===String(c.id)?{background:C.azulBg,boxShadow:`inset 0 0 0 1.5px ${C.accent}`}:{})}}>
+                  <span style={{width:30,height:30,borderRadius:9,background:sal<0?C.overdueBg:(sal>0?C.azulBg:C.bgSoft),display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={sal<0?'arrowDown':'arrowUp'} s={15} c={colS}/></span>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-                    <div style={{display:'flex',alignItems:'center',gap:7,marginTop:1}}>
-                      {rs&&<span style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1,minWidth:0}}>{rs}</span>}
-                      <span style={{fontSize:10,color:inact?C.overdueText:C.done,flexShrink:0}}>{dias==null?'sin movimientos':inact?`· sin mov. ${nDias(dias)}`:`· hace ${nDias(dias)}`}</span>
+                    <div style={{fontSize:14,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginTop:1,minWidth:0}}>
+                      <span style={{fontSize:11,color:inact?C.overdueText:C.done,flexShrink:0}}>{ult?`Últ. movimiento ${fmtFechaDMY(ult)}`:'sin movimientos'}</span>
+                      {rs&&<span style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>· {rs}</span>}
                     </div>
                   </div>
-                  {nPR>0&&<span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{nPR} por rendir</span>}
-                  <span style={{fontSize:13,fontWeight:700,color:col,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtSaldoG(sal)}</span>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:colS,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtSaldoG(sal)}</div>
+                    {nPR>0&&<div style={{fontSize:10.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap'}}>{nPR} por rendir</div>}
+                  </div>
+                  <span style={{color:C.done,fontSize:18,lineHeight:1,flexShrink:0}}>›</span>
                 </div>
               )}
+              // Tiles suaves que filtran (Por cobrar / A favor / Todos): conteo de clientes, no montos.
+              const tiles = [['neg','Por cobrar',C.overdueBg,C.overdueText],['pos','A favor',C.azulBg,C.accent],['todos','Todos',C.surface,C.muted]].map(([k,l,bg,col])=>{ const on=saldoFilter===k; const n=baseAll.filter(matchC).filter(c=>k==='neg'?saldoDe(c)<0:k==='pos'?saldoDe(c)>0:true).length; return (
+                <button key={k} type='button' onClick={()=>setSaldoFilter(k)} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:(k==='todos'?C.border:'transparent')}`,borderRadius:12,padding:'9px 12px',cursor:'pointer',minWidth:0,fontFamily:'inherit'}}>
+                  <div style={{fontSize:10,fontWeight:600,letterSpacing:.4,textTransform:'uppercase',opacity:.9,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+                  <div style={{fontSize:20,fontWeight:700,letterSpacing:-.4,lineHeight:1.15,fontVariantNumeric:'tabular-nums'}}>{n}</div>
+                  <div style={{fontSize:11,opacity:.8}}>clientes</div>
+                </button>) })
+              const ORDS=[['saldo','Saldo: mayor a menor'],['saldoAsc','Saldo: menor a mayor'],['az','Nombre A–Z'],['reciente',isDesktop?'Último movimiento: más nuevo':'Fecha: más nuevo'],['actividad',isDesktop?'Último movimiento: más antiguo':'Fecha: más antiguo'],['nombre','Por abogado']]
               return (<>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9}}>
-                  <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, RUT o razón social…' autoFocus/></div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginBottom:10}}>{tiles}</div>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, RUT o razón social…' autoFocus={!enHub}/></div>
                   {archivadosG>0&&<button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,color:verArchivadosG?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>{verArchivadosG?'Ver activos':`Archivados · ${archivadosG}`}</button>}
                 </div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
-                  {[['neg','Por cobrar',C.overdueText],['pos','A favor',C.greenText],['todos','Todos',C.accent]].map(([k,l,col])=>{ const on=saldoFilter===k; const n=baseAll.filter(matchC).filter(c=>k==='neg'?saldoDe(c)<0:k==='pos'?saldoDe(c)>0:true).length; return (
-                    <button key={k} onClick={()=>{ setSaldoFilter(k); if(k!=='todos') setCliOrd('saldo') }} style={{minHeight:32,padding:'0 12px',borderRadius:20,border:`1px solid ${on?col:C.border}`,background:on?col:C.surface,color:on?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l} · {n}</button>) })}
+                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px'}}>
+                    <span style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{verArchivadosG?'Archivados':(saldoFilter==='neg'?'Por cobrar':saldoFilter==='pos'?'A favor':'Todos')} · {list.length}</span>
+                    <select value={cliOrd} onChange={e=>setCliOrd(e.target.value)} aria-label='Ordenar clientes' style={{marginLeft:'auto',minWidth:0,maxWidth:'62%',fontSize:12,color:C.muted,background:C.bgSoft,border:'none',borderRadius:20,padding:'4px 10px',cursor:'pointer',fontFamily:'inherit'}}>{ORDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+                  </div>
+                  {list.length===0
+                    ? <div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13,borderTop:`1px solid ${C.track}`}}>Sin clientes.</div>
+                    : (q2||cliOrd!=='nombre')
+                      ? sortCli(list).map(row)
+                      : (()=>{ const grupos={}; list.forEach(c=>{ const k=respByClienteFull[String(c.id)]||'__sin__'; (grupos[k]=grupos[k]||[]).push(c) }); const order=Object.keys(grupos).sort((a,b)=> a==='__sin__'?1:b==='__sin__'?-1:a.localeCompare(b,'es')); return order.map(k=>{ const cs=sortCli(grupos[k]); const suma=cs.reduce((s,c)=>s+saldoDe(c),0); const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); return (
+                          <details key={k} style={{borderTop:`1px solid ${C.track}`}}>
+                            <summary style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',cursor:'pointer',listStyle:'none'}}>
+                              <span style={{width:28,height:28,borderRadius:8,background:pc.bg,color:pc.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{sin?<SIcon n='user' s={15} c={C.grisText}/>:(INICIALES_RESP[k]||String(k)[0])}</span>
+                              <span style={{fontSize:13,fontWeight:700,color:C.text}}>{sin?'Sin abogado':k}</span>
+                              <span style={{fontSize:11,color:C.muted}}>· {cs.length}</span>
+                              <span style={{flex:1}}></span>
+                              <span style={{fontSize:14,fontWeight:700,color:suma<0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtSaldoG(suma)}</span>
+                              <span style={{display:'inline-flex',marginLeft:4,transform:'rotate(90deg)'}}><SIcon n='chevron' s={12} c={C.done}/></span>
+                            </summary>
+                            <div>{cs.map(row)}</div>
+                          </details>
+                        )}) })()
+                  }
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px 7px'}}>
-                  <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.4px'}}>{verArchivadosG?'Clientes archivados':'Clientes'} · {list.length}{q2||cliOrd!=='nombre'?'':' · por abogado'}</span>
-                  <span style={{marginLeft:'auto',display:'flex',gap:4}}>{[['nombre','Nombre'],['saldo','Saldo'],['actividad','Actividad']].map(([k,l])=>{ const on=cliOrd===k; return <button key={k} onClick={()=>setCliOrd(k)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.muted}}>{l}</button> })}</span>
-                </div>
-                {list.length===0
-                  ? <div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13}}>Sin clientes.</div>
-                  : (q2||cliOrd!=='nombre')
-                    ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{sortCli(list).map(row)}</div>
-                    : (()=>{ const grupos={}; list.forEach(c=>{ const k=respByClienteFull[String(c.id)]||'__sin__'; (grupos[k]=grupos[k]||[]).push(c) }); const order=Object.keys(grupos).sort((a,b)=> a==='__sin__'?1:b==='__sin__'?-1:a.localeCompare(b,'es')); return order.map(k=>{ const cs=sortCli(grupos[k]); const suma=cs.reduce((s,c)=>s+saldoDe(c),0); const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); return (
-                        <details key={k} style={{marginBottom:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-                          <summary style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer',listStyle:'none'}}>
-                            <span style={{width:28,height:28,borderRadius:8,background:pc.bg,color:pc.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{sin?<SIcon n='user' s={15} c={C.grisText}/>:(INICIALES_RESP[k]||String(k)[0])}</span>
-                            <span style={{fontSize:13,fontWeight:700,color:C.text}}>{sin?'Sin abogado':k}</span>
-                            <span style={{fontSize:11,color:C.muted}}>· {cs.length}</span>
-                            <span style={{flex:1}}></span>
-                            <span style={{fontSize:14,fontWeight:700,color:suma<0?C.overdue:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtSaldoG(suma)}</span>
-                            <span style={{display:'inline-flex',marginLeft:4,transform:'rotate(90deg)'}}><SIcon n='chevron' s={12} c={C.done}/></span>
-                          </summary>
-                          <div style={{borderTop:`1px solid ${C.track}`}}>{cs.map(row)}</div>
-                        </details>
-                      )}) })()
-                }
               </>)
   }
   const body = (
@@ -20289,17 +20308,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const showHub = hubOpen && !selectedClient && !showOrphans && !showNotaria && !showHistorial
   if(showHub){
     const D = isDesktop
-    const saldoDe = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
     const activos = clientsWithMovs.filter(c=>c.status!=='Terminado')
-    const negL = activos.filter(c=>saldoDe(c)<0)
-    const posL = activos.filter(c=>saldoDe(c)>0)
-    const porCobrar = Math.abs(negL.reduce((a,c)=>a+saldoDe(c),0))
-    const aFavor = posL.reduce((a,c)=>a+saldoDe(c),0)
     const nSin = orphans.length + revN(revNoActivo) + revN(revOcasional)
-    const goDir = f=>{ setSaldoFilter(f); setHubOpen(false); if(f==='neg'||f==='pos'){ setQ(''); setCliOrd('saldo'); setShowBuscarClientes(true) } }
     const cards = [
-      {t:'Clientes', ic:'users', s:`Saldos y detalle · ${activos.length}`, col:C.accent, bg:C.azulBg, go:()=>goDir('todos')},
-      {t:'Cargar', ic:'wallet', s:'Gasto · fondo · masiva', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setNotaMenuOpen(true)}},
       {t:'Rendiciones', ic:'receipt', s:'Rendir a cliente', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} pendiente`:'Sin pendientes', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
       {t:'Historial', ic:'clock', s:'Rendiciones y pagos', col:C.accent, bg:C.azulBg, go:()=>setShowHistorial(true)},
@@ -20308,33 +20319,27 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     // Caja chica del equipo ↔ banco: tarjeta como las demás (antes fila suelta); abre la revisión en Banco.
     if(isAdmin&&onRevisionCajaChica){ const sinCC=calceCajaChica(pettyCash,[],{}).cajasSinTransf.length
       cards.splice(4,0,{t:'Caja chica', ic:'wallet', s:sinCC?`${sinCC} sin conciliar`:'Conciliada', col:C.greenText, bg:C.greenBg, go:onRevisionCajaChica}) }
-    // Tarjeta de navegación: blanca, plana, con ícono en cuadro (sin barra de color) — como el render autorizado.
+    // Accesos: mini-tarjetas con ícono (una línea), secundarias a la lista de saldos.
     const navCard = c => (
-      <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
-        <span style={{width:32,height:32,borderRadius:10,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={c.ic} s={17} c={c.col}/></span>
-        <div>
-          <div style={{fontSize:15,fontWeight:600,color:C.text}}>{c.t}</div>
-          <div style={{fontSize:12,color:C.muted,marginTop:2}}>{c.s}</div>
+      <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'9px 11px',display:'flex',alignItems:'center',gap:9,minWidth:0}}>
+        <span style={{width:28,height:28,borderRadius:9,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={c.ic} s={15} c={c.col}/></span>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.t}</div>
+          <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.s}</div>
         </div>
       </div>
     )
     const hubInner = (
-      <div style={{maxWidth:D?860:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
-        <div style={{padding:D?'14px 2px 12px':'16px 8px 10px'}}>
-          <div style={{fontSize:D?22:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Gastos y Fondos</div>
+      <div style={{maxWidth:D?960:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',padding:D?'14px 2px 12px':'16px 8px 10px'}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:7,minWidth:0}}>
+            <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,whiteSpace:'nowrap'}}>Gastos y Fondos</span>
+            <span style={{fontSize:12,color:C.done,whiteSpace:'nowrap'}}>· {activos.length} clientes</span>
+          </div>
+          <button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button>
         </div>
-        {/* Hero: UNA tarjeta blanca con dos columnas separadas por línea (Por cobrar | A favor), montos abreviados. */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:D?16:11}}>
-          <div onClick={()=>goDir('neg')} style={{cursor:'pointer',padding:D?'15px 18px':'12px 13px'}}>
-            <div style={{fontSize:12,color:C.muted,marginBottom:4}}>Por cobrar</div>
-            <div style={{fontSize:D?26:20,fontWeight:800,color:C.overdueText,letterSpacing:-.5,lineHeight:1.05}}>{fmtShort(porCobrar)}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:4}}>{negL.length} cliente{negL.length!==1?'s':''} te deben</div>
-          </div>
-          <div onClick={()=>goDir('pos')} style={{cursor:'pointer',padding:D?'15px 18px':'12px 13px',borderLeft:`1px solid ${C.border}`}}>
-            <div style={{fontSize:12,color:C.muted,marginBottom:4}}>A favor de clientes</div>
-            <div style={{fontSize:D?26:20,fontWeight:800,color:C.accent,letterSpacing:-.5,lineHeight:1.05}}>{fmtShort(aFavor)}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:4}}>{posL.length} en custodia</div>
-          </div>
+        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length},minmax(0,1fr))`:'1fr 1fr',gap:8,marginBottom:12}}>
+          {cards.map((c,i)=>(!D&&i===cards.length-1&&cards.length%2)?<div key={c.t} style={{gridColumn:'1 / -1'}}>{navCard(c)}</div>:navCard(c))}
         </div>
         {/* Avisos de caja chica por persona (alertasCajaChica, fuente única): en negativo / baja → "Entregar caja" (Nueva Caja prellenada). Solo si hay alguno.
             SOLO ADMIN: un limited ve únicamente SU caja (regla del proyecto); antes este bloque no revisaba el rol y mostraba la caja de todo el equipo + "Entregar caja". */}
@@ -20359,9 +20364,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Entregar caja{neg?` ${fmtN(-a.saldo)}`:''} ›</span>
               </div>) })}
           </div>) })()}
-        <div style={{display:'grid',gridTemplateColumns:D?'1fr 1fr 1fr':'1fr 1fr',gap:D?12:8}}>
-          {cards.map((c,i)=>(i===cards.length-1&&cards.length%(D?3:2))?<div key={c.t} style={{gridColumn:'1 / -1'}}>{navCard(c)}</div>:navCard(c))}
-        </div>
+        {renderListaClientes({enHub:true})}
       </div>
     )
     if(D) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{hubInner}{pedirModal}</div>
