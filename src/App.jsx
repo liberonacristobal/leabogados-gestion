@@ -20927,7 +20927,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
   const initAssignees = task ? (task.assignees?.length?task.assignees:(task.who?[task.who]:[])) : [user?.name||'Cristóbal']
   const [f,setF] = useState(task
     ? {id:task.id,title:task.title||'',assignees:initAssignees,entity_id:task.entity_id||null,due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by,project_id:task.project_id||null}
-    : {title:preTitle||'',assignees:initAssignees,entity_id:null,due:(typeof preDue==='string'?preDue:'')||'',status:'Activo',note:'',sale_id:'',project:preProject?.name||'',subproject:'',project_id:preProject?.id||null})
+    : {title:preTitle||'',assignees:initAssignees,entity_id:null,due:(typeof preDue==='string'?preDue:'')||'',status:'Activo',note:'',sale_id:'',project:preProject?.name||'',subproject:'',project_id:preProject?.id||null,assigned_by:user?.name||null})
   const [showProjects,setShowProjects] = useState(false)
   const [subNew,setSubNew] = useState(false)
   const [showDate,setShowDate] = useState(false)
@@ -21131,6 +21131,17 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
               )})}
             </div>
           </Fld>
+
+          {/* Quién la encargó: queda como asignador (aparece en su "Tareas que asigné" y le llega el aviso al terminarla). */}
+          {!esEdicion&&(
+            <Fld label='Encargada por'>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                {WHO.map(w=>{ const on=f.assigned_by===w; const pc=personChip(w); return (
+                  <button key={w} onClick={()=>up('assigned_by',w)} style={{fontSize:12,fontWeight:on?700:500,padding:'5px 13px',borderRadius:20,border:`1px solid ${on?pc.color:C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted,cursor:'pointer'}}>{w===me?`${w} (yo)`:w}</button>
+                )})}
+              </div>
+            </Fld>
+          )}
 
           <Fld label='Plazo'>
             <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
