@@ -25809,7 +25809,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
               await upsertBilling({client_id:mc.id,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:dueFromIssued(parsed.issued_at),notes:null})
               await reconcileProgramada(mc.id, parsed.total, parsed.issued_at)
               if(parsed.rut){
-                await supabase.from('client_entities').upsert({client_id:mc.id,rut:parsed.rut,name:parsed.cliente||null},{onConflict:'rut'})
+                await supabase.from('client_entities').upsert({client_id:mc.id,rut:parsed.rut,name:parsed.cliente||null},{onConflict:'rut',ignoreDuplicates:true})
               }
             }catch(e){
               if(!e.message?.includes('duplicate')) addLog(`error guardando ${pdf.name}: ${e.message}`)
@@ -26055,7 +26055,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
       await reconcileProgramada(clientId, inv.amount, inv.issued_at)
       // Guardar en client_entities para match automático futuro
       if(inv.rut){
-        await supabase.from('client_entities').upsert({client_id:clientId, rut:inv.rut, name:inv.cliente||null},{onConflict:'rut'})
+        await supabase.from('client_entities').upsert({client_id:clientId, rut:inv.rut, name:inv.cliente||null},{onConflict:'rut',ignoreDuplicates:true})
         if(onClientsUpdate) onClientsUpdate()
       }
     }
