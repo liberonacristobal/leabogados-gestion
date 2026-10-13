@@ -18751,16 +18751,14 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [notaQ,setNotaQ] = useState('')   // Deuda notaría: buscador (OT, cliente o trámite)
   const [deudaGrpOpen,setDeudaGrpOpen] = useState(()=>new Set()) // Deuda: secciones (responsable/estado) plegadas
   const [cliOrd,setCliOrd] = usePersisted('fd_gastos_cliord','saldo')   // orden de la lista de clientes: saldo | saldoAsc | az | reciente | actividad | nombre (por abogado)
-  // Estado del cliente en Gastos (definición del usuario 09-10): Vigente = movimiento en la app ≤120 días (gasto/fondo o factura
-  // emitida/pagada) o saldo distinto de $0 · Inactivo = lo demás · Incobrable = tiene algún movimiento marcado incobrable_at.
+  // Estado del cliente en Gastos: Vigente = saldo distinto de $0 (algo por cobrar o por devolver) · Inactivo = en $0
+  // (pedido del usuario 2026-10-13, antes también contaba movimiento ≤120 días) · Incobrable = algún movimiento con incobrable_at.
   const [estadoG,setEstadoG] = usePersisted('fd_gastos_estado','vigentes')   // vigentes | inactivos | incobrables | todos
-  const estadoCli = useMemo(()=>{ const last={}, inc=new Set(); const up=(k,d)=>{ if(k&&d&&(!last[k]||d>last[k])) last[k]=d }
-    ;(expenses||[]).forEach(e=>{ if(e.deleted_at) return; const k=String(e.client_id); up(k,String(e.date||e.created_at||'').slice(0,10)); if(e.incobrable_at) inc.add(k) })
-    ;(billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Programada') return; up(String(b.client_id),String(b.paid_at||b.issued_at||'').slice(0,10)) })
-    const lim=new Date(Date.now()-120*86400000).toISOString().slice(0,10)
-    return { last, inc, lim } },[expenses,billing])
+  const estadoCli = useMemo(()=>{ const inc=new Set()
+    ;(expenses||[]).forEach(e=>{ if(!e.deleted_at&&e.incobrable_at) inc.add(String(e.client_id)) })
+    return { inc } },[expenses])
   const saldoCliG = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
-  const esVigenteG = c=> Math.round(saldoCliG(c))!==0 || (estadoCli.last[String(c.id)]||'')>=estadoCli.lim
+  const esVigenteG = c=> Math.round(saldoCliG(c))!==0
   const pasaEstadoG = (c,est=estadoG)=> est==='todos' ? true : est==='incobrables' ? estadoCli.inc.has(String(c.id)) : est==='inactivos' ? !esVigenteG(c) : esVigenteG(c)
   // Abogado del cliente — MISMA fuente que la ficha de Clientes: abogado_responsable, y si no, el responsable de su venta más reciente.
   const respByClienteFull = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
@@ -18976,11 +18974,12 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const accionesCli = (full) => {
     if(!selectedClient||esOficina(selectedClient.id)) return null
     const por=gastosPorRendir(selectedClient.id), n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0)
-    const b=(pri)=>({height:32,padding:full?'0 6px':'0 14px',minWidth:full?0:96,flex:full?1:'0 0 auto',borderRadius:9,fontSize:13,fontWeight:600,fontFamily:'inherit',cursor:'pointer',whiteSpace:'nowrap',boxSizing:'border-box',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,border:`1px solid ${pri?C.accent:C.border}`,background:pri?C.accent:C.surface,color:pri?'#fff':C.accent})
+    // Mismo color que su tarjeta: + Fondo = verde de Fondos, + Gasto = azul de Gastos; Rendir neutro.
+    const b=(bg,col,bd)=>({height:32,padding:full?'0 6px':'0 14px',minWidth:full?0:96,flex:full?1:'0 0 auto',borderRadius:9,fontSize:13,fontWeight:600,fontFamily:'inherit',cursor:'pointer',whiteSpace:'nowrap',boxSizing:'border-box',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,border:`1px solid ${bd||bg}`,background:bg,color:col})
     return (<div style={{display:'flex',gap:8,alignItems:'center',flexShrink:0,...(full?{marginTop:8}:{})}}>
-      <button type='button' onClick={()=>onIrConciliacion?onIrConciliacion():onAddFondo()} title='Los fondos entran desde la conciliación bancaria' style={b(false)}>+ Fondo</button>
-      <button type='button' onClick={()=>onAdd(selectedClient)} style={b(true)}>+ Gasto</button>
-      {n>0&&<button type='button' onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} title={`Por rendir al cliente: ${n} gasto${n!==1?'s':''} · ${fmt(monto)}`} style={b(false)}>Rendir <span style={{color:C.done}}>{n}</span></button>}
+      <button type='button' onClick={()=>onIrConciliacion?onIrConciliacion():onAddFondo()} title='Los fondos entran desde la conciliación bancaria' style={b(C.greenBg,C.greenText)}>+ Fondo</button>
+      <button type='button' onClick={()=>onAdd(selectedClient)} style={b(C.border,C.accent)}>+ Gasto</button>
+      {n>0&&<button type='button' onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} title={`Por rendir al cliente: ${n} gasto${n!==1?'s':''} · ${fmt(monto)}`} style={b(C.surface,C.accent,C.border)}>Rendir <span style={{color:C.done}}>{n}</span></button>}
     </div>)
   }
   // Lista de clientes de Gastos (buscador · Por cobrar/A favor/Todos · por abogado · orden). FUENTE ÚNICA: pantalla "Buscar clientes"
