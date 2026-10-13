@@ -7,7 +7,7 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 import {
   supabase, signInWithGoogle, signInWithMagicLink, signOut, onAuthChange, getSession,
-  getClients, getBilling,
+  getClients, getBilling, selectAll,
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
   getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh,
   upsertClient, deleteClient as dbDeleteClient,
@@ -9308,7 +9308,7 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const [busy,setBusy]=useState(false)
   const [reloadN,setReloadN]=useState(0)
   useEffect(()=>{ if(DEMO){ setVentas([]); setCm([]); return } let v=true
-    supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').then(({data})=>{ if(v&&data) setVentas(data) },()=>{})
+    selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').order('id')).then(({data})=>{ if(v&&data) setVentas(data) },()=>{})
     supabase.from('oficina_costos_mensual').select('*').eq('anio',yr).then(({data})=>{ if(v&&data) setCm(data) },()=>{})
     return ()=>{v=false} },[yr,reloadN])
   const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -9509,7 +9509,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const ivaCreditoC = comprasRows.reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
   // Ventas del SII (sii_cargas_docs) = fuente de verdad de lo emitido, TODO el año (billing está incompleto). Facturación propia = tipo 33/34 − notas de crédito (61) − facturas por cuenta de terceros.
   const [ventasRows,setVentasRows] = useState([])
-  useEffect(()=>{ if(DEMO){ setVentasRows([]); return } let v=true; supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,billing_id').then(({data})=>{ if(v&&data) setVentasRows(data) },()=>{}); return ()=>{v=false} },[])
+  useEffect(()=>{ if(DEMO){ setVentasRows([]); return } let v=true; selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,billing_id').order('id')).then(({data})=>{ if(v&&data) setVentasRows(data) },()=>{}); return ()=>{v=false} },[])
   const extBillIds = useMemo(()=>new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id))),[terceros])
   const facSiiPeriodo = ym => (ventasRows||[]).filter(d=>String(d.fecha_emision||'').startsWith(ym)).reduce((a,d)=>{ const t=Number(d.tipo_dte); if(t===61) return a-(Number(d.monto)||0); if((t===33||t===34)&&!extBillIds.has(String(d.billing_id))) return a+(Number(d.monto)||0); return a },0)
   const ym = new Date().toISOString().slice(0,7), year=new Date().getFullYear()
@@ -9995,7 +9995,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     }
     supabase.from('v_ventas_salud').select('*').then(({data})=>{ if(data) setSaludRows(data.filter(v=>v.faltan_cuotas||v.honorario_descuadrado)) },()=>{})
     supabase.from('v_sii_ventas_sin_enlazar').select('*').then(({data})=>{ if(data) setSiiRows(data) },()=>{})
-    supabase.from('cartola_movimientos').select('rut_contraparte,nombre_contraparte,monto').not('rut_contraparte','is',null).then(({data})=>{ if(data) setMovsRut(data.filter(m=>m.nombre_contraparte)) },()=>{})
+    selectAll(()=>supabase.from('cartola_movimientos').select('rut_contraparte,nombre_contraparte,monto').not('rut_contraparte','is',null).order('id')).then(({data})=>{ if(data) setMovsRut(data.filter(m=>m.nombre_contraparte)) },()=>{})
     supabase.from('learnings').select('key').eq('kind','rut_banco_no').then(({data})=>{ if(data) setRutNo(new Set(data.map(r=>r.key))) },()=>{})
   },[])
   const cuotasSinGen=saludRows.filter(v=>v.faltan_cuotas)
@@ -21907,7 +21907,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const dCol=iso=>{const dp=String(iso||'').slice(0,10).split('-');return {dia:dp.length>=3?dp[2]:'—',sub:dp.length>=3?`${_MES[parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''}}
   useEffect(()=>{ let ok=true; setLoading(true); (async()=>{
     const [a,b]=await Promise.all([
-      supabase.from('conciliacion').select('*'),
+      selectAll(()=>supabase.from('conciliacion').select('*').order('id')),
       supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,rol_cuenta,tipo,es_interno,categoria,descripcion').eq('cliente_id',client.id),
     ])
     if(ok){ setConc(a.data||[]); setMovs(b.data||[]); setLoading(false) }
@@ -28385,7 +28385,7 @@ function LearningCenter({clients=[], onClose}){
       {id:'l5',kind:'gasto_cliente',key:'inscripcion conservador',value:'c2'},
       {id:'l6',kind:'dominio_cliente',key:'andesretail.cl',value:'c1'},
     ]); return }
-    supabase.from('learnings').select('id,kind,key,value,meta,created_at').order('created_at',{ascending:false}).then(({data})=>setRows(data||[]),()=>setRows([]))
+    selectAll(()=>supabase.from('learnings').select('id,kind,key,value,meta,created_at').order('created_at',{ascending:false}).order('id')).then(({data})=>setRows(data||[]),()=>setRows([]))
   },[])
   const cn = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || '—'
   const KINDS = {
@@ -36861,7 +36861,7 @@ export default function App() {
       getClients(),
       q('ventas', supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false})),
       getBilling(),
-      q('gastos', supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false})),
+      q('gastos', selectAll(()=>supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).order('id'))),
       q('tareas', supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false})),
       q('razones sociales', supabase.from('client_entities').select('*')),
       q('adjuntos gastos', supabase.from('expense_attachments').select('id,expense_id')),
@@ -36871,7 +36871,7 @@ export default function App() {
       q('cuentas por pagar', supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})),
       q('importaciones', supabase.from('bulk_imports').select('*').order('created_at',{ascending:false}).limit(10)),
       q('memoria de alias', supabase.from('import_aliases').select('*')),
-      q('conciliación', supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino,anticipo_id')),
+      q('conciliación', selectAll(()=>supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino,anticipo_id').order('id'))),
       q('cobertura cartola', supabase.from('cartola_movimientos').select('fecha').order('fecha',{ascending:false}).limit(1)),
     ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi,ia,cc,ch])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi);setImportAliases(ia);setConciliacion(cc);setCartolaHasta(ch&&ch[0]?String(ch[0].fecha).slice(0,10):null)
       if(loadErrs.length) appAlert('No se pudieron cargar: '+loadErrs.join(', ')+'.\nAlgunas cifras pueden verse incompletas. Recarga la página antes de ingresar datos para no duplicar.')})
@@ -39106,7 +39106,7 @@ export default function App() {
           const [s,b,e]=await Promise.all([
             supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(r=>r.data||[]),
             getBilling(),
-            supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
+            selectAll(()=>supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).order('id')).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
         {/* 'revisionDatos' ya NO es modal: página 'flujo'. */}
