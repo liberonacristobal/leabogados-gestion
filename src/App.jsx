@@ -1456,7 +1456,7 @@ function ClientStatusTabs({value,onChange,activeN,endedN,prospectoN}){
   )
 }
 
-function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,sales=[],billing=[],anticipos=[],currentUserName,onEdit,onAdd,onAddTask,onQuickTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onNuevoAnticipo,onConciliar,onOpenSale,onAjuste,onAssignSeries,onStatusChange,onEditTask,onEditExpense,onSaveFields,onImportDrive}) {
+function ClientsViewLimited({onAsociarTrabajo=null,clients,expenses,tasks,clientEntities,rendiciones,sales=[],billing=[],anticipos=[],currentUserName,onEdit,onAdd,onAddTask,onQuickTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onNuevoAnticipo,onConciliar,onOpenSale,onAjuste,onAssignSeries,onStatusChange,onEditTask,onEditExpense,onSaveFields,onImportDrive}) {
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const isDesktop = useIsDesktop()
@@ -1636,7 +1636,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
         </div>
         {effTab==='contacto'&&<ContactoTab client={cl} entities={entities} onSaveFields={onSaveFields}/>}
         {esResp&&effTab==='financiero'&&<FinancieroTab client={cl} clientBilling={clientBilling} entities={entities} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(cl)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(cl)} onConciliar={()=>onConciliar&&onConciliar(cl)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange}/>}
-        {esResp&&effTab==='documentos'&&<EstadoCuentaTab client={cl} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} expenses={expenses} clientEntities={entities} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onAjuste={onAjuste}/>}
+        {esResp&&effTab==='documentos'&&<EstadoCuentaTab onAsociarTrabajo={onAsociarTrabajo} client={cl} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} expenses={expenses} clientEntities={entities} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onAjuste={onAjuste}/>}
       </div>
     )
   }
@@ -15401,6 +15401,11 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const CATS = CAT_COLORS
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
+  // Rendir cuentas exige proyecto: si algún gasto marcado no lo tiene, hay que elegirlo (se le asigna al rendir, con su venta).
+  const nSinProyR = gastosSel.filter(e=>!e.sale_id&&!e.project).length
+  const faltaProyR = !proyecto && nSinProyR>0
+  const puedeRendir = selected.size>0 && !faltaProyR
+  const proyPatch = e => { const sid=proyToSale[proyecto]; return proyecto ? {...(!e.project?{project:proyecto}:{}), ...(sid&&!e.sale_id?{sale_id:sid}:{})} : {} }
 
   // IA: profesionaliza las descripciones de los gastos seleccionados (expande abreviaciones legales, corrige tildes). Guarda el resultado.
   const mejorarDescripcionesIA = async()=>{
@@ -15439,7 +15444,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   }
 
   const handleGenerar = async(modo='pdf') => {
-    if(!gastosSel.length) return
+    if(!gastosSel.length||faltaProyR) return
     setSaving(true)
     try {
       const renderId = crypto.randomUUID()
@@ -15468,14 +15473,13 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       // Marcar gastos como rendidos, avisando si alguno falla
       let falloMarca = 0
       for(const e of gastosSel) {
-        const patch = {client_rendered_at:now,client_render_id:renderId}
-        if(proyecto && !e.project) patch.project = proyecto   // asociar el gasto al proyecto si no lo estaba (memoria: no volver a pedirlo)
+        const patch = {client_rendered_at:now,client_render_id:renderId,...proyPatch(e)}   // asociar el gasto al proyecto (y su venta) si no lo estaba (memoria: no volver a pedirlo)
         const {error} = await supabase.from('expenses').update(patch).eq('id',e.id)
         if(error) falloMarca++
       }
       if(falloMarca>0) appAlert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
-      if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId,...(proyecto&&!e.project?{project:proyecto}:{})}:e))
+      if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId,...proyPatch(e)}:e))
       const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:periodoSel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null,dirigido_email:atencionEmail||null,ot_numbers:otNums||null}
       if(onRendicionComplete) onRendicionComplete(rendObj)
       await guardarDirigido()
@@ -15489,7 +15493,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
 
   // EDITAR en sitio: actualiza la MISMA rendición (mismo id/correlativo/fecha), agrega/quita gastos, re-marca y ajusta el reembolso. No la anula ni crea otra.
   const handleGuardarEdicion = async() => {
-    if(!esEdicion || !gastosSel.length) return
+    if(!esEdicion || !gastosSel.length || faltaProyR) return
     setSaving(true)
     try {
       const now = new Date().toISOString()
@@ -15501,14 +15505,14 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       const patch = {total:totalSel, n_gastos:gastosSel.length, entity_id:selEnt||null, project:proyecto||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, ot_numbers:otNums||null}
       const {error:re} = await supabase.from('rendiciones').update(patch).eq('id',editRend.id)
       if(re) throw new Error('No se pudo actualizar la rendición: '+re.message)
-      for(const e of toAdd){ await supabase.from('expenses').update({client_rendered_at:now, client_render_id:editRend.id}).eq('id',e.id) }
+      for(const e of toAdd){ await supabase.from('expenses').update({client_rendered_at:now, client_render_id:editRend.id, ...proyPatch(e)}).eq('id',e.id) }
       for(const e of toRemove){ await supabase.from('expenses').update({client_rendered_at:null, client_render_id:null}).eq('id',e.id) }
       // Ajustar el cobro de reembolso vinculado (si existe y no está anulado) al nuevo total
       let reembAjust=null
       const reemb=(billing||[]).find(b=>b.billing_type==='reembolso'&&b.status!=='Anulada'&&(b.notes||'').includes('Rendición ID '+editRend.id))
       if(reemb && reemb.amount!==totalSel){ const {error:be}=await supabase.from('billing').update({amount:totalSel}).eq('id',reemb.id); if(!be) reembAjust={id:reemb.id} }
       if(setExpenses) setExpenses(p=>p.map(e=>{
-        if(toAdd.find(x=>x.id===e.id)) return {...e,client_rendered_at:now,client_render_id:editRend.id}
+        if(toAdd.find(x=>x.id===e.id)) return {...e,client_rendered_at:now,client_render_id:editRend.id,...proyPatch(e)}
         if(toRemove.find(x=>x.id===e.id)) return {...e,client_rendered_at:null,client_render_id:null}
         return e
       }))
@@ -15555,11 +15559,11 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         const sug = contacts.filter(c=>c.email)
         return (<>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:6}}>
-          <div style={flBox(!!proyecto)}>
-            <div style={flLbl}>Proyecto</div>
+          <div style={{...flBox(!!proyecto),...(faltaProyR?{borderColor:C.overdue}:{})}}>
+            <div style={flLbl}>Proyecto{faltaProyR?' *':''}</div>
             {proyectosDisp.length>0
               ? <select value={proyecto} onChange={e=>{setProyecto(e.target.value);setSelected(new Set())}} style={{...flInp,appearance:'none'}}><option value=''>Todos</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}{proyConteo[p]?` (${proyConteo[p]})`:(proyToSale[p]?' · venta':'')}</option>)}</select>
-              : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Opcional' style={flInp}/>}
+              : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder={faltaProyR?'Escribe el trabajo':'Opcional'} style={flInp}/>}
           </div>
           <div style={flBox(false)}>
             <div style={flLbl}>Dirigido a</div>
@@ -15637,26 +15641,27 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   </>)
   const bResumen = null
   const bIA = selected.size>0&&<button onClick={mejorarDescripcionesIA} disabled={limpiandoIA} style={{...chipBtn('soft'),width:'100%',marginBottom:8,opacity:limpiandoIA?.6:1}}>{limpiandoIA?'Mejorando descripciones…':'Mejorar descripciones con IA'}</button>
-  const bBotones = (
+  const bBotones = (<>
+      {faltaProyR&&<div style={{fontSize:11.5,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
       <div style={{display:'flex',gap:8}}>
         {!asPage&&<button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
         {esEdicion ? (
-          <button disabled={!selected.size||saving} onClick={handleGuardarEdicion}
-            style={{flex:3,padding:'9px 14px',borderRadius:10,border:'none',background:selected.size?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+          <button disabled={!puedeRendir||saving} onClick={handleGuardarEdicion}
+            style={{flex:3,padding:'9px 14px',borderRadius:10,border:'none',background:puedeRendir?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:puedeRendir?'pointer':'not-allowed'}}>
             {saving?'Guardando…':'Guardar cambios'}
           </button>
         ) : (<>
-        <button disabled={!selected.size||saving} onClick={()=>handleGenerar('pdf')}
-          style={{flex:1.3,padding:'9px 14px',borderRadius:10,border:`1px solid ${selected.size?C.accent:C.done}`,background:'#fff',color:selected.size?C.accent:C.done,fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+        <button disabled={!puedeRendir||saving} onClick={()=>handleGenerar('pdf')}
+          style={{flex:1.3,padding:'9px 14px',borderRadius:10,border:`1px solid ${puedeRendir?C.accent:C.done}`,background:'#fff',color:puedeRendir?C.accent:C.done,fontSize:13,fontWeight:700,cursor:puedeRendir?'pointer':'not-allowed'}}>
           {saving?'…':'Descargar PDF'}
         </button>
-        <button disabled={!selected.size||saving} onClick={()=>handleGenerar('enviar')}
-          style={{flex:1.7,padding:'9px 14px',borderRadius:10,border:'none',background:selected.size?C.normal:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+        <button disabled={!puedeRendir||saving} onClick={()=>handleGenerar('enviar')}
+          style={{flex:1.7,padding:'9px 14px',borderRadius:10,border:'none',background:puedeRendir?C.normal:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:puedeRendir?'pointer':'not-allowed'}}>
           {saving?'Generando…':'Enviar al cliente'}
         </button>
         </>)}
       </div>
-  )
+  </>)
 
   // Desktop: maestro-detalle (lista | documento). Móvil: apilado en el orden de hoy. Misma JSX, dos arreglos.
   return isDesktop ? (
@@ -15961,6 +15966,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   // Proyecto aprendido por cliente + sociedad de la OT (learnings 'notaria_proyecto': `${client_id}::${entity_id|compareciente}` → sale_id).
   const [notaProyL,setNotaProyL] = useState({})
   useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_proyecto').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setNotaProyL(m) },()=>{}) },[notaria])
+  // Descripción → venta aprendida al asignar en la ficha (learnings 'gasto_venta': `${client_id}::${glosaKey}`): alimenta la sugerencia.
+  const [gastoVentaL,setGastoVentaL] = useState({})
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','gasto_venta').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setGastoVentaL(m) },()=>{}) },[])
   const [notaAlias,setNotaAlias] = useState([])   // learnings kind 'notaria_alias': key (requirente/frase) → value (client_id)
   useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_alias').order('updated_at',{ascending:true}).then(({data})=>setNotaAlias(data||[]),()=>{}) },[notaria])
   // Glosas aprendidas por tipo de trámite (materia normalizada → glosa a rendir). Se aprende al editar una glosa en el preview.
@@ -16069,7 +16077,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       setRows(rows.map(r=>({...r})))
     }catch(e){ console.error('matching',e) }
     finally{ setMatching(false); setMatchProg(null)
-      if(notaria){ try{ const c=notaCats(rows); const nD=c.listas.length+c.oficina.length+c.personal.length; const nR=c.falta.length+c.confirma.length; flash(`Análisis listo · ${nD} para cargar${nR?` · ${nR} por revisar`:''}`); setReadyBanner(true) }catch(_){ flash('Análisis listo · revisa la carga') ; setReadyBanner(true) } }
+      if(notaria){ try{ const c=notaCats(rows); const nD=c.listas.length+c.proyecto.length+c.oficina.length+c.personal.length; const nR=c.falta.length+c.confirma.length; flash(`Análisis listo · ${nD} para cargar${nR?` · ${nR} por revisar`:''}`); setReadyBanner(true) }catch(_){ flash('Análisis listo · revisa la carga') ; setReadyBanner(true) } }
     }
   }
 
@@ -16385,19 +16393,24 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     if(r.sale_id && vs.some(v=>String(v.id)===String(r.sale_id))) return {need:false, sale:r.sale_id, vs}
     const k=proyKey(r), l=k&&notaProyL[k]; if(l && vs.some(v=>String(v.id)===String(l))) return {need:false, sale:l, vs}
     const ps=proyectoSeguro(r.client_id, sales, {titulo:r.proyecto}); if(ps.sale_id) return {need:false, sale:ps.sale_id, vs}
-    return {need:true, vs, sug:sugerirVentaGasto({concept:r.concepto,subconcept:r.subconcepto,materia:r.materia,date:r.fecha}, vs, null).venta}
+    const gl = r.noSug ? null : (gastoVentaL[`${r.client_id}::${glosaKey(glosaFinal(r))}`] || gastoVentaL[`${r.client_id}::${glosaKey(r.concepto||'')}`] || null)
+    const sug = r.noSug ? null : sugerirVentaGasto({concept:glosaFinal(r),subconcept:r.subconcepto,materia:r.materia,date:r.fecha}, vs, gl).venta
+    return {need:true, vs, sug, sale:sug?sug.id:undefined}
   }
+  const sinProyNota = r => { const p=proyDe(r); return p.need && !p.sug }
   // Elegir el proyecto de una OT lo aplica también a las demás OT de la misma sociedad del cliente que aún no lo tienen.
   const setProyRow = (rowId, campo, valor) => { setTouched(true); setRows(p=>{ const src=p.find(x=>x.id===rowId); const k=src&&proyKey(src)
-    return p.map(x=> x.id===rowId || (campo==='sale_id' && k && proyKey(x)===k && !x.sale_id && proyDe(x).need) ? {...x,[campo]:valor} : x) }) }
+    const extra = campo==='sale_id' ? {proyRev:true, noSug:!valor} : {proyRev:true}
+    return p.map(x=> x.id===rowId || (campo==='sale_id' && valor && k && proyKey(x)===k && !x.sale_id && proyDe(x).need) ? {...x,[campo]:valor,...extra} : x) }) }
   const proyCampo = r => { const pr=proyDe(r); if(!pr.vs || pr.vs.length===1) return null
     const st={width:'100%',maxWidth:420,padding:'6px 9px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box'}
     if(!pr.vs.length) return <input value={r.proyecto||''} onChange={e=>setProyRow(r.id,'proyecto',e.target.value)} placeholder='Trabajo (el cliente no tiene ventas)…' aria-label='Proyecto' style={st}/>
     const ord=pr.sug?[pr.sug,...pr.vs.filter(v=>v.id!==pr.sug.id)]:pr.vs
-    return <select value={r.sale_id||pr.sale||''} onChange={e=>setProyRow(r.id,'sale_id',e.target.value||null)} aria-label='Proyecto' style={st}>
+    const val=r.sale_id||pr.sale||''
+    return <span style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><select value={val} onChange={e=>setProyRow(r.id,'sale_id',e.target.value||null)} aria-label='Proyecto' style={{...st,flex:'1 1 220px'}}>
       <option value=''>Proyecto…</option>
       {ord.map(v=><option key={v.id} value={v.id}>{v.title}{v.status!=='Activo'?` (${String(v.status).toLowerCase()})`:''}</option>)}
-    </select> }
+    </select>{!r.sale_id&&pr.sug&&String(val)===String(pr.sug.id)&&<span style={{fontSize:10,fontWeight:600,color:C.greenText}}>sugerido por la descripción</span>}</span> }
   const asignarPersonal = (rowId,persona)=>setRows(p=>p.map(r=>r.id===rowId?{...r,personal_de:persona||null,client_id:null,clientName:null,entity_id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:persona?'personal':'none',confidence:persona?100:0}:r))
   // Crea un cliente ocasional con el nombre de la fila (columna Cliente), opcionalmente con responsable, y le asigna el gasto.
   const crearOcasional = async(r,responsable)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm,responsable); if(c){ setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)); if(onLearnAlias) onLearnAlias(nm.toLowerCase(), c.id); flash(`Cliente nuevo «${c.name}» · se guarda al Cargar`) }  /* aprende nombre→ocasional para que no reaparezca al re-subir */ setOcasPick(null) }
@@ -16582,14 +16595,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Reparte las filas en 6 categorías accionables. Cada una es una tarjeta plegable; adentro, filas
   // que muestran compareciente + trámite + fecha (lo que identifica de quién es).
   const notaCats = (flt) => {
-    const c={falta:[],confirma:[],listas:[],personal:[],oficina:[],yacargadas:[],nonuestra:[],sinefecto:[],errores:[]}
+    const c={falta:[],confirma:[],proyecto:[],listas:[],personal:[],oficina:[],yacargadas:[],nonuestra:[],sinefecto:[],errores:[]}
     flt.forEach(r=>{
       if(r.error){ if(/sin efecto/i.test(r.error)) c.sinefecto.push(r); else c.errores.push(r); return }   // 'Sin efecto (anulada)' aparte de errores reales (ej. 'OT no detectada')
       if(r.noNuestra){ c.nonuestra.push(r); return }   // "No es nuestra": OT correcta pero no la paga la oficina → no se carga, solo se registra + avisa a la notaría (reversible)
       if(dupInfo[r.id]?.otState){ c.yacargadas.push(r); return }
       if(r.personal_de){ c.personal.push(r); return }   // gasto personal de un miembro (Cristóbal/Erasmo/…)
       if(r.isInternal || (r.client_id && esOficinaCli(r.client_id))){ c.oficina.push(r); return }
-      if(r.client_id){ c.listas.push(r); return }
+      if(r.client_id){ (proyDe(r).need||r.proyRev ? c.proyecto : c.listas).push(r); return }
       if(r.suggestion){ c.confirma.push(r); return }
       c.falta.push(r)
     })
@@ -16598,6 +16611,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const CAT_META = {
     falta:{t:'Falta el cliente', s:'búscalo, míralo en Drive o créalo', col:C.overdueText, bg:C.overdueBg},
     confirma:{t:'Confirma el cliente', s:'la IA ya propuso uno · un toque', col:C.soonText, bg:C.soonBg},
+    proyecto:{t:'Proyecto por revisar', s:'con cliente · sin proyecto seguro · opcional', col:C.soonText, bg:C.soonBg},
     listas:{t:'Listas para cargar', s:'con cliente · agrupadas por cliente', col:C.greenText, bg:C.greenBg},
     personal:{t:'Personal · de un miembro', s:'de un abogado/miembro, no de un cliente', col:C.grisText, bg:C.bgWarm},
     oficina:{t:'De la oficina', s:'no van a un cliente', col:C.tealText, bg:C.tealBg},
@@ -16606,7 +16620,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     sinefecto:{t:'Sin efecto', s:'anuladas · excluidas del total', col:C.grisText, bg:C.bgWarm},
     errores:{t:'Con error · no se cargan', s:'revísalas (ej. OT no detectada en el archivo)', col:C.overdueText, bg:C.overdueBg},
   }
-  const catSvg = (k,col) => { const p={falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],personal:['M5 20c0-4 3.5-6 7-6s7 2 7 6'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],nonuestra:['M15 9l-6 6M9 9l6 6'],sinefecto:['M6 6l12 12'],errores:['M12 9v4','M12 17v.01']}[k]||[]
+  const catSvg = (k,col) => { const p={proyecto:['M3 7h6l2 2h10v10H3z'],falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],personal:['M5 20c0-4 3.5-6 7-6s7 2 7 6'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],nonuestra:['M15 9l-6 6M9 9l6 6'],sinefecto:['M6 6l12 12'],errores:['M12 9v4','M12 17v.01']}[k]||[]
     const base = k==='falta'?<circle cx='9' cy='8' r='3'/>:k==='confirma'?<circle cx='12' cy='12' r='3.5'/>:k==='personal'?<circle cx='12' cy='8' r='3.5'/>:k==='oficina'?<rect x='4' y='3' width='12' height='18' rx='1'/>:k==='yacargadas'?<path d='M3 12a9 9 0 1 0 3-6.7L3 8'/>:(k==='sinefecto'||k==='nonuestra')?<circle cx='12' cy='12' r='9'/>:null
     return <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth={k==='listas'?2.4:2} strokeLinecap='round' strokeLinejoin='round'>{base}{p.map((d,i)=><path key={i} d={d}/>)}</svg> }
   const tramDe = r => ((r.materia||'').trim().toLowerCase().replace(/^./,ch=>ch.toUpperCase()))||'Trámite notarial'
@@ -16720,12 +16734,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Recibo del resultado (clickeable): la acción "Cargar" cuelga del dato; A clientes se despliega.
   const notaReceipt = (cats) => {
     // Se cargan = solo las filas CON destino resuelto (cliente / oficina / miembro), respetando lo desmarcado. Falta y confirma NO se cargan: quedan por revisar.
-    const cargarRows=[...cats.listas,...cats.oficina,...cats.personal].filter(notaSelOn)
+    const cargarRows=[...cats.proyecto,...cats.listas,...cats.oficina,...cats.personal].filter(notaSelOn)
     const nCarga=cargarRows.length, totCarga=cargarRows.reduce((a,r)=>a+(r.monto||0),0)
-    const byCli={}; cats.listas.forEach(r=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); const k=r.client_id; (byCli[k]=byCli[k]||{name:c?.name||'Cliente',n:0,tot:0}); byCli[k].n++; byCli[k].tot+=(r.monto||0) })
+    const byCli={}; [...cats.proyecto,...cats.listas].forEach(r=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); const k=r.client_id; (byCli[k]=byCli[k]||{name:c?.name||'Cliente',n:0,tot:0}); byCli[k].n++; byCli[k].tot+=(r.monto||0) })
     const cliList=Object.values(byCli).sort((a,b)=>b.tot-a.tot)
     const quedan=cats.falta.length+cats.confirma.length
-    const sinProy=cargarRows.filter(r=>proyDe(r).need)
+    const sinProy=cargarRows.filter(sinProyNota)
+    const respSin=[...new Set(sinProy.map(r=>clients.find(c=>String(c.id)===String(r.client_id))?.abogado_responsable).filter(Boolean))]
     return (
       <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff',marginTop:14}}>
         <div style={{padding:'8px 13px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,background:C.bgPanel,borderBottom:`.5px solid ${C.track}`}}>Resultado de la carga</div>
@@ -16738,7 +16753,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             msg += ' ¿Confirmas?'
             if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:10,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
         </div>
-        {sinProy.length>0&&<div onClick={()=>setCatOpen(new Set(['listas']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',fontSize:12,color:C.muted,cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><span>{sinProy.length} OT sin proyecto · se cargan igual</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(sinProy.reduce((a,r)=>a+(r.monto||0),0))} ›</span></div>}
+        {sinProy.length>0&&<div onClick={()=>setCatOpen(new Set(['proyecto']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',fontSize:12,color:C.muted,cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><span>{sinProy.length} OT sin proyecto · se cargan igual{respSin.length?` · aviso a ${respSin.join(', ')}`:''}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(sinProy.reduce((a,r)=>a+(r.monto||0),0))} ›</span></div>}
         <div style={{fontSize:11,color:C.muted,padding:'8px 13px 0',lineHeight:1.5}}>Tus asignaciones se guardan al Cargar; lo que la app aprende (RUT y clientes) queda para siempre.</div>
         <div style={{fontSize:11,color:C.done,padding:'2px 13px 8px',lineHeight:1.5,borderBottom:`.5px solid ${C.track}`}}>Si algo sale mal, puedes deshacer toda la carga con un clic.</div>
         <div onClick={()=>setRcOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',fontSize:13,cursor:'pointer'}}><span style={{color:C.muted}}>Cuánto debe cada cliente <span style={{fontSize:10,color:C.done}}>· de más a menos</span></span><span style={{display:'flex',alignItems:'center',gap:7}}><b>{cliList.length} cliente{cliList.length!==1?'s':''}</b><span style={{color:C.done,transform:rcOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span></span></div>
@@ -16784,7 +16799,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <button disabled={!sel.length} onClick={()=>sel.forEach(r=>asignar(r.id,r.suggestion.id))} style={{width:'100%',fontSize:12,fontWeight:700,color:'#fff',background:sel.length?C.normal:C.done,border:'none',borderRadius:8,padding:'8px',cursor:sel.length?'pointer':'default',marginBottom:2}}>Confirmar seleccionadas ({sel.length})</button>
               {fr.map(r=>notaCatRow(r,'confirma'))}
             </>)})()}
-            {k==='listas'&&(()=>{ const fr=filtRows(rws,k); const by={}; fr.forEach(r=>{ (by[r.client_id]=by[r.client_id]||[]).push(r) }); const groups=Object.entries(by).map(([cid,rs])=>{ const c=clients.find(x=>String(x.id)===String(cid)); let saldo=null; try{ saldo=saldoCliente(expenses,cid) }catch(_){}; const tt=rs.reduce((a,r)=>a+(r.monto||0),0); return {cid,name:c?.name||'Cliente',nEnt:entsOf(cid).length,rs,tt,saldo} }).sort((a,b)=>b.tt-a.tt); return (<>
+            {(k==='listas'||k==='proyecto')&&(()=>{ const fr=filtRows(rws,k); const by={}; fr.forEach(r=>{ (by[r.client_id]=by[r.client_id]||[]).push(r) }); const groups=Object.entries(by).map(([cid,rs])=>{ const c=clients.find(x=>String(x.id)===String(cid)); let saldo=null; try{ saldo=saldoCliente(expenses,cid) }catch(_){}; const tt=rs.reduce((a,r)=>a+(r.monto||0),0); return {cid,name:c?.name||'Cliente',nEnt:entsOf(cid).length,rs,tt,saldo} }).sort((a,b)=>b.tt-a.tt); return (<>
               {rws.length>10&&buscador(k)}
               {groups.map(g=>{ const cubre=g.saldo!=null&&g.saldo>=g.tt; const adel=g.saldo!=null?Math.max(0,g.tt-g.saldo):0; return (
                 <div key={g.cid}>
@@ -16831,7 +16846,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       </div>}
       {notaria&&(()=>{ const cts=notaCats(rows||[]); const nLeidas=(rows||[]).length; const errs=cts.errores
         // Partición única (suman las filas del archivo): se cargan = con destino (cliente/oficina/miembro); por revisar = falta+confirma; ya en la app; anuladas; con error.
-        const nDest=cts.listas.length+cts.oficina.length+cts.personal.length; const nRev=cts.falta.length+cts.confirma.length; const nYa=cts.yacargadas.length; const nAnul=cts.sinefecto.length; const nNoN=cts.nonuestra.length; return (
+        const nDest=cts.listas.length+cts.proyecto.length+cts.oficina.length+cts.personal.length; const nRev=cts.falta.length+cts.confirma.length; const nYa=cts.yacargadas.length; const nAnul=cts.sinefecto.length; const nNoN=cts.nonuestra.length; return (
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
           <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'baseline'}}>
             <div><span style={{fontSize:20,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{nLeidas}</span> <span style={{fontSize:11,color:C.muted}}>filas del archivo</span></div>
@@ -16855,7 +16870,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {aprendido&&aprendido.name
         ? <div style={{display:'flex',alignItems:'center',gap:7,background:C.greenBg,border:`1px solid ${C.normal}`,borderRadius:10,padding:'8px 11px',marginBottom:9}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:12,color:C.greenText}}>Aprendí que <b>{aprendido.name}</b> es <b>{aprendido.cli}</b> — no te lo vuelvo a preguntar.</span></div>
         : accionMsg&&<div style={{display:'flex',alignItems:'center',gap:7,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 11px',marginBottom:9}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:12,color:C.text}}>{accionMsg}</span></div>}
-      {['errores','falta','confirma','listas','personal','oficina','yacargadas','nonuestra','sinefecto'].map(card)}
+      {['errores','falta','confirma','proyecto','listas','personal','oficina','yacargadas','nonuestra','sinefecto'].map(card)}
       {notaReceipt(cats)}
     </div>)
   }
@@ -38797,7 +38812,7 @@ export default function App() {
             </div>}
             {tab==='expenses'&&<ExpensesView onOpenMovBanco={id=>navTo({tab:'conciliacion',conc:id})} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} onRevisionCajaChica={()=>navTo({tab:'conciliacion',ccRev:true})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView isAdmin={userRole==='admin'} expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
-            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields}/>}
+            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited onAsociarTrabajo={handleAsociarTrabajo} clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView onAsociarTrabajo={handleAsociarTrabajo} clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
           </ViewErrorBoundary></div>
         )}

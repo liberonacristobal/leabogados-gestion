@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ALCANCE (definido con el usuario): SOLO lo pendiente del cliente del abogado —
 //   (1) Cobros ya recibidos, sin registrar: depósitos en la cuenta de la oficina, con cliente asignado, sin conciliar a su factura.
 //   (2) Documentos duplicados por limpiar: folios repetidos + anticipos a mano que calzan con el banco (subconjunto SEGURO; el módulo Duplicados es la fuente completa).
+//   (3) Gastos sin proyecto (desde el 01-06-2026): para rendir cuentas cada gasto del cliente va a su proyecto; se asigna en la ficha › Fondos y gastos.
 // Nada de compras del SII, costos de oficina ni otras métricas.
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
@@ -69,6 +70,7 @@ serve(async (req) => {
           sb.from("cartola_movimientos").select("id,fecha,monto,monto_conciliado,n_operacion,nombre_contraparte,cliente_id,tipo,estado,es_interno").eq("tipo","abono").in("estado",["pendiente","parcial"]),
           sb.from("anticipos").select("id,client_id,monto,fecha,nota"),
           sb.from("conciliacion").select("anticipo_id,tipo_destino"),
+          sb.from("expenses").select("id,client_id,amount,concept,ot_number,date").eq("type","gasto").is("sale_id",null).is("deleted_at",null).is("apertura_id",null).eq("no_descuenta_saldo",false).not("client_id","is",null).gte("date","2026-06-01"),
         ]);
         const fallo = res.find((r:any)=> r.error || r.data===null);
         if (!fallo) return res;
@@ -77,7 +79,7 @@ serve(async (req) => {
       }
       throw new Error("No se pudieron cargar los datos: "+(last?.message||"consulta vacía"));
     };
-    const [{ data: clients }, { data: billing }, { data: movs }, { data: anticipos }, { data: conc }] = await fetchAll();
+    const [{ data: clients }, { data: billing }, { data: movs }, { data: anticipos }, { data: conc }, { data: sinProyRaw }] = await fetchAll();
 
     const cli = (id:any)=> (clients||[]).find((c:any)=>String(c.id)===String(id));
     const cname = (id:any)=> cli(id)?.name || "Cliente";
@@ -159,11 +161,21 @@ serve(async (req) => {
       }
     });
 
+    // ── (3) Gastos sin proyecto, por abogado responsable del cliente (sin responsable → ambos admins). Oficina fuera. ──
+    const OFICINA_ID = "055df2ad-fa4f-4293-9dc3-d7ab9a200774";
+    const esOficina = (cid:any)=> String(cid)===OFICINA_ID || /liberona\s+escala/i.test(cname(cid));
+    const porCli: Record<string, any> = {};
+    (sinProyRaw||[]).forEach((e:any)=>{ if (esOficina(e.client_id)) return; const k=String(e.client_id); const g=(porCli[k]=porCli[k]||{ cid:k, cli:cname(k), n:0, monto:0, desc:[] as string[] }); g.n++; g.monto+=Number(e.amount)||0; const d0=String(e.concept||"").replace(/^gastos notariales\s*[—–-]\s*/i,"").trim(); const d=d0.length>48?d0.slice(0,46).trim()+"…":d0; if(d && g.desc.length<2 && !g.desc.includes(d)) g.desc.push(d); });
+    const sinProyDe: Record<string, any[]> = {};
+    Object.values(porCli).forEach((g:any)=>{ const r=respDeCliente(g.cid); (r?[r]:ADMINS).forEach((n:string)=> (sinProyDe[n]=sinProyDe[n]||[]).push(g)); });
+    Object.values(sinProyDe).forEach(arr=> arr.sort((a,b)=> b.monto-a.monto));
+
     // ── Diseño (paleta C, a prueba de Gmail con tablas) ──
     // Colores EXACTOS de la paleta C (Liberona Escala): accent, text/GRAFITO, muted/AZUL2, done/AZUL3, AZUL4; greenText/greenBg; soonText/soonBg.
     const HAIR="#E4E8EB", INK="#3D3D3D", MUT="#537281", FAINT="#99ABB4", NV="#003C50";
     const GRN="#0F6E56", GRNBG="#E1F5EE", AMB="#854F0B", AMBBG="#FFF8E1";
-    const sec = (n:string,label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${n} · ${label}</span></div>`;
+    let secN = 0;   // numeración correlativa de las secciones que sí aparecen
+    const sec = (_n:string,label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${++secN} · ${label}</span></div>`;
     const cta = (txt:string,color:string,url:string="https://gestion.leabogados.cl")=> `<div style="margin-top:12px;"><a href="${url}" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${txt} &rarr;</a></div>`;
 
     const cobrosHtml = (arr:any[]) => {
@@ -197,6 +209,20 @@ serve(async (req) => {
         cta("Limpiar estos duplicados",AMB,"https://gestion.leabogados.cl/?ir=duplicados")+`</div>`;
     };
 
+    const sinProyHtml = (arr:any[]) => {
+      if (!arr.length) return "";
+      const top = arr.slice(0, 8);
+      const rows = top.map((x:any,i:number)=> `<tr><td style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}"><div style="font-size:13.5px;font-weight:700;color:${INK};">${esc(x.cli)}</div><div style="font-size:11px;color:${MUT};margin-top:2px;line-height:1.4;">${x.n} gasto${x.n!==1?"s":""}${x.desc.length?` · ${esc(x.desc.join(", "))}${x.n>x.desc.length?"…":""}`:""}</div></td><td align="right" valign="top" style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}white-space:nowrap;"><span style="font-size:14px;font-weight:800;color:${NV};">${fmt(x.monto)}</span></td></tr>`).join("");
+      const rest = arr.slice(top.length);
+      const mas = rest.length ? `<div style="font-size:11.5px;color:${FAINT};margin-top:9px;">y ${rest.length} cliente${rest.length!==1?"s":""} más · ${rest.reduce((s:number,x:any)=>s+x.n,0)} gastos · ${fmt(rest.reduce((s:number,x:any)=>s+x.monto,0))}</div>` : "";
+      const nTot = arr.reduce((s:number,x:any)=>s+x.n,0), mTot = arr.reduce((s:number,x:any)=>s+x.monto,0);
+      return `<div style="padding:24px 26px 4px;">${sec("","Gastos sin proyecto",NV)}`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Para rendir cuentas, cada gasto va a su proyecto. Abre la ficha del cliente › Fondos y gastos: al tocar un gasto eliges el proyecto y marcas los demás que van al mismo.</div>`+
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+ mas +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${AZBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${NV};font-weight:600;">${nTot} gasto${nTot!==1?"s":""} en ${arr.length} cliente${arr.length!==1?"s":""}</td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Sin proyecto</span> <span style="font-size:16px;font-weight:800;color:${NV};margin-left:6px;">${fmt(mTot)}</span></td></tr></table>`+
+        cta("Asignar en la app",NV)+`</div>`;
+    };
+
     // Sección 3 (solo admins): depósitos y duplicados sin cliente/abogado, para que Cristóbal y Erasmo los tomen entre los dos.
     const AZBG = "#E6F1FB";   // C.azulBg
     const sinRespHtml = (cobros:any[], dups:any[]) => {
@@ -215,13 +241,19 @@ serve(async (req) => {
         cta("Identificar y asignar",NV,"https://gestion.leabogados.cl/?ir=sinasignar")+`</div>`;
     };
 
-    const armar = (nombre:string, cobros:any[], folios:any[], ants:any[], srCobros:any[]=[], srDup:any[]=[]) => {
+    const armar = (nombre:string, cobros:any[], folios:any[], ants:any[], srCobros:any[]=[], srDup:any[]=[], sinProy:any[]=[]) => {
+      secN = 0;
       const nCob = cobros.length, nDup = folios.reduce((s:number,x:any)=>s+x.n,0)+ants.length;
+      const nSP = sinProy.reduce((s:number,x:any)=>s+x.n,0);
       const nSr = srCobros.length + srDup.reduce((s:number,x:any)=>s+(x.n||1),0);
-      const resumen = (nCob||nDup||nSr)
-        ? `${nCob?`<b style="color:${GRN};font-weight:700;">${nCob} cobro${nCob!==1?"s":""} por registrar</b>`:""}${nCob&&(nDup||nSr)?" · ":""}${nDup?`<b style="color:${AMB};font-weight:700;">${nDup} duplicado${nDup!==1?"s":""} por limpiar</b>`:""}${nDup&&nSr?" · ":""}${nSr?`<b style="color:${NV};font-weight:700;">${srCobros.length} depósito${srCobros.length!==1?"s":""} sin identificar</b>`:""}. Cada tema tiene su propia acción abajo.`
-        : `Nada pendiente de tus clientes esta semana.`;
-      const cH = cobrosHtml(cobros), dH = dupHtml(folios, ants), sH = sinRespHtml(srCobros, srDup);
+      const partes = [
+        nCob ? `<b style="color:${GRN};font-weight:700;">${nCob} cobro${nCob!==1?"s":""} por registrar</b>` : "",
+        nDup ? `<b style="color:${AMB};font-weight:700;">${nDup} duplicado${nDup!==1?"s":""} por limpiar</b>` : "",
+        nSP ? `<b style="color:${NV};font-weight:700;">${nSP} gasto${nSP!==1?"s":""} sin proyecto</b>` : "",
+        nSr ? `<b style="color:${NV};font-weight:700;">${srCobros.length} depósito${srCobros.length!==1?"s":""} sin identificar</b>` : "",
+      ].filter(Boolean);
+      const resumen = partes.length ? `${partes.join(" · ")}. Cada tema tiene su propia acción abajo.` : `Nada pendiente de tus clientes esta semana.`;
+      const cH = cobrosHtml(cobros), dH = dupHtml(folios, ants), pH = sinProyHtml(sinProy), sH = sinRespHtml(srCobros, srDup);
       return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;background:#ECEFF1;padding:22px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
@@ -232,8 +264,9 @@ serve(async (req) => {
   </div>
   ${cH}
   ${dH}
+  ${pH}
   ${sH}
-  ${(!cH&&!dH&&!sH)?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin cobros por registrar ni duplicados por limpiar. Todo en orden.</div>`:`<div style="height:8px;"></div>`}
+  ${(!cH&&!dH&&!pH&&!sH)?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin cobros por registrar ni duplicados por limpiar. Todo en orden.</div>`:`<div style="height:8px;"></div>`}
   <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
 </div></body></html>`;
     };
@@ -247,12 +280,13 @@ serve(async (req) => {
       for (const [resp, arr] of Object.entries(cobrosDe)) if (!recibe(resp)) { (arr as any[]).forEach((x:any)=> sinRespCobros.push({ fecha:x.mov.fecha, saldo:x.saldo, op:x.mov.n_operacion, quien:x.cli, conNombre:true })); delete cobrosDe[resp]; }
       for (const [resp, arr] of Object.entries(dupFolioDe)) if (!recibe(resp)) { (arr as any[]).forEach((r:any)=> sinRespDup.push(r)); delete dupFolioDe[resp]; }
       for (const [resp, arr] of Object.entries(dupAntDe)) if (!recibe(resp)) { (arr as any[]).forEach((r:any)=> sinRespDup.push({ cli:r.cli, monto:r.monto, tipo:"anticipo", n:1 })); delete dupAntDe[resp]; }
+      for (const [resp, arr] of Object.entries(sinProyDe)) if (!recibe(resp) && !ADMINS.includes(resp)) { ADMINS.forEach(n=>{ sinProyDe[n]=[...(sinProyDe[n]||[]), ...(arr as any[])].sort((a:any,b:any)=>b.monto-a.monto) }); delete sinProyDe[resp]; }
       sinRespCobros.sort((a,b)=> b.saldo-a.saldo);
     }
     const haySinResp = sinRespCobros.length + sinRespDup.length > 0;
     // Destinatarios: quien tenga algo pendiente propio; y los admins también si hay algo sin responsable.
     let nombres = testTo ? [ NAME_OF_EMAIL[testTo] || "Cristóbal" ]
-                         : Object.keys(EMAIL).filter(n=> (cobrosDe[n]||[]).length || (dupFolioDe[n]||[]).length || (dupAntDe[n]||[]).length || (haySinResp && ADMINS.includes(n)));
+                         : Object.keys(EMAIL).filter(n=> (cobrosDe[n]||[]).length || (dupFolioDe[n]||[]).length || (dupAntDe[n]||[]).length || (sinProyDe[n]||[]).length || (haySinResp && ADMINS.includes(n)));
     if (soloNombres) nombres = nombres.filter(n=> soloNombres.includes(n));
 
     for (const nombre of nombres) {
@@ -263,12 +297,13 @@ serve(async (req) => {
       const srCob = esAdmin ? sinRespCobros : [], srDup = esAdmin ? sinRespDup : [];
       const nCob = cobros.length, nDup = folios.reduce((s:number,x:any)=>s+x.n,0)+ants.length;
       const nSr = srCob.length + srDup.reduce((s:number,x:any)=>s+(x.n||1),0);
-      if (!testTo && !nCob && !nDup && !nSr) continue;   // en cron real no mandar correos vacíos
-      const html = armar(nombre, cobros, folios, ants, srCob, srDup);
+      const sinProy = sinProyDe[nombre]||[]; const nSP = sinProy.reduce((s:number,x:any)=>s+x.n,0);
+      if (!testTo && !nCob && !nDup && !nSr && !nSP) continue;   // en cron real no mandar correos vacíos
+      const html = armar(nombre, cobros, folios, ants, srCob, srDup, sinProy);
       // Asunto que invita a mirar, no castigador (sin recuento de pendientes).
       const subject = "Tus clientes en 2 minutos";
       if (!dryRun) await sendMail(to, subject, html);
-      sent.push({ nombre, to, cobros:nCob, duplicados:nDup, sinResp:nSr, ...(dryRun?{subject,html}:{}) });
+      sent.push({ nombre, to, cobros:nCob, duplicados:nDup, sinProyecto:nSP, sinResp:nSr, ...(dryRun?{subject,html}:{}) });
     }
 
     return new Response(JSON.stringify({ ok:true, modo: testTo?"prueba":"cron", dryRun, sent, count:sent.length }), { headers:{ "Content-Type":"application/json", "Access-Control-Allow-Origin":"*" } });
