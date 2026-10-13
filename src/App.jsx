@@ -2740,10 +2740,10 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioAct
   )})()
   return (
     <aside className='sidenav' style={{position:'fixed',left:0,top:0,bottom:0,width:212,background:'#04242F',padding:'16px 12px',display:'none',flexDirection:'column',gap:2,zIndex:40,overflowY:'auto'}}>
-      <div style={{padding:'4px 8px 16px'}}>
+      <div style={{padding:'4px 8px 16px',display:'flex',justifyContent:'center'}}>
         {/* Logo real del estudio (blanco sobre el sidebar oscuro); si el estudio no tiene logo cargado, cae al monograma. La atribución 'con tecnología FirmDesk' se movió al pie. */}
         {BRAND?.logo?.blanco
-          ? <img src={BRAND.logo.blanco} alt={BRAND?.nombre||'FirmDesk'} style={{height:22,width:'auto',maxWidth:'100%',objectFit:'contain',objectPosition:'left center',display:'block'}}/>
+          ? <img src={BRAND.logo.blanco} alt={BRAND?.nombre||'FirmDesk'} style={{height:22,width:'auto',maxWidth:'100%',objectFit:'contain',objectPosition:'center',display:'block'}}/>
           : <div style={{display:'flex',alignItems:'center',gap:9}}><span style={{width:26,height:26,borderRadius:8,background:'#12A150',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13}}>{(BRAND?.nombre||'L')[0]}</span><span style={{fontSize:14,fontWeight:800,color:'#fff',letterSpacing:-.2,lineHeight:1.15}}>{BRAND?.nombre||'FirmDesk'}</span></div>}
       </div>
       {secciones.map((s,i)=>(<div key={i} style={{display:'flex',flexDirection:'column',gap:1}}>
