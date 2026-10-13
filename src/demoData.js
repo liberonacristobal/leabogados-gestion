@@ -157,13 +157,11 @@ export const demoData = {
   ],
   expenses: [
     // Fondos de clientes
-    { id:'x1', client_id:'c1', entity_id:'e1', type:'fondo', amount:1000000, concept:'Fondo de gastos', category:'Fondo', date:'2026-02-01', created_by:'Cristóbal', apertura_id:'xap1' },
-    { id:'xap1', client_id:'c1', entity_id:'e1', type:'fondo', amount:680000, concept:'Saldo inicial al 01-06-2026', category:'Apertura', date:'2026-06-01', created_by:'Cristóbal' },
+    { id:'x1', client_id:'c1', entity_id:'e1', type:'fondo', amount:1000000, concept:'Fondo de gastos', category:'Fondo', date:'2026-02-01', created_by:'Cristóbal' },
     { id:'x2', client_id:'c3',               type:'fondo', amount:500000,  concept:'Fondo de gastos', category:'Fondo', date:'2026-03-05', created_by:'Cristóbal' },
     // Gastos con cliente (algunos dejan saldo negativo → "clientes sin fondos")
-    { id:'x3', apertura_id:'xap1', client_id:'c1', entity_id:'e1', type:'gasto', amount:320000, concept:'Inscripción Conservador', category:'CBR',      date:'2026-03-10', created_by:'Martín',  client_rendered_at:null },
-    { id:'x4', apertura_id:'xap2', client_id:'c2', type:'gasto', amount:180000, concept:'Notaría — escritura',     category:'Notaria',        date:'2026-04-02', created_by:'Martín',  paid_by_client:false },
-    { id:'xap2', client_id:'c2', type:'gasto', amount:180000, concept:'Saldo inicial al 01-06-2026', category:'Apertura', subcategory:'revisar', date:'2026-06-01', created_by:'Cristóbal' },
+    { id:'x3', client_id:'c1', entity_id:'e1', type:'gasto', amount:320000, concept:'Inscripción Conservador', category:'CBR',      date:'2026-03-10', created_by:'Martín',  client_rendered_at:null },
+    { id:'x4', client_id:'c2', type:'gasto', amount:180000, concept:'Notaría — escritura',     category:'Notaria',        date:'2026-04-02', created_by:'Martín',  paid_by_client:false },
     { id:'x5', client_id:'c5', type:'gasto', amount:95000,  concept:'Registro de marca INAPI',  category:'Otro',           date:'2026-05-09', created_by:'Martina', },
     { id:'x6', client_id:'c6', type:'gasto', amount:60000,  concept:'Certificados',             category:'Registro Civil', date:'2026-05-20', created_by:'Martina', },
     // Caja chica (gastos por persona, varios sin liquidar)

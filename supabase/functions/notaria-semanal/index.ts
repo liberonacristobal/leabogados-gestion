@@ -69,7 +69,7 @@ serve(async (req) => {
       let last:any = null;
       for (let att=0; att<4; att++){
         const res = await Promise.all([
-          sb.from("expenses").select("id,client_id,type,amount,no_descuenta_saldo,notaria_liquidado_at,client_rendered_at,rendered_at,ot_number,category,subcategory,materia,date,apertura_id").is("deleted_at",null),
+          sb.from("expenses").select("id,client_id,type,amount,no_descuenta_saldo,notaria_liquidado_at,client_rendered_at,rendered_at,ot_number,category,subcategory,materia,date").is("deleted_at",null),
           sb.from("clients").select("id,name,abogado_responsable"),
         ]);
         const fallo = res.find((r:any)=> r.error || r.data===null);
@@ -91,8 +91,6 @@ serve(async (req) => {
     const bal: Record<string,{fondos:number,gastos:number}> = {};
     for (const e of (exps||[])) {
       const id = String(e.client_id||""); if (!id) continue;
-      // Igual que cuentaEnSaldo de la app: lo resumido en el saldo inicial y el saldo inicial "pagado"/"cerrado" no suman.
-      if (e.apertura_id || (e.category==="Apertura" && ["pagado","cerrado"].includes(e.subcategory))) continue;
       const b = bal[id] || (bal[id]={fondos:0,gastos:0});
       if (e.type==="fondo") b.fondos += Number(e.amount)||0;
       else if (e.no_descuenta_saldo !== true) b.gastos += Number(e.amount)||0;
@@ -102,7 +100,7 @@ serve(async (req) => {
     // OT de notaría por rendir (gate: liquidada a notaría +30d, sin rendir al cliente, no histórico).
     const notaByClient: Record<string, any[]> = {};
     for (const e of (exps||[])) {
-      if (e.type!=="gasto" || !e.notaria_liquidado_at || e.client_rendered_at || e.rendered_at || e.no_descuenta_saldo===true || e.apertura_id || e.category==="Apertura") continue;
+      if (e.type!=="gasto" || !e.notaria_liquidado_at || e.client_rendered_at || e.rendered_at || e.no_descuenta_saldo===true) continue;
       if (diasDe(e.notaria_liquidado_at) < 30) continue;
       const id = String(e.client_id||""); if (!id || id===OFICINA_ID) continue;
       (notaByClient[id]=notaByClient[id]||[]).push(e);
