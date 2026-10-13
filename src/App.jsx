@@ -21803,6 +21803,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [openGrp,setOpenGrp]=useState({Activas:true})  // grupos de estado: Activas visible, Terminadas/Otras plegadas
   const [movOrd,setMovOrd]=useState('desc')    // orden por fecha en Movimientos: 'desc' | 'asc'
   const [fgOrd,setFgOrd]=useState('desc')      // orden por fecha en Fondos y gastos: 'desc' | 'asc'
+  const [fgSinPR,setFgSinPR]=useState(false)   // filtro "Sin proyecto o RS"
+  const [corrG,setCorrG]=useState(null)        // gasto cuyo proyecto/RS se está corrigiendo: {id, sale, ent}
   const [detMov,setDetMov]=useState(null)      // movimiento con detalle expandido en Movimientos
   const [movF,setMovF]=useState('todos')       // filtro Movimientos: todos|abonos|cargos|sin
   const _MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
@@ -21957,6 +21959,9 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     </div>}
     {Hdr({icon:'wallet',title:'Fondos y gastos',k:'fondos',summary:`saldo ${fmtSaldoG(fg.saldo)}`,sumCol:fg.saldo<0?C.overdue:C.normal})}
     {sec.fondos&&(()=>{ const _sf=(a,b)=>{ const r=(a.date||'')<(b.date||'')?1:-1; return fgOrd==='desc'?r:-r }; const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort(_sf); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort(_sf)
+      const faltaPR = e => !e.no_descuenta_saldo && e.category!=='Apertura' && cuentaEnSaldo(e) && (!e.sale_id || (!e.entity_id && (clientEntities||[]).length>0))
+      const nPR = onAsociarTrabajo ? [...fondos,...gastos].filter(faltaPR).length : 0
+      const fondosV = fgSinPR ? fondos.filter(faltaPR) : fondos, gastosV = fgSinPR ? gastos.filter(faltaPR) : gastos
       const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; const isDev=signo>0&&((e.amount||0)<0||/^\s*devoluci/i.test(e.concept||'')); return (
         <div key={e.id} style={{borderBottom:`1px solid ${C.border}`}}>
           <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer'}}>
@@ -21971,13 +21976,35 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
             <span style={{color:C.done,fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           </div>
           {open&&<div style={{padding:'8px 10px',background:C.bgSoft,borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
-            <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:3}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto')}</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:3}}><span style={{fontSize:12,color:C.text,fontWeight:600,minWidth:0}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto')}</span>{onEditExpense&&<span onClick={(ev)=>{ev.stopPropagation();onEditExpense(e)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer',flexShrink:0}}>editar gasto ↗</span>}</div>
             <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto'}</b></span><span>Fecha: <b style={{color:C.text}}>{fmtFechaDMY(e.date)}</b></span><span>Monto: <b style={{color:isDev?C.muted:col}}>{isDev?'−'+fmt(Math.abs(e.amount)):fmt(e.amount)}</b></span>{e.category&&<span>Categoría: <b style={{color:C.text}}>{e.category}</b></span>}</div>
-            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Venta / proyecto · razón social</span><span style={{display:'flex',gap:10,flexShrink:0}}>{v&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}{ultAsig?.ids.has(e.id)&&ultAsig.n===1&&<span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span>}{onEditExpense&&<span onClick={(ev)=>{ev.stopPropagation();onEditExpense(e)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>{(v||e.project||onAsociarTrabajo)?'editar':'asignar'} ↗</span>}</span></div>
-              <div onClick={v&&onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:v&&onOpenSale?'pointer':'default'}}>{v?<><b>{v.title}</b>{e.subproject?<b>{` · ${e.subproject}`}</b>:null}{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}{e.subproject?` · ${e.subproject}`:''}</b>:(onAsociarTrabajo?null:<span style={{color:C.overdue}}>Sin proyecto asignado</span>))}</div>
+            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Venta / proyecto · razón social</span><span style={{display:'flex',gap:10,flexShrink:0}}>{v&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}{ultAsig?.ids.has(e.id)&&ultAsig.n===1&&<span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span>}</span></div>
+              {(()=>{ const entName=id=>{ const en=(clientEntities||[]).find(x=>String(x.id)===String(id)); return en?en.name:'Razón social asignada' }
+                const txtProy = v?<><b>{v.title}</b>{e.subproject?<b>{` · ${e.subproject}`}</b>:null}{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}{e.subproject?` · ${e.subproject}`:''}</b>:null)
+                // Corregir: el dato mismo se toca → selectores con lo actual → Confirmar (con "antes" a la vista). Deshacer queda en línea.
+                if(onAsociarTrabajo&&corrG?.id===e.id){ const vs=(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&(VENTA_REAL(s)||String(s.id)===String(e.sale_id))); const ents=clientEntities||[]
+                  const cambia = String(corrG.sale||'')!==String(e.sale_id||'') || String(corrG.ent||'')!==String(e.entity_id||'')
+                  const sel={flex:'1 1 170px',minWidth:0,fontSize:12,padding:'6px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.text}
+                  const confirmar=async()=>{ if(!cambia) return; if(e.client_rendered_at&&!(await appConfirm(`Este movimiento ya se rindió al cliente el ${fmtFechaDMY(e.client_rendered_at)} con el proyecto anterior. ¿Cambiarlo igual?`))) return; await asignar([e], corrG.sale||'', corrG.ent||'', '', {forzar:true}); setCorrG(null) }
+                  return <div onClick={ev=>ev.stopPropagation()} style={{marginTop:4}}>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {vs.length>0&&<select value={corrG.sale||''} onChange={ev=>setCorrG(c=>({...c,sale:ev.target.value}))} aria-label='Proyecto' style={sel}><option value=''>Proyecto…</option>{vs.map(x=><option key={x.id} value={x.id}>{x.title}{x.status!=='Activo'?` (${String(x.status||'').toLowerCase()})`:''}</option>)}</select>}
+                      {ents.length>0&&<select value={corrG.ent||''} onChange={ev=>setCorrG(c=>({...c,ent:ev.target.value}))} aria-label='Razón social' style={sel}><option value=''>Razón social…</option>{ents.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginTop:6,flexWrap:'wrap'}}>
+                      <span style={{flex:1,minWidth:0,fontSize:10.5,color:C.muted}}>antes: {[v?.title||e.project||'sin proyecto', e.entity_id?entName(e.entity_id):'sin razón social'].join(' · ')}</span>
+                      <span onClick={()=>setCorrG(null)} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>cancelar</span>
+                      <button disabled={!cambia} onClick={confirmar} style={{fontSize:12,fontWeight:700,borderRadius:8,padding:'6px 12px',border:'none',background:cambia?C.accent:C.done,color:C.surface,cursor:cambia?'pointer':'default'}}>Confirmar</button>
+                    </div></div> }
+                const tap = (cont)=> <div onClick={(ev)=>{ev.stopPropagation();setCorrG({id:e.id,sale:e.sale_id||'',ent:e.entity_id||''})}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,border:`1px dashed ${C.border}`,borderRadius:8,padding:'5px 8px',marginTop:4,cursor:'pointer',color:C.text}}><span style={{minWidth:0}}>{cont}</span><span style={{color:C.done,flexShrink:0}}>⌄</span></div>
+                return <>
+                  {txtProy&&(onAsociarTrabajo ? tap(txtProy) : <div onClick={v&&onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:v&&onOpenSale?'pointer':'default'}}>{txtProy}</div>)}
+                  {!txtProy&&!onAsociarTrabajo&&<div style={{color:C.overdue}}>Sin proyecto asignado</div>}
+                  {e.entity_id&&onAsociarTrabajo&&tap(<span style={{color:C.muted}}>{entName(e.entity_id)}</span>)}
+                </> })()}
               {ultAsig?.ids.has(e.id)&&ultAsig.n>1&&<div style={{display:'flex',alignItems:'baseline',gap:8,background:C.greenBg,color:C.greenText,borderRadius:8,padding:'7px 10px',marginTop:5,fontSize:12}}><span>Asignados {ultAsig.n} · {fmt(ultAsig.monto)}</span><span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span></div>}
-              {onAsociarTrabajo&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} otros={sinProy.filter(x=>x.type===e.type)} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} onAsignar={asignar}/>}
-              {(e.entity_id||!onAsociarTrabajo||!(clientEntities||[]).length)&&<div style={{color:e.entity_id?C.muted:C.overdue,marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div>}</div>
+              {onAsociarTrabajo&&corrG?.id!==e.id&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} otros={sinProy.filter(x=>x.type===e.type)} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} onAsignar={asignar}/>}
+              {((e.entity_id&&!onAsociarTrabajo)||!onAsociarTrabajo||(!e.entity_id&&!(clientEntities||[]).length))&&<div style={{color:e.entity_id?C.muted:C.overdue,marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div>}</div>
             {/* Pago / depósito: de dónde viene o a dónde fue la plata (banco, notaría, caja chica, rendición, fondo que lo cubre). Cada enlace lleva al dato. */}
             {(()=>{ const links=[]
               conc.filter(x=>String(x.gasto_id)===String(e.id)).forEach(c=>{ const mv=movById[c.movimiento_id]; links.push({k:'b'+c.movimiento_id, t:signo>0?'Depósito del banco':'Pagado desde el banco', d:[mv?fmtFechaDMY(mv.fecha):null, fmt(c.monto_aplicado), mv?.nombre_contraparte||null].filter(Boolean).join(' · '), on:onOpenConciliacion?()=>onOpenConciliacion(c.movimiento_id):null}) })
@@ -21997,15 +22024,18 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
       return (<div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:8}}>
         <div style={{fontSize:11,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?C.overdueText:C.greenText}}>{fmtSaldoG(fg.saldo)}</b></div>
-        <button onClick={()=>setFgOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {fgOrd==='desc'?'↓':'↑'}</button>
+        <div style={{display:'flex',gap:6,flexShrink:0}}>
+          {(nPR>0||fgSinPR)&&<button onClick={()=>setFgSinPR(x=>!x)} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:999,border:`1px solid ${fgSinPR?C.accent:C.border}`,background:fgSinPR?C.accent:'#fff',color:fgSinPR?C.surface:C.text,cursor:'pointer',whiteSpace:'nowrap'}}>Sin proyecto o RS · {nPR}{fgSinPR?' ✕':''}</button>}
+          <button onClick={()=>setFgOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {fgOrd==='desc'?'↓':'↑'}</button>
+        </div>
       </div>
       {onRendicion&&(()=>{ const pr=gastosPorRendirCli(expenses,client.id); if(!pr.length) return null; const m=pr.reduce((t,e)=>t+(Number(e.amount)||0),0); return <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,borderRadius:10,padding:'7px 8px 7px 13px',marginBottom:10}}><span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Por rendir · {pr.length} gasto{pr.length!==1?'s':''}</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(m)}</b><ActBtn variant='success' onClick={onRendicion}>Rendir</ActBtn></div> })()}
       <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:2}}>Fondos recibidos</div>
-      {fondos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
-      {fondos.map(e=>fila(e,1,C.greenText))}
+      {fondosV.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
+      {fondosV.map(e=>fila(e,1,C.greenText))}
       <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',margin:'8px 0 2px'}}>Gastos</div>
-      {gastos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
-      {gastos.map(e=>fila(e,-1,C.overdueText))}
+      {gastosV.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
+      {gastosV.map(e=>fila(e,-1,C.overdueText))}
       <BitacoraLista plano prefijo={`clientes.${client.id}.`} autor='Administración' limite={50}/>
     </div>) })()}
     {Hdr({icon:'clock',title:'Anticipos',k:'adelantos',summary:anticipos.length?`${anticipos.length}`:'sin anticipos'})}
@@ -36358,16 +36388,19 @@ export default function App() {
   const [navStack,setNavStack]=useState([])
   // Asigna proyecto (venta) y/o razón social a uno o varios gastos/fondos desde la ficha. Solo completa lo que falta (no pisa);
   // aprende la glosa → proyecto (learnings gasto_venta); deshacer con el toast; bitácora.
-  const handleAsociarTrabajo=async(lote,saleId,entityId,subproject)=>{
+  // forzar: corrige lo ya asignado (reemplaza proyecto/RS distintos); sin forzar solo completa lo que falta.
+  const handleAsociarTrabajo=async(lote,saleId,entityId,subproject,{forzar=false}={})=>{
     const v=saleId?(sales||[]).find(s=>String(s.id)===String(saleId)):null
-    const cambios=(lote||[]).map(e=>({e, patch:{...(v&&!e.sale_id?{sale_id:v.id,project:v.title,...(subproject?{subproject}:{})}:{}), ...(entityId&&!e.entity_id?{entity_id:entityId}:{})}})).filter(c=>Object.keys(c.patch).length)
+    const cambios=(lote||[]).map(e=>({e, patch: forzar
+      ? {...(v&&String(v.id)!==String(e.sale_id)?{sale_id:v.id,project:v.title,subproject:null}:{}), ...(entityId&&String(entityId)!==String(e.entity_id)?{entity_id:entityId}:{})}
+      : {...(v&&!e.sale_id?{sale_id:v.id,project:v.title,...(subproject?{subproject}:{})}:{}), ...(entityId&&!e.entity_id?{entity_id:entityId}:{})}})).filter(c=>Object.keys(c.patch).length)
     if(!cambios.length) return
     const antes=cambios.map(c=>({id:c.e.id, sale_id:c.e.sale_id||null, project:c.e.project||null, subproject:c.e.subproject||null, entity_id:c.e.entity_id||null}))
     try{
       if(!DEMO){ for(const c of cambios){ const {error}=await supabase.from('expenses').update(c.patch).eq('id',c.e.id); if(error) throw error }
         if(v) cambios.filter(c=>c.patch.sale_id).forEach(c=>learnPut('gasto_venta',`${c.e.client_id}::${glosaKey(c.e.concept||'')}`,v.id,{})) }
       setExpenses(p=>p.map(x=>{ const c=cambios.find(y=>y.e.id===x.id); return c?{...x,...c.patch}:x }))
-      logActividad('gastos.proyecto_rs_asignado',{tabla:'expenses',detalle:{n:cambios.length,proyecto:v?.title||null,subproyecto:subproject||null,razon_social:entityId||null,monto:cambios.reduce((a,c)=>a+(c.e.amount||0),0)}})
+      logActividad(forzar?'gastos.proyecto_rs_corregido':'gastos.proyecto_rs_asignado',{tabla:'expenses',detalle:{n:cambios.length,proyecto:v?.title||null,subproyecto:subproject||null,razon_social:entityId||null,monto:cambios.reduce((a,c)=>a+(c.e.amount||0),0),...(forzar?{antes:antes.map(a=>({proyecto:a.project,razon_social:a.entity_id}))}:{})}})
       return async()=>{
         if(!DEMO) for(const a of antes){ await supabase.from('expenses').update({sale_id:a.sale_id,project:a.project,subproject:a.subproject,entity_id:a.entity_id}).eq('id',a.id) }
         setExpenses(p=>p.map(x=>{ const a=antes.find(y=>y.id===x.id); return a?{...x,sale_id:a.sale_id,project:a.project,subproject:a.subproject,entity_id:a.entity_id}:x }))
