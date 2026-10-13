@@ -18728,6 +18728,15 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const { catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
   // Hub de Gastos: cara de entrada (hero Por cobrar/A favor + 6 tarjetas). Al tocar una tarjeta se navega a la vista existente. Presentación pura — no toca cifras.
   const [hubOpen,setHubOpen] = useState(()=>{ const vm=viewMemLeer('gastos'); return vm ? vm.hubOpen : !gastosVolverLeer() })
+  // Revisión de gastos cargados a la oficina por el equipo: quién revisa sale de miembros.revisa_gastos (configurable por estudio).
+  const [showRevOfi,setShowRevOfi] = useState(false)
+  const [miembrosRev,setMiembrosRev] = useState({revisores:[],admins:[]})
+  useEffect(()=>{ let on=true; supabase.from('miembros').select('email,nombre,rol,revisa_gastos').then(({data})=>{ if(!on||!data) return; setMiembrosRev({revisores:data.filter(m=>m.revisa_gastos),admins:data.filter(m=>m.rol==='admin')}) },()=>{}); return ()=>{on=false} },[])
+  const revisorNombre = miembrosRev.revisores[0]?.nombre||null
+  const soyRevisor = !!currentUser?.email && miembrosRev.revisores.some(m=>String(m.email).toLowerCase()===String(currentUser.email).toLowerCase())
+  const revOfiItems = useMemo(()=>{ const adm=new Set(miembrosRev.admins.map(m=>m.nombre).filter(Boolean))
+    return (expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&e.client_id&&e.created_by&&!/@|^audit/i.test(e.created_by)&&!adm.has(e.created_by)&&(!e.revision_estado||e.revision_estado==='nose')&&(()=>{ const c=(clients||[]).find(x=>String(x.id)===String(e.client_id)); return !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')) })())
+  },[expenses,clients,miembrosRev])
   useEffect(()=>{ try{ sessionStorage.removeItem(_GASTOS_VOLVER) }catch(_){} },[])
   useEffect(()=>{ if(openGastosOfi){ setSelectedClient(null); setHubOpen(false); setShowGastosOficina(true); onGastosOfiOpened&&onGastosOfiOpened() } },[openGastosOfi])   // gatillo desde el módulo Oficina → vista "Gastos oficina" (Varios y personales)
   const [cobrosVista,setCobrosVista] = useState('carga')   // Cobros: 'carga' (por carga masiva) | 'ot' (lista de OT)
@@ -20402,6 +20411,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       </div>
     </FlujoPagina>
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{page}</div>:page }
+  if(showRevOfi&&(soyRevisor||isAdmin)){ const pg=<RevisionOficinaPage items={revOfiItems} setExpenses={setExpenses} clients={clients} sales={sales} clientEntities={clientEntities} me={currentUserName} isAdmin={isAdmin} revisor={revisorNombre} onBack={()=>setShowRevOfi(false)}/>
+    return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
   if(pedirOpen) return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pedirModal}</div>:pedirModal
   // ── HUB de Gastos (cara de entrada). Presentación pura: mismas cifras auditadas, sin recalcular nada.
   const showHub = hubOpen && !selectedClient && !showOrphans && !showNotaria && !showHistorial
@@ -20454,6 +20465,17 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             </div>
             <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Ver ›</span>
           </div>) })()}
+        {(soyRevisor||isAdmin)&&(()=>{ const nP=revOfiItems.filter(e=>!e.revision_estado).length, nN=revOfiItems.filter(e=>e.revision_estado==='nose').length
+          const n=isAdmin?nN:nP; if(!n&&!(isAdmin&&nP)) return null
+          return (
+          <div onClick={()=>setShowRevOfi(true)} className='lf-row' style={{display:'flex',alignItems:'center',gap:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 14px',marginBottom:10,cursor:'pointer'}}>
+            <span style={{width:8,height:8,borderRadius:'50%',background:n?C.soon:C.done,flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.text}}>Revisión de gastos de oficina</div>
+              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isAdmin?[nN?`${nN} para decidir`:null,nP?`${nP} en revisión${revisorNombre?` de ${revisorNombre}`:''}`:null].filter(Boolean).join(' · '):`${nP} por revisar`}</div>
+            </div>
+            <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Revisar ›</span>
+          </div>) })()}
         {isAdmin&&(()=>{ const al=alertasCajaChica(pettyCash,expenses); if(!al.length) return null; return (
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px',marginBottom:10}}>
             {al.map((a,i)=>{ const neg=a.tipo==='negativo'; return (
@@ -20473,6 +20495,103 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   if(isDesktop && (showNotaria||showHistorial||showOrphans||showGastosOficina)) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{body}</div>
   // Escritorio con un cliente abierto: la ficha va a todo el ancho, sin la lista de clientes al lado (pedido 2026-10-13); "← Clientes" vuelve a la lista.
   return body
+}
+
+// Revisión mensual de los gastos que el equipo cargó a la oficina. El revisor (miembros.revisa_gastos) confirma Oficina,
+// los pasa a su cliente o marca "No sé", que sube a los socios. Compuerta humana: nada se mueve solo y todo se deshace en línea.
+function RevisionOficinaPage({items,setExpenses,clients,sales,clientEntities,me,isAdmin,revisor,onBack}){
+  const isDesktop=useIsDesktop()
+  const [pick,setPick]=useState(null)
+  const [pq,setPq]=useState('')
+  const [hechos,setHechos]=useState([])
+  const ahora=()=>new Date().toISOString()
+  // Bitácora de reasignaciones (misma tabla que "Reasignar gastos"); no frena si falla.
+  const auditar=(e,de,a)=>{ try{ supabase.from('expense_audit').insert({expense_id:e.id,from_client_id:de||null,to_client_id:a||null,concept:e.concept||null,amount:e.amount??null,moved_by:me||null}).then(()=>{},()=>{}) }catch(_){} }
+  const antesDe=e=>({client_id:e.client_id,entity_id:e.entity_id||null,project:e.project||null,sale_id:e.sale_id||null,revision_estado:e.revision_estado||null,revisado_por:e.revisado_por||null,revisado_at:e.revisado_at||null})
+  const marcar=async(e,estado)=>{
+    const patch={revision_estado:estado,revisado_por:me||null,revisado_at:ahora()}
+    const {error}=await supabase.from('expenses').update(patch).eq('id',e.id)
+    if(error){ appAlert('No se pudo guardar: '+error.message); return }
+    setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
+    setHechos(h=>[{e,accion:estado,antes:antesDe(e)},...h])
+  }
+  const aCliente=async(e,c)=>{
+    setPick(null); setPq('')
+    // Proyecto solo si no hay duda (única venta o única activa); si no, queda para la ficha del cliente.
+    const vs=(sales||[]).filter(s=>s.client_id===c.id&&VENTA_REAL(s)); const act=vs.filter(s=>s.status==='Activo'); const v=vs.length===1?vs[0]:(act.length===1?act[0]:null)
+    const patch={client_id:c.id,revision_estado:'cliente',revisado_por:me||null,revisado_at:ahora(),entity_id:v?.entity_id||(clientEntities||[]).find(x=>x.client_id===c.id)?.id||null,project:v?v.title:null,sale_id:v?v.id:null}
+    const {error}=await supabase.from('expenses').update(patch).eq('id',e.id)
+    if(error){ appAlert('No se pudo mover: '+error.message); return }
+    setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
+    auditar(e,e.client_id,c.id)
+    const gk=glosaKey(e.concept||''); if(gk) learnPut('gasto_cliente',gk,c.id)
+    setHechos(h=>[{e,accion:'cliente',cli:c,antes:antesDe(e)},...h])
+  }
+  const deshacer=async h=>{
+    const {error}=await supabase.from('expenses').update(h.antes).eq('id',h.e.id)
+    if(error){ appAlert('No se pudo deshacer: '+error.message); return }
+    if(h.accion==='cliente') auditar(h.e,h.cli?.id,h.antes.client_id)
+    setExpenses(p=>p.map(x=>x.id===h.e.id?{...x,...h.antes}:x))
+    setHechos(l=>l.filter(x=>x!==h))
+  }
+  const hechosIds=new Set(hechos.map(h=>h.e.id))
+  const vivos=items.filter(e=>!hechosIds.has(e.id))
+  const pend=vivos.filter(e=>!e.revision_estado)
+  const nose=vivos.filter(e=>e.revision_estado==='nose')
+  const porMes=l=>{ const m={}; l.forEach(e=>{ const k=String(e.date||'').slice(0,7); (m[k]=m[k]||[]).push(e) }); return Object.entries(m).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,x])=>[k,x.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))]) }
+  const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const mesLbl=k=>{ const [y,m]=k.split('-'); return MES[+m-1]?`${MES[+m-1]} ${y}`:'Sin fecha' }
+  const chip={display:'inline-flex',alignItems:'center',height:isDesktop?26:32,padding:'0 12px',borderRadius:8,fontSize:12,fontWeight:700,border:'none',cursor:'pointer',fontFamily:'inherit',background:C.azulTenue,color:C.accent,whiteSpace:'nowrap'}
+  const acciones=e=>(
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',flexShrink:0}}>
+      <button type='button' onClick={()=>{setPick(pick===e.id?null:e.id);setPq('')}} style={pick===e.id?{...chip,background:C.azulTenueOn}:chip}>Cliente</button>
+      <button type='button' onClick={()=>marcar(e,'oficina')} style={chip}>Oficina</button>
+      {!isAdmin&&e.revision_estado!=='nose'&&<button type='button' onClick={()=>marcar(e,'nose')} style={{...chip,background:'transparent',color:C.muted}}>No sé</button>}
+    </div>)
+  const buscaCli=e=>{ const ms=pq.trim()?(clients||[]).filter(c=>!c.is_internal&&_normTxt(c.name).includes(_normTxt(pq))).slice(0,6):[]
+    return (<div style={{marginTop:8,marginLeft:54}}>
+      <Inp value={pq} onChange={x=>setPq(x.target.value)} placeholder='Buscar cliente…' autoFocus style={{height:34,fontSize:13}}/>
+      {ms.length>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:4,overflow:'hidden'}}>{ms.map((c,i)=><button key={c.id} type='button' onClick={()=>aCliente(e,c)} style={{display:'block',width:'100%',textAlign:'left',padding:'10px 12px',border:'none',borderTop:i?`1px solid ${C.track}`:'none',background:C.surface,fontSize:13,cursor:'pointer',fontFamily:'inherit',color:C.text}}>{c.name}</button>)}</div>}
+    </div>) }
+  const fila=(e,i)=>(
+    <div key={e.id} style={{padding:'10px 12px',borderTop:i?`1px solid ${C.track}`:'none'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        {diaGrande(e.date)}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+          <div style={{fontSize:11.5,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[e.created_by,e.category,e.revision_estado==='nose'&&e.revisado_por?`${e.revisado_por} no supo`:null].filter(Boolean).join(' · ')}</div>
+        </div>
+        {isDesktop&&acciones(e)}
+        <span style={{fontWeight:700,fontSize:14,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?90:0,textAlign:'right'}}>{fmt(e.amount)}</span>
+      </div>
+      {!isDesktop&&<div style={{marginLeft:54,marginTop:8}}>{acciones(e)}</div>}
+      {pick===e.id&&buscaCli(e)}
+    </div>)
+  const bloque=(titulo,lista)=>lista.length>0&&(
+    <div style={{marginBottom:18}}>
+      {titulo&&<div style={{fontSize:11,fontWeight:700,letterSpacing:.6,textTransform:'uppercase',color:C.muted,margin:'4px 2px 8px'}}>{titulo}</div>}
+      {porMes(lista).map(([k,l])=>(
+        <div key={k} style={{marginBottom:10}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5,fontWeight:700,color:C.accent,margin:'0 2px 6px'}}><span>{mesLbl(k)}</span><span style={{color:C.muted,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{l.length} · {fmt(l.reduce((a,e)=>a+(Number(e.amount)||0),0))}</span></div>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{l.map(fila)}</div>
+        </div>))}
+    </div>)
+  return (
+    <FlujoPagina origen='Gastos' titulo='Revisión de oficina' onBack={onBack} maxW={900}>
+      {isAdmin&&bloque('Para decidir',nose)}
+      {bloque(isAdmin?`En revisión${revisor?` de ${revisor}`:''}`:null,pend)}
+      {!pend.length&&!(isAdmin&&nose.length)&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:20,textAlign:'center',fontSize:13,color:C.greenText}}>Todo revisado</div>}
+      {hechos.length>0&&<div style={{marginTop:6}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:.6,textTransform:'uppercase',color:C.muted,margin:'4px 2px 8px'}}>Revisados ahora</div>
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          {hechos.map((h,i)=><div key={h.e.id+i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',fontSize:12.5}}>
+            <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{h.e.concept||'—'}</span>
+            <span style={{color:C.muted,whiteSpace:'nowrap'}}>{h.accion==='cliente'?`→ ${h.cli?.name}`:h.accion==='oficina'?'Oficina':'No sé'}</span>
+            <button type='button' onClick={()=>deshacer(h)} style={{border:'none',background:'none',color:C.accent,fontWeight:600,fontSize:12,cursor:'pointer',fontFamily:'inherit',padding:0}}>Deshacer</button>
+          </div>)}
+        </div>
+      </div>}
+    </FlujoPagina>)
 }
 
 function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,onClose,saving,preClient,preDev=false}) {
