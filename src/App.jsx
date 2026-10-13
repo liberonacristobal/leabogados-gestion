@@ -18375,7 +18375,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:catBg,color:C.muted,fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
               {movExp===e.id&&!isFondo&&e.ot_number&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:C.azulBg,color:C.azulInfo,fontWeight:700}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.normal,fontWeight:600}}>{isDev?'Devolución':'Fondo'}</span>}
-              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:C.greenBg,color:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>Rendido <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>}
+              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10.5,padding:0,background:'none',color:C.done,fontWeight:500,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}>✓ Rendido {fmtFechaDMY(e.client_rendered_at)} <span style={{fontSize:10,lineHeight:1,opacity:.7}}>✕</span></button>}
               {!isFondo&&e.notaria_liquidado_at&&(isAdmin&&!e.notaria_render_id
                 ? <button onClick={ev=>{ev.stopPropagation();marcarNotariaPagado(e,ev)}} title='Pagado a la notaría · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:'#FAECE7',color:C.coralText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>✓ Notaría <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>
                 : <span style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:'#FAECE7',color:C.coralText,fontWeight:600}}>✓ Notaría</span>)}
@@ -20213,7 +20213,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           {(()=>{
             const _qm=_normTxt(qMovG.trim()), _qd=qMovG.replace(/\D/g,'')
             const matchMov=e=>!_qm || _normTxt(`${e.concept||''} ${e.subconcept||''} ${e.ot_number||''} ${e.category||''} ${e.requirente||''}`).includes(_qm) || (_qd.length>=3&&String(Math.abs(e.amount||0)).includes(_qd))
-            const movs=filtered.filter(e=>!esRendido(e)).filter(matchMov)
+            const movs=filtered.filter(e=>esOficina(selectedClient.id)?!esRendido(e):true).filter(matchMov)   // cliente: los rendidos van en la misma lista (marca gris con su fecha)
             const fondos=movs.filter(e=>e.type==='fondo')
             const gastos=movs.filter(e=>e.type!=='fondo')
             const rendidos=filtered.filter(esRendido)
@@ -20222,7 +20222,6 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             if(!esOficina(selectedClient.id)) return (<>
               {movs.length>0&&<><div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'4px 2px 6px'}}>{gastoCatF==='Fondo'?'Fondos':gastoCatF==='__gastos__'?'Gastos':'Movimientos'} · {movs.length}</div>{movs.map(renderMov)}</>}
               {movs.length===0&&<div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13}}>Sin movimientos con estos filtros.</div>}
-              {rendidosBlock('__single__',rendidos)}
             </>)
             return (<>
               {fondos.length>0&&<><div style={{fontSize:9,color:C.greenText,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 6px'}}>Fondos recibidos · {fondos.length}</div>{fondos.map(renderMov)}</>}
