@@ -37926,6 +37926,7 @@ export default function App() {
       const key=(exp?.concept||'').toLowerCase().trim()
       const iguales = key.length>2 ? (expenses||[]).filter(e=>!e.client_id && (e.concept||'').toLowerCase().trim()===key).map(e=>e.id) : []
       const ids = [...new Set([expenseId, ...iguales])]
+      const previos = ids.map(id=>{ const x=(expenses||[]).find(e=>e.id===id); return {id, client_id:x?.client_id??null, entity_id:x?.entity_id??null, concept:x?.concept||null, amount:x?.amount??null} })
       const {error} = await supabase.from('expenses').update({client_id:clientId, entity_id:null}).in('id',ids)
       if(error) throw error
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:clientId,entity_id:null}:e))
@@ -37936,10 +37937,12 @@ export default function App() {
         const rows = ids.map(id=>{ const e=(expenses||[]).find(x=>x.id===id); return { expense_id:id, from_client_id:e?.client_id||null, to_client_id:clientId, concept:e?.concept||null, amount:e?.amount??null, moved_by:user?.name||null } }).filter(r=>String(r.from_client_id)!==String(r.to_client_id))
         if(rows.length){ const {data}=await supabase.from('expense_audit').insert(rows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) }
       }catch(_){}
-      // Deshacer: si el match por descripción fue demasiado amplio, revierte los gastos a "sin cliente".
+      // Deshacer: devuelve cada gasto al cliente (y razón social) que tenía antes — no a "sin cliente" (antes perdía el cliente
+      // de origen al deshacer una reasignación entre clientes). Deja la vuelta en la bitácora.
       setUndoToast({msg: ids.length>1?`Cliente asignado a ${ids.length} gastos`:'Cliente asignado', onUndo:async()=>{
-        await supabase.from('expenses').update({client_id:null}).in('id',ids)
-        setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:null}:e))
+        for(const pv of previos){ await supabase.from('expenses').update({client_id:pv.client_id, entity_id:pv.entity_id}).eq('id',pv.id) }
+        setExpenses(p=>p.map(e=>{ const pv=previos.find(x=>x.id===e.id); return pv?{...e,client_id:pv.client_id,entity_id:pv.entity_id}:e }))
+        try{ const rows=previos.filter(pv=>String(pv.client_id)!==String(clientId)).map(pv=>({expense_id:pv.id,from_client_id:clientId,to_client_id:pv.client_id,concept:pv.concept,amount:pv.amount,moved_by:user?.name||null})); if(rows.length){ const {data}=await supabase.from('expense_audit').insert(rows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) } }catch(_){}
       }})
     }catch(e){ appAlert('Error: '+e.message) }
   },[expenses,handleLearnAlias])
