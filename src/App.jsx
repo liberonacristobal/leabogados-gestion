@@ -15753,7 +15753,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   // Razones sociales (entidades) del cliente
   const entsOf = cid => (clientEntities||[]).filter(e=>e.client_id===cid)
   // Fila lista para cargar: con cliente, sin error y con razón social resuelta (auto si 1, elegida si varias)
-  const rowReady = r => (!!r.client_id || !!r.personal_de) && !r.error && (!!r.personal_de || entsOf(r.client_id).length<=1 || !!r.entity_id)
+  const rowReady = r => (!!r.client_id || !!r.personal_de) && !r.error && (!!r.personal_de || entsOf(r.client_id).length<=1 || !!r.entity_id) && !proyDe(r).need
 
   // ExcelJS (escritura con estilos/validación/comentarios — SheetJS community no los soporta) cargado por CDN al descargar
   const loadExcelJS = () => new Promise((resolve,reject)=>{
@@ -15958,6 +15958,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   // conciliación: SOLO sugiere si los tokens apuntan a UN único cliente; si es ambiguo o nulo, NO adivina.
   const _NOTA_STOP = new Set(['sociedad','sociedades','anonima','compraventa','escritura','publica','poder','especial','copia','vigencia','constitucion','protocolizacion','acuerdo','mandato','contrato','notaria','notarial','inmobiliaria','comercial','servicios','inversiones','grupo','spa','ltda','limitada','eirl','para','por','con','del','los','las','una','uno','sobre','entre','este','esta'])
   const _toksNota = s => [...new Set(String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=4 && !_NOTA_STOP.has(w)))]
+  // Proyecto aprendido por cliente + sociedad de la OT (learnings 'notaria_proyecto': `${client_id}::${entity_id|compareciente}` → sale_id).
+  const [notaProyL,setNotaProyL] = useState({})
+  useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_proyecto').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setNotaProyL(m) },()=>{}) },[notaria])
   const [notaAlias,setNotaAlias] = useState([])   // learnings kind 'notaria_alias': key (requirente/frase) → value (client_id)
   useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_alias').order('updated_at',{ascending:true}).then(({data})=>setNotaAlias(data||[]),()=>{}) },[notaria])
   // Glosas aprendidas por tipo de trámite (materia normalizada → glosa a rendir). Se aprende al editar una glosa en el preview.
@@ -16371,6 +16374,30 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const glosaFinal = r => { const sub=(r.subconcepto||'').trim(), base=(r.concepto||'').trim(); return (!r.conceptoFix && sub && !base.toLowerCase().includes(sub.toLowerCase())) ? `${base} — ${sub}` : base }
   // Triage en el preview: marcar una fila como personal de un miembro (sale del cliente). El cliente «oficina» o sin cliente muestra "¿De quién es?".
   const esOficinaCli = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')) }
+  // REGLA: ningún gasto de cliente sin proyecto. Se resuelve solo si no hay duda (elegido, aprendido para esa sociedad, única venta
+  // o única activa); si el cliente tiene varias ventas se elige en la fila; si no tiene ninguna se escribe el trabajo.
+  const ventasCli = cid => (sales||[]).filter(s=>String(s.client_id)===String(cid)&&VENTA_REAL(s))
+  const proyKey = r => { const k = r.entity_id || (sinNombreReal(r.nombre||r.requirente) ? '' : normName(r.nombre||r.requirente)); return r.client_id&&k ? `${r.client_id}::${k}` : null }
+  const proyDe = r => {
+    if(!r.client_id || r.personal_de || r.isInternal || esOficinaCli(r.client_id)) return {need:false}
+    const vs=ventasCli(r.client_id)
+    if(!vs.length) return {need:!String(r.proyecto||'').trim(), vs}
+    if(r.sale_id && vs.some(v=>String(v.id)===String(r.sale_id))) return {need:false, sale:r.sale_id, vs}
+    const k=proyKey(r), l=k&&notaProyL[k]; if(l && vs.some(v=>String(v.id)===String(l))) return {need:false, sale:l, vs}
+    const ps=proyectoSeguro(r.client_id, sales, {titulo:r.proyecto}); if(ps.sale_id) return {need:false, sale:ps.sale_id, vs}
+    return {need:true, vs, sug:sugerirVentaGasto({concept:r.concepto,subconcept:r.subconcepto,materia:r.materia,date:r.fecha}, vs, null).venta}
+  }
+  // Elegir el proyecto de una OT lo aplica también a las demás OT de la misma sociedad del cliente que aún no lo tienen.
+  const setProyRow = (rowId, campo, valor) => { setTouched(true); setRows(p=>{ const src=p.find(x=>x.id===rowId); const k=src&&proyKey(src)
+    return p.map(x=> x.id===rowId || (campo==='sale_id' && k && proyKey(x)===k && !x.sale_id && proyDe(x).need) ? {...x,[campo]:valor} : x) }) }
+  const proyCampo = r => { const pr=proyDe(r); if(!pr.vs || pr.vs.length===1) return null
+    const st={width:'100%',maxWidth:420,padding:'6px 9px',borderRadius:8,border:`1px solid ${pr.need?C.overdue:C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box'}
+    if(!pr.vs.length) return <input value={r.proyecto||''} onChange={e=>setProyRow(r.id,'proyecto',e.target.value)} placeholder='Trabajo (el cliente no tiene ventas)…' aria-label='Proyecto' style={st}/>
+    const ord=pr.sug?[pr.sug,...pr.vs.filter(v=>v.id!==pr.sug.id)]:pr.vs
+    return <select value={r.sale_id||pr.sale||''} onChange={e=>setProyRow(r.id,'sale_id',e.target.value||null)} aria-label='Proyecto' style={st}>
+      <option value=''>Proyecto…</option>
+      {ord.map(v=><option key={v.id} value={v.id}>{v.title}{v.status!=='Activo'?` (${String(v.status).toLowerCase()})`:''}</option>)}
+    </select> }
   const asignarPersonal = (rowId,persona)=>setRows(p=>p.map(r=>r.id===rowId?{...r,personal_de:persona||null,client_id:null,clientName:null,entity_id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:persona?'personal':'none',confidence:persona?100:0}:r))
   // Crea un cliente ocasional con el nombre de la fila (columna Cliente), opcionalmente con responsable, y le asigna el gasto.
   const crearOcasional = async(r,responsable)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm,responsable); if(c){ setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)); if(onLearnAlias) onLearnAlias(nm.toLowerCase(), c.id); flash(`Cliente nuevo «${c.name}» · se guarda al Cargar`) }  /* aprende nombre→ocasional para que no reaparezca al re-subir */ setOcasPick(null) }
@@ -16621,6 +16648,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           <button onClick={()=>toggleRowNota(r.id)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Otro</button>
           <button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:12,fontWeight:700,color:C.tealText,background:C.tealBg,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Gasto interno {persPick===r.id?'▴':'▾'}</button>
         </div>}
+        {kind==='listas'&&proyCampo(r)&&<div style={{marginTop:6}}>{proyCampo(r)}</div>}
         {kind==='listas'&&<div style={{display:'flex',gap:12,marginTop:6,flexWrap:'wrap',alignItems:'center'}}><button onClick={()=>toggleRowNota(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{open?'Cerrar':'Cambiar cliente'}</button><button onClick={()=>setPersPick(persPick===r.id?null:r.id)} style={{fontSize:11,fontWeight:600,color:C.tealText,background:'none',border:'none',cursor:'pointer',padding:0}}>Gasto interno {persPick===r.id?'▴':'▾'}</button><button onClick={()=>marcarNoNuestra(r.id)} title='La notaría la envió pero no es un trabajo de la oficina → no se carga' style={{fontSize:11,fontWeight:600,color:C.overdueText,background:'none',border:'none',cursor:'pointer',padding:0}}>No es nuestra</button></div>}
         {kind==='nonuestra'&&<div style={{marginTop:6}}><button onClick={()=>reactivarRow(r.id)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Sí es nuestra · volver a la revisión</button></div>}
         {open&&<div style={{marginTop:8,padding:'9px 11px',background:'#EEF4FB',border:'1px solid #CFE0F2',borderRadius:10}}>
@@ -16697,18 +16725,20 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const byCli={}; cats.listas.forEach(r=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); const k=r.client_id; (byCli[k]=byCli[k]||{name:c?.name||'Cliente',n:0,tot:0}); byCli[k].n++; byCli[k].tot+=(r.monto||0) })
     const cliList=Object.values(byCli).sort((a,b)=>b.tot-a.tot)
     const quedan=cats.falta.length+cats.confirma.length
+    const sinProy=cargarRows.filter(r=>proyDe(r).need)
     return (
       <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff',marginTop:14}}>
         <div style={{padding:'8px 13px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,background:C.bgPanel,borderBottom:`.5px solid ${C.track}`}}>Resultado de la carga</div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:C.greenBg,borderBottom:`.5px solid ${C.track}`}}>
           <div><div style={{fontSize:12,color:C.muted}}>Gastos que se cargan</div><div style={{fontSize:17,fontWeight:800,color:C.greenText,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{nCarga} · {fmt(totCarga)}</div></div>
-          <button disabled={guardando||(!nCarga&&!cats.falta.length)} onClick={async()=>{ const nPend=cats.falta.length, nYa=cats.yacargadas.length; if(!nCarga&&!nPend) return; const aCli=cliList.length
+          <button disabled={guardando||!!sinProy.length||(!nCarga&&!cats.falta.length)} onClick={async()=>{ const nPend=cats.falta.length, nYa=cats.yacargadas.length; if(sinProy.length||(!nCarga&&!nPend)) return; const aCli=cliList.length
             let msg = nCarga ? `Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` a ${aCli} cliente${aCli!==1?'s':''}`:''}.` : 'No hay gastos con cliente ni interno para cargar.'
             if(nPend) msg += ` Los ${nPend} sin cliente quedan pendientes por identificar (te aviso a los 3 días).`
             if(nYa) msg += ` ${nYa} ya está${nYa!==1?'n':''} en la app y se omite${nYa!==1?'n':''}.`
             msg += ' ¿Confirmas?'
-            if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:10,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
+            if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:10,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando&&!sinProy.length?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando&&!sinProy.length?1:.5}}>{guardando?'…':'Cargar'}</button>
         </div>
+        {sinProy.length>0&&<div onClick={()=>setCatOpen(new Set(['listas']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',fontSize:12,background:C.overdueBg,color:C.overdueText,cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><b>Falta el proyecto en {sinProy.length} OT</b><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(sinProy.reduce((a,r)=>a+(r.monto||0),0))} ›</span></div>}
         <div style={{fontSize:11,color:C.muted,padding:'8px 13px 0',lineHeight:1.5}}>Tus asignaciones se guardan al Cargar; lo que la app aprende (RUT y clientes) queda para siempre.</div>
         <div style={{fontSize:11,color:C.done,padding:'2px 13px 8px',lineHeight:1.5,borderBottom:`.5px solid ${C.track}`}}>Si algo sale mal, puedes deshacer toda la carga con un clic.</div>
         <div onClick={()=>setRcOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',fontSize:13,cursor:'pointer'}}><span style={{color:C.muted}}>Cuánto debe cada cliente <span style={{fontSize:10,color:C.done}}>· de más a menos</span></span><span style={{display:'flex',alignItems:'center',gap:7}}><b>{cliList.length} cliente{cliList.length!==1?'s':''}</b><span style={{color:C.done,transform:rcOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span></span></div>
@@ -16831,8 +16861,15 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   }
 
   const guardar = async(incluirTodo=false, explicit=null) => {
-    const target = explicit || (incluirTodo ? (rows||[]) : listas)
-    if(target.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
+    const target0 = explicit || (incluirTodo ? (rows||[]) : listas)
+    if(target0.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente, razón social y proyecto resueltos, sin errores).'); return }
+    // Regla: ningún gasto de cliente sin proyecto (rinde cuentas). Se guarda el proyecto resuelto y se aprende el elegido por sociedad.
+    const faltaP = target0.filter(r=>!r.error&&proyDe(r).need)
+    if(faltaP.length){ appAlert(`Falta el proyecto en ${faltaP.length} ${faltaP.length===1?'gasto':'gastos'} con cliente. Elígelo en cada fila antes de cargar.`); return }
+    const vistosP=new Set()
+    const target = target0.map(r=>{ const pr=proyDe(r)
+      if(r.sale_id&&!DEMO){ const k=proyKey(r); if(k&&!vistosP.has(k)&&String(notaProyL[k]||'')!==String(r.sale_id)){ vistosP.add(k); learnPut('notaria_proyecto',k,r.sale_id) } }
+      return pr.sale&&!r.sale_id?{...r,sale_id:pr.sale}:r })
     setGuardando(true)
     try{
       // Notaría: arma el resumen de estado (cargadas + con error + ya en la app) ANTES de importar, para persistirlo con la carga (nada sin rastro).
@@ -17154,6 +17191,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                       </select>
                     )}
                   </div>
+                  {tipo==='gasto'&&proyCampo(r)&&<div style={{marginTop:6}}>{proyCampo(r)}</div>}
                   {r.subconcepto&&<input value={r.subconcepto} onChange={e=>editarCampo(r.id,'subconcepto',e.target.value)} placeholder='Subconcepto' style={{width:'100%',marginTop:6,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.muted,outline:'none',boxSizing:'border-box'}}/>}
                   {/* ¿De quién es? — solo cuando no calzó un cliente externo (sin cliente u oficina): a un miembro (personal) o se deja para la oficina */}
                   {tipo==='gasto'&&!r.personal_de&&(!r.client_id||esOficinaCli(r.client_id))&&(
@@ -37217,7 +37255,7 @@ export default function App() {
         requirente:(r.requirente||'').trim()||null, materia:(r.materia||'').trim()||null,   // señales del documento de notaría (identificación de cliente + detalle)
 
         category: tipo==='fondo'?'Fondo':(r.categoria||'Otro'),
-        date:r.fecha||null, project:r.proyecto||null, sale_id:null, ...proyectoSeguro(r.client_id, sales, {titulo:r.proyecto}),
+        date:r.fecha||null, project:r.proyecto||null, sale_id:null, ...proyectoSeguro(r.client_id, sales, {saleId:r.sale_id||null, titulo:r.proyecto}),
         personal_de: r.personal_de||null,
         // Columna "pagado con caja chica" (sí→false / no→true) manda; si no viene, default Notaría=true. Fondos/personal=false.
         paid_by_client: (tipo!=='fondo'&&!r.personal_de) ? (r.paid_by_client!==undefined ? r.paid_by_client : r.categoria==='Notaria') : false,
@@ -37701,12 +37739,12 @@ export default function App() {
     if(anticipo.estado!=='disponible'){ appAlert('Solo se puede reclasificar un anticipo disponible.'); return }
     if(!await appConfirm(`¿Reclasificar este anticipo de ${fmt(anticipo.monto)} a Fondo por rendir? Pasa a ser un fondo para gastos del cliente.`)) return
     try{
-      const {data:fondo,error}=await supabase.from('expenses').insert({client_id:anticipo.client_id, entity_id:anticipo.entity_id||null, type:'fondo', amount:anticipo.monto, date:anticipo.fecha, concept:anticipo.proyecto||anticipo.nota||'Fondo (reclasificado de anticipo)', category:'Fondo', created_by:user?.email||null}).select().single(); if(error) throw error
+      const {data:fondo,error}=await supabase.from('expenses').insert({client_id:anticipo.client_id, entity_id:anticipo.entity_id||null, ...proyectoSeguro(anticipo.client_id, sales, {saleId:anticipo.sale_id||null, titulo:anticipo.proyecto||null}), type:'fondo', amount:anticipo.monto, date:anticipo.fecha, concept:anticipo.proyecto||anticipo.nota||'Fondo (reclasificado de anticipo)', category:'Fondo', created_by:user?.email||null}).select().single(); if(error) throw error
       await supabase.from('conciliacion').update({tipo_destino:'fondo',gasto_id:fondo.id,anticipo_id:null}).eq('anticipo_id',anticipo.id)
       const {error:de}=await supabase.from('anticipos').delete().eq('id',anticipo.id); if(de) throw de
       setExpenses&&setExpenses(p=>[fondo,...p]); setAnticipos(p=>p.filter(a=>String(a.id)!==String(anticipo.id)))
     }catch(e){ appAlert('Error al reclasificar: '+e.message) }
-  },[user])
+  },[user,sales])
 
   // Fusionar dos anticipos duplicados (manual + conciliación bancaria): conserva el "keep" (el verificado en banco) y le pasa proyecto/sale_id/entity_id del "drop"; borra el drop.
   const handleFusionarAnticipos=useCallback(async(keep,drop)=>{
