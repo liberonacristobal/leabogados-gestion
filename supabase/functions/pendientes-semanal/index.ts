@@ -59,6 +59,10 @@ serve(async (req) => {
       scope = val;
     }
     const soloNombres: string[] | null = (scope && scope !== "on") ? scope.split(/[,;]+/).map(s=>s.trim()).filter(Boolean) : null;
+    // Bloques que se envían (config 'pendientes_semanal_bloques' o body.bloques): cobros,duplicados,proyecto,sinresp. Sin config = todos.
+    let bloquesTxt = body.bloques ? String(body.bloques) : "";
+    if (!bloquesTxt) { const { data: bq } = await sb.from("learnings").select("value").eq("kind","config").eq("key","pendientes_semanal_bloques").order("updated_at",{ascending:false}).limit(1); bloquesTxt = (bq?.[0]?.value || "").trim(); }
+    const BLOQ = new Set((bloquesTxt || "cobros,duplicados,proyecto,sinresp").split(/[,;\s]+/).map(x=>x.trim().toLowerCase()).filter(Boolean));
 
     // ── Datos (con reintento para no mandar cifras vacías si una consulta arranca en frío) ──
     const fetchAll = async () => {
@@ -293,15 +297,16 @@ serve(async (req) => {
       const to = testTo || EMAIL[nombre];
       if (!to) continue;
       const esAdmin = ADMINS.includes(nombre);
-      const cobros = cobrosDe[nombre]||[], folios = dupFolioDe[nombre]||[], ants = dupAntDe[nombre]||[];
-      const srCob = esAdmin ? sinRespCobros : [], srDup = esAdmin ? sinRespDup : [];
+      const cobros = BLOQ.has("cobros") ? (cobrosDe[nombre]||[]) : [];
+      const folios = BLOQ.has("duplicados") ? (dupFolioDe[nombre]||[]) : [], ants = BLOQ.has("duplicados") ? (dupAntDe[nombre]||[]) : [];
+      const srCob = esAdmin && BLOQ.has("sinresp") ? sinRespCobros : [], srDup = esAdmin && BLOQ.has("sinresp") ? sinRespDup : [];
       const nCob = cobros.length, nDup = folios.reduce((s:number,x:any)=>s+x.n,0)+ants.length;
       const nSr = srCob.length + srDup.reduce((s:number,x:any)=>s+(x.n||1),0);
-      const sinProy = sinProyDe[nombre]||[]; const nSP = sinProy.reduce((s:number,x:any)=>s+x.n,0);
+      const sinProy = BLOQ.has("proyecto") ? (sinProyDe[nombre]||[]) : []; const nSP = sinProy.reduce((s:number,x:any)=>s+x.n,0);
       if (!testTo && !nCob && !nDup && !nSr && !nSP) continue;   // en cron real no mandar correos vacíos
       const html = armar(nombre, cobros, folios, ants, srCob, srDup, sinProy);
       // Asunto que invita a mirar, no castigador (sin recuento de pendientes).
-      const subject = "Tus clientes en 2 minutos";
+      const subject = (nSP && !nCob && !nDup && !nSr) ? "Gastos de tus clientes sin proyecto" : "Tus clientes en 2 minutos";
       if (!dryRun) await sendMail(to, subject, html);
       sent.push({ nombre, to, cobros:nCob, duplicados:nDup, sinProyecto:nSP, sinResp:nSr, ...(dryRun?{subject,html}:{}) });
     }
