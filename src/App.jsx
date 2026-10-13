@@ -15712,7 +15712,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[],onSave,onBulkImport,onConciliar,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional,onNavigate,dirtyRef}) {
+function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[],onSave,onBulkImport,onConciliar,onAjustarNotaria,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional,onNavigate,dirtyRef}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const isDeskCM = useIsDesktop()   // escritorio: revisión en 2 columnas y filas de notaría en grilla alineada (móvil intacto)
   // Notaría: modo SIMPLE = cola de confirmación 1×1 (sugerencia + Confirmar por fila, solo importa lo confirmado, muestra todo el documento).
@@ -16306,7 +16306,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         if(!error){ if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        else if(notaria && /sin efecto/i.test(notas) && (monto<=1)) error='Sin efecto (anulada)' }   // anulada REAL = costo $1. Las "sin efecto" con cobro real (>$1) son anuladas por la notaría pero el trabajo se hizo → facturables a su cliente (no error).
+        else if(notaria && (monto<=1)) error = /sin efecto/i.test(notas) ? 'Sin efecto (anulada)' : 'De registro ($1) · no se cobra' }   // OT de $1 = solo registro de la notaría (anulada o protocolización sin costo): no es gasto ni se cobra. Las "sin efecto" con cobro real (>$1) sí son facturables a su cliente (no error).
         return {id:idx, rut, nombre:nombreEff, fecha, monto, concepto:conceptoEff, subconcepto, ot, notas, proyecto, requirente, materia, categoria, abogadoResp, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='rut_exact'?100:method==='name_exact'?95:90):undefined), error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
@@ -16496,7 +16496,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const toggleGrpNota = cid => setGrpOpen(p=>{ const n=new Set(p); n.has(cid)?n.delete(cid):n.add(cid); return n })
   // Seleccionada para importar = tiene destino (cliente, oficina o miembro), no es error, no está ya en la app, no fue desmarcada.
   // Una sola definición: de aquí salen el contador del banner, el botón "Importar seleccionadas" y el recibo → todo cuadra.
-  const notaSelOn = r => (!!r.client_id || !!r.personal_de) && !r.error && !dupInfo[r.id]?.otState && !deselNota.has(r.id)
+  const notaSelOn = r => (!!r.client_id || !!r.personal_de) && !r.error && !dupInfo[r.id]?.otState && !dupInfo[r.id]?.sinNum && !deselNota.has(r.id)
   const toggleSelNota = id => setDeselNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   const toggleRowNota = id => setRowOpenNota(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
@@ -16506,9 +16506,19 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const dupInfo = useMemo(()=>{
     const m={}
     const byOt=new Map(); (expenses||[]).forEach(e=>{ if(!e.deleted_at&&e.ot_number){ const o=_normOt(e.ot_number); if(o) byOt.set(o,e) } })
+    // La OT de la notaría es la fuente de la verdad: un gasto de notaría del mismo cliente y monto que se cargó SIN N° de OT
+    // recibe el número (no se duplica). Fecha a ≤60 días si ambas existen; se usa a lo más una vez.
+    const sinNumPool=(expenses||[]).filter(e=>!e.deleted_at&&e.type!=='fondo'&&e.category==='Notaria'&&!_normOt(e.ot_number)), usadoSN=new Set()
+    const dias=(a,b)=>(a&&b)?Math.abs(new Date(a)-new Date(b))/864e5:null
     ;(rows||[]).forEach(r=>{
       const info={}
-      const o=_normOt(r.ot); if(o&&byOt.has(o)){ const e=byOt.get(o); info.otDup=e
+      const o=_normOt(r.ot)
+      if(o&&!byOt.has(o)&&notaria&&r.client_id&&!r.error&&(r.monto||0)>1){
+        const cands=sinNumPool.filter(e=>!usadoSN.has(e.id)&&String(e.client_id)===String(r.client_id)&&Number(e.amount)===Number(r.monto)&&(dias(e.date,r.fecha)==null||dias(e.date,r.fecha)<=60))
+          .sort((a,b)=>(dias(a.date,r.fecha)??999)-(dias(b.date,r.fecha)??999))
+        if(cands.length){ usadoSN.add(cands[0].id); info.sinNum=cands[0] } }
+      if(o&&byOt.has(o)){ const e=byOt.get(o); info.otDup=e
+        if(notaria&&(r.monto||0)>1&&Number(e.amount)!==Number(r.monto)) info.montoNot={app:Number(e.amount)||0, notaria:r.monto}   // la notaría manda
         // Estado de la OT que ya existe → alarma respectiva. "Pagada" = está en tu correo/liquidación a la notaría.
         info.otState = (e.notaria_liquidado_at||e.notaria_render_id) ? 'pagada'
           : (e.client_render_id||e.client_rendered_at||e.render_id||e.rendered_at) ? 'rendida'
@@ -16518,10 +16528,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const cand=(expenses||[]).find(e=>{ if(e.deleted_at||e.bulk_import_id||e.client_id!==r.client_id) return false; const et=_toksDup(`${e.concept} ${e.subconcept||''}`); let n=0; et.forEach(w=>{ if(rt.has(w)) n++ }); return n>=2 })
         if(cand) info.manualDup=cand
       }
-      if(info.otDup||info.manualDup) m[r.id]=info
+      if(info.otDup||info.manualDup||info.sinNum) m[r.id]=info
     })
     return m
-  },[rows,expenses])
+  },[rows,expenses,notaria])
   const listas = (rows||[]).filter(rowReady)
   const sugeridos = (rows||[]).filter(r=>!!r.suggestion)
   const nAuto = (rows||[]).filter(r=>bucketOf(r)==='auto').length
@@ -16544,7 +16554,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // El cuerpo de cada fila se renderiza igual que en la lista plana (no se duplica); solo se intercalan encabezados de grupo.
   const notaItems = (flt) => {
     const byClient={}, sinCli=[], enApp=[]
-    flt.forEach(r=>{ if(dupInfo[r.id]?.otState){ enApp.push(r); return }   // ya en la app (pagada/rendida/cargada) → grupo aparte
+    flt.forEach(r=>{ if(dupInfo[r.id]?.otState||dupInfo[r.id]?.sinNum){ enApp.push(r); return }   // ya en la app (pagada/rendida/cargada) → grupo aparte
       if(r.client_id && !esOficinaCli(r.client_id)) (byClient[r.client_id]=byClient[r.client_id]||[]).push(r); else sinCli.push(r) })
     const groups = Object.entries(byClient).map(([cid,rs])=>{ const c=clients.find(x=>String(x.id)===String(cid)); const tot=rs.reduce((a,r)=>a+(r.monto||0),0); let saldo=null; try{ saldo=saldoCliente(expenses,cid) }catch(_){}; const nRev=rs.filter(r=>bucketOf(r)!=='auto').length; return {cid,name:c?.name||'Cliente',nEnt:entsOf(cid).length,tot,saldo,nRev,rs} })
     groups.sort((a,b)=>(b.nRev>0?1:0)-(a.nRev>0?1:0) || b.tot-a.tot)
@@ -16582,7 +16592,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <span style={{fontSize:13,color:C.done,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           </span>
         </div>
-        {st&&<div style={{fontSize:11,fontWeight:600,color:st==='pagada'?C.overdueText:st==='rendida'?C.coralText:C.muted,padding:'0 12px 6px 38px'}}>{st==='pagada'?'Ya pagada a la notaría — no la cargues de nuevo':st==='rendida'?'Ya rendida al cliente':'Ya cargada — se omite al importar'}</div>}
+        {st&&<div style={{fontSize:11,fontWeight:600,color:st==='pagada'?C.overdueText:st==='rendida'?C.coralText:C.muted,padding:'0 12px 6px 38px'}}>{st==='pagada'?'Ya pagada a la notaría — no la cargues de nuevo':st==='rendida'?'Ya rendida al cliente':(dupInfo[r.id]?.montoNot?`Ya cargada — el monto se actualiza al de la notaría (${fmt(dupInfo[r.id].montoNot.app)} → ${fmt(dupInfo[r.id].montoNot.notaria)})`:'Ya cargada — se omite al importar')}</div>}
+        {!st&&dupInfo[r.id]?.sinNum&&<div style={{fontSize:11,fontWeight:600,color:C.muted,padding:'0 12px 6px 38px'}}>Ya estaba cargada sin N° de OT — se le pone el número</div>}
         {open&&<div style={{padding:'2px 12px 12px 38px',background:sel?'#fff':C.bgSoft}}>
           <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}><tbody>
             <tr><td style={{color:C.muted,padding:'2px 0',width:96,verticalAlign:'top'}}>Trámite</td><td style={{padding:'2px 0',color:C.text}}>{r.materia||'—'}</td></tr>
@@ -16615,9 +16626,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const notaCats = (flt) => {
     const c={falta:[],confirma:[],proyecto:[],listas:[],personal:[],oficina:[],yacargadas:[],nonuestra:[],sinefecto:[],errores:[]}
     flt.forEach(r=>{
-      if(r.error){ if(/sin efecto/i.test(r.error)) c.sinefecto.push(r); else c.errores.push(r); return }   // 'Sin efecto (anulada)' aparte de errores reales (ej. 'OT no detectada')
+      if(r.error){ if(/sin efecto|de registro/i.test(r.error)) c.sinefecto.push(r); else c.errores.push(r); return }   // 'Sin efecto (anulada)' aparte de errores reales (ej. 'OT no detectada')
       if(r.noNuestra){ c.nonuestra.push(r); return }   // "No es nuestra": OT correcta pero no la paga la oficina → no se carga, solo se registra + avisa a la notaría (reversible)
-      if(dupInfo[r.id]?.otState){ c.yacargadas.push(r); return }
+      if(dupInfo[r.id]?.otState||dupInfo[r.id]?.sinNum){ c.yacargadas.push(r); return }
       if(r.personal_de){ c.personal.push(r); return }   // gasto personal de un miembro (Cristóbal/Erasmo/…)
       if(r.isInternal || (r.client_id && esOficinaCli(r.client_id))){ c.oficina.push(r); return }
       if(r.client_id){ (proyDe(r).need||r.proyRev ? c.proyecto : c.listas).push(r); return }
@@ -16635,7 +16646,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     oficina:{t:'De la oficina', s:'no van a un cliente', col:C.tealText, bg:C.tealBg},
     yacargadas:{t:'Ya cargadas', s:'están en la app · se omiten', col:C.muted, bg:C.bgSoft},
     nonuestra:{t:'No son nuestras · avisar a la notaría', s:'OT correctas pero no las paga la oficina · no se cargan, se registran', col:C.overdueText, bg:C.overdueBg},
-    sinefecto:{t:'Sin efecto', s:'anuladas · excluidas del total', col:C.grisText, bg:C.bgWarm},
+    sinefecto:{t:'Sin efecto o de registro', s:'anuladas u OT de $1 · no se cobran', col:C.grisText, bg:C.bgWarm},
     errores:{t:'Con error · no se cargan', s:'revísalas (ej. OT no detectada en el archivo)', col:C.overdueText, bg:C.overdueBg},
   }
   const catSvg = (k,col) => { const p={proyecto:['M3 7h6l2 2h10v10H3z'],falta:['M4 19c0-3 2-5 5-5','M17 12v4M17 19v.01'],confirma:['M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1'],listas:['M5 13l4 4L19 7'],personal:['M5 20c0-4 3.5-6 7-6s7 2 7 6'],oficina:['M8 7h4M8 11h4M8 15h4M16 9h4v12h-4'],yacargadas:['M3 4v4h4','M12 8v4l3 2'],nonuestra:['M15 9l-6 6M9 9l6 6'],sinefecto:['M6 6l12 12'],errores:['M12 9v4','M12 17v.01']}[k]||[]
@@ -16654,7 +16665,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const oldY = fy && !isNaN(fy) && fy < new Date().getFullYear()   // OT de un año anterior
     const info = kind==='yacargadas'||kind==='sinefecto'||kind==='errores'||kind==='nonuestra'   // solo lectura
     const st = dupInfo[r.id]?.otState
-    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='nonuestra' ? (r.noNPrev?`Ya marcada como no nuestra el ${fmtFechaDMY(String(r.noNPrev.created_at||'').slice(0,10))} · ${r.noNPrev.estado==='consultada'?'consultada a la notaría':r.noNPrev.estado==='resuelta'?'la notaría respondió':'por consultar'}`:'No es nuestra — no se carga, se avisa a la notaría') : kind==='sinefecto' ? 'Anulada — no se carga' : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
+    const stNote = kind==='errores' ? (r.error||'Con error — no se carga') : kind==='nonuestra' ? (r.noNPrev?`Ya marcada como no nuestra el ${fmtFechaDMY(String(r.noNPrev.created_at||'').slice(0,10))} · ${r.noNPrev.estado==='consultada'?'consultada a la notaría':r.noNPrev.estado==='resuelta'?'la notaría respondió':'por consultar'}`:'No es nuestra — no se carga, se avisa a la notaría') : kind==='sinefecto' ? (/de registro/i.test(r.error||'')?'De registro ($1) — no se cobra':'Anulada — no se carga') : dupInfo[r.id]?.sinNum ? `Ya estaba cargada sin N° de OT — se le pone el ${otDe(r)}` : (st==='cargada'&&dupInfo[r.id]?.montoNot) ? `Ya está en la app — el monto se actualiza al de la notaría (${fmt(dupInfo[r.id].montoNot.app)} → ${fmt(dupInfo[r.id].montoNot.notaria)})` : dupInfo[r.id]?.montoNot ? `${st==='pagada'?'Ya pagada a la notaría':'Ya rendida al cliente'} — la notaría cobra ${fmt(dupInfo[r.id].montoNot.notaria)} (en la app ${fmt(dupInfo[r.id].montoNot.app)})` : st==='pagada' ? 'Ya pagada a la notaría' : st==='rendida' ? 'Ya rendida al cliente' : st==='cargada' ? 'Ya está en la app' : null
     const prot = (kind==='listas'||kind==='personal') ? tramDe(r) : (noName ? 'Sin compareciente' : nomDe(r))
     const sub  = kind==='listas' ? (cn||'') : kind==='personal' ? (noName?'':nomDe(r)) : (tramDe(r) + (cn?` · ${cn}`:''))
     const chk = kind==='confirma', on = chk && !confDesel.has(r.id)
@@ -16764,12 +16775,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         <div style={{padding:'8px 13px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,background:C.bgPanel,borderBottom:`.5px solid ${C.track}`}}>Resultado de la carga</div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:C.greenBg,borderBottom:`.5px solid ${C.track}`}}>
           <div><div style={{fontSize:12,color:C.muted}}>Gastos que se cargan</div><div style={{fontSize:17,fontWeight:800,color:C.greenText,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{nCarga} · {fmt(totCarga)}</div></div>
-          <button disabled={guardando||(!nCarga&&!cats.falta.length)} onClick={async()=>{ const nPend=cats.falta.length, nYa=cats.yacargadas.length; if(!nCarga&&!nPend) return; const aCli=cliList.length
-            let msg = nCarga ? `Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` a ${aCli} cliente${aCli!==1?'s':''}`:''}.` : 'No hay gastos con cliente ni interno para cargar.'
+          <button disabled={guardando||(!nCarga&&!cats.falta.length&&!ajustesNota.length)} onClick={async()=>{ const nPend=cats.falta.length, nAj=ajustesNota.length, nYa=cats.yacargadas.length-nAj; if(!nCarga&&!nPend&&!nAj) return; const aCli=cliList.length
+            let msg = nCarga ? `Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` a ${aCli} cliente${aCli!==1?'s':''}`:''}.` : (nAj?'':'No hay gastos con cliente ni interno para cargar.')
+            if(nAj) msg += ` ${nAj} ya cargada${nAj!==1?'s':''} se actualiza${nAj!==1?'n':''} con el dato de la notaría (N° de OT o monto).`
             if(nPend) msg += ` Los ${nPend} sin cliente quedan pendientes por identificar (te aviso a los 3 días).`
-            if(nYa) msg += ` ${nYa} ya está${nYa!==1?'n':''} en la app y se omite${nYa!==1?'n':''}.`
+            if(nYa>0) msg += ` ${nYa} ya está${nYa!==1?'n':''} en la app y se omite${nYa!==1?'n':''}.`
             msg += ' ¿Confirmas?'
-            if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:10,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
+            if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:10,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length||ajustesNota.length)&&!guardando?'pointer':'default',opacity:(nCarga||cats.falta.length||ajustesNota.length)&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
         </div>
         {sinProy.length>0&&<div onClick={()=>setCatOpen(new Set(['proyecto']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',fontSize:12,color:C.muted,cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><span>{sinProy.length} OT sin proyecto · se cargan igual{respSin.length?` · aviso a ${respSin.join(', ')}`:''}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(sinProy.reduce((a,r)=>a+(r.monto||0),0))} ›</span></div>}
         <div style={{fontSize:11,color:C.muted,padding:'8px 13px 0',lineHeight:1.5}}>Tus asignaciones se guardan al Cargar; lo que la app aprende (RUT y clientes) queda para siempre.</div>
@@ -16872,7 +16884,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             {nRev>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nRev}</span> <span style={{fontSize:11,color:C.muted}}>por revisar</span></div>}
             {nYa>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.done,fontVariantNumeric:'tabular-nums'}}>{nYa}</span> <span style={{fontSize:11,color:C.muted}}>ya en la app</span></div>}
             {nNoN>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{nNoN}</span> <span style={{fontSize:11,color:C.muted}}>no son nuestras</span></div>}
-            {nAnul>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.grisText,fontVariantNumeric:'tabular-nums'}}>{nAnul}</span> <span style={{fontSize:11,color:C.muted}}>anuladas</span></div>}
+            {nAnul>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.grisText,fontVariantNumeric:'tabular-nums'}}>{nAnul}</span> <span style={{fontSize:11,color:C.muted}}>sin efecto o de registro</span></div>}
             {errs.length>0&&<div><span style={{fontSize:16,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{errs.length}</span> <span style={{fontSize:11,color:C.muted}}>con error</span></div>}
           </div>
           {errs.some(r=>/OT no detectada/i.test(r.error||''))&&<div style={{marginTop:8,background:C.overdueBg,border:'1px solid #F3C9C4',borderRadius:8,padding:'8px 11px',fontSize:12,color:C.overdueText,fontWeight:600,lineHeight:1.5}}>La app <b>releyó estas filas</b> y aun así no encontró la OT. Todo trabajo de notaría trae OT → revisa que la columna <b>OT</b> del archivo esté presente y completa en esas filas. No se cargan sin OT.</div>}
@@ -16893,8 +16905,16 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     </div>)
   }
 
+  // Notaría: lo ya cargado se AJUSTA al dato de la notaría (N° de OT a un gasto que estaba sin número; monto si aún no se paga ni rinde).
+  const ajustesNota = notaria ? (rows||[]).flatMap(r=>{ const d=dupInfo[r.id]; if(!d) return []
+    if(d.sinNum) return [{id:d.sinNum.id, ot_number:String(r.ot||'').trim()}]
+    if(d.montoNot&&d.otState==='cargada') return [{id:d.otDup.id, amount:d.montoNot.notaria}]
+    return [] }) : []
   const guardar = async(incluirTodo=false, explicit=null) => {
     const target0 = explicit || (incluirTodo ? (rows||[]) : listas)
+    if(target0.length===0 && notaria && ajustesNota.length){ setGuardando(true)
+      try{ const n=onAjustarNotaria?await onAjustarNotaria(ajustesNota,{filename:fileName}):0; setResultado({imported:0,dupOmit:0,ajustados:n,nota:{porPagar:0,clientes:0},leidas:(rows||[]).length,errores:(rows||[]).filter(r=>r.error).length,erroresDet:[],omitidas:(rows||[]).filter(r=>dupInfo[r.id]?.otState).length,pendientes:0}) }catch(e){ appAlert('Error al ajustar: '+(e.message||e)) }
+      setGuardando(false); return }
     if(target0.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
     // Proyecto: se guarda el resuelto y se aprende el elegido por sociedad. Nunca frena la carga: lo que quede sin proyecto se asigna en el gasto.
     const vistosP=new Set()
@@ -16910,10 +16930,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const pagadores = target.filter(r=>(r.client_id||r.personal_de)&&!r.error)
       if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length; const noNs=(rows||[]).filter(r=>r.noNuestra)
         notaResumen={ leidas:(rows||[]).length, cargadas:pagadores.length, pendientes:pendRows.length, error:errRows.length, omitidas, erroresDet:errRows.map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), noNuestras:noNs.map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||'',fecha:_fechaISO(r.fecha),materia:r.materia||null,requirente:r.requirente||null,concepto:r.concepto||null,subconcepto:r.subconcepto||null})) } }
+      const ajN = (notaria&&ajustesNota.length&&onAjustarNotaria) ? await onAjustarNotaria(ajustesNota,{filename:fileName}) : 0
       const res = await onBulkImport(target, {tipo, filename:fileName, notaResumen})
       // Notaría: resumen REAL de lo cargado (usa lo efectivamente insertado tras dedup, no la intención pre-carga).
       if(notaria){ const conCli=pagadores.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
-        setResultado({...res, imported:res.cargadas??pagadores.length, nota:{porPagar,clientes}, leidas:notaResumen.leidas, errores:notaResumen.error, erroresDet:notaResumen.erroresDet, omitidas:notaResumen.omitidas, pendientes:res.pendientes??pendRows.length}) }
+        setResultado({...res, ajustados:ajN, imported:res.cargadas??pagadores.length, nota:{porPagar,clientes}, leidas:notaResumen.leidas, errores:notaResumen.error, erroresDet:notaResumen.erroresDet, omitidas:notaResumen.omitidas, pendientes:res.pendientes??pendRows.length}) }
       else setResultado(res)
     }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
@@ -16921,7 +16942,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Exporta la carga a CSV (para la notaría / Martina / contador): OT, fecha, compareciente, trámite, cliente, monto, estado.
   const exportarCargaCSV = () => {
     const cn=r=>r.client_id?(clients.find(c=>String(c.id)===String(r.client_id))?.name||r.clientName||''):(r.personal_de?`Personal · ${r.personal_de}`:'')
-    const estadoRow=r=> r.error?'Anulada' : dupInfo[r.id]?.otState?'Ya en la app' : (r.client_id?'A cliente':(r.suggestion?'Sugerida':'Sin cliente'))
+    const estadoRow=r=> r.error?(/de registro/i.test(r.error)?'De registro':'Anulada') : (dupInfo[r.id]?.otState||dupInfo[r.id]?.sinNum)?'Ya en la app' : (r.client_id?'A cliente':(r.suggestion?'Sugerida':'Sin cliente'))
     const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`
     const head=['OT','Fecha','Compareciente','Tramite','Cliente','Monto','Estado']
     const body=(rows||[]).map(r=>[otDe(r), r.fecha||'', r.nombre||r.requirente||'', r.materia||'', cn(r), r.monto||0, estadoRow(r)])
@@ -17048,6 +17069,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         <span style={{fontSize:12,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'4px 11px'}}>{resultado.imported||0} cargadas</span>
         {resultado.pendientes>0&&<span style={{fontSize:12,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'4px 11px'}}>{resultado.pendientes} pendientes por identificar</span>}
         {resultado.omitidas>0&&<span style={{fontSize:12,fontWeight:700,color:C.done,background:C.bgSoft,borderRadius:20,padding:'4px 11px'}}>{resultado.omitidas} ya en la app</span>}
+        {resultado.ajustados>0&&<span style={{fontSize:12,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'4px 11px'}}>{resultado.ajustados} actualizada{resultado.ajustados!==1?'s':''} con el dato de la notaría</span>}
         {resultado.errores>0&&<span style={{fontSize:12,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'4px 11px'}}>{resultado.errores} con error · no cargadas</span>}
       </div>}
       {notaria&&resultado.pendientes>0&&<div style={{maxWidth:440,margin:'0 auto 12px',fontSize:12,color:C.soonText,background:C.soonBg,border:`1px solid #F0D88A`,borderRadius:10,padding:'8px 11px',lineHeight:1.5}}>Las <b>{resultado.pendientes} sin cliente</b> quedaron guardadas como <b>pendientes por identificar</b> (no se cargan a nadie). Aparecen en Notaría · «Sin cliente» y te avisaré si pasan 3 días sin resolver.</div>}
@@ -18036,7 +18058,8 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       return re.test(m) ? m.replace(re, linea) : m })
   }
   const [notaResp,setNotaResp] = useState(null)   // filtro de pendientes por abogado responsable del cliente ('__sin__'=sin responsable)
-  const notariaPend = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&!e.notaria_liquidado_at&&(Number(e.amount)||0)>1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
+  // Deuda con la notaría = OT (la OT es la fuente de la verdad): un gasto de categoría Notaría sin N° de OT no es deuda con la notaría.
+  const notariaPend = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&/\d/.test(String(e.ot_number||''))&&!e.notaria_render_id&&!e.notaria_liquidado_at&&(Number(e.amount)||0)>1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
   // Gastos de notaría por $1 (o menos): escrituras/trabajos anulados, solo orden — no se liquidan, se pueden eliminar.
   const notariaAnulados = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&(Number(e.amount)||0)<=1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
   const [notaAnulOpen,setNotaAnulOpen] = useState(false)
@@ -18050,7 +18073,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&cuentaEnSaldo(e))
     const fondo=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo'&&cuentaEnSaldo(e)).reduce((a,e)=>a+(e.amount||0),0)
     const pagado=g.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
-    const esNotaPend=e=>e.category==='Notaria'&&!e.notaria_render_id&&!e.notaria_liquidado_at   // lo que se liquida ahora a la notaría (no se reserva)
+    const esNotaPend=e=>e.category==='Notaria'&&/\d/.test(String(e.ot_number||''))&&!e.notaria_render_id&&!e.notaria_liquidado_at   // lo que se liquida ahora a la notaría (no se reserva)
     const resItems=g.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at&&!esNotaPend(e))
     const reservado=resItems.reduce((a,e)=>a+(e.amount||0),0)
     return { fondo, pagado, reservado, resItems, disp: Math.max(0, fondo-pagado-reservado) }
@@ -24662,7 +24685,7 @@ function DetalleGasto({e, expenses, clientEntities, sales, onEditar}){
   const quien=e.created_by&&!/@|^bulk/i.test(e.created_by)?e.created_by:null
   const reg={k:'reg', t:fondo?'Recibido':'Registrado', fecha:fondo?e.date:(e.created_at||'').slice(0,10), d:[quien, e.bulk_import_id?'carga masiva':null].filter(Boolean).join(' · ')}
   const falta=[]
-  if(!fondo&&e.category==='Notaria'&&!e.notaria_liquidado_at) falta.push({k:'pn', t:'Pagado a la notaría', pend:true})
+  if(!fondo&&e.category==='Notaria'&&e.ot_number&&!e.notaria_liquidado_at) falta.push({k:'pn', t:'Pagado a la notaría', pend:true})
   if(!fondo&&!e.client_rendered_at&&!e.no_descuenta_saldo) falta.push({k:'pr', t:'Rendido al cliente', pend:true})
   const pasos=[reg,...recorridoGasto(e,{conc,movById,expenses}),...falta]
   const venta=(sales||[]).find(x=>String(x.id)===String(e.sale_id)), rs=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id))
@@ -37447,6 +37470,25 @@ export default function App() {
     return {imported:inserted.length, cargadas:cargadasReal, pendientes:inserted.length-cargadasReal, dupOmit, otDupOmit, sinCliente, sinFecha, batchId, filename}
   },[expenses,user,sales])
 
+  // Carga de notaría (la OT de la notaría es la fuente de la verdad): ajusta EN SU LUGAR lo ya cargado en vez de duplicar —
+  // pone el N° de OT a un gasto que estaba sin número, o actualiza el monto al que cobra la notaría. Cada cambio deja bitácora con el antes.
+  const handleAjustarNotaria=useCallback(async(ajustes,{filename}={})=>{
+    let n=0
+    for(const a of (ajustes||[])){
+      const ex=(expenses||[]).find(e=>String(e.id)===String(a.id)); if(!ex) continue
+      const patch={}
+      if(a.ot_number&&!String(ex.ot_number||'').trim()) patch.ot_number=a.ot_number
+      if(a.amount!=null&&Number(ex.amount)!==Number(a.amount)) patch.amount=a.amount
+      if(!Object.keys(patch).length) continue
+      const {error}=await supabase.from('expenses').update(patch).eq('id',a.id)
+      if(error) throw error
+      n++
+      logActividad('notaria.ajuste_carga',{tabla:'expenses',id:a.id,detalle:{antes:{ot_number:ex.ot_number||null,amount:ex.amount},despues:patch,archivo:filename||null}})
+      setExpenses(p=>p.map(e=>String(e.id)===String(a.id)?{...e,...patch}:e))
+    }
+    return n
+  },[expenses])
+
   // Conciliar una carga: ACTUALIZA en su lugar los gastos que ya existen (cliente/categoría) e IMPORTA solo los nuevos.
   // Evita duplicar y preserva los movimientos ya rendidos. Devuelve también los valores previos (para deshacer las correcciones).
   const handleConciliarCarga=useCallback(async(actualizaciones, nuevos, {tipo,filename,cajaOwner})=>{
@@ -38868,7 +38910,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
-        <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
+        <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onAjustarNotaria={handleAjustarNotaria} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
         )})()}
         {tab==='flujo'&&pagina?.type==='solicitarFondos'&&<FlujoPagina origen={origenNav('Gastos')} titulo='Solicitar fondos' ctx={pagina.data?.client?.name||null} onBack={()=>setModal(null)} maxW={1120}><SolicitarFondosModal asPage client={pagina.data?.client} clients={clients} sale={pagina.data?.sale} montoInicial={pagina.data?.monto} responsable={pagina.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}
