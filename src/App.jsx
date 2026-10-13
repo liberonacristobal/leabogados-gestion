@@ -49,6 +49,8 @@ const C = {
   tileBg:'#F7F9FA', tileLine:'#EAEEF0', tileLineOn:'#CFE0E6',
   // sub-paleta SOBRE NAVY (heroes con fondo accent #003C50, p.ej. Saldo del cliente / Vendido): label azul claro, botón navy profundo, divisor, verde/rojo claros legibles sobre navy
   onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
+  // tenues con letra oscura: chips y botón de guardar (azul) y avisos en línea (crema + café)
+  azulTenue:'#EFF5FA', azulTenueOn:'#E3EDF5', avisoBg:'#FFFBF0', avisoLine:'#F3E2BC', avisoMid:'#FBF1DE', avisoText:'#633806',
 }
 // ── BRAND — identidad del ESTUDIO (tenant). LEA es el tenant #1. Todo lo identitario se lee de aquí
 // para poder adaptar a OTRO estudio cambiando SOLO esta config (regla de oro: vendible por diseño).
@@ -20581,202 +20583,304 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
 const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Movilización','Archivo Judicial','Otro']
-function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false}) {
+// Categorías que casi siempre son de un cliente: cargadas a la oficina, se pregunta antes de guardar.
+const CATS_DE_CLIENTE = new Set(['Notaria','CBR','Diario Oficial','Registro Civil','Archivo Judicial'])
+const _CAT_KW = [[/\b(uber|cabify|didi|taxi|metro|bencina|peaje|estacionamiento|transvip)\b/,'Movilización'],[/\bnotari/,'Notaria'],[/diario oficial/,'Diario Oficial'],[/registro civil/,'Registro Civil'],[/archivo judicial/,'Archivo Judicial'],[/\b(cbr|conservador|certificad|inscripci)/,'CBR']]
+const _NOM_GENERICO = new Set(['sociedad','limitada','inversiones','servicios','comercial','inmobiliaria','asesorias','agricola','empresa','empresas','chile','holding','group','capital','consultores','compania','ingenieria','construccion','constructora','desarrollo','gestion','proyectos','abogados','familia','sucesion','corporacion','fundacion','internacional','sociedades','negocios','transportes','importadora','exportadora','distribuidora','oficina','certificado','notaria','escritura','compraventa'])
+const _tokG = s => _normTxt(s).split(' ').filter(w=>w.length>=5)
+const _esOfiCli = c => !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||''))
+const _hoyLocal = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+
+function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName}) {
+  const isDesktop = useIsDesktop()
+  const hoy = _hoyLocal()
+  const nuevaFila = date => ({id:Date.now()+Math.random(),category:null,concept:'',amount:'',date:date||hoy,paid_by_client:false,subcategory:'',cli:null,proj:'',resp:null,picking:false,pq:''})
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
-  const hoy = new Date().toISOString().slice(0,10)
-  const [rows,setRows] = useState([{id:1,category:'CBR',concept:'',amount:'',date:hoy}])
+  const [rows,setRows] = useState(()=>[nuevaFila()])
   const [saving,setSaving] = useState(false)
   const [saved,setSaved] = useState(0)
   const rsList = useMemo(()=>{ if(!selectedClient) return []; return (clientEntities||[]).filter(e=>e.client_id===selectedClient.id) },[clientEntities,selectedClient])
   const [entityId,setEntityId] = useState('')
-  const [showRS,setShowRS] = useState(false)
   useEffect(()=>{ setEntityId(rsList[0]?.id||'') },[rsList])   // pre-poblar con la primera RS del cliente
-  // Proyecto del lote (autocomplete con los proyectos del cliente: tareas + ventas, igual que QuickTaskForm)
   const [project,setProject] = useState('')
-  const [showProjects,setShowProjects] = useState(false)
+  const [projAuto,setProjAuto] = useState(false)
   const [newProject,setNewProject] = useState(false)
   const [subproject,setSubproject] = useState('')
-  const clientProjects = useMemo(()=>{
-    if(!selectedClient) return []
-    const m={}
-    ;(tasks||[]).filter(t=>t.client_id===selectedClient.id&&t.project).forEach(t=>{ const d=t.created_at||t.due||''; if(!(t.project in m)||d>m[t.project]) m[t.project]=d })
-    ;(sales||[]).filter(s=>s.client_id===selectedClient.id&&s.title).forEach(s=>{ const d=s.created_at||s.date||''; if(!(s.title in m)||d>m[s.title]) m[s.title]=d })
-    return Object.keys(m).sort((a,b)=>(m[b]||'').localeCompare(m[a]||''))   // más reciente primero
-  },[tasks,sales,selectedClient])
-  const esOficina = !!selectedClient && (selectedClient.is_internal || /liberona\s+escala/i.test(selectedClient.name||''))
-  // Proyecto obligatorio (salvo oficina): se preselecciona solo si es claro (única venta o única activa); si no, se elige.
-  useEffect(()=>{ const vs=(sales||[]).filter(s=>selectedClient&&s.client_id===selectedClient.id&&VENTA_REAL(s)); const act=vs.filter(s=>s.status==='Activo')
-    setProject(vs.length===1?vs[0].title:(act.length===1?act[0].title:'')); setNewProject(false) },[clientProjects])
+  const esOficina = _esOfiCli(selectedClient)
+  const gastosVivos = useMemo(()=>(expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at),[expenses])
+
+  // Proyectos de un cliente (ventas + tareas, más reciente primero). La oficina no hereda proyectos de tareas:
+  // así se colaba "Títulos San Bernardo" en gastos de oficina.
+  const projectsOf = useCallback(cid=>{
+    if(!cid) return []
+    const cli=(clients||[]).find(c=>c.id===cid); const m={}
+    if(!_esOfiCli(cli)) (tasks||[]).filter(t=>t.client_id===cid&&t.project).forEach(t=>{ const d=t.created_at||t.due||''; if(!(t.project in m)||d>m[t.project]) m[t.project]=d })
+    ;(sales||[]).filter(s=>s.client_id===cid&&s.title&&!s.deleted_at).forEach(s=>{ const d=s.created_at||s.date||''; if(!(s.title in m)||d>m[s.title]) m[s.title]=d })
+    return Object.keys(m).sort((a,b)=>(m[b]||'').localeCompare(m[a]||''))
+  },[clients,tasks,sales])
+  // Proyecto sugerido: la única venta (o única activa); si no, el último usado en gastos de ese cliente.
+  const projDefault = useCallback(cid=>{
+    const cli=(clients||[]).find(c=>c.id===cid); if(!cid||_esOfiCli(cli)) return ''
+    const vs=(sales||[]).filter(s=>s.client_id===cid&&VENTA_REAL(s)); const act=vs.filter(s=>s.status==='Activo')
+    if(vs.length===1) return vs[0].title; if(act.length===1) return act[0].title
+    const lista=projectsOf(cid)
+    const ult=gastosVivos.filter(e=>e.client_id===cid&&e.project&&lista.includes(e.project)).sort((a,b)=>String(b.created_at||b.date||'').localeCompare(String(a.created_at||a.date||'')))[0]
+    return ult?.project||''
+  },[clients,sales,gastosVivos,projectsOf])
+  const clientProjects = useMemo(()=>projectsOf(selectedClient?.id),[projectsOf,selectedClient])
+  useEffect(()=>{ const p=projDefault(selectedClient?.id); setProject(p); setProjAuto(!!p); setNewProject(false) },[selectedClient?.id])
   const ventaProj = (sales||[]).find(s=>selectedClient&&s.client_id===selectedClient.id&&s.title===project)
   const subsCli = useMemo(()=>selectedClient?subproyectosCliente(selectedClient.id,tasks,expenses):[],[selectedClient,tasks,expenses])
   // La razón social sigue al proyecto elegido cuando la venta la tiene.
   useEffect(()=>{ const v=(sales||[]).find(s=>selectedClient&&s.client_id===selectedClient.id&&s.title===project); if(v?.entity_id&&rsList.some(e=>e.id===v.entity_id)) setEntityId(v.entity_id) },[project])
   const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>_normTxt(c.name).includes(_normTxt(q))).slice(0,6) },[clients,q])
   const balance = selectedClient ? saldoCliente(expenses, selectedClient.id) : null
-  const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
 
-  const addRow = () => setRows(p=>[...p,{id:Date.now(),category:'CBR',concept:'',amount:'',date:p[p.length-1]?.date||hoy}])
-  const removeRow = id => setRows(p=>p.filter(r=>r.id!==id))
-  const updateRow = (id,k,v) => setRows(p=>p.map(r=>r.id===id?{...r,[k]:v}:r))
+  // Clientes recientes: primero los de quien carga, luego los de todos.
+  const recientes = useMemo(()=>{
+    const rec=(a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))
+    const mios=gastosVivos.filter(e=>userName&&e.created_by===userName).sort(rec)
+    const out=[]; const seen=new Set()
+    ;[...mios,...[...gastosVivos].sort(rec)].forEach(e=>{ if(out.length>=4||!e.client_id||seen.has(e.client_id)) return; const c=(clients||[]).find(x=>x.id===e.client_id); if(c){ seen.add(c.id); out.push(c) } })
+    return out
+  },[gastosVivos,clients,userName])
 
-  const handleKeyDown = (e,rowId,field) => {
-    if(e.key==='Enter'||e.key==='Tab') {
-      const idx = rows.findIndex(r=>r.id===rowId)
-      if(field==='amount' && idx===rows.length-1) { e.preventDefault(); addRow() }
-    }
+  // Lo aprendido (glosa → cliente / categoría).
+  const [learn,setLearn] = useState({cli:{},cat:{}})
+  useEffect(()=>{ let on=true
+    const rd=k=>selectAll(()=>supabase.from('learnings').select('key,value,updated_at,id').eq('kind',k).order('updated_at',{ascending:true}).order('id')).then(r=>{ const m={}; (r?.data||[]).forEach(x=>{ if(x.key&&x.value) m[x.key]=x.value }); return m },()=>({}))
+    Promise.all([rd('gasto_cliente'),rd('gasto_categoria')]).then(([cli,cat])=>{ if(on) setLearn({cli,cat}) })
+    return ()=>{on=false} },[])
+
+  // Índices para sugerir cliente desde la glosa: nombres/RS únicos de cada cliente e historial de gastos.
+  const idx = useMemo(()=>{
+    const cliById=new Map((clients||[]).map(c=>[c.id,c]))
+    const nom=new Map()
+    const addNom=(cid,s)=>_tokG(s).forEach(t=>{ if(_NOM_GENERICO.has(t)) return; const set=nom.get(t)||new Set(); set.add(cid); nom.set(t,set) })
+    ;(clients||[]).forEach(c=>{ if(!_esOfiCli(c)) addNom(c.id,c.name) })
+    ;(clientEntities||[]).forEach(e=>{ const c=cliById.get(e.client_id); if(c&&!_esOfiCli(c)) addNom(c.id,e.name) })
+    const tok=new Map(), gk=new Map()
+    const inc=(map,k,cid)=>{ const m=map.get(k)||new Map(); m.set(cid,(m.get(cid)||0)+1); map.set(k,m) }
+    gastosVivos.forEach(e=>{ if(!e.client_id||!e.concept) return; new Set(_tokG(e.concept)).forEach(t=>inc(tok,t,e.client_id)); const k=glosaKey(e.concept); if(k) inc(gk,k,e.client_id) })
+    return {cliById,nom,tok,gk}
+  },[clients,clientEntities,gastosVivos])
+  const top = m => { let n=0,best=null,bc=0; m.forEach((c,k)=>{ n+=c; if(c>bc){bc=c;best=k} }); return {best,bc,n} }
+  // Cliente que sugiere la glosa (o null). La primera evidencia manda: si apunta al cliente actual, no hay aviso.
+  const sugerirCliente = (concept,curId) => {
+    if(!concept||concept.trim().length<4) return null
+    const {cliById,nom,tok,gk}=idx
+    const vale=cid=>{ const c=cliById.get(cid); return c&&!_esOfiCli(c)?c:null }
+    const k=glosaKey(concept); const hk=k&&gk.get(k)
+    if(hk){ const t=top(hk); if(t.bc>=2&&t.bc/t.n>=0.8){ const c=vale(t.best); if(c) return c.id===curId?null:{c,motivo:`Los gastos con esta descripción son de ${c.name}.`} } }
+    if(k&&learn.cli[k]&&(!hk||top(hk).bc/top(hk).n>=0.8)){ const c=vale(learn.cli[k]); if(c) return c.id===curId?null:{c,motivo:`Esta descripción ya se asignó a ${c.name}.`} }
+    const ts=_tokG(concept)
+    for(const t of ts){ const s=nom.get(t); if(s&&s.size===1){ const c=vale([...s][0]); if(c) return c.id===curId?null:{c,motivo:`La descripción menciona a ${c.name}.`} } }
+    for(const t of ts){ const m=tok.get(t); if(!m) continue; const r=top(m); if(r.bc>=3&&r.bc/r.n>=0.85){ const c=vale(r.best); if(c) return c.id===curId?null:{c,motivo:`«${t[0].toUpperCase()+t.slice(1)}» aparece en ${r.bc} gastos de ${c.name}.`} } }
+    return null
+  }
+  const catAuto = concept => { const k=glosaKey(concept||''); const l=k&&learn.cat[k]; if(l&&CATS_GASTO.includes(l)) return l; const n=_normTxt(concept); for(const [re,cat] of _CAT_KW) if(re.test(n)) return cat; return null }
+  const catDe = r => r.category || catAuto(r.concept) || 'Otro'
+  const cliDe = r => r.cli || selectedClient
+  const projDe = r => r.cli ? r.proj : project
+
+  const updateRow = (id,patch) => setRows(p=>{ let n=p.map(r=>r.id===id?{...r,...patch}:r); const last=n[n.length-1]; if(last&&(last.concept||last.amount)) n=[...n,nuevaFila(last.date)]; return n })
+  const removeRow = id => setRows(p=>{ const n=p.filter(r=>r.id!==id); return n.length?n:[nuevaFila()] })
+  const moverFila = (r,c) => {
+    updateRow(r.id,{cli:c,proj:projDefault(c.id),resp:'mov',picking:false,pq:''})
+    const gk=glosaKey(r.concept||'')
+    if(gk&&!_esOfiCli(c)) supabase.from('learnings').select('value').eq('kind','gasto_proyecto').eq('key',`${c.id}::${gk}`).order('updated_at',{ascending:false}).limit(1).then(({data})=>{ const v=data&&data[0]?.value; if(v&&projectsOf(c.id).includes(v)) setRows(p=>p.map(x=>x.id===r.id&&x.cli?.id===c.id?{...x,proj:v}:x)) },()=>{})
   }
 
+  const llenas = rows.filter(r=>r.amount&&parseInt(r.amount)>0)
+  const avisoDe = r => {
+    if(r.resp) return null
+    const cli=cliDe(r); if(!cli) return null
+    const sug=sugerirCliente(r.concept,cli.id)
+    if(_esOfiCli(cli)&&CATS_DE_CLIENTE.has(catDe(r))) return {bloquea:true,sug,motivo:`${catDe(r)==='Notaria'?'Los gastos de notaría':catDe(r)==='CBR'?'Los certificados del CBR':`Los gastos de ${catDe(r)}`} suelen ser de un cliente.`}
+    return sug?{bloquea:false,sug,motivo:sug.motivo}:null
+  }
+  const faltaProyecto = !esOficina&&!project.trim()&&llenas.some(r=>!r.cli)
+  const faltaProyFila = llenas.some(r=>r.cli&&!_esOfiCli(r.cli)&&!r.proj)
+  const bloqueadas = llenas.filter(r=>avisoDe(r)?.bloquea).length
+  const puedeGuardar = !!selectedClient&&llenas.length>0&&!faltaProyecto&&!faltaProyFila&&!bloqueadas&&!saving
+
   const saveAll = async() => {
-    const valid = rows.filter(r=>r.amount&&parseInt(r.amount)>0)
-    if(!valid.length||!selectedClient||(!esOficina&&!project.trim())) return
+    if(!puedeGuardar) return
     setSaving(true)
     let count=0; const errores=[]
-    for(const r of valid) {
+    for(const r of llenas) {
+      const cli=cliDe(r); const cat=catDe(r); const proj=projDe(r)||null
+      const vta=r.cli?(sales||[]).find(s=>s.client_id===cli.id&&s.title===proj):null
+      const ent=r.cli?(vta?.entity_id||(clientEntities||[]).find(e=>e.client_id===cli.id)?.id||null):(entityId||null)
       try {
-        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subproject:esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:r.category==='Notaria'?true:!!r.paid_by_client})
+        await onSave({client_id:cli.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:cat,date:r.date||hoy,sale_id:null,entity_id:ent,project:proj,subproject:!r.cli&&esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,subcategory:cat==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:cat==='Notaria'?true:!!r.paid_by_client})
         count++
-      } catch(e){ errores.push(r.concept||r.category||'Fila') }
+        // Si se corrigió el cliente desde el aviso, la glosa queda aprendida para ese cliente.
+        if(r.resp==='mov'){ const gk=glosaKey(r.concept||''); if(gk) learnPut('gasto_cliente',gk,cli.id) }
+      } catch(e){ errores.push(r.concept||cat||'Fila') }
     }
     if(errores.length) appAlert(`${errores.length} gasto(s) no se guardaron: ${errores.join(', ')}`)
     setSaved(count)
-    setRows([{id:Date.now(),category:'CBR',concept:'',amount:'',date:hoy}])
+    setRows([nuevaFila()])
+    // Sin cliente fijo de origen, la siguiente carga parte eligiendo cliente (no arrastrar el anterior).
+    if(!preClient){ setSelectedClient(null); setQ('') }
     setSaving(false)
   }
 
-  const inS = {padding:'7px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:13,background:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none',width:'100%'}
+  const inS = {height:34,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13.5,background:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none',width:'100%',fontFamily:'inherit'}
+  const chip = (tone) => ({display:'inline-flex',alignItems:'center',height:24,padding:'0 12px',borderRadius:8,fontSize:12,fontWeight:700,whiteSpace:'nowrap',boxSizing:'border-box',cursor:'pointer',fontFamily:'inherit',
+    ...(tone==='aviso1'?{background:C.avisoMid,color:C.avisoText,border:`1px solid ${C.avisoLine}`}:tone==='aviso2'?{background:'transparent',color:C.avisoText,border:'1px solid transparent'}:{background:C.azulTenue,color:C.accent,border:'1px solid transparent'})})
+  const spark = <svg width='11' height='11' viewBox='0 0 24 24' fill={C.done} style={{flexShrink:0}} aria-label='Sugerido'><path d='M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9z'/></svg>
+  const diaInput = r => (
+    <label style={{position:'relative',flexShrink:0,cursor:'pointer'}} title='Cambiar fecha'>
+      {diaGrande(r.date)}
+      <input type='date' value={r.date||hoy} onChange={e=>e.target.value&&updateRow(r.id,{date:e.target.value})} onClick={e=>{ try{ e.currentTarget.showPicker?.() }catch(_){} }} style={{position:'absolute',inset:0,opacity:0,width:'100%',height:'100%',cursor:'pointer',border:'none',padding:0}}/>
+    </label>)
+  const focusSig = id => setTimeout(()=>{ const ids=rows.map(r=>r.id); const i=ids.indexOf(id); const el=document.querySelectorAll('[data-gconcept]')[i+1]; el&&el.focus() },30)
+
+  const filaCliente = r => {
+    const ms=r.pq.trim()?(clients||[]).filter(c=>_normTxt(c.name).includes(_normTxt(r.pq))).slice(0,6):[]
+    return (
+      <div style={{position:'relative',marginTop:8}}>
+        <Inp value={r.pq} onChange={e=>updateRow(r.id,{pq:e.target.value})} placeholder='Buscar cliente…' autoFocus style={{height:32,fontSize:13}}/>
+        {ms.length>0&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginTop:4,maxHeight:220,overflowY:'auto'}}>
+          {ms.map(c=><div key={c.id} onMouseDown={()=>moverFila(r,c)} style={{padding:'10px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}>{c.name}</div>)}
+        </div>}
+      </div>)
+  }
+  const aviso = (r,a) => {
+    const nombre=a.sug?.c?.name
+    const txtCorto=nombre?`¿Es de ${nombre}?`:'¿De qué cliente es?'
+    const txtLargo=a.bloquea?`${a.motivo}${a.sug?' '+a.sug.motivo:''} ${nombre?`¿Mover este gasto a ${nombre}?`:'¿De qué cliente es?'}`:`${a.motivo} ¿Mover este gasto a ${nombre}?`
+    return (
+      <div style={{marginTop:8,background:C.avisoBg,border:`1px solid ${C.avisoLine}`,borderRadius:8,padding:'7px 10px',color:C.avisoText,fontSize:12,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        <span style={{flex:'1 1 auto',minWidth:0}}>{isDesktop?txtLargo:txtCorto}</span>
+        <span style={{display:'flex',gap:6,marginLeft:'auto',flexWrap:'wrap'}}>
+          {a.sug&&<button type='button' onClick={()=>moverFila(r,a.sug.c)} style={chip('aviso1')}>{a.bloquea?'Sí':'Sí, mover'}</button>}
+          {a.bloquea&&<button type='button' onClick={()=>updateRow(r.id,{picking:true})} style={chip(a.sug?'aviso2':'aviso1')}>{a.sug?'Otro':'Elegir cliente'}</button>}
+          <button type='button' onClick={()=>updateRow(r.id,{resp:'no'})} style={chip('aviso2')}>{a.bloquea?'Oficina':'No'}</button>
+        </span>
+      </div>)
+  }
+  // Sub-línea de la fila: categoría · pagó el cliente · cliente/proyecto si se movió · eliminar
+  const selTxt = (value,label,opts,onChange,col,fw) => (
+    <label style={{position:'relative',display:'inline-flex',alignItems:'center',gap:3,color:col||C.muted,fontWeight:fw||400,cursor:'pointer',whiteSpace:'nowrap',maxWidth:200,overflow:'hidden'}}>
+      <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{label}</span><span style={{fontSize:9,opacity:.7}}>▾</span>
+      <select value={value} onChange={e=>onChange(e.target.value)} style={{position:'absolute',inset:0,opacity:0,width:'100%',cursor:'pointer',fontSize:16}}>{opts}</select>
+    </label>)
+  const subLinea = (r,ultima) => {
+    const cat=catDe(r)
+    const sel={border:'none',background:'transparent',color:C.muted,fontSize:12,padding:0,fontFamily:'inherit',cursor:'pointer',outline:'none',maxWidth:140}
+    return (
+      <div style={{display:'flex',alignItems:'center',columnGap:12,rowGap:4,flexWrap:'wrap',fontSize:12,color:C.muted,minWidth:0}}>
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}>
+          {selTxt(cat,cat,CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>),v=>updateRow(r.id,{category:v}))}
+          {!r.category&&catAuto(r.concept)&&spark}
+        </span>
+        {cat==='Otro'&&r.category==='Otro'&&<input list='gasto-subcats' value={r.subcategory||''} onChange={e=>updateRow(r.id,{subcategory:e.target.value})} placeholder='Subcategoría' style={{...sel,borderBottom:`1px solid ${C.border}`,width:110,color:C.text}}/>}
+        <button type='button' disabled={cat==='Notaria'} onClick={()=>updateRow(r.id,{paid_by_client:!r.paid_by_client})} title={cat==='Notaria'?'Notaría siempre se rinde al cliente':undefined} style={{...sel,color:(cat==='Notaria'||r.paid_by_client)?C.accent:C.done,fontWeight:(cat==='Notaria'||r.paid_by_client)?600:400,cursor:cat==='Notaria'?'default':'pointer'}}>{(cat==='Notaria'||r.paid_by_client)?'Pagó el cliente':'Pagó la oficina'}</button>
+        {r.cli&&<span style={{display:'inline-flex',alignItems:'center',gap:6,minWidth:0}}>
+          <button type='button' onClick={()=>updateRow(r.id,{cli:null,proj:'',resp:null})} title='Volver al cliente del lote' style={{...sel,color:C.accent,fontWeight:600,maxWidth:220,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>→ {r.cli.name}</button>
+          {!_esOfiCli(r.cli)&&selTxt(r.proj,r.proj||'Elegir proyecto',[<option key='' value=''>Elegir proyecto</option>,...projectsOf(r.cli.id).map(p=><option key={p} value={p}>{p}</option>)],v=>updateRow(r.id,{proj:v}),r.proj?C.muted:C.overdueText)}
+        </span>}
+        {!ultima&&<button type='button' onClick={()=>removeRow(r.id)} title='Eliminar' style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',padding:2,display:'flex',alignItems:'center'}}><TrashIcon/></button>}
+      </div>)
+  }
+  const montoInput = (r,w) => <input inputMode='numeric' value={r.amount?Number(r.amount).toLocaleString('es-CL'):''} onChange={e=>updateRow(r.id,{amount:e.target.value.replace(/\D/g,'')})} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); focusSig(r.id) } }} placeholder='$0' style={{...inS,width:w,flexShrink:0,textAlign:'right',fontWeight:700,fontVariantNumeric:'tabular-nums'}}/>
+  const glosaInput = r => <input data-gconcept='1' value={r.concept} onChange={e=>updateRow(r.id,{concept:e.target.value})} placeholder='Descripción' style={{...inS,flex:1,minWidth:0}}/>
+
+  const btnGuardar = (
+    <button type='button' disabled={!puedeGuardar} onClick={saveAll} title={bloqueadas?'Responde el aviso para guardar':faltaProyecto||faltaProyFila?'Falta el proyecto':undefined}
+      style={{width:isDesktop?220:'100%',height:38,borderRadius:8,border:`1px solid ${C.azulTenueOn}`,background:C.azulTenueOn,color:C.accent,fontSize:13,fontWeight:700,cursor:puedeGuardar?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeGuardar?1:.5,fontFamily:'inherit'}}>
+      {saving?<Spin/>:null}{saving?'Guardando...':llenas.length>1?`Guardar ${llenas.length} gastos`:'Guardar gasto'}
+    </button>)
 
   return (
     <>
-      {!sinCabecera&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,marginBottom:16}}>
-        <div style={{display:'flex',alignItems:'flex-start',gap:9,minWidth:0}}>
-          <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
-          <div style={{minWidth:0}}>
-            {selectedClient&&<div style={{fontSize:11,fontWeight:500,color:C.done,textTransform:'uppercase',letterSpacing:.5,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</div>}
-            <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
-          </div>
-        </div>
-        <button className='qt-close' onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:4,width:40,height:44,display:'flex',alignItems:'center',justifyContent:'center'}}>x</button>
+      {!sinCabecera&&<div style={{display:'flex',alignItems:'center',gap:9,marginBottom:14}}>
+        <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
       </div>}
+      {saved>0&&!selectedClient&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
       {!selectedClient&&(
-        <Fld label='Cliente'>
+        <>
           <div style={{position:'relative'}}>
-            <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' autoFocus/>
+            <FloatFld label='Cliente'><input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente' autoFocus={isDesktop} style={fInp}/></FloatFld>
             {matches.length>0&&(
-              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:220,overflowY:'auto'}}>
-                {matches.map(c=>(
-                  <div key={c.id} onMouseDown={()=>{setSelectedClient(c);setQ('')}} style={{padding:'10px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
-                    onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft}
-                    onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                    <div style={{fontWeight:500}}>{c.name}</div>
-                  </div>
-                ))}
+              <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:8,maxHeight:260,overflowY:'auto'}}>
+                {matches.map(c=><div key={c.id} onMouseDown={()=>{setSelectedClient(c);setQ('');setSaved(0)}} style={{padding:'10px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,fontWeight:500}}>{c.name}</div>)}
               </div>
             )}
           </div>
-        </Fld>
+          {recientes.length>0&&!q&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:4}}>
+            {recientes.map(c=><button key={c.id} type='button' onClick={()=>{setSelectedClient(c);setSaved(0)}} style={chip()}>{c.name}</button>)}
+          </div>}
+        </>
       )}
 
       {selectedClient&&(
         <>
-          {saved>0&&<div style={{fontSize:12,color:C.normal,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
-          {balance!=null&&balance<=0&&!(selectedClient.is_internal||/liberona\s+escala/i.test(selectedClient.name||''))&&(
-            <div style={{fontSize:12,color:C.soonText,background:C.soonBg,border:`1px solid #FAC775`,borderRadius:8,padding:'9px 11px',marginBottom:10,lineHeight:1.4}}>
-              Estás ingresando gastos a un cliente <b>Sin fondos</b>. Pídele a Erasmo o Cristóbal que soliciten fondos a <b>{selectedClient.name}</b>.
+          {saved>0&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
+          {balance!=null&&balance<=0&&!esOficina&&(
+            <div style={{fontSize:12,color:C.avisoText,background:C.avisoBg,border:`1px solid ${C.avisoLine}`,borderRadius:8,padding:'8px 11px',marginBottom:8,lineHeight:1.4}}>
+              <b>{selectedClient.name}</b> no tiene fondos. Pídele a Erasmo o Cristóbal que los soliciten.
             </div>
           )}
-
-          {rsList.length>0&&(
-            <div style={{marginBottom:12,position:'relative'}}>
-              <button type='button' onClick={()=>setShowRS(s=>!s)} onBlur={()=>setTimeout(()=>setShowRS(false),150)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#f5f7f9',color:C.text,fontSize:14,cursor:'pointer',textAlign:'left'}}>
-                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsList.find(e=>e.id===entityId)?.name||'Sin asignar'}</span>
-                <span style={{color:C.muted,transform:showRS?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0,marginLeft:8}}>▾</span>
-              </button>
-              {showRS&&(
-                <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
-                  {rsList.map(e=>(
-                    <div key={e.id} onMouseDown={()=>{setEntityId(e.id);setShowRS(false)}} style={{padding:'10px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,background:e.id===entityId?C.azulBg:'#fff',color:e.id===entityId?C.accent:C.text,fontWeight:e.id===entityId?600:400}}>{e.name}</div>
-                  ))}
+          <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',columnGap:10}}>
+            <FloatFld label='Cliente'>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,height:24}}>
+                <span style={{fontSize:14,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</span>
+                <button type='button' onClick={()=>setSelectedClient(null)} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',padding:0,fontFamily:'inherit'}}>Cambiar</button>
+              </div>
+            </FloatFld>
+            <FloatFld label={esOficina?'Proyecto (opcional)':'Proyecto'}>
+              {clientProjects.length===0||newProject?(
+                <input value={project} onChange={e=>{setProject(e.target.value);setProjAuto(false)}} placeholder='Nombre del proyecto' autoFocus={newProject} style={fInp}/>
+              ):(
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <select value={project} onChange={e=>{ if(e.target.value==='__nuevo'){ setNewProject(true); setProject('') } else setProject(e.target.value); setProjAuto(false) }} style={{...fInp,flex:1,minWidth:0,color:project?C.text:faltaProyecto?C.overdueText:C.done,cursor:'pointer',appearance:'none',WebkitAppearance:'none'}}>
+                    <option value=''>Elegir proyecto</option>
+                    {clientProjects.map(p=><option key={p} value={p}>{p}</option>)}
+                    <option value='__nuevo'>+ Nuevo proyecto</option>
+                  </select>
+                  {projAuto&&project&&spark}
                 </div>
               )}
-            </div>
-          )}
-
-          <div style={{marginBottom:12}}>
-            <Lbl>Proyecto{!esOficina&&<span style={{color:C.overdue}}> *</span>}</Lbl>
-            {clientProjects.length===0||newProject?(
-              <Inp value={project} onChange={e=>setProject(e.target.value)} placeholder='Nombre del proyecto...' autoFocus={newProject}/>
-            ):(
-              <div style={{position:'relative'}}>
-                <button type='button' onClick={()=>setShowProjects(s=>!s)} onBlur={()=>setTimeout(()=>setShowProjects(false),150)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#f5f7f9',color:project?C.text:C.muted,fontSize:14,cursor:'pointer',textAlign:'left'}}>
-                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{project||'Selecciona un proyecto'}</span>
-                  <span style={{color:C.muted,transform:showProjects?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0,marginLeft:8}}>▾</span>
-                </button>
-                {showProjects&&(
-                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
-                    {clientProjects.map((p,i)=>(
-                      <div key={i} onMouseDown={()=>{setProject(p);setShowProjects(false)}} style={{padding:'10px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,background:p===project?C.azulBg:'#fff',color:p===project?C.accent:C.text,fontWeight:p===project?600:400}}>{p}</div>
-                    ))}
-                    <div onMouseDown={()=>{setNewProject(true);setProject('');setShowProjects(false)}} style={{padding:'10px 12px',cursor:'pointer',fontSize:13,fontWeight:600,color:C.normal}}>+ Nuevo proyecto...</div>
-                  </div>
-                )}
-              </div>
-            )}
+            </FloatFld>
+            {rsList.length>1&&<FloatFld label='Razón social'>
+              <select value={entityId} onChange={e=>setEntityId(e.target.value)} style={{...fInp,cursor:'pointer',appearance:'none',WebkitAppearance:'none'}}>
+                {rsList.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </FloatFld>}
+            {esPermanente(ventaProj)&&<FloatFld label='Subproyecto'>
+              <input value={subproject} onChange={e=>setSubproject(e.target.value)} list='gasto-subproy' placeholder='Ej: Campos, Marcas…' style={fInp}/>
+              <datalist id='gasto-subproy'>{subsCli.map(x=><option key={x} value={x}/>)}</datalist>
+            </FloatFld>}
           </div>
-          {esPermanente(ventaProj)&&<div style={{marginBottom:12}}>
-            <Lbl>Subproyecto</Lbl>
-            <Inp value={subproject} onChange={e=>setSubproject(e.target.value)} list='gasto-subproy' placeholder='Ej: Campos, Marcas…'/>
-            <datalist id='gasto-subproy'>{subsCli.map(x=><option key={x} value={x}/>)}</datalist>
-          </div>}
 
-          {/* Filas de gasto: layout en 2 líneas */}
-          <div style={{marginBottom:8}}>
-            {rows.map((row,idx)=>(
-              <div key={row.id} style={{marginBottom:12,paddingBottom:12,borderBottom:idx<rows.length-1?`1px solid ${C.border}`:'none'}}>
-                {/* Línea 1: Tipo | Fecha | Pago Cliente | eliminar */}
-                <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
-                  <select value={row.category} onChange={e=>updateRow(row.id,'category',e.target.value)} style={{...inS,fontSize:12,flex:'0 1 100px',minWidth:0,width:'auto'}}>
-                    {CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11,flex:'1 1 120px',minWidth:0,width:'auto'}}/>
-                  <label title={row.category==='Notaria'?'Notaría siempre se rinde al cliente y no descuenta tu caja chica':undefined} style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto',cursor:row.category==='Notaria'?'default':'pointer',flexShrink:0}}>
-                    <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>Pago Cliente</span>
-                    <Switch on={row.category==='Notaria'||!!row.paid_by_client} disabled={row.category==='Notaria'} onToggle={()=>updateRow(row.id,'paid_by_client',!row.paid_by_client)}/>
-                  </label>
-                  <button onClick={()=>removeRow(row.id)} title='Eliminar fila' style={{background:'none',border:'none',cursor:'pointer',padding:4,flexShrink:0,display:'flex',alignItems:'center'}}><TrashIcon/></button>
-                </div>
-                {/* Línea 2: Descripción | Monto */}
-                <div style={{display:'flex',gap:6}}>
-                  <input value={row.concept} onChange={e=>updateRow(row.id,'concept',e.target.value)} placeholder='Descripción...' style={{...inS,flex:1}} onKeyDown={e=>handleKeyDown(e,row.id,'concept')}/>
-                  <input type='number' value={row.amount} onChange={e=>updateRow(row.id,'amount',e.target.value)} placeholder='0' style={{...inS,flex:'0 0 92px',textAlign:'right'}} onKeyDown={e=>handleKeyDown(e,row.id,'amount')} autoFocus={idx===rows.length-1&&idx>0}/>
-                </div>
-                {row.category==='Otro'&&(
-                  <input list='gasto-subcats' value={row.subcategory||''} onChange={e=>updateRow(row.id,'subcategory',e.target.value)} placeholder='Subcategoría (Otro)...' style={{...inS,fontSize:12,marginTop:6}}/>
-                )}
-              </div>
-            ))}
+          <div style={{border:`1px solid ${C.border}`,borderRadius:12,marginTop:4}}>
+            {rows.map((r,i)=>{ const ultima=i===rows.length-1&&!r.concept&&!r.amount; const a=!ultima&&r.amount?avisoDe(r):null
+              return (
+                <div key={r.id} style={{padding:'10px 12px',borderTop:i?`1px solid ${C.track}`:'none'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    {diaInput(r)}
+                    {glosaInput(r)}
+                    {montoInput(r,isDesktop?120:86)}
+                  </div>
+                  {!ultima&&<div style={{marginTop:6,marginLeft:54}}>{subLinea(r,ultima)}</div>}
+                  {a&&!r.picking&&<div style={{marginLeft:54}}>{aviso(r,a)}</div>}
+                  {r.picking&&<div style={{marginLeft:54}}>{filaCliente(r)}</div>}
+                </div>)
+            })}
             <datalist id='gasto-subcats'>
               {[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}
             </datalist>
           </div>
-
-          <button onClick={addRow} style={{width:'100%',padding:'8px',borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:12}}>+ Agregar fila</button>
-
-          {total>0&&(
-            <div style={{display:'flex',justifyContent:'space-between',padding:'8px 12px',borderRadius:8,background:C.bgSoft,marginBottom:12}}>
-              <span style={{fontSize:13,color:C.muted}}>Total {rows.filter(r=>r.amount).length} gasto{rows.filter(r=>r.amount).length!==1?'s':''}</span>
-              <span style={{fontSize:14,fontWeight:700,color:C.overdue}}>-{fmt(total)}</span>
-            </div>
-          )}
         </>
       )}
 
-      <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
-        {selectedClient&&<button disabled={saving||!rows.some(r=>r.amount&&parseInt(r.amount)>0)||(!esOficina&&!project.trim())} onClick={saveAll} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:C.surface,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!rows.some(r=>r.amount)||(!esOficina&&!project.trim()))?.6:1}}>
-          {saving?<Spin/>:null}{saving?'Guardando...':'Guardar todo'}
-        </button>}
-      </div>
+      {selectedClient&&<div style={{display:'flex',justifyContent:isDesktop?'flex-end':'stretch',marginTop:12}}>{btnGuardar}</div>}
     </>
   )
 }
@@ -24780,7 +24884,7 @@ function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendicion
     ? <DetalleGasto e={expense} expenses={expenses} clientEntities={clientEntities} sales={sales} onEditar={()=>setVer(false)}/>
     : tipo==='expenseEdit'
     ? <div className='qt-body'><ExpenseEditForm expense={expense} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={onSaveExpense} onClose={onBack} onDelete={onDeleteExpense} saving={saving} user={user} onAttachChange={onAttachChange}/></div>
-    : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} sinCabecera/></div>
+    : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} userName={user?.name} sinCabecera/></div>
   return (
     <div>
       <PageHeader origen={origen} onBack={onBack} titulo={titulo} ctx={client?.name||personaCaja||null}/>
