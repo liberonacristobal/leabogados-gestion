@@ -59,6 +59,11 @@ serve(async (req) => {
       scope = val;
     }
     const soloNombres: string[] | null = (scope && scope !== "on") ? scope.split(/[,;]+/).map(s=>s.trim()).filter(Boolean) : null;
+    // Frecuencia (config 'pendientes_semanal_frecuencia'): 'semanal' (default) o 'mensual' = solo el primer lunes del mes (el cron corre cada lunes).
+    const { data: fq } = await sb.from("learnings").select("value").eq("kind","config").eq("key","pendientes_semanal_frecuencia").order("updated_at",{ascending:false}).limit(1);
+    const mensual = String(fq?.[0]?.value||"").trim().toLowerCase()==="mensual";
+    const diaCL = Number(new Date().toLocaleDateString("en-CA",{ timeZone:"America/Santiago" }).slice(8,10));
+    if (esCron && !testTo && mensual && diaCL > 7) return new Response(JSON.stringify({ ok:true, skipped:"mensual: no es el primer lunes" }), { headers:{ "Content-Type":"application/json" } });
     // Bloques que se envían (config 'pendientes_semanal_bloques' o body.bloques): cobros,duplicados,proyecto,sinresp. Sin config = todos.
     let bloquesTxt = body.bloques ? String(body.bloques) : "";
     if (!bloquesTxt) { const { data: bq } = await sb.from("learnings").select("value").eq("kind","config").eq("key","pendientes_semanal_bloques").order("updated_at",{ascending:false}).limit(1); bloquesTxt = (bq?.[0]?.value || "").trim(); }
@@ -102,7 +107,9 @@ serve(async (req) => {
     const _dom = new Date(_lun); _dom.setUTCDate(_lun.getUTCDate()+6);
     const _mLun = _lun.toLocaleDateString("es-CL",{ month:"long", timeZone:"UTC" });
     const _mDom = _dom.toLocaleDateString("es-CL",{ month:"long", timeZone:"UTC" });
-    const rango = _mLun===_mDom
+    const rango = mensual
+      ? `${_hoy.toLocaleDateString("es-CL",{ month:"long", year:"numeric", timeZone:"UTC" }).replace(/^./,(c:string)=>c.toUpperCase())}`
+      : _mLun===_mDom
       ? `Semana del ${_lun.getUTCDate()} al ${_dom.getUTCDate()} de ${_mDom}`
       : `Semana del ${_lun.getUTCDate()} de ${_mLun} al ${_dom.getUTCDate()} de ${_mDom}`;
 
@@ -256,7 +263,7 @@ serve(async (req) => {
         nSP ? `<b style="color:${NV};font-weight:700;">${nSP} gasto${nSP!==1?"s":""} sin proyecto</b>` : "",
         nSr ? `<b style="color:${NV};font-weight:700;">${srCobros.length} depósito${srCobros.length!==1?"s":""} sin identificar</b>` : "",
       ].filter(Boolean);
-      const resumen = partes.length ? `${partes.join(" · ")}. Cada tema tiene su propia acción abajo.` : `Nada pendiente de tus clientes esta semana.`;
+      const resumen = partes.length ? `${partes.join(" · ")}. Cada tema tiene su propia acción abajo.` : `Nada pendiente de tus clientes ${mensual?"este mes":"esta semana"}.`;
       const cH = cobrosHtml(cobros), dH = dupHtml(folios, ants), pH = sinProyHtml(sinProy), sH = sinRespHtml(srCobros, srDup);
       return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;background:#ECEFF1;padding:22px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
