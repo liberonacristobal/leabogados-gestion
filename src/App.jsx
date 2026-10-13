@@ -15753,7 +15753,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   // Razones sociales (entidades) del cliente
   const entsOf = cid => (clientEntities||[]).filter(e=>e.client_id===cid)
   // Fila lista para cargar: con cliente, sin error y con razón social resuelta (auto si 1, elegida si varias)
-  const rowReady = r => (!!r.client_id || !!r.personal_de) && !r.error && (!!r.personal_de || entsOf(r.client_id).length<=1 || !!r.entity_id) && !proyDe(r).need
+  const rowReady = r => (!!r.client_id || !!r.personal_de) && !r.error && (!!r.personal_de || entsOf(r.client_id).length<=1 || !!r.entity_id)
 
   // ExcelJS (escritura con estilos/validación/comentarios — SheetJS community no los soporta) cargado por CDN al descargar
   const loadExcelJS = () => new Promise((resolve,reject)=>{
@@ -16391,7 +16391,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const setProyRow = (rowId, campo, valor) => { setTouched(true); setRows(p=>{ const src=p.find(x=>x.id===rowId); const k=src&&proyKey(src)
     return p.map(x=> x.id===rowId || (campo==='sale_id' && k && proyKey(x)===k && !x.sale_id && proyDe(x).need) ? {...x,[campo]:valor} : x) }) }
   const proyCampo = r => { const pr=proyDe(r); if(!pr.vs || pr.vs.length===1) return null
-    const st={width:'100%',maxWidth:420,padding:'6px 9px',borderRadius:8,border:`1px solid ${pr.need?C.overdue:C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box'}
+    const st={width:'100%',maxWidth:420,padding:'6px 9px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none',boxSizing:'border-box'}
     if(!pr.vs.length) return <input value={r.proyecto||''} onChange={e=>setProyRow(r.id,'proyecto',e.target.value)} placeholder='Trabajo (el cliente no tiene ventas)…' aria-label='Proyecto' style={st}/>
     const ord=pr.sug?[pr.sug,...pr.vs.filter(v=>v.id!==pr.sug.id)]:pr.vs
     return <select value={r.sale_id||pr.sale||''} onChange={e=>setProyRow(r.id,'sale_id',e.target.value||null)} aria-label='Proyecto' style={st}>
@@ -16731,14 +16731,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         <div style={{padding:'8px 13px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,background:C.bgPanel,borderBottom:`.5px solid ${C.track}`}}>Resultado de la carga</div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:C.greenBg,borderBottom:`.5px solid ${C.track}`}}>
           <div><div style={{fontSize:12,color:C.muted}}>Gastos que se cargan</div><div style={{fontSize:17,fontWeight:800,color:C.greenText,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{nCarga} · {fmt(totCarga)}</div></div>
-          <button disabled={guardando||!!sinProy.length||(!nCarga&&!cats.falta.length)} onClick={async()=>{ const nPend=cats.falta.length, nYa=cats.yacargadas.length; if(sinProy.length||(!nCarga&&!nPend)) return; const aCli=cliList.length
+          <button disabled={guardando||(!nCarga&&!cats.falta.length)} onClick={async()=>{ const nPend=cats.falta.length, nYa=cats.yacargadas.length; if(!nCarga&&!nPend) return; const aCli=cliList.length
             let msg = nCarga ? `Vas a cargar ${nCarga} gasto${nCarga!==1?'s':''}${aCli?` a ${aCli} cliente${aCli!==1?'s':''}`:''}.` : 'No hay gastos con cliente ni interno para cargar.'
             if(nPend) msg += ` Los ${nPend} sin cliente quedan pendientes por identificar (te aviso a los 3 días).`
             if(nYa) msg += ` ${nYa} ya está${nYa!==1?'n':''} en la app y se omite${nYa!==1?'n':''}.`
             msg += ' ¿Confirmas?'
-            if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:10,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando&&!sinProy.length?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando&&!sinProy.length?1:.5}}>{guardando?'…':'Cargar'}</button>
+            if(await appConfirm(msg)) guardar(false,[...cargarRows,...cats.falta]) }} style={{fontSize:13,fontWeight:800,border:'none',borderRadius:10,background:C.normal,color:'#fff',padding:'11px 20px',cursor:(nCarga||cats.falta.length)&&!guardando?'pointer':'default',opacity:(nCarga||cats.falta.length)&&!guardando?1:.5}}>{guardando?'…':'Cargar'}</button>
         </div>
-        {sinProy.length>0&&<div onClick={()=>setCatOpen(new Set(['listas']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',fontSize:12,background:C.overdueBg,color:C.overdueText,cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><b>Falta el proyecto en {sinProy.length} OT</b><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(sinProy.reduce((a,r)=>a+(r.monto||0),0))} ›</span></div>}
+        {sinProy.length>0&&<div onClick={()=>setCatOpen(new Set(['listas']))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',fontSize:12,color:C.muted,cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><span>{sinProy.length} OT sin proyecto · se cargan igual</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(sinProy.reduce((a,r)=>a+(r.monto||0),0))} ›</span></div>}
         <div style={{fontSize:11,color:C.muted,padding:'8px 13px 0',lineHeight:1.5}}>Tus asignaciones se guardan al Cargar; lo que la app aprende (RUT y clientes) queda para siempre.</div>
         <div style={{fontSize:11,color:C.done,padding:'2px 13px 8px',lineHeight:1.5,borderBottom:`.5px solid ${C.track}`}}>Si algo sale mal, puedes deshacer toda la carga con un clic.</div>
         <div onClick={()=>setRcOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',fontSize:13,cursor:'pointer'}}><span style={{color:C.muted}}>Cuánto debe cada cliente <span style={{fontSize:10,color:C.done}}>· de más a menos</span></span><span style={{display:'flex',alignItems:'center',gap:7}}><b>{cliList.length} cliente{cliList.length!==1?'s':''}</b><span style={{color:C.done,transform:rcOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span></span></div>
@@ -16862,10 +16862,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 
   const guardar = async(incluirTodo=false, explicit=null) => {
     const target0 = explicit || (incluirTodo ? (rows||[]) : listas)
-    if(target0.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente, razón social y proyecto resueltos, sin errores).'); return }
-    // Regla: ningún gasto de cliente sin proyecto (rinde cuentas). Se guarda el proyecto resuelto y se aprende el elegido por sociedad.
-    const faltaP = target0.filter(r=>!r.error&&proyDe(r).need)
-    if(faltaP.length){ appAlert(`Falta el proyecto en ${faltaP.length} ${faltaP.length===1?'gasto':'gastos'} con cliente. Elígelo en cada fila antes de cargar.`); return }
+    if(target0.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
+    // Proyecto: se guarda el resuelto y se aprende el elegido por sociedad. Nunca frena la carga: lo que quede sin proyecto se asigna en el gasto.
     const vistosP=new Set()
     const target = target0.map(r=>{ const pr=proyDe(r)
       if(r.sale_id&&!DEMO){ const k=proyKey(r); if(k&&!vistosP.has(k)&&String(notaProyL[k]||'')!==String(r.sale_id)){ vistosP.add(k); learnPut('notaria_proyecto',k,r.sale_id) } }
