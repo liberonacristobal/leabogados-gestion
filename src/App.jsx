@@ -18971,20 +18971,17 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       </div>
     </FlujoPagina>
   })()
-  // Excel del detalle de gastos y fondos de un cliente. Saldo = fgCliente (fuente única); la columna "Cuenta en saldo" explica qué no descuenta.
-  const descargarGastosCliente = async(c) => {
-    try{
-      const XLSX=await loadXLSXStyle()
-      const movs=(expenses||[]).filter(e=>!e.deleted_at&&String(e.client_id)===String(c.id)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
-      const rows=[['Fecha','Tipo','Categoría','Concepto','Razón social','OT','Monto','Cuenta en saldo','Estado']]
-      movs.forEach(e=>{ const rs=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id))?.name||''; const fondo=e.type==='fondo'
-        rows.push([e.date?fmtFechaDMY(e.date):'', fondo?'Fondo':'Gasto', e.category||'', [e.concept,e.subconcept].filter(Boolean).join(' — '), rs, e.ot_number||'', (fondo?1:-1)*(e.amount||0), (!fondo&&e.no_descuenta_saldo)?'No':'Sí', esRendido(e)?'Rendido':'']) })
-      const bal=fgCliente(expenses,c.id)
-      rows.push([]); rows.push(['','','','Fondos','','',bal.fondos,'','']); rows.push(['','','','Gastos que descuentan','','',-bal.gastos,'','']); rows.push(['','','','Saldo del cliente','','',bal.saldo,'',''])
-      const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:11},{wch:7},{wch:14},{wch:48},{wch:30},{wch:11},{wch:13},{wch:14},{wch:10}]
-      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Gastos')
-      XLSX.writeFile(wb,`Gastos ${String(c.name||'cliente').replace(/[\\/:*?"<>|]/g,'')} ${new Date().toISOString().slice(0,10)}.xlsx`)
-    }catch(e){ appAlert('No se pudo generar el Excel: '+(e.message||e)) }
+  // Acciones de la ficha del cliente: tres botones iguales (32 px) — Fondo · Gasto (principal) · Rendir n (solo si hay por rendir).
+  // Escritorio: van en la línea del nombre y nunca se encogen ni saltan de línea (lo que cede es el nombre, con "…"). Móvil: fila a todo el ancho.
+  const accionesCli = (full) => {
+    if(!selectedClient||esOficina(selectedClient.id)) return null
+    const por=gastosPorRendir(selectedClient.id), n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0)
+    const b=(pri)=>({height:32,padding:full?'0 6px':'0 14px',minWidth:full?0:96,flex:full?1:'0 0 auto',borderRadius:9,fontSize:13,fontWeight:600,fontFamily:'inherit',cursor:'pointer',whiteSpace:'nowrap',boxSizing:'border-box',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,border:`1px solid ${pri?C.accent:C.border}`,background:pri?C.accent:C.surface,color:pri?'#fff':C.accent})
+    return (<div style={{display:'flex',gap:8,alignItems:'center',flexShrink:0,...(full?{marginTop:8}:{})}}>
+      <button type='button' onClick={()=>onIrConciliacion?onIrConciliacion():onAddFondo()} title='Los fondos entran desde la conciliación bancaria' style={b(false)}>+ Fondo</button>
+      <button type='button' onClick={()=>onAdd(selectedClient)} style={b(true)}>+ Gasto</button>
+      {n>0&&<button type='button' onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} title={`Por rendir al cliente: ${n} gasto${n!==1?'s':''} · ${fmt(monto)}`} style={b(false)}>Rendir <span style={{color:C.done}}>{n}</span></button>}
+    </div>)
   }
   // Lista de clientes de Gastos (buscador · Por cobrar/A favor/Todos · por abogado · orden). FUENTE ÚNICA: pantalla "Buscar clientes"
   // y columna izquierda en escritorio cuando hay un cliente abierto (lista + detalle lado a lado; arrastrar un gasto a un cliente lo reasigna).
@@ -19069,8 +19066,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const body = (
     <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:isDesktop&&selectedClient?'nowrap':'wrap',gap:isDesktop&&selectedClient?16:8}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
             {(selectedClient||showOrphans||showNotaria||showHistorial||!hubOpen)&&(
               <button onClick={()=>{
                 // Cada flecha devuelve a la vista INMEDIATAMENTE anterior (no al hub salvo que la anterior sea el hub).
@@ -19088,9 +19085,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 setHubOpen(true)                                                                              // Clientes (default) → hub
               }} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
             )}
-            <div>
-              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
+            <div style={{minWidth:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
+                <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,...(isDesktop&&selectedClient?{minWidth:0,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}:{})}}>
                   {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Pagos realizados':notaTab==='pend'?'Deuda':notaTab==='nonuestras'?'No son nuestras':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ver ficha ›</span>}
@@ -19111,9 +19108,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{onOpenClientFicha&&!esOficina(selectedClient.id)?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(selectedClient.id)}} title='Ver ficha del cliente' style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>{rsDisplay(selEnts[0].name)}</span>:rsDisplay(selEnts[0].name)}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
             </div>
           </div>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            {/* Rendir: ahora es un aviso con su botón dentro del detalle del cliente (ver 'Por rendir al cliente') */}
-          </div>
+          {isDesktop&&selectedClient&&accionesCli(false)}
         </div>
 
         {/* Menú Cargar (sin notaría — la notaría tiene su propio botón) */}
@@ -19145,28 +19140,24 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               {onOpenCostosOfi&&<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,whiteSpace:'nowrap'}}>Abrir ›</span>}
             </div>)
           }
-          // Ficha del cliente: el SALDO es el protagonista; debajo Fondos y Gastos (tiles suaves que filtran la lista) y luego las acciones.
+          // Ficha del cliente: el SALDO es el protagonista; Fondos y Gastos al lado (escritorio, una franja 2:1:1) o debajo (móvil).
+          // Tarjetas = rótulo + cifra, sin botones dentro; Fondos/Gastos filtran la lista. Color coherente: fondo tenue + texto del mismo tono, más oscuro.
           const bal=rb.total, neg=bal.saldo<0
-          const movsCli=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&!e.deleted_at&&cuentaEnSaldo(e))
-          const nF=movsCli.filter(e=>e.type==='fondo').length, nG=movsCli.filter(e=>e.type!=='fondo'&&!e.no_descuenta_saldo).length
-          const tile=(k,lbl,val,sub,bg,col,big)=>{ const on=gastoCatF===k; return (
-            <button type='button' onClick={()=>setGastoCatF(k)} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:(bg===C.surface?C.border:'transparent')}`,borderRadius:12,padding:big?'13px 16px':'9px 13px',cursor:'pointer',fontFamily:'inherit',minWidth:0,...(big?{gridColumn:'1 / -1',display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:10,flexWrap:'wrap'}:{})}}>
+          const tile=(k,lbl,val,bg,col,big,note)=>{ const on=!!k&&gastoCatF===k; return (
+            <button type='button' onClick={()=>setGastoCatF(k)} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:'transparent'}`,borderRadius:12,padding:big?'11px 15px':'11px 14px',cursor:'pointer',fontFamily:'inherit',minWidth:0,...(big?{display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:10,...(isDesktop?{}:{gridColumn:'1 / -1'})}:{})}}>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:big?11:10,fontWeight:600,letterSpacing:.4,textTransform:'uppercase',opacity:.9}}>{lbl}</div>
-                <div style={{fontSize:big?(isDesktop?32:28):18,fontWeight:700,letterSpacing:big?-.8:-.3,lineHeight:1.15,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{val}</div>
+                <div style={{fontSize:10.5,fontWeight:700,letterSpacing:.6,textTransform:'uppercase',opacity:.85}}>{lbl}</div>
+                <div style={{fontSize:big?(isDesktop?30:28):(isDesktop?19:16),fontWeight:700,letterSpacing:big?-.8:-.4,lineHeight:1.15,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{val}</div>
               </div>
-              <div style={{fontSize:big?12.5:11,opacity:.8,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+              {note&&<div style={{fontSize:11.5,opacity:.8,whiteSpace:'nowrap'}}>{note}</div>}
             </button>) }
           return (<div style={{marginBottom:10}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-              {tile('','Saldo',fmtSaldoG(bal.saldo),`${neg?'por cobrar':bal.saldo>0?'a favor':'al día'} · ${movsCli.length} movimientos`,neg?C.overdueBg:C.azulBg,neg?C.overdueText:C.accent,true)}
-              {tile('Fondo','Fondos',fmt(bal.fondos),`${nF} fondo${nF!==1?'s':''}`,C.greenBg,C.greenText)}
-              {tile('__gastos__','Gastos',fmt(bal.gastos),`${nG} gasto${nG!==1?'s':''}`,C.surface,C.muted)}
+            <div style={{display:'grid',gridTemplateColumns:isDesktop?'2fr 1fr 1fr':'1fr 1fr',gap:isDesktop?10:8}}>
+              {tile('','Saldo',fmtSaldoG(bal.saldo),neg?C.overdueBg:C.azulBg,neg?C.overdueText:C.accent,true,neg?'por cobrar':bal.saldo>0?'a favor':'al día')}
+              {tile('Fondo','Fondos',fmt(bal.fondos),C.greenBg,C.greenText)}
+              {tile('__gastos__','Gastos',fmt(bal.gastos),C.border,C.accent)}
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              <button type='button' onClick={()=>onIrConciliacion?onIrConciliacion():onAddFondo()} title='Los fondos entran desde la conciliación bancaria' style={{height:38,borderRadius:11,border:'none',background:C.greenBg,color:C.greenText,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>+ Cargar fondo</button>
-              <button type='button' onClick={()=>onAdd(selectedClient)} style={{height:38,borderRadius:11,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>+ Cargar gasto</button>
-            </div>
+            {!isDesktop&&accionesCli(true)}
           </div>)
         })()}
 
@@ -20271,11 +20262,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       {/* Vista cliente: Saldo arriba, Fondos recibidos y Gastos en secciones. La RS es etiqueta de cada gasto, no agrupación — el fondo cubre todas las razones sociales. */}
       {selectedClient&&(
         <div style={{padding:'4px 20px 130px'}}>
-          {!esOficina(selectedClient.id)&&(()=>{ const por=gastosPorRendir(selectedClient.id); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}
-            return n>0
-              ? <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,borderRadius:10,padding:'7px 8px 7px 13px',marginBottom:10}}><span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?`Por rendir al cliente · ${n} gasto${n!==1?'s':''}`:`Por rendir · ${n}`}</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(monto)}</b><ActBtn variant='success' onClick={open}>Rendir</ActBtn></div>
-              : <div onClick={open} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.muted,marginBottom:10,cursor:'pointer'}}><SIcon n='check' s={13} c={C.greenText}/>Al día · nada por rendir</div> })()}
-          <Buscador value={qMovG} onChange={setQMovG} placeholder='Buscar gasto, OT o monto…' style={{marginBottom:8}} right={<>{!esOficina(selectedClient.id)&&<button onClick={()=>descargarGastosCliente(selectedClient)} title='Descargar el detalle del cliente en Excel' style={{display:'inline-flex',alignItems:'center',gap:5,minHeight:30,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Excel</button>}</>}/>
+          <Buscador value={qMovG} onChange={setQMovG} placeholder='Buscar gasto, OT o monto…' style={{marginBottom:8}}/>
           {gastoToolbar()}
           {(()=>{
             const _qm=_normTxt(qMovG.trim()), _qd=qMovG.replace(/\D/g,'')
@@ -20482,12 +20469,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   }
   // Notaría / Historial / Sin cliente: son SECCIONES sin lista maestra → van a todo el ancho (sin el 2-panel de clientes).
   if(isDesktop && (showNotaria||showHistorial||showOrphans||showGastosOficina)) return <div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{body}</div>
-  // Escritorio con un cliente abierto desde la lista: lista a la izquierda (fija) + detalle a la derecha, sin salir de la lista (render aprobado 2026-10-08).
-  if(isDesktop && selectedClient && showBuscarClientes) return (
-    <div style={{display:'flex',alignItems:'flex-start',gap:4,height:'calc(100vh - 66px)',background:C.bg}}>
-      <aside style={{width:370,flexShrink:0,height:'100%',overflowY:'auto',padding:'20px 4px 40px 20px',boxSizing:'border-box'}}>{renderListaClientes()}</aside>
-      <div style={{flex:1,minWidth:0,height:'100%',overflowY:'auto'}}>{body}</div>
-    </div>)
+  // Escritorio con un cliente abierto: la ficha va a todo el ancho, sin la lista de clientes al lado (pedido 2026-10-13); "← Clientes" vuelve a la lista.
   return body
 }
 
