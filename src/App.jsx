@@ -1117,6 +1117,22 @@ function fgCliente(expenses, clientId){
   return {fondos, gastos, saldo:fondos-gastos}
 }
 const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
+// Check mínimo en SVG (marcas sutiles: sello de OT pagada, rendido). Nunca el carácter ✓.
+const CheckMini = ({s=9,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||'currentColor'} strokeWidth='3.2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}} aria-hidden='true'><polyline points='20 6 9 17 4 12'/></svg>
+// OT de notaría con su sello (sutil): check verde chico si ya se le pagó a la notaría; sin sello = por pagar. Una sola marca para la ficha de Gastos y la de Clientes.
+const otConSello = (e, onClick) => { if(!e?.ot_number) return null; const ot=String(e.ot_number).toUpperCase().startsWith('OT')?String(e.ot_number):`OT ${e.ot_number}`; const pag=!!e.notaria_liquidado_at
+  return <span onClick={onClick?(ev=>{ev.stopPropagation();onClick(e)}):undefined} title={pag?`Pagada a la notaría el ${fmtFechaDMY(e.notaria_liquidado_at)}`:'Aún no pagada a la notaría'} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,color:C.muted,cursor:onClick?'pointer':'default',whiteSpace:'nowrap'}}>{pag&&<span style={{width:13,height:13,borderRadius:'50%',border:`1.3px solid ${C.greenText}`,display:'inline-flex',alignItems:'center',justifyContent:'center',boxSizing:'border-box'}}><CheckMini s={8} c={C.greenText}/></span>}{ot}</span> }
+// Recorrido de un gasto o fondo (FUENTE ÚNICA): de dónde vino o a dónde fue la plata — banco, liquidación de notaría, caja chica, rendición al
+// cliente, fondo que lo cubre. Lo usan la ficha de Clientes (Fondos y gastos) y el detalle del gasto. Cada paso trae su referencia para enlazar.
+function recorridoGasto(e,{conc=[],movById={},expenses=[]}={}){
+  const fondo=e?.type==='fondo', pasos=[]
+  ;(conc||[]).filter(x=>String(x.gasto_id)===String(e.id)).forEach(c=>{ const mv=movById[c.movimiento_id]; pasos.push({k:'b'+c.movimiento_id, t:fondo?'Depósito del banco':'Pagado desde el banco', fecha:mv?.fecha||null, d:[fmt(c.monto_aplicado), mv?.nombre_contraparte||null].filter(Boolean).join(' · '), mov:c.movimiento_id}) })
+  if(e.notaria_liquidado_at) pasos.push({k:'n', t:'Pagado a la notaría', fecha:e.notaria_liquidado_at, d:'liquidación de notaría', render:e.notaria_render_id||null})
+  if(e.rendered_at) pasos.push({k:'cc', t:'Liquidado en caja chica', fecha:e.rendered_at, d:e.created_by||'', render:e.render_id||null})
+  if(e.client_rendered_at) pasos.push({k:'r', t:'Rendido al cliente', fecha:e.client_rendered_at, d:'', render:e.client_render_id||null})
+  if(e.reembolso_fondo_id){ const f=(expenses||[]).find(x=>String(x.id)===String(e.reembolso_fondo_id)); pasos.push({k:'f', t:'Cubierto con el fondo', fecha:f?.date||null, d:f?fmt(f.amount):'', fondo:f?.id||null}) }
+  return pasos
+}
 // Aporte de UN movimiento al saldo del cliente (fondo suma; gasto resta salvo histórico). FUENTE ÚNICA de la fórmula neta
 // que antes se repetía inline en el Dashboard y la lista de Clientes. Equivale a sumar esto = fgCliente().saldo.
 const saldoDelta = e => !cuentaEnSaldo(e) ? 0 : e.type==='fondo' ? (e.amount||0) : (e.no_descuenta_saldo ? 0 : -(e.amount||0))
@@ -18373,20 +18389,19 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:catBg,color:C.muted,fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
-              {movExp===e.id&&!isFondo&&e.ot_number&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:C.azulBg,color:C.azulInfo,fontWeight:700}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>}
+              {!isFondo&&otConSello(e, onEdit?()=>onEdit(e):null)}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.normal,fontWeight:600}}>{isDev?'Devolución':'Fondo'}</span>}
-              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10.5,padding:0,background:'none',color:C.done,fontWeight:500,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}>✓ Rendido {fmtFechaDMY(e.client_rendered_at)} <span style={{fontSize:10,lineHeight:1,opacity:.7}}>✕</span></button>}
-              {!isFondo&&e.notaria_liquidado_at&&(isAdmin&&!e.notaria_render_id
-                ? <button onClick={ev=>{ev.stopPropagation();marcarNotariaPagado(e,ev)}} title='Pagado a la notaría · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:'#FAECE7',color:C.coralText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>✓ Notaría <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>
-                : <span style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:'#FAECE7',color:C.coralText,fontWeight:600}}>✓ Notaría</span>)}
-              {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):appAlert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:C.azulBg,color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>✓ Caja chica</button>}
+              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10.5,padding:0,background:'none',color:C.done,fontWeight:500,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}><CheckMini s={10}/>Rendido {fmtFechaDMY(e.client_rendered_at)} <span style={{fontSize:10,lineHeight:1,opacity:.7}}>✕</span></button>}
+              {/* Detalle al desplegar (la fila queda limpia): pagado a la notaría manual (deshacer) y liquidación de caja chica. */}
+              {movExp===e.id&&!isFondo&&e.notaria_liquidado_at&&isAdmin&&!e.notaria_render_id&&<button onClick={ev=>{ev.stopPropagation();marcarNotariaPagado(e,ev)}} title='Marcado a mano como pagado a la notaría · tocar para deshacer' style={{fontSize:10.5,padding:0,background:'none',color:C.done,fontWeight:500,border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Pagada a la notaría {fmtFechaDMY(e.notaria_liquidado_at)} <span style={{opacity:.7}}>✕</span></button>}
+              {movExp===e.id&&!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):appAlert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10.5,padding:0,background:'none',color:C.accent,fontWeight:600,border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Liquidación de caja chica ›</button>}
               {movExp===e.id&&e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:C.azulBg,color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
               {movExp===e.id&&isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:C.bgWarm,color:C.grisText,fontWeight:600}}>Carga masiva</span>}
-              {!isFondo&&e.pagado_cliente_at
+              {movExp===e.id&&(!isFondo&&e.pagado_cliente_at
                 ? (isAdmin
                   ? <button onClick={ev=>{ev.stopPropagation();marcarEstado(e,null)}} title='Pagado · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:e.no_descuenta_saldo?C.bgWarm:C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>
                   : <span style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:e.no_descuenta_saldo?C.bgWarm:C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado</span>)
-                : !isFondo&&e.no_descuenta_saldo&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:C.bgWarm,color:C.grisText,fontWeight:600}}>Gasto histórico</span>}
+                : !isFondo&&e.no_descuenta_saldo&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:C.bgWarm,color:C.grisText,fontWeight:600}}>Gasto histórico</span>)}
               {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:11,fontWeight:700,color:C.muted}}>Personal · <b style={{color:pc.color,fontWeight:700}}>{e.personal_de}</b></span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
@@ -22013,9 +22028,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer'}}>
             {(()=>{ const dp=String(e.date||'').slice(0,10).split('-'); const dia=dp.length>=3?dp[2]:'—'; const sub=dp.length>=3?`${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{dia}</div><div style={{fontSize:9,color:C.done}}>{sub}</div></div> })()}
             <div style={{flex:1,minWidth:0}}>
-              {(()=>{ const ot=e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):null
-                const ep = signo<0 ? (e.notaria_liquidado_at?{l:'Notaría',bg:'#FAECE7',c:C.coralText}:e.rendered_at?{l:'Caja chica',bg:C.azulBg,c:C.accent}:conc.find(x=>String(x.gasto_id)===String(e.id)&&x.tipo_destino==='gasto')?{l:'Pagado',bg:C.greenBg,c:C.greenText}:null) : null
-                return (signo>0||e.category||ot||ep)?<div style={{display:'flex',gap:5,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:9,padding:'1px 7px',borderRadius:4,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.greenText,fontWeight:600}}>{isDev?'Devolución':'Fondo'}</span>:(e.category&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:4,background:C.bgWarm,color:C.muted,fontWeight:600}}>{e.category}</span>)}{ot&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:C.azulBg,color:C.azulInfo,fontWeight:700}}>{ot}</span>}{ep&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:ep.bg,color:ep.c,fontWeight:700}}>✓ {ep.l}</span>}</div>:null })()}
+              {/* Fila limpia (regla sutil): tipo o categoría + OT con su sello de pagada; caja chica, banco y rendición quedan en el detalle (recorridoGasto). */}
+              {(signo>0||e.category||e.ot_number||e.client_rendered_at)?<div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:9,padding:'1px 7px',borderRadius:4,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.greenText,fontWeight:600}}>{isDev?'Devolución':'Fondo'}</span>:(e.category&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:4,background:C.bgWarm,color:C.muted,fontWeight:600}}>{e.category}</span>)}{signo<0&&otConSello(e)}{signo<0&&e.client_rendered_at&&<span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,color:C.done,whiteSpace:'nowrap'}}><CheckMini s={10}/>Rendido {fmtFechaDMY(e.client_rendered_at)}</span>}</div>:null}
               <div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo'):'Gasto')}</div>
             </div>
             <div style={{fontSize:13,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:isDev?C.muted:col,flexShrink:0}}>{isDev?'−'+fmt(Math.abs(e.amount)):(signo>0?'+':'−')+fmt(e.amount)}</div>
@@ -22052,12 +22066,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
               {onAsociarTrabajo&&corrG?.id!==e.id&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} otros={sinProy.filter(x=>x.type===e.type)} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} onAsignar={asignar}/>}
               {((e.entity_id&&!onAsociarTrabajo)||!onAsociarTrabajo||(!e.entity_id&&!(clientEntities||[]).length))&&<div style={{color:e.entity_id?C.muted:C.overdue,marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div>}</div>
             {/* Pago / depósito: de dónde viene o a dónde fue la plata (banco, notaría, caja chica, rendición, fondo que lo cubre). Cada enlace lleva al dato. */}
-            {(()=>{ const links=[]
-              conc.filter(x=>String(x.gasto_id)===String(e.id)).forEach(c=>{ const mv=movById[c.movimiento_id]; links.push({k:'b'+c.movimiento_id, t:signo>0?'Depósito del banco':'Pagado desde el banco', d:[mv?fmtFechaDMY(mv.fecha):null, fmt(c.monto_aplicado), mv?.nombre_contraparte||null].filter(Boolean).join(' · '), on:onOpenConciliacion?()=>onOpenConciliacion(c.movimiento_id):null}) })
-              if(e.notaria_liquidado_at) links.push({k:'n', t:'Pagado a la notaría', d:`liquidación del ${fmtFechaDMY(e.notaria_liquidado_at)}`})
-              if(e.rendered_at) links.push({k:'cc', t:'Caja chica', d:`liquidada el ${fmtFechaDMY(e.rendered_at)}${e.created_by?` · ${e.created_by}`:''}`})
-              if(e.client_rendered_at) links.push({k:'r', t:'Rendido al cliente', d:fmtFechaDMY(e.client_rendered_at)})
-              if(e.reembolso_fondo_id){ const f=expenses.find(x=>String(x.id)===String(e.reembolso_fondo_id)); links.push({k:'f', t:'Cubierto con el fondo', d:f?`${fmtFechaDMY(f.date)} · ${fmt(f.amount)}`:'', on:f?()=>setDetG(f.id):null}) }
+            {(()=>{ const links=recorridoGasto(e,{conc,movById,expenses}).map(p=>({k:p.k, t:p.t, d:[p.fecha?fmtFechaDMY(p.fecha):null, p.d].filter(Boolean).join(' · '), on:p.mov&&onOpenConciliacion?()=>onOpenConciliacion(p.mov):p.fondo?()=>setDetG(p.fondo):null}))
               if(!links.length) return null
               return <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}>
                 <span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>{signo>0?'Depósito':'Pago'}</span>
@@ -24638,16 +24647,68 @@ function EntregarCajaForm({persona,monto,personas=[],me,saving,onSave,onClose}){
     </div>
   )
 }
+// Detalle de UN gasto/fondo (se ve al entrar; "Editar" abre el formulario de siempre). Recorrido = recorridoGasto (fuente única, la misma de la
+// ficha de Clientes) + lo que falta (pagar a la notaría, rendir). Regla sutil: texto gris, un solo color de estado (verde = hecho).
+function DetalleGasto({e, expenses, clientEntities, sales, onEditar}){
+  const isDesktop=useIsDesktop()
+  const [conc,setConc]=useState([]); const [movById,setMovById]=useState({})
+  useEffect(()=>{ let vivo=true; if(!e?.id) return
+    supabase.from('conciliacion').select('id,movimiento_id,gasto_id,monto_aplicado,tipo_destino').eq('gasto_id',e.id).then(async({data}={})=>{ if(!vivo) return; const cs=data||[]; setConc(cs)
+      const ids=[...new Set(cs.map(c=>c.movimiento_id).filter(Boolean))]; if(!ids.length) return
+      const {data:ms}=await supabase.from('cartola_movimientos').select('id,fecha,nombre_contraparte,monto,rol_cuenta').in('id',ids); if(vivo) setMovById(Object.fromEntries((ms||[]).map(m=>[m.id,m]))) })
+    return ()=>{ vivo=false } },[e?.id])
+  if(!e) return null
+  const fondo=e.type==='fondo'
+  const quien=e.created_by&&!/@|^bulk/i.test(e.created_by)?e.created_by:null
+  const reg={k:'reg', t:fondo?'Recibido':'Registrado', fecha:fondo?e.date:(e.created_at||'').slice(0,10), d:[quien, e.bulk_import_id?'carga masiva':null].filter(Boolean).join(' · ')}
+  const falta=[]
+  if(!fondo&&e.category==='Notaria'&&!e.notaria_liquidado_at) falta.push({k:'pn', t:'Pagado a la notaría', pend:true})
+  if(!fondo&&!e.client_rendered_at&&!e.no_descuenta_saldo) falta.push({k:'pr', t:'Rendido al cliente', pend:true})
+  const pasos=[reg,...recorridoGasto(e,{conc,movById,expenses}),...falta]
+  const venta=(sales||[]).find(x=>String(x.id)===String(e.sale_id)), rs=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id))
+  const lbl={fontSize:10,fontWeight:600,letterSpacing:.5,textTransform:'uppercase',color:C.done,margin:'18px 0 8px'}
+  const fila=(k,v,col)=><><span style={{color:C.done}}>{k}</span><span style={{color:col||C.text,fontWeight:500,minWidth:0}}>{v}</span></>
+  return (
+    <div style={{padding:isDesktop?'20px 22px':'16px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:isDesktop?18:16,fontWeight:600,color:C.text,letterSpacing:-.3}}>{e.concept||(fondo?'Fondo':'Gasto')}</div>
+          <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',fontSize:12,color:C.muted,marginTop:3}}>{[fondo?'Fondo':(e.category||'Gasto'), e.date?fmtFechaDMY(e.date):null].filter(Boolean).join(' · ')}{!fondo&&otConSello(e)}</div>
+        </div>
+        <div style={{fontSize:isDesktop?24:20,fontWeight:700,color:fondo?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',textDecoration:e.no_descuenta_saldo?'line-through':'none'}}>{fondo?'+':'−'}{fmt(Math.abs(e.amount||0))}</div>
+      </div>
+      <div style={lbl}>Recorrido</div>
+      <div style={{marginLeft:5,paddingLeft:16,borderLeft:`1.5px solid ${C.border}`}}>
+        {pasos.map(p=>(
+          <div key={p.k} style={{position:'relative',padding:'2px 0 12px'}}>
+            <span style={{position:'absolute',left:-22.5,top:5,width:11,height:11,borderRadius:'50%',boxSizing:'border-box',background:p.pend?C.surface:C.greenText,border:`1.5px solid ${p.pend?C.done:C.greenText}`,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{!p.pend&&<CheckMini s={7} c='#fff'/>}</span>
+            <div style={{fontSize:13,fontWeight:600,color:p.pend?C.muted:C.text}}>{p.t}</div>
+            <div style={{fontSize:12,color:C.done}}>{p.pend?'Pendiente':[p.fecha?fmtFechaDMY(p.fecha):null,p.d].filter(Boolean).join(' · ')}</div>
+          </div>))}
+      </div>
+      <div style={lbl}>Datos</div>
+      <div style={{display:'grid',gridTemplateColumns:isDesktop?'130px minmax(0,1fr)':'104px minmax(0,1fr)',gap:'6px 12px',fontSize:13}}>
+        {fila('Proyecto', venta?.title||e.project||'Sin proyecto', venta||e.project?null:C.soonText)}
+        {fila('Razón social', rs?rsDisplay(rs.name):'Sin razón social', rs?null:C.soonText)}
+        {e.requirente&&fila('Requirente', e.requirente)}
+        {e.no_descuenta_saldo&&fila('Saldo', 'No descuenta el saldo (histórico)', C.muted)}
+        {e.notas&&fila('Notas', e.notas, C.muted)}
+      </div>
+      {onEditar&&<button type='button' onClick={onEditar} style={{marginTop:18,height:38,padding:'0 18px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{fondo?'Editar fondo':'Editar gasto'}</button>}
+    </div>)
+}
 function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendiciones,saving,user,origen,onBack,onSwitch,onSaveExpense,onSaveFondo,onDeleteExpense,onAttachChange,pettyCash=[],me,onSaveCaja}){
   const isDesktop=useIsDesktop()
   const tipo=pagina?.type
   const data=pagina?.data||null
   const expense=tipo==='expenseEdit'?data:null
+  const [ver,setVer]=useState(true)   // al entrar a un gasto: primero el detalle; "Editar" abre el formulario
+  useEffect(()=>{ setVer(true) },[expense?.id])
   const esCaja=tipo==='entregarCaja'
   const preClient=(tipo==='expenseEdit'||esCaja)?null:(data||null)
   const clientId=expense?.client_id||preClient?.id||null
   const client=clientId?clients.find(c=>String(c.id)===String(clientId)):null
-  const titulo=esCaja?'Entregar caja':tipo==='expenseEdit'?(expense?.type==='fondo'?'Editar fondo':'Editar gasto'):'Registrar gastos'
+  const titulo=esCaja?'Entregar caja':tipo==='expenseEdit'?(ver?(expense?.type==='fondo'?'Fondo':'Gasto'):(expense?.type==='fondo'?'Editar fondo':'Editar gasto')):'Registrar gastos'
   const personasCaja=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))]
   const personaCaja=esCaja?(data?.persona||personasCaja[0]||null):null
   const saldoPersona=personaCaja?saldoCajaChica(pettyCash,expenses,personaCaja):null
@@ -24671,6 +24732,8 @@ function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendicion
     ? <EntregarCajaForm persona={data?.persona||null} monto={data?.monto||null} personas={personasCaja} me={me} saving={saving} onSave={onSaveCaja} onClose={onBack}/>
     : tipo==='fondo'
     ? <FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={onSaveFondo} onClose={onBack} saving={saving} preClient={preClient} preDev={!!pagina?.dev}/>
+    : tipo==='expenseEdit'&&ver
+    ? <DetalleGasto e={expense} expenses={expenses} clientEntities={clientEntities} sales={sales} onEditar={()=>setVer(false)}/>
     : tipo==='expenseEdit'
     ? <div className='qt-body'><ExpenseEditForm expense={expense} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={onSaveExpense} onClose={onBack} onDelete={onDeleteExpense} saving={saving} user={user} onAttachChange={onAttachChange}/></div>
     : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} sinCabecera/></div>
