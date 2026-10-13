@@ -348,6 +348,8 @@ const urgency = (due,status) => {
 // RUT: normalizador ÚNICO de toda la app = el de cartola (crNormRut): mayúscula, solo dígitos + K (sin puntos, espacios ni guion).
 // Antes esta copia conservaba el guion y usaba minúscula (outlier): fallaba dedupe/match entre "12345678-9" y "123456789".
 const normRut = crNormRut
+// Compareciente vacío o de relleno ("N/A", "S/N", "-"): no identifica a nadie → no se propaga ni se aprende como alias.
+const sinNombreReal = s => !String(s||'').replace(/^\s*(n\/?a\.?|s\/?n|sin (nombre|datos)|-+)\s*$/i,'').trim()
 // Feriados de Chile (fuente: api.boostr.cl / apis.digital.gob.cl). Se cargan al iniciar y se cachean; si la API no responde,
 // el cálculo del día hábil cae a solo fin de semana (comportamiento anterior, seguro).
 const FERIADOS_CL = new Set()   // 'YYYY-MM-DD'
@@ -1059,16 +1061,30 @@ function nombresMiembros(){
   return _nombresMiembrosP
 }
 // Lista de la bitácora para un área (prefijo de action). Cada fila: qué · detalle · quién · cuándo.
-function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, vacio='Aún no hay registros.'}){
+// plano: modo "Historial" al pie de una lista (plegado, texto completo, autor neutro, sin monto; si no hay registros no se muestra).
+function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, vacio='Aún no hay registros.', plano=false, autor=null}){
   const [rows,setRows]=useState(null)
-  useEffect(()=>{ let vivo=true; if(DEMO){ setRows([]); return }
+  const [abierto,setAbierto]=useState(false)
+  useEffect(()=>{ let vivo=true; if(DEMO){ setRows(plano?(demoData.historial||[]).filter(r=>String(r.action).startsWith(prefijo)):[]); return }
     supabase.from('activity_log').select('id,action,detail,user_email,created_at').like('action',prefijo+'%').order('created_at',{ascending:false}).limit(limite)
       .then(({data})=>{ if(vivo) setRows(data||[]) }).catch(()=>{ if(vivo) setRows([]) })
     return ()=>{ vivo=false } },[prefijo,limite])
   const [nombres,setNombres]=useState(_nombresMiembrosCache||{})
   useEffect(()=>{ nombresMiembros().then(m=>setNombres(m)) },[])
   const quien=e=>nombres[String(e||'').toLowerCase()]||(String(e||'').split('@')[0]||'—')
-  const det=d=>{ try{ const o=JSON.parse(d); if(o==null) return ''; if(typeof o!=='object') return String(o); const a=Array.isArray(o)?o:[o]; return a.map(x=>typeof x==='object'&&x?[x.folio||x.invoice_no?`N° ${folioN(x.folio||x.invoice_no)}`:null,x.title||x.concept||x.name||x.persona||null].filter(Boolean).join(' · '):String(x)).filter(Boolean).join(' · ') }catch(_){ return String(d||'') } }
+  const det=d=>{ try{ const o=JSON.parse(d); if(o==null) return ''; if(typeof o!=='object') return String(o); const a=Array.isArray(o)?o:[o]; return a.map(x=>typeof x==='object'&&x?[x.folio||x.invoice_no?`N° ${folioN(x.folio||x.invoice_no)}`:null,x.texto||x.title||x.concept||x.name||x.persona||null].filter(Boolean).join(' · '):String(x)).filter(Boolean).join(' · ') }catch(_){ return String(d||'') } }
+  if(plano){ if(!rows||!rows.length) return null
+    return (
+      <div style={{borderTop:`1px solid ${C.border}`,marginTop:4}}>
+        <div onClick={()=>setAbierto(v=>!v)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',cursor:'pointer'}}>
+          <span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>{titulo}</span>
+          <span style={{color:C.done,fontSize:16,lineHeight:1,transform:abierto?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
+        </div>
+        {abierto&&<div style={{display:'grid',gap:6,paddingBottom:8}}>{rows.map(r=><div key={r.id} style={{background:C.bgSoft,borderRadius:8,padding:'8px 10px'}}>
+          <div style={{fontSize:11,color:C.muted,fontWeight:600}}>{fmtFechaDMY(String(r.created_at||'').slice(0,10))} · {autor||quien(r.user_email)}</div>
+          <div style={{fontSize:12,color:C.text,lineHeight:1.5}}>{det(r.detail)}</div>
+        </div>)}</div>}
+      </div>) }
   return (
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px 6px'}}>
       <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>{titulo}</div>
@@ -15966,7 +15982,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   }
   // Aprende: requirente → cliente (learning notaria_alias), para que la próxima OT de ese requirente venga sugerida.
   const learnNota = async (row, clientId) => {
-    const key=String(row?.requirente||'').trim(); if(!key||!clientId||DEMO) return
+    const key=String(row?.requirente||'').trim(); if(sinNombreReal(key)||!clientId||DEMO) return
     try{ await supabase.from('learnings').insert({kind:'notaria_alias',key,value:String(clientId)}); setNotaAlias(p=>[...p,{key,value:String(clientId)}]) }catch(_){}
   }
 
@@ -16307,7 +16323,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   }
 
   // Identidad cruda de la fila para propagar: RUT si hay, si no el nombre normalizado.
-  const rawKey = r => normRut(r.rut) || String(r.nombre||'').toLowerCase().trim()
+  const rawKey = r => normRut(r.rut) || (sinNombreReal(r.nombre) ? '' : String(r.nombre||'').toLowerCase().trim())
   // Asignar cliente a una fila Y a todas las filas iguales (mismo RUT/nombre) que aún no haya
   // resuelto el usuario manualmente — así no se repite el trabajo.
   const asignar = (rowId,clientId,method) => {
@@ -16327,13 +16343,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       })
     })
     // Aprende: este nombre crudo → este cliente, para que las próximas cargas caigan solas.
-    if(onLearnAlias && srcNombre && String(srcNombre).trim()) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
+    if(onLearnAlias && srcNombre && !sinNombreReal(srcNombre)) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
     if(srcRow && String(srcRow.requirente||'').trim()){ learnNota(srcRow, clientId); learnRutNota(srcRow, clientId); setRespNota(srcRow, clientId)   // notaría: aprende requirente→cliente, RUT→client_entity y fija responsable
       const nm=srcRow.nombre||srcRow.requirente; setAprendido({name:nm,cli:c?.name||''}); setTimeout(()=>setAprendido(a=>(a&&a.name===nm)?{}:a),4500); setAprendidasSet(s=>new Set(s).add(rowId)) }   // micro-aviso: "lo aprendí" + cuenta para el chip del hero
     // Notaría: ¿hay OTRAS OT sin cliente con compareciente PARECIDO (no idéntico, esos ya se propagaron)? Ofrece asignarlas juntas.
-    if(notaria && srcRow && String(srcNombre||'').trim()){
+    if(notaria && srcRow && !sinNombreReal(srcNombre)){
       const kSrc=rawKey(srcRow)
-      const sim=(rows||[]).filter(r=> r.id!==rowId && !r.client_id && !r.personal_de && !r.error && String(r.nombre||'').trim() && rawKey(r)!==kSrc && (()=>{ const s=simil(srcNombre,r.nombre); return s>=80 && s<100 })())
+      const sim=(rows||[]).filter(r=> r.id!==rowId && !r.client_id && !r.personal_de && !r.error && !sinNombreReal(r.nombre) && rawKey(r)!==kSrc && (()=>{ const s=simil(srcNombre,r.nombre); return s>=80 && s<100 })())
       setSimilarPrompt(sim.length ? {clientId, clientName:c?.name||'', ids:sim.map(r=>r.id), srcName:srcNombre} : null)
     }
     flash(`Asignado a ${c?.name||'cliente'} · se guarda al Cargar`)
@@ -16478,7 +16494,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     // Por revisar (subagrupado por compareciente: los repetidos van juntos)
     if(sinCli.length){
       out.push({type:'header',kind:'sin',n:sinCli.length,tot:sinCli.reduce((a,r)=>a+(r.monto||0),0)})
-      const by={}; sinCli.forEach(r=>{ const k=(normName(r.nombre||r.requirente||'')||('id'+r.id)); (by[k]=by[k]||[]).push(r) })
+      const by={}; sinCli.forEach(r=>{ const k=(sinNombreReal(r.nombre||r.requirente)?'':normName(r.nombre||r.requirente||''))||('id'+r.id); (by[k]=by[k]||[]).push(r) })
       Object.values(by).sort((a,b)=>b.length-a.length||b[0].monto-a[0].monto).forEach(rs=>{ if(rs.length>1) out.push({type:'sub',name:rs[0].nombre||'—',n:rs.length,tot:rs.reduce((a,r)=>a+(r.monto||0),0)}); rs.forEach(r=>out.push({type:'row',r})) })
     }
     // Clientes (colapsables; por defecto cerrados)
@@ -21729,7 +21745,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [ord,setOrd]=useState('fecha')
   const [openRS,setOpenRS]=useState({})   // razones sociales desplegadas (por defecto plegadas)
   const [ultAsig,setUltAsig]=useState(null)   // último proyecto/RS asignado: {ids, n, undo} — "deshacer" en línea
-  const asignar = onAsociarTrabajo ? async(lote,...r)=>{ const undo=await onAsociarTrabajo(lote,...r); if(undo) setUltAsig({ids:new Set(lote.map(x=>x.id)), n:lote.length, undo}) } : null
+  const asignar = onAsociarTrabajo ? async(lote,...r)=>{ const undo=await onAsociarTrabajo(lote,...r); if(undo) setUltAsig({ids:new Set(lote.map(x=>x.id)), n:lote.length, monto:lote.reduce((a,x)=>a+Math.abs(x.amount||0),0), undo}) } : null
   const deshacerAsig = async()=>{ const u=ultAsig; setUltAsig(null); if(u) await u.undo() }
   const [openProy,setOpenProy]=useState(null)  // proyecto/grupo "Por proyecto" desplegado (key o '_')
   const [porProyOpen,setPorProyOpen]=useState(false)   // el bloque "Por proyecto" arranca oculto
@@ -21906,9 +21922,10 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           {open&&<div style={{padding:'8px 10px',background:C.bgSoft,borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
             <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:3}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto')}</div>
             <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto'}</b></span><span>Fecha: <b style={{color:C.text}}>{fmtFechaDMY(e.date)}</b></span><span>Monto: <b style={{color:isDev?C.muted:col}}>{isDev?'−'+fmt(Math.abs(e.amount)):fmt(e.amount)}</b></span>{e.category&&<span>Categoría: <b style={{color:C.text}}>{e.category}</b></span>}</div>
-            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Venta / proyecto · razón social</span><span style={{display:'flex',gap:10,flexShrink:0}}>{v&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}{ultAsig?.ids.has(e.id)&&<span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span>}{onEditExpense&&<span onClick={(ev)=>{ev.stopPropagation();onEditExpense(e)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>{(v||e.project||onAsociarTrabajo)?'editar':'asignar'} ↗</span>}</span></div>
+            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Venta / proyecto · razón social</span><span style={{display:'flex',gap:10,flexShrink:0}}>{v&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}{ultAsig?.ids.has(e.id)&&ultAsig.n===1&&<span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span>}{onEditExpense&&<span onClick={(ev)=>{ev.stopPropagation();onEditExpense(e)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>{(v||e.project||onAsociarTrabajo)?'editar':'asignar'} ↗</span>}</span></div>
               <div onClick={v&&onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:v&&onOpenSale?'pointer':'default'}}>{v?<><b>{v.title}</b>{e.subproject?<b>{` · ${e.subproject}`}</b>:null}{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}{e.subproject?` · ${e.subproject}`:''}</b>:(onAsociarTrabajo?null:<span style={{color:C.overdue}}>Sin proyecto asignado</span>))}</div>
-              {onAsociarTrabajo&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} onAsignar={asignar}/>}
+              {ultAsig?.ids.has(e.id)&&ultAsig.n>1&&<div style={{display:'flex',alignItems:'baseline',gap:8,background:C.greenBg,color:C.greenText,borderRadius:8,padding:'7px 10px',marginTop:5,fontSize:12}}><span>Asignados {ultAsig.n} · {fmt(ultAsig.monto)}</span><span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span></div>}
+              {onAsociarTrabajo&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} otros={sinProy.filter(x=>x.type===e.type)} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} onAsignar={asignar}/>}
               {(e.entity_id||!onAsociarTrabajo||!(clientEntities||[]).length)&&<div style={{color:e.entity_id?C.muted:C.overdue,marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div>}</div>
             {/* Pago / depósito: de dónde viene o a dónde fue la plata (banco, notaría, caja chica, rendición, fondo que lo cubre). Cada enlace lleva al dato. */}
             {(()=>{ const links=[]
@@ -21925,13 +21942,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
             {(e.created_by||e.notas)&&<div style={{marginTop:3}}>{e.created_by?`Registrado por ${e.created_by}`:''}{e.notas?` · ${e.notas}`:''}</div>}
           </div>}
         </div>) }
-      const sinPR=[...fondos,...gastos].filter(e=>!e.sale_id||(!e.entity_id&&(clientEntities||[]).length>0)).filter(e=>!e.no_descuenta_saldo&&e.category!=='Apertura'&&cuentaEnSaldo(e))
+      const sinProy=[...fondos,...gastos].filter(e=>!e.sale_id&&!e.no_descuenta_saldo&&e.category!=='Apertura'&&cuentaEnSaldo(e)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
       return (<div>
-      {ultAsig&&ultAsig.n>1&&<div style={{display:'flex',alignItems:'baseline',gap:8,background:C.bgSoft,borderRadius:8,padding:'8px 10px',marginBottom:8,fontSize:12}}><b style={{color:C.text}}>Asignado a {ultAsig.n}</b><span onClick={deshacerAsig} style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Deshacer</span></div>}
-      {onAsociarTrabajo&&sinPR.length>1&&<div style={{background:C.bgSoft,borderRadius:8,padding:'8px 10px',marginBottom:8}}>
-        <div style={{display:'flex',alignItems:'baseline',gap:8,fontSize:12}}><b style={{color:C.text}}>{sinPR.length} sin proyecto o razón social</b><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums',fontWeight:600}}>{fmt(sinPR.reduce((a,e)=>a+(e.amount||0),0))}</span></div>
-        <AsignarProyectoRS items={sinPR} ventas={(sales||[]).filter(s=>String(s.client_id)===String(client.id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(client.id,tasks,expenses)} onAsignar={asignar}/>
-      </div>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:8}}>
         <div style={{fontSize:11,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?C.overdueText:C.greenText}}>{fmtSaldoG(fg.saldo)}</b></div>
         <button onClick={()=>setFgOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {fgOrd==='desc'?'↓':'↑'}</button>
@@ -21943,6 +21955,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
       <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',margin:'8px 0 2px'}}>Gastos</div>
       {gastos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
       {gastos.map(e=>fila(e,-1,C.overdueText))}
+      <BitacoraLista plano prefijo={`clientes.${client.id}.`} autor='Administración' limite={50}/>
     </div>) })()}
     {Hdr({icon:'clock',title:'Anticipos',k:'adelantos',summary:anticipos.length?`${anticipos.length}`:'sin anticipos'})}
     {sec.adelantos&&<div style={{padding:'2px 13px 12px'}}>
@@ -21985,7 +21998,9 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], onOpenFactura}){
 // Asesoría permanente (cobro mensual): sus gastos llevan subproyecto, igual que sus tareas. Sugerencias = los ya usados por el cliente.
 const esPermanente = v => !!v && v.cobro_type==='mensual'
 const subproyectosCliente = (clientId, tasks=[], expenses=[]) => [...new Set([...(tasks||[]),...(expenses||[])].filter(x=>String(x.client_id)===String(clientId)&&x.subproject).map(x=>x.subproject.trim()))].sort((a,b)=>a.localeCompare(b,'es'))
-function AsignarProyectoRS({e, items, ventas=[], ents=[], subs=[], onAsignar}){
+// otros: los demás movimientos del cliente sin proyecto. Al elegir el proyecto se listan (por descripción) para sumarlos al mismo.
+function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=[], onAsignar}){
+  const [marc,setMarc] = useState(()=>new Set())
   const lote = items || (e ? [e] : [])
   const faltaV = lote.some(x=>!x.sale_id), faltaRS = ents.length>0 && lote.some(x=>!x.entity_id)
   const sug = e ? sugerirVentaGasto(e, ventas, null) : {venta: ventas.length===1 ? ventas[0] : (ventas.filter(s=>s.status==='Activo').length===1 ? ventas.find(s=>s.status==='Activo') : null)}
@@ -21998,6 +22013,36 @@ function AsignarProyectoRS({e, items, ventas=[], ents=[], subs=[], onAsignar}){
   if(!faltaV && !faltaRS) return null
   const sel = {flex:'1 1 170px',minWidth:0,fontSize:12,padding:'6px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.text}
   const ok = (faltaV&&v) || (faltaRS&&rs)
+  const lista = e && faltaV && v ? otros.filter(x=>x.id!==e.id) : []
+  const extra = lista.filter(x=>marc.has(x.id))
+  const todoLote = [...lote, ...extra]
+  const asig = ()=>{ const rsX = faltaRS ? rs : (extra.some(x=>!x.entity_id) ? rsDeV(v) : ''); onAsignar(todoLote, faltaV?v:'', rsX, pideSub?sub.trim():''); setMarc(new Set()) }
+  const btn = <button disabled={!ok} onClick={asig} style={{fontSize:12,fontWeight:700,borderRadius:8,padding:'6px 12px',border:'none',background:ok?C.accent:C.done,color:C.surface,cursor:ok?'pointer':'default',whiteSpace:'nowrap'}}>{todoLote.length>1?(items?`Asignar a los ${todoLote.length}`:`Asignar ${todoLote.length} · ${fmt(todoLote.reduce((a,x)=>a+Math.abs(x.amount||0),0))}`):'Asignar'}</button>
+  const ck = on => <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',color:C.surface,fontSize:10,display:'grid',placeItems:'center',flexShrink:0,marginTop:1}}>{on?'✓':''}</span>
+  if(lista.length) return (
+    <div onClick={ev=>ev.stopPropagation()} style={{marginTop:5}}>
+      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+        {ventas.length>0&&<select value={v} onChange={ev=>{ setV(ev.target.value); const r=rsDeV(ev.target.value); if(r) setRs(r) }} aria-label='Proyecto' style={sel}>
+          <option value=''>Proyecto…</option>
+          {ventas.map(s=><option key={s.id} value={s.id}>{s.title}{s.status!=='Activo'?` (${s.status.toLowerCase()})`:''}</option>)}
+        </select>}
+        {pideSub&&<><input value={sub} onChange={ev=>setSub(ev.target.value)} list='asig-subproy' placeholder='Subproyecto…' aria-label='Subproyecto' style={sel}/><datalist id='asig-subproy'>{subs.map(x=><option key={x} value={x}/>)}</datalist></>}
+        {faltaRS&&<select value={rs} onChange={ev=>setRs(ev.target.value)} aria-label='Razón social' style={sel}>
+          <option value=''>Razón social…</option>
+          {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
+        </select>}
+      </div>
+      <div style={{marginTop:7,paddingTop:7,borderTop:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:2}}><b style={{fontSize:11.5,color:C.text}}>Otros sin proyecto · ¿van a este mismo?</b><span onClick={()=>setMarc(extra.length===lista.length?new Set():new Set(lista.map(x=>x.id)))} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{extra.length===lista.length?'Desmarcar':'Marcar todos'}</span></div>
+        {lista.map(x=>{ const on=marc.has(x.id); const ot=x.ot_number?(String(x.ot_number).toUpperCase().startsWith('OT')?x.ot_number:'OT-'+x.ot_number):null
+          return <div key={x.id} onClick={()=>setMarc(s=>{ const n=new Set(s); n.has(x.id)?n.delete(x.id):n.add(x.id); return n })} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`,cursor:'pointer'}}>
+            {ck(on)}
+            <span style={{flex:1,minWidth:0,display:'grid',gap:1}}><span style={{fontSize:12,color:C.text,lineHeight:1.35}}>{String(x.concept||x.category||'Sin descripción').replace(/^gastos notariales\s*[—–-]\s*/i,'')}</span><span style={{fontSize:10.5,color:C.muted}}>{[fmtFechaDMY(x.date),ot].filter(Boolean).join(' · ')}</span></span>
+            <span style={{fontSize:12,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Math.abs(x.amount||0))}</span>
+          </div> })}
+        <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>{btn}</div>
+      </div>
+    </div>)
   return (
     <div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:6,alignItems:'center',marginTop:5,flexWrap:'wrap'}}>
       {faltaV&&ventas.length>0&&<select value={v} onChange={ev=>{ setV(ev.target.value); const r=rsDeV(ev.target.value); if(r) setRs(r) }} aria-label='Proyecto' style={sel}>
@@ -22009,7 +22054,7 @@ function AsignarProyectoRS({e, items, ventas=[], ents=[], subs=[], onAsignar}){
         <option value=''>Razón social…</option>
         {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
       </select>}
-      <button disabled={!ok} onClick={()=>onAsignar(lote, faltaV?v:'', faltaRS?rs:'', pideSub?sub.trim():'')} style={{fontSize:12,fontWeight:700,borderRadius:8,padding:'6px 12px',border:'none',background:ok?C.accent:C.done,color:C.surface,cursor:ok?'pointer':'default',whiteSpace:'nowrap'}}>{lote.length>1?`Asignar a los ${lote.length}`:'Asignar'}</button>
+      {btn}
     </div>)
 }
 // Gastos y fondos de UNA venta (columna de la venta, bajo "Cobro de la venta"): el trabajo es el centro; cada movimiento abre su
