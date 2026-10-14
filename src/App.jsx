@@ -994,13 +994,17 @@ function _glosaTransf(desc){ const t=String(desc||''); const f=t.match(/\bel (\d
   return { fecha:f?`${f[3]}-${f[2]}-${f[1]}`:null, hora:h?h[1]:null, cuenta:c?c[1].slice(-4):null } }
 const _ccFechas = m => { const g=_glosaTransf(m?.descripcion).fecha; return [...new Set([_ccDia(m?.fecha),g].filter(Boolean))] }   // fecha contable + fecha real de la glosa
 const _ccDias = (a,b) => Math.round((new Date(_ccDia(a)+'T00:00')-new Date(_ccDia(b)+'T00:00'))/86400000)   // a − b, en días
+// Caja chica marcada "[ajuste]" en la nota: movimiento contable de la caja (p.ej. un reembolso pagado dos veces) que NO tiene transferencia;
+// no se cruza con el banco ni aparece como "sin transferencia". Cuenta igual en el saldo.
+const _ccEsAjuste = p => /\[ajuste\]/i.test(String(p?.notes||''))
+const _ccNotaVisible = n => String(n||'').replace(/\s*·\s*mov:[0-9a-f-]+/g,'').replace(/\[ajuste\]\s*/ig,'').trim()
 function calceCajaChica(petty, movs, {equipo, conciliados=new Set(), sueldos={}, hoy}={}){
   const porRut={}; (equipo||EQUIPO_CFG||[]).forEach(s=>{ const k=_rutK(s.rut); if(k) porRut[k]=s.nombre })
   const nombres=new Set(Object.values(porRut).map(_norm))
   const quien = m => porRut[_rutK(m.rut_contraparte)]
   const monto = x => Math.round(Math.abs(Number(x?.amount??x?.monto)||0))
   const ligados=new Set((petty||[]).map(p=>p.movimiento_id).filter(Boolean).map(String))
-  const cajas=(petty||[]).filter(p=>!p.movimiento_id&&monto(p)>0&&p.delivered_at&&nombres.has(_norm(p.user_name))&&!String(p.notes||'').includes('mov:'))
+  const cajas=(petty||[]).filter(p=>!p.movimiento_id&&monto(p)>0&&p.delivered_at&&nombres.has(_norm(p.user_name))&&!String(p.notes||'').includes('mov:')&&!_ccEsAjuste(p))
     .sort((a,b)=>_ccDia(a.delivered_at).localeCompare(_ccDia(b.delivered_at)))
   const cargos=(movs||[]).filter(m=>m.tipo==='cargo'&&!m.es_interno&&quien(m)&&!ligados.has(String(m.id))&&!conciliados.has(String(m.id))&&!['conciliado','parcial','interno'].includes(String(m.estado||'')))
     .sort((a,b)=>_ccDia(a.fecha).localeCompare(_ccDia(b.fecha)))
@@ -2515,13 +2519,13 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
               <button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy(adminNombres.includes(me)?me:(adminNombres[0]||'')); setCajaOtra(false); setShowNuevaCaja(true) }} style={chipBtn('primary')}>+ Nueva Caja</button>
             </div>
             {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas. Registra cada transferencia que recibas.</div>}
-            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at&&(isAdmin||!p.movimiento_id); return (
+            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at&&(isAdmin||(!p.movimiento_id&&!_ccEsAjuste(p))); return (
               <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||adminNombres[0]||''); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:editable?'pointer':'default'}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>{diaGrande(p.delivered_at)}<div style={{minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{p.delivered_by?`De ${p.delivered_by}`:'Caja recibida'}{p.notes&&!String(p.notes).startsWith('Abono caja chica')&&!String(p.notes).startsWith('Registrada desde')?<span style={{color:C.muted}}> · {String(p.notes).replace(/\s*·\s*mov:[0-9a-f-]+/g,'')}</span>:null}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
-                  {(()=>{ const d=p.delivered_at?_ccDias(new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),p.delivered_at):0; const sinBanco=!p.movimiento_id&&!p.rendered_at&&d>=5
+                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{p.delivered_by?`De ${p.delivered_by}`:'Caja recibida'}{p.notes&&!String(p.notes).startsWith('Abono caja chica')&&!String(p.notes).startsWith('Registrada desde')?<span style={{color:C.muted}}> · {_ccNotaVisible(p.notes)}</span>:null}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
+                  {(()=>{ const d=p.delivered_at?_ccDias(new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),p.delivered_at):0; const ajuste=_ccEsAjuste(p); const sinBanco=!ajuste&&!p.movimiento_id&&!p.rendered_at&&d>=5
                     const tm=p.movimiento_id&&misTransf.find(m=>m.id===p.movimiento_id); const tf=tm?(_glosaTransf(tm.descripcion).fecha||tm.fecha):null
-                    return <div style={{fontSize:10,fontWeight:600,marginTop:1,color:p.movimiento_id?C.greenText:sinBanco?C.overdueText:C.soonText}}>{p.movimiento_id?(tf?`transferencia del ${fmtFechaDMY(tf)} conciliada ✓`:'transferencia conciliada ✓'):sinBanco?`sin transferencia en el banco · ${nDias(d)}`:'transferencia por conciliar'}</div> })()}
+                    return <div style={{fontSize:10,fontWeight:600,marginTop:1,color:p.movimiento_id?C.greenText:ajuste?C.muted:sinBanco?C.overdueText:C.soonText}}>{ajuste&&!p.movimiento_id?'ajuste de caja · sin transferencia':p.movimiento_id?(tf?`transferencia del ${fmtFechaDMY(tf)} conciliada ✓`:'transferencia conciliada ✓'):sinBanco?`sin transferencia en el banco · ${nDias(d)}`:'transferencia por conciliar'}</div> })()}
                 </div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
@@ -34544,7 +34548,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     setBusy(null)
   }
   // Abono a caja chica ya ingresado a mano (mismo nombre, monto exacto, aún sin vincular a un movimiento).
-  const cajaChicaMatch = (persona, monto) => (pettyCash||[]).find(p => p.user_name===persona && (p.amount||0)>0 && Math.abs((p.amount||0)-monto)<=TOL && !p.movimiento_id && !String(p.notes||'').includes('mov:'))
+  const cajaChicaMatch = (persona, monto) => (pettyCash||[]).find(p => p.user_name===persona && (p.amount||0)>0 && Math.abs((p.amount||0)-monto)<=TOL && !p.movimiento_id && !String(p.notes||'').includes('mov:') && !_ccEsAjuste(p))
   // Pago a la notaría ↔ su liquidación (rendiciones tipo 'notaria'). Enlace 1:1 = rendiciones.movimiento_id.
   // Calce: liquidación sin pago enlazado, creada a ±30 días del cargo. Monto exacto y único → se enlaza con un toque; si el RUT ya es
   // conocido de la notaría (aprendido al enlazar: learnings 'notaria_rut') se enlaza solo. Monto distinto → solo si el RUT es de la notaría.
