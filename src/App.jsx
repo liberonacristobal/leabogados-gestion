@@ -14571,7 +14571,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const [cliF,setCliF] = useState(null)                // filtro por cliente en la ficha (no mezclar la bolsa)
   const [ordC,setOrdC] = useState(-1), [ordP,setOrdP] = useState(-1)   // orden por fecha: comisiones · pagos y facturas del SII (−1 = más nuevo primero)
   const [expT,setExpT] = useState(null), [nVer,setNVer] = useState(5) // comisión desplegada · cuántas se muestran
-  const [revOpen,setRevOpen] = useState(false), [secAb,setSecAb] = useState(null), [cliMas,setCliMas] = useState(false), [masOpen,setMasOpen] = useState(false)   // ficha: por revisar · tarjetita abierta · más clientes · menú ⋯ (móvil)
+  const [revOpen,setRevOpen] = useState(false), [secAb,setSecAb] = useState(null), [cliMas,setCliMas] = useState(false)   // ficha: revisar y acciones · tarjetita abierta · más clientes
   useEffect(()=>{ viewMemGuardar('proveedores',{view:['form','pagar','boleta'].includes(view)?(selId?'ficha':'list'):view,selId,yr,modo,tf}) },[view,selId,yr,modo,tf])
   useEffect(()=>{ if(focoProvId&&proveedores.some(p=>String(p.id)===String(focoProvId))){ setSelId(String(focoProvId)); setView('ficha'); setCf('todas'); onFocoUsado&&onFocoUsado() } },[focoProvId,proveedores])
   const [q,setQ] = useState('')
@@ -15140,14 +15140,22 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       ...porIdentP.map(m=>({k:'pi'+m.id,t:'Pago por identificar',s:`${dmy(m.fecha)}${typeof marcas[m.id]==='string'&&marcas[m.id]!=='Trabajo por identificar'?' · '+marcas[m.id]:''}`,m:Math.abs(Number(m.monto)||0),a:'Enlazar',on:()=>{setEnlP({mid:m.id});setEnlSel(new Set());setSecAb('pagos');setRevOpen(false)}})),
       pagSinBancoP.length>0&&{k:'sb',t:'Pagadas sin su pago del banco',s:`${pagSinBancoP.length} comisi${pagSinBancoP.length===1?'ón':'ones'}`,m:sumM(pagSinBancoP),a:'Ver',on:()=>{setCf('pagada');setNVer(5);setRevOpen(false)}},
     ].filter(Boolean)
-    const revPill = revItems.length ? <span onClick={()=>setRevOpen(o=>!o)} className='pv-c' style={{display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 12px',borderRadius:20,border:`1px solid ${C.border}`,background:C.card,fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}>Por revisar <span style={{background:C.soonBg,color:C.soonText,borderRadius:10,padding:'0 7px',fontSize:11}}>{revItems.length}</span> {revOpen?'▴':'▾'}</span> : null
-    const revPanel = revOpen&&revItems.length ? <div style={{...card,overflow:'hidden'}}>{revItems.map((x,i)=><div key={x.k} onClick={x.on} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
-      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600}}>{x.t}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s}</div></div>
-      <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:700,...num}}>{fmt(x.m)}</div><div style={{fontSize:11,fontWeight:700,color:C.accent}}>{x.a} ›</div></div></div>)}</div> : null
+    // Opción A (2026-10-14): un solo desplegable «Revisar y acciones» (lo pendiente + registrar factura del proveedor + agregar comisión); Pagar aparte.
+    const accItems = [
+      !m0.equipo&&{k:'bol',t:`Registrar factura de ${tituloProv(sel).split(' ')[0]}`,s:'Anota su factura en las comisiones que cubre',on:()=>{setRevOpen(false);abrirBoleta(sel)}},
+      onAsignarFacturas&&{k:'asg',t:'Agregar comisión a una factura tuya',s:'Cuando la venta no la trae',on:()=>{setRevOpen(false);setAsgOpen(true);setFacQ('')}},
+    ].filter(Boolean)
+    const revPill = (revItems.length||accItems.length) ? <span onClick={()=>setRevOpen(o=>!o)} className='pv-c' style={{display:'inline-flex',alignItems:'center',gap:6,height:36,padding:'0 14px',borderRadius:10,border:`1px solid ${revOpen?C.accent:C.border}`,background:revOpen?C.azulBg:C.card,fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer',boxSizing:'border-box'}}>Revisar y acciones {revItems.length>0&&<span style={{background:C.soonBg,color:C.soonText,borderRadius:10,padding:'0 7px',fontSize:11}}>{revItems.length}</span>} {revOpen?'▴':'▾'}</span> : null
+    const secLbl = t => <div style={{...kLbl,fontSize:9.5,padding:'7px 14px 5px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>{t}</div>
+    const revPanel = revOpen ? <div style={{...card,overflow:'hidden',maxWidth:isDesktop?520:'none'}}>
+      {revItems.length>0&&<>{secLbl(`Por revisar · ${revItems.length}`)}{revItems.map((x,i)=><div key={x.k} onClick={x.on} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600}}>{x.t}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s}</div></div>
+        <span style={{fontSize:12.5,fontWeight:700,...num}}>{fmt(x.m)} ›</span></div>)}</>}
+      {accItems.length>0&&<>{secLbl('Acciones')}{accItems.map((x,i)=><div key={x.k} onClick={x.on} className='pv-c' style={{padding:'9px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}><div style={{fontSize:12.5,fontWeight:600}}>{x.t}</div><div style={{fontSize:11,color:C.muted}}>{x.s}</div></div>)}</>}
+    </div> : null
     const btnBoleta = <ActBtn variant='ghost' size='lg' onClick={()=>abrirBoleta(sel)}>Registrar factura de {tituloProv(sel).split(' ')[0]}</ActBtn>
-    const btnAsig = onAsignarFacturas ? <ActBtn variant={asgOpen?'softNavy':'ghost'} size='lg' onClick={()=>{setAsgOpen(o=>!o);setFacQ('')}}>{asgOpen?'Cerrar':'Agregar comisión a una factura tuya'}</ActBtn> : null
     const btnPagar = m0.porPagar>0 ? <ActBtn variant='primary' size='lg' full={!isDesktop} onClick={()=>abrirPagar(sel)}>Pagar {fmt(m0.porPagar)} ›</ActBtn> : null
-    const acciones = <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{revPill}<span style={{flex:1}}/>{isDesktop&&!m0.equipo&&btnBoleta}{isDesktop&&btnAsig}{isDesktop&&btnPagar}</div>
+    const acciones = <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{revPill}<span style={{flex:1}}/>{isDesktop&&btnPagar}</div>
     // Por cliente: la bolsa separada por cliente; tocar filtra las comisiones, el nombre abre su ficha.
     const porClienteCard = porCliente.length>0 ? <div style={{...card,overflow:'hidden'}}>
       {band('Por cliente',cliF?link('Ver todos',()=>setCliF(null),C.accent):null)}
@@ -15191,7 +15199,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       tsF.map(t=>{ const b=facDe(t); return [dmy(fEmi(t)),cliDe(t)?.name||'',b?.invoice_no?`F${folioN(b.invoice_no)}`:'',b?glosaFactura(b):'',pagoCli(t)?.fecha?dmy(pagoCli(t).fecha):'',t.factura_numero||'',Math.round(Number(t.monto)||0),t.pagado_at?dmy(t.pagado_at):'',estLbl(t)[0]] }))
     const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)
     const comisionesCard = <div style={{...card,overflow:'hidden'}}>
-      {band(tituloLista,ordTog(ordC,setOrdC))}
+      {band(asgOpen?'Agregar comisión a una factura tuya':tituloLista,asgOpen?link('Cerrar',()=>setAsgOpen(false),C.accent):ordTog(ordC,setOrdC))}
       {asgOpen&&(()=>{ const yaAsig=new Set(ts.map(t=>String(t.billing_id))); const asignables = facQ.trim() ? billing.filter(b=>{ if(b.status==='Anulada'||b.billing_type==='reembolso'||yaAsig.has(String(b.id))) return false; const c=clients.find(x=>String(x.id)===String(b.client_id)); return _normTxt(`${c?.name||''} ${b.concept||''} ${b.invoice_no||''} ${b.receptor_name||''}`).includes(_normTxt(facQ)) }).slice(0,10) : []
         const asignar = async bid => { const m=parseInt(montos[bid])||0; if(!m||!onAsignarFacturas) return; setAsgBusy(bid); const ok=await onAsignarFacturas(sel.id,[{billing_id:bid,monto:m}]); setAsgBusy(null); if(ok){ setMontos(p=>{const n={...p};delete n[bid];return n}); const b=billing.find(x=>String(x.id)===String(bid)); logActividad(`proveedores.${sel.id}.asignar`,{tabla:'billing',id:bid,detalle:{title:b?.invoice_no?`Factura ${folioN(b.invoice_no)}`:'Factura',monto:m}}) } }
         return <div style={{padding:'0 14px 10px'}}><Buscador value={facQ} onChange={setFacQ} placeholder='Factura del estudio: cliente, concepto o N°…' autoFocus/>
@@ -15267,19 +15275,13 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     const minis = isDesktop
       ? <div style={{display:'grid',gridTemplateColumns:`repeat(${secs.length},minmax(0,1fr))`,gap:8}}>{secs.map(mini)}</div>
       : <div style={{...card,overflow:'hidden'}}>{secs.map((x,i)=><Fragment key={x.k}>{i===0?<div style={{marginTop:-1}}>{mini(x)}</div>:mini(x)}{secAb===x.k&&<div style={{padding:'0 0 8px'}}>{x.el}</div>}</Fragment>)}</div>
-    const masMovil = masOpen ? <div style={{...card,overflow:'hidden'}}>
-      {!m0.equipo&&<div onClick={()=>{setMasOpen(false);abrirBoleta(sel)}} className='pv-c' style={{padding:'11px 14px',fontSize:13,fontWeight:600,cursor:'pointer'}}>Registrar factura de {tituloProv(sel).split(' ')[0]}</div>}
-      {onAsignarFacturas&&<div onClick={()=>{setMasOpen(false);setAsgOpen(true);setFacQ('')}} className='pv-c' style={{padding:'11px 14px',fontSize:13,fontWeight:600,borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>Agregar comisión a una factura tuya</div>}
-      <div onClick={()=>{setMasOpen(false);exportCuotas()}} className='pv-c' style={{padding:'11px 14px',fontSize:13,fontWeight:600,borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>Descargar Excel</div>
-    </div> : null
-    const btnMas = <span onClick={()=>setMasOpen(o=>!o)} title='Más acciones' style={{height:30,width:34,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:masOpen?C.azulBg:C.card,cursor:'pointer',fontWeight:800,color:C.accent}}>⋯</span>
     return (<div>{css}
-      <PageHeader origen='Proveedores' onBack={()=>setView('list')} titulo={tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{isDesktop?btnExcel:btnMas}</span>}/>
+      <PageHeader origen='Proveedores' onBack={()=>setView('list')} titulo={tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
       {wrap(isDesktop ? <>
         {datosStrip}{tiles}{acciones}{revPanel}
         <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
         {minis}{secAbierta&&secAbierta.el}
-      </> : <>{masMovil}{tiles}{datosStrip}{btnPagar}{acciones}{revPanel}{porClienteCard}{comisionesCard}{minis}</>)}
+      </> : <>{tiles}{datosStrip}{btnPagar}{acciones}{revPanel}{porClienteCard}{comisionesCard}{minis}</>)}
     </div>)
   }
 
