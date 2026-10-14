@@ -20790,12 +20790,24 @@ const _tokG = s => _normTxt(s).split(' ').filter(w=>w.length>=5)
 const _esOfiCli = c => !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||''))
 const _hoyLocal = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 
-function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName,onIrCliente,onLanding}) {
+function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName,estudioId,onIrCliente,onLanding}) {
   const isDesktop = useIsDesktop()
   const hoy = _hoyLocal()
   const nuevaFila = date => ({id:Date.now()+Math.random(),category:null,concept:'',amount:'',date:date||hoy,paid_by_client:false,subcategory:'',cli:null,proj:'',resp:null,picking:false,pq:''})
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
+  // Gasto personal de un miembro: en vez de cliente se elige la persona (personal_de). La tanda entera es de esa persona.
+  const [personal,setPersonal] = useState(null)
+  const [equipo,setEquipo] = useState([])
+  useEffect(()=>{ let on=true
+    if(DEMO){ setEquipo(Object.keys(INICIALES_RESP)); return }
+    supabase.from('miembros').select('nombre,estudio_id,es_socio').then(({data})=>{ if(!on) return
+      const vistos=new Set()
+      setEquipo((data||[]).filter(m=>!estudioId||m.estudio_id===estudioId)
+        .sort((a,b)=>(b.es_socio?1:0)-(a.es_socio?1:0)||String(a.nombre||'').localeCompare(String(b.nombre||''),'es'))
+        .map(m=>String(m.nombre||'').split(' (')[0].trim()).filter(n=>n&&!vistos.has(n)&&vistos.add(n)))
+    },()=>{})
+    return ()=>{on=false} },[estudioId])
   const [rows,setRows] = useState(()=>[nuevaFila()])
   const [saving,setSaving] = useState(false)
   const [saved,setSaved] = useState(0)
@@ -20897,15 +20909,28 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     if(_esOfiCli(cli)&&CATS_DE_CLIENTE.has(catDe(r))) return {bloquea:true,sug,motivo:`${catDe(r)==='Notaria'?'Los gastos de notaría':catDe(r)==='CBR'?'Los certificados del CBR':`Los gastos de ${catDe(r)}`} suelen ser de un cliente.`}
     return sug?{bloquea:false,sug,motivo:sug.motivo}:null
   }
-  const faltaProyecto = !esOficina&&!project.trim()&&llenas.some(r=>!r.cli)
+  const faltaProyecto = !personal&&!esOficina&&!project.trim()&&llenas.some(r=>!r.cli)
   const faltaProyFila = llenas.some(r=>r.cli&&!_esOfiCli(r.cli)&&!r.proj)
   const bloqueadas = llenas.filter(r=>avisoDe(r)?.bloquea).length
-  const puedeGuardar = !!selectedClient&&llenas.length>0&&!faltaProyecto&&!faltaProyFila&&!bloqueadas&&!saving
+  const puedeGuardar = (!!selectedClient||!!personal)&&llenas.length>0&&!faltaProyecto&&!faltaProyFila&&!bloqueadas&&!saving
 
   const saveAll = async() => {
     if(!puedeGuardar) return
     setSaving(true)
     let count=0; const errores=[]
+    if(personal){
+      // Personal: sin cliente, sin proyecto; descuenta de la caja de quien carga y queda como deuda de la persona con la oficina.
+      for(const r of llenas){ const cat=catDe(r)
+        try{
+          await onSave({client_id:null,personal_de:personal,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:cat,date:r.date||hoy,sale_id:null,entity_id:null,project:null,subproject:null,subcategory:cat==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:false})
+          count++
+          logActividad('gastos.personal',{tabla:'expenses',detalle:{title:r.concept||cat,persona:personal,monto:parseInt(r.amount)}})
+        }catch(e){ errores.push(r.concept||cat||'Fila') }
+      }
+      if(errores.length) appAlert(`${errores.length} gasto(s) no se guardaron: ${errores.join(', ')}`)
+      setSaved(count); setRows([nuevaFila()]); setPersonal(null); setQ(''); setSaving(false)
+      return
+    }
     for(const r of llenas) {
       const cli=cliDe(r); const cat=catDe(r); const proj=projDe(r)||null
       const vta=r.cli?(sales||[]).find(s=>s.client_id===cli.id&&s.title===proj):null
@@ -20989,7 +21014,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const btnGuardar = (
     <button type='button' disabled={!puedeGuardar} onClick={saveAll} title={bloqueadas?'Responde el aviso para guardar':faltaProyecto||faltaProyFila?'Falta el proyecto':undefined}
       style={{width:isDesktop?220:'100%',height:38,borderRadius:8,border:`1px solid ${C.azulTenueOn}`,background:C.azulTenueOn,color:C.accent,fontSize:13,fontWeight:700,cursor:puedeGuardar?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeGuardar?1:.5,fontFamily:'inherit'}}>
-      {saving?<Spin/>:null}{saving?'Guardando...':llenas.length>1?`Guardar ${llenas.length} gastos`:'Guardar gasto'}
+      {saving?<Spin/>:null}{saving?'Guardando...':llenas.length>1?`Guardar ${llenas.length} gastos${personal?' personales':''}`:personal?'Guardar gasto personal':'Guardar gasto'}
     </button>)
 
   // ── Inicio de la carga (aún sin cliente): repetir lo frecuente, clientes recientes y por tipo — todo desde los gastos de quien carga.
@@ -21019,9 +21044,13 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const [verSinProy,setVerSinProy] = useState(false)
   const buscRef = useRef(null)
   useEffect(()=>{ if(!isDesktop||selectedClient) return; const h=e=>{ if(e.key==='/'&&!/input|textarea|select/i.test(document.activeElement?.tagName||'')){ e.preventDefault(); buscRef.current&&buscRef.current.focus() } }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h) },[isDesktop,selectedClient])
-  useEffect(()=>{ onLanding&&onLanding(!selectedClient) },[selectedClient])
+  useEffect(()=>{ onLanding&&onLanding(!selectedClient&&!personal) },[selectedClient,personal])
+  const elegirPersonal = p => {
+    setSaved(0); setQ(''); setTipo(null); setSelectedClient(null); setPersonal(p); setRows([nuevaFila()])
+    setTimeout(()=>{ const el=document.querySelector('[data-gconcept]'); el&&el.focus() },80)
+  }
   const elegirCliente = (c,extra={}) => {
-    setSaved(0); setQ(''); setTipo(null)
+    setSaved(0); setQ(''); setTipo(null); setPersonal(null)
     if(extra.proj) preProjRef.current=extra.proj
     const fila={...nuevaFila(),...(extra.cat?{category:extra.cat}:{}),...(extra.concept?{concept:extra.concept}:{})}
     setRows(extra.concept?[fila,nuevaFila()]:[fila]); setSelectedClient(c)
@@ -21080,6 +21109,16 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         </button>)}
       </div>}
     </div>)
+  const bloquePersonal = equipo.length>0&&(
+    <>
+      {secT('Gasto personal de')}
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        {equipo.map(p=>{ const pc=personChip(p); return (
+          <button key={p} type='button' onClick={()=>elegirPersonal(p)} {...hov(C.bgSoft,C.surface)} style={{...btnReset,display:'inline-flex',alignItems:'center',gap:7,height:36,padding:'0 12px 0 5px',borderRadius:10,background:C.surface,border:`1px solid ${C.border}`,fontSize:13,fontWeight:600,color:C.text}}>
+            <span style={{width:26,height:26,borderRadius:8,background:pc.bg,color:pc.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700}}>{INICIALES_RESP[p]||p.slice(0,2).toUpperCase()}</span>{p}
+          </button>) })}
+      </div>
+    </>)
   const tarjetaRep = x => (
     <button key={x.c.id+x.cat} type='button' onClick={()=>elegirCliente(x.c,{cat:x.cat,concept:x.ult.concept||'',proj:x.ult.project||null})} style={{...btnReset,background:C.azulTenue,borderRadius:14,padding:12,minHeight:86,display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>
       <div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(x.c)}</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>{catLbl(x.cat)}</div></div>
@@ -21108,6 +21147,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
           </div>
           <div style={{minWidth:0}}>
             {recientes.length>0&&<>{secT('Clientes recientes')}{listaCli(recientes)}</>}
+            {bloquePersonal}
             {avisoSinProy}
           </div>
         </div>))}
@@ -21128,6 +21168,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
             {tipos.orden.map(k=><button key={k} type='button' onClick={()=>setTipo(k)} style={{...btnReset,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:12,height:62,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,fontSize:12,fontWeight:600,color:C.accent,textAlign:'center'}}><span style={{color:C.muted,display:'flex'}}>{icoCat(k)}</span>{catLbl(k)}</button>)}
           </div>
+          {bloquePersonal}
           {avisoSinProy}
         </>))}
     </>)
@@ -21139,11 +21180,21 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
       </div>}
       {saved>0&&!selectedClient&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
-      {!selectedClient&&landing}
+      {!selectedClient&&!personal&&landing}
 
-      {selectedClient&&(
+      {(selectedClient||personal)&&(
         <>
           {saved>0&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
+          {personal?(
+          <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',columnGap:10}}>
+            <FloatFld label='Personal de'>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,height:24}}>
+                <span style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:14,color:C.text,minWidth:0}}>{(()=>{ const pc=personChip(personal); return <span style={{width:22,height:22,borderRadius:7,background:pc.bg,color:pc.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9.5,fontWeight:700,flexShrink:0}}>{INICIALES_RESP[personal]||personal.slice(0,2).toUpperCase()}</span> })()}{personal}</span>
+                <button type='button' onClick={()=>setPersonal(null)} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',padding:0,fontFamily:'inherit'}}>Cambiar</button>
+              </div>
+            </FloatFld>
+          </div>
+          ):<>
           {balance!=null&&balance<=0&&!esOficina&&(
             <div style={{fontSize:12,color:C.avisoText,background:C.avisoBg,border:`1px solid ${C.avisoLine}`,borderRadius:8,padding:'8px 11px',marginBottom:8,lineHeight:1.4}}>
               <b>{selectedClient.name}</b> no tiene fondos. Pídele a Erasmo o Cristóbal que los soliciten.
@@ -21180,6 +21231,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
               <datalist id='gasto-subproy'>{subsCli.map(x=><option key={x} value={x}/>)}</datalist>
             </FloatFld>}
           </div>
+          </>}
 
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,marginTop:4}}>
             {rows.map((r,i)=>{ const ultima=i===rows.length-1&&!r.concept&&!r.amount; const a=!ultima&&r.amount?avisoDe(r):null
@@ -21202,7 +21254,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         </>
       )}
 
-      {selectedClient&&<div style={{display:'flex',justifyContent:isDesktop?'flex-end':'stretch',marginTop:12}}>{btnGuardar}</div>}
+      {(selectedClient||personal)&&<div style={{display:'flex',justifyContent:isDesktop?'flex-end':'stretch',marginTop:12}}>{btnGuardar}</div>}
     </>
   )
 }
@@ -25242,7 +25294,7 @@ function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendicion
     ? <DetalleGasto e={expense} expenses={expenses} clientEntities={clientEntities} sales={sales} onEditar={()=>setVer(false)}/>
     : tipo==='expenseEdit'
     ? <div className='qt-body'><ExpenseEditForm expense={expense} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={onSaveExpense} onClose={onBack} onDelete={onDeleteExpense} saving={saving} user={user} onAttachChange={onAttachChange}/></div>
-    : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} userName={user?.name} onIrCliente={onIrGastosCliente} onLanding={setLanding} sinCabecera/></div>
+    : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} userName={user?.name} estudioId={user?.estudio_id} onIrCliente={onIrGastosCliente} onLanding={setLanding} sinCabecera/></div>
   return (
     <div>
       <PageHeader origen={origen} onBack={onBack} titulo={titulo} ctx={client?.name||personaCaja||null}/>
@@ -37982,7 +38034,7 @@ export default function App() {
       // Atribución automática: registra quién ingresó el gasto (solo al crear, nunca al editar)
       if(f.type==='gasto' && !f.id && !p.created_by) p.created_by = user?.name || null
       // Movilización = siempre de la oficina (def. del usuario): si no se asignó cliente, va al cliente interno (Liberona Escala). No re-elegir cliente para cada Uber.
-      if(p.type==='gasto' && p.category==='Movilización' && !p.client_id){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi) p.client_id=ofi.id }
+      if(p.type==='gasto' && p.category==='Movilización' && !p.client_id && !p.personal_de){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi) p.client_id=ofi.id }
       const prev = f.id ? (expenses||[]).find(x=>x.id===f.id) : null   // estado anterior: para reajustar la rendición si cambió el monto
       let{data,error}=await supabase.from('expenses').upsert(p).select().single()
       if(error)throw error
