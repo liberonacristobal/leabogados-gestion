@@ -14570,7 +14570,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const [cf,setCf] = useState('todas')                 // filtro de cuotas en la ficha: todas | por_pagar | por_devengar | pagada
   const [cliF,setCliF] = useState(null)                // filtro por cliente en la ficha (no mezclar la bolsa)
   const [ordC,setOrdC] = useState(-1), [ordP,setOrdP] = useState(-1)   // orden por fecha: comisiones · pagos y facturas del SII (−1 = más nuevo primero)
-  const [expT,setExpT] = useState(null), [nVer,setNVer] = useState(12) // comisión desplegada · cuántas se muestran
+  const [expT,setExpT] = useState(null), [nVer,setNVer] = useState(5) // comisión desplegada · cuántas se muestran
+  const [revOpen,setRevOpen] = useState(false), [secAb,setSecAb] = useState(null), [cliMas,setCliMas] = useState(false), [masOpen,setMasOpen] = useState(false)   // ficha: por revisar · tarjetita abierta · más clientes · menú ⋯ (móvil)
   useEffect(()=>{ viewMemGuardar('proveedores',{view:['form','pagar','boleta'].includes(view)?(selId?'ficha':'list'):view,selId,yr,modo,tf}) },[view,selId,yr,modo,tf])
   useEffect(()=>{ if(focoProvId&&proveedores.some(p=>String(p.id)===String(focoProvId))){ setSelId(String(focoProvId)); setView('ficha'); setCf('todas'); onFocoUsado&&onFocoUsado() } },[focoProvId,proveedores])
   const [q,setQ] = useState('')
@@ -14844,7 +14845,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   anios.sort((a,b)=>b.localeCompare(a))
   const selAnio = <select value={yr} onChange={e=>setYr(e.target.value)} title='Año de lo pagado y transferido' style={{fontSize:12.5,fontWeight:700,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',background:C.card,outline:'none',cursor:'pointer'}}>{anios.map(y=><option key={y} value={y}>{y}</option>)}</select>
   const sel = proveedores.find(p=>String(p.id)===String(selId))
-  const abrirFicha = (id,filtro='todas',cli=null) => { setSelId(String(id)); setView('ficha'); setCf(filtro); setCliF(cli); setNVer(12); setExpT(null); setEvMas(false); setCMas(false); setAsgOpen(false); setRetOpen(false) }
+  const abrirFicha = (id,filtro='todas',cli=null) => { setSelId(String(id)); setView('ficha'); setCf(filtro); setCliF(cli); setNVer(5); setExpT(null); setEvMas(false); setCMas(false); setAsgOpen(false); setRetOpen(false) }
   const abrirNuevo = () => { setF({nombre:'',razon_social:'',rut:'',datos_pago:''}); setOkDistinto(false); setCompletarCola([]); setView('form') }
   const abrirEditar = (p,cola=[]) => { setF({id:p.id,nombre:p.nombre||'',razon_social:p.razon_social||'',rut:p.rut||'',datos_pago:p.datos_pago||''}); setOkDistinto(false); setCompletarCola(cola); setSelId(String(p.id)); setView('form') }
   const abrirPagar = p => { const ts=tercDe(p.id).filter(t=>est(t)==='por_pagar'); const nums=[...new Set(ts.map(t=>t.factura_numero).filter(Boolean))]
@@ -15123,7 +15124,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     const band = (titulo,der) => <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}><span style={{...kLbl,color:C.accent,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo}</span>{der}</div>
     const ordTog = (v,set) => <span onClick={()=>set(-v)} style={{fontSize:11.5,fontWeight:600,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>{v<0?'↓ Más nuevo':'↑ Más antiguo'}</span>
     const KP = {com:[C.card,C.accent,C.border],pag:[C.greenBg,C.greenText,'transparent'],pp:[C.soonBg,C.soonText,'transparent'],cob:[C.azulBg,C.accent,'transparent']}
-    const tile = (k,l,v,s,filtro) => { const [bg,fg,bd]=KP[k], on=cf===filtro&&filtro!=='todas'; return <div key={k} onClick={()=>{setCf(on?'todas':filtro);setNVer(12)}} className='pv-c' style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
+    const tile = (k,l,v,s,filtro) => { const [bg,fg,bd]=KP[k], on=cf===filtro&&filtro!=='todas'; return <div key={k} onClick={()=>{setCf(on?'todas':filtro);setNVer(5)}} className='pv-c' style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
       <div style={{...kLbl,color:fg}}>{l}</div><div style={{fontSize:isDesktop?19:16,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85}}>{s}</div></div> }
     const nAnt = tPag.filter(esAnt).length
     const tiles = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
@@ -15132,23 +15133,31 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       {tile('pp','Por pagar',m0.porPagar,m0.porPagar>0?(isDesktop&&m0.masAnt?`El cliente ya pagó · desde ${dmy(m0.masAnt)}`:'El cliente ya pagó'):'Al día','por_pagar')}
       {tile('cob','Sujeto a cobro',alCobroTot,`${tCob.length} factura${tCob.length!==1?'s':''} que el cliente aún no paga`,'por_devengar')}
     </div>
-    const avisos = (sinFacProv.length||porIdentP.length) ? <span style={{fontSize:11.5,color:C.muted,flex:'1 1 280px',minWidth:0}}>
-      {sinFacProv.length>0&&<>Sin factura del proveedor: {sinFacProv.length} · <b style={{color:C.text,...num}}>{fmt(sumM(sinFacProv))}</b> {link('Ver ›',()=>{setCf('sinfac');setNVer(12)},C.accent)}</>}
-      {sinFacProv.length>0&&porIdentP.length>0&&' · '}
-      {porIdentP.length>0&&<>{porIdentP.length} pago{porIdentP.length!==1?'s':''} por identificar · <b style={{color:C.text,...num}}>{fmt(montoMovs(porIdentP))}</b> {link('Enlazar ›',()=>{setEnlP({mid:porIdentP[0].id});setEnlSel(new Set())},C.accent)}</>}
-    </span> : <span style={{flex:1}}/>
-    const btnBoleta = <ActBtn variant='ghost' size='lg' onClick={()=>abrirBoleta(sel)}>Registrar factura del proveedor</ActBtn>
+    // Por revisar: pastilla con contador; al tocarla se despliega cada punto con su acción.
+    const pagSinBancoP = pagadasSinBancoDe(sel.id)
+    const revItems = [
+      sinFacProv.length>0&&{k:'sf',t:'Sin factura del proveedor',s:`${sinFacProv.length} comisi${sinFacProv.length===1?'ón':'ones'} con el cliente pagado: ${sinFacProv.slice(0,6).map(t=>facDe(t)?.invoice_no?'F'+folioN(facDe(t).invoice_no):'s/f').join(', ')}${sinFacProv.length>6?'…':''}`,m:sumM(sinFacProv),a:'Ver',on:()=>{setCf('sinfac');setNVer(5);setRevOpen(false)}},
+      ...porIdentP.map(m=>({k:'pi'+m.id,t:'Pago por identificar',s:`${dmy(m.fecha)}${typeof marcas[m.id]==='string'&&marcas[m.id]!=='Trabajo por identificar'?' · '+marcas[m.id]:''}`,m:Math.abs(Number(m.monto)||0),a:'Enlazar',on:()=>{setEnlP({mid:m.id});setEnlSel(new Set());setSecAb('pagos');setRevOpen(false)}})),
+      pagSinBancoP.length>0&&{k:'sb',t:'Pagadas sin su pago del banco',s:`${pagSinBancoP.length} comisi${pagSinBancoP.length===1?'ón':'ones'}`,m:sumM(pagSinBancoP),a:'Ver',on:()=>{setCf('pagada');setNVer(5);setRevOpen(false)}},
+    ].filter(Boolean)
+    const revPill = revItems.length ? <span onClick={()=>setRevOpen(o=>!o)} className='pv-c' style={{display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 12px',borderRadius:20,border:`1px solid ${C.border}`,background:C.card,fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}>Por revisar <span style={{background:C.soonBg,color:C.soonText,borderRadius:10,padding:'0 7px',fontSize:11}}>{revItems.length}</span> {revOpen?'▴':'▾'}</span> : null
+    const revPanel = revOpen&&revItems.length ? <div style={{...card,overflow:'hidden'}}>{revItems.map((x,i)=><div key={x.k} onClick={x.on} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600}}>{x.t}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s}</div></div>
+      <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:700,...num}}>{fmt(x.m)}</div><div style={{fontSize:11,fontWeight:700,color:C.accent}}>{x.a} ›</div></div></div>)}</div> : null
+    const btnBoleta = <ActBtn variant='ghost' size='lg' onClick={()=>abrirBoleta(sel)}>Registrar factura de {tituloProv(sel).split(' ')[0]}</ActBtn>
+    const btnAsig = onAsignarFacturas ? <ActBtn variant={asgOpen?'softNavy':'ghost'} size='lg' onClick={()=>{setAsgOpen(o=>!o);setFacQ('')}}>{asgOpen?'Cerrar':'Agregar comisión a una factura tuya'}</ActBtn> : null
     const btnPagar = m0.porPagar>0 ? <ActBtn variant='primary' size='lg' full={!isDesktop} onClick={()=>abrirPagar(sel)}>Pagar {fmt(m0.porPagar)} ›</ActBtn> : null
-    const acciones = <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{avisos}{!m0.equipo&&btnBoleta}{isDesktop&&btnPagar}</div>
+    const acciones = <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{revPill}<span style={{flex:1}}/>{isDesktop&&!m0.equipo&&btnBoleta}{isDesktop&&btnAsig}{isDesktop&&btnPagar}</div>
     // Por cliente: la bolsa separada por cliente; tocar filtra las comisiones, el nombre abre su ficha.
     const porClienteCard = porCliente.length>0 ? <div style={{...card,overflow:'hidden'}}>
       {band('Por cliente',cliF?link('Ver todos',()=>setCliF(null),C.accent):null)}
-      {porCliente.map(x=>{ const on=String(cliF)===x.k, nPP=x.ts.filter(t=>est(t)==='por_pagar').length, nCob=x.ts.filter(t=>est(t)==='por_devengar').length, nPg=x.ts.filter(t=>est(t)==='pagada').length
+      {(cliMas?porCliente:porCliente.slice(0,5)).map(x=>{ const on=String(cliF)===x.k, nPP=x.ts.filter(t=>est(t)==='por_pagar').length, nCob=x.ts.filter(t=>est(t)==='por_devengar').length, nPg=x.ts.filter(t=>est(t)==='pagada').length
         const cob=sumSaldo(x.ts.filter(t=>est(t)==='por_devengar')), [v,et]=x.porPagar>0?[x.porPagar,null]:cob>0?[cob,'sujeto a cobro']:[x.pagada,'pagada']
-        return <div key={x.k} onClick={()=>{setCliF(on?null:x.k);setNVer(12)}} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:on?C.azulBg:'transparent'}}>
+        return <div key={x.k} onClick={()=>{setCliF(on?null:x.k);setNVer(5)}} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:on?C.azulBg:'transparent'}}>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.cli?celda(<span>{x.cli.name}</span>,onOpenClientFicha?()=>onOpenClientFicha(x.cli.id):null):'Sin cliente'}</div>
             <div style={{fontSize:11,color:C.muted}}>{[nPP?`${nPP} por pagar`:null,nCob?`${nCob} sujeta${nCob!==1?'s':''} a cobro`:null,nPg?`${nPg} pagada${nPg!==1?'s':''}`:null].filter(Boolean).join(' · ')}</div></div>
           <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:700,color:et?C.muted:C.text,...num}}>{fmt(v)}</div>{et&&<div style={{fontSize:10.5,fontWeight:600,color:C.muted}}>{et}</div>}</div></div> })}
+      {porCliente.length>5&&<div onClick={()=>setCliMas(v=>!v)} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}>{cliMas?'Ver menos':`Ver ${porCliente.length-5} más ›`}</div>}
     </div> : null
     // Comisiones por factura: una línea (fecha · folio · glosa · comisión y estado); al tocar se despliega la cadena cliente → proveedor → pago.
     const estLbl = t => { const e=est(t); if(e==='por_pagar') return [aporteDe(t.id)>0?'Pago parcial':'Por pagar',C.soonText]; if(e==='por_devengar') return ['Sujeto a cobro',C.muted]; return [esAnt(t)?'Anticipo':'Pagada',esAnt(t)?C.azulInfo:C.muted] }
@@ -15182,7 +15191,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       tsF.map(t=>{ const b=facDe(t); return [dmy(fEmi(t)),cliDe(t)?.name||'',b?.invoice_no?`F${folioN(b.invoice_no)}`:'',b?glosaFactura(b):'',pagoCli(t)?.fecha?dmy(pagoCli(t).fecha):'',t.factura_numero||'',Math.round(Number(t.monto)||0),t.pagado_at?dmy(t.pagado_at):'',estLbl(t)[0]] }))
     const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)
     const comisionesCard = <div style={{...card,overflow:'hidden'}}>
-      {band(tituloLista,<span style={{display:'inline-flex',gap:12,alignItems:'center'}}>{onAsignarFacturas&&link(asgOpen?'Cerrar':'+ Asignar factura',()=>{setAsgOpen(o=>!o);setFacQ('')},C.accent)}{ordTog(ordC,setOrdC)}</span>)}
+      {band(tituloLista,ordTog(ordC,setOrdC))}
       {asgOpen&&(()=>{ const yaAsig=new Set(ts.map(t=>String(t.billing_id))); const asignables = facQ.trim() ? billing.filter(b=>{ if(b.status==='Anulada'||b.billing_type==='reembolso'||yaAsig.has(String(b.id))) return false; const c=clients.find(x=>String(x.id)===String(b.client_id)); return _normTxt(`${c?.name||''} ${b.concept||''} ${b.invoice_no||''} ${b.receptor_name||''}`).includes(_normTxt(facQ)) }).slice(0,10) : []
         const asignar = async bid => { const m=parseInt(montos[bid])||0; if(!m||!onAsignarFacturas) return; setAsgBusy(bid); const ok=await onAsignarFacturas(sel.id,[{billing_id:bid,monto:m}]); setAsgBusy(null); if(ok){ setMontos(p=>{const n={...p};delete n[bid];return n}); const b=billing.find(x=>String(x.id)===String(bid)); logActividad(`proveedores.${sel.id}.asignar`,{tabla:'billing',id:bid,detalle:{title:b?.invoice_no?`Factura ${folioN(b.invoice_no)}`:'Factura',monto:m}}) } }
         return <div style={{padding:'0 14px 10px'}}><Buscador value={facQ} onChange={setFacQ} placeholder='Factura del estudio: cliente, concepto o N°…' autoFocus/>
@@ -15221,16 +15230,56 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     const docsCard = docsY.length ? <div style={{...card,overflow:'hidden'}}>{band(`Facturas de ${tituloProv(sel)} en el SII · ${yr}`,ordTog(ordP,setOrdP))}{docsY.map(filaDoc)}</div> : null
     const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
     const bita = <BitacoraLista prefijo={`proveedores.${sel.id}.`} etiquetas={ETQ} limite={15} vacio='Aquí queda cada pago, enlace o cambio: quién y cuándo.'/>
-    const ctxHdr = <span onClick={()=>abrirEditar(sel)} style={{cursor:'pointer'}} title='Ver y editar datos'>{[sel.razon_social,sel.rut,m0.equipo?'equipo':null].filter(Boolean).join(' · ')||'Agregar datos'}</span>
     const btnExcel = <span onClick={exportCuotas} title='Descargar Excel' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/></span>
+    // Datos del proveedor siempre a la vista (copiables); Editar al extremo.
+    const dItem = (l,v,max) => <span style={{display:'flex',flexDirection:'column',minWidth:0,maxWidth:max||'none'}}><span style={{...kLbl,fontSize:9.5}}>{l}</span><span style={{fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}</span></span>
+    const copiar = <b style={{fontSize:11,color:C.accent,marginLeft:4}}>Copiar</b>
+    const relTxt = [m0.equipo?'Equipo':null,m0.les?'Le pagas comisión':null,m0.te?'Te paga comisión':null].filter(Boolean).join(' · ')||'Sin comisiones aún'
+    const datosStrip = <div style={{...card,padding:'9px 14px',display:'flex',flexWrap:'wrap',gap:'6px 22px',alignItems:'flex-end'}}>
+      {isDesktop&&sel.razon_social&&dItem('Razón social',sel.razon_social)}
+      {dItem('RUT',sel.rut?<Copyable text={sel.rut}>{sel.rut}{copiar}</Copyable>:link('+ agregar',()=>abrirEditar(sel),C.accent))}
+      {dItem('Datos de pago',sel.datos_pago?.trim()?<Copyable text={sel.datos_pago}>{sel.datos_pago.trim().split(/\n+/).join(' · ')}{copiar}</Copyable>:link('+ agregar',()=>abrirEditar(sel),C.accent),isDesktop?300:'100%')}
+      {isDesktop&&dItem('Relación',relTxt)}
+      <span style={{marginLeft:'auto'}}>{link('Editar ›',()=>abrirEditar(sel),C.accent)}</span>
+    </div>
+    // Tarjetitas: pagos del banco · facturas del SII · comisiones por cobrar · historial (cerradas; se abre una a la vez).
+    const pagTot = pagosY.reduce((x,m)=>x+Math.abs(Number(m.monto)||0),0), ultPagoF = pagosY.map(m=>String(m.fecha)).sort().pop()
+    const facY = docsY.filter(d=>Number(d.tipo_dte)!==61), nNC = docsY.length-facY.length, docNet = docsY.reduce((x,d)=>x+sgn(d)*Math.abs(Number(d.monto)||0),0)
+    const ultDoc = [...facY].sort((p1,p2)=>String(p1.fecha_emision).localeCompare(String(p2.fecha_emision))).pop()
+    const secs = [
+      pagosCard&&{k:'pagos',t:'Pagos del banco',v:fmt(pagTot),s:`${pagosY.length} en ${yr}${ultPagoF?' · último '+dmy(ultPagoF):''}`,el:pagosCard},
+      docsCard&&{k:'sii',t:'Facturas en el SII',v:fmt(docNet),s:`${facY.length} factura${facY.length!==1?'s':''}${nNC?` y ${nNC} NC`:''} en ${yr}${ultDoc?' · última F'+ultDoc.folio:''}`,el:docsCard},
+      aFavor&&{k:'cobrar',t:'Comisiones por cobrar',v:fmt(m0.aFavor),s:m0.retPend>0?`${fmt(m0.retPend)} sujeto a cobro`:'te paga comisión',el:aFavor},
+      {k:'hist',t:'Historial',v:null,s:'Pagos, enlaces y cambios',el:bita},
+    ].filter(Boolean)
+    const secAbierta = secs.find(x=>x.k===secAb)
+    const mini = x => { const on=secAb===x.k; return <div key={x.k} onClick={()=>setSecAb(on?null:x.k)} className='pv-c' style={isDesktop
+      ? {background:on?C.azulBg:C.card,border:`1px solid ${on?C.accent:C.border}`,borderRadius:10,padding:'9px 12px',cursor:'pointer',minWidth:0}
+      : {display:'flex',alignItems:'center',gap:10,padding:'11px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:on?C.azulBg:'transparent'}}>
+      {isDesktop ? <>
+        <div style={{display:'flex',justifyContent:'space-between',...kLbl,fontSize:9.5}}><span>{x.t}</span><span>{on?'▴':'▾'}</span></div>
+        {x.v&&<div style={{fontSize:14,fontWeight:700,marginTop:3,...num}}>{x.v}</div>}
+        <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s}</div>
+      </> : <>
+        <div style={{flex:1,minWidth:0}}><div style={{...kLbl,fontSize:9.5}}>{x.t}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s}</div></div>
+        {x.v&&<span style={{fontSize:13,fontWeight:700,...num}}>{x.v}</span>}<span style={{color:C.done,fontSize:11}}>{on?'▴':'▾'}</span>
+      </>}</div> }
+    const minis = isDesktop
+      ? <div style={{display:'grid',gridTemplateColumns:`repeat(${secs.length},minmax(0,1fr))`,gap:8}}>{secs.map(mini)}</div>
+      : <div style={{...card,overflow:'hidden'}}>{secs.map((x,i)=><Fragment key={x.k}>{i===0?<div style={{marginTop:-1}}>{mini(x)}</div>:mini(x)}{secAb===x.k&&<div style={{padding:'0 0 8px'}}>{x.el}</div>}</Fragment>)}</div>
+    const masMovil = masOpen ? <div style={{...card,overflow:'hidden'}}>
+      {!m0.equipo&&<div onClick={()=>{setMasOpen(false);abrirBoleta(sel)}} className='pv-c' style={{padding:'11px 14px',fontSize:13,fontWeight:600,cursor:'pointer'}}>Registrar factura de {tituloProv(sel).split(' ')[0]}</div>}
+      {onAsignarFacturas&&<div onClick={()=>{setMasOpen(false);setAsgOpen(true);setFacQ('')}} className='pv-c' style={{padding:'11px 14px',fontSize:13,fontWeight:600,borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>Agregar comisión a una factura tuya</div>}
+      <div onClick={()=>{setMasOpen(false);exportCuotas()}} className='pv-c' style={{padding:'11px 14px',fontSize:13,fontWeight:600,borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>Descargar Excel</div>
+    </div> : null
+    const btnMas = <span onClick={()=>setMasOpen(o=>!o)} title='Más acciones' style={{height:30,width:34,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:masOpen?C.azulBg:C.card,cursor:'pointer',fontWeight:800,color:C.accent}}>⋯</span>
     return (<div>{css}
-      <PageHeader origen='Proveedores' onBack={()=>setView('list')} titulo={tituloProv(sel)} ctx={isDesktop?ctxHdr:null} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{isDesktop&&btnExcel}</span>}/>
+      <PageHeader origen='Proveedores' onBack={()=>setView('list')} titulo={tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{isDesktop?btnExcel:btnMas}</span>}/>
       {wrap(isDesktop ? <>
-        {tiles}{acciones}
+        {datosStrip}{tiles}{acciones}{revPanel}
         <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
-        {(pagosCard||docsCard)&&<div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:12,alignItems:'start'}}>{pagosCard||<span/>}{docsCard||<span/>}</div>}
-        <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',gap:12,alignItems:'start'}}>{datos}{aFavor||<span/>}{bita}</div>
-      </> : <>{tiles}{btnPagar}{acciones}{porClienteCard}{comisionesCard}{pagosCard}{docsCard}{aFavor}{datos}{bita}</>)}
+        {minis}{secAbierta&&secAbierta.el}
+      </> : <>{masMovil}{tiles}{datosStrip}{btnPagar}{acciones}{revPanel}{porClienteCard}{comisionesCard}{minis}</>)}
     </div>)
   }
 
