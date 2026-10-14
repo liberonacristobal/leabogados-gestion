@@ -582,3 +582,4 @@
 - 2026-10-14: Gastos sin cliente: botón «Personal de» para asignar el gasto a un miembro de la oficina.
 - 2026-10-14: Menú de escritorio: «Comisiones» (Proveedores) entra a Finanzas; Repricing pasa al menú ☰.
 - 2026-10-14: Comisiones: «Por devengar» y «Al cobro» pasan a «Sujeto a cobro» en toda la app; «A favor de la oficina» pasa a «Comisiones por cobrar».
+- 2026-10-14: Proveedores (landing): 4 tarjetas que filtran (Por pagar · Sujeto a cobro · Pagada del año · Comisiones por cobrar), por revisar en una línea, lista de una línea que se despliega con vista rápida (le debes · sujeto a cobro · último movimiento), por proveedor ⇄ por cliente; móvil agrupado por estado.
