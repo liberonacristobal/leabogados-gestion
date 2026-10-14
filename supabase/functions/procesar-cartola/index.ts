@@ -94,8 +94,11 @@ Deno.serve(async (req) => {
       `cartola_movimientos?select=hash,cuenta,tipo,monto,descripcion,fecha&fecha=gte.${dd(minF, -5)}&fecha=lte.${dd(maxF, 5)}`,
     )
     const yaHay = new Set(existentes.filter(e => e.fecha >= minF && e.fecha <= maxF).map(e => e.hash))
+    // Huellas solo de lo existente que NO llega por hash en este archivo (antes se saltaba todo lo existente del rango,
+    // y lo cargado a mano sin n° de operación se volvía a insertar: 6 duplicados del 13-10-2026).
+    const entrantes = new Set(movs.map(m => m.hash))
     const huellas: Record<string, number> = {}
-    for (const e of existentes) { if (yaHay.has(e.hash)) continue; const h = huellaGlosa(e); if (h) huellas[h] = (huellas[h] || 0) + 1 }
+    for (const e of existentes) { if (entrantes.has(e.hash)) continue; const h = huellaGlosa(e); if (h) huellas[h] = (huellas[h] || 0) + 1 }
     const nuevos = movs.filter(m => {
       if (yaHay.has(m.hash)) return false
       const h = huellaGlosa(m)
