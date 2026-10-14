@@ -580,3 +580,4 @@
 - 2026-10-14: Regla de oro: sin franjas de color a la izquierda. Se quitan las 3 que quedaban (Revisión de carga, tarjeta de factura en la venta, encabezado de lista).
 - 2026-10-14: Proveedores: ficha rediseñada (4 tarjetas, por cliente, comisiones por factura en una línea que se despliega, pagos del banco y facturas del SII); Banco: pago a proveedor con comisiones = pago de comisión por defecto (calce exacto, anticipo u otro servicio) y abono muestra la comisión incluida; trigger comisión ↔ factura pagada; fix getBilling en 10 lugares (comisiones de venta quedaban sin factura); reparto de la venta no toca comisiones por factura.
 - 2026-10-14: Gastos sin cliente: botón «Personal de» para asignar el gasto a un miembro de la oficina.
+- 2026-10-14: Menú de escritorio: «Comisiones» (Proveedores) entra a Finanzas; Repricing pasa al menú ☰.
