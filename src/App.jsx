@@ -20114,10 +20114,10 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           const alta=s&&s.conf>=90
           return (
             <div key={e.id} style={{background:C.card,borderRadius:12,padding:'10px 12px',marginBottom:8,border:`1px solid ${C.border}`}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:s||orfPickFor===e.id?8:9}}>
+              <div onClick={()=>onEdit&&onEdit(e)} title='Ver el gasto' style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:s||orfPickFor===e.id?8:9,cursor:onEdit?'pointer':'default'}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>{e.date?fmtFechaDMY(e.date):'sin fecha'} · {e.category||'Otro'}{e.type==='fondo'?' · Fondo':''}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1.35,overflowWrap:'anywhere'}}>{e.concept||'—'}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>{e.date?fmtFechaDMY(e.date):'sin fecha'} · {e.category||'Otro'}{e.type==='fondo'?' · Fondo':''}{e.ot_number?` · OT ${e.ot_number}`:''}</div>
                 </div>
                 <span style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(e.amount)}</span>
               </div>
