@@ -35260,6 +35260,17 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
     setBusy(null)
   }
   const enlazarTodasCC = async()=>{ if(ccBulk) return; setCcBulk(true); for(const {cargo,petty} of revisionCC.listas){ await enlazarCajaChica(cargo,petty) } setCcBulk(false) }
+  // Con el barrido automático encendido, los calces exactos (misma persona y monto, transferencia el mismo día o el anterior) se enlazan
+  // apenas la cartola está en el banco, sin esperar al barrido de la mañana. Si el monto es igual a un sueldo ya conciliado a esa persona,
+  // calceCajaChica lo deja en "por confirmar" y nunca llega aquí. Cada par se intenta una sola vez (un error no se reintenta en bucle).
+  const ccAutoIntentados = useRef(new Set())
+  useEffect(()=>{ if(!ccAuto||DEMO||loading||busy||ccBulk) return
+    const ls=revisionCC.listas.filter(({cargo})=>!ccAutoIntentados.current.has(String(cargo.id))); if(!ls.length) return
+    ls.forEach(({cargo})=>ccAutoIntentados.current.add(String(cargo.id)))
+    ;(async()=>{ setCcBulk(true)
+      for(const {cargo,petty} of ls){ await enlazarCajaChica(cargo,petty); logActividad('cajachica.conciliada_auto',{tabla:'petty_cash',id:petty.id,detalle:{title:`${petty.user_name} · transferencia ${fmtFechaDMY(cargo.fecha)}`,monto:Math.round(Math.abs(cargo.monto||0))}}) }
+      setCcBulk(false) })()
+  },[revisionCC,ccAuto,loading,busy,ccBulk])   // eslint-disable-line
   // Fila de una propuesta (por confirmar): caja(s) ↔ transferencia(s) + motivo + la acción que corresponde al tipo.
   // Trazable: cada transferencia del panel abre su movimiento del banco (detalle con glosa, cuenta y conciliación).
   const verMovCC = id => { setCcRevOpen(false); setModalMov(id) }
