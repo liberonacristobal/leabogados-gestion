@@ -170,8 +170,8 @@ const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-
 const nDias = n => { const d=Math.abs(Math.round(Number(n)||0)); return d+' día'+(d===1?'':'s') }
 // Fecha destacada (día grande + "mes año") — formato estándar de listas. col opcional (urgencia).
 // Día grande de LISTAS (formato que eligió el usuario en Banco, 2026-10-09): día 18px + "mmm aa". Fuente única para Abonos, Cargos y caja chica.
-const diaGrande = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0}}/>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:18,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:10,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
-const bigDate = (d,col) => { /* año completo (canon de fecha: siempre con año de 4 dígitos) */ const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0}}/>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:16,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:9,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0]}</div></div> }
+const diaGrande = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.15,fontSize:9,color:C.done,fontWeight:600}}>sin<br/>fecha</div>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:18,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:10,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
+const bigDate = (d,col) => { /* año completo (canon de fecha: siempre con año de 4 dígitos) */ const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.15,fontSize:9,color:C.done,fontWeight:600}}>sin<br/>fecha</div>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:16,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:9,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0]}</div></div> }
 // Saldo de una factura = lo que falta cobrar. FUENTE ÚNICA: lo abonado = el mayor entre paid_amount (campo de la factura) y los abonos CONCILIADOS del banco (_respaldoCache, suma de conciliacion.monto_aplicado). Así nunca cuenta doble ni ignora un abono que el banco ya respaldó. Pagada/Anulada = 0.
 let _respaldoCache = {}
 const setRespaldoCache = m => { _respaldoCache = m || {} }
@@ -1143,14 +1143,19 @@ function recorridoGasto(e,{conc=[],movById={},expenses=[]}={}){
 // que antes se repetía inline en el Dashboard y la lista de Clientes. Equivale a sumar esto = fgCliente().saldo.
 const saldoDelta = e => !cuentaEnSaldo(e) ? 0 : e.type==='fondo' ? (e.amount||0) : (e.no_descuenta_saldo ? 0 : -(e.amount||0))
 
-// FUENTE ÚNICA del saldo de un fondo de cliente para RENDICIONES (modal, PDF y correo usan ESTA).
-// saldo disponible = fondos recibidos − gastos YA RENDIDOS (de todas las rendiciones de la RS).
-// Los gastos no rendidos no descuentan saldo todavía. scopeEntId acota a una razón social (multi-RS); null = todo el cliente.
-function rendicionSaldo(expenses, clientId, scopeEntId){
-  const movs=(expenses||[]).filter(e=>e.client_id===clientId && (!scopeEntId || e.entity_id===scopeEntId))
-  const totFondos=movs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-  const rendido=movs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
-  return {totFondos, rendido, saldo:totFondos-rendido}
+// FUENTE ÚNICA del fondo de un cliente para RENDICIONES (armar tanda, correo, Ver PDF y PDF adjunto usan ESTA).
+// saldo = fondos recibidos − gastos YA RENDIDOS. Los no rendidos aún no descuentan. Mismas reglas que fgCliente:
+// fuera lo resumido en una apertura y los gastos históricos (no_descuenta_saldo) no descuentan.
+// Alcance: scopeEntId null = todo el cliente; con RS = esa RS + los movimientos sin RS (notaría sin RS no queda fuera).
+// excludeRenderId deja fuera de "rendiciones previas" la rendición que se está mostrando.
+function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=null){
+  const movs=(expenses||[]).filter(e=>e.client_id===clientId && cuentaEnSaldo(e) && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id))
+  const fondos=movs.filter(e=>e.type==='fondo').sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
+  const totFondos=fondos.reduce((a,e)=>a+(e.amount||0),0)
+  const descuentan=movs.filter(e=>!(e.type==='gasto'&&e.no_descuenta_saldo))
+  const rendido=descuentan.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
+  const {previas, rendidoAntes}=rendicionesPreviasDe(descuentan, excludeRenderId)
+  return {fondos, totFondos, rendido, saldo:totFondos-rendido, previas, rendidoAntes}
 }
 // Rendiciones ANTERIORES (para el desglose "Resumen del fondo"): agrupa gastos ya rendidos por rendición,
 // excluyendo la actual. Recibe movimientos ya acotados a la RS. Devuelve [{total,fecha}] y la suma.
@@ -1276,9 +1281,7 @@ function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='
   // Scope del saldo: con 1 RS = todo el cliente (incl. fondos sin entity_id); con 2+ RS se acota a la RS de los gastos.
   const entId = _entsC.length>1 ? _gEnt : null
   const ent = _entsC.length===1 ? _entsC[0] : (_gEnt ? (clientEntities||[]).find(x=>x.id===_gEnt) : null)
-  const scopedMovs = (expenses||[]).filter(e=>e.client_id===(client&&client.id) && (!entId || e.entity_id===entId))
-  const fondos = scopedMovs.filter(e=>e.type==='fondo').sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
-  const {previas, rendidoAntes} = rendicionesPreviasDe(scopedMovs, r.id)
+  const {fondos, totFondos, previas, rendidoAntes} = rendicionFondo(expenses, client&&client.id, entId, r.id)
   return rendicionDocHtml({
     razon: (ent&&ent.name) || (client&&client.name) || '—',
     rut: (ent&&ent.rut) || (client&&client.rut) || '',
@@ -1287,7 +1290,7 @@ function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='
     dirigidoA: r.dirigido_a || null,
     gastos, fondos,
     totGastos: gastos.reduce((a,e)=>a+(e.amount||0),0),
-    totFondos: fondos.reduce((a,e)=>a+(e.amount||0),0),
+    totFondos,
     rendidoAntes, rendicionesPrevias: previas, correlativo: r.correlativo,
     project: r.project || null, subproject: r.subproject || null,
     lang,
@@ -15414,9 +15417,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     supabase.from('expense_attachments').select('expense_id').in('expense_id',ids).then(({data})=>{ if(alive) setConRespaldo(new Set((data||[]).map(r=>String(r.expense_id)))) },()=>{})
     return ()=>{alive=false}
   },[client.id,selEnt])
-  const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-  const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
-  const saldoActual = fondosDisp - gastosYaRend
+  const _fondoRend = rendicionFondo(expenses, client.id, singleRS?null:selEnt)
+  const fondosDisp = _fondoRend.totFondos
+  const saldoActual = _fondoRend.saldo
   // Correlativo por cliente: se cuenta solo sobre las rendiciones ENVIADAS (correlativo grabado). Tentativo = max + 1.
   const rendsCliEnv = (rendiciones||[]).filter(r=>String(r.client_id)===String(client.id) && r.correlativo && !r.anulada_at)
   const nextCorr = Math.max(0, ...rendsCliEnv.map(r=>r.correlativo||0)) + 1
@@ -15454,7 +15457,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
 
   const totalSel = disponibles.filter(e=>selected.has(e.id)).reduce((a,e)=>a+(e.amount||0),0)
   const saldoTrasRendicion = saldoActual - totalSel
-  const fondosList = allMovs.filter(e=>e.type==='fondo').sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
+  const fondosList = _fondoRend.fondos
 
   // "Dirigido a": precargar del valor guardado de rendiciones anteriores del cliente (tabla contacts)
   useEffect(()=>{
@@ -15520,7 +15523,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     let periodo='\u2014'
     if(fechas.length){ const ini=fechas[0], fin=fechas[fechas.length-1]; periodo = mesAno(ini)===mesAno(fin) ? mesAno(ini) : `${dia(ini)} \u2013 ${dia(fin)}` }
     // Rendiciones anteriores de este fondo (la tanda actual a\u00fan no est\u00e1 rendida \u2192 queda fuera).
-    const {previas, rendidoAntes} = rendicionesPreviasDe(allMovs)
+    const {previas, rendidoAntes} = _fondoRend
     return rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA: atencionVal||null, gastos: gastosSel.map(e=>({...e,respaldo:conRespaldo.has(String(e.id))})), fondos: fondosList, totGastos: totalSel, totFondos: fondosDisp, rendidoAntes, rendicionesPrevias: previas, correlativo: nextCorr, project: proyecto||null, subproject: (subproyecto||'').trim()||null })
   }
 
@@ -15669,7 +15672,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         <div style={{...lblG,marginBottom:4}}>Esta rendición</div>
         {lnR(`${selected.size} gasto${selected.size!==1?'s':''} seleccionado${selected.size!==1?'s':''}`, fmtN(totalSel), selected.size?C.overdue:C.muted)}
         {lnR('Fondos', fmtN(fondosDisp))}
-        {lnR('Ya rendido', fmtN(gastosYaRend))}
+        {lnR('Ya rendido', fmtN(_fondoRend.rendido))}
         <div style={{borderTop:`1px solid ${C.track}`,marginTop:4,paddingTop:5}}>{lnR(saldoTrasRendicion<0?'Saldo a cargo del cliente':'Saldo a favor del cliente', fmtN(Math.abs(saldoTrasRendicion)), saldoTrasRendicion<0?C.overdueText:C.greenText, true)}</div>
       </div>
   )
@@ -23970,7 +23973,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   // Negativo = el cliente debe al Estudio → se incluyen los datos bancarios.
   // 1 RS: todo el cliente (incl. fondos sin entity_id) pertenece a esa RS; solo se acota con 2+ RS.
   const entId = ((clientEntities||[]).filter(e=>e.client_id===r.client_id).length>1) ? (det.find(e=>e.entity_id)||{}).entity_id : null
-  const _rs = rendicionSaldo(expenses, r.client_id, entId)
+  const _rs = rendicionFondo(expenses, r.client_id, entId)
   const saldoCliente = _rs.saldo
   const totFondosCli = _rs.totFondos
   const debeCliente = saldoCliente < 0
@@ -25459,13 +25462,10 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
   const gEnt = (gastos.find(e=>e.entity_id)||{}).entity_id
   const scopeEntId = entsClient.length>1 ? gEnt : null
   const ent = entsClient.length===1 ? entsClient[0] : (gEnt ? (clientEntities||[]).find(x=>x.id===gEnt) : null)
-  const scopedMovs = (expenses||[]).filter(e=>e.client_id===(client&&client.id) && (!scopeEntId || e.entity_id===scopeEntId))
-  const fondos = scopedMovs.filter(e=>e.type==='fondo').sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
-  const { previas, rendidoAntes } = rendicionesPreviasDe(scopedMovs, r.id)
+  const { fondos, totFondos, previas, rendidoAntes } = rendicionFondo(expenses, client&&client.id, scopeEntId, r.id)
   const razon = (ent&&ent.name) || (client&&client.name) || '—'
   const rut = (ent&&ent.rut) || (client&&client.rut) || ''
   const totGastos = gastos.reduce((a,e)=>a+(e.amount||0),0)
-  const totFondos = fondos.reduce((a,e)=>a+(e.amount||0),0)
   const saldo = totFondos - rendidoAntes - totGastos
   const fechaEmision = r.created_at ? new Date(r.created_at).toLocaleDateString(EN?'en-GB':'es-CL',{day:'2-digit',month:'long',year:'numeric'}) : ''
   const T = EN
