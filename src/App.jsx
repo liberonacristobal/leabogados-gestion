@@ -13644,7 +13644,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               {(estSel.size>0||agingF)&&<span onClick={()=>{setEstSel(new Set());setAgingF('')}} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
             </div>
             {rows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>}
-            {isDesktop&&rows.length>0&&<div style={{display:'grid',gridTemplateColumns:'62px 20px minmax(0,1fr) 96px 92px 150px',gap:14,padding:'2px 14px 6px',borderLeft:'3px solid transparent',borderBottom:`1px solid ${C.border}`,marginBottom:2,alignItems:'center'}}>
+            {isDesktop&&rows.length>0&&<div style={{display:'grid',gridTemplateColumns:'62px 20px minmax(0,1fr) 96px 92px 150px',gap:14,padding:'2px 14px 6px',borderBottom:`1px solid ${C.border}`,marginBottom:2,alignItems:'center'}}>
               {hCell('fecha','Fecha')}
               <span></span>
               {hCell('cliente','Cliente · documento')}
@@ -17281,7 +17281,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               const badge = bad?['Error',C.overdue,'#fff']:(bucket==='auto'?[r.personal_de?'Personal':r.isInternal?'Interno':r.matchMethod==='aprendido'?'Aprendido':'Auto',C.normal,'#fff']:bucket==='sug'?[`Sugerido ${r.confidence||''}%`,'#C77F18','#fff']:bucket==='rev'?[`Revisar ${r.confidence||''}%`,C.overdue,'#fff']:['Sin cliente',C.muted,'#fff'])
               if((r.isInternal||r.personal_de)&&!bad) badge[1]=C.muted
               return (
-                <div key={r.id} style={{padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:bg,boxShadow:bad?`inset 3px 0 0 ${C.overdue}`:'none'}}>
+                <div key={r.id} style={{padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:bg}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                     <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:badge[2],background:badge[1],borderRadius:4,padding:'2px 7px',flexShrink:0,whiteSpace:'nowrap'}}>{badge[0]}</span>
                     <span style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.fecha||'sin fecha'} · {r.rut||r.nombre||'sin RUT'}</span>
@@ -22825,7 +22825,7 @@ function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=null, en
       <div style={{fontSize:10.5,color:olv?C.overdueText:C.muted,marginTop:2}}>{emit(b)?`Vence ${dmy(b.due)}`:`Vence ${dmy(effDue(b))}`}{olv?' · sin facturar':''}</div>
     </div>) }
   const celdaFactura = (b) => emit(b) ? (
-    <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${estCol(b)}`,borderRadius:10,padding:'8px 10px',cursor:onOpenFactura?'pointer':'default'}}>
+    <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',cursor:onOpenFactura?'pointer':'default'}}>
       <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{fontSize:12.5,color:C.accent,fontWeight:700}}>N° {folioN(b.invoice_no)||b.invoice_no}</span><span style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div>
       <div style={{fontSize:10.5,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><span style={{color:estCol(b),fontWeight:600}}>{estTxt(b)}</span><span>Emitida {dmy(b.issued_at)}</span>{rutTxt(b)&&<span>· {rutTxt(b)}</span>}<span style={{color:C.done,marginLeft:'auto'}}>›</span></div>
     </div>

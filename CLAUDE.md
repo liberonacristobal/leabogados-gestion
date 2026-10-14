@@ -149,6 +149,10 @@ La falla recurrente (día entero 2026-10-01): tomé un número derivado —una v
 
 Refuerza con dientes "cuestionar el propio análisis" y "nunca de memoria". Mnemotecnia: **filas, no cuentas · ciclo, no foto · esperable, no defecto · prueba, no corazonada.**
 
+## REGLA DE ORO: sin franjas de color a la izquierda ("no parecer IA")
+
+Nunca usar líneas o franjas de color a la izquierda para marcar estado: ni `borderLeft` de color, ni `boxShadow: inset Npx 0 0`, ni divs-franja verticales. Aplica a la app Y a todo render, mockup o propuesta. El estado se lee por el color de la cifra o del texto, un punto tenue o el chip del canon. Las etiquetas/títulos de sección y de KPI van en `C.accent` (visibles por jerarquía), no en gris claro.
+
 ## Economía de espacio en formularios
 
 - Formularios y paneles deben ser densos pero legibles. Eliminar padding decorativo, márgenes inflados y secciones que obligan a scroll innecesario.
