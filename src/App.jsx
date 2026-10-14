@@ -955,13 +955,17 @@ function overheadHoraDe(costosOfiRows, metas={}, costoHora={}, ym){
   return capMes>0 ? overheadMes/capMes : 0
 }
 // Margen real de un cliente permanente (fuente única): ingreso (honorario×meses) − costo (horas×costo cargado). Úsalo en Horas y en la alerta del dueño.
-function margenDeSale(sale, horas, costoHora={}, overheadHora=0, mesesYTD=1, ufHoy=0, ufAnioEff=0, anio){
+function margenDeSale(sale, horas, costoHora={}, overheadHora=0, mesesYTD=1, ufHoy=0, ufAnioEff=0, anio, terceros=[], billing=[]){
   anio = anio || String(new Date().getFullYear())
+  // Comisiones del año de esta venta (terceros_pagos por la fecha de su factura; sin factura, por la fecha de pago) — rebajan el margen.
+  const issuedBy={}; (billing||[]).forEach(b=>{ if(b&&!b.deleted_at&&b.status!=='Anulada') issuedBy[String(b.id)]=String(b.issued_at||b.due||'') })
+  const comisCLP=Math.round((terceros||[]).filter(t=>t&&String(t.sale_id)===String(sale.id)&&String(t.billing_id?(issuedBy[String(t.billing_id)]||''):(t.pagado_at||'')).slice(0,4)===anio).reduce((a,t)=>a+(Number(t.monto)||0),0))
   const feeUF=ventaUFmesDe(sale, ufAnioEff); const ingCLP=Math.round(feeUF*mesesYTD*ufHoy)
   let costoCLP=0, faltaCosto=false
   ;(horas||[]).forEach(h=>{ if(String(h.client_id)!==String(sale.client_id)||String(h.fecha||'').slice(0,4)!==anio) return; const c=Number(costoHora[h.user_name]); if(!(h.user_name in costoHora)||!c){ faltaCosto=true } costoCLP += (Number(h.horas)||0)*((c||0)+overheadHora) })
-  costoCLP=Math.round(costoCLP); const margen=ingCLP-costoCLP; const pct=ingCLP>0?Math.round(margen/ingCLP*100):0
-  return { cid:sale.client_id, ingCLP, costoCLP, margen, pct, sinIng:feeUF<=0, faltaCosto }
+  costoCLP=Math.round(costoCLP); const margen=ingCLP-costoCLP-comisCLP; const pct=ingCLP>0?Math.round(margen/ingCLP*100):0
+  // costoCLP = horas + comisiones, para que paga − cuesta = margen en toda vista; el desglose va en costoHorasCLP/comisCLP.
+  return { cid:sale.client_id, ingCLP, costoCLP:costoCLP+comisCLP, costoHorasCLP:costoCLP, comisCLP, margen, pct, sinIng:feeUF<=0, faltaCosto }
 }
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
@@ -3491,7 +3495,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const ufDeVenta = s => ventaUF(s, ufRef)
   const clpDeVenta = s => ventaCLP(s, ufRef)
   const vendidoBrutoUF = salesYr.reduce((a,s)=>a+ufDeVenta(s),0)
-  const costoUF = salesYr.reduce((a,s)=>a+((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))+(s.moneda==='CLP'&&s.cost_clp&&ufRef>0?((parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1)):0),0)
+  const costoUF = salesYr.reduce((a,s)=>{ const u=parseFloat(s.uf_value)||ufRef; return a+(u>0?comisionesVenta(s,terceros,billing,ufRef).clp/u:0) },0)   // fuente única comisionesVenta
   const vendidoNetoUF = vendidoBrutoUF - costoUF
   // ① P&L / ② break-even — costos de oficina acumulados (respetan el quiebre de mes vía costosOficinaMes).
   const _mNow = new Date().getMonth()+1
@@ -3514,13 +3518,13 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       const ufAnioEff=ufAnio>0?ufAnio:ufRef
       const oh=overheadHoraDe(costosOfiRows,metas,costoHora)
       const mesesYTD=new Date().getMonth()+1
-      const negs=(sales||[]).filter(s=>!s.deleted_at&&esRec(s)).map(s=>margenDeSale(s,hrs,costoHora,oh,mesesYTD,ufRef,ufAnioEff,String(yr))).filter(d=>!d.sinIng&&!d.faltaCosto&&d.margen<0).sort((a,b)=>a.margen-b.margen)
+      const negs=(sales||[]).filter(s=>!s.deleted_at&&esRec(s)).map(s=>margenDeSale(s,hrs,costoHora,oh,mesesYTD,ufRef,ufAnioEff,String(yr),terceros,billing)).filter(d=>!d.sinIng&&!d.faltaCosto&&d.margen<0).sort((a,b)=>a.margen-b.margen)
       setMargenNeg(negs)
     },()=>{})
     return ()=>{alive=false}
   },[sales,costosOfiRows,ufRef,yr])
   const vendidoBrutoCLP = Math.round(salesYr.reduce((a,s)=>a+clpDeVenta(s),0))
-  const costoCLP = Math.round(costoUF * ufRef)
+  const costoCLP = Math.round(salesYr.reduce((a,s)=>a+comisionesVenta(s,terceros,billing,ufRef).clp,0))
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
   const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
 
@@ -3569,11 +3573,12 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const metricasAnio = (year) => {
     const sy = sales.filter(s=>s.year===year&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s))   // Vendido = Activo + Terminado (fuente única con SalesView; excluye Pausado, que antes divergía)
     const bruto = Math.round(sy.reduce((a,s)=>a+clpDeVenta(s),0))
-    const costo = Math.round(sy.reduce((a,s)=>a+(((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))*ufRef)+((s.moneda==='CLP'&&s.cost_clp)?((parseFloat(s.cost_clp)||0)*(esRec(s)?12:1)):0),0))
+    // Comisiones = fuente única comisionesVenta (las registradas; si una venta no tiene, su costo pactado). En UF, con la UF de la venta.
+    const costo = Math.round(sy.reduce((a,s)=>a+comisionesVenta(s,terceros,billing,ufRef).clp,0))
     const neto = bruto - costo
     // UF NOMINALES (suma directa de amount_uf, igual que la pestaña Ventas) — para que ambas vistas cuadren en modo UF. No reconvertir el CLP con la UF de hoy.
     const brutoUF = sy.reduce((a,s)=>a+ufDeVenta(s),0)
-    const costoUF = sy.reduce((a,s)=>a+((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))+((s.moneda==='CLP'&&s.cost_clp&&ufRef>0)?((parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1)):0),0)
+    const costoUF = sy.reduce((a,s)=>{ const u=parseFloat(s.uf_value)||ufRef; return a+(u>0?comisionesVenta(s,terceros,billing,ufRef).clp/u:0) },0)
     const netoUF = brutoUF - costoUF
     const meta = Number(targets.find(t=>t.year===year)?.target_amount) || (year===currentYear?META_CLP:0)
     const pct = meta>0 ? Math.round((neto/meta)*100) : 0   // % meta sobre NETO (igual que el historial y pctMeta) — no mezclar bruto/neto
@@ -5112,12 +5117,13 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     // Servicios y Precios: por área (venta, ticket, recurrencia, rango, clientes). Activo+Terminado.
     const ventasReales = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s))
     const areaAgg = {}
-    ventasReales.forEach(s=>{ const a=s.area||'Sin área'; const u=ventaUF(s,ufRef); const co=costoVentaUF(s,ufRef); if(!areaAgg[a]) areaAgg[a]={uf:0,costo:0,conCosto:0,n:0,rec:0,tickets:[],byCli:{}}; const A=areaAgg[a]; A.uf+=u; A.costo+=co; if(co>0) A.conCosto++; A.n++; if(esRecurrente(s)) A.rec++; if(u>0) A.tickets.push(u); if(s.client_id) A.byCli[s.client_id]=(A.byCli[s.client_id]||0)+u })
+    const comUFv = s => { const u=parseFloat(s.uf_value)||ufRef; return u>0 ? comisionesVenta(s,terceros,billing,ufRef).clp/u : 0 }   // comisiones reales (o pactadas) en UF de la venta — fuente única
+    ventasReales.forEach(s=>{ const a=s.area||'Sin área'; const u=ventaUF(s,ufRef); const co=comUFv(s); if(!areaAgg[a]) areaAgg[a]={uf:0,costo:0,conCosto:0,n:0,rec:0,tickets:[],byCli:{}}; const A=areaAgg[a]; A.uf+=u; A.costo+=co; if(co>0) A.conCosto++; A.n++; if(esRecurrente(s)) A.rec++; if(u>0) A.tickets.push(u); if(s.client_id) A.byCli[s.client_id]=(A.byCli[s.client_id]||0)+u })
     const servicios = Object.entries(areaAgg).map(([area,d])=>({ area, uf:d.uf, costo:d.costo, margen:d.uf-d.costo, margenPct:d.uf>0?(d.uf-d.costo)/d.uf*100:0, conCosto:d.conCosto, n:d.n, ticket:d.n?d.uf/d.n:0, recPct:d.n?Math.round(d.rec/d.n*100):0, min:d.tickets.length?Math.min(...d.tickets):0, max:d.tickets.length?Math.max(...d.tickets):0, clientes:Object.entries(d.byCli).map(([cid,uf])=>({cid,uf,name:((clients||[]).find(c=>String(c.id)===String(cid))||{}).name||'—'})).sort((a,b)=>b.uf-a.uf) })).sort((a,b)=>b.uf-a.uf)
     const costoTot = servicios.reduce((a,s)=>a+s.costo,0), ufTot = servicios.reduce((a,s)=>a+s.uf,0)
-    const serviciosTot = {areas:servicios.length, uf:ufTot, costo:costoTot, margen:ufTot-costoTot, conCosto:ventasReales.filter(s=>costoVentaUF(s,ufRef)>0).length, nTotal:ventasReales.length}
+    const serviciosTot = {areas:servicios.length, uf:ufTot, costo:costoTot, margen:ufTot-costoTot, conCosto:ventasReales.filter(s=>comUFv(s)>0).length, nTotal:ventasReales.length}
     // Ventas sin costo cargado (Activo+Terminado): el margen no es representativo hasta cargar su reparto de terceros.
-    const ventasSinCosto = ventasReales.filter(s=>costoVentaUF(s,ufRef)<=0).sort((a,b)=>ventaUF(b,ufRef)-ventaUF(a,ufRef))
+    const ventasSinCosto = ventasReales.filter(s=>comUFv(s)<=0).sort((a,b)=>ventaUF(b,ufRef)-ventaUF(a,ufRef))
 
     // Tendencias: crecimiento año vs año anterior (total y por abogado). Complementa (no duplica) Ventas-por-mes ni Servicios.
     const prevYr = yr-1
@@ -26562,12 +26568,13 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
 
 
 // ─── REPORT BUILDER ──────────────────────────────────────────────────────────
-function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
+function ReportBuilder({sales,billing,clients,expenses,tasks,terceros=[],onClose}) {
   const {uf:ufHoy} = useUF()
   // Misma fuente de verdad que el Dashboard: ventaUF anualiza recurrentes y convierte CLP→UF.
   const ufRef = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
   const esRec = s => esRecurrente(s)
-  const costoVentaUF = s => ((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1)) + (s.moneda==='CLP'&&s.cost_clp&&ufRef>0 ? (parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1) : 0)
+  // Comisiones en UF de la venta — fuente única comisionesVenta (registradas; si no hay, el costo pactado).
+  const costoVentaUF = s => { const u=parseFloat(s.uf_value)||ufRef; return u>0 ? comisionesVenta(s,terceros,billing,ufRef).clp/u : 0 }
   const [sections,setSections] = useState({ventas:true,cobranza:true,gastos:true,tareas:false})
   const [period,setPeriod] = useState('month')
   const [selYear,setSelYear] = useState(String(currentYear))
@@ -30402,7 +30409,7 @@ function extraerTextoGmail(msg){
   if(!t.trim()){ t = walk(msg?.payload,'text/html').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ') }
   return t.replace(/\r?\n/g,' ').replace(/&nbsp;/g,' ').trim()
 }
-function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, onOpenClientFicha, onOpenCostosOfi }){
+function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing=[], currentUserName, isAdmin, onOpenClientFicha, onOpenCostosOfi }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const me = currentUserName || ''
   const [horas,setHoras] = useState([])
@@ -30645,8 +30652,8 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
   const hayOverhead = overheadMes>0 && capacidadMes>0
   const [ohOpen,setOhOpen] = useState(false)   // desglose del overhead por categoría (clickeable → Costos de Oficina)
   const overheadPorCat = useMemo(()=>{ const m={}; costosOfi.filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).forEach(r=>{ m[r.categoria]=(m[r.categoria]||0)+(r.es_ingreso?-1:1)*effCosto(r) }); return Object.entries(m).map(([cat,mes])=>({cat,mes,hora:capacidadMes>0?mes/capacidadMes:0})).filter(x=>x.mes!==0).sort((a,b)=>b.mes-a.mes) },[costosOfi,capacidadMes])
-  const margenData = useMemo(()=> permanentes.map(({sale})=> margenDeSale(sale, horas, costoHora, cargarOverhead?overheadHora:0, mesesYTD, ufHoy, ufAnioEff, anioAct)),
-    [permanentes, horas, costoHora, mesesYTD, ufHoy, ufAnioEff, anioAct, cargarOverhead, overheadHora])
+  const margenData = useMemo(()=> permanentes.map(({sale})=> margenDeSale(sale, horas, costoHora, cargarOverhead?overheadHora:0, mesesYTD, ufHoy, ufAnioEff, anioAct, terceros, billing)),
+    [permanentes, horas, costoHora, mesesYTD, ufHoy, ufAnioEff, anioAct, cargarOverhead, overheadHora, terceros, billing])
   const margenTot = margenData.filter(d=>!d.sinIng).reduce((a,d)=>({ing:a.ing+d.ingCLP,costo:a.costo+d.costoCLP,margen:a.margen+d.margen}),{ing:0,costo:0,margen:0})
   // ④ Rentabilidad por abogado: valor generado (horas facturables × tarifa) vs costo cargado (horas × costo/hora cargado).
   const tarifaCLP = (Number(tarifaUF)||3) * ufHoy
@@ -30834,7 +30841,7 @@ function HorasView({ clients=[], sales=[], tasks=[], currentUserName, isAdmin, o
           {hayCostos && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:10,color:'#fff'}}>
             <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Margen real · permanentes · {anioAct}</div>
             <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums',color:margenTot.margen>=0?'#fff':'#FFD2CC'}}>{f0(margenTot.margen)}</div>
-            <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Ingreso {f0(margenTot.ing)} − costo {f0(margenTot.costo)} (horas × costo/hora).</div>
+            <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Ingreso {f0(margenTot.ing)} − costo {f0(margenTot.costo)} (horas × costo/hora{margenData.some(d=>d.comisCLP>0)?' + comisiones':''}).</div>
           </div>}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px',gap:8}}>
             <span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,padding:2,flexShrink:0}}>
@@ -39393,7 +39400,7 @@ export default function App() {
         <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onAjustarNotaria={handleAjustarNotaria} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
         )})()}
         {tab==='flujo'&&pagina?.type==='solicitarFondos'&&<FlujoPagina origen={origenNav('Gastos')} titulo='Solicitar fondos' ctx={pagina.data?.client?.name||null} onBack={()=>setModal(null)} maxW={1120}><SolicitarFondosModal asPage client={pagina.data?.client} clients={clients} sale={pagina.data?.sale} montoInicial={pagina.data?.monto} responsable={pagina.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/></FlujoPagina>}
-        {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} terceros={terceros} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='redaccion'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Redactar con IA' onBack={()=>setModal(null)} maxW={1120}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='plazos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Plazos y obligaciones' onBack={()=>setModal(null)} maxW={1120}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='revisionDatos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisión de datos' onBack={()=>setModal(null)} maxW={1120}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} terceros={terceros} onOpenMov={handleOpenConciliacion} onResolverDupAnticipo={rdLog('revision.resolverDupAnticipo',handleResolverDupAnticipo)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={rdLog('revision.guardarClientRut',async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) })} onPasarTerminado={rdLog('revision.pasarTerminado',async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) })} onActualizarHonorario={rdLog('revision.actualizarHonorario',async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) })} onFixVencimiento={rdLog('revision.fixVencimiento',async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) })} onResolverCuotaTramo={rdLog('revision.resolverCuotaTramo',async(s,mode,exceso)=>{
@@ -39439,7 +39446,7 @@ export default function App() {
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView openCajaChicaRev={ccRevFocus} sales={sales} setRendiciones={setRendiciones} onCajaChicaRevConsumed={()=>setCcRevFocus(false)} onOpenProveedor={id=>navTo({tab:'proveedores',provId:id})} onOpenFactura={b=>setModal({type:'billing',data:b})} clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
             {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onSaveOperacion={handleSaveOperacion} onDelOperacion={handleDelOperacion} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarEvidencia={handleAplicarEvidencia} onDescartarEvidencia={handleDescartarEvidencia} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
-            {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
+            {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} terceros={terceros} billing={billing} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack}/>}
             {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
