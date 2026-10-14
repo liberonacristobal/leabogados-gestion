@@ -37526,23 +37526,39 @@ export default function App() {
           const borrar = previas.filter(t=>t.estado!=='pagado')   // recrea todo lo no pagado
           if(borrar.length) await supabase.from('terceros_pagos').delete().in('id', borrar.map(t=>t.id))
           const nuevos=[]
+          // Monto fijo ($): lo YA PAGADO de esa misma fila (proveedor+tipo+valor) se descuenta del total y solo el RESTANTE
+          // se reparte entre las cuotas libres. Sin esto, una comisión pagada de una vez (billing_id null o anclada a una
+          // sola cuota) se volvía a crear en las demás cuotas al re-guardar la venta → comisión duplicada.
+          const esFijo = row => row.tipo!=='pct' && row.tipo!=='uf'
+          const pagadoDeFila = row => previas.filter(t=>t.estado==='pagado' && String(t.proveedor_id)===String(row.proveedor_id)
+            && (t.tipo_costo||'clp')===(row.tipo||'clp') && Number(t.valor||0)===Number(parseFloat(row.valor)||0))
+            .reduce((a,t)=>a+(Number(t.monto)||0),0)
           for(const row of f.repartoTerceros){
             if(!row.proveedor_id || !((parseFloat(row.valor)||0)>0)) continue
             const prov = proveedores.find(p=>String(p.id)===String(row.proveedor_id))
             const provNom = prov?(prov.nombre||prov.razon_social):null
+            const yaPagado = esFijo(row) ? pagadoDeFila(row) : 0
+            const restanteFijo = yaPagado>0 ? (parseFloat(row.valor)||0) - yaPagado : null   // sin pagos previos → reparto de siempre
+            if(restanteFijo!==null && restanteFijo<=0) continue   // ya pagado completo
             // Sin cuotas generadas: se registra igual la cuenta por pagar (billing_id null) para no perder el costo en silencio.
             if(cuotasVenta.length===0){
               const v = parseFloat(row.valor)||0
-              const mSin = row.tipo==='uf' ? Math.round(v*(sUfVal||0)) : row.tipo==='pct' ? 0 : Math.round(v)
+              const mSin = row.tipo==='uf' ? Math.round(v*(sUfVal||0)) : row.tipo==='pct' ? 0 : Math.round(restanteFijo??v)
               if(mSin>0) nuevos.push({sale_id:data.id, billing_id:null, proveedor_id:row.proveedor_id,
                 proveedor:provNom, rut:prov?.rut||null, tipo_costo:row.tipo||null, valor:v||null, monto:mSin,
                 estado:'pendiente', created_by:user?.name||null})
               continue
             }
-            for(const cuota of cuotasVenta){
-              if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
-              if(row.desde && String(cuota.due||'').slice(0,7) < String(row.desde)) continue   // comisión "desde X en adelante": no aplica a cuotas anteriores
-              const m = montoCuota(row,cuota); if(m<=0) continue
+            const libres = cuotasVenta.filter(cuota=>!pagadas.has(`${row.proveedor_id}|${cuota.id}`)
+              && !(row.desde && String(cuota.due||'').slice(0,7) < String(row.desde)))   // comisión "desde X en adelante": no aplica a cuotas anteriores
+            const totLibres = libres.reduce((a,b)=>a+(b.amount||0),0)
+            let asignado = 0
+            for(const [i,cuota] of libres.entries()){
+              const m = restanteFijo===null ? montoCuota(row,cuota)
+                : i===libres.length-1 ? Math.round(restanteFijo-asignado)   // la última absorbe el redondeo → suma exacta
+                : Math.round(restanteFijo*(totLibres>0?(cuota.amount||0)/totLibres:1/libres.length))
+              asignado += m
+              if(m<=0) continue
               nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
                 proveedor: provNom, rut:prov?.rut||null,
                 tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, monto:m,
