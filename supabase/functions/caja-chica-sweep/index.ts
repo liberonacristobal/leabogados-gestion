@@ -87,7 +87,7 @@ serve(async (req) => {
     for (const m of movs || []) { const q = quien(m); if (q && conciliados.has(String(m.id))) (sueldos[nrm(q.nombre)] = sueldos[nrm(q.nombre)] || new Set()).add(monto(m)); }
 
     const nombres = new Set(equipo.map((e) => nrm(e.nombre)));
-    const cajas = (petty || []).filter((p: any) => !p.movimiento_id && monto(p) > 0 && p.delivered_at && nombres.has(nrm(p.user_name)) && !String(p.notes || "").includes("mov:"))
+    const cajas = (petty || []).filter((p: any) => !p.movimiento_id && monto(p) > 0 && p.delivered_at && nombres.has(nrm(p.user_name)) && !String(p.notes || "").includes("mov:") && !/\[ajuste\]/i.test(String(p.notes || "")))
       .sort((a: any, b: any) => dia(a.delivered_at).localeCompare(dia(b.delivered_at)));
     const cargos = (movs || []).filter((m: any) => !m.es_interno && quien(m) && !ligados.has(String(m.id)) && !conciliados.has(String(m.id)) && !sinCaja.has(String(m.id)) &&
       !["conciliado", "parcial", "interno"].includes(String(m.estado || ""))).sort((a: any, b: any) => dia(a.fecha).localeCompare(dia(b.fecha)));
