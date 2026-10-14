@@ -20914,7 +20914,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       const vta=r.cli?(sales||[]).find(s=>s.client_id===cli.id&&s.title===proj):null
       const ent=r.cli?(vta?.entity_id||(clientEntities||[]).find(e=>e.client_id===cli.id)?.id||null):(entityId||null)
       try {
-        await onSave({client_id:cli.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:cat,date:r.date||hoy,sale_id:null,entity_id:ent,project:proj,subproject:!r.cli&&esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,subcategory:cat==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:cat==='Notaria'?true:!!r.paid_by_client})
+        await onSave({client_id:cli.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:cat,date:r.date||hoy,sale_id:null,entity_id:ent,project:proj,subproject:!r.cli&&esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,subcategory:cat==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:cat==='Notaria'})   // lo que carga el equipo es siempre caja chica; notaría va por su liquidación
         count++
         // Si se corrigió el cliente desde el aviso, la glosa queda aprendida para ese cliente.
         if(r.resp==='mov'){ const gk=glosaKey(r.concept||''); if(gk) learnPut('gasto_cliente',gk,cli.id) }
@@ -20963,7 +20963,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         </span>
       </div>)
   }
-  // Sub-línea de la fila: categoría · pagó el cliente · cliente/proyecto si se movió · eliminar
+  // Sub-línea de la fila: categoría · cliente/proyecto si se movió · eliminar
   const selTxt = (value,label,opts,onChange,col,fw) => (
     <label style={{position:'relative',display:'inline-flex',alignItems:'center',gap:3,color:col||C.muted,fontWeight:fw||400,cursor:'pointer',whiteSpace:'nowrap',maxWidth:200,overflow:'hidden'}}>
       <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{label}</span><span style={{fontSize:9,opacity:.7}}>▾</span>
@@ -20979,7 +20979,6 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
           {!r.category&&catAuto(r.concept)&&spark}
         </span>
         {cat==='Otro'&&r.category==='Otro'&&<input list='gasto-subcats' value={r.subcategory||''} onChange={e=>updateRow(r.id,{subcategory:e.target.value})} placeholder='Subcategoría' style={{...sel,borderBottom:`1px solid ${C.border}`,width:110,color:C.text}}/>}
-        <button type='button' disabled={cat==='Notaria'} onClick={()=>updateRow(r.id,{paid_by_client:!r.paid_by_client})} title={cat==='Notaria'?'Notaría siempre se rinde al cliente':undefined} style={{...sel,color:(cat==='Notaria'||r.paid_by_client)?C.accent:C.done,fontWeight:(cat==='Notaria'||r.paid_by_client)?600:400,cursor:cat==='Notaria'?'default':'pointer'}}>{(cat==='Notaria'||r.paid_by_client)?'Pagó el cliente':'Pagó la oficina'}</button>
         {r.cli&&<span style={{display:'inline-flex',alignItems:'center',gap:6,minWidth:0}}>
           <button type='button' onClick={()=>updateRow(r.id,{cli:null,proj:'',resp:null})} title='Volver al cliente del lote' style={{...sel,color:C.accent,fontWeight:600,maxWidth:220,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>→ {r.cli.name}</button>
           {!_esOfiCli(r.cli)&&selTxt(r.proj,r.proj||'Elegir proyecto',[<option key='' value=''>Elegir proyecto</option>,...projectsOf(r.cli.id).map(p=><option key={p} value={p}>{p}</option>)],v=>updateRow(r.id,{proj:v}),r.proj?C.muted:C.overdueText)}
