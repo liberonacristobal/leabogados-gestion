@@ -20818,15 +20818,12 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     ;(sales||[]).filter(s=>s.client_id===cid&&s.title&&!s.deleted_at).forEach(s=>{ const d=s.created_at||s.date||''; if(!(s.title in m)||d>m[s.title]) m[s.title]=d })
     return Object.keys(m).sort((a,b)=>(m[b]||'').localeCompare(m[a]||''))
   },[clients,tasks,sales])
-  // Proyecto sugerido: la única venta (o única activa); si no, el último usado en gastos de ese cliente.
+  // Proyecto por defecto: solo si el cliente tiene UN proyecto; con varios, quien carga lo marca (obligatorio al guardar).
   const projDefault = useCallback(cid=>{
     const cli=(clients||[]).find(c=>c.id===cid); if(!cid||_esOfiCli(cli)) return ''
-    const vs=(sales||[]).filter(s=>s.client_id===cid&&VENTA_REAL(s)); const act=vs.filter(s=>s.status==='Activo')
-    if(vs.length===1) return vs[0].title; if(act.length===1) return act[0].title
     const lista=projectsOf(cid)
-    const ult=gastosVivos.filter(e=>e.client_id===cid&&e.project&&lista.includes(e.project)).sort((a,b)=>String(b.created_at||b.date||'').localeCompare(String(a.created_at||a.date||'')))[0]
-    return ult?.project||''
-  },[clients,sales,gastosVivos,projectsOf])
+    return lista.length===1 ? lista[0] : ''
+  },[clients,projectsOf])
   const clientProjects = useMemo(()=>projectsOf(selectedClient?.id),[projectsOf,selectedClient])
   const preProjRef = useRef(null)   // proyecto que trae "Repetir" (si sigue vigente para el cliente)
   useEffect(()=>{ const pre=preProjRef.current; preProjRef.current=null; const p=(pre&&projectsOf(selectedClient?.id).includes(pre))?pre:projDefault(selectedClient?.id); setProject(p); setProjAuto(!!p); setNewProject(false) },[selectedClient?.id])
