@@ -3807,7 +3807,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const billingProj = useMemo(()=> (fantasmaIds&&fantasmaIds.size) ? (billing||[]).filter(b=> !fantasmaIds.has(String(b.id))) : (billing||[]), [billing,fantasmaIds])
   const proyIngresosDash = useMemo(()=>{ const finA=`${new Date().getFullYear()}-12-31`; return (billingProj||[]).filter(b=> b && !b.deleted_at && b.billing_type!=='reembolso' && b.due && b.due<=finA && (['Pendiente','Vencido'].includes(b.status)||b.status==='Programada')).reduce((a,b)=>a+saldoBill(b),0) },[billingProj])
   // Cuentas por pagar (cifra del tile): deuda a proveedores no pagada (por_pagar + pendiente), excluye facturas anuladas. Mismo criterio que el detalle.
-  // Comisiones por pagar (fuente única saldoComisiones: el cliente ya pagó esa cuota; lo que aún no paga va como 'por devengar').
+  // Comisiones por pagar (fuente única saldoComisiones: el cliente ya pagó esa cuota; lo que aún no paga va como 'sujeto a cobro').
   const comisSaldo = useMemo(()=>saldoComisiones(terceros,billing),[terceros,billing])
   const cxpTotDash = comisSaldo.porPagar
 
@@ -3902,7 +3902,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>go('cobranza')},
       (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
       progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
-      cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}${cxpDias!=null?` · la más antigua cobrada hace ${nDias(cxpDias)}`:''}${comisSaldo.porDevengar>0?` · por devengar ${fmtShort(comisSaldo.porDevengar)}`:''}`,goLbl:'Ver',go:()=>navTo?navTo({tab:'proveedores'}):go('billing')},
+      cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}${cxpDias!=null?` · la más antigua cobrada hace ${nDias(cxpDias)}`:''}${comisSaldo.porDevengar>0?` · sujeto a cobro ${fmtShort(comisSaldo.porDevengar)}`:''}`,goLbl:'Ver',go:()=>navTo?navTo({tab:'proveedores'}):go('billing')},
       margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>go('repricing')},
       (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>go('horas')},
       porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
@@ -4448,7 +4448,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
         const grupos = Object.values(byProv).map(g=>({...g, total:g.cuentas.reduce((a,t)=>a+(t.monto||0),0), urgente:g.cuentas.some(t=>eDer(t)==='por_pagar')}))
           .sort((a,b)=> (b.urgente-a.urgente) || (b.total-a.total))
         const ordCuentas = cs => [...cs].sort((a,b)=> (eDer(a)==='por_pagar'?0:1)-(eDer(b)==='por_pagar'?0:1))
-        const estPill = est => est==='por_pagar'?{l:'Por pagar',c:C.soonText,bg:C.soonBg}:{l:'Por devengar',c:C.muted,bg:C.bgSoft}
+        const estPill = est => est==='por_pagar'?{l:'Por pagar',c:C.soonText,bg:C.soonBg}:{l:'Sujeto a cobro',c:C.muted,bg:C.bgSoft}
         // Pagadas este año, agrupadas por colaborador — para verlos a TODOS (incl. los ya saldados, ej. Andrés Mery).
         const byProvPag = {}
         ;(terceros||[]).filter(t=>t.estado==='pagado'&&String(t.pagado_at||'').startsWith(String(yr))).forEach(t=>{ const k=t.proveedor_id||'__'; if(!byProvPag[k]) byProvPag[k]={prov:provById(t.proveedor_id),cuentas:[]}; byProvPag[k].cuentas.push(t) })
@@ -14556,7 +14556,7 @@ const _diasDesde = iso => { const s=String(iso||'').slice(0,10); if(!/^\d{4}-\d\
 const _diasEntre = (a,b) => { const x=String(a||'').slice(0,10), y=String(b||'').slice(0,10); if(!x||!y) return null; return Math.round((new Date(y+'T12:00')-new Date(x+'T12:00'))/864e5) }
 
 // ── PROVEEDORES (página, tab 'proveedores'): SOLO a quienes les pagas comisión o que te pagan comisiones. El subarriendo y los servicios
-// de oficina no van aquí. Lenguaje aprobado: Comisión · Pagada · Por pagar · Por devengar · A favor de la oficina. Las comisiones se
+// de oficina no van aquí. Lenguaje aprobado (2026-10-14): Comisiones · Pagada · Por pagar (el cliente ya pagó) · Sujeto a cobro (el cliente aún no paga) · Anticipo · Comisiones por cobrar (lo que te pagan). Las comisiones se
 // siguen POR TRABAJO (la venta; o "Facturas a {cliente}" cuando no hay venta) y POR CUOTA: vence · cliente pagó (fecha del banco) · le pagaste.
 function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onPagarBulk,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado}) {
   const isDesktop = useIsDesktop()
@@ -14655,7 +14655,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     if(e==='pagada'){ const dd=pc?_diasEntre(pc.fecha,t.pagado_at):null; return {tono:'pg',txt:dd!=null&&dd>=0?`pagada · ${dd} día${dd===1?'':'s'} después`:'pagada'} }
     if(e==='por_pagar'){ const d=_diasDesde(pc?.fecha), ap=aporteDe(t.id); if(ap>0) return {tono:'pp',txt:`pago parcial ${fmt(ap)} · falta ${fmt(Math.max(0,(Number(t.monto)||0)-ap))}`}; return {tono:t.estado!=='por_pagar'?'rev':'pp',txt:(t.estado!=='por_pagar'?'el cliente pagó · la comisión no avanzó':'por pagar')+(d!=null?` · hace ${nDias(d)}`:'')} }
     if(!b) return {tono:'rev',txt:'sin cuota del cliente'}
-    if(b.status==='Programada'){ const d=_diasDesde(b.due); return d!=null&&d>0 ? {tono:'rev',txt:`por facturar · venció hace ${nDias(d)}`} : {tono:'dev',txt:'por devengar'} }
+    if(b.status==='Programada'){ const d=_diasDesde(b.due); return d!=null&&d>0 ? {tono:'rev',txt:`por facturar · venció hace ${nDias(d)}`} : {tono:'dev',txt:'sujeto a cobro'} }
     if(b.status==='Vencido'){ const d=_diasDesde(b.due); return {tono:'rev',txt:`factura vencida${d!=null?` · hace ${nDias(d)}`:''}`} }
     return {tono:'dev',txt:b.due?`facturada · vence ${dm(b.due)}`:'facturada'} }
   const TONO = {pg:[C.greenBg,C.greenText],pp:[C.soonBg,C.soonText],dev:[C.bgSoft,C.muted],rev:[C.overdueBg,C.overdueText]}
@@ -14679,7 +14679,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
         : progV.length ? {tono:'rev',txt:`${progV.length} cuota${progV.length!==1?'s':''} sin facturar · ${progV.length>1?'la 1ª ':''}vencía el ${dm(facDe(progV[0])?.due)}`,t:progV[0]}
         : venc.length ? {tono:'rev',txt:`${venc.length} factura${venc.length!==1?'s':''} vencida${venc.length!==1?'s':''} · ${venc.length>1?'la más antigua ':''}venció el ${dm(facDe(venc[0])?.due)}`,t:venc[0]}
         : prox ? {tono:'dev',txt:prox.invoice_no?`factura ${folioN(prox.invoice_no)} vence el ${dm(prox.due)}`:`próxima cuota ${dm(prox.due)}`,b:prox}
-        : w.porDevengar>0 ? {tono:'dev',txt:'por devengar'}
+        : w.porDevengar>0 ? {tono:'dev',txt:'sujeto a cobro'}
         : {tono:'pg',txt:ultPag?`${w.ts.length>1?'última pagada':'pagada'} el ${dm(ultPag)}`:'pagada'}
       return w }).sort((a,b)=>(b.porPagar-a.porPagar)||(Number(b.rev)-Number(a.rev))||(b.porDevengar-a.porDevengar)||(b.total-a.total)) }
 
@@ -14699,7 +14699,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const docsDe = id => docs.filter(d=>String(d.proveedor_id)===String(id))
   const clienteDe = p => p?.client_id ? clients.find(c=>String(c.id)===String(p.client_id)) : null
   const factQueTePaga = p => p?.client_id ? billing.filter(b=>String(b.client_id)===String(p.client_id)&&b.billing_type==='honorarios'&&!b.deleted_at&&b.status!=='Anulada') : []
-  // Métricas por proveedor. Comisión/Pagada/Por pagar/Por devengar = saldo vivo; Pagadas del año y transferido = año del filtro.
+  // Métricas por proveedor. Comisión/Pagada/Por pagar/Sujeto a cobro = saldo vivo; Pagadas del año y transferido = año del filtro.
   const met = p => { const ts=tercDe(p.id), by=e=>ts.filter(t=>est(t)===e)
     const reten=ts.filter(t=>Number(t.comision_monto)>0)
     const retCob=reten.filter(t=>facDe(t)?.status==='Pagado').reduce((s,t)=>s+(Number(t.comision_monto)||0),0)
@@ -15129,7 +15129,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       {tile('com','Comisiones',m0.total,`${nCli} cliente${nCli!==1?'s':''} · ${ts.length} factura${ts.length!==1?'s':''}`,'todas')}
       {tile('pag','Pagada',m0.pagada,`${tPag.length} factura${tPag.length!==1?'s':''}${nAnt?` · ${nAnt} anticipo${nAnt!==1?'s':''}`:''}`,'pagada')}
       {tile('pp','Por pagar',m0.porPagar,m0.porPagar>0?(isDesktop&&m0.masAnt?`El cliente ya pagó · desde ${dmy(m0.masAnt)}`:'El cliente ya pagó'):'Al día','por_pagar')}
-      {tile('cob','Por pagar al cobro',alCobroTot,`${tCob.length} factura${tCob.length!==1?'s':''} que el cliente aún no paga`,'por_devengar')}
+      {tile('cob','Sujeto a cobro',alCobroTot,`${tCob.length} factura${tCob.length!==1?'s':''} que el cliente aún no paga`,'por_devengar')}
     </div>
     const avisos = (sinFacProv.length||porIdentP.length) ? <span style={{fontSize:11.5,color:C.muted,flex:'1 1 280px',minWidth:0}}>
       {sinFacProv.length>0&&<>Sin factura del proveedor: {sinFacProv.length} · <b style={{color:C.text,...num}}>{fmt(sumM(sinFacProv))}</b> {link('Ver ›',()=>{setCf('sinfac');setNVer(12)},C.accent)}</>}
@@ -15143,14 +15143,14 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     const porClienteCard = porCliente.length>0 ? <div style={{...card,overflow:'hidden'}}>
       {band('Por cliente',cliF?link('Ver todos',()=>setCliF(null),C.accent):null)}
       {porCliente.map(x=>{ const on=String(cliF)===x.k, nPP=x.ts.filter(t=>est(t)==='por_pagar').length, nCob=x.ts.filter(t=>est(t)==='por_devengar').length, nPg=x.ts.filter(t=>est(t)==='pagada').length
-        const cob=sumSaldo(x.ts.filter(t=>est(t)==='por_devengar')), [v,et]=x.porPagar>0?[x.porPagar,null]:cob>0?[cob,'al cobro']:[x.pagada,'pagada']
+        const cob=sumSaldo(x.ts.filter(t=>est(t)==='por_devengar')), [v,et]=x.porPagar>0?[x.porPagar,null]:cob>0?[cob,'sujeto a cobro']:[x.pagada,'pagada']
         return <div key={x.k} onClick={()=>{setCliF(on?null:x.k);setNVer(12)}} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:on?C.azulBg:'transparent'}}>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.cli?celda(<span>{x.cli.name}</span>,onOpenClientFicha?()=>onOpenClientFicha(x.cli.id):null):'Sin cliente'}</div>
-            <div style={{fontSize:11,color:C.muted}}>{[nPP?`${nPP} por pagar`:null,nCob?`${nCob} al cobro`:null,nPg?`${nPg} pagada${nPg!==1?'s':''}`:null].filter(Boolean).join(' · ')}</div></div>
+            <div style={{fontSize:11,color:C.muted}}>{[nPP?`${nPP} por pagar`:null,nCob?`${nCob} sujeta${nCob!==1?'s':''} a cobro`:null,nPg?`${nPg} pagada${nPg!==1?'s':''}`:null].filter(Boolean).join(' · ')}</div></div>
           <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:700,color:et?C.muted:C.text,...num}}>{fmt(v)}</div>{et&&<div style={{fontSize:10.5,fontWeight:600,color:C.muted}}>{et}</div>}</div></div> })}
     </div> : null
     // Comisiones por factura: una línea (fecha · folio · glosa · comisión y estado); al tocar se despliega la cadena cliente → proveedor → pago.
-    const estLbl = t => { const e=est(t); if(e==='por_pagar') return [aporteDe(t.id)>0?'Pago parcial':'Por pagar',C.soonText]; if(e==='por_devengar') return ['Al cobro',C.muted]; return [esAnt(t)?'Anticipo':'Pagada',esAnt(t)?C.azulInfo:C.muted] }
+    const estLbl = t => { const e=est(t); if(e==='por_pagar') return [aporteDe(t.id)>0?'Pago parcial':'Por pagar',C.soonText]; if(e==='por_devengar') return ['Sujeto a cobro',C.muted]; return [esAnt(t)?'Anticipo':'Pagada',esAnt(t)?C.azulInfo:C.muted] }
     const det = (l,v) => <div style={{display:'flex',justifyContent:'space-between',gap:12,fontSize:11.5,padding:'2px 0',maxWidth:340}}><span style={{color:C.muted,whiteSpace:'nowrap'}}>{l}</span><span style={{textAlign:'right',fontWeight:600,color:C.text,minWidth:0}}>{v}</span></div>
     const lk = (txt,on) => on ? <span onClick={e=>{e.stopPropagation();on()}} style={{color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>{txt} ›</span> : <span style={{whiteSpace:'nowrap'}}>{txt}</span>
     const filaT = t => { const b=facDe(t), pc=pagoCli(t), [eL,eC]=estLbl(t), open=expT===t.id, e=est(t), w=trabajoDe(t), ap=aporteDe(t.id)
@@ -15179,7 +15179,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
         {enlP?.tid===t.id&&panelEnlace()}</Fragment> }
     const exportCuotas = () => exportCSV(`comisiones_${tituloProv(sel).replace(/\s+/g,'_')}.csv`,['Emitida','Cliente','Tu factura','Glosa','Cliente pagó','Factura del proveedor','Comisión','Le pagaste','Estado'],
       tsF.map(t=>{ const b=facDe(t); return [dmy(fEmi(t)),cliDe(t)?.name||'',b?.invoice_no?`F${folioN(b.invoice_no)}`:'',b?glosaFactura(b):'',pagoCli(t)?.fecha?dmy(pagoCli(t).fecha):'',t.factura_numero||'',Math.round(Number(t.monto)||0),t.pagado_at?dmy(t.pagado_at):'',estLbl(t)[0]] }))
-    const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Al cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)
+    const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)
     const comisionesCard = <div style={{...card,overflow:'hidden'}}>
       {band(tituloLista,<span style={{display:'inline-flex',gap:12,alignItems:'center'}}>{onAsignarFacturas&&link(asgOpen?'Cerrar':'+ Asignar factura',()=>{setAsgOpen(o=>!o);setFacQ('')},C.accent)}{ordTog(ordC,setOrdC)}</span>)}
       {asgOpen&&(()=>{ const yaAsig=new Set(ts.map(t=>String(t.billing_id))); const asignables = facQ.trim() ? billing.filter(b=>{ if(b.status==='Anulada'||b.billing_type==='reembolso'||yaAsig.has(String(b.id))) return false; const c=clients.find(x=>String(x.id)===String(b.client_id)); return _normTxt(`${c?.name||''} ${b.concept||''} ${b.invoice_no||''} ${b.receptor_name||''}`).includes(_normTxt(facQ)) }).slice(0,10) : []
@@ -15257,12 +15257,12 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     <div onClick={()=>{setModo('trab');setTf('por_pagar')}} className='pv-c' style={{fontSize:28,fontWeight:800,color:sc.porPagar>0?C.soonText:C.greenText,letterSpacing:-.6,...num,marginTop:2,cursor:'pointer',display:'inline-block',borderRadius:6}}>{fmtShort(sc.porPagar)}</div>
     <div style={{fontSize:11.5,color:C.muted}}>{conDeuda.length?<>{(()=>{ const g={}; tsTodas.filter(t=>est(t)==='por_pagar').forEach(t=>{ const n=cliDe(t)?.name||'Sin cliente'; g[n]=(g[n]||0)+saldoT(t) }); return Object.entries(g).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([n,v])=>`${n} ${fmtShort(v)}`).join(' · ') })()}{masAntTot?<span style={{color:C.soonText,fontWeight:600}}> · la más antigua cobrada hace {nDias(_diasDesde(masAntTot))}</span>:null}</>:'al día con todos'}</div>
     <div style={{display:'flex',gap:12,borderTop:`1px solid ${C.bgSoft}`,marginTop:10,paddingTop:9}}>
-      {kpiF('Por devengar',sc.porDevengar,'cuotas que el cliente aún no paga',C.text,()=>{setModo('trab');setTf('por_devengar')})}
+      {kpiF('Sujeto a cobro',sc.porDevengar,'cuotas que el cliente aún no paga',C.text,()=>{setModo('trab');setTf('por_devengar')})}
       {kpiF(`Pagadas · ${yr}`,pagadasAnio,`transferido ${fmtShort(transfAnio)}`,C.greenText,()=>{setModo('trab');setTf('pagados')})}
-      {kpiF('A favor de la oficina',aFavorTot,retPendTot>0?`${fmtShort(retPendTot)} más al cobrar`:'cobrado',C.greenText,()=>{ const r=filas.filter(x=>x.aFavor>0||x.retPend>0)[0]; if(r){ abrirFicha(r.p.id); setRetOpen(true) } })}
+      {kpiF('Comisiones por cobrar',aFavorTot,retPendTot>0?`${fmtShort(retPendTot)} más al cobrar`:'cobrado',C.greenText,()=>{ const r=filas.filter(x=>x.aFavor>0||x.retPend>0)[0]; if(r){ abrirFicha(r.p.id); setRetOpen(true) } })}
     </div>
     <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',fontSize:11.5,color:C.muted,borderTop:`1px solid ${C.bgSoft}`,marginTop:9,paddingTop:8}}>
-      <span>Comisiones</span><b style={{color:C.text,...num}}>{fmt(sc.total)}</b><span style={{color:C.done,fontWeight:700}}>=</span><span>pagadas</span><b style={{color:C.text,...num}}>{fmt(sc.pagada)}</b><span style={{color:C.done,fontWeight:700}}>+</span><span>por pagar</span><b style={{color:C.soonText,...num}}>{fmt(sc.porPagar)}</b><span style={{color:C.done,fontWeight:700}}>+</span><span>por devengar</span><b style={{color:C.text,...num}}>{fmt(sc.porDevengar)}</b>
+      <span>Comisiones</span><b style={{color:C.text,...num}}>{fmt(sc.total)}</b><span style={{color:C.done,fontWeight:700}}>=</span><span>pagadas</span><b style={{color:C.text,...num}}>{fmt(sc.pagada)}</b><span style={{color:C.done,fontWeight:700}}>+</span><span>por pagar</span><b style={{color:C.soonText,...num}}>{fmt(sc.porPagar)}</b><span style={{color:C.done,fontWeight:700}}>+</span><span>sujeto a cobro</span><b style={{color:C.text,...num}}>{fmt(sc.porDevengar)}</b>
     </div></div>
   const alerta = (dot,txt,acc,on) => <div onClick={on} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',fontSize:12.5}}><span style={{width:8,height:8,borderRadius:'50%',background:dot,flexShrink:0}}/><span style={{flex:1,minWidth:0,color:C.text}}>{txt}</span><span style={{fontSize:12,fontWeight:700,color:C.azulInfo,whiteSpace:'nowrap'}}>{acc} ›</span></div>
   const revisar = (sc.desfasadas.length||sinCuota.length||progVenc.length||nCom||nSii||sinDatos.length||sinEnl.length||porIdent.length||pagSinBanco.length) ? <div style={{...card,overflow:'hidden'}}>
@@ -15284,7 +15284,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const COLS='minmax(190px,1.7fr) 64px repeat(5,minmax(92px,1fr))'
   const th = (k,l) => <span onClick={()=>setOrd(o=>({k,dir:o.k===k?-o.dir:(k==='nombre'?1:-1)}))} style={{textAlign:k==='nombre'?'left':'right',cursor:'pointer',color:ord.k===k?C.accent:undefined}}>{l}{ord.k===k?(ord.dir<0?' ▾':' ▴'):''}</span>
   const tablaProv = <div style={{...card,overflow:'hidden'}}>
-    <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',background:C.bgSoft,...kLbl,fontSize:9.5}}>{th('nombre','Proveedor')}{th('trabajos','Trabajos')}{th('total','Comisión')}{th('pagada','Pagada')}{th('porPagar','Por pagar')}{th('porDevengar','Por devengar')}{th('aFavor','A favor de la oficina')}</div>
+    <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',background:C.bgSoft,...kLbl,fontSize:9.5}}>{th('nombre','Proveedor')}{th('trabajos','Trabajos')}{th('total','Comisión')}{th('pagada','Pagada')}{th('porPagar','Por pagar')}{th('porDevengar','Sujeto a cobro')}{th('aFavor','Comisiones por cobrar')}</div>
     {vis.map(r=><div key={r.p.id} style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:13}}>
       {celda(<div style={{minWidth:0}}><div style={{fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',...sub}}>{tituloProv(r.p)}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.equipo?'equipo':([r.p.razon_social,r.p.rut].filter(Boolean).join(' · ')||'Sin RUT')}{!r.les&&!r.te?' · sin comisiones aún':''}</div></div>,()=>abrirFicha(r.p.id),{minWidth:0,display:'block'})}
       {celda(<span style={{display:'block',textAlign:'right',...num}}>{r.trabajos||dash}</span>,()=>abrirFicha(r.p.id))}
@@ -15298,7 +15298,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   </div>
   const listaProvMovil = <div style={{...card,overflow:'hidden'}}>{vis.map(r=><div key={r.p.id} onClick={()=>abrirFicha(r.p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
     <span style={{width:34,height:34,borderRadius:10,background:C.azulBg,color:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>{cIni(tituloProv(r.p))}</span>
-    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(r.p)}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[r.trabajos?`${r.trabajos} trabajo${r.trabajos!==1?'s':''}`:null,r.porDevengar?'por devengar '+fmtShort(r.porDevengar):null,r.pagada?'pagada '+fmtShort(r.pagada):null].filter(Boolean).join(' · ')||(r.p.razon_social||r.p.rut||'sin comisiones aún')}</div></div>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(r.p)}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[r.trabajos?`${r.trabajos} trabajo${r.trabajos!==1?'s':''}`:null,r.porDevengar?'sujeto a cobro '+fmtShort(r.porDevengar):null,r.pagada?'pagada '+fmtShort(r.pagada):null].filter(Boolean).join(' · ')||(r.p.razon_social||r.p.rut||'sin comisiones aún')}</div></div>
     <span style={{textAlign:'right',fontSize:13,fontWeight:700,color:r.porPagar>0?C.soonText:C.done,...num}}>{r.porPagar>0?<>{fmtShort(r.porPagar)}<span style={{display:'block',fontSize:10,fontWeight:600}}>por pagar</span></>:'al día'}</span></div>)}</div>
   // Tabla por trabajo
   const wsAll = trabajosDe(tsTodas)
@@ -15306,13 +15306,13 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     : tf==='sincuota' ? w.ts.some(t=>!t.billing_id&&est(t)!=='pagada') : tf==='porfacturar' ? w.ts.some(t=>est(t)==='por_devengar'&&facDe(t)?.status==='Programada'&&String(facDe(t)?.due||'9')<hoyISO) : true
   const wsF = wsAll.filter(w=>enTf(w)&&(!qq||_normTxt(`${w.titulo} ${w.cli?.name||''} ${tituloProv(w.prov)}`).includes(qq)))
   const nTf = k => wsAll.filter(w=>{ const prev=tf; return k==='todos'?true:k==='por_pagar'?w.porPagar>0:k==='por_devengar'?w.porDevengar>0:k==='pagados'?(w.porPagar===0&&w.porDevengar===0):k==='revisar'?w.rev:true }).length
-  const tfOpts = [['todos',`Todos · ${nTf('todos')}`],['por_pagar',`Por pagar · ${nTf('por_pagar')}`],['por_devengar',`Por devengar · ${nTf('por_devengar')}`],['pagados',`Pagados · ${nTf('pagados')}`],['revisar',`Por revisar · ${nTf('revisar')}`]]
+  const tfOpts = [['todos',`Todos · ${nTf('todos')}`],['por_pagar',`Por pagar · ${nTf('por_pagar')}`],['por_devengar',`Sujeto a cobro · ${nTf('por_devengar')}`],['pagados',`Pagados · ${nTf('pagados')}`],['revisar',`Por revisar · ${nTf('revisar')}`]]
   if(tf==='sincuota') tfOpts.push(['sincuota','Sin cuota'])
   if(tf==='porfacturar') tfOpts.push(['porfacturar','Cuotas vencidas sin facturar'])
   const CT='minmax(0,1.45fr) minmax(0,.75fr) 62px 104px 104px 100px 104px minmax(0,1.15fr)'
   const accionSeg = w => w.seg.pagar ? ()=>abrirPagar(w.prov) : (w.seg.t&&facDe(w.seg.t)&&onOpenFactura) ? ()=>onOpenFactura(facDe(w.seg.t)) : (w.seg.b&&onOpenFactura) ? ()=>onOpenFactura(w.seg.b) : ()=>abrirFicha(w.prov?.id)
   const tablaTrab = <div style={{...card,overflow:'hidden'}}>
-    <div style={{display:'grid',gridTemplateColumns:CT,columnGap:12,padding:'8px 14px',background:C.bgSoft,...kLbl,fontSize:9.5}}><span>Trabajo · cliente</span><span>Proveedor</span><span style={{textAlign:'right'}}>Cuotas</span><span style={{textAlign:'right'}}>Comisión</span><span style={{textAlign:'right'}}>Pagada</span><span style={{textAlign:'right'}}>Por pagar</span><span style={{textAlign:'right'}}>Por devengar</span><span>Seguimiento</span></div>
+    <div style={{display:'grid',gridTemplateColumns:CT,columnGap:12,padding:'8px 14px',background:C.bgSoft,...kLbl,fontSize:9.5}}><span>Trabajo · cliente</span><span>Proveedor</span><span style={{textAlign:'right'}}>Cuotas</span><span style={{textAlign:'right'}}>Comisión</span><span style={{textAlign:'right'}}>Pagada</span><span style={{textAlign:'right'}}>Por pagar</span><span style={{textAlign:'right'}}>Sujeto a cobro</span><span>Seguimiento</span></div>
     {wsF.map(w=><div key={w.key} style={{display:'grid',gridTemplateColumns:CT,columnGap:12,alignItems:'center',padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5}}>
       <div style={{minWidth:0}}>{celda(<b style={{display:'block',color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',...sub}}>{w.titulo}</b>,w.sale&&onOpenSale?()=>onOpenSale(w.sale):(w.cli&&onOpenClientFicha?()=>onOpenClientFicha(w.cli.id):null),{display:'block'})}{w.cli&&w.sale?celda(<span style={{fontSize:11,color:C.muted,...sub}}>{w.cli.name}</span>,onOpenClientFicha?()=>onOpenClientFicha(w.cli.id):null):null}</div>
       {celda(<span style={{...sub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}>{tituloProv(w.prov)}</span>,w.prov?()=>abrirFicha(w.prov.id):null,{minWidth:0})}
@@ -15330,8 +15330,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[w.sale?w.cli?.name:null,tituloProv(w.prov),w.ts.some(t=>t.billing_id)?`${w.nPag} de ${w.ts.length} cuotas`:'sin cuota'].filter(Boolean).join(' · ')}</div>
     <div style={{marginTop:4}} onClick={e=>{e.stopPropagation();accionSeg(w)()}}>{tono(w.seg.tono,w.seg.txt)}</div></div>)}</div>
   const exportar = () => modo==='trab'
-    ? exportCSV(`comisiones_por_trabajo.csv`,['Trabajo','Cliente','Proveedor','Cuotas','Comisión','Pagada','Por pagar','Por devengar','Seguimiento'],wsF.map(w=>[w.titulo,w.cli?.name||'',tituloProv(w.prov),`${w.nPag} de ${w.ts.length}`,Math.round(w.total),Math.round(w.pagada),Math.round(w.porPagar),Math.round(w.porDevengar),w.seg.txt]))
-    : exportCSV(`proveedores.csv`,['Proveedor','Razón social','RUT','Trabajos','Comisión','Pagada','Por pagar','Por devengar','A favor de la oficina'],[...vis.map(r=>[tituloProv(r.p),r.p.razon_social||'',r.p.rut||'',r.trabajos,Math.round(r.total),Math.round(r.pagada),Math.round(r.porPagar),Math.round(r.porDevengar),Math.round(r.aFavor)]),['TOTAL','','',tot('trabajos'),Math.round(tot('total')),Math.round(tot('pagada')),Math.round(tot('porPagar')),Math.round(tot('porDevengar')),Math.round(tot('aFavor'))]])
+    ? exportCSV(`comisiones_por_trabajo.csv`,['Trabajo','Cliente','Proveedor','Cuotas','Comisión','Pagada','Por pagar','Sujeto a cobro','Seguimiento'],wsF.map(w=>[w.titulo,w.cli?.name||'',tituloProv(w.prov),`${w.nPag} de ${w.ts.length}`,Math.round(w.total),Math.round(w.pagada),Math.round(w.porPagar),Math.round(w.porDevengar),w.seg.txt]))
+    : exportCSV(`proveedores.csv`,['Proveedor','Razón social','RUT','Trabajos','Comisión','Pagada','Por pagar','Sujeto a cobro','Comisiones por cobrar'],[...vis.map(r=>[tituloProv(r.p),r.p.razon_social||'',r.p.rut||'',r.trabajos,Math.round(r.total),Math.round(r.pagada),Math.round(r.porPagar),Math.round(r.porDevengar),Math.round(r.aFavor)]),['TOTAL','','',tot('trabajos'),Math.round(tot('total')),Math.round(tot('pagada')),Math.round(tot('porPagar')),Math.round(tot('porDevengar')),Math.round(tot('aFavor'))]])
   const segModo = <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>{[['prov','Por proveedor'],['trab','Por trabajo']].map(([k,l])=><span key={k} onClick={()=>setModo(k)} style={{fontSize:11.5,fontWeight:700,padding:'7px 12px',cursor:'pointer',background:modo===k?C.accent:C.card,color:modo===k?'#fff':C.muted,whiteSpace:'nowrap'}}>{l}</span>)}</div>
   return (<div>{css}
     <PageHeader origen={origen} onBack={onBack} titulo='Proveedores' ctx={isDesktop?'comisiones que pagas y las que te pagan':null} right={selAnio}/>
@@ -22654,7 +22654,7 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], terceros=[], prove
   // Comisiones de la venta (fuente única comisionesVenta). Base del neto: lo facturado; si aún no hay facturas, el honorario.
   const com = comisionesVenta(sale, terceros, billing, ufRef)
   const baseNeto = facturado>0 ? facturado : hCLP
-  const estLbl = t => t.estado==='pagado' ? `pagada${t.pagado_at?' '+fmtFechaDMY(t.pagado_at):''}` : t.estado==='por_pagar' ? 'por pagar' : 'por devengar'
+  const estLbl = t => t.estado==='pagado' ? `pagada${t.pagado_at?' '+fmtFechaDMY(t.pagado_at):''}` : t.estado==='por_pagar' ? 'por pagar' : 'sujeto a cobro'
   const grupos = Object.values(com.filas.reduce((g,t)=>{ const k=`${t.proveedor_id||t.proveedor}|${t.naturaleza||'comision'}|${t.estado}|${t.estado==='pagado'?t.pagado_at:''}`; (g[k]=g[k]||{t,monto:0}).monto+=Number(t.monto)||0; return g },{}))
   return (<>
     <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:10}}>
