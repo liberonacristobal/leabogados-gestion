@@ -9900,13 +9900,31 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario, onGuardarClientRut}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], terceros=[], onOpenMov, onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario, onGuardarClientRut}){
   const [ptBusy,setPtBusy]=useState(null)        // sale_id en proceso de "pasar a Terminado"
   const [ptDone,setPtDone]=useState(()=>new Set()) // ventas ya pasadas en esta sesión
   const [ahBusy,setAhBusy]=useState(null)        // sale_id en proceso de "actualizar honorario"
   const [ahDone,setAhDone]=useState(()=>new Set()) // honorarios ya alineados en esta sesión
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const isDesk=useIsDesktop()   // hook ANTES de cualquier return temprano
+  // Banco: plata contada dos veces o de más. Lee la cartola y la caja chica enlazada (no vienen en props).
+  const [bkMovs,setBkMovs]=useState([]); const [bkPc,setBkPc]=useState([])
+  useEffect(()=>{ if(DEMO) return; let v=true
+    selectAll(()=>supabase.from('cartola_movimientos').select('id,fecha,monto,tipo,nombre_contraparte,descripcion,estado,monto_conciliado,es_interno').order('id')).then(({data})=>{ if(v&&data) setBkMovs(data) },()=>{})
+    supabase.from('petty_cash').select('movimiento_id,amount').not('movimiento_id','is',null).then(({data})=>{ if(v&&data) setBkPc(data) },()=>{})
+    return ()=>{v=false} },[])
+  const bancoChk=useMemo(()=>{
+    const concBy={}, tipoBy={}; (conciliacion||[]).forEach(c=>{ const k=String(c.movimiento_id); concBy[k]=(concBy[k]||0)+(Number(c.monto_aplicado)||0); (tipoBy[k]=tipoBy[k]||new Set()).add(c.tipo_destino) })
+    const pcBy={}; (bkPc||[]).forEach(p=>{ const k=String(p.movimiento_id); pcBy[k]=(pcBy[k]||0)+Math.abs(Number(p.amount)||0) })
+    const tercBy={}; (terceros||[]).forEach(t=>{ if(t.movimiento_id) tercBy[String(t.movimiento_id)]=true })
+    const vivos=(bkMovs||[]).filter(m=>!m.es_interno&&m.estado!=='interno')
+    const sobre=vivos.filter(m=>(concBy[String(m.id)]||0)>(Number(m.monto)||0)+1)
+    const doble=vivos.filter(m=>tercBy[String(m.id)]&&tipoBy[String(m.id)]?.has('gasto'))
+    // Una entrega de caja y la conciliación de sus gastos pueden describir la MISMA transferencia → se toma el mayor, no la suma.
+    const atras=vivos.filter(m=>Math.min(Number(m.monto)||0,Math.max(concBy[String(m.id)]||0,pcBy[String(m.id)]||0))>(Number(m.monto_conciliado)||0)+1)
+    const sinBanco=(terceros||[]).filter(t=>t.estado==='pagado'&&!t.movimiento_id&&String(t.pagado_at||'')>='2026-06-01')
+    return {sobre,doble,atras,sinBanco,concBy}
+  },[bkMovs,bkPc,conciliacion,terceros])
   const [fixing,setFixing]=useState(null)   // id de la factura cuyo vencimiento se está corrigiendo
   const [ctBusy,setCtBusy]=useState(null)   // sale_id de la cuota↔tramo que se está resolviendo
   const [ctDone,setCtDone]=useState(()=>new Set())  // sale_id ya resueltos/ignorados en esta sesión
@@ -10194,6 +10212,16 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
         </div>
       </div>)}
     </div>}
+    {(()=>{ const {sobre,doble,atras,sinBanco,concBy}=bancoChk; const n=sobre.length+doble.length+atras.length+sinBanco.length; if(!n) return null
+      const movFila=(m,det)=><div key={m.id} onClick={()=>onOpenMov&&onOpenMov(m.id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:onOpenMov?'pointer':'default',display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflowWrap:'anywhere'}}>{fmtFechaDMY(m.fecha)} · {m.nombre_contraparte||String(m.descripcion||'').slice(0,60)||'—'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{det}</div></div>
+        <span style={{fontSize:12,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(m.monto||0)}</span></div>
+      return <div style={secBox}>{sh('Banco · plata contada dos veces o de más',C.overdueText,n)}
+        {doble.length>0&&<><div style={{fontSize:10,color:C.done,margin:'4px 0 2px'}}>pago a proveedor registrado como comisión y además como gasto · se cuenta dos veces</div>{doble.map(m=>movFila(m,'comisión pagada + gasto'))}</>}
+        {sobre.length>0&&<><div style={{fontSize:10,color:C.done,margin:'8px 0 2px'}}>conciliado por más de lo que entró o salió del banco</div>{sobre.map(m=>movFila(m,`conciliado ${fmt(concBy[String(m.id)]||0)}`))}</>}
+        {atras.length>0&&<><div style={{fontSize:10,color:C.done,margin:'8px 0 2px'}}>la cifra conciliada no está al día con lo aplicado</div>{atras.map(m=>movFila(m,`marcado ${fmt(m.monto_conciliado||0)} · aplicado ${fmt(concBy[String(m.id)]||0)}`))}</>}
+        {sinBanco.length>0&&<><div style={{fontSize:10,color:C.done,margin:'8px 0 2px'}}>comisión marcada pagada sin su transferencia del banco</div>{sinBanco.slice(0,30).map(t=><div key={t.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}><div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{t.proveedor||'Proveedor'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>pagada {t.pagado_at?fmtFechaDMY(t.pagado_at):'—'}</div></div><span style={{fontSize:12,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(Number(t.monto)||0)}</span></div>)}</>}
+      </div> })()}
     </div>
   </div>
 }
@@ -34142,10 +34170,20 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],sales=[],
   const ofiCli = clients.find(c=>c.is_internal || /liberona\s+escala/i.test(c.name||''))
   const catsOficinaConc = useMemo(()=>{ const s=new Set(CATS_OFICINA_NUEVAS); if(ofiCli){ (expenses||[]).forEach(e=>{ if(String(e.client_id)===String(ofiCli.id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(catOficinaNueva(e.category)) }) } return [...s] },[expenses,ofiCli])
   // Costo de OFICINA: el cargo es un gasto operativo de la firma → crea un gasto en el cliente interno con su categoría y concilia (reversible con Deshacer).
+  // Un pago a proveedor vive en UN solo lugar: como comisión de su venta (terceros_pagos, rebaja el ingreso) o como gasto.
+  // Registrarlo en ambos lo cuenta dos veces (pasó con MJ, BDA, Pedro Isla y Menchaca).
+  const yaEsComision = m => (terc||[]).some(t=>String(t.movimiento_id)===String(m.id)) || (conc||[]).some(c=>String(c.movimiento_id)===String(m.id)&&c.tipo_destino==='tercero')
+  const guardaComision = (mov, category) => {
+    if(yaEsComision(mov)){ appAlert('Este cargo ya está registrado como pago de comisión a un proveedor (rebaja el ingreso de su venta). No se registra además como gasto de oficina.'); return false }
+    const prov = ['Proveedores','Comisiones'].includes(category) ? provDeCargo(mov) : null
+    if(prov && comisPorPagar(prov.id).length){ appAlert(`${prov.nombre||prov.razon_social} tiene comisiones por pagar. Registra este cargo con "Pagar comisiones" para que rebaje el ingreso de su venta y no quede duplicado como gasto de oficina.`); return false }
+    return true
+  }
   const costoOficina = async(mov, category, subcategory=null)=>{
     if(busy) return
     if(!ofiCli){ appAlert('No se encontró el cliente interno (Oficina).'); return }
     if(!category){ appAlert('Elige la categoría del costo de oficina.'); return }
+    if(!guardaComision(mov, category)) return
     setBusy(mov.id)
     let gasto=null, cr=null
     try{
@@ -34169,6 +34207,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],sales=[],
     if(busy) return
     if(!ofiCli){ appAlert('No se encontró el cliente interno (Oficina).'); return }
     if(!items?.length) return
+    if(!guardaComision(mov, null)) return
     if(!await appConfirm(`Repartir este cargo (${fmtM(mov.monto)}) en ${items.length} costos de oficina?\n\n${items.map(i=>`· ${i.item} · ${fmtM(i.monto)}`).join('\n')}`)) return
     setBusy(mov.id)
     const creados=[]
@@ -34520,6 +34559,7 @@ function useConciliacionModel({clients=[],clientEntities=[],billing=[],sales=[],
   const fFifoDate = iso => { try{ const d=new Date(String(iso).slice(0,10)+'T00:00:00'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${d.getUTCDate()} ${M[d.getUTCMonth()]} ${d.getUTCFullYear()}` }catch{ return '' } }
   const conciliarComisiones = async (m,prov,selIds)=>{
     if(!selIds.length||busy===m.id) return
+    if((conc||[]).some(c=>String(c.movimiento_id)===String(m.id)&&c.tipo_destino==='gasto')){ appAlert('Este cargo ya está registrado como gasto. Deshaz ese registro antes de marcarlo como pago de comisión, para no contarlo dos veces.'); return }
     setBusy(m.id)
     try{
       const sum=(terc||[]).filter(t=>selIds.includes(t.id)).reduce((a,t)=>a+(t.monto||0),0)
@@ -39323,7 +39363,7 @@ export default function App() {
         {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='redaccion'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Redactar con IA' onBack={()=>setModal(null)} maxW={1120}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='plazos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Plazos y obligaciones' onBack={()=>setModal(null)} maxW={1120}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)}/></FlujoPagina>}
-        {tab==='flujo'&&pagina?.type==='revisionDatos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisión de datos' onBack={()=>setModal(null)} maxW={1120}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={rdLog('revision.resolverDupAnticipo',handleResolverDupAnticipo)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={rdLog('revision.guardarClientRut',async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) })} onPasarTerminado={rdLog('revision.pasarTerminado',async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) })} onActualizarHonorario={rdLog('revision.actualizarHonorario',async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) })} onFixVencimiento={rdLog('revision.fixVencimiento',async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) })} onResolverCuotaTramo={rdLog('revision.resolverCuotaTramo',async(s,mode,exceso)=>{
+        {tab==='flujo'&&pagina?.type==='revisionDatos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisión de datos' onBack={()=>setModal(null)} maxW={1120}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} terceros={terceros} onOpenMov={handleOpenConciliacion} onResolverDupAnticipo={rdLog('revision.resolverDupAnticipo',handleResolverDupAnticipo)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={rdLog('revision.guardarClientRut',async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) })} onPasarTerminado={rdLog('revision.pasarTerminado',async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) })} onActualizarHonorario={rdLog('revision.actualizarHonorario',async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) })} onFixVencimiento={rdLog('revision.fixVencimiento',async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) })} onResolverCuotaTramo={rdLog('revision.resolverCuotaTramo',async(s,mode,exceso)=>{
           if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
           // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
           const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
