@@ -18446,7 +18446,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   const _esNotaPendP=e=>e.category==='Notaria'&&/\d/.test(String(e.ot_number||''))&&!e.notaria_render_id&&!e.notaria_liquidado_at
   const cuentaP_ = persona => {
     const mine=(expenses||[]).filter(e=>e.personal_de===persona&&!e.client_id&&!e.deleted_at&&cuentaEnSaldo(e))
-    const fondos=mine.filter(e=>e.type==='fondo'), gastos=mine.filter(e=>e.type!=='fondo'&&!e.no_descuenta_saldo)
+    const fondos=mine.filter(e=>e.type==='fondo'&&!e.no_descuenta_saldo), gastos=mine.filter(e=>e.type!=='fondo'&&!e.no_descuenta_saldo)
     const fondoDe=g=>g.reembolso_fondo_id?fondos.find(f=>String(f.id)===String(g.reembolso_fondo_id)):null
     const dedic=new Set(gastos.map(g=>fondoDe(g)?.id).filter(Boolean).map(String))
     return {fondos,gastos,fondoDe,dedic}
@@ -18813,7 +18813,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
                 ? (isAdmin
                   ? <button onClick={ev=>{ev.stopPropagation();marcarEstado(e,null)}} title='Pagado · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:4,background:e.no_descuenta_saldo?C.bgWarm:C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado <span style={{fontWeight:700,fontSize:11,lineHeight:1}}><Gl n='x'/></span></button>
                   : <span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:e.no_descuenta_saldo?C.bgWarm:C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:700,display:'inline-flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado</span>)
-                : !isFondo&&e.no_descuenta_saldo&&!e.incobrable_at&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.grisText,fontWeight:700,whiteSpace:'nowrap'}}>Gasto histórico</span>)}
+                : (!isFondo||(e.personal_de&&!e.client_id))&&e.no_descuenta_saldo&&!e.incobrable_at&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.grisText,fontWeight:700,whiteSpace:'nowrap'}}>{e.personal_de&&!e.client_id?'Fuera de la cuenta':'Gasto histórico'}</span>)}
               {e.incobrable_at&&(isAdmin&&!isFondo
                 ? <button onClick={ev=>{ev.stopPropagation();marcarEstado(e,null)}} title={`Incobrable desde ${fmtFechaDMY(e.incobrable_at)} · tocar para deshacer`} style={{fontSize:10.5,padding:0,background:'none',color:C.textSoft,fontWeight:500,border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Incobrable · asumido por la oficina <span style={{fontSize:10,lineHeight:1,opacity:.7}}><Gl n='x'/></span></button>
                 : <span style={{fontSize:10.5,color:C.textSoft,fontWeight:500,whiteSpace:'nowrap'}}>Incobrable · asumido por la oficina</span>)}
@@ -19432,7 +19432,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                   </div>
                 </button>) })
               // Cuentas del equipo (lo propio de cada miembro: personal_de sin cliente). Saldo = fondos − gastos, mismo criterio que dispPersona/fgCliente.
-              const miembros=(()=>{ const m={}; (expenses||[]).forEach(e=>{ if(e.deleted_at||e.client_id||!e.personal_de) return; if(!isAdmin&&e.personal_de!==currentUserName) return; const o=(m[e.personal_de]=m[e.personal_de]||{p:e.personal_de,fondo:0,gasto:0,n:0,ult:null}); if(cuentaEnSaldo(e)){ if(e.type==='fondo') o.fondo+=(e.amount||0); else if(!e.no_descuenta_saldo) o.gasto+=(e.amount||0) } if(e.type!=='fondo') o.n++; const d=String(e.date||'').slice(0,10); if(d&&(!o.ult||d>o.ult)) o.ult=d })
+              const miembros=(()=>{ const m={}; (expenses||[]).forEach(e=>{ if(e.deleted_at||e.client_id||!e.personal_de) return; if(!isAdmin&&e.personal_de!==currentUserName) return; const o=(m[e.personal_de]=m[e.personal_de]||{p:e.personal_de,fondo:0,gasto:0,n:0,ult:null}); if(cuentaEnSaldo(e)&&!e.no_descuenta_saldo){ if(e.type==='fondo') o.fondo+=(e.amount||0); else o.gasto+=(e.amount||0) } if(e.type!=='fondo') o.n++; const d=String(e.date||'').slice(0,10); if(d&&(!o.ult||d>o.ult)) o.ult=d })
                 const qq=_normTxt(q2||''); return Object.values(m).filter(o=>!qq||_normTxt(o.p).includes(qq)).sort((a,b)=>a.p.localeCompare(b.p,'es')) })()
               const rowMiembro = o => { const sal=o.fondo-o.gasto; const colS=sal<0?C.overdueText:(sal>0?C.accent:C.done); const pc=personChip(o.p); return (
                 <div key={'m:'+o.p} onClick={()=>setCuentaP(o.p)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
@@ -19922,7 +19922,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const fonByP={}; persFon.forEach(e=>{(fonByP[e.personal_de]=fonByP[e.personal_de]||[]).push(e)})
         const personasP=[...new Set([...Object.keys(byP),...Object.keys(fonByP)])].sort((a,b)=>a.localeCompare(b,'es'))
         const gastosP=p=>(byP[p]||[]).filter(e=>!e.no_descuenta_saldo&&cuentaEnSaldo(e)).reduce((a,e)=>a+(e.amount||0),0)   // mismo criterio que fgCliente y dispPersona
-        const fondosP=p=>(fonByP[p]||[]).filter(cuentaEnSaldo).reduce((a,e)=>a+(e.amount||0),0)
+        const fondosP=p=>(fonByP[p]||[]).filter(e=>cuentaEnSaldo(e)&&!e.no_descuenta_saldo).reduce((a,e)=>a+(e.amount||0),0)
         const persTot = pers.reduce((a,e)=>a+(e.amount||0),0)
         return (
         <div style={{padding:'4px 20px 100px',...(isDesktop?{maxWidth:900,margin:'0 auto'}:{})}}>
@@ -20915,7 +20915,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   if(cuentaP){
     const p=cuentaP, D=isDesktop
     const movsP=(expenses||[]).filter(e=>!e.deleted_at&&!e.client_id&&e.personal_de===p).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
-    const fondosP=movsP.filter(e=>e.type==='fondo'&&cuentaEnSaldo(e)), gastosP=movsP.filter(e=>e.type!=='fondo'&&cuentaEnSaldo(e)&&!e.no_descuenta_saldo)
+    const fondosP=movsP.filter(e=>e.type==='fondo'&&cuentaEnSaldo(e)&&!e.no_descuenta_saldo), gastosP=movsP.filter(e=>e.type!=='fondo'&&cuentaEnSaldo(e)&&!e.no_descuenta_saldo)
     const cubre=f=>gastosP.filter(g=>String(g.reembolso_fondo_id)===String(f.id))
     const esDedic=f=>cubre(f).length>0
     const fondoDe=g=>fondosP.find(f=>String(f.id)===String(g.reembolso_fondo_id))
