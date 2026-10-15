@@ -598,3 +598,4 @@
 - 2026-10-14: Ficha de proveedor: un solo desplegable «Revisar y acciones» (por revisar + registrar factura del proveedor + agregar comisión) y Pagar aparte (opción A).
 - 2026-10-14: Proveedores (landing): «Por revisar» pasa de línea de texto a tarjetitas chicas bajo los KPI (Sin factura · Por identificar · Por enlazar · Sin datos de pago), cada una clickeable.
 - 2026-10-15 · Notaría › Deuda: los gastos personales se cubren con el fondo de esa persona (fondo por rendir de un tercero); Inicio: se quita texto suelto bajo Costos de terceros.
+- 2026-10-15 · Notaría › Bitácora: etiquetas legibles para ajustes de revisión y OT cargadas.
