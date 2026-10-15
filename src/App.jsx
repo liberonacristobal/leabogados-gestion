@@ -147,6 +147,8 @@ async function claudeCall(body){
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}` : '—'
 // CLP abreviado para KPIs ($216,2M / $30K). Conserva el signo.
+// Millones con 1 decimal ($40,8M); bajo $1M, 2 decimales ($0,73M). Tarjetas y resúmenes (regla «número en $M»).
+const fmtMill = n => { const a=Math.abs(Number(n)||0), s=n<0?'−':''; return s+'$'+(a/1e6).toFixed(a>=1e6?1:2).replace('.',',')+'M' }
 const fmtShort = n => { const a=Math.abs(n||0), s=n<0?'-':''; if(a>=1000000) return s+'$'+(a/1000000).toFixed(a>=10000000?0:1).replace('.',',')+'M'; if(a>=1000) return s+'$'+Math.round(a/1000)+'K'; return s+'$'+a.toLocaleString('es-CL') }
 // UF abreviada para KPIs (UF 9.800 / UF 6.309), sin decimales para no recargar.
 const fmtUFk = n => `UF ${Math.round(n||0).toLocaleString('es-CL')}`
@@ -15397,36 +15399,32 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const cobTot = filasL.reduce((s,r)=>s+r.cob,0)
   const sinFacTot = filasL.reduce((s,r)=>s+r.sinFac,0), sinFacMTot = filasL.reduce((s,r)=>s+r.sinFacM,0)
   const enLf = r => lf==='por_pagar'?r.porPagar>0 : lf==='por_devengar'?r.cob>0 : lf==='pagada'?r.pagAnio>0 : lf==='cobrar'?(r.caItems||[]).length>0 : lf==='sinfac'?r.sinFac>0 : true
-  const KPL = {pp:[C.soonBg,C.soonText,'transparent'],cob:[C.azulBg,C.accent,'transparent'],pag:[C.greenBg,C.greenText,'transparent'],te:[C.card,C.accent,C.border]}
-  const ICO_L={pp:'tPagar',cob:'tEspera',pag:'tCheck',te:'tEntra'}
-  const tileL = (k,l,v,s,f) => { const [bg,fg,bd]=KPL[k], on=lf===f; return <div key={k} onClick={()=>setLf(on?'todos':f)} className='pv-c' style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5,display:'flex',gap:10,alignItems:'flex-start'}}>
+  // Landing (2026-10-15): 6 tarjetas iguales — etiqueta + cifra en $M, sin texto debajo (el detalle aparece al tocar).
+  const KPL = {pp:[C.soonBg,C.soonText,'transparent'],cob:[C.azulBg,C.accent,'transparent'],pag:[C.greenBg,C.greenText,'transparent'],te:[C.card,C.accent,C.border],sf:[C.card,C.accent,C.border],pi:[C.card,C.accent,C.border]}
+  const ICO_L={pp:'tPagar',cob:'tEspera',pag:'tCheck',te:'tEntra',sf:'tSinFac',pi:'tIdentif'}
+  const tileL = (k,l,v,f,onTap) => { const [bg,fg,bd]=KPL[k], on=f&&lf===f, tap=onTap||(f?()=>setLf(on?'todos':f):null); return <div key={k} onClick={v?tap||undefined:undefined} className={v&&tap?'pv-c':undefined} style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:isDesktop?'10px 12px':'10px',cursor:v&&tap?'pointer':'default',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5,display:'flex',gap:10,alignItems:'center'}}>
     {isDesktop&&<KpiIco n={ICO_L[k]} c={fg} soft={bg===C.card||bg===C.surface||bg===C.tileBg}/>}
-    <div style={{minWidth:0}}><div style={{...kLbl,color:fg}}>{l}</div><div style={{fontSize:isDesktop?19:16,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div></div></div> }
+    <div style={{minWidth:0}}><div style={{...kLbl,color:fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',...(isDesktop?{}:{fontSize:9.5,letterSpacing:.3})}}>{l}</div><div style={{fontSize:isDesktop?19:17,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:1,whiteSpace:'nowrap'}}>{v?fmtMill(v):'—'}</div></div></div> }
   const nP = f => filasL.filter(f).length
   const provN = n => `${n} proveedor${n!==1?'es':''}`
-  const tilesL = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
-    {tileL('pp','Por pagar',sc.porPagar,sc.porPagar>0?(isDesktop?`${provN(nP(r=>r.porPagar>0))} · ya cobrado`:'Ya cobrado'):'Al día','por_pagar')}
-    {tileL('cob','Sujeto a cobro',cobTot,provN(nP(r=>r.cob>0)),'por_devengar')}
-    {tileL('pag',`Pagada · ${yr}`,pagadasAnio,provN(nP(r=>r.pagAnio>0)),'pagada')}
-    {tileL('te','Comisiones por cobrar',porCobrarTot,`cobradas ${yr} ${fmt(cobAnioTot)}`,'cobrar')}
+  const tilesL = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
+    {tileL('pp','Por pagar',sc.porPagar,'por_pagar')}
+    {tileL('cob','Sujeto a cobro',cobTot,'por_devengar')}
+    {tileL('pag',`Pagada · ${yr}`,pagadasAnio,'pagada')}
+    {tileL('te','Comisiones por cobrar',porCobrarTot,'cobrar')}
+    {tileL('sf',`Sin factura${sinFacTot?' · '+sinFacTot:''}`,sinFacMTot,'sinfac')}
+    {tileL('pi',`Por identificar${porIdent.length?' · '+porIdent.length:''}`,montoMov(porIdent),null,porIdent.length?()=>abrirFicha(porIdent[0].p.id):null)}
   </div>
-  // Por revisar: tarjetitas chicas bajo los KPI (solo las que tienen algo); cada una lleva a su lista.
+  // Por enlazar (pagos del banco por calzar): alerta de una línea, solo si hay. Sin factura / Por identificar ya son tarjetas.
   const nEnl = nCom+nSii+sinEnl.length+pagSinBanco.length
-  const revCards = [
-    sinFacTot>0&&{k:'sf',ic:'tSinFac',t:'Sin factura',v:fmt(sinFacMTot),s:`${sinFacTot} comisi${sinFacTot===1?'ón':'ones'}`,on:()=>setLf(lf==='sinfac'?'todos':'sinfac'),act:lf==='sinfac'},
-    porIdent.length>0&&{k:'pi',ic:'tIdentif',t:'Por identificar',v:fmt(montoMov(porIdent)),s:`${porIdent.length} pago${porIdent.length!==1?'s':''}`,on:()=>abrirFicha(porIdent[0].p.id)},
-    nEnl>0&&{k:'en',ic:'tEnlazar',t:'Por enlazar',v:`${nEnl} pago${nEnl!==1?'s':''}`,s:(nCom+nSii)>0?'calces exactos':null,on:()=>{ if(nCom+nSii>0){setSelEnl(null);setView('enlazar')} else abrirFicha((sinEnl[0]||pagSinBanco[0]).p.id) }},
-  ].filter(Boolean)
-  const revisarL = revCards.length ? <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>{revCards.map(x=><div key={x.k} onClick={x.on} className='pv-c' style={{background:x.act?C.azulBg:C.card,border:`1px solid ${x.act?C.accent:C.border}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',minWidth:0,display:'flex',gap:10,alignItems:'center'}}>
-    {isDesktop&&x.ic&&<KpiIco n={x.ic} c={C.accent} soft/>}
-    <div style={{minWidth:0}}><div style={{...kLbl,fontSize:9.5}}>{x.t}</div><div style={{fontSize:14,fontWeight:700,color:C.text,marginTop:2,...num}}>{x.v}</div>{x.s&&<div style={{fontSize:11,color:C.muted}}>{x.s}</div>}</div></div>)}</div> : null
+  const revisarL = nEnl>0 ? <div onClick={()=>{ if(nCom+nSii>0){setSelEnl(null);setView('enlazar')} else abrirFicha((sinEnl[0]||pagSinBanco[0]).p.id) }} className='pv-c' style={{...card,display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer'}}><span style={{width:7,height:7,borderRadius:'50%',background:C.soonText,flexShrink:0}}/><span style={{flex:1,minWidth:0,fontSize:12.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b>Por enlazar</b> · {nEnl} pago{nEnl!==1?'s':''} del banco</span><span style={{fontSize:11.5,fontWeight:700,color:C.accent}}>Ver <Gl n='chevron'/></span></div> : null
   // Por proveedor
   let vis = filasL.filter(r=>enLf(r)&&(!qq||_normTxt(`${r.p.nombre||''} ${r.p.razon_social||''} ${r.p.rut||''} ${r.clis.join(' ')}`).includes(qq)||(_nRut(q)&&_nRut(r.p.rut).includes(_nRut(q)))))
   vis = [...vis].sort((a,b)=> ord.k==='nombre' ? tituloProv(a.p).localeCompare(tituloProv(b.p),'es')*ord.dir : ((a[ord.k]-b[ord.k])*ord.dir || (b.cob-a.cob) || tituloProv(a.p).localeCompare(tituloProv(b.p),'es')))
   const activo = r => r.porPagar>0||r.cob>0||r.pagAnio>0
   const visAct = vis.filter(activo), visSin = vis.filter(r=>!activo(r))
   const tot = k => visAct.reduce((s,r)=>s+(r[k]||0),0)
-  const COLS='minmax(200px,1.7fr) 130px 140px 140px 96px 18px'
+  const COLS='minmax(200px,1.7fr) 130px 150px 150px 18px'
   const th = (k,l) => <span onClick={()=>setOrd(o=>({k,dir:o.k===k?-o.dir:(k==='nombre'?1:-1)}))} style={{textAlign:k==='nombre'?'left':'right',cursor:'pointer'}}>{l}{ord.k===k?(ord.dir<0?<>{" "}<Gl n='chevD'/></>:<>{" "}<Gl n='chevU'/></>):''}</span>
   const qi = (l,v,on) => <div onClick={on?e=>{e.stopPropagation();on()}:undefined} className={on?'pv-c':undefined} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,padding:'2px 4px',margin:'0 -4px',borderRadius:5,cursor:on?'pointer':'default'}}><span style={{color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{l}</span><b style={{...num,color:C.text}}>{v}</b></div>
   const qBox = (titulo,hijos) => <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',minWidth:0}}><div style={{...kLbl,fontSize:9.5,marginBottom:3}}>{titulo}</div>{hijos}</div>
@@ -15449,27 +15447,26 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}><ActBtn variant='ghost' onClick={()=>abrirFicha(r.p.id)}>Ver ficha <Gl n='chevron'/></ActBtn>{r.porPagar>0&&<ActBtn variant='primary' onClick={()=>abrirPagar(r.p)}>Pagar {fmt(r.porPagar)} <Gl n='chevron'/></ActBtn>}</div>
     </div> }
   const subProv = r => [r.equipo?'Equipo':(r.p.razon_social||r.p.rut||null), r.nCli?(r.nCli===1&&r.clis[0]?r.clis[0]:`${r.nCli} clientes`):null].filter(Boolean).join(' · ')
-  const filaProv = r => { const open=expP===r.p.id, cv=v=>v?fmt(v):dash
+  const filaProv = r => { const open=expP===r.p.id, cv=v=>v?fmtMill(v):dash
     return <div key={r.p.id} onClick={()=>setExpP(open?null:r.p.id)} className='pv-c' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5,cursor:'pointer',background:open?C.bgSoft:'transparent'}}>
       <div style={{minWidth:0}}>{celda(<span style={{fontSize:13,fontWeight:700,color:C.accent}}>{tituloProv(r.p)}</span>,()=>abrirFicha(r.p.id))}<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subProv(r)}</div></div>
       <span style={{textAlign:'right',fontWeight:700,color:r.porPagar>0?C.soonText:C.done,...num}}>{cv(r.porPagar)}</span>
       <span style={{textAlign:'right',color:r.cob?C.text:C.done,...num}}>{cv(r.cob)}</span>
       <span style={{textAlign:'right',color:r.pagAnio?C.muted:C.done,...num}}>{cv(r.pagAnio)}</span>
-      <span style={{textAlign:'right',color:r.sinFac?C.muted:C.done,...num}}>{r.sinFac||'—'}</span>
       <span style={{color:C.textSoft,fontSize:11}}>{open?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>
       {open&&vistaRapida(r)}
     </div> }
   const tablaProv = <div style={{...card,overflow:'hidden'}}>
-    <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,...kLbl,fontSize:9.5}}>{th('nombre','Proveedor')}{th('porPagar','Por pagar')}{th('cob','Sujeto a cobro')}{th('pagAnio',`Pagada ${yr}`)}{th('sinFac','Sin factura')}<span/></div>
+    <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,...kLbl,fontSize:9.5}}>{th('nombre','Proveedor')}{th('porPagar','Por pagar')}{th('cob','Sujeto a cobro')}{th('pagAnio',`Pagada ${yr}`)}<span/></div>
     {visAct.map(filaProv)}
     {visSin.length>0&&<div onClick={()=>setVerSinMov(v=>!v)} className='pv-c' style={{padding:'8px 14px',borderTop:`1px solid ${C.border}`,fontSize:11.5,fontWeight:600,color:C.muted,cursor:'pointer'}}>Sin movimiento en {yr} · {visSin.length} ({visSin.slice(0,4).map(r=>tituloProv(r.p)).join(', ')}{visSin.length>4?'…':''}) {verSinMov?<Gl n='chevU'/>:<Gl n='chevD'/>}</div>}
     {verSinMov&&visSin.map(filaProv)}
-    {visAct.length>0&&<div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'9px 14px',borderTop:`1px solid ${C.border}`,fontSize:12.5,fontWeight:700}}><span>Total</span><span style={{textAlign:'right',...num}}>{fmt(tot('porPagar'))}</span><span style={{textAlign:'right',...num}}>{fmt(tot('cob'))}</span><span style={{textAlign:'right',...num}}>{fmt(tot('pagAnio'))}</span><span style={{textAlign:'right',...num}}>{tot('sinFac')||'—'}</span><span/></div>}
+    {visAct.length>0&&<div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'9px 14px',borderTop:`1px solid ${C.border}`,fontSize:12.5,fontWeight:700}}><span>Total</span><span style={{textAlign:'right',...num}}>{fmtMill(tot('porPagar'))}</span><span style={{textAlign:'right',...num}}>{fmtMill(tot('cob'))}</span><span style={{textAlign:'right',...num}}>{fmtMill(tot('pagAnio'))}</span><span/></div>}
   </div>
   const bandL = (t,der) => <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:C.bgSoft,borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}><span style={{...kLbl,flex:1}}>{t}</span>{der}</div>
   const filaMovil = (r,k) => <div key={r.p.id} onClick={()=>abrirFicha(r.p.id,k==='pp'?'por_pagar':k==='cob'?'por_devengar':'todas')} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
     <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(r.p)}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{k==='pp'&&r.masAnt?`${r.nPorPagar} factura${r.nPorPagar!==1?'s':''} · desde ${dmy(r.masAnt)}`:(r.clis.slice(0,3).join(' · ')||subProv(r))}</div></div>
-    <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:700,color:k==='pp'?C.soonText:C.muted,...num}}>{fmt(k==='pp'?r.porPagar:k==='cob'?r.cob:r.pagAnio)}</div>{k==='pp'&&<div onClick={e=>{e.stopPropagation();abrirPagar(r.p)}} style={{fontSize:11,fontWeight:700,color:C.accent}}>Pagar <Gl n='chevron'/></div>}</div></div>
+    <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:700,color:k==='pp'?C.soonText:C.muted,...num}}>{fmtMill(k==='pp'?r.porPagar:k==='cob'?r.cob:r.pagAnio)}</div>{k==='pp'&&<div onClick={e=>{e.stopPropagation();abrirPagar(r.p)}} style={{fontSize:11,fontWeight:700,color:C.accent}}>Pagar <Gl n='chevron'/></div>}</div></div>
   const gPP=vis.filter(r=>r.porPagar>0).sort((a,b)=>b.porPagar-a.porPagar), gCob=vis.filter(r=>!(r.porPagar>0)&&r.cob>0).sort((a,b)=>b.cob-a.cob), gPag=vis.filter(r=>!(r.porPagar>0)&&!(r.cob>0)&&r.pagAnio>0)
   const listaProvMovil = <div style={{...card,overflow:'hidden'}}>
     {gPP.length>0&&<>{bandL(`Por pagar · ${gPP.length}`)}{gPP.map(r=>filaMovil(r,'pp'))}</>}
