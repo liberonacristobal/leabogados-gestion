@@ -14651,6 +14651,20 @@ const fechaBHE = (pagadaEn, vence) => { const hoy=new Date().toLocaleDateString(
 // (la estimación pudo hacerse con la de otro año). Con boleta registrada mandan sus cifras reales.
 const reajusteBHEPago = (t, fecha) => { if(t?.liquido==null||t?.bhe_id||!(Number(t?.retencion)>0)) return null
   const liq=Number(t.liquido)||0, bruto=Math.round(liq/(1-tasaBHE(fecha))); return bruto!==Number(t.monto) ? {monto:bruto, retencion:bruto-liq} : null }
+// Retención de boleta ↔ F29: va en el F29 del MES DE LA BOLETA (período P, cód. 151) y se paga en P+1 con el PPM
+// (gasto 'Impuestos y patentes › PPM', concepto "IVA/PPM MM-AAAA"). Pagada = existe ese pago, sin marcar nada a mano.
+// Si el concepto del pago dice que dejó fuera retenciones de esta persona ("sin retenciones BHE … Delpino"), no cuenta como pagada.
+const periodoF29 = e => { const m=String(e?.concept||'').match(/(\d{2})-(\d{4})/); if(m) return `${m[2]}-${m[1]}`
+  const d=String(e?.date||'').slice(0,7); if(!/^\d{4}-\d{2}$/.test(d)) return ''; const [y,mm]=d.split('-').map(Number), x=new Date(y,mm-2,1); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}` }
+const f29BHE = (fecha, expenses, nombre) => { const per=String(fecha||'').slice(0,7); if(!/^\d{4}-\d{2}$/.test(per)) return null
+  const lbl=`${per.slice(5,7)}-${per.slice(0,4)}`, hoyP=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}).slice(0,7)
+  const pago=(expenses||[]).find(e=>!e.deleted_at&&e.category==='Impuestos y patentes'&&e.subcategory==='PPM'&&periodoF29(e)===per)
+  const pals=String(nombre||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().split(/\s+/).filter(w=>w.length>=4)
+  const cpt=String(pago?.concept||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+  const excluida=!!pago&&/sin retenci/.test(cpt)&&pals.some(w=>cpt.includes(w))
+  const estado=pago&&!excluida?'pagada':excluida?'excluida':per>=hoyP?'ira':'por_pagar'
+  const txt={pagada:`Pagada en el F29 ${lbl} · ${fmtFechaDMY(pago?.date)}`, excluida:`No incluida en el F29 ${lbl}`, ira:`Irá en el F29 ${lbl}`, por_pagar:`F29 ${lbl} sin pago registrado`}[estado]
+  return {per, lbl, estado, pago:estado==='pagada'?pago:null, txt} }
 const costoComision = (prov, m, tipo, fecha) => { if(!esBoletaProv(prov)||!(m>0)) return {monto:m}
   const t=tasaBHE(fecha)
   if(tipo==='pct'||tipo==='uf'){ const bruto=Math.round(m/(1-t)); return {monto:bruto, liquido:m, retencion:bruto-m} }
@@ -14686,7 +14700,7 @@ const _diasEntre = (a,b) => { const x=String(a||'').slice(0,10), y=String(b||'')
 // ── PROVEEDORES (página, tab 'proveedores'): SOLO a quienes les pagas comisión o que te pagan comisiones. El subarriendo y los servicios
 // de oficina no van aquí. Lenguaje aprobado (2026-10-14): Comisiones · Pagada · Por pagar (el cliente ya pagó) · Sujeto a cobro (el cliente aún no paga) · Anticipo · Comisiones por cobrar (lo que te pagan). Las comisiones se
 // siguen POR TRABAJO (la venta; o "Facturas a {cliente}" cuando no hay venta) y POR CUOTA: vence · cliente pagó (fecha del banco) · le pagaste.
-function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anticipos=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onPagarBulk,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado}) {
+function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anticipos=[],expenses=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onPagarBulk,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado}) {
   const isDesktop = useIsDesktop()
   const mem = viewMemLeer('proveedores')
   const [view,setView] = useState(mem?.view||'list')   // list | ficha | form | enlazar | pagar
@@ -15105,7 +15119,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
         </div>
         <div><div style={{...kLbl,marginBottom:4}}>{conBol?'Bruto de la boleta (total honorarios)':'Monto de la boleta'}</div><input inputMode='numeric' value={bol.monto} onChange={e=>setBol(p=>({...p,monto:e.target.value}))} placeholder='$' style={inp}/>
           {conBol&&monto>0&&<div style={{display:'flex',flexDirection:'column',gap:2,marginTop:6,fontSize:12}}>
-            <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Retención {pctBHE(tasaB)} · va al F29</span><span style={num}>{fmt(retB)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Retención {pctBHE(tasaB)} · va al F29{f29BHE(bol.fecha)?` ${f29BHE(bol.fecha).lbl}`:''}</span><span style={num}>{fmt(retB)}</span></div>
             <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Líquido a transferir</span><b style={num}>{fmt(liqB)}</b></div></div>}
           {dif!=null&&<div style={{fontSize:11.5,marginTop:5,color:Math.abs(dif)<=1?C.greenText:C.soonText,fontWeight:600}}>{Math.abs(dif)<=1?'Cuadra con las comisiones elegidas':conBol?`El líquido es ${fmt(Math.abs(dif))} ${dif>0?'más':'menos'} que lo que se le debe por las comisiones elegidas (${fmt(sumPag)})`:`${dif>0?'La boleta es':'Las comisiones son'} ${fmt(Math.abs(dif))} más${dif>0?'':' que la boleta'}`}</div>}</div>
         {conBol&&<div><div style={{...kLbl,marginBottom:4}}>PDF de la boleta</div><input type='file' accept='application/pdf' onChange={e=>setBol(p=>({...p,file:e.target.files?.[0]||null}))} style={{fontSize:12}}/>
@@ -15147,7 +15161,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
           <span style={{fontSize:13,fontWeight:700,...num}}>{fmt(saldoT(t))}</span></div> })}</div> })}
       {conBol ? <div style={{padding:'10px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,display:'flex',flexDirection:'column',gap:4}}>
         <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5}}><span style={{color:C.muted}}>Costo (bruto)</span><b style={num}>{fmt(total)}</b></div>
-        <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5}}><span style={{color:C.muted}}>Retención {pctBHE(tasaBHE(pag.fecha))} · va al F29</span><span style={num}>{fmt(retSel)}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5}}><span style={{color:C.muted}}>Retención {pctBHE(tasaBHE(pag.fecha))} · va al F29 del mes de la boleta</span><span style={num}>{fmt(retSel)}</span></div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:2}}><span style={{fontWeight:700}}>Transferir a {tituloProv(sel)}</span><span style={{fontSize:18,fontWeight:700,color:C.accent,...num}}>{fmt(transferir)}</span></div>
       </div>
       : <div style={{display:'flex',justifyContent:'space-between',padding:'10px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontWeight:700}}><span>Total a pagar</span><span style={num}>{fmt(total)}</span></div>}
@@ -15322,10 +15336,11 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     </div>
     // Quien emite boleta: costo pagado del año separado en retención (F29) y líquido (transferido).
     const bolStrip = esBoletaProv(sel) ? (()=>{ const py=tPag.filter(t=>yOf(t.pagado_at||t.created_at)===yr), cto=sumM(py), liq=py.reduce((a,t)=>a+pagarT(t),0), nB=new Set(py.map(t=>t.bhe_id).filter(Boolean)).size
+      const retPorPagar=py.reduce((a,t)=>{ const bh=bheDe(t), f=f29BHE(bh?.fecha||t.factura_fecha||t.pagado_at,expenses,tituloProv(sel)); return a+(f?.estado==='pagada'?0:(Number(t.monto)||0)-pagarT(t)) },0)
       const it=(l,v,s2)=><div style={{minWidth:0}}><div style={kLbl}>{l}</div><div style={{fontSize:isDesktop?17:15,fontWeight:700,color:C.accent,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:C.textSoft}}>{s2}</div></div>
       return <div style={{...card,padding:'10px 14px',display:'flex',flexDirection:'column',gap:8}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.azulBg,color:C.accent,whiteSpace:'nowrap'}}>Emite boleta · retención {pctBHE(tasaBHE(yr+'-01-01'))} ({yr})</span><span style={{fontSize:11,color:C.textSoft}}>{nB} boleta{nB!==1?'s':''} pagada{nB!==1?'s':''} en {yr}</span></div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10}}>{it(`Costo pagado ${yr}`,cto,'bruto')}{it('Retención · F29',cto-liq,'pagada al SII')}{it('Líquido transferido',liq,`a ${tituloProv(sel).split(' ')[0]}`)}</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10}}>{it(`Costo pagado ${yr}`,cto,'bruto')}{it('Retención · F29',cto-liq,retPorPagar>0?`${fmtShort(retPorPagar)} aún sin F29 pagado`:'pagada en el F29')}{it('Líquido transferido',liq,`a ${tituloProv(sel).split(' ')[0]}`)}</div>
       </div> })() : null
     // Por revisar: pastilla con contador; al tocarla se despliega cada punto con su acción.
     const pagSinBancoP = pagadasSinBancoDe(sel.id)
@@ -15385,7 +15400,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
               {conBolF&&<>
                 {det('Boleta',bh?<span onClick={()=>abrirDocumento(bh.storage_path)} title='Descargar la boleta (PDF)' style={{display:'inline-flex',alignItems:'center',gap:4,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}><SIcon n='download' s={12} c={C.accent}/>N° {bh.folio} · {dmy(bh.fecha)}</span>:t.factura_numero?`N° ${t.factura_numero}${t.factura_fecha?' · '+dmy(t.factura_fecha):''}`:lk('Sin boleta · registrar',()=>abrirBoleta(sel)))}
                 {det('Costo (bruto)',fmt(Number(t.monto)||0))}
-                {det(`Retención ${pctBHE(bh?Number(bh.tasa)||tasaBHE(bh.fecha):tasaBHE(fechaBHE(t.pagado_at,venceT(t))))} · F29`,fmt(t.retencion!=null?Number(t.retencion)||0:(Number(t.monto)||0)-pagarT(t)))}
+                {det(`Retención ${pctBHE(bh?Number(bh.tasa)||tasaBHE(bh.fecha):tasaBHE(fechaBHE(t.pagado_at,venceT(t))))}`,fmt(t.retencion!=null?Number(t.retencion)||0:(Number(t.monto)||0)-pagarT(t)))}
+                {(()=>{ const f=f29BHE(bh?.fecha||t.factura_fecha||(t.estado==='pagado'?t.pagado_at:null),expenses,tituloProv(sel)); return f?det('F29',<span style={{color:f.estado==='pagada'?C.greenText:f.estado==='ira'?C.muted:C.soonText}}>{f.txt}</span>):null })()}
                 {det(e==='pagada'?'Líquido transferido':'Líquido a transferir',fmt(pagarT(t)))}</>}
               {det('Le pagaste',t.estado==='pagado'?lk(t.pagado_at?dmy(t.pagado_at):'Pagada',t.movimiento_id&&onIrBanco?()=>onIrBanco(t.movimiento_id):null):ap>0?`${fmt(ap)} · faltan ${fmt(Math.max(0,(Number(t.monto)||0)-ap))}`:e==='por_pagar'?lk('Pagar',()=>abrirPagar(sel)):'—')}
               {w.sale&&det('Trabajo',lk(w.titulo,onOpenSale?()=>onOpenSale(w.sale):null))}
@@ -40081,7 +40097,7 @@ export default function App() {
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Oficina' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})}/>
             </div>}
-            {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onPagarBulk={handlePagarTercerosBulk} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
+            {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onPagarBulk={handlePagarTercerosBulk} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
