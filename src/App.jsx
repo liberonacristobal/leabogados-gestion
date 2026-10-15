@@ -14625,6 +14625,8 @@ async function conciliarPagoComisiones(m, ids, sum){
   if(e1) throw e1
   const {error:e2}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:String(m.fecha).slice(0,10),movimiento_id:m.id}).in('id',ids)
   if(e2){ await supabase.from('conciliacion').delete().eq('id',cc.id); throw e2 }
+  try{ const {data:rs}=await supabase.from('terceros_pagos').select('id,monto,liquido,retencion,bhe_id').in('id',ids)
+    for(const t of (rs||[])){ const pt=reajusteBHEPago(t,m.fecha); if(pt) await supabase.from('terceros_pagos').update(pt).eq('id',t.id) } }catch(_){}
   const aplicado=(Number(m.monto_conciliado)||0)+sum
   const estado=(Math.abs(Number(m.monto)||0)-aplicado)<=1?'conciliado':'parcial'
   const {error:e3}=await supabase.from('cartola_movimientos').update({categoria:m.categoria||'Proveedor',monto_conciliado:aplicado,estado}).eq('id',m.id)
@@ -14643,6 +14645,12 @@ const esBoletaProv = p => p?.documento==='boleta'
 const pagarT = t => t?.liquido!=null ? (Number(t.liquido)||0) : (Number(t?.monto)||0)
 // Costo de una comisión nueva de quien emite boleta. % y UF: lo pactado es lo que RECIBE (líquido) → costo = líquido ÷ (1 − tasa).
 // Monto fijo ($): se ingresa el costo (bruto) → líquido = bruto × (1 − tasa). Quien factura: monto tal cual.
+// Fecha que fija la tasa: la del pago si ya se pagó; si no, el vencimiento, pero nunca una fecha pasada (una cuota atrasada se pagará este año).
+const fechaBHE = (pagadaEn, vence) => { const hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}); return pagadaEn ? String(pagadaEn).slice(0,10) : (vence&&String(vence).slice(0,10)>hoy ? String(vence).slice(0,10) : hoy) }
+// Al pagar una comisión de quien emite boleta SIN boleta registrada, el costo estimado se rehace con la tasa del AÑO DEL PAGO
+// (la estimación pudo hacerse con la de otro año). Con boleta registrada mandan sus cifras reales.
+const reajusteBHEPago = (t, fecha) => { if(t?.liquido==null||t?.bhe_id||!(Number(t?.retencion)>0)) return null
+  const liq=Number(t.liquido)||0, bruto=Math.round(liq/(1-tasaBHE(fecha))); return bruto!==Number(t.monto) ? {monto:bruto, retencion:bruto-liq} : null }
 const costoComision = (prov, m, tipo, fecha) => { if(!esBoletaProv(prov)||!(m>0)) return {monto:m}
   const t=tasaBHE(fecha)
   if(tipo==='pct'||tipo==='uf'){ const bruto=Math.round(m/(1-t)); return {monto:bruto, liquido:m, retencion:bruto-m} }
@@ -14904,7 +14912,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     const fechaDe=m=>String(m.fecha).slice(0,10)
     const descT=t=>alloc.filter(a=>a.t.id===t.id).map(a=>`${dm(a.m.fecha)} ${fmt(a.monto)}`).join(' + ')
     // 1) comisiones completas → pagadas
-    for(const [tid,m] of Object.entries(completa)){ const t=ts.find(x=>String(x.id)===String(tid)); const patch={estado:'pagado',pagado_at:fechaDe(m),movimiento_id:m.id,referencia:`Pagada: ${descT(t)}`}
+    for(const [tid,m] of Object.entries(completa)){ const t=ts.find(x=>String(x.id)===String(tid)); const patch={estado:'pagado',pagado_at:fechaDe(m),movimiento_id:m.id,referencia:`Pagada: ${descT(t)}`,...(reajusteBHEPago(t,fechaDe(m))||{})}
       if(!DEMO){ const {error}=await supabase.from('terceros_pagos').update(patch).eq('id',tid); if(error) throw error }
       setTerceros&&setTerceros(p=>p.map(x=>String(x.id)===String(tid)?{...x,...patch}:x)) }
     // 2) aportes (lo que un pago puso en una comisión que NO cerró con ese pago)
@@ -15377,7 +15385,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
               {conBolF&&<>
                 {det('Boleta',bh?<span onClick={()=>abrirDocumento(bh.storage_path)} title='Descargar la boleta (PDF)' style={{display:'inline-flex',alignItems:'center',gap:4,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}><SIcon n='download' s={12} c={C.accent}/>N° {bh.folio} · {dmy(bh.fecha)}</span>:t.factura_numero?`N° ${t.factura_numero}${t.factura_fecha?' · '+dmy(t.factura_fecha):''}`:lk('Sin boleta · registrar',()=>abrirBoleta(sel)))}
                 {det('Costo (bruto)',fmt(Number(t.monto)||0))}
-                {det(`Retención ${pctBHE(bh?Number(bh.tasa)||tasaBHE(bh.fecha):tasaBHE(t.pagado_at||venceT(t)))} · F29`,fmt(t.retencion!=null?Number(t.retencion)||0:(Number(t.monto)||0)-pagarT(t)))}
+                {det(`Retención ${pctBHE(bh?Number(bh.tasa)||tasaBHE(bh.fecha):tasaBHE(fechaBHE(t.pagado_at,venceT(t))))} · F29`,fmt(t.retencion!=null?Number(t.retencion)||0:(Number(t.monto)||0)-pagarT(t)))}
                 {det(e==='pagada'?'Líquido transferido':'Líquido a transferir',fmt(pagarT(t)))}</>}
               {det('Le pagaste',t.estado==='pagado'?lk(t.pagado_at?dmy(t.pagado_at):'Pagada',t.movimiento_id&&onIrBanco?()=>onIrBanco(t.movimiento_id):null):ap>0?`${fmt(ap)} · faltan ${fmt(Math.max(0,(Number(t.monto)||0)-ap))}`:e==='por_pagar'?lk('Pagar',()=>abrirPagar(sel)):'—')}
               {w.sale&&det('Trabajo',lk(w.titulo,onOpenSale?()=>onOpenSale(w.sale):null))}
@@ -38240,7 +38248,7 @@ export default function App() {
               const v = parseFloat(row.valor)||0
               const mSin = row.tipo==='uf' ? Math.round(v*(sUfVal||0)) : row.tipo==='pct' ? 0 : Math.round(restanteFijo??v)
               if(mSin>0) nuevos.push({sale_id:data.id, billing_id:null, proveedor_id:row.proveedor_id,
-                proveedor:provNom, rut:prov?.rut||null, tipo_costo:row.tipo||null, valor:v||null, ...costoComision(prov,mSin,row.tipo,null),
+                proveedor:provNom, rut:prov?.rut||null, tipo_costo:row.tipo||null, valor:v||null, ...costoComision(prov,mSin,row.tipo,fechaBHE(null,null)),
                 estado:'pendiente', created_by:user?.name||null})
               continue
             }
@@ -38256,7 +38264,7 @@ export default function App() {
               if(m<=0) continue
               nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
                 proveedor: provNom, rut:prov?.rut||null,
-                tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, ...costoComision(prov,m,row.tipo,cuota.paid_at||cuota.due),
+                tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, ...costoComision(prov,m,row.tipo,fechaBHE(cuota.status==='Pagado'?(cuota.paid_at||cuota.due):null,cuota.due)),
                 estado: cuota.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null})
             }
           }
@@ -39243,7 +39251,7 @@ export default function App() {
     try{
       const payload=limpio.map(it=>{ const fac=(billing||[]).find(b=>String(b.id)===String(it.billing_id)); const m=parseInt(it.monto)||0
         return {sale_id:fac?.sale_id||null, billing_id:it.billing_id, proveedor_id:proveedorId,
-          proveedor:prov.razon_social||prov.nombre||null, rut:prov.rut||null, tipo_costo:'clp', valor:m, ...costoComision(prov,m,'clp',fac?.paid_at||fac?.issued_at),
+          proveedor:prov.razon_social||prov.nombre||null, rut:prov.rut||null, tipo_costo:'clp', valor:m, ...costoComision(prov,m,'clp',fechaBHE(fac?.status==='Pagado'?(fac?.paid_at||fac?.issued_at):null,fac?.due)),
           estado: fac?.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null} })
       const {error}=await supabase.from('terceros_pagos').insert(payload)
       if(error)throw error
@@ -39280,7 +39288,8 @@ export default function App() {
       if(!ids?.length) return null
       const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null,factura_numero:factura_numero||null,factura_fecha:factura_fecha||null}).in('id',ids).select()
       if(error)throw error
-      setTerceros(p=>p.map(t=>{const u=(data||[]).find(d=>d.id===t.id); return u||t}))
+      const ajustes=[]; for(const d of (data||[])){ const pt=reajusteBHEPago(d,d.pagado_at); if(pt){ await supabase.from('terceros_pagos').update(pt).eq('id',d.id); ajustes.push({...d,...pt}) } }
+      setTerceros(p=>p.map(t=>{const u=ajustes.find(d=>d.id===t.id)||(data||[]).find(d=>d.id===t.id); return u||t}))
       return data
     }catch(e){appAlert('Error: '+e.message); return null}
   },[])
