@@ -160,6 +160,8 @@ export const demoData = {
     { id:'h2', action:'clientes.c2.auditoria', created_at:'2026-10-13T11:00:00Z', user_email:'cl@leabogados.cl', detail:JSON.stringify({texto:'Los gastos sin fecha vienen del registro histórico importado el 25-06-2026; el original no trae fecha.'}) },
   ],
   expenses: [
+    // F29 (PPM) que paga la contadora: el de 08-2026 paga la retención de la boleta demo N° 12
+    { id:'xppm8', type:'gasto', amount:612400, concept:'IVA/PPM 08-2026', category:'Impuestos y patentes', subcategory:'PPM', date:'2026-09-11', created_by:'Cristóbal' },
     // Fondos de clientes
     { id:'x1', client_id:'c1', entity_id:'e1', type:'fondo', amount:1000000, concept:'Fondo de gastos', category:'Fondo', date:'2026-02-01', created_by:'Cristóbal' },
     { id:'x2', client_id:'c3',               type:'fondo', amount:500000,  concept:'Fondo de gastos', category:'Fondo', date:'2026-03-05', created_by:'Cristóbal' },
