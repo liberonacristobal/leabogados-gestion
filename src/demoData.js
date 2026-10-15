@@ -183,7 +183,7 @@ export const demoData = {
     { id:'xv2', client_id:'c2', type:'gasto', amount:45000,  concept:'Copias de escrituras para due diligence', category:'Notaria', ot_number:'48402', date:'2026-08-26', created_by:'Martina' },
     { id:'ofr1', client_id:'c0', type:'gasto', amount:18500, concept:'Insumos de oficina', category:'Oficina', date:'2026-10-03', created_by:'Martina' },
     { id:'ofr2', client_id:'c0', type:'gasto', amount:42000, concept:'Courier documentos', category:'Oficina', date:'2026-10-08', created_by:'Martina' },
-    { id:'pf0', client_id:null, personal_de:'Cristóbal', type:'fondo', amount:10000, concept:'Aporte de Cristóbal a la cuenta de gastos', category:'Fondo', date:'2026-02-09' },
+    { id:'pf0', client_id:null, personal_de:'Cristóbal', type:'fondo', amount:10000, concept:'Aporte de Cristóbal a la cuenta de gastos', category:'Fondo', date:'2026-02-09', no_descuenta_saldo:true },
     { id:'pf1', client_id:null, personal_de:'Cristóbal', type:'fondo', amount:105000, concept:'Fondo por rendir · de Juan Pérez Soto · para Cristóbal', category:'Fondo', date:'2026-09-03' },
     { id:'pg1', client_id:null, personal_de:'Cristóbal', reembolso_fondo_id:'pf1', type:'gasto', amount:49100, concept:'Copia escritura pública', category:'Archivo Judicial', date:'2026-10-02', created_by:'Cristóbal', paid_by_client:false },
     { id:'pg2', client_id:null, personal_de:'Cristóbal', type:'gasto', amount:14390, concept:'Uber Ministerio de Hacienda a oficina', category:'Movilización', date:'2026-08-24', created_by:'Cristóbal', paid_by_client:false },
