@@ -3574,6 +3574,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const [cpExp,setCpExp] = useState(null)       // cuenta por pagar a proveedor con su origen desplegado
   const [openPagar,setOpenPagar] = useState(true)
   const [cpProvOpen,setCpProvOpen] = useState({})   // drill: facturas del proveedor desplegadas
+  const [cpF,setCpF] = useState('todos')            // filtro de la sección Comisiones (mismas 4 tarjetas que el home de Comisiones)
+  const [cpVerTodos,setCpVerTodos] = useState(false)
   const [cpPagOpen,setCpPagOpen] = useState(false)  // sección "Pagadas este año" (colaboradores ya pagados) desplegada
   const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
   const [payGroup,setPayGroup] = useState(null)        // varias cuentas del mismo proveedor pagadas juntas
@@ -4134,7 +4136,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
               const t=resDrill.tile
               const cn = cid => (clients.find(c=>String(c.id)===String(cid))||{}).name || 'Sin cliente'
               const openYear = y => setResDrill(d=>({...d, year: d.year===y?null:y}))
-              const box={margin:'9px 0 2px',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}
+              const box={margin:'9px 0 2px',background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,overflow:'hidden'}   // mismo fondo que las tarjetas de Finanzas · gestión (contraste con la página)
               const R={display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.border}`}
               const RC={...R,cursor:'pointer'}
               // ADN de fila único (mismo tamaño/peso en los 4 paneles; el COLOR de la cifra solo por rol):
@@ -4498,38 +4500,43 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
         const byProvPag = {}
         ;(terceros||[]).filter(t=>t.estado==='pagado'&&String(t.pagado_at||'').startsWith(String(yr))).forEach(t=>{ const k=t.proveedor_id||'__'; if(!byProvPag[k]) byProvPag[k]={prov:provById(t.proveedor_id),cuentas:[]}; byProvPag[k].cuentas.push(t) })
         const gruposPag = Object.values(byProvPag).map(g=>({...g,total:g.cuentas.reduce((a,t)=>a+(t.monto||0),0)})).sort((a,b)=>b.total-a.total)
-        return (
-          <div style={{padding:'16px 20px 0'}}>
-            <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8,marginBottom:8}}><span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Comisiones · colaboradores</span>{navTo&&<span onClick={()=>navTo({tab:'proveedores'})} style={{fontSize:12,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver proveedores ›</span>}</div>
-            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
-              {(porPagarTot+pendienteTot)===0 ? (
-                <div style={{display:'flex',alignItems:'center',gap:11}}>
-                  <span style={{width:34,height:34,borderRadius:'50%',background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg></span>
-                  <div><div style={{fontSize:15,fontWeight:600,color:C.greenText}}>Al día con proveedores</div><div style={{fontSize:11,color:C.done,marginTop:1}}>Sin deudas pendientes</div></div>
-                </div>
-              ) : (
-                <div style={{display:'flex',alignItems:'center',gap:11,marginBottom:13}}>
-                  <span style={{width:34,height:34,borderRadius:'50%',background:C.ambarBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2 2 22h20L12 2z'/><line x1='12' y1='9' x2='12' y2='14'/><line x1='12' y1='18' x2='12' y2='18'/></svg></span>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:19,fontWeight:700,color:C.soonText,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(porPagarTot+pendienteTot)} <span style={{fontSize:12,fontWeight:600}}>por pagar</span></div>
-                    <div style={{fontSize:11,color:C.done,marginTop:2}}>{porPagarTot>0&&<><b style={{color:C.greenText}}>{fmtShort(porPagarTot)}</b> listo para pagar</>}{porPagarTot>0&&pendienteTot>0&&' · '}{pendienteTot>0&&<><b style={{color:C.soonText}}>{fmtShort(pendienteTot)}</b> en espera del cobro</>}</div>
-                  </div>
-                </div>
-              )}
-                {grupos.map((g,gi)=>{
-                  const ppCuentas=g.cuentas.filter(t=>eDer(t)==='por_pagar')
-                  const ppTot=ppCuentas.reduce((a,t)=>a+(t.monto||0),0)
-                  const pkey=g.prov?.id||('g'+gi); const provOpen=!!cpProvOpen[pkey]
-                  const provNom=titleCase(tituloProv(g.prov)); const provRS=g.prov?.razon_social?.trim()
-                  return (
-                  <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                    <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} title={provRS&&titleCase(provRS)!==provNom?titleCase(provRS):undefined} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',background:C.neutro||C.bgSoft,cursor:'pointer'}}>
-                      <span style={{width:24,height:24,borderRadius:6,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
-                      <span style={{flex:1,fontSize:13,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}{g.prov?.id&&navTo&&<span onClick={e=>{e.stopPropagation();navTo({tab:'proveedores',provId:g.prov.id})}} style={{marginLeft:8,fontSize:11.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>ficha ›</span>}</span>
-                      <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtShort(g.total)}</span>
-                      <span style={{fontSize:11,color:C.done,flexShrink:0}}>{provOpen?'▴':'▾'}</span>
-                    </div>
-                    {provOpen&&ppCuentas.length>=2&&(
+        // ── Mismo lenguaje que el home de Comisiones (2026-10-14): 4 tarjetas que filtran la lista · lista de una línea que se despliega ──
+        const facDeT = t => (billing||[]).find(b=>String(b.id)===String(t.billing_id))
+        const sumT = xs => xs.reduce((a,t)=>a+(Number(t.monto)||0),0)
+        const cuandoT = t => { const b=facDeT(t); if(!b||!b.invoice_no) return 'fac'; return b.status==='Vencido'?'atr':'dia' }   // de qué depende lo sujeto a cobro
+        // «Te pagan» = mismo cálculo que el home de Comisiones (met().aFavor): nuestra retención ya cobrada + nuestras facturas al proveedor pagadas.
+        const tePagan = (proveedores||[]).map(p=>{ const ts=(terceros||[]).filter(t=>String(t.proveedor_id)===String(p.id)&&Number(t.comision_monto)>0&&billOk(t.billing_id)), stB=t=>facDeT(t)?.status
+          const retCob=ts.filter(t=>stB(t)==='Pagado').reduce((a,t)=>a+(Number(t.comision_monto)||0),0), retPend=ts.filter(t=>stB(t)!=='Pagado').reduce((a,t)=>a+(Number(t.comision_monto)||0),0)
+          const fPag=p.client_id?(billing||[]).filter(b=>String(b.client_id)===String(p.client_id)&&b.billing_type==='honorarios'&&!b.deleted_at&&b.status==='Pagado').reduce((a,b)=>a+(Number(b.amount)||0),0):0
+          return {prov:p,aFavor:retCob+fPag,retPend} }).filter(x=>x.aFavor>0||x.retPend>0).sort((a,b)=>b.aFavor-a.aFavor)
+        const aFavorTot=tePagan.reduce((a,x)=>a+x.aFavor,0), retPendTot=tePagan.reduce((a,x)=>a+x.retPend,0)
+        const nProv = f => grupos.filter(f).length, provN = n => `${n} proveedor${n!==1?'es':''}`
+        const sujetoDe = g => g.cuentas.filter(t=>eDer(t)!=='por_pagar'), ppDe = g => g.cuentas.filter(t=>eDer(t)==='por_pagar')
+        const KT={pp:[C.soonBg,C.soonText,'transparent'],cob:[C.azulBg,C.accent,'transparent'],pag:[C.greenBg,C.greenText,'transparent'],te:['#fff',C.accent,C.border]}
+        const tileC=(k,l,v,sub)=>{ const [bg,fg,bd]=KT[k], on=cpF===k; return <div key={k} onClick={()=>setCpF(on?'todos':k)} style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
+          <div style={{fontSize:10,fontWeight:700,color:fg,textTransform:'uppercase',letterSpacing:.5}}>{l}</div><div style={{fontSize:isDeskRes?19:16,fontWeight:700,color:fg,letterSpacing:-.4,fontVariantNumeric:'tabular-nums',marginTop:2,whiteSpace:'nowrap'}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85}}>{sub}</div></div> }
+        const nPP=nProv(g=>ppDe(g).length>0), nCob=nProv(g=>sujetoDe(g).length>0)
+        const tiles=<div style={{display:'grid',gridTemplateColumns:isDeskRes?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
+          {tileC('pp','Por pagar',porPagarTot,porPagarTot>0?(isDeskRes?`${provN(nPP)} · el cliente ya pagó`:'El cliente ya pagó'):'Al día')}
+          {tileC('cob','Sujeto a cobro',pendienteTot,`${provN(nCob)}${isDeskRes?' · cuando paguen los clientes':''}`)}
+          {tileC('pag',`Pagada · ${yr}`,pagadoYr,provN(gruposPag.length))}
+          {tileC('te',isDeskRes?'Comisiones por cobrar':'Te pagan',aFavorTot,retPendTot>0?`+${fmt(retPendTot)} sujeto a cobro`:'cobradas')}
+        </div>
+        const F_LBL={pp:'Por pagar',cob:'Sujeto a cobro',pag:`Pagada · ${yr}`,te:isDeskRes?'Comisiones por cobrar':'Te pagan'}
+        // Desglose de lo sujeto a cobro (solo con ese filtro): de qué depende que se libere.
+        const desg = xs => { const by={atr:0,dia:0,fac:0}; xs.forEach(t=>{ by[cuandoT(t)]+=Number(t.monto)||0 }); return by }
+        const dTot = cpF==='cob' ? desg(grupos.flatMap(sujetoDe)) : null
+        const partes = by => [by.atr>0&&<Fragment key='a'><b style={{color:C.overdueText,fontWeight:700}}>{fmtShort(by.atr)}</b> cliente atrasado</Fragment>, by.dia>0&&<Fragment key='d'>{fmtShort(by.dia)} al día</Fragment>, by.fac>0&&<Fragment key='f'>{fmtShort(by.fac)} falta facturar</Fragment>].filter(Boolean).reduce((acc,x,ix)=>ix?[...acc,' · ',x]:[x],[])
+        const cliFol = t => { const b=facDeT(t); const c=clients.find(x=>String(x.id)===String(b?.client_id)); return `${String(c?.name||'—').split(/\s+/).slice(0,2).join(' ')}${b?.invoice_no?' F'+folioN(b.invoice_no):''}` }
+        const filasC = cpF==='pag' ? gruposPag.map(g=>({k:'pag_'+(g.prov?.id||'x'),g,val:g.total,col:C.greenText,sub:null,tipo:'pag'}))
+          : cpF==='te' ? tePagan.map(x=>({k:'te_'+x.prov.id,g:{prov:x.prov,cuentas:[]},val:x.aFavor,col:C.accent,sub:x.retPend>0?`+${fmt(x.retPend)} sujeto a cobro`:null,tipo:'te'}))
+          : grupos.map((g,gi)=>{ const pp=ppDe(g), sj=sujetoDe(g), ppT=sumT(pp), sjT=sumT(sj), k=g.prov?.id||('g'+gi)
+              if(cpF==='pp') return ppT>0 ? {k,g,val:ppT,col:C.soonText,sub:pp.map(cliFol).join(' · '),tipo:'nop'} : null
+              if(cpF==='cob') return sjT>0 ? {k,g,val:sjT,col:C.accent,sub:partes(desg(sj)),tipo:'nop'} : null
+              return {k,g,val:g.total,col:C.accent,sub:ppT>0?<b style={{color:C.soonText,fontWeight:700}}>{fmt(ppT)} por pagar</b>:null,tipo:'nop'} }).filter(Boolean).sort((a,b)=>b.val-a.val)
+        const TOPN=5, vis=cpVerTodos?filasC:filasC.slice(0,TOPN)
+        // Detalle al desplegar: las cuentas del proveedor (mismo detalle de siempre, con Pagar).
+        const detNoPag = g => { const ppCuentas=ppDe(g), ppTot=sumT(ppCuentas), provOpen=true; return <>{provOpen&&ppCuentas.length>=2&&(
                       <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{margin:'8px 12px 0',height:24,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
                     )}
                     {provOpen&&ordCuentas(g.cuentas).map(t=>{
@@ -4572,28 +4579,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
                           )}
                         </div>
                       )
-                    })}
-                  </div>
-                )})}
-                {gruposPag.length>0&&(
-                  <div style={{marginTop:(porPagarTot+pendienteTot)===0?4:2}}>
-                    <div onClick={()=>setCpPagOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 2px',cursor:'pointer'}}>
-                      <span style={{fontSize:12,fontWeight:600,color:C.done}}>Pagadas este año</span>
-                      <span style={{flex:1,height:1,background:C.border}}></span>
-                      <span style={{fontSize:13,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(pagadoYr)}</span>
-                      <span style={{fontSize:11,color:C.done}}>{gruposPag.length} colab.</span>
-                      <span style={{fontSize:11,color:C.done}}>{cpPagOpen?'▴':'▾'}</span>
-                    </div>
-                    {cpPagOpen&&gruposPag.map((g,gi)=>{ const pkey='pag_'+(g.prov?.id||gi); const provOpen=!!cpProvOpen[pkey]; const provNom=titleCase(tituloProv(g.prov)); return (
-                      <div key={pkey} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
-                        <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',background:C.bgSoft,cursor:'pointer'}}>
-                          <span style={{width:24,height:24,borderRadius:6,background:C.greenText,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
-                          <span style={{flex:1,fontSize:13,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}{g.prov?.id&&navTo&&<span onClick={e=>{e.stopPropagation();navTo({tab:'proveedores',provId:g.prov.id})}} style={{marginLeft:8,fontSize:11.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>ficha ›</span>}</span>
-                          <span style={{fontSize:13,fontWeight:600,color:C.greenText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtShort(g.total)}</span>
-                          <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:C.greenBg,color:C.greenText,flexShrink:0}}>Pagado</span>
-                          <span style={{fontSize:11,color:C.done,flexShrink:0}}>{provOpen?'▴':'▾'}</span>
-                        </div>
-                        {provOpen&&[...g.cuentas].sort((a,b)=>String(b.pagado_at||'').localeCompare(String(a.pagado_at||''))).map(t=>{ const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id)); const cli=clients.find(c=>String(c.id)===String(fac?.client_id)); return (
+                    })}</> }
+        const detPag = g => { const provOpen=true; return <>{provOpen&&[...g.cuentas].sort((a,b)=>String(b.pagado_at||'').localeCompare(String(a.pagado_at||''))).map(t=>{ const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id)); const cli=clients.find(c=>String(c.id)===String(fac?.client_id)); return (
                           <div key={t.id} style={{borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8,padding:'10px 12px'}}>
                             <div style={{minWidth:0,flex:1}}>
                               <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}{fac?.invoice_no?` · Factura N° ${folioN(fac.invoice_no)}`:''}</div>
@@ -4601,12 +4588,27 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
                             </div>
                             <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(t.monto)}</span>
                           </div>
-                        )})}
-                      </div>
-                    )})}
+                        )})}</> }
+        return (
+          <div style={{padding:'16px 20px 0'}}>
+            <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8,marginBottom:8}}><span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Comisiones</span>{navTo&&<span onClick={()=>navTo({tab:'proveedores'})} style={{fontSize:12,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver comisiones ›</span>}</div>
+            {tiles}
+            {cpF!=='todos'&&<div style={{fontSize:11.5,color:C.muted,margin:'8px 2px 0',lineHeight:1.45}}>Filtro: <b style={{color:C.accent}}>{F_LBL[cpF]}</b>{dTot&&<> · {partes(dTot)}</>} <span onClick={()=>setCpF('todos')} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',marginLeft:4}}>Quitar</span></div>}
+            {filasC.length>0&&<div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
+              {vis.map((f,fi)=>{ const open=!!cpProvOpen[f.k]; const nom=titleCase(tituloProv(f.g.prov)); return (
+                <div key={f.k} style={{borderTop:fi?`1px solid ${C.border}`:'none'}}>
+                  <div onClick={()=>{ if(f.tipo==='te'){ navTo&&f.g.prov?.id&&navTo({tab:'proveedores',provId:f.g.prov.id}); return } setCpProvOpen(o=>({...o,[f.k]:!o[f.k]})) }} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nom}{f.g.prov?.id&&navTo&&<span onClick={e=>{e.stopPropagation();navTo({tab:'proveedores',provId:f.g.prov.id})}} style={{marginLeft:8,fontSize:11.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>ficha ›</span>}</div>
+                      {f.sub&&<div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.sub}</div>}
+                    </div>
+                    <span style={{fontSize:13,fontWeight:800,color:f.col,flexShrink:0,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(f.val)}</span>
+                    {f.tipo!=='te'&&<span style={{fontSize:10,color:C.done,flexShrink:0}}>{open?'▴':'▾'}</span>}
                   </div>
-                )}
-              </div>
+                  {open&&(f.tipo==='pag' ? detPag(f.g) : detNoPag(f.g))}
+                </div>) })}
+              {filasC.length>TOPN&&<div onClick={()=>setCpVerTodos(v=>!v)} style={{padding:'9px 14px',borderTop:`1px solid ${C.border}`,fontSize:12,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>{cpVerTodos?'Ver menos':`Ver los ${filasC.length} ›`}</div>}
+            </div>}
           </div>
         )
       })()}
