@@ -37209,6 +37209,8 @@ export function PortalApp(){
   const [err,setErr] = useState(null)
   const [loadingData,setLoadingData] = useState(false)
   const [verPag,setVerPag] = useState(false)
+  // Misma letra que la app (DM Sans): el portal se monta sin el <link> de App, así que la carga él mismo (una vez).
+  useEffect(()=>{ try{ if(!document.querySelector(`link[href="${FONT}"]`)){ const l=document.createElement('link'); l.rel='stylesheet'; l.href=FONT; document.head.appendChild(l) } if(!document.getElementById('portal-font-inherit')){ const st=document.createElement('style'); st.id='portal-font-inherit'; st.textContent='input,button,textarea,select{font-family:inherit}'; document.head.appendChild(st) } }catch(_){} },[])   // los campos y botones no heredan la letra por defecto
   useEffect(()=>{ supabase.auth.getSession().then(({data})=>{ setSession(data?.session||null); setChecking(false) },()=>setChecking(false)); const sub=supabase.auth.onAuthStateChange((_e,s)=>setSession(s)); return ()=>{ try{ sub?.data?.subscription?.unsubscribe?.() }catch(_){} } },[])
   useEffect(()=>{ if(!session){ setData(null); return } setLoadingData(true); setErr(null)
     fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/portal',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey}, body:'{}' })
@@ -37223,7 +37225,7 @@ export function PortalApp(){
     setVerifying(false) }
   const salir = ()=>{ supabase.auth.signOut(); setSession(null); setData(null); setStep('email'); setEmail(''); setCode('') }
   const Brand = ({right}) => <div style={{background:C.accent,padding:'16px 18px',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}><div style={{textAlign:'center',color:'#fff'}}><div style={{fontSize:13,fontWeight:600,letterSpacing:2.5}}>LIBERONA ESCALA</div><div style={{fontSize:8,letterSpacing:4,opacity:.85,marginTop:2}}>ABOGADOS</div></div>{right&&<div style={{position:'absolute',right:16,top:'50%',transform:'translateY(-50%)'}}>{right}</div>}</div>
-  const wrap = { minHeight:'100vh', background:C.bg, fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif", padding:'22px 14px 50px', display:'flex', justifyContent:'center' }
+  const wrap = { minHeight:'100vh', background:C.bg, fontFamily:"'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif", padding:'22px 14px 50px', display:'flex', justifyContent:'center' }
   const card = { width:'100%', maxWidth:460, background:'#fff', border:`1px solid ${C.border}`, borderRadius:18, overflow:'hidden', boxShadow:'0 10px 30px rgba(0,40,60,.08)' }
 
   if(checking) return <div style={{...wrap,alignItems:'center'}}><Spin/></div>
