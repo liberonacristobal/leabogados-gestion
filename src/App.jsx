@@ -20164,7 +20164,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         // Barra: buscador + selector de orden + selector de agrupar (mismo selector que Facturación; render aprobado 2026-10-15)
         const hayClientes=Object.keys(notaGroups.byClient).length>0
         const selS={fontSize:12.5,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:10,height:40,boxSizing:'border-box',padding:'0 10px',background:C.surface,color:C.accent,cursor:'pointer',minWidth:0,...(D?{}:{width:'100%'})}   // mismo alto que el buscador
-        const ORDS=[['monto|desc','Mayor monto'],['monto|asc','Menor monto'],['nombre|asc','Cliente A–Z'],['nombre|desc','Cliente Z–A'],['saldo|desc','Mayor saldo'],['saldo|asc','Menor saldo']]
+        const ORDS=[['monto|desc','Mayor monto'],['monto|asc','Menor monto'],['nombre|asc','Cliente A–Z'],['nombre|desc','Cliente Z–A'],['saldo|desc','Mayor disponible'],['saldo|asc','Menor disponible']]
         const selOrden=hayClientes&&<select value={`${deudaSort.col}|${deudaSort.dir}`} onChange={ev=>{ const [col,dir]=ev.target.value.split('|'); setDeudaSort({col,dir}) }} style={selS}>{ORDS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
         const selGrupo=hayClientes&&<select value={deudaGroup} onChange={ev=>setDeudaGroup(ev.target.value)} style={selS}><option value='cliente'>Por cliente</option><option value='responsable'>Por abogado</option><option value='estado'>Por estado</option></select>
         const toolbar = D
@@ -20209,7 +20209,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n}),
               nombreOT(onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn, qq?`${gs.length} de ${gsAll.length}`:gsAll.length),
-              esOf?<>Oficina · gasto propio</>:(()=>{ const sal=saldoCliente(expenses,cid); return <>Saldo <b style={{color:sal<0?C.overdueText:C.text,fontWeight:600}}>{fmtSaldoG(sal)}</b></> })(),   // mismo saldo que la ficha del cliente (fgCliente: ya descuenta estas OT)
+              esOf?<>Oficina · gasto propio</>:<>Disponible <b style={{color:disp>0?C.text:C.overdueText,fontWeight:600}}>{fmt(disp)}</b></>,   // lo que tiene para pagar estas OT (fondo − lo ya gastado); la ficha muestra el saldo después de pagarlas
               esOf?colD('Oficina','gasto propio',C.muted):colSaldo(disp,deficit>0?null:disp-aPagar),
               montoEst(aPagar,esOf?null:est))}
             {open&&<div>
@@ -20228,7 +20228,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           const hit=!qq||gs.some(e=>matchE(e,cliName(cid)))
           return {cid,gs,porFondos,hit,estKey,resp,aPagar,disp,sal:saldoCliente(expenses,cid),nom:cliName(cid)}
         })
-        const sKey={nombre:e=>e.nom.toLowerCase(),monto:e=>e.aPagar,saldo:e=>e.sal,ot:e=>e.gs.length}[deudaSort.col]||(e=>e.aPagar)
+        const sKey={nombre:e=>e.nom.toLowerCase(),monto:e=>e.aPagar,saldo:e=>e.disp,ot:e=>e.gs.length}[deudaSort.col]||(e=>e.aPagar)
         const sDir=deudaSort.dir==='asc'?1:-1
         const pasaEst=e=>!deudaEstF||(deudaEstF==='con'?e.disp>0:deudaEstF==='adel'?e.aPagar>e.disp:false)
         const entries=allEntries.filter(e=>e.porFondos&&e.hit&&pasaEst(e)).sort((a,b)=>{ const x=sKey(a),y=sKey(b); return (typeof x==='string'?x.localeCompare(y,'es'):x-y)*sDir })
@@ -20260,7 +20260,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {(()=>{ const defP=Math.max(0,tot-dP); const estP=sinFP?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubreP?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}; return filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
               nombreOT(<>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></>,gsAll.length),
-              (()=>{ const sal=fP-oP-tot; return <>Saldo <b style={{color:sal<0?C.overdueText:C.text,fontWeight:600}}>{fmtSaldoG(sal)}</b></> })(),
+              <>Disponible <b style={{color:dP>0?C.text:C.overdueText,fontWeight:600}}>{fmt(dP)}</b></>,
               colSaldo(dP,defP>0?null:dP-tot),
               montoEst(tot,estP)) })()}
             {open&&<div>{gs.map(e=>notaRow(e,false,false,notaQ))}</div>}
