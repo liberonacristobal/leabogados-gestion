@@ -2739,12 +2739,11 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioAct
           {id:'tasks',label:'Tareas',ic:'check',mod:'nucleo'},
         ]},
         {cap:'Finanzas', items:[
-          {id:'prioridades',label:'Prioridades',ic:'alert',mod:'finanzas',onClick:onPrioridades,active:prioActive},
           {id:'conciliacion',label:'Banco',ic:'bank',mod:'finanzas'},
+          {id:'proveedores',label:'Comisiones',ic:'pct',mod:'finanzas'},
           {id:'cobranza',label:'Cobranza',ic:'send',mod:'finanzas'},
           {id:'horas',label:'Horas',ic:'clock',mod:'horas'},
           {id:'inteligencia',label:'Inteligencia',ic:'chart',mod:'nucleo'},
-          {id:'proveedores',label:'Comisiones',ic:'pct',mod:'finanzas'},
         ]} ]
     : [ {cap:null, items:(TABS_LIMITED.map(t=>({id:t.id,label:t.label,ic:t.icon,mod:t.mod})))} ]
   const item = t => moduloOn(t.mod) && (()=>{ const act = t.active||tab===t.id; return (
@@ -3992,32 +3991,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const cargaSemN = (tasks||[]).filter(t=>t&&t.status!=='Terminado'&&t.due&&String(t.due).slice(0,10)<=_wk7ISO).length
 
   // PÁGINA Prioridades financieras (early-return): abre desde el menú Finanzas (sidebar) o ⌘K; cada alerta navega a su fuente (y cierra la página para que el volver caiga en Inicio).
-  if(prioOpen){
-    const SEV={r:{bg:C.overdueBg,fg:C.overdueText},a:{bg:C.soonBg,fg:C.soonText},b:{bg:C.azulBg,fg:C.azulInfo}}
-    return (
-      <div style={{maxWidth:700,margin:'0 auto',padding:'10px 16px 40px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
-          <button onClick={()=>setPrioOpen(false)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 2px 0 0'}}>←</button>
-          <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Prioridades financieras</span>
-        </div>
-        {!prioridades.length
-          ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'34px 16px',textAlign:'center',color:C.muted,fontSize:14}}>Todo al día — sin prioridades por resolver.</div>
-          : <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-          {prioridades.map((a,i)=>{ const sv=SEV[a.sev]||SEV.b; const ir=()=>{ setPrioOpen(false); a.go&&a.go() }; return (
-            <div key={a.key} style={{display:'flex',alignItems:'center',gap:12,padding:'14px',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
-              <span style={{width:32,height:32,borderRadius:8,background:sv.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={a.icon} s={17} c={sv.fg}/></span>
-              <div onClick={ir} style={{flex:1,minWidth:0,cursor:'pointer'}}>
-                <div style={{fontSize:14,fontWeight:700,color:C.text,lineHeight:1.25}}>{a.t}</div>
-                <div style={{fontSize:12,color:C.muted,marginTop:2}}>{a.s}</div>
-              </div>
-              <span onClick={ir} style={{fontSize:11,fontWeight:800,color:C.accent,whiteSpace:'nowrap',cursor:'pointer'}}>{a.goLbl} →</span>
-              <span onClick={e=>{e.stopPropagation();descartarAlerta(a)}} title='Descartar' style={{color:C.done,cursor:'pointer',flexShrink:0,display:'flex'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></span>
-            </div>
-          )})}
-        </div>}
-      </div>
-    )
-  }
+  // (Página «Prioridades financieras» retirada 2026-10-14: duplicaba avisos que ya viven en Inicio, Cobranza, Banco y Comisiones.)
+
 
   return (
     <div className='dash-cols'>
@@ -37006,7 +36981,6 @@ const VIEWS_PALETTE = {
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
-  {id:'prioridades', label:'Prioridades'},
   {id:'redaccion', label:'Redactar con IA'},
   {id:'conciliar', label:'Conciliar facturas'},
   {id:'conciliacion', label:'Conciliación bancaria'},
