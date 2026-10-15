@@ -19095,8 +19095,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [hubOpen,setHubOpen] = useState(()=>{ const vm=viewMemLeer('gastos'); return vm ? vm.hubOpen : !gastosVolverLeer() })
   // Revisión de gastos cargados a la oficina por el equipo: quién revisa sale de miembros.revisa_gastos (configurable por estudio).
   const [showRevOfi,setShowRevOfi] = useState(false)
+  const [avisosOpen,setAvisosOpen] = useState(false)   // hub de Gastos: avisos (caja chica / revisión) plegados por defecto
   const [miembrosRev,setMiembrosRev] = useState({revisores:[],admins:[]})
-  useEffect(()=>{ let on=true; supabase.from('miembros').select('email,nombre,rol,revisa_gastos').then(({data})=>{ if(!on||!data) return; setMiembrosRev({revisores:data.filter(m=>m.revisa_gastos),admins:data.filter(m=>m.rol==='admin')}) },()=>{}); return ()=>{on=false} },[])
+  useEffect(()=>{ if(DEMO){ setMiembrosRev({revisores:[{email:'martin@demo',nombre:'Martín'}],admins:[{nombre:'Cristóbal'},{nombre:'Erasmo'}]}); return } let on=true; supabase.from('miembros').select('email,nombre,rol,revisa_gastos').then(({data})=>{ if(!on||!data) return; setMiembrosRev({revisores:data.filter(m=>m.revisa_gastos),admins:data.filter(m=>m.rol==='admin')}) },()=>{}); return ()=>{on=false} },[])
   const revisorNombre = miembrosRev.revisores[0]?.nombre||null
   const soyRevisor = !!currentUser?.email && miembrosRev.revisores.some(m=>String(m.email).toLowerCase()===String(currentUser.email).toLowerCase())
   const revOfiItems = useMemo(()=>{ const adm=new Set(miembrosRev.admins.map(m=>m.nombre).filter(Boolean))
@@ -19408,6 +19409,24 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                     <div style={{fontSize:isDesktop?19:16,fontWeight:700,letterSpacing:-.4,lineHeight:1.2,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{n} <span style={{fontSize:isDesktop?13:12,fontWeight:600}}>cliente{n!==1?'s':''}</span></div>
                   </div>
                 </button>) })
+              // Cuentas del equipo (lo propio de cada miembro: personal_de sin cliente). Saldo = fondos − gastos, mismo criterio que dispPersona/fgCliente.
+              const miembros=(()=>{ const m={}; (expenses||[]).forEach(e=>{ if(e.deleted_at||e.client_id||!e.personal_de) return; if(!isAdmin&&e.personal_de!==currentUserName) return; const o=(m[e.personal_de]=m[e.personal_de]||{p:e.personal_de,fondo:0,gasto:0,n:0,ult:null}); if(cuentaEnSaldo(e)){ if(e.type==='fondo') o.fondo+=(e.amount||0); else if(!e.no_descuenta_saldo) o.gasto+=(e.amount||0) } if(e.type!=='fondo') o.n++; const d=String(e.date||'').slice(0,10); if(d&&(!o.ult||d>o.ult)) o.ult=d })
+                const qq=_normTxt(q2||''); return Object.values(m).filter(o=>!qq||_normTxt(o.p).includes(qq)).sort((a,b)=>a.p.localeCompare(b.p,'es')) })()
+              const rowMiembro = o => { const sal=o.fondo-o.gasto; const colS=sal<0?C.overdueText:(sal>0?C.accent:C.done); const pc=personChip(o.p); return (
+                <div key={'m:'+o.p} onClick={()=>{ setShowPersonales(o.p); setShowGastosOficina(true); setHubOpen(false) }} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
+                  <span style={{width:30,height:30,borderRadius:9,background:pc.bg,color:pc.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{INICIALES_RESP[o.p]||String(o.p)[0]}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{...NOMBRE_CLI}}>{o.p}</div>
+                    <div style={{fontSize:11,color:C.done,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[isDesktop?'Cuenta personal':null,o.ult?`Últ. movimiento ${fmtFechaDMY(o.ult)}`:null].filter(Boolean).join(' · ')||'Cuenta personal'}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:colS,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtSaldoG(sal)}</div>
+                    {sal!==0&&<div style={{fontSize:10.5,fontWeight:600,color:sal<0?C.overdueText:C.greenText,whiteSpace:'nowrap'}}>{sal<0?'debe a la oficina':'a favor'}</div>}
+                  </div>
+                  <span style={{color:C.textSoft,fontSize:18,lineHeight:1,flexShrink:0}}><Gl n='chevron'/></span>
+                </div>) }
+              const ESTS = miembros.length ? [...ESTADOS_G.slice(0,3),['equipo','Equipo'],ESTADOS_G[3]] : ESTADOS_G
+              const verEquipo = estadoG==='equipo'
               const ORDS=[['saldo','Saldo: mayor a menor'],['saldoAsc','Saldo: menor a mayor'],['az','Nombre A–Z'],['reciente',isDesktop?'Último movimiento: más nuevo':'Fecha: más nuevo'],['actividad',isDesktop?'Último movimiento: más antiguo':'Fecha: más antiguo'],['nombre','Por abogado']]
               return (<>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginBottom:10}}>{tiles}</div>
@@ -19415,16 +19434,17 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                   <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, RUT o razón social…' autoFocus={!enHub}/></div>
                 </div>
                 <div role='tablist' aria-label='Estado del cliente' style={{display:'flex',background:C.track,borderRadius:10,padding:3,gap:2,marginBottom:10}}>
-                  {ESTADOS_G.map(([k,l])=>{ const on=estadoG===k; const n=clientsWithMovs.filter(c=>pasaEstadoG(c,k)).filter(matchC).length; return (
+                  {ESTS.map(([k,l])=>{ const on=estadoG===k; const n=k==='equipo'?miembros.length:clientsWithMovs.filter(c=>pasaEstadoG(c,k)).filter(matchC).length; return (
                     <button key={k} type='button' role='tab' aria-selected={on} onClick={()=>setEstadoG(k)} style={{flex:1,minWidth:0,border:'none',borderRadius:8,padding:isDesktop?'6px 4px':'6px 1px',fontSize:isDesktop?12:11,letterSpacing:isDesktop?0:-.2,fontWeight:600,fontFamily:'inherit',cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',background:on?C.surface:'transparent',color:on?C.accent:C.muted,boxShadow:on?'0 1px 2px rgba(0,0,0,.08)':'none'}}>{l} <span style={{fontWeight:500,opacity:.75}}>{n}</span></button>) })}
                 </div>
                 <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px'}}>
-                    <span style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{(ESTADOS_G.find(x=>x[0]===estadoG)||ESTADOS_G[0])[1]}{saldoFilter==='neg'?' · Por cobrar':saldoFilter==='pos'?' · A favor':saldoFilter==='cero'?' · En $0':''} · {list.length}</span>
+                    <span style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{verEquipo?'Equipo':(ESTADOS_G.find(x=>x[0]===estadoG)||ESTADOS_G[0])[1]}{!verEquipo&&(saldoFilter==='neg'?' · Por cobrar':saldoFilter==='pos'?' · A favor':saldoFilter==='cero'?' · En $0':'')} · {verEquipo?miembros.length:list.length}</span>
                     <select value={cliOrd} onChange={e=>setCliOrd(e.target.value)} aria-label='Ordenar clientes' style={{marginLeft:'auto',minWidth:0,maxWidth:'62%',fontSize:12,color:C.muted,background:C.bgSoft,border:'none',borderRadius:20,padding:'4px 10px',cursor:'pointer',fontFamily:'inherit'}}>{ORDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
                   </div>
                   {/* Gastos sin cliente: primera fila, en tono de aviso y borde punteado (no es un cliente). No suma en los tiles; desaparece en cero. */}
-                  {isAdmin&&!q2&&orphans.length>0&&(()=>{ const tot=orphans.reduce((a,e)=>a+(Number(e.amount)||0),0); const desde=orphans.map(e=>String(e.date||'').slice(0,10)).filter(Boolean).sort()[0]
+                  {verEquipo&&miembros.map(rowMiembro)}
+                  {!verEquipo&&isAdmin&&!q2&&orphans.length>0&&(()=>{ const tot=orphans.reduce((a,e)=>a+(Number(e.amount)||0),0); const desde=orphans.map(e=>String(e.date||'').slice(0,10)).filter(Boolean).sort()[0]
                     return (
                     <div onClick={()=>setShowOrphans(true)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer',background:C.avisoBg}}>
                       <span style={{width:30,height:30,borderRadius:9,background:C.avisoMid,border:`1px dashed ${C.avisoLine}`,boxSizing:'border-box',color:C.avisoText,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>?</span>
@@ -19438,7 +19458,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                       </div>
                       <span style={{color:C.textSoft,fontSize:18,lineHeight:1,flexShrink:0}}><Gl n='chevron'/></span>
                     </div>) })()}
-                  {list.length===0
+                  {verEquipo ? null : list.length===0
                     ? <div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13,borderTop:`1px solid ${C.track}`}}>Sin clientes.</div>
                     : (q2||cliOrd!=='nombre')
                       ? sortCli(list).map(row)
@@ -20880,13 +20900,32 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     // Caja chica del equipo ↔ banco: tarjeta como las demás (antes fila suelta); abre la revisión en Banco.
     if(isAdmin&&onRevisionCajaChica){ const sinCC=calceCajaChica(pettyCash,[],{}).cajasSinTransf.length
       cards.splice(4,0,{t:'Caja chica', ic:'wallet', s:sinCC?`${sinCC} sin conciliar`:'Conciliada', col:C.greenText, bg:C.greenBg, go:onRevisionCajaChica}) }
+    // Avisos del hub (antes filas grandes sueltas): caja chica en negativo/baja (solo admin) y revisión de gastos de oficina.
+    const alCC = isAdmin ? alertasCajaChica(pettyCash,expenses) : []
+    const negCC = alCC.filter(a=>a.tipo==='negativo'), totNeg = negCC.reduce((t,a)=>t-a.saldo,0)
+    const rv = (soyRevisor||isAdmin) ? (()=>{ const nP=revOfiItems.filter(e=>!e.revision_estado).length, nN=revOfiItems.filter(e=>e.revision_estado==='nose').length; const n=isAdmin?nN:nP; if(!n&&!(isAdmin&&nP)) return null
+      return {n:n||nP, txt:isAdmin?(nN?`${nN} para decidir`:`${nP}${revisorNombre?` de ${revisorNombre}`:' en revisión'}`):`${nP} por revisar`} })() : null
+    {
+      const iCC=cards.findIndex(c=>c.t==='Caja chica')
+      if(iCC>=0&&alCC.length) cards[iCC]={...cards[iCC], s:negCC.length?`${negCC.length} en negativo · ${fmtMill(totNeg)}`:`${alCC.length} baja${alCC.length!==1?'s':''}`, sCol:negCC.length?C.overdueText:C.soonText, go:()=>setAvisosOpen(o=>!o)}
+      if(rv) cards.push({t:'Revisión de gastos', ic:'check', s:rv.txt, sCol:C.soonText, col:C.soonText, bg:C.soonBg, go:()=>setShowRevOfi(true)})
+    }
+    // Entregas de caja (una línea por persona): se abren al tocar la tarjeta Caja chica cuando hay avisos.
+    const filasCaja = alCC.map(a=>{ const neg=a.tipo==='negativo'; return (
+      <div key={a.persona} onClick={()=>onEntregarCaja&&onEntregarCaja(a.persona,neg?-a.saldo:null)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
+        <span style={{fontSize:12.5,color:C.text,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Caja chica · <b style={{color:personChip(a.persona).color}}>{a.persona}</b></span>
+        <span style={{fontSize:12.5,fontWeight:700,color:neg?C.overdueText:C.soonText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{neg?fmtSaldoG(a.saldo):`quedan ${fmt(a.saldo)}`}</span>
+        <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Entregar <Gl n='chevron'/></span>
+      </div>) })
+    const avisosCaja = avisosOpen && alCC.length>0 && (
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>{filasCaja}</div>)
     // Accesos: mini-tarjetas con ícono (una línea), secundarias a la lista de saldos.
     const navCard = c => (
       <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'9px 11px',display:'flex',alignItems:'center',gap:9,minWidth:0}}>
         <span style={{width:28,height:28,borderRadius:9,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={c.ic} s={15} c={c.col}/></span>
         <div style={{minWidth:0}}>
           <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.t}</div>
-          <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.s}</div>
+          <div style={{fontSize:11,color:c.sCol||C.muted,fontWeight:c.sCol?600:400,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.s}</div>
         </div>
       </div>
     )
@@ -20899,9 +20938,10 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           </div>
           <button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length},minmax(0,1fr))`:'1fr 1fr',gap:8,marginBottom:12}}>
+        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length>5?3:cards.length},minmax(0,1fr))`:'1fr 1fr',gap:8,marginBottom:12}}>
           {cards.map((c,i)=>(!D&&i===cards.length-1&&cards.length%2)?<div key={c.t} style={{gridColumn:'1 / -1'}}>{navCard(c)}</div>:navCard(c))}
         </div>
+        {avisosCaja}
         {/* Avisos de caja chica por persona (alertasCajaChica, fuente única): en negativo / baja → "Entregar caja" (Nueva Caja prellenada). Solo si hay alguno.
             SOLO ADMIN: un limited ve únicamente SU caja (regla del proyecto); antes este bloque no revisaba el rol y mostraba la caja de todo el equipo + "Entregar caja". */}
         {!isAdmin&&(()=>{ const tiene=(pettyCash||[]).some(p=>p.user_name===currentUserName); if(!tiene) return null
@@ -20915,26 +20955,6 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{saldo<0?`la oficina te debe ${fmtN(-saldo)}`:`disponible ${fmtN(saldo)}`}{pend.length?` · ${pend.length} sin liquidar`:''}</div>
             </div>
             <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Ver <Gl n='chevron'/></span>
-          </div>) })()}
-        {(soyRevisor||isAdmin)&&(()=>{ const nP=revOfiItems.filter(e=>!e.revision_estado).length, nN=revOfiItems.filter(e=>e.revision_estado==='nose').length
-          const n=isAdmin?nN:nP; if(!n&&!(isAdmin&&nP)) return null
-          return (
-          <div onClick={()=>setShowRevOfi(true)} className='lf-row' style={{display:'flex',alignItems:'center',gap:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 14px',marginBottom:10,cursor:'pointer'}}>
-            <span style={{width:8,height:8,borderRadius:'50%',background:n?C.soon:C.done,flexShrink:0}}/>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:C.text}}>Revisión de gastos de oficina</div>
-              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isAdmin?[nN?`${nN} para decidir`:null,nP?`${nP} en revisión${revisorNombre?` de ${revisorNombre}`:''}`:null].filter(Boolean).join(' · '):`${nP} por revisar`}</div>
-            </div>
-            <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Revisar <Gl n='chevron'/></span>
-          </div>) })()}
-        {isAdmin&&(()=>{ const al=alertasCajaChica(pettyCash,expenses); if(!al.length) return null; return (
-          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px',marginBottom:10}}>
-            {al.map((a,i)=>{ const neg=a.tipo==='negativo'; return (
-              <div key={a.persona} onClick={()=>onEntregarCaja&&onEntregarCaja(a.persona,neg?-a.saldo:null)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
-                <span style={{width:8,height:8,borderRadius:'50%',background:neg?C.overdue:C.soon,flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{neg?'Caja chica en negativo':'Caja chica baja'}</div><div style={{fontSize:11,color:C.muted}}>{a.persona} · {neg?`la oficina le debe ${fmtN(-a.saldo)}`:`quedan ${fmtN(a.saldo)} (aviso a ${fmtN(BRAND.cajaChicaUmbral)})`}</div></div>
-                <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Entregar caja{neg?` ${fmtN(-a.saldo)}`:''} <Gl n='chevron'/></span>
-              </div>) })}
           </div>) })()}
         {renderListaClientes({enHub:true})}
       </div>

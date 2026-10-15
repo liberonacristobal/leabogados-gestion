@@ -32,6 +32,7 @@ export const demoData = {
     { id:'c10', name:'Logística Biobío Ltda',      rut:'77.202.303-4', status:'Activo',    type:'Empresa', abogado_responsable:'Erasmo',    is_internal:false },
     { id:'c11', name:'Fundación Aprender',         rut:'65.404.505-6', status:'Activo',    type:'Institución', abogado_responsable:'Cristóbal', is_internal:false },
     { id:'c12', name:'Import Export Pacífico SpA', rut:'76.606.707-8', status:'Prospecto', type:'Empresa', abogado_responsable:'Erasmo',    is_internal:false },
+    { id:'c0', name:'Estudio Demo (oficina)',     rut:'76.000.000-0', status:'Activo',    type:'Empresa', abogado_responsable:'Cristóbal', is_internal:true },
   ],
   proyectos_cartera: [
     { id:'p1', cliente_id:'c1', sale_id:'s1', nombre_proyecto:'Reestructuración societaria', estado:'rojo',  etapa_idx:2, responsable:'CL', nota:'Esperando poderes del segundo socio para firmar', plazo_label:'Firma de escritura ante notario', plazo:new Date(Date.now()-4*864e5).toISOString().slice(0,10),  ultima_actividad:new Date(Date.now()-18*864e5).toISOString().slice(0,10), origen:'venta', activo:true },
@@ -180,6 +181,8 @@ export const demoData = {
     // Gastos sin trabajo (página "Gastos sin trabajo"): un caso por texto, uno para IA y un fondo sin venta asignada.
     { id:'xv1', client_id:'c5', type:'gasto', amount:95000,  concept:'Solicitud de registro de marca INAPI', category:'Otro', date:'2026-07-02', created_by:'Martina' },
     { id:'xv2', client_id:'c2', type:'gasto', amount:45000,  concept:'Copias de escrituras para due diligence', category:'Notaria', ot_number:'48402', date:'2026-08-26', created_by:'Martina' },
+    { id:'ofr1', client_id:'c0', type:'gasto', amount:18500, concept:'Insumos de oficina', category:'Oficina', date:'2026-10-03', created_by:'Martina' },
+    { id:'ofr2', client_id:'c0', type:'gasto', amount:42000, concept:'Courier documentos', category:'Oficina', date:'2026-10-08', created_by:'Martina' },
     { id:'xv3', client_id:'c2', type:'fondo', amount:500000, concept:'Provisión de fondos (conciliación bancaria)', category:'Fondo', date:'2026-08-12', created_by:'Cristóbal' },
     // Notaría — carga masiva "bi1" (por pagar): alimenta Notaría (Deuda / Cobros / Carga masiva).
     { id:'n1',  bulk_import_id:'bi1', client_id:'c1', type:'gasto', amount:80000,  ot_number:'48301', concept:'Gastos notariales — Compraventa',            category:'Notaria', date:'2026-08-18', created_by:'Martina', paid_by_client:false },
