@@ -1182,6 +1182,10 @@ async function logCargaSII({tipo, n=0, user, period=null, files=[]}){
 // visibles e intactos, pero ya no suman al saldo ni se rinden. Deshacer = borrar la apertura (apertura_id vuelve a null).
 const CORTE_APERTURA = '2026-06-01'
 const cuentaEnSaldo = e => !e?.apertura_id
+// Abono conciliado solo en parte (ej. $2.320.000 con $566.460 aplicados a una factura): el resto sigue por resolver.
+// Umbral $1.000 para no reabrir diferencias de UF/redondeo. Monto pendiente = monto − conciliado.
+const abonoConResto = m => !!m && m.tipo==='abono' && !m.es_interno && String(m.estado)==='parcial' && (Math.abs(Number(m.monto)||0)-(Number(m.monto_conciliado)||0))>1000
+const restoAbono = m => abonoConResto(m) ? Math.abs(Number(m.monto)||0)-(Number(m.monto_conciliado)||0) : (Number(m?.monto)||0)
 // Fuente única para "fondos − gastos" de un cliente. Siempre con guarda ||0 (nunca NaN).
 function fgCliente(expenses, clientId){
   let fondos=0, gastos=0
@@ -35742,7 +35746,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
       else if(concView==='conciliados') l=l.filter(m=>keepOpen(m)||concByMov[m.id]?.length)
       else if(concView==='descalces') l=l.filter(m=>keepOpen(m)||esDescalce(m))
       // porresolver = unión: sin identificar + por conciliar + descalces (todos los abonos que faltan cruzar), sin duplicar como categorías separadas.
-      else if(concView==='porresolver') l=l.filter(m=>keepOpen(m)||(!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m))))
+      else if(concView==='porresolver') l=l.filter(m=>keepOpen(m)||abonoConResto(m)||(!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m))))
     }
     else if(sub==='cargos'&&concView!=='todos'){
       // Cargos que piden tu criterio: sin categoría, no internos, no conciliados. El foco "Por clasificar" (foto arriba) filtra a esta base.
@@ -35782,8 +35786,8 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     if(anioF!=='todos') l=l.filter(m=>(m.fecha||'').slice(0,4)===anioF)
     if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
     if(respF!=='todos') l=l.filter(m=> respF==='__sin__' ? !(m.cliente_id&&respByCid[String(m.cliente_id)]) : respByCid[String(m.cliente_id)]===respF)
-    const _pr=l.filter(m=>!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m)))   // = filtro 'porresolver' de la lista
-    const _h=Date.now(), porresolverMonto=_pr.reduce((a,m)=>a+(m.monto||0),0), porresolver90=_pr.filter(m=>{ const t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; return !isNaN(t)&&(_h-t)/86400000>90 }).reduce((a,m)=>a+(m.monto||0),0)
+    const _pr=l.filter(m=>abonoConResto(m)||(!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m))))   // = filtro 'porresolver' de la lista
+    const _h=Date.now(), porresolverMonto=_pr.reduce((a,m)=>a+restoAbono(m),0), porresolver90=_pr.filter(m=>{ const t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; return !isNaN(t)&&(_h-t)/86400000>90 }).reduce((a,m)=>a+restoAbono(m),0)
     return { porresolver:_pr.length, porresolverMonto, porresolver90, porconciliar:l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length)).length, descalces:l.filter(esDescalce).length, sinid:l.filter(m=>!m.es_interno&&!m.cliente_id&&!tieneCand(m)&&!RESUELTAS_ABO.includes(m.categoria)).length, conciliados:l.filter(m=>concByMov[m.id]?.length).length }
   },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concByMov,billing,liqsNota,rutsNota])
 
@@ -35978,8 +35982,8 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
   // (en escritorio, el 2-panel rail+lista); el botón "volver" regresa al hub. Antes el escritorio saltaba directo al rail.
   // "Por resolver" — fuente ÚNICA de cifras/desglose (usada por el hub móvil y el rail de escritorio).
   const _hoyPR=Date.now()
-  const porResolverMovs = movs.filter(m=> m.tipo==='abono' && !m.es_interno && !(concByMov[m.id]?.length) && !RESUELTAS_ABO.includes(m.categoria) && (!m.cliente_id || esConciliable(m)))
-  const prN = porResolverMovs.length, prMonto = porResolverMovs.reduce((s,m)=>s+(m.monto||0),0)
+  const porResolverMovs = movs.filter(m=> abonoConResto(m) || (m.tipo==='abono' && !m.es_interno && !(concByMov[m.id]?.length) && !RESUELTAS_ABO.includes(m.categoria) && (!m.cliente_id || esConciliable(m))))
+  const prN = porResolverMovs.length, prMonto = porResolverMovs.reduce((s,m)=>s+restoAbono(m),0)
   const _sumM = arr => arr.reduce((s,m)=>s+Math.abs(m.monto||0),0)
   const _prSinIdA = porResolverMovs.filter(m=>!m.cliente_id), _prConfA = porResolverMovs.filter(m=>m.cliente_id&&tieneCand(m)), _prDescA = porResolverMovs.filter(m=>m.cliente_id&&!tieneCand(m))
   const prSinId = _prSinIdA.length, prConf = _prConfA.length, prDesc = _prDescA.length
