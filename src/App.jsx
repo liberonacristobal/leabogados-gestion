@@ -18978,6 +18978,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [cargaGroup,setCargaGroup] = useState('cliente')         // Carga abierta: agrupar OT por 'cliente' | 'responsable' | 'estado' | 'plana'
   const [cargaQ,setCargaQ] = useState('')                        // Carga abierta: buscador de OT/cliente
   const [deudaGroup,setDeudaGroup] = useState('cliente')         // Deuda notaría: agrupar clientes por 'cliente' | 'responsable' | 'estado'
+  const [deudaSort,setDeudaSort] = usePersistedState('deuda_nota_sort',{col:'monto',dir:'desc'})   // Deuda: orden de clientes (nombre | monto | saldo | ot), recuerda la elección
   const [notaQ,setNotaQ] = useState('')   // Deuda notaría: buscador (OT, cliente o trámite)
   const [deudaGrpOpen,setDeudaGrpOpen] = useState(()=>new Set()) // Deuda: secciones (responsable/estado) plegadas
   const [cliOrd,setCliOrd] = usePersisted('fd_gastos_cliord','saldo')   // orden de la lista de clientes: saldo | saldoAsc | az | reciente | actividad | nombre (por abogado)
@@ -20087,16 +20088,16 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{...lblK,color:C.overdueText}}>Pendiente a notaría</div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:12,color:C.muted}}>{BRAND.notaria} · {notariaPend.length} OT</span><span style={{fontSize:24,fontWeight:800,color:C.overdueText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(notaPendTotal)}</span></div>
             <div style={{borderTop:`1px solid ${C.track}`,paddingTop:7,marginTop:8}}>
-              {ln('Con fondo',fmt(conFondoT),C.greenText)}
+              {ln('Con saldo',fmt(conFondoT),C.greenText)}
               {ln('Adelanta oficina',fmt(adelantoT),C.soonText)}
-              {sinFondoT>0&&ln('Sin fondo de cliente',fmt(sinFondoT))}
+              {sinFondoT>0&&ln('Personal sin saldo',fmt(sinFondoT))}
             </div>
           </div>)
         const selBox = selNota.size>0 && (
           <div style={{background:adelanto>0?C.overdueBg:C.azulBg,border:`1px solid ${adelanto>0?C.overdueText:C.accent}`,borderRadius:12,padding:'11px 13px'}}>
             <div style={{...lblK,color:adelanto>0?C.overdueText:C.accent}}>Seleccionadas</div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,marginTop:2}}><span style={{fontSize:13,fontWeight:700,color:adelanto>0?C.overdueText:C.accent}}>{selNota.size} OT</span><span style={{fontSize:16,fontWeight:800,color:adelanto>0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(notaTotal)}</span></div>
-            {ln('Con fondo',fmt(conFondo),C.greenText)}
+            {ln('Con saldo',fmt(conFondo),C.greenText)}
             {ln('Adelanto',fmt(adelanto),adelanto>0?C.overdueText:null)}
             {abgs.length>0&&<div style={{borderTop:'0.5px solid rgba(83,114,129,.25)',marginTop:6,paddingTop:6}}>
               <div style={{...lblK,marginBottom:2}}>Fondos por abogado</div>
@@ -20137,16 +20138,16 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           const cn=cliName(cid)
           const gs = qq ? gsAll.filter(e=>matchE(e,cn)) : gsAll
           const cubre=disp>=aPagar, sinF=disp<=0
-          const est = exc?{l:'Con adelanto',bg:C.overdueBg,c:C.overdueText}:sinF?{l:'Sin fondos',bg:C.overdueBg,c:C.overdueText}:cubre?{l:'Cubre',bg:C.greenBg,c:C.greenText}:{l:'Cubre parcial',bg:C.ambarBg,c:C.soonText}
-          const rojo = exc||sinF
+          const est = exc?{l:'Con adelanto',bg:C.overdueBg,c:C.overdueText}:sinF?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubre?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}
+          const deficit=Math.max(0,aPagar-disp)   // rojo solo en el chip y el déficit (render aprobado 2026-10-15)
           const open = !!qq || notaCliOpen.has(cid)
           return (
-          <div key={cid} style={{border:`1px solid ${rojo?C.overdueText:C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
-            <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:rojo?C.overdueBg:C.surface,cursor:'pointer'}}>
+          <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
+            <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:C.surface,cursor:'pointer'}}>
               <span style={{display:'inline-flex',color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:700,color:rojo?C.overdueText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn}</div>
-                <div style={{fontSize:11,color:rojo?C.overdueText:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{esOf?<>Oficina · <b>se cubre sola</b></>:<>Disponible <b style={{color:rojo?C.overdueText:C.text}}>{fmt(disp)}</b>{D?<> de {fmt(fondosC)}</>:null}</>}</div>
+                <div style={{fontSize:14,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn}</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{esOf?<>Oficina · <b>se cubre sola</b></>:<>Saldo {fmt(disp)} · {deficit>0?<b style={{color:sinF||exc?C.overdueText:C.soonText}}>déficit {fmt(deficit)}</b>:<>queda <b style={{color:C.text}}>{fmt(disp-aPagar)}</b></>}</>}</div>
               </div>
               <span style={{fontSize:10,borderRadius:20,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
               <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(aPagar)}</div><div style={{fontSize:10,color:C.muted}}>{qq?`${gs.length} de ${gsAll.length}`:gsAll.length} OT</div></div>
@@ -20165,14 +20166,16 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           const estKey=exc?'adelanto':sinF?'sinfondos':cubre?'cubre':'parcial'
           const resp=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'
           const hit=!qq||gs.some(e=>matchE(e,cliName(cid)))
-          return {cid,gs,porFondos,hit,estKey,resp,aPagar}
+          return {cid,gs,porFondos,hit,estKey,resp,aPagar,disp,nom:cliName(cid)}
         })
-        const entries=allEntries.filter(e=>e.porFondos&&e.hit)
+        const sKey={nombre:e=>e.nom.toLowerCase(),monto:e=>e.aPagar,saldo:e=>e.disp,ot:e=>e.gs.length}[deudaSort.col]||(e=>e.aPagar)
+        const sDir=deudaSort.dir==='asc'?1:-1
+        const entries=allEntries.filter(e=>e.porFondos&&e.hit).sort((a,b)=>{ const x=sKey(a),y=sKey(b); return (typeof x==='string'?x.localeCompare(y,'es'):x-y)*sDir })
         const ocultasFondos=qq?allEntries.filter(e=>!e.porFondos&&e.hit).reduce((a,e)=>a+e.gs.filter(x=>matchE(x,cliName(e.cid))).length,0):0
         const listaClientes=(()=>{
           if(deudaGroup==='cliente') return entries.map(e=>clientCard(e.cid,e.gs))
           const groups={}; entries.forEach(e=>{ const gk=deudaGroup==='responsable'?e.resp:e.estKey; (groups[gk]=groups[gk]||[]).push(e) })
-          const ESTLBL={cubre:'Cubren con su fondo',parcial:'Cubren parcial',sinfondos:'Sin fondos · adelanta la oficina',adelanto:'Con adelanto activado'}
+          const ESTLBL={cubre:'Con saldo',parcial:'Parcial',sinfondos:'Sin saldo · adelanta la oficina',adelanto:'Con adelanto activado'}
           const order=deudaGroup==='responsable'
             ? Object.keys(groups).sort((a,b)=>groups[b].reduce((s,e)=>s+e.aPagar,0)-groups[a].reduce((s,e)=>s+e.aPagar,0))
             : ['sinfondos','adelanto','parcial','cubre'].filter(k=>groups[k])
@@ -20196,7 +20199,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></div><div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fP>0?<>{sinFP?'Sin fondos':cubreP?'Cubre':'Cubre parcial'} · Disponible <b style={{color:C.text}}>{fmt(dP)}</b>{isDesktop?<> de {fmt(fP)}</>:null}</>:'Sin fondo'} · {gsAll.length} OT</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></div><div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fP>0?<>Saldo {fmt(dP)} · {cubreP?<>queda <b style={{color:C.text}}>{fmt(dP-tot)}</b></>:<b style={{color:sinFP?C.overdueText:C.soonText}}>déficit {fmt(tot-dP)}</b>}</>:'Sin saldo'} · {gsAll.length} OT</div></div>
               <div style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>
             </div>
             {open&&<div>{gs.map(e=>notaRow(e,false,false,notaQ))}</div>}
@@ -20242,6 +20245,10 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div style={{flex:1,minWidth:0}}>
             <Buscador value={notaQ} onChange={setNotaQ} placeholder='Buscar OT, cliente o trámite…' style={{marginBottom:8}} />
             {!D&&filtros&&<div style={{marginBottom:8}}>{filtros}</div>}
+            {entries.length>1&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:10}}>
+              <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Ordenar</span>
+              {[['nombre','Nombre'],['monto','Monto'],['saldo','Saldo'],['ot','OT']].map(([col,lbl])=>{ const on=deudaSort.col===col; return <button key={col} onClick={()=>setDeudaSort(s=>({col,dir:s.col===col?(s.dir==='desc'?'asc':'desc'):(col==='nombre'?'asc':'desc')}))} style={{fontSize:11,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',minHeight:28,cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted}}>{lbl}{on?(deudaSort.dir==='desc'?' ↓':' ↑'):''}</button> })}
+            </div>}
             {ocultasFondos>0&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.soonText,background:C.soonBg,borderRadius:9,padding:'7px 11px',marginBottom:8}}><span style={{flex:1}}>{ocultasFondos} OT más calzan, ocultas por "Solo con fondos del cliente".</span><button onClick={()=>setNotaFondos(false)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:30}}>Ver todos</button></div>}
             {D&&!nada&&<div style={{display:'grid',gridTemplateColumns:'18px 96px 86px minmax(0,1fr) 100px 32px',columnGap:10,padding:'2px 8px 6px 26px',...lblK}}><span/><span>OT</span><span>Fecha</span><span>Trámite</span><span style={{textAlign:'right'}}>Monto</span><span/></div>}
             {notariaPend.length===0&&notariaAnulados.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13}}>No hay gastos de notaría pendientes de liquidar.</div>}
@@ -30479,7 +30486,6 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
     try{ await supabase.from('learnings').delete().eq('kind','fd_auto').eq('key','cobranza:'+cid) }catch(_){}
   }
   const NIV = { firme:{bg:C.soonBg,tx:C.soonText,lbl:'Firme'}, final:{bg:C.overdueBg,tx:C.overdueText,lbl:'Final'} }
-  const _MA = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   // Detalle de una factura vencida (compartido móvil/escritorio): fecha día-grande + folio + glosa + estado + saldo, y acciones Buscar pago (→ Conciliación) / Abrir factura (→ ficha/factura, con el Conciliar en un toque). Reusa helpers (folioN, saldoBill, fmtFechaDMY).
   const detItem = ({b,acc,venc,diasVenc})=>{ const s=String(b.issued_at||b.due||'').slice(0,10); const dd=/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-'):null; const parcial=(b.paid_amount||0)>0
     // Color por severidad de mora (mismo criterio que abonos/cargos): verde al día · ámbar <30 d · rojo ≥30 d. SIN línea izquierda (ya no se usa).
@@ -30495,7 +30501,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
     return (
     // Toda la fila abre la factura (→ su detalle con "Volver"); la fecha de emisión y los días de vencida son el foco.
     <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,borderTop:`1px solid ${C.bgSoft}`,padding:'9px 4px',cursor:onOpenFactura?'pointer':'default'}}>
-      <div style={{width:38,textAlign:'center',flexShrink:0,lineHeight:1.05}}>{dd?<><div style={{fontSize:15,fontWeight:800,color:sevCol}}>{dd[2]}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase'}}>{_MA[+dd[1]-1]} {dd[0]}</div></>:<span style={{fontSize:11,color:C.done}}>—</span>}</div>
+      {dd?bigDate(s,sevCol):<div style={{width:44,flexShrink:0,textAlign:'center',fontSize:11,color:C.done}}>—</div>}
       <div style={{flex:1,minWidth:0}}>
         {showRs
           ? <><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{titleCase(rs)}</div>
