@@ -46,7 +46,7 @@ const C = {
   // pista/fondo gris-azul de barras, chips y celdas neutras (antes #EEF1F3 suelto ×45)
   track:'#EEF1F3',
   // tiles del grid del Inicio (kTile): fondo, borde y borde-abierto
-  tileBg:'#F7F9FA', tileLine:'#EAEEF0', tileLineOn:'#CFE0E6',
+  tileBg:'#FFFFFF', tileLine:'#E4E8EB', tileLineOn:'#CFE0E6',   // tarjetas: mismo blanco y borde que Accesos directos (más contraste con la página)
   // sub-paleta SOBRE NAVY (heroes con fondo accent #003C50, p.ej. Saldo del cliente / Vendido): label azul claro, botón navy profundo, divisor, verde/rojo claros legibles sobre navy
   onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
   // tenues con letra oscura: chips y botón de guardar (azul) y avisos en línea (crema + café)
