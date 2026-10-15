@@ -20201,14 +20201,14 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           const gs = qq ? gsAll.filter(e=>matchE(e,cn)) : gsAll
           const cubre=disp>=aPagar, sinF=disp<=0
           const est = exc?{l:'Con adelanto',bg:C.overdueBg,c:C.overdueText}:sinF?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubre?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}
-          const deficit=Math.max(0,aPagar-disp)   // rojo solo en el chip y el déficit (render aprobado 2026-10-15)
+          const deficit=Math.max(0,aPagar-disp)   // sin línea de déficit (redundante con el monto y el chip); rojo solo en el chip
           const open = !!qq || notaCliOpen.has(cid)
           return (
           <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n}),
               nombreOT(onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn, qq?`${gs.length} de ${gsAll.length}`:gsAll.length),
-              esOf?<>Oficina · gasto propio</>:<>Saldo {fmt(disp)} · {deficit>0?<b style={{color:sinF||exc?C.overdueText:C.soonText}}>déficit {fmt(deficit)}</b>:<>queda <b style={{color:C.text}}>{fmt(disp-aPagar)}</b></>}</>,
-              esOf?<><span/>{colD('Oficina','gasto propio',C.muted)}</>:<>{colD('Saldo',fmt(disp))}{deficit>0?colD('Déficit',fmt(deficit),sinF||exc?C.overdueText:C.soonText):colD('Queda',fmt(disp-aPagar))}</>,
+              esOf?<>Oficina · gasto propio</>:<>Saldo {fmt(disp)}{deficit>0?null:<> · queda <b style={{color:C.text}}>{fmt(disp-aPagar)}</b></>}</>,
+              esOf?<><span/>{colD('Oficina','gasto propio',C.muted)}</>:<>{colD('Saldo',fmt(disp))}{deficit>0?<span/>:colD('Queda',fmt(disp-aPagar))}</>,
               montoEst(aPagar,esOf?null:est))}
             {open&&<div>
               {reservadoC>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.azulInfo,background:C.azulBg,padding:'5px 13px',borderTop:`1px solid ${C.border}`}}><span>Otros gastos por pagar</span><b style={{fontVariantNumeric:'tabular-nums'}}>{fmt(reservadoC)}</b></div>}
@@ -20258,8 +20258,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {(()=>{ const defP=Math.max(0,tot-dP); const estP=sinFP?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubreP?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}; return filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
               nombreOT(<>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></>,gsAll.length),
-              <>Saldo {fmt(dP)} · {defP>0?<b style={{color:sinFP?C.overdueText:C.soonText}}>déficit {fmt(defP)}</b>:<>queda <b style={{color:C.text}}>{fmt(dP-tot)}</b></>}</>,
-              <>{colD('Saldo',fmt(dP))}{defP>0?colD('Déficit',fmt(defP),sinFP?C.overdueText:C.soonText):colD('Queda',fmt(dP-tot))}</>,
+              <>Saldo {fmt(dP)}{defP>0?null:<> · queda <b style={{color:C.text}}>{fmt(dP-tot)}</b></>}</>,
+              <>{colD('Saldo',fmt(dP))}{defP>0?<span/>:colD('Queda',fmt(dP-tot))}</>,
               montoEst(tot,estP)) })()}
             {open&&<div>{gs.map(e=>notaRow(e,false,false,notaQ))}</div>}
           </div>)}):null
