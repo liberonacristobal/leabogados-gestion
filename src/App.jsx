@@ -14655,7 +14655,8 @@ const abrirDocumento = async path => { if(!path) return; const w=window.open('',
 // Estado de una comisión (FUENTE ÚNICA): 'pagada' (ya se le pagó) · 'por_pagar' (el cliente ya pagó esa cuota) · 'por_devengar' (el cliente aún no la paga).
 // Se deriva de la factura del cliente y no solo del flag guardado: si la cuota está Pagada, la comisión queda por pagar aunque el flag
 // (que mueve handleConciliarTerceros) no haya alcanzado a cambiar. `b` = la cuota del cliente (billing) o null si la comisión no tiene cuota.
-const estadoComision = (t, b) => t?.estado==='pagado' ? 'pagada' : (t?.estado==='por_pagar' || b?.status==='Pagado') ? 'por_pagar' : 'por_devengar'
+// Una cuota 'Anticipada' (cubierta por un anticipo del cliente, p. ej. Rodrigo Macho que paga sin factura) ya está cobrada → su comisión se debe.
+const estadoComision = (t, b) => t?.estado==='pagado' ? 'pagada' : (t?.estado==='por_pagar' || b?.status==='Pagado' || b?.status==='Anticipada') ? 'por_pagar' : 'por_devengar'
 // Saldos de comisiones (fuente única para Inicio, Oficina y Proveedores). Excluye las de cuotas borradas o anuladas.
 function saldoComisiones(terceros=[], billing=[]){
   const byId=new Map((billing||[]).map(b=>[String(b.id),b]))
@@ -14677,7 +14678,7 @@ const _diasEntre = (a,b) => { const x=String(a||'').slice(0,10), y=String(b||'')
 // ── PROVEEDORES (página, tab 'proveedores'): SOLO a quienes les pagas comisión o que te pagan comisiones. El subarriendo y los servicios
 // de oficina no van aquí. Lenguaje aprobado (2026-10-14): Comisiones · Pagada · Por pagar (el cliente ya pagó) · Sujeto a cobro (el cliente aún no paga) · Anticipo · Comisiones por cobrar (lo que te pagan). Las comisiones se
 // siguen POR TRABAJO (la venta; o "Facturas a {cliente}" cuando no hay venta) y POR CUOTA: vence · cliente pagó (fecha del banco) · le pagaste.
-function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onPagarBulk,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado}) {
+function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anticipos=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onPagarBulk,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado}) {
   const isDesktop = useIsDesktop()
   const mem = viewMemLeer('proveedores')
   const [view,setView] = useState(mem?.view||'list')   // list | ficha | form | enlazar | pagar
@@ -14758,7 +14759,9 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const saldoT = t => est(t)==='pagada' ? 0 : Math.max(0,(Number(t.monto)||0)-Math.round(aporteDe(t.id)*ratioT(t)))   // lo que falta pagarle de esa comisión (costo)
   const saldoPag = t => est(t)==='pagada' ? 0 : Math.max(0,pagarT(t)-aporteDe(t.id))   // lo que falta TRANSFERIRLE (calce con el banco)
   const venceT = t => String(facDe(t)?.due||facDe(t)?.issued_at||'9')
-  const pagoCli = t => { const b=facDe(t); if(!b) return null; const a=abonoCli[String(b.id)]; return a ? {fecha:a.fecha,mov:a.mov} : (b.status==='Pagado'&&b.paid_at ? {fecha:String(b.paid_at).slice(0,10),mov:null} : null) }
+  const pagoCli = t => { const b=facDe(t); if(!b) return null; const a=abonoCli[String(b.id)]; if(a) return {fecha:a.fecha,mov:a.mov}
+    if(b.status==='Anticipada'){ const an=(anticipos||[]).find(x=>String(x.id)===String(b.prepaid_anticipo_id)); return an?{fecha:String(an.fecha).slice(0,10),mov:null,anticipo:true}:null }
+    return b.status==='Pagado'&&b.paid_at ? {fecha:String(b.paid_at).slice(0,10),mov:null} : null }
   const sumM = a => a.reduce((s,t)=>s+(Number(t.monto)||0),0)
   // Aportes parciales (una comisión pagada en varias transferencias: p. ej. el tope de la 1ª transferencia a una cuenta nueva).
   // learnings pago_prov_aporte: key = movimiento, value = {asig:[{t,monto}]} (formato antiguo {t:[ids],monto} → al primero).
@@ -40069,7 +40072,7 @@ export default function App() {
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Oficina' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})}/>
             </div>}
-            {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onPagarBulk={handlePagarTercerosBulk} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
+            {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onPagarBulk={handlePagarTercerosBulk} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
