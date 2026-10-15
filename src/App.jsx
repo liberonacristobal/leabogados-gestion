@@ -3197,6 +3197,17 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[],onOpenClientFicha}) {
 // Recurrentes mensuales ACTIVAS se proyectan x12. No-recurrentes tal cual.
 // Lo usan Dashboard y SalesView para que los totales NUNCA difieran.
 const esRecurrente = s => s.cobro_type==='mensual' && s.status==='Activo'
+// Inicio de una venta (YYYY-MM): el inicio del cobro mensual si está; si no, año/mes de la venta.
+const inicioVentaYM = s => { const mi=String(s?.cobro_config?.mensualInicio||''); return /^\d{4}-\d{2}/.test(mi) ? mi.slice(0,7) : `${s?.year}-${String(s?.month||1).padStart(2,'0')}` }
+// ¿La venta cuenta en lo vendido del año y? Su año, y si es MENSUAL y sigue activa, también cada año en que se RENUEVA
+// (otros 12 meses desde el aniversario de su inicio), solo cuando el aniversario ya llegó. Fuente única para todo filtro "vendido del año".
+const ventaCuentaEnAnio = (s, y) => {
+  if(!s) return false
+  if(Number(s.year)===Number(y)) return true
+  if(!esRecurrente(s) || Number(y)<=Number(s.year)) return false
+  const aniv=`${y}-${inicioVentaYM(s).slice(5,7)}`, hoyYM=new Date().toISOString().slice(0,7)
+  return aniv<=hoyYM
+}
 // Subarrendamiento (ingreso por arriendo, NO honorarios): se factura y programa como una venta,
 // pero NO cuenta en "Vendido del año" ni en las metas de venta. Se excluye en todos los agregados de Vendido/áreas.
 // Vive en Colaboradores (ficha del colaborador), no en Ventas ni en Clientes.
@@ -3252,8 +3263,20 @@ const REF_COSTO_BANCO = 'Registrado desde Banco'
 const comisionesVenta = (s, terceros=[], billing=[], ufRef=0) => {
   const fuera = new Set((billing||[]).filter(b=>b&&(b.status==='Anulada'||b.deleted_at)).map(b=>String(b.id)))
   const filas = (terceros||[]).filter(t=>t&&s&&String(t.sale_id)===String(s.id)&&!(t.billing_id&&fuera.has(String(t.billing_id))))
-  if(filas.length) return { clp: filas.reduce((a,t)=>a+(Number(t.monto)||0),0), real:true, filas }
-  return { clp: Math.round(costoVentaUF(s,ufRef)*(ufRef||0)), real:false, filas:[] }
+  if(filas.length){
+    const clp=filas.reduce((a,t)=>a+(Number(t.monto)||0),0)
+    // Venta MENSUAL: el honorario cuenta 12 meses (ventaUF ×12) → el costo también. Los meses aún sin comisión se proyectan
+    // con la última comisión mensual registrada. `clp` = solo lo registrado (para lo facturado); `anual` = registrado + proyectado (para el neto de la venta).
+    let proy=0
+    if(esRecurrente(s)){
+      const fecha=t=>{ const b=(billing||[]).find(x=>String(x.id)===String(t.billing_id)); return String(b?.issued_at||t.created_at||'') }
+      const ult=[...filas].sort((a,b)=>fecha(b).localeCompare(fecha(a)))[0]
+      proy=Math.max(0,12-filas.length)*(Number(ult?.monto)||0)
+    }
+    return { clp, real:true, filas, proy, anual:clp+proy }
+  }
+  const clp0=Math.round(costoVentaUF(s,ufRef)*(ufRef||0))
+  return { clp:clp0, real:false, filas:[], proy:0, anual:clp0 }
 }
 // Venta histórica del cliente (Activo+Terminado) en UF — fuente única ventaUF (UF congelada).
 const ventaHistoricaUF = (clientId, sales, ufRef) => (sales||[]).filter(s=>String(s.client_id)===String(clientId)&&['Activo','Terminado'].includes(s.status)&&!s.deleted_at).reduce((a,s)=>a+ventaUF(s,ufRef),0)
@@ -3495,7 +3518,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const yr = currentYear
   const bb = billing
   // "Vendido del año" = Activo + Terminado (MISMA definición que kpis.vendidoYTD y SalesView.vendUF — fuente única; antes usaba "no Borrador/Propuesta/Rechazada", que divergía si aparecía otro estado como Pausado).
-  const salesYr = sales.filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&Number(s.year)===yr&&!esSubarriendo(s))
+  const salesYr = sales.filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&ventaCuentaEnAnio(s,yr)&&!esSubarriendo(s))
   const ufState = useUF()
   const ufHoy = ufState.uf
 
@@ -3505,7 +3528,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const ufDeVenta = s => ventaUF(s, ufRef)
   const clpDeVenta = s => ventaCLP(s, ufRef)
   const vendidoBrutoUF = salesYr.reduce((a,s)=>a+ufDeVenta(s),0)
-  const costoUF = salesYr.reduce((a,s)=>{ const u=parseFloat(s.uf_value)||ufRef; return a+(u>0?comisionesVenta(s,terceros,billing,ufRef).clp/u:0) },0)   // fuente única comisionesVenta
+  const costoUF = salesYr.reduce((a,s)=>{ const u=parseFloat(s.uf_value)||ufRef; return a+(u>0?comisionesVenta(s,terceros,billing,ufRef).anual/u:0) },0)   // fuente única comisionesVenta (anual: incluye lo proyectado de las mensuales)
   const vendidoNetoUF = vendidoBrutoUF - costoUF
   // ① P&L / ② break-even — costos de oficina acumulados (respetan el quiebre de mes vía costosOficinaMes).
   const _mNow = new Date().getMonth()+1
@@ -3534,7 +3557,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     return ()=>{alive=false}
   },[sales,costosOfiRows,ufRef,yr])
   const vendidoBrutoCLP = Math.round(salesYr.reduce((a,s)=>a+clpDeVenta(s),0))
-  const costoCLP = Math.round(salesYr.reduce((a,s)=>a+comisionesVenta(s,terceros,billing,ufRef).clp,0))
+  const costoCLP = Math.round(salesYr.reduce((a,s)=>a+comisionesVenta(s,terceros,billing,ufRef).anual,0))
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
   const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
 
@@ -3581,14 +3604,14 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   },[])
   // Métricas de un año desde sales (vendido), misma fórmula que el cálculo central
   const metricasAnio = (year) => {
-    const sy = sales.filter(s=>s.year===year&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s))   // Vendido = Activo + Terminado (fuente única con SalesView; excluye Pausado, que antes divergía)
+    const sy = sales.filter(s=>!s.deleted_at&&ventaCuentaEnAnio(s,year)&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s))   // Vendido = Activo + Terminado (fuente única con SalesView; excluye Pausado, que antes divergía)
     const bruto = Math.round(sy.reduce((a,s)=>a+clpDeVenta(s),0))
     // Comisiones = fuente única comisionesVenta (las registradas; si una venta no tiene, su costo pactado). En UF, con la UF de la venta.
-    const costo = Math.round(sy.reduce((a,s)=>a+comisionesVenta(s,terceros,billing,ufRef).clp,0))
+    const costo = Math.round(sy.reduce((a,s)=>a+comisionesVenta(s,terceros,billing,ufRef).anual,0))
     const neto = bruto - costo
     // UF NOMINALES (suma directa de amount_uf, igual que la pestaña Ventas) — para que ambas vistas cuadren en modo UF. No reconvertir el CLP con la UF de hoy.
     const brutoUF = sy.reduce((a,s)=>a+ufDeVenta(s),0)
-    const costoUF = sy.reduce((a,s)=>{ const u=parseFloat(s.uf_value)||ufRef; return a+(u>0?comisionesVenta(s,terceros,billing,ufRef).clp/u:0) },0)
+    const costoUF = sy.reduce((a,s)=>{ const u=parseFloat(s.uf_value)||ufRef; return a+(u>0?comisionesVenta(s,terceros,billing,ufRef).anual/u:0) },0)
     const netoUF = brutoUF - costoUF
     const meta = Number(targets.find(t=>t.year===year)?.target_amount) || (year===currentYear?META_CLP:0)
     const pct = meta>0 ? Math.round((neto/meta)*100) : 0   // % meta sobre NETO (igual que el historial y pctMeta) — no mezclar bruto/neto
@@ -5152,7 +5175,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     const sinRec = reales.filter(c=>(c.status||'Activo')==='Activo'&&!tieneRec(c.id)&&vh(c.id)>=50).map(c=>({c,uf:vh(c.id)})).sort((a,b)=>b.uf-a.uf)
     const winback = reales.filter(c=>c.status==='Terminado'&&vh(c.id)>=30&&mesesDesde(ult(c.id))<=18).map(c=>({c,uf:vh(c.id),meses:mesesDesde(ult(c.id))})).sort((a,b)=>b.uf-a.uf)
 
-    const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s)&&Number(s.year)===yr).reduce((a,s)=>a+ventaUF(s,ufRef),0)   // fuente única con Inicio/Ventas: Activo+Terminado, sin subarriendo
+    const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s)&&ventaCuentaEnAnio(s,yr)).reduce((a,s)=>a+ventaUF(s,ufRef),0)   // fuente única con Inicio/Ventas: Activo+Terminado, sin subarriendo
     const porCobrar = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
     const cobradoYTD = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').slice(0,4)===String(yr)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única, coincide con fichas/dashboard)
     // Cartera: TODOS los no-internos segmentados por salud (cascada, cada cliente cae en uno). Terminados fuera.
@@ -5174,7 +5197,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     // Servicios y Precios: por área (venta, ticket, recurrencia, rango, clientes). Activo+Terminado.
     const ventasReales = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s))
     const areaAgg = {}
-    const comUFv = s => { const u=parseFloat(s.uf_value)||ufRef; return u>0 ? comisionesVenta(s,terceros,billing,ufRef).clp/u : 0 }   // comisiones reales (o pactadas) en UF de la venta — fuente única
+    const comUFv = s => { const u=parseFloat(s.uf_value)||ufRef; return u>0 ? comisionesVenta(s,terceros,billing,ufRef).anual/u : 0 }   // comisiones reales (o pactadas) en UF de la venta — fuente única
     ventasReales.forEach(s=>{ const a=s.area||'Sin área'; const u=ventaUF(s,ufRef); const co=comUFv(s); if(!areaAgg[a]) areaAgg[a]={uf:0,costo:0,conCosto:0,n:0,rec:0,tickets:[],byCli:{}}; const A=areaAgg[a]; A.uf+=u; A.costo+=co; if(co>0) A.conCosto++; A.n++; if(esRecurrente(s)) A.rec++; if(u>0) A.tickets.push(u); if(s.client_id) A.byCli[s.client_id]=(A.byCli[s.client_id]||0)+u })
     const servicios = Object.entries(areaAgg).map(([area,d])=>({ area, uf:d.uf, costo:d.costo, margen:d.uf-d.costo, margenPct:d.uf>0?(d.uf-d.costo)/d.uf*100:0, conCosto:d.conCosto, n:d.n, ticket:d.n?d.uf/d.n:0, recPct:d.n?Math.round(d.rec/d.n*100):0, min:d.tickets.length?Math.min(...d.tickets):0, max:d.tickets.length?Math.max(...d.tickets):0, clientes:Object.entries(d.byCli).map(([cid,uf])=>({cid,uf,name:((clients||[]).find(c=>String(c.id)===String(cid))||{}).name||'—'})).sort((a,b)=>b.uf-a.uf) })).sort((a,b)=>b.uf-a.uf)
     const costoTot = servicios.reduce((a,s)=>a+s.costo,0), ufTot = servicios.reduce((a,s)=>a+s.uf,0)
@@ -5384,7 +5407,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     const rBill = b => (b.sale_id&&respSaleId[String(b.sale_id)]) || abogCli[String(b.client_id)] || 'Sin socio'
     const build = (anio) => {
       const M={}; const g=a=>(M[a]=M[a]||{abo:a,vendido:0,nV:0,recCLP:0,fact:0,cob:0,pc:0,venc:0})
-      ;(sales||[]).forEach(s=>{ if(s.deleted_at||esSubarriendo(s)) return; if(!['Activo','Terminado'].includes(s.status)) return; if(anio && Number(s.year)!==yr) return; const m=g(rVenta(s)); const clp=ventaCLP(s,ufRef); m.vendido+=clp; m.nV++; if(esRecurrente(s)) m.recCLP+=clp })
+      ;(sales||[]).forEach(s=>{ if(s.deleted_at||esSubarriendo(s)) return; if(!['Activo','Terminado'].includes(s.status)) return; if(anio && !ventaCuentaEnAnio(s,yr)) return; const m=g(rVenta(s)); const clp=ventaCLP(s,ufRef); m.vendido+=clp; m.nV++; if(esRecurrente(s)) m.recCLP+=clp })
       ;(billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||b.status==='Programada'||['reembolso','nota_credito'].includes(b.billing_type)||!b.invoice_no) return; if(anio && String(b.issued_at||'').slice(0,4)!==String(yr)) return; const m=g(rBill(b)); m.fact+=montoFactura(b); m.cob+=cobradoBill(b); if(['Pendiente','Vencido'].includes(b.status)){ const sal=saldoBill(b); m.pc+=sal; if(esVencidaB(b)) m.venc+=sal } })
       return Object.values(M).filter(m=>m.vendido>0||m.fact>0).sort((a,b)=>b.vendido-a.vendido)
     }
@@ -5761,7 +5784,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[],onEdi
   },[sales,clients,clientEntities,q,fYear,fArea])
   // Encabezado "Vendido del año" = Activo + Terminado del año seleccionado (mismo universo que el Dashboard), independiente del filtro de la lista. UF por defecto, toca para CLP.
   const [montoUF,setMontoUF] = useState(_vmV?.montoUF??true)
-  const yearSales = sales.filter(s=> !esSubarriendo(s) && (!fYear || String(s.year)===fYear) && (!fArea || s.area===fArea))
+  const yearSales = sales.filter(s=> !esSubarriendo(s) && (!fYear || ventaCuentaEnAnio(s,fYear)) && (!fArea || s.area===fArea))
   const actYr = yearSales.filter(s=>s.status==='Activo')
   const termYr = yearSales.filter(s=>s.status==='Terminado')
   const sumUF = arr=>arr.reduce((a,s)=>a+ventaUF(s,ufRef),0)
@@ -5769,7 +5792,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[],onEdi
   // "Vendido" = ventas del año/área con estado dentro del filtro multi (por defecto Activo+Terminado) y abogado dentro del filtro (vacío = todos). El desglose suma exacto a este total.
   const vendSrc = yearSales.filter(s=> estSel.has(s.status) && (abogSel.size===0 || abogSel.has(respVenta(s))))
   const vendUF=sumUF(vendSrc), vendCLP=sumCLP(vendSrc)
-  const comDe = s => comisionesVenta(s,terceros,billing,ufRef).clp
+  const comDe = s => comisionesVenta(s,terceros,billing,ufRef).anual
   const comUFde = s => { const u=parseFloat(s.uf_value)||ufRef; return u>0 ? comDe(s)/u : 0 }   // UF de la propia venta (igual que su ficha)
   const vendCom = vendSrc.reduce((a,s)=>a+comDe(s),0), vendComUF = vendSrc.reduce((a,s)=>a+comUFde(s),0)
   const netoUF = vendUF - vendComUF, netoCLP = vendCLP - vendCom
@@ -5894,7 +5917,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[],onEdi
   const colorGrupo = k => groupBy==='abogado' ? (k==='Sin abogado'?C.done:personChip(k).color) : (AREA_COL[k]||'#537281')
   const grupos = useMemo(()=>{
     // El desglose desglosa el MISMO universo que "Vendido" (estado en el filtro multi + abogado en el filtro), así suma exacto al total.
-    const src = sales.filter(s=> !esSubarriendo(s) && (!fYear||String(s.year)===fYear) && (!fArea||s.area===fArea) && estSel.has(s.status) && (abogSel.size===0||abogSel.has(respVenta(s))))
+    const src = sales.filter(s=> !esSubarriendo(s) && (!fYear||ventaCuentaEnAnio(s,fYear)) && (!fArea||s.area===fArea) && estSel.has(s.status) && (abogSel.size===0||abogSel.has(respVenta(s))))
     const m={}
     src.forEach(s=>{
       const k = groupBy==='abogado' ? respVenta(s) : (s.area||'Sin área')
@@ -7132,7 +7155,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           : 'Ingresa el honorario abajo'
         // Si la venta ya tiene comisiones registradas, el margen usa esas (fuente única comisionesVenta); si no, el costo pactado.
         const comR = sale?.id ? comisionesVenta(sale, terceros, billing, ufVal) : {real:false,clp:0}
-        const costHero = comR.real ? (moneda==='UF' ? (ufVal>0?comR.clp/ufVal:0) : comR.clp) : costVal
+        const costHero = comR.real ? (moneda==='UF' ? (ufVal>0?comR.anual/ufVal:0) : comR.anual) : costVal   // honorario del año vs costo del año (mensuales: incluye lo proyectado)
         const margen = base - costHero
         const pct = base>0 ? Math.max(0,Math.min(100,Math.round(margen/base*100))) : 0
         const fmtU = v => moneda==='UF' ? `${(+v.toFixed(1)).toLocaleString('es-CL')} UF` : fmt(Math.round(v))
@@ -26802,7 +26825,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,terceros=[],onClose
   const ufRef = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
   const esRec = s => esRecurrente(s)
   // Comisiones en UF de la venta — fuente única comisionesVenta (registradas; si no hay, el costo pactado).
-  const costoVentaUF = s => { const u=parseFloat(s.uf_value)||ufRef; return u>0 ? comisionesVenta(s,terceros,billing,ufRef).clp/u : 0 }
+  const costoVentaUF = s => { const u=parseFloat(s.uf_value)||ufRef; return u>0 ? comisionesVenta(s,terceros,billing,ufRef).anual/u : 0 }
   const [sections,setSections] = useState({ventas:true,cobranza:true,gastos:true,tareas:false})
   const [period,setPeriod] = useState('month')
   const [selYear,setSelYear] = useState(String(currentYear))
