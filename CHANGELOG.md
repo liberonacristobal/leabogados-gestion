@@ -607,3 +607,4 @@
 - 2026-10-15 · Notaría › Deuda: el nombre del cliente se muestra completo (baja de línea en vez de cortarse).
 - 2026-10-15 · Notaría › Deuda: la página usa más ancho y el panel Pendiente es más compacto (290 px).
 - 2026-10-15 · Notaría › Deuda: orden y agrupación con el selector de Facturación (mismo alto que el buscador); sin OT ni 'Solo con saldo'; montos al borde derecho; el N° de OT abre el gasto en escritorio.
+- 2026-10-15 · Coherencia: Deuda muestra el mismo saldo que la ficha del cliente (fgCliente) y del libro personal; saldo personal en Gastos con el mismo criterio (sin histórico/apertura); correo tu-semana cuenta las OT castigadas y, junto a notaria-semanal, carga gastos por páginas (tope de 1.000 filas de Supabase). Edge desplegados.

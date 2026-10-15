@@ -65,11 +65,13 @@ serve(async (req) => {
     const soloResp: string[] | null = (scope && scope !== "on") ? scope.split(/[,;]+/).map(s=>norm(s)).filter(Boolean) : null;
 
     // Todos los gastos vivos (para saldo por cliente) + clientes.
+    // PostgREST corta en 1.000 filas: los gastos se traen por páginas (ya son más de 1.000).
+    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const fetchAll = async () => {
       let last:any = null;
       for (let att=0; att<4; att++){
         const res = await Promise.all([
-          sb.from("expenses").select("id,client_id,type,amount,no_descuenta_saldo,notaria_liquidado_at,client_rendered_at,rendered_at,ot_number,category,subcategory,materia,date").is("deleted_at",null),
+          pageAll(()=>sb.from("expenses").select("id,client_id,type,amount,no_descuenta_saldo,notaria_liquidado_at,client_rendered_at,rendered_at,ot_number,category,subcategory,materia,date").is("deleted_at",null).order("id")),
           sb.from("clients").select("id,name,abogado_responsable"),
         ]);
         const fallo = res.find((r:any)=> r.error || r.data===null);
