@@ -11198,7 +11198,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [groupOpen,setGroupOpen] = usePersistedState('bill_grp',{})   // colapso por grupo (Pagadas/Anuladas cerrados por defecto)
   const [rsSel,setRsSel] = useState({})   // filtro por razón social dentro de cada cliente: clientId → entityId | 'all'
   // Navegación por estado: todas las KPI cards / tabs de estado llevan al MISMO acordeón "Por cliente" filtrado por ese estado (vistas coherentes, no listas viejas distintas).
-  const ESTADO_MAP={emitidas:['Pendiente','Vencido'],programadas:['Programada'],vencido:['Vencido'],pagado:['Pagado']}
+  const ESTADO_MAP={emitidas:['Pendiente','Vencido'],programadas:['Programada'],vencido:['Vencido'],pagado:['Pagado'],anuladas:['Anulada']}
   const irAEstado = fl => { setFilter('clientes'); setEstSel(new Set(ESTADO_MAP[fl]||[])); setAgingF('') }
   const irAEstadoAging = tr => { setFilter('clientes'); setEstSel(new Set(['Vencido'])); setAgingF(tr) }   // drill de un tramo de antigüedad → lista Vencidas filtrada por ese tramo
   const estadoActivo = fl => filter==='clientes' && [...estSel].sort().join(',')===(ESTADO_MAP[fl]||[]).slice().sort().join(',') && estSel.size>0
@@ -11789,7 +11789,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const yaFacturadasIds = useMemo(()=> new Set(matchProgEmitidas(bb,clients,clientEntities).map(m=>String(m.prog.id))), [bb,clients,clientEntities])   // fuente única (detector compartido)
   // KPIs — MISMA fuente que el landing: Por cobrar = total cuentas por cobrar (emitidas con saldo, NO depende del año); Por facturar = sin folio real (excluye las ya facturadas).
   const pending=bb.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
-  const overdue=bb.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((s,b)=>s+saldoBill(b),0)
+  const overdue=bb.filter(b=>b.invoice_no&&(b.status==='Vencido'||(b.status==='Pendiente'&&esVencidaB(b)))).reduce((s,b)=>s+saldoBill(b),0)   // mismo criterio que la lista (estadoReal) y Cobranza: status Vencido o emisión+30 ya pasada
   const paid=bb.filter(b=>cobradoBill(b)>0&&matchYM(kpiDate(b))).reduce((s,b)=>s+cobradoBill(b),0)   // incluye parciales (fuente única cobradoBill)
   const programado=bb.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&!yaFacturadasIds.has(b.id)&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
   // Contadores por nº de documentos para las tabs
@@ -12703,21 +12703,6 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           </div>
         </div>
 
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='rechazadas'&&filter!=='porcompletar'&&filter!=='sinemitir'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
-          {(()=>{ const on=estadoActivo('emitidas'); return (
-            <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:10,padding:'7px 9px',border:`1px solid ${on?C.accent:C.border}`,cursor:'pointer',minWidth:0}}>
-              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n='file' s={12} c={C.accent}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap'}}>Por cobrar</span></div>
-              <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>{fmtShort(pending)}</div>
-              {overdue>0&&<div onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{fontSize:10,color:C.overdue,fontWeight:600,marginTop:3,whiteSpace:'nowrap'}}>Vencido {fmtShort(overdue)}</div>}
-            </button>
-          )})()}
-          {[['Por facturar',programado,'programadas','#537281','#EDF1F3','clock'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE','check']].map(([l,v,fl,col,bg,icon])=>{ const on=estadoActivo(fl); return (
-            <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:10,padding:'7px 9px',border:`1px solid ${on?col:C.border}`,cursor:'pointer',minWidth:0}}>
-              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n={icon} s={12} c={col}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</span></div>
-              <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtShort(v)}</div>
-            </button>
-          )})}
-        </div>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&filter!=='rechazadas'&&filter!=='porcompletar'&&filter!=='sinemitir'&&(()=>{
           const lista=bb.filter(b=>!b.deleted_at&&esEmitida(b)&&b.email_sent_at&&saldoBill(b)>0&&!['Pagado','Anulada','Anticipada'].includes(b.status))
             .map(b=>({b,dias:Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000),venc:esVencidaG(b)}))
@@ -12856,6 +12841,17 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             <option value=''>Todos los años</option>
             {years.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
+          {(filter==='clientes'||filter==='all')&&(()=>{
+            // Estado = filtro desplegable con su cifra (reemplaza las mini tarjetas y los chips). Cifras: las mismas de la foto (pending/overdue/programado/paid).
+            const key=Object.keys(ESTADO_MAP).find(k=>ESTADO_MAP[k].slice().sort().join(',')===[...estSel].sort().join(','))||''
+            const yl=fYear?` ${fYear}`:''
+            const opts=[['','Todos los estados'],['vencido',`Vencidas · ${fmtMill(overdue)}`],['emitidas',`Por cobrar · ${fmtMill(pending)}`],['programadas',`Por facturar${yl} · ${fmtMill(programado)}`],['pagado',`Pagadas${yl} · ${fmtMill(paid)}`],['anuladas','Anuladas']]
+            const on=key!==''||!!agingF, ven=key==='vencido'||!!agingF
+            return <select value={agingF?'aging':key} onChange={e=>{setEstSel(new Set(ESTADO_MAP[e.target.value]||[]));setAgingF('')}} style={{fontSize:11,fontWeight:600,border:`1px solid ${on?(ven?C.overdueText:C.accent):C.border}`,borderRadius:20,padding:'5px 9px',background:on?(ven?C.overdueBg:C.azulBg):'#fff',color:on?(ven?C.overdueText:C.accent):C.muted,cursor:'pointer',flexShrink:0,appearance:'none',maxWidth:'100%'}}>
+              {agingF&&<option value='aging'>Vencidas {({'1-30':'1–30 días','31-60':'31–60 días','61-90':'61–90 días','90':'+90 días'})[agingF]||agingF}</option>}
+              {opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+            </select>
+          })()}
           <div style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:10,flexShrink:0}}>
             {filter!=='porcompletar'&&<button onClick={()=>setShowBuscar(s=>!s)} title='Buscar' style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',cursor:'pointer',color:(q||showBuscar)?C.accent:C.muted,padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg></button>}
             <div style={{position:'relative'}}>
@@ -13219,12 +13215,12 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const efClientId=b=> b.client_id || efEntity(b)?.client_id || null
           const byC={}; rows.forEach(b=>{ const cid=efClientId(b)||'__none__'; (byC[cid]=byC[cid]||[]).push(b) })
           const byCAll={}; rowsAll.forEach(b=>{ const cid=efClientId(b)||'__none__'; (byCAll[cid]=byCAll[cid]||[]).push(b) })
-          const metCid=cid=>{ const v=byCAll[cid]||[]; return {pc:v.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0), ve:v.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0), pf:v.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&!yaFacturadasIds.has(b.id)&&matchYM(kpiDate(b))).reduce((a,b)=>a+(b.amount||0),0), co:v.filter(b=>cobradoBill(b)>0&&matchYM(kpiDate(b))).reduce((a,b)=>a+cobradoBill(b),0)} }
+          const metCid=cid=>{ const v=byCAll[cid]||[]; return {pc:v.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0), ve:v.filter(b=>b.invoice_no&&(b.status==='Vencido'||(b.status==='Pendiente'&&esVencidaB(b)))).reduce((a,b)=>a+saldoBill(b),0), pf:v.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&!yaFacturadasIds.has(b.id)&&matchYM(kpiDate(b))).reduce((a,b)=>a+(b.amount||0),0), co:v.filter(b=>cobradoBill(b)>0&&matchYM(kpiDate(b))).reduce((a,b)=>a+cobradoBill(b),0)} }
           const sinFiltroEst=estSel.size===0&&!agingF
           const _cids=new Set([...Object.keys(byC), ...(sinFiltroEst?Object.keys(byCAll).filter(cid=>{ const m=metCid(cid); return m.pc>0||m.pf>0||m.co>0 }):[])])
           const list=[..._cids].map(cid=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr:byC[cid]||[]})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
-          const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conciliable}); const col=est.color; const ui=ufInfoDe(b); const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const rsN=(()=>{ const e=efEntity(b); if(e?.name) return rsDisplay(e.name); if(b.receptor_name) return rsDisplay(b.receptor_name); if(cli&&cli.id){ const rl=rsLabel(cli.id,clients,clientEntities); if(rl.multi) return 'Sin razón social'; if(rl.name&&rl.name!==cli.name) return rsDisplay(rl.name) } return null })(); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
+          const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conciliable}); const col=est.color; const ui=ufInfoDe(b); const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const rsN=(()=>{ const e=efEntity(b); if(e?.name) return rsDisplay(e.name); if(b.receptor_name) return rsDisplay(b.receptor_name); if(cli&&cli.id){ const rl=rsLabel(cli.id,clients,clientEntities); if(rl.multi) return 'Sin razón social'; if(rl.name&&rl.name!==cli.name) return rsDisplay(rl.name) } return null })(); const dl=daysLeft(venceDe(b)||b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:5,overflow:'hidden'}}>
               <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 180px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
@@ -13270,13 +13266,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           )}
           const porCobrarTot=rows.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+saldoBill(b),0)
           const vencidoTot=rows.filter(b=>estadoReal(b)==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
-          const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
           return (<div>
-            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
-              {estChips.map(([v,l])=>{ const on=estSel.has(v); const ic={Programada:'clock',Pendiente:'file',Vencido:'alert',Pagado:'check',Anulada:'x'}[v]; return <span key={v} onClick={()=>{setAgingF('');setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})}} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{ic&&<SIcon n={ic} s={11} c={on?C.accent:C.muted}/>}{l}</span> })}
-              {agingF&&<span onClick={()=>setAgingF('')} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',background:C.overdueBg,color:C.overdueText}}>Vencidas {({'1-30':'1–30d','31-60':'31–60d','61-90':'61–90d','90':'+90d'})[agingF]||agingF} <Gl n='x'/></span>}
-              {(estSel.size>0||agingF)&&<span onClick={()=>{setEstSel(new Set());setAgingF('')}} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
-            </div>
             {(()=>{
               // Vista por cliente: clientes COLAPSADOS (solo nombre + total). Al abrir → filtro por razón social + acordeones por estado (Por cobrar [vencidas primero] / Por facturar / Cobradas / Anuladas), cada factura con su RS. Aging contable: vencida más antigua primero.
               const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy; return b.amount||0 } return montoFactura(b) }
@@ -13294,7 +13284,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               const metC=x=>({...metCid(x.c.id), n:(visN(x)>0||sinFiltroEst)?1:0})
               const listO = ordPC.k==='nombre' ? (ordPC.dir===1?list:[...list].reverse()) : [...list].sort((x,y)=>((metC(x)[ordPC.k]-metC(y)[ordPC.k])*ordPC.dir)||(x.c.name||'').localeCompare(y.c.name||'','es'))
               const totPC = list.reduce((t,x)=>{ if(!visN(x)&&!sinFiltroEst) return t; const m=metCid(x.c.id); t.pc+=m.pc; t.pf+=m.pf; t.co+=m.co; t.ve+=m.ve; t.n++; return t },{pc:0,pf:0,co:0,ve:0,n:0})
-              const W=128
+              const W=136
               const cards=listO.map(({c,arr})=>{
                 const visible=arr.filter(matchEst)
                 if(!visible.length&&!sinFiltroEst) return null
@@ -13315,15 +13305,16 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span onClick={onOpenClientFicha&&c.id&&c.id!=='__none__'?(e=>{e.stopPropagation();onOpenClientFicha(c.id)}):undefined} title={onOpenClientFicha&&c.id&&c.id!=='__none__'?'Ver ficha del cliente':undefined} style={{cursor:onOpenClientFicha&&c.id&&c.id!=='__none__'?'pointer':'inherit'}}>{c.name}</span></div>
                       {(rsHead.multi||(rsHead.name&&_normTxt(rsHead.name)!==_normTxt(c.name)))&&<div style={{fontSize:10,color:rsHead.multi?C.soonText:C.muted,fontWeight:rsHead.multi?600:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{rsHead.multi?`${rsHead.multi} razones sociales`:`${rsDisplay(rsHead.name)}${rsHead.rut?` · ${fmtRutCL(rsHead.rut)}`:''}`}</div>}
-                      {!isDesktop&&(_mc.pf>0||_mc.co>0)&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{[_mc.pf>0?`por facturar ${fmt(_mc.pf)}`:'',_mc.co>0?`cobrado ${fmt(_mc.co)}`:''].filter(Boolean).join(' · ')}</div>}
+                      {!isDesktop&&(_mc.pf>0||_mc.co>0)&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{[_mc.pf>0?`por facturar ${fmtMill(_mc.pf)}`:'',_mc.co>0?`cobrado ${fmtMill(_mc.co)}`:''].filter(Boolean).join(' · ')}</div>}
                     </div>
                     {isDesktop ? (<>
-                      <div style={{width:W,textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}><div style={{fontSize:13,fontWeight:700,color:_mc.pc>0?C.text:C.done}}>{_mc.pc>0?fmt(_mc.pc):'—'}</div>{vencC>0&&<div style={{fontSize:10,fontWeight:600,color:C.overdueText}}>vencido {fmt(vencC)}</div>}</div>
-                      <div style={{width:W,textAlign:'right',flexShrink:0,fontSize:13,fontWeight:_mc.pf>0?600:400,color:_mc.pf>0?C.muted:C.done,fontVariantNumeric:'tabular-nums'}}>{_mc.pf>0?fmt(_mc.pf):'—'}</div>
-                      <div style={{width:W,textAlign:'right',flexShrink:0,fontSize:13,fontWeight:_mc.co>0?700:400,color:_mc.co>0?C.greenText:C.done,fontVariantNumeric:'tabular-nums'}}>{_mc.co>0?fmt(_mc.co):'—'}</div>
+                      <div style={{width:W,textAlign:'right',flexShrink:0,fontSize:13,fontWeight:700,color:_mc.pc>0?C.text:C.done,fontVariantNumeric:'tabular-nums'}}>{_mc.pc>0?fmtMill(_mc.pc):'—'}</div>
+                      <div style={{width:W,textAlign:'right',flexShrink:0,fontSize:13,fontWeight:vencC>0?700:400,color:vencC>0?C.overdueText:C.done,fontVariantNumeric:'tabular-nums'}}>{vencC>0?fmtMill(vencC):'—'}</div>
+                      <div style={{width:W,textAlign:'right',flexShrink:0,fontSize:13,fontWeight:_mc.pf>0?600:400,color:_mc.pf>0?C.muted:C.done,fontVariantNumeric:'tabular-nums'}}>{_mc.pf>0?fmtMill(_mc.pf):'—'}</div>
+                      <div style={{width:W,textAlign:'right',flexShrink:0,fontSize:13,fontWeight:_mc.co>0?700:400,color:_mc.co>0?C.greenText:C.done,fontVariantNumeric:'tabular-nums'}}>{_mc.co>0?fmtMill(_mc.co):'—'}</div>
                     </>) : (
                       <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{fontSize:13,fontWeight:700,color:_mc.pc>0?C.text:C.done,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{_mc.pc>0?fmt(_mc.pc):'—'}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:_mc.pc>0?C.text:C.done,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{_mc.pc>0?fmtMill(_mc.pc):'—'}</div>
                         <div style={{fontSize:9.5,fontWeight:700,color:_mc.pc>0?(vencC>0?C.overdueText:C.accent):C.muted}}>{_mc.pc>0?(vencC>0?'vencido':'por cobrar'):'al día'}</div>
                       </div>)}
                   </div>
@@ -13338,7 +13329,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                       return (<div key={key} style={{marginBottom:6}}>
                         <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:4}}>
                           <span style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}><SIcon n={_ec.icon||'file'} s={15} c={_ec.text}/><span style={{fontSize:10,fontWeight:700,background:_ec.bg,color:_ec.text,borderRadius:14,padding:'2px 9px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?<Gl n='chevD'/>:<Gl n='chevron'/>}</span></span>
-                          <span style={{fontSize:11,fontWeight:700,color:_ec.text}}>{fmt(sub)}</span>
+                          <span style={{fontSize:11,fontWeight:700,color:_ec.text}}>{fmtMill(sub)}</span>
                         </div>
                         {isOpen&&gr.map(b=>fila(b,yaFacturadasIds.has(b.id),c))}
                       </div>)
@@ -13348,15 +13339,16 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               }).filter(Boolean)
                if(!cards.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
                if(!isDesktop) return cards
-               const hcP=(k,l)=>{ const on=ordPC.k===k; return <span onClick={()=>setOrdPC(o=>o.k===k?{k,dir:-o.dir}:{k,dir:k==='nombre'?1:-1})} style={{width:k==='nombre'?undefined:W,flex:k==='nombre'?1:undefined,textAlign:k==='nombre'?'left':'right',flexShrink:0,cursor:'pointer',userSelect:'none',color:on?C.accent:C.muted}}>{l}{on?(ordPC.dir===1?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span> }
+               const hcP=(k,l)=>{ const on=ordPC.k===k; return <span onClick={()=>setOrdPC(o=>o.k===k?{k,dir:-o.dir}:{k,dir:k==='nombre'?1:-1})} style={{width:k==='nombre'?undefined:W,flex:k==='nombre'?1:undefined,textAlign:k==='nombre'?'left':'right',flexShrink:0,whiteSpace:'nowrap',cursor:'pointer',userSelect:'none',color:on?C.accent:C.muted}}>{l}{on?(ordPC.dir===1?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span> }
                return (<>
-                 <div style={{display:'flex',gap:10,padding:'0 13px 6px 62px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>{hcP('nombre','Cliente')}{hcP('pc','Por cobrar')}{hcP('pf','Por facturar')}{hcP('co','Cobrado')}</div>
+                 <div style={{display:'flex',gap:10,padding:'0 13px 6px 62px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>{hcP('nombre','Cliente')}{hcP('pc','Por cobrar')}{hcP('ve','Vencido')}{hcP('pf',`Por facturar${fYear?' '+fYear:''}`)}{hcP('co',`Cobrado${fYear?' '+fYear:''}`)}</div>
                  {cards}
                  <div style={{display:'flex',gap:10,alignItems:'baseline',padding:'10px 13px 4px 62px',fontSize:12.5,fontWeight:700,borderTop:`1px solid ${C.border}`,marginTop:4}}>
                    <span style={{flex:1}}>{totPC.n} cliente{totPC.n!==1?'s':''}</span>
-                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(totPC.pc)}{totPC.ve>0&&<div style={{fontSize:10,fontWeight:600,color:C.overdueText}}>vencido {fmt(totPC.ve)}</div>}</span>
-                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.muted}}>{fmt(totPC.pf)}</span>
-                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.greenText}}>{fmt(totPC.co)}</span>
+                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmtMill(totPC.pc)}</span>
+                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums',color:totPC.ve>0?C.overdueText:C.done}}>{totPC.ve>0?fmtMill(totPC.ve):'—'}</span>
+                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.muted}}>{fmtMill(totPC.pf)}</span>
+                   <span style={{width:W,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.greenText}}>{fmtMill(totPC.co)}</span>
                  </div>
                </>)
             })()}</div>)
@@ -13633,7 +13625,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const colValT=(b)=>{ const c=tblSort.col; if(c==='cliente') return ((clients.find(x=>x.id===b.client_id)?.name)||b.receptor_name||'~').toLowerCase(); if(c==='resp') return (clients.find(x=>x.id===b.client_id)?.abogado_responsable||'~~').toLowerCase(); if(c==='monto') return (['Vencido','Pendiente'].includes(estadoReal(b))?saldoBill(b):montoDe(b))||0; if(c==='vence') return venceDe(b)||''; return kpiDate(b)||'' }
           const cmpT=(a,b)=>{ const va=colValT(a),vb=colValT(b); const r=(typeof va==='number')?(va-vb):String(va).localeCompare(String(vb),'es'); return tblSort.dir==='desc'?-r:r }
           const hCell=(col,label,align)=>{ const on=tblSort.col===col; return <span onClick={()=>setTblSort(s=>({col,dir:s.col===col?(s.dir==='asc'?'desc':'asc'):(col==='cliente'?'asc':'desc')}))} title='Ordenar' style={{display:'inline-flex',alignItems:'center',gap:3,cursor:'pointer',fontSize:9,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:on?C.accent:C.muted,userSelect:'none'}}>{label}{on?<span style={{fontSize:8}}>{tblSort.dir==='asc'?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>:''}</span> }
-          const filaAll=b=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conc.has(b.id)}); const col=est.color; const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
+          const filaAll=b=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conc.has(b.id)}); const col=est.color; const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); const dl=daysLeft(venceDe(b)||b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:5,overflow:'hidden'}}>
               <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 96px 92px 150px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
@@ -13643,7 +13635,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}{porConciliar&&<span style={{color:C.soonText,fontWeight:700}}> · Por conciliar</span>}</div>
                 </div>
                 {isDesktop&&(()=>{ const rp=cl?.abogado_responsable; if(!rp) return <div style={{fontSize:11,color:C.textSoft}}>—</div>; const pc=personChip(rp); return <div style={{minWidth:0,overflow:'hidden'}}><span style={{fontSize:11,fontWeight:700,color:pc.color,whiteSpace:'nowrap',display:'inline-block',maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis'}}>{rp}</span></div> })()}
-                {isDesktop&&(()=>{ const v=venceDe(b); if(['Pagado','Anticipada','Anulada'].includes(b.status)||!v) return <div style={{textAlign:'right',fontSize:11,color:C.textSoft}}>—</div>; const d=new Date(v+'T00:00:00'); return <div style={{textAlign:'right'}}><div style={{fontSize:11,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{d.getDate()} {MESES_ABR[d.getMonth()].toLowerCase()}</div>{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div> })()}
+                {isDesktop&&(()=>{ const v=venceDe(b); if(['Pagado','Anticipada','Anulada'].includes(b.status)||!v) return <div style={{textAlign:'right',fontSize:11,color:C.textSoft}}>—</div>; return <div style={{textAlign:'right'}}><div style={{fontSize:11,fontWeight:600,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtFechaDMY(v)}</div>{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div> })()}
                 <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ const hayAb=saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status); return <><div style={{fontSize:13,fontWeight:600,color:hayAb?(er==='Vencido'?C.overdueText:C.accent):C.text}}>{fmt(hayAb?saldoBill(b):(b.status==='Programada'?(ui?ui.clpHoy:b.amount):montoFactura(b)))}</div>{hayAb&&<div style={{fontSize:9,color:C.muted}}>de {fmt(b.status==='Programada'?(ui?ui.clpHoy:b.amount):montoFactura(b))}</div>}</> })()}{!isDesktop&&diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
@@ -13679,13 +13671,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               </div>}
             </div>
           )}
-          const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
           return (<div>
-            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
-              {estChips.map(([v,l])=>{ const on=estSel.has(v); const ic={Programada:'clock',Pendiente:'file',Vencido:'alert',Pagado:'check',Anulada:'x'}[v]; return <span key={v} onClick={()=>{setAgingF('');setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})}} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{ic&&<SIcon n={ic} s={11} c={on?C.accent:C.muted}/>}{l}</span> })}
-              {agingF&&<span onClick={()=>setAgingF('')} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',background:C.overdueBg,color:C.overdueText}}>Vencidas {({'1-30':'1–30d','31-60':'31–60d','61-90':'61–90d','90':'+90d'})[agingF]||agingF} <Gl n='x'/></span>}
-              {(estSel.size>0||agingF)&&<span onClick={()=>{setEstSel(new Set());setAgingF('')}} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
-            </div>
             {rows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>}
             {isDesktop&&rows.length>0&&<div style={{display:'grid',gridTemplateColumns:'62px 20px minmax(0,1fr) 96px 92px 150px',gap:14,padding:'2px 14px 6px',borderBottom:`1px solid ${C.border}`,marginBottom:2,alignItems:'center'}}>
               {hCell('fecha','Fecha')}
@@ -13699,7 +13685,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               <div key={key} style={{marginBottom:4}}>
                 <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',margin:'8px 0 5px'}}>
                   <span style={{fontSize:10,fontWeight:700,background:ch.bg,color:ch.fg,borderRadius:14,padding:'2px 9px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
-                  <span style={{fontSize:10,fontWeight:700,background:ch.bg,color:ch.fg,borderRadius:14,padding:'2px 9px'}}>{fmt(sub)}</span>
+                  <span style={{fontSize:10,fontWeight:700,background:ch.bg,color:ch.fg,borderRadius:14,padding:'2px 9px'}}>{fmtMill(sub)}</span>
                 </div>
                 {isOpen&&gr.map(filaAll)}
               </div>
