@@ -19314,7 +19314,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               </>)
   }
   const body = (
-    <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
+    <div style={isDesktop?{maxWidth:showNotaria&&notaTab==='pend'?1320:1040,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:isDesktop&&selectedClient?'nowrap':'wrap',gap:isDesktop&&selectedClient?16:8}}>
           <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
@@ -20096,15 +20096,15 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const pctP=v=>notaPendTotal>0?Math.round(v/notaPendTotal*100)+'%':''
         const partes=[['con','Con saldo',conFondoT,C.greenText,`${nCon} con fondo para pagar`],['adel','Adelanta oficina',adelantoT,C.soonText,`${nAdel} cliente${nAdel!==1?'s':''} · pedir fondos`],...(sinFondoT>0?[['pers','Personal sin saldo',sinFondoT,C.muted,perSin.join(' · ')||'sin cliente asignado']]:[])]
         const hero = (
-          <div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,padding:D?'15px 16px':'12px 14px'}}>
+          <div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,padding:'12px 14px'}}>
             <div style={{...lblK,color:C.accent}}>Pendiente a notaría</div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:12,color:C.muted}}>{BRAND.notaria} · {notariaPend.length} OT</span><span style={{fontSize:D?28:24,fontWeight:800,color:C.accent,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(notaPendTotal)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:12,color:C.muted}}>{BRAND.notaria} · {notariaPend.length} OT</span><span style={{fontSize:24,fontWeight:800,color:C.accent,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(notaPendTotal)}</span></div>
             {D
-              ? <div style={{display:'flex',flexDirection:'column',gap:7,marginTop:12}}>{partes.map(([k,l,v,col,sub])=>{ const on=deudaEstF===k; return (
-                  <div key={k} onClick={()=>setDeudaEstF(f=>f===k?null:k)} style={{display:'flex',alignItems:'center',gap:10,border:`1px solid ${on?C.accent:C.tileLine}`,background:on?C.azulBg:C.tileBg,borderRadius:11,padding:'9px 12px',cursor:'pointer'}}>
+              ? <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:10}}>{partes.map(([k,l,v,col,sub])=>{ const on=deudaEstF===k; return (
+                  <div key={k} onClick={()=>setDeudaEstF(f=>f===k?null:k)} style={{display:'flex',alignItems:'center',gap:10,border:`1px solid ${on?C.accent:C.tileLine}`,background:on?C.azulBg:C.tileBg,borderRadius:10,padding:'7px 10px',cursor:'pointer'}}>
                     <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:col===C.muted?C.text:col}}>{l}</div><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
-                    <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:15,fontWeight:800,color:col===C.muted?C.text:col,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div><div style={{fontSize:10.5,color:C.muted}}>{pctP(v)}</div></div>
+                    <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:col===C.muted?C.text:col,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div><div style={{fontSize:10,color:C.muted}}>{pctP(v)}</div></div>
                   </div>) })}</div>
               : <div style={{borderTop:`1px solid ${C.track}`,paddingTop:6,marginTop:8}}>{partes.map(([k,l,v,col])=>{ const on=deudaEstF===k; return (
                   <div key={k} onClick={()=>setDeudaEstF(f=>f===k?null:k)} style={{display:'flex',alignItems:'center',gap:8,minHeight:30,padding:'0 6px',margin:'0 -6px',borderRadius:8,background:on?C.azulBg:'transparent',cursor:'pointer'}}>
@@ -20318,7 +20318,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {D
               ? <>{toolbar}<div style={{display:'flex',gap:18,alignItems:'flex-start'}}>
                   {lista}
-                  <div style={{width:340,flexShrink:0,position:'sticky',top:12,display:'flex',flexDirection:'column',gap:10}}>{hero}{selBox}{bitacora}</div>
+                  <div style={{width:290,flexShrink:0,position:'sticky',top:12,display:'flex',flexDirection:'column',gap:10}}>{hero}{selBox}{bitacora}</div>
                 </div></>
               : <div style={{display:'flex',flexDirection:'column',gap:10}}>{hero}{selBox}{lista}</div>}
           </div>)
