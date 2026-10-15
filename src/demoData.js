@@ -157,7 +157,11 @@ export const demoData = {
     { id:'b42', client_id:'c7', sale_id:null, entity_id:null, concept:'Honorarios profesionales', amount:11500000, status:'Pendiente', invoice_no:'1642', issued_at:'2026-08-22', due:'2026-08-28', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b43', client_id:'c1', sale_id:null, entity_id:null, concept:'Honorarios profesionales', amount:9000000, status:'Pendiente', invoice_no:'1643', issued_at:'2026-08-23', due:'2026-08-28', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
   ],
+  notariaNoNuestras: [
+    { id:'nn1', ot:'491007', fecha:'2026-09-30', materia:'Escritura de compraventa', requirente:'Tercero sin vínculo', monto:35000, estado:'pendiente', cargas:[{fecha:'2026-10-15'}], historial:[] },
+  ],
   historial: [
+    { id:'h3', action:'notaria.recordatorio_liquidacion', created_at:'2026-10-13T12:00:00Z', user_email:'cl@leabogados.cl', detail:JSON.stringify({texto:'Pedir desde el 02-09-2026'}) },
     { id:'h1', action:'clientes.c2.auditoria', created_at:'2026-10-13T12:00:00Z', user_email:'cl@leabogados.cl', detail:JSON.stringify({texto:'Se registra el pago a la notaría por $180.000 (OT 406644, 01-12-2025), pagada el 24-12-2025. Fuente: planilla "Deuda Notaría" al 31-12-2025.'}) },
     { id:'h2', action:'clientes.c2.auditoria', created_at:'2026-10-13T11:00:00Z', user_email:'cl@leabogados.cl', detail:JSON.stringify({texto:'Los gastos sin fecha vienen del registro histórico importado el 25-06-2026; el original no trae fecha.'}) },
   ],

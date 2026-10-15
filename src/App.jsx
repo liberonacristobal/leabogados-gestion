@@ -1128,7 +1128,7 @@ function nombresMiembros(){
 function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, vacio='Aún no hay registros.', plano=false, autor=null}){
   const [rows,setRows]=useState(null)
   const [abierto,setAbierto]=useState(false)
-  useEffect(()=>{ let vivo=true; if(DEMO){ setRows(plano?(demoData.historial||[]).filter(r=>String(r.action).startsWith(prefijo)):[]); return }
+  useEffect(()=>{ let vivo=true; if(DEMO){ setRows((demoData.historial||[]).filter(r=>String(r.action).startsWith(prefijo))); return }
     supabase.from('activity_log').select('id,action,detail,user_email,created_at').like('action',prefijo+'%').order('created_at',{ascending:false}).limit(limite)
       .then(({data})=>{ if(vivo) setRows(data||[]) }).catch(()=>{ if(vivo) setRows([]) })
     return ()=>{ vivo=false } },[prefijo,limite])
@@ -1158,6 +1158,16 @@ function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, va
           <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ try{ const o=JSON.parse(r.detail); const m=o&&!Array.isArray(o)&&typeof o==='object'?(o.monto??o.amount):(Array.isArray(o)?o.reduce((a,x)=>a+(Number(x?.monto??x?.amount)||0),0)||null:null); return m!=null?<div style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(m)}</div>:null }catch(_){ return null } })()}<div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{fmtFechaHora(r.created_at)}</div><div style={{fontSize:10.5,color:C.textSoft}}>{quien(r.user_email)}</div></div>
         </div>)}
     </div>)
+}
+
+// Último registro de una bitácora (activity_log por prefijo) → render(row|null). Para tarjetas-resumen que abren la bitácora completa.
+function BitacoraUltima({prefijo, render}){
+  const [row,setRow]=useState(undefined)
+  useEffect(()=>{ let vivo=true; if(DEMO){ setRow((demoData.historial||[]).filter(r=>String(r.action).startsWith(prefijo)).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)))[0]||null); return }
+    supabase.from('activity_log').select('id,action,created_at').like('action',prefijo+'%').order('created_at',{ascending:false}).limit(1)
+      .then(({data})=>{ if(vivo) setRow((data||[])[0]||null) }).catch(()=>{ if(vivo) setRow(null) })
+    return ()=>{ vivo=false } },[prefijo])
+  return render(row)
 }
 
 // Bitácora de cargas del SII (sii_import_batches): TODA carga deja registro (XML lo hace vía ensureBatch; PDF/Drive/Excel pasan por aquí). Nunca bloquea.
@@ -19238,7 +19248,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   // Ya viven persistidas en el resumen de cada carga (bulk_imports.resumen.noNuestras); acá se agregan para poder
   // consultarlas a la notaría cuando quieras, no solo durante la carga. El estado (consultada/resuelta) va en learnings.
   const [noNRows,setNoNRows] = useState([])   // tabla notaria_no_nuestras (fuente: una fila por N° de OT, completa, con cargas e historial)
-  useEffect(()=>{ if(DEMO) return; supabase.from('notaria_no_nuestras').select('*').order('created_at',{ascending:false}).then(({data})=>setNoNRows(data||[])).catch(()=>{}) },[bulkImports])
+  useEffect(()=>{ if(DEMO){ setNoNRows(demoData.notariaNoNuestras||[]); return } supabase.from('notaria_no_nuestras').select('*').order('created_at',{ascending:false}).then(({data})=>setNoNRows(data||[])).catch(()=>{}) },[bulkImports])
   const notaNoNuestras = useMemo(()=>{
     const items=[], vistos=new Set()
     ;(noNRows||[]).forEach(r=>{ const k=canonOtNN(r.ot); vistos.add(k)
@@ -19526,7 +19536,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,...(isDesktop&&selectedClient?{minWidth:0,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}:{})}}>
-                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Pagos realizados':notaTab==='pend'?'Deuda':notaTab==='nonuestras'?'No son nuestras':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
+                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Pagos realizados':notaTab==='pend'?'Deuda':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Recordatorios':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ver ficha <Gl n='chevron'/></span>}
                 {selectedClient&&!esOficina(selectedClient.id)&&(()=>{
@@ -19998,7 +20008,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const cards=[
           {t:'Deuda', ic:'clock', s:notariaPend.length?`${notariaPend.length} OT · ${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.soonText, bg:C.ambarBg, go:()=>setNotaTab('pend')},
           {t:'Cobros', ic:'exchange', s:notaLedger.n?`${notaLedger.n} OT · ${fmtShort(notaLedger.total)}`:'lo que nos cobran', col:C.azulInfo, bg:C.azulBg, go:()=>{setCobrosVista('carga');setCobrosOpen(null);setCobrosQ('');setNotaTab('cobros')}},
-          {t:'Pagos realizados', ic:'check', s:notaLiquidaciones.length?`${notaLiquidaciones.length} liquidación${notaLiquidaciones.length!==1?'es':''} · ${fmtShort(pagTot||0)} pagado`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
+          {t:'Pagos realizados', ic:'check', s:notaLiquidaciones.length?`${notaLiquidaciones.length} ${notaLiquidaciones.length!==1?'liquidaciones':'liquidación'} · ${fmtShort(pagTot||0)}`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
           {t:'Carga masiva', ic:'file', s:'importar · correo', col:C.muted, bg:C.bgSoft, go:()=>{setShowNotaria(false);setHubOpen(false);setCargaOpen(null);setShowCargaPag(true)}},
         ]
         return (
@@ -20011,13 +20021,6 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 <span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span>
               </div>
             )})()}
-            {notaNoNuestras.items.length>0&&(
-              <div onClick={()=>{ setNoNSel(new Set(notaNoNuestras.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:notaNoNuestras.n>0?C.overdueBg:C.surface,border:`1px solid ${notaNoNuestras.n>0?C.overdueText+'44':C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
-                <span style={{width:30,height:30,borderRadius:10,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:notaNoNuestras.n>0?C.overdueText:C.text}}>{notaNoNuestras.n>0?<>{notaNoNuestras.n} OT que no son nuestras{notaNoNuestras.nPend>0?` · ${notaNoNuestras.nPend} por consultar`:' · ya consultadas'}</>:<>OT que no son nuestras · {notaNoNuestras.resueltas.length} resuelta{notaNoNuestras.resueltas.length!==1?'s':''}</>}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>OT correctas pero no las paga la oficina — consúltalas a la notaría</div></div>
-                <span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span>
-              </div>
-            )}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8}}>
               {cards.map(c=>(
                 <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
@@ -20029,8 +20032,25 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 </div>
               ))}
             </div>
-            {/* Bitácora del recordatorio automático (días 10 y 20 · día hábil siguiente): qué se pidió, a quién y cuándo. */}
-            <div style={{marginTop:14}}><BitacoraLista prefijo='notaria.recordatorio' titulo='Recordatorios para pedir la liquidación' etiquetas={{'notaria.recordatorio_liquidacion':'Recordatorio enviado','notaria.recordatorio_liquidacion_prueba':'Recordatorio de prueba'}} limite={8} vacio='Aún no se ha enviado ninguno · salen los días 10 y 20 (o el día hábil siguiente).'/></div>
+            {/* Avisos como tarjetas hermanas bajo las 4: "No son nuestras" (roja si hay por resolver) y "Recordatorios" (bitácora del pedido de liquidación, días 10 y 20). */}
+            {(()=>{ const nn=notaNoNuestras, hayNN=nn.items.length>0, rojo=nn.n>0
+              const tile=(k,{ic,t,s,bg,cardBg,cardBd,tCol,go})=>(
+                <div key={k} onClick={go} style={{cursor:'pointer',background:cardBg||C.surface,border:`1px solid ${cardBd||C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82,minWidth:0,gridColumn:hayNN?undefined:'1 / -1'}}>
+                  <span style={{width:32,height:32,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{ic}</span>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:600,color:tCol||C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div>
+                  </div>
+                </div>)
+              return (
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginTop:D?12:8}}>
+                  {hayNN&&tile('nn',{t:'No son nuestras', s:rojo?`${nn.n} OT · ${nn.nPend>0?`${nn.nPend} por consultar`:'consultadas'}`:`${nn.resueltas.length} resuelta${nn.resueltas.length!==1?'s':''}`,
+                    ic:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={rojo?C.overdueText:C.muted} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg>,
+                    bg:rojo?C.surface:C.bgSoft, cardBg:rojo?C.overdueBg:undefined, cardBd:rojo?C.overdueText+'44':undefined, tCol:rojo?C.overdueText:undefined,
+                    go:()=>{ setNoNSel(new Set(nn.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }})}
+                  <BitacoraUltima prefijo='notaria.recordatorio' render={u=>tile('rec',{t:'Recordatorios', s:u===undefined?'…':u?`último ${fmtFechaDMY(isoLocal(u.created_at))}`:'días 10 y 20',
+                    ic:<SIcon n='mail' s={17} c={C.muted}/>, bg:C.bgSoft, go:()=>setNotaTab('recordatorios')})}/>
+                </div>) })()}
           </div>
         )
       })()}
@@ -20090,6 +20110,11 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         )
       })()}
       {/* Vista "No son nuestras": OT no reconocidas acumuladas de las cargas — se consultan a la notaría cuando quieras (no solo en la carga) */}
+      {showNotaria&&notaTab==='recordatorios'&&(
+        <div style={{padding:isDesktop?'8px 22px 44px':'6px 12px 30px',maxWidth:isDesktop?760:undefined,margin:'0 auto'}}>
+          <BitacoraLista prefijo='notaria.recordatorio' titulo='Recordatorios para pedir la liquidación' etiquetas={{'notaria.recordatorio_liquidacion':'Recordatorio enviado','notaria.recordatorio_liquidacion_prueba':'Recordatorio de prueba'}} limite={30} vacio='Aún no se ha enviado ninguno · salen los días 10 y 20 (o el día hábil siguiente).'/>
+        </div>
+      )}
       {showNotaria&&notaTab==='nonuestras'&&(()=>{
         // OT que no son nuestras (render aprobado 2026-10-08): se guardan completas por N° de OT, con historial; resolver NO las borra.
         // Botones: UN solo estilo (nb) — mismo alto (34), tipografía (12.5/600), radio y alineación en toda la vista; el CTA del panel 38.
