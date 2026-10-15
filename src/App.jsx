@@ -18455,7 +18455,8 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   const [notaPersonaPick,setNotaPersonaPick] = useState(null)
   const PERSONAS_NOTA = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   // Agrupa los pendientes: por cliente (con su saldo de fondos), personales (personal_de) y sin asignar.
-  const notaGroups = useMemo(()=>{ const byClient={},personal={},sin=[]; notariaPend.forEach(e=>{ if(e.client_id){(byClient[e.client_id]=byClient[e.client_id]||[]).push(e)} else if(e.personal_de){(personal[e.personal_de]=personal[e.personal_de]||[]).push(e)} else sin.push(e) }); return {byClient,personal,sin} },[notariaPend])
+  // Incobrables (castigo): la oficina paga la OT a la notaría y no se le cobra al cliente → grupo propio, sin chequeo de fondo del cliente.
+  const notaGroups = useMemo(()=>{ const byClient={},personal={},sin=[],asume=[]; notariaPend.forEach(e=>{ if(e.incobrable_at){ asume.push(e); return } if(e.client_id){(byClient[e.client_id]=byClient[e.client_id]||[]).push(e)} else if(e.personal_de){(personal[e.personal_de]=personal[e.personal_de]||[]).push(e)} else sin.push(e) }); return {byClient,personal,sin,asume} },[notariaPend])
   const marcarPersonal = async(e,persona)=>{ const patch={personal_de:persona||null, paid_by_client: persona?false:(e.category==='Notaria')}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); setNotaPersonaPick(null); logActividad('notaria.personal',{tabla:'expenses',id:e.id,detalle:{persona:persona||null,title:[e.ot_number?fmtOt(e.ot_number):null,e.concept].filter(Boolean).join(' · '),monto:e.amount}}) }catch(err){appAlert('Error: '+err.message)} }
   // Triage de gasto de oficina (Liberona Escala) → personal de un miembro: lo saca del folder de la oficina y queda como personal.
   const esOficina = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
@@ -18517,7 +18518,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     </div>
   )}
   // ¿la selección incluye gastos de clientes sin fondos? (adelantaríamos plata de la oficina)
-  const notaSinFondosSel = notaSel.filter(e=>e.client_id && saldoCliente(expenses,e.client_id)<0)
+  const notaSinFondosSel = notaSel.filter(e=>e.client_id && !e.incobrable_at && saldoCliente(expenses,e.client_id)<0)
   const periodoNota = gs => { const fs=gs.map(e=>e.date).filter(Boolean).sort(); if(!fs.length) return new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const mY=d=>new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); return mY(fs[0])===mY(fs[fs.length-1])?mY(fs[0]):`${fmtFechaDMY(fs[0])} – ${fmtFechaDMY(fs[fs.length-1])}` }
 
   // Liquidar = GUARDAR la liquidación como 'por_enviar' (sin correo). El envío a la notaría es un 2º paso (enviarNotaria).
@@ -20224,10 +20225,11 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         let sinFondoT=notaGroups.sin.reduce((a,e)=>a+(e.amount||0),0)
         let conFondoT=0,adelantoT=0; Object.entries(notaGroups.byClient).forEach(([cid,gs])=>{ const ap=gs.reduce((a,e)=>a+(e.amount||0),0); const d=dispCliente(cid).disp; conFondoT+=Math.min(ap,d); adelantoT+=Math.max(0,ap-d) })
         Object.entries(notaGroups.personal).forEach(([persona,gs])=>{ const ap=gs.reduce((a,e)=>a+(e.amount||0),0); const d=dispPersona(persona).disp; conFondoT+=Math.min(ap,d); sinFondoT+=Math.max(0,ap-d) })
+        const asumeT=notaGroups.asume.reduce((a,e)=>a+(e.amount||0),0)
         // Selección: cuánto se paga con el fondo de cada cliente vs cuánto adelanta la oficina — total y por abogado (misma lógica de antes).
-        const selByCli={}; notaSel.forEach(e=>{ const k=e.client_id||(e.personal_de?'p:'+e.personal_de:'__none__'); selByCli[k]=(selByCli[k]||0)+(e.amount||0) })
-        let conFondo=0, adelanto=0; const porAbg={}
-        Object.entries(selByCli).forEach(([cid,sel])=>{ const d=cid.startsWith('p:')?dispPersona(cid.slice(2)).disp:dispCliente(cid).disp; const con=Math.min(sel,d), ade=Math.max(0,sel-d); conFondo+=con; adelanto+=ade; const resp=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'; const o=porAbg[resp]=porAbg[resp]||{con:0,ade:0}; o.con+=con; o.ade+=ade })
+        const selByCli={}; notaSel.forEach(e=>{ const k=e.incobrable_at?'__asume__':(e.client_id||(e.personal_de?'p:'+e.personal_de:'__none__')); selByCli[k]=(selByCli[k]||0)+(e.amount||0) })
+        let conFondo=0, adelanto=0, asumeSel=0; const porAbg={}
+        Object.entries(selByCli).forEach(([cid,sel])=>{ if(cid==='__asume__'){ asumeSel+=sel; return } const d=cid.startsWith('p:')?dispPersona(cid.slice(2)).disp:dispCliente(cid).disp; const con=Math.min(sel,d), ade=Math.max(0,sel-d); conFondo+=con; adelanto+=ade; const resp=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'; const o=porAbg[resp]=porAbg[resp]||{con:0,ade:0}; o.con+=con; o.ade+=ade })
         const abgs=Object.entries(porAbg).sort((a,b)=>(b[1].con+b[1].ade)-(a[1].con+a[1].ade))
         const D=isDesktop
         const lblK={fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}
@@ -20239,7 +20241,20 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const nAdel=cliEnt.filter(x=>x.ap>x.d).length
         const perSin=perEnt.filter(x=>x.ap>x.d).map(x=>x.persona)
         const pctP=v=>notaPendTotal>0?Math.round(v/notaPendTotal*100)+'%':''
-        const partes=[['con','Con saldo',conFondoT,C.greenText,`${nCon} con fondo para pagar`],['adel','Adelanta oficina',adelantoT,C.soonText,`${nAdel} cliente${nAdel!==1?'s':''} · pedir fondos`],...(sinFondoT>0?[['pers','Personal sin saldo',sinFondoT,C.muted,perSin.join(' · ')||'sin cliente asignado']]:[])]
+        // "Lo que tiene fondos": por cliente/persona, las OT más antiguas primero mientras alcance su disponible (salta las que no caben);
+        // la oficina (Liberona Escala) e incobrables (asume la oficina) van completas. Misma regla de bloqueo que la selección manual.
+        const pagables=(()=>{ const ids=[]; const byDate=(a,b)=>String(a.date||'9999').localeCompare(String(b.date||'9999'))||String(a.ot_number||'').localeCompare(String(b.ot_number||''))
+          const tomar=(gs,disp)=>{ let used=0; [...gs].sort(byDate).forEach(e=>{ if(disp===Infinity||used+(e.amount||0)<=disp){ used+=(e.amount||0); ids.push(e) } }) }
+          Object.entries(notaGroups.byClient).forEach(([cid,gs])=>tomar(gs,dispCliente(cid).disp))
+          Object.entries(notaGroups.personal).forEach(([persona,gs])=>tomar(gs,dispPersona(persona).disp))
+          notaGroups.asume.forEach(e=>ids.push(e))
+          return ids })()
+        const pagablesT=pagables.reduce((a,e)=>a+(e.amount||0),0)
+        const btnPagables = pagables.length>0 && (
+          <button onClick={()=>{ setSelNota(new Set(pagables.map(e=>e.id))); setNotaConfirm(false) }} title={`${pagables.length} OT: lo que cubre el fondo de cada cliente o persona, más lo de la oficina y lo que asume`} style={{width:'100%',minHeight:38,marginTop:10,borderRadius:9,border:`1px solid ${C.greenText}`,background:C.greenBg,color:C.greenText,fontSize:12.5,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'0 12px'}}>
+            <span style={{whiteSpace:'nowrap'}}>Seleccionar con fondos</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(pagablesT)}</span>
+          </button>)
+        const partes=[['con','Con saldo',conFondoT,C.greenText,`${nCon} con fondo para pagar`],['adel','Adelanta oficina',adelantoT,C.soonText,`${nAdel} cliente${nAdel!==1?'s':''} · pedir fondos`],...(sinFondoT>0?[['pers','Personal sin saldo',sinFondoT,C.muted,perSin.join(' · ')||'sin cliente asignado']]:[]),...(asumeT>0?[['asume','Asume la oficina',asumeT,C.grisText,`${notaGroups.asume.length} OT incobrable${notaGroups.asume.length!==1?'s':''}`]]:[])]
         const hero = (
           <div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,padding:'12px 14px'}}>
             <div style={{...lblK,color:C.accent}}>Pendiente a notaría</div>
@@ -20258,6 +20273,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                     <span style={{fontSize:10.5,color:C.muted}}>{pctP(v)}</span>
                     <span style={{fontSize:13,fontWeight:700,color:col===C.muted?C.text:col,fontVariantNumeric:'tabular-nums',minWidth:84,textAlign:'right'}}>{fmt(v)}</span>
                   </div>) })}</div>}
+            {btnPagables}
           </div>)
         const selBox = selNota.size>0 && (
           <div style={{background:adelanto>0?C.overdueBg:C.azulBg,border:`1px solid ${adelanto>0?C.overdueText:C.accent}`,borderRadius:12,padding:'11px 13px'}}>
@@ -20265,6 +20281,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,marginTop:2}}><span style={{fontSize:13,fontWeight:700,color:adelanto>0?C.overdueText:C.accent}}>{selNota.size} OT</span><span style={{fontSize:16,fontWeight:800,color:adelanto>0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(notaTotal)}</span></div>
             {ln('Con saldo',fmt(conFondo),C.greenText)}
             {ln('Adelanto',fmt(adelanto),adelanto>0?C.overdueText:null)}
+            {asumeSel>0&&ln('Asume la oficina',fmt(asumeSel))}
             {abgs.length>0&&<div style={{borderTop:'0.5px solid rgba(83,114,129,.25)',marginTop:6,paddingTop:6}}>
               <div style={{...lblK,marginBottom:2}}>Fondos por abogado</div>
               {abgs.map(([resp,o])=><Fragment key={resp}>{ln(resp==='__sin__'?'Sin responsable':String(resp).split(' ')[0],fmt(o.con+o.ade))}{o.ade>0&&<div style={{fontSize:10.5,color:C.overdueText,textAlign:'right',marginTop:-2}}>adelanto {fmt(o.ade)}</div>}</Fragment>)}
@@ -20378,7 +20395,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               </div>)
           })
         })()
-        const personales=!notaResp?Object.entries(notaGroups.personal).map(([persona,gsAll])=>{ const gs=qq?gsAll.filter(e=>matchE(e,persona)):gsAll; if(qq&&!gs.length) return null; if(deudaEstF){ const dd=dispPersona(persona).disp, tt=gsAll.reduce((a,e)=>a+(e.amount||0),0); if(deudaEstF==='adel'||(deudaEstF==='con'&&!(dd>0))||(deudaEstF==='pers'&&!(tt>dd))) return null } const pc=personChip(persona); const k='p:'+persona; const open=!!qq||notaCliOpen.has(k); const tot=gsAll.reduce((a,e)=>a+(e.amount||0),0); const {fondo:fP,disp:dP,otros:oP}=dispPersona(persona); const sinFP=dP<=0, cubreP=dP>=tot; return (
+        const personales=!notaResp?Object.entries(notaGroups.personal).map(([persona,gsAll])=>{ const gs=qq?gsAll.filter(e=>matchE(e,persona)):gsAll; if(qq&&!gs.length) return null; if(deudaEstF){ const dd=dispPersona(persona).disp, tt=gsAll.reduce((a,e)=>a+(e.amount||0),0); if(deudaEstF==='adel'||deudaEstF==='asume'||(deudaEstF==='con'&&!(dd>0))||(deudaEstF==='pers'&&!(tt>dd))) return null } const pc=personChip(persona); const k='p:'+persona; const open=!!qq||notaCliOpen.has(k); const tot=gsAll.reduce((a,e)=>a+(e.amount||0),0); const {fondo:fP,disp:dP,otros:oP}=dispPersona(persona); const sinFP=dP<=0, cubreP=dP>=tot; return (
           <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {(()=>{ const defP=Math.max(0,tot-dP); const estP=sinFP?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubreP?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}; return filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
               nombreOT(<>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></>,gsAll.length),
@@ -20387,6 +20404,16 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               montoEst(tot,estP)) })()}
             {open&&<div>{gs.map(e=>notaRow(e,false,false,notaQ))}</div>}
           </div>)}):null
+        const asGs=(qq?notaGroups.asume.filter(e=>matchE(e,cliName(e.client_id))):notaGroups.asume)
+        const asumeBlock=!notaResp&&asGs.length>0&&(!deudaEstF||deudaEstF==='asume')&&(()=>{ const k='__asume__'; const open=!!qq||notaCliOpen.has(k); return (
+          <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
+            {filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
+              nombreOT('Asume la oficina',notaGroups.asume.length),
+              <>Incobrables · no se cobran al cliente</>,
+              colD('Paga','la oficina',C.muted),
+              montoEst(asumeT,null))}
+            {open&&<div>{asGs.map(e=><div key={e.id}><div style={{fontSize:11,fontWeight:700,color:C.accent,padding:D?'7px 14px 0 42px':'7px 12px 0 40px',borderTop:`0.5px solid ${C.border}`}}>{onOpenClientFicha?<span onClick={()=>onOpenClientFicha(e.client_id)} style={{cursor:'pointer'}}>{cliName(e.client_id)}</span>:cliName(e.client_id)}</div>{notaRow(e,false,false,notaQ)}</div>)}</div>}
+          </div>) })()
         const sinGs=qq?notaGroups.sin.filter(e=>matchE(e)):notaGroups.sin
         const sinBlock=!notaResp&&sinGs.length>0&&(!deudaEstF||deudaEstF==='pers')&&(()=>{ const k='__sinasignar__'; const open=!!qq||notaCliOpen.has(k); const tot=notaGroups.sin.reduce((a,e)=>a+(e.amount||0),0); return (
           <div style={{border:`1px dashed ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
@@ -20423,7 +20450,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               </div>
             )})}
           </div>)
-        const nada = !entries.length && !(personales||[]).some(Boolean) && !sinBlock
+        const nada = !entries.length && !(personales||[]).some(Boolean) && !sinBlock && !asumeBlock
         const lista = (
           <div style={{flex:1,minWidth:0}}>
             {!D&&toolbar}
@@ -20434,6 +20461,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {listaClientes}
             {personales}
             {sinBlock}
+            {asumeBlock}
             {anulados}
             {!D&&<div style={{marginTop:12}}>{bitacora}</div>}
           </div>)
