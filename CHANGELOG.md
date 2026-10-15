@@ -600,3 +600,4 @@
 - 2026-10-15 · Notaría › Deuda: los gastos personales se cubren con el fondo de esa persona (fondo por rendir de un tercero); Inicio: se quita texto suelto bajo Costos de terceros.
 - 2026-10-15 · Notaría › Bitácora: etiquetas legibles para ajustes de revisión y OT cargadas.
 - 2026-10-15 · Notaría › Deuda: ordenar por Nombre/Monto/Saldo/OT; estados Con saldo · Parcial · Sin saldo; segunda línea saldo + queda/déficit; rojo solo en chip y déficit. Cobranza: fecha día-grande con el formato estándar (mes en minúscula).
+- 2026-10-15 · Facturas del mes: lista con fondo blanco y separadores sutiles entre facturas.

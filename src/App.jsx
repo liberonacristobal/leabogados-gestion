@@ -3427,7 +3427,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
           {segBtn('porcobrar','Por cobrar',pcTot,porCobrar.length,{fg:C.soonText,bg:C.soonBg,bd:'#EAD9A8'})}
           {segBtn('pagadas','Pagadas',pagTot,pagadas.length,{fg:C.greenText,bg:C.greenBg,bd:'#BFE0CF'})}
         </div>
-        <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+        <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.tileBg}}>
           {list.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'34px 0'}}>Sin facturas {tab==='pagadas'?'pagadas':'por cobrar'} este mes.</div>}
           {list.map((b,i)=>{ const parcial=tab==='pagadas'&&saldoBill(b)>0; const est=estadoCobro(b)
             const monto=tab==='pagadas'?cobradoBill(b):saldoBill(b); const rs=rsDe(b); const cl=clients.find(c=>String(c.id)===String(b.client_id))
@@ -3437,7 +3437,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
               : {t:est.label,bg:est.bg,c:est.text}
             const fecha = tab==='pagadas' ? (b.paid_at?`cobrada ${fmtFechaDMY(b.paid_at)}`:'pagada') : `vence ${fmtFechaDMY(venceBill(b))}`
             return (
-            <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'flex-start',gap:11,padding:'12px 13px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',cursor:onOpenFactura?'pointer':'default'}}>
+            <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'flex-start',gap:11,padding:'12px 13px',borderTop:i>0?`1px solid ${C.tileLine}`:'none',cursor:onOpenFactura?'pointer':'default'}}>
               <span style={{marginTop:1,flexShrink:0}}><SIcon n={icon.n} s={19} c={icon.c}/></span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl&&onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(cl.id)}} style={{cursor:'pointer'}}>{cn(b.client_id)}</span>:cn(b.client_id)}</div>
