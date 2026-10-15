@@ -19126,7 +19126,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [hubOpen,setHubOpen] = useState(()=>{ const vm=viewMemLeer('gastos'); return vm ? vm.hubOpen : !gastosVolverLeer() })
   // Revisión de gastos cargados a la oficina por el equipo: quién revisa sale de miembros.revisa_gastos (configurable por estudio).
   const [showRevOfi,setShowRevOfi] = useState(false)
-  const [avisosOpen,setAvisosOpen] = useState(false)
+  const [showRevisar,setShowRevisar] = useState(()=>!!viewMemLeer('gastos')?.showRevisar)   // página Revisar: Caja chica + Gastos (revisión del equipo)
+  const [revCaja,setRevCaja] = useState(false)   // Revisar › Caja chica: cajas del equipo
   const [cuentaP,setCuentaP] = useState(null)   // cuenta personal de un miembro abierta (Gastos › Equipo)   // hub de Gastos: avisos (caja chica / revisión) plegados por defecto
   const [miembrosRev,setMiembrosRev] = useState({revisores:[],admins:[]})
   useEffect(()=>{ if(DEMO){ setMiembrosRev({revisores:[{email:'martin@demo',nombre:'Martín'}],admins:[{nombre:'Cristóbal'},{nombre:'Erasmo'}]}); return } let on=true; supabase.from('miembros').select('email,nombre,rol,revisa_gastos').then(({data})=>{ if(!on||!data) return; setMiembrosRev({revisores:data.filter(m=>m.revisa_gastos),admins:data.filter(m=>m.rol==='admin')}) },()=>{}); return ()=>{on=false} },[])
@@ -19140,7 +19141,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [cobrosQ,setCobrosQ] = useState('')                // buscador en Cobros (vista por OT)
   const [qMovG,setQMovG] = useState('')             // buscador dentro de los gastos del cliente abierto
   useEffect(()=>{ setQMovG('') },[selectedClient?.id])
-  useEffect(()=>{ viewMemGuardar('gastos',{hubOpen,selId:selectedClient?.id||null,showBuscarClientes,showNotaria,notaTab}) },[hubOpen,selectedClient?.id,showBuscarClientes,showNotaria,notaTab])
+  useEffect(()=>{ viewMemGuardar('gastos',{hubOpen,selId:selectedClient?.id||null,showBuscarClientes,showNotaria,notaTab,showRevisar}) },[hubOpen,selectedClient?.id,showBuscarClientes,showNotaria,notaTab,showRevisar])
   const [noNQ,setNoNQ] = useState('')               // "No son nuestras": buscador
   const [noNOpen,setNoNOpen] = useState(null)        // "No son nuestras": OT con su detalle desplegado
   const [noNResOpen,setNoNResOpen] = useState(false) // "No son nuestras": sección Resueltas desplegada
@@ -19532,7 +19533,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 if(showHistorial){setShowHistorial(false);setShowRendiciones(true);setRendSub(null);return}   // Historial (de rendiciones) → Rendiciones
                 if(showNotaria){ if(notaTab==='enviar'){ setNotaSend(null); if(notaOrigen==='historial'){ setNotaOrigen(null); setShowNotaria(false); setNotaTab('hub'); setShowHistorial(true); return } setNotaTab('pagados');return} if(notaTab!=='hub'){setNotaTab('hub');return} setShowNotaria(false);setHubOpen(true);return }   // enviar → Pagos ; sub → Notaría ; Notaría → hub
                 setHubOpen(true)                                                                              // Clientes (default) → hub
-              }} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}><Gl n='chevL'/></button>
+              }} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'inline-flex',alignItems:'center',gap:8}}><BackBtn origen={
+                selectedClient?'Gastos':showOrphans?'Revisión':showRevision?(revSub?'Revisión':'Clientes'):(showReasignar||showBuscarClientes)?'Clientes':showRendiciones?(rendSub?'Rendiciones':'Gastos'):showHistorial?'Rendiciones':showNotaria?(notaTab==='enviar'?'Historial':notaTab!=='hub'?'Notaría':'Gastos'):'Gastos'}/><span style={{color:C.textSoft,fontWeight:400}}>|</span></button>
             )}
             <div style={{minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
@@ -19870,7 +19872,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const pend90Tot=pend90.reduce((a,r)=>a+(r.monto||0),0)
         const cardBase={cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 15px'}
         const iconSq=(ic,bg,col)=><span style={{width:34,height:34,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:10}}><SIcon n={ic} s={18} c={col}/></span>
-        const wrap=ch=><div style={{padding:'4px 20px 100px',...(isDesktop?{maxWidth:760,margin:'0 auto'}:{})}}>{ch}</div>
+        const wrap=ch=><div style={{padding:isDesktop?'4px 22px 100px':'4px 12px 100px',...(isDesktop?{maxWidth:760,margin:'0 auto'}:{})}}>{ch}</div>
         if(rendSub==='rendir'){
           const q2=q.trim().toLowerCase(); const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
           const lista=(clientsWithMovs||[]).filter(c=>c.status!=='Terminado'&&!esOficina(c.id)).filter(c=>!q2||nrm(c.name).includes(nrm(q2))).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))
@@ -19906,11 +19908,11 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           </>)
         }
         return wrap(
-          <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:11}}>
-            <div onClick={()=>{setQ('');setRendSub('rendir')}} style={cardBase}>{iconSq('receipt',C.azulBg,C.accent)}<div style={{fontSize:15,fontWeight:700,color:C.text}}>Rendir a cliente</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>buscar y rendir gastos</div></div>
-            <div onClick={()=>setRendSub('pend')} style={cardBase}>{iconSq('alert',pend90.length?C.soonBg:C.azulBg,pend90.length?C.soonText:C.accent)}<div style={{fontSize:15,fontWeight:700,color:C.text}}>Pendientes</div><div style={{fontSize:12,color:pend90.length?C.soonText:C.muted,marginTop:2}}>{pend90.length?`${pend90.length} cliente${pend90.length!==1?'s':''} · +90 días`:'al día'}</div></div>
-            <div onClick={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}} style={cardBase}>{iconSq('clock',C.azulBg,C.accent)}<div style={{fontSize:15,fontWeight:700,color:C.text}}>Historial</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>rendiciones enviadas</div></div>
-            {<div onClick={()=>onSolicitarFondos&&onSolicitarFondos()} style={cardBase}>{iconSq('mail',C.soonBg,C.soonText)}<div style={{fontSize:15,fontWeight:700,color:C.text}}>Solicitar fondos</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>pedir provisión</div></div>}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:isDesktop?12:8}}>
+            <HubTile ic='receipt' bg={C.azulBg} col={C.accent} t='Rendir a cliente' s='buscar y rendir gastos' sM='rendir gastos' onClick={()=>{setQ('');setRendSub('rendir')}}/>
+            <HubTile ic='alert' bg={pend90.length?C.soonBg:C.azulBg} col={pend90.length?C.soonText:C.accent} t='Pendientes' s={pend90.length?`${pend90.length} cliente${pend90.length!==1?'s':''} · +90 días`:'al día'} sM={pend90.length?`${pend90.length} con +90 días`:'al día'} sCol={pend90.length?C.soonText:undefined} onClick={()=>setRendSub('pend')}/>
+            <HubTile ic='clock' bg={C.azulBg} col={C.accent} t='Historial' s='rendiciones enviadas' sM='enviadas' onClick={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}}/>
+            <HubTile ic='mail' bg={C.soonBg} col={C.soonText} t='Solicitar fondos' s='pedir provisión' onClick={()=>onSolicitarFondos&&onSolicitarFondos()}/>
           </div>
         )
       })()}
@@ -20005,14 +20007,13 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       {showNotaria&&notaTab==='hub'&&(()=>{
         const D=isDesktop
         const cards=[
-          {t:'Pagar', ic:'clock', s:notariaPend.length?`${notariaPend.length} OT · ${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.soonText, bg:C.ambarBg, go:()=>setNotaTab('pend')},
+          {t:'Pagar', ic:'clock', s:notariaPend.length?`${notariaPend.length} OT · ${fmtShort(notaPendTotal)} por pagar`:'al día', sM:notariaPend.length?`${fmtShort(notaPendTotal)} · ${notariaPend.length} OT`:'al día', col:C.soonText, bg:C.ambarBg, go:()=>setNotaTab('pend')},
           {t:'Cobros', ic:'exchange', s:notaLedger.n?`${notaLedger.n} OT · ${fmtShort(notaLedger.total)}`:'lo que nos cobran', col:C.azulInfo, bg:C.azulBg, go:()=>{setCobrosQ('');setCobEst('');setCobMes('');setCobAnio('');setCobOpenM(null);setNotaTab('cobros')}},
           {t:'Historial', ic:'check', s:notaLiquidaciones.length?`${notaLiquidaciones.length} pago${notaLiquidaciones.length!==1?'s':''} · ${fmtShort(notaLiquidaciones.reduce((a,r)=>a+(r.total||0),0))}`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
           {t:'Carga masiva', ic:'file', s:'importar · correo', col:C.muted, bg:C.bgSoft, go:()=>{setShowNotaria(false);setHubOpen(false);setCargaOpen(null);setShowCargaPag(true)}},
         ]
         return (
           <div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
-            <div style={{textAlign:'right',fontSize:12,color:C.muted,marginBottom:12,marginTop:-2}}>{fmtShort(notaPendTotal)} pendiente</div>
             {(()=>{ const sinCli=notaGroups.sin||[]; if(!sinCli.length) return null; const diasDe=e=>e.created_at?Math.floor((Date.now()-new Date(e.created_at).getTime())/86400000):0; const venc=sinCli.filter(e=>diasDe(e)>=3); const alerta=venc.length>0; return (
               <div onClick={()=>setNotaTab('pend')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:alerta?C.overdueBg:C.soonBg,border:`1px solid ${alerta?'#F3C9C4':'#F0D88A'}`,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
                 <span style={{width:30,height:30,borderRadius:10,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='clock' s={16} c={alerta?C.overdueText:C.soonText}/></span>
@@ -20021,30 +20022,15 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               </div>
             )})()}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8}}>
-              {cards.map(c=>(
-                <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82}}>
-                  <span style={{width:32,height:32,borderRadius:10,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={c.ic} s={17} c={c.col}/></span>
-                  <div>
-                    <div style={{fontSize:15,fontWeight:600,color:C.text}}>{c.t}</div>
-                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>{c.s}</div>
-                  </div>
-                </div>
-              ))}
+              {cards.map(c=><HubTile key={c.t} ic={c.ic} t={c.t} s={c.s} sM={c.sM} col={c.col} bg={c.bg} onClick={c.go}/>)}
             </div>
             {/* Avisos como tarjetas hermanas bajo las 4: "No son nuestras" (roja si hay por resolver) y "Recordatorios" (bitácora del pedido de liquidación, días 10 y 20). */}
             {(()=>{ const nn=notaNoNuestras, hayNN=nn.items.length>0, rojo=nn.n>0
-              const tile=(k,{ic,t,s,bg,cardBg,cardBd,tCol,go})=>(
-                <div key={k} onClick={go} style={{cursor:'pointer',background:cardBg||C.surface,border:`1px solid ${cardBd||C.border}`,borderRadius:12,padding:D?'14px 15px':'12px 12px',display:'flex',flexDirection:'column',gap:D?11:9,minHeight:D?92:82,minWidth:0,gridColumn:hayNN?undefined:'1 / -1'}}>
-                  <span style={{width:32,height:32,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{ic}</span>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:15,fontWeight:600,color:tCol||C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</div>
-                    <div style={{fontSize:12,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div>
-                  </div>
-                </div>)
+              const tile=(k,{ic,t,s,sM,bg,cardBg,cardBd,tCol,go})=><div key={k} style={{gridColumn:hayNN?undefined:'1 / -1',minWidth:0}}><HubTile icNode={ic} t={t} s={s} sM={sM} bg={bg} cardBg={cardBg} cardBd={cardBd} tCol={tCol} onClick={go}/></div>
               return (
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginTop:D?12:8}}>
-                  {hayNN&&tile('nn',{t:'No son nuestras', s:rojo?`${nn.n} OT · ${nn.nPend>0?`${nn.nPend} por consultar`:'consultadas'}`:`${nn.resueltas.length} resuelta${nn.resueltas.length!==1?'s':''}`,
-                    ic:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={rojo?C.overdueText:C.muted} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg>,
+                  {hayNN&&tile('nn',{t:'No son nuestras', s:rojo?`${nn.n} OT · ${nn.nPend>0?`${nn.nPend} por consultar`:'consultadas'}`:`${nn.resueltas.length} resuelta${nn.resueltas.length!==1?'s':''}`, sM:rojo?(nn.nPend>0?`${nn.nPend} por consultar`:`${nn.n} consultadas`):`${nn.resueltas.length} resuelta${nn.resueltas.length!==1?'s':''}`,
+                    ic:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={rojo?C.overdueText:C.muted} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg>,
                     bg:rojo?C.surface:C.bgSoft, cardBg:rojo?C.overdueBg:undefined, cardBd:rojo?C.overdueText+'44':undefined, tCol:rojo?C.overdueText:undefined,
                     go:()=>{ setNoNSel(new Set(nn.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }})}
                   <BitacoraUltima prefijo='notaria.recordatorio' render={u=>tile('rec',{t:'Recordatorios', s:u===undefined?'…':u?`último ${fmtFechaDMY(isoLocal(u.created_at))}`:'días 10 y 20',
@@ -20988,6 +20974,47 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{page}</div>:page }
   if(showRevOfi&&(soyRevisor||isAdmin)){ const pg=<RevisionOficinaPage items={revOfiItems} setExpenses={setExpenses} clients={clients} sales={sales} clientEntities={clientEntities} me={currentUserName} isAdmin={isAdmin} revisor={revisorNombre} onBack={()=>setShowRevOfi(false)}/>
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
+  // Revisar = caja chica del equipo + gastos que revisa el equipo. Una sola fuente para la tarjeta del hub y la página.
+  const revisarRes = (isAdmin||soyRevisor) ? (()=>{
+    const alCC = isAdmin ? alertasCajaChica(pettyCash,expenses) : []
+    const negCC = alCC.filter(a=>a.tipo==='negativo'), totNeg = negCC.reduce((t,a)=>t-a.saldo,0)
+    const sinCC = isAdmin ? calceCajaChica(pettyCash,[],{}).cajasSinTransf.length : 0
+    const caja = negCC.length ? {s:`${negCC.length} en negativo · ${fmtMill(totNeg)}`, sM:`${negCC.length} en negativo`, col:C.overdueText} : alCC.length ? {s:`${alCC.length} baja${alCC.length!==1?'s':''}`, col:C.soonText} : sinCC ? {s:`${sinCC} sin conciliar`, col:C.soonText} : {s:'al día'}
+    const nP=revOfiItems.filter(e=>!e.revision_estado).length, nN=revOfiItems.filter(e=>e.revision_estado==='nose').length
+    const gas = isAdmin ? (nN?{s:`${nN} para decidir`,col:C.soonText}:nP?{s:`${nP}${revisorNombre?` de ${revisorNombre}`:' en revisión'}`,col:C.soonText}:{s:'al día'}) : (nP?{s:`${nP} por revisar`,col:C.soonText}:{s:'al día'})
+    const nGas = isAdmin?(nN||nP):nP
+    const resumen = [negCC.length?`${negCC.length} caja${negCC.length!==1?'s':''} en negativo`:sinCC?`${sinCC} caja${sinCC!==1?'s':''} sin conciliar`:null, nGas?`${nGas} gasto${nGas!==1?'s':''}`:null].filter(Boolean).join(' · ')
+    const sinPorPersona={}; if(isAdmin) calceCajaChica(pettyCash,[],{}).cajasSinTransf.forEach(x=>{ const u=x.petty?.user_name; if(u) sinPorPersona[u]=(sinPorPersona[u]||0)+1 })
+    return {alCC, caja, gas, resumen, sinCC, sinPorPersona, col:negCC.length?C.overdueText:resumen?C.soonText:undefined}
+  })() : null
+  if(showRevisar&&revCaja&&revisarRes&&isAdmin){ const r=revisarRes
+    const personas=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].map(persona=>({persona, saldo:saldoCajaChica(pettyCash,expenses,persona), sin:r.sinPorPersona[persona]||0})).sort((a,b)=>a.saldo-b.saldo)
+    const pg=(
+    <FlujoPagina origen='Revisar' titulo='Caja chica' ctx='cajas del equipo' onBack={()=>setRevCaja(false)} maxW={760}>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{personas.map((x,i)=>{ const neg=x.saldo<0, baja=!neg&&x.saldo<=(BRAND.cajaChicaUmbral||0); return (
+        <div key={x.persona} onClick={()=>onEntregarCaja&&onEntregarCaja(x.persona,neg?-x.saldo:null)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:personChip(x.persona).color,whiteSpace:'nowrap'}}>{x.persona}</div>
+            <div style={{fontSize:11.5,color:x.sin?C.soonText:C.muted,fontWeight:x.sin?600:400,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.sin?`${x.sin} sin transferencia`:'conciliada'}</div>
+          </div>
+          <span style={{fontSize:11.5,fontWeight:700,color:C.accent,background:C.azulBg,borderRadius:20,padding:'3px 10px',whiteSpace:'nowrap'}}>Entregar</span>
+          <span style={{fontSize:14,fontWeight:700,color:neg?C.overdueText:baja?C.soonText:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?96:84,textAlign:'right'}}>{fmtSaldoG(x.saldo)}</span>
+        </div>) })}{personas.length===0&&<div style={{padding:22,textAlign:'center',fontSize:13,color:C.muted}}>Sin cajas entregadas.</div>}</div>
+      {onRevisionCajaChica&&<div onClick={onRevisionCajaChica} style={{display:'flex',alignItems:'center',gap:10,marginTop:10,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 14px',cursor:'pointer'}}>
+        <span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>Conciliar con el banco</span>
+        <span style={{fontSize:12,color:r.sinCC?C.soonText:C.muted,fontWeight:r.sinCC?600:400,whiteSpace:'nowrap'}}>{r.sinCC?`${r.sinCC} sin conciliar`:'al día'}</span>
+        <span style={{color:C.textSoft}}><Gl n='chevron'/></span>
+      </div>}
+    </FlujoPagina>)
+    return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
+  if(showRevisar&&revisarRes){ const r=revisarRes; const pg=(
+    <FlujoPagina origen='Gastos' titulo='Revisar' onBack={()=>setShowRevisar(false)} maxW={760}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:isDesktop?12:8}}>
+        {isAdmin&&<HubTile ic='wallet' bg={C.greenBg} col={C.greenText} t='Caja chica' s={r.caja.s} sM={r.caja.sM} sCol={r.caja.col} onClick={()=>setRevCaja(true)}/>}
+        <HubTile ic='check' bg={C.soonBg} col={C.soonText} t='Gastos' s={r.gas.s} sCol={r.gas.col} onClick={()=>setShowRevOfi(true)}/>
+      </div>
+    </FlujoPagina>)
+    return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
   if(pedirOpen) return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pedirModal}</div>:pedirModal
   // ── HUB de Gastos (cara de entrada). Presentación pura: mismas cifras auditadas, sin recalcular nada.
   const showHub = hubOpen && !selectedClient && !showOrphans && !showNotaria && !showHistorial
@@ -21076,55 +21103,21 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     const activos = clientsWithMovs.filter(c=>c.status!=='Terminado')
     const nSin = orphans.length + revN(revNoActivo) + revN(revOcasional)
     const cards = [
-      {t:'Rendiciones', ic:'receipt', s:rendirPend.length?`${rendirPend.length} por rendir · ${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))}`:'al día', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
-      {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} pendiente`:'Sin pendientes', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
+      {t:'Rendiciones', ic:'receipt', s:rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
+      {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
     ]
-    // Caja chica del equipo ↔ banco: tarjeta como las demás (antes fila suelta); abre la revisión en Banco.
-    if(isAdmin&&onRevisionCajaChica){ const sinCC=calceCajaChica(pettyCash,[],{}).cajasSinTransf.length
-      cards.splice(4,0,{t:'Caja chica', ic:'wallet', s:sinCC?`${sinCC} sin conciliar`:'Conciliada', col:C.greenText, bg:C.greenBg, go:onRevisionCajaChica}) }
-    // Avisos del hub (antes filas grandes sueltas): caja chica en negativo/baja (solo admin) y revisión de gastos de oficina.
-    const alCC = isAdmin ? alertasCajaChica(pettyCash,expenses) : []
-    const negCC = alCC.filter(a=>a.tipo==='negativo'), totNeg = negCC.reduce((t,a)=>t-a.saldo,0)
-    const rv = (soyRevisor||isAdmin) ? (()=>{ const nP=revOfiItems.filter(e=>!e.revision_estado).length, nN=revOfiItems.filter(e=>e.revision_estado==='nose').length; const n=isAdmin?nN:nP; if(!n&&!(isAdmin&&nP)) return null
-      return {n:n||nP, txt:isAdmin?(nN?`${nN} para decidir`:`${nP}${revisorNombre?` de ${revisorNombre}`:' en revisión'}`):`${nP} por revisar`} })() : null
-    {
-      const iCC=cards.findIndex(c=>c.t==='Caja chica')
-      if(iCC>=0&&alCC.length) cards[iCC]={...cards[iCC], s:negCC.length?`${negCC.length} en negativo · ${fmtMill(totNeg)}`:`${alCC.length} baja${alCC.length!==1?'s':''}`, sCol:negCC.length?C.overdueText:C.soonText, go:()=>setAvisosOpen(o=>!o)}
-      if(rv) cards.push({t:'Revisión de gastos', ic:'check', s:rv.txt, sCol:C.soonText, col:C.soonText, bg:C.soonBg, go:()=>setShowRevOfi(true)})
-      else if(soyRevisor||isAdmin) cards.push({t:'Revisión de gastos', ic:'check', s:'al día', col:C.soonText, bg:C.soonBg, go:()=>setShowRevOfi(true)})
-    }
-    // Entregas de caja (una línea por persona): se abren al tocar la tarjeta Caja chica cuando hay avisos.
-    const filasCaja = alCC.map(a=>{ const neg=a.tipo==='negativo'; return (
-      <div key={a.persona} onClick={()=>onEntregarCaja&&onEntregarCaja(a.persona,neg?-a.saldo:null)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
-        <span style={{fontSize:12.5,color:C.text,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Caja chica · <b style={{color:personChip(a.persona).color}}>{a.persona}</b></span>
-        <span style={{fontSize:12.5,fontWeight:700,color:neg?C.overdueText:C.soonText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{neg?fmtSaldoG(a.saldo):`quedan ${fmt(a.saldo)}`}</span>
-        <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Entregar <Gl n='chevron'/></span>
-      </div>) })
-    const avisosCaja = avisosOpen && alCC.length>0 && (
-      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>{filasCaja}</div>)
-    // Accesos: mini-tarjetas con ícono (una línea), secundarias a la lista de saldos.
-    const navCard = c => (
-      <div key={c.t} onClick={c.go} style={{cursor:'pointer',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'9px 11px',display:'flex',alignItems:'center',gap:9,minWidth:0}}>
-        <span style={{width:28,height:28,borderRadius:9,background:c.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={c.ic} s={15} c={c.col}/></span>
-        <div style={{minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.t}</div>
-          <div style={{fontSize:11,color:c.sCol||C.muted,fontWeight:c.sCol?600:400,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.s}</div>
-        </div>
-      </div>
-    )
+    if(revisarRes&&D) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
     const hubInner = (
       <div style={{maxWidth:D?960:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',padding:D?'14px 2px 12px':'16px 8px 10px'}}>
           <div style={{display:'flex',alignItems:'baseline',gap:7,minWidth:0}}>
             <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,whiteSpace:'nowrap'}}>Gastos y Fondos</span>
-            <span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>· {activos.length} clientes</span>
           </div>
-          <button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button>
+          <div style={{display:'flex',gap:8}}>{!D&&revisarRes&&<button type='button' onClick={()=>setShowRevisar(true)} style={{...chipBtn(),...(revisarRes.resumen?{color:revisarRes.col}:{})}}>Revisar</button>}<button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button></div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length},minmax(0,1fr))`:'1fr 1fr',gap:8,marginBottom:12}}>
-          {cards.map((c,i)=>(!D&&i===cards.length-1&&cards.length%2)?<div key={c.t} style={{gridColumn:'1 / -1'}}>{navCard(c)}</div>:navCard(c))}
+        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length},minmax(0,1fr))`:'1fr 1fr',gap:D?12:8,marginBottom:12}}>
+          {cards.map(c=><HubTile key={c.t} ic={c.ic} t={c.t} s={c.s} sCol={c.sCol} col={c.col} bg={c.bg} onClick={c.go}/>)}
         </div>
-        {avisosCaja}
         {/* Avisos de caja chica por persona (alertasCajaChica, fuente única): en negativo / baja → "Entregar caja" (Nueva Caja prellenada). Solo si hay alguno.
             SOLO ADMIN: un limited ve únicamente SU caja (regla del proyecto); antes este bloque no revisaba el rol y mostraba la caja de todo el equipo + "Entregar caja". */}
         {!isAdmin&&(()=>{ const tiene=(pettyCash||[]).some(p=>p.user_name===currentUserName); if(!tiene) return null
@@ -25673,7 +25666,7 @@ function PageHeader({origen,onBack,titulo,ctx,right,style}){
   return (
     <div style={{padding:'14px 16px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`,...style}}>
       <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
-        <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer',flexShrink:0}}><span style={{fontSize:17,lineHeight:1}}><Gl n='chevL'/></span> {origen}</span>
+        <BackBtn origen={origen} onBack={onBack}/>
         <span style={{color:C.textSoft,fontWeight:400}}>|</span>
         <span style={{fontSize:16,fontWeight:800,color:C.accent,flexShrink:0}}>{titulo}</span>
         {ctx&&<><span style={{color:C.textSoft,fontWeight:400}}>|</span><span style={{fontSize:13,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctx}</span></>}
@@ -25702,6 +25695,27 @@ function FacturaPage({b,cli,origen,onBack,onOpenClientFicha,children}){
 function PaginaSobre({origen,titulo,ctx,onBack,maxW=640,children}){
   const isDesktop=useIsDesktop()
   return createPortal(<div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,zIndex:650,background:C.bg,overflowY:'auto'}}><FlujoPagina origen={origen} titulo={titulo} ctx={ctx} onBack={onBack} maxW={maxW}>{children}</FlujoPagina></div>, document.body)
+}
+// Tarjeta de acceso de los hubs (Gastos, Notaría, Rendiciones, Revisar): una sola forma en toda la app — ícono a la izquierda, texto a la derecha.
+// sM = subtítulo corto para el celular (todo en 1 línea, sin «…»).
+function HubTile({ic,icNode,t,s,sM,sCol,col,bg,cardBg,cardBd,tCol,onClick}){
+  const D=useIsDesktop()
+  return (
+    <div onClick={onClick} style={{cursor:onClick?'pointer':'default',background:cardBg||C.surface,border:`1px solid ${cardBd||C.border}`,borderRadius:12,padding:D?'12px 14px':'10px 11px',display:'flex',alignItems:'center',gap:D?12:9,minWidth:0}}>
+      <span style={{width:D?34:30,height:D?34:30,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icNode||<SIcon n={ic} s={D?17:15} c={col}/>}</span>
+      <div style={{minWidth:0,flex:1}}>
+        <div style={{fontSize:D?14.5:13,fontWeight:600,color:tCol||C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</div>
+        <div style={{fontSize:D?12:11,color:sCol||C.muted,fontWeight:sCol?600:400,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{D?s:(sM||s)}</div>
+      </div>
+    </div>)
+}
+// Flecha de volver: botón cuadrado con chevrón (blanco de toque cómodo) + origen. Una sola forma en toda la app.
+function BackBtn({origen,onBack}){
+  return (
+    <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:7,cursor:'pointer',flexShrink:0}}>
+      <span style={{width:30,height:30,borderRadius:9,border:`1px solid ${C.border}`,background:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',color:C.accent,fontSize:15,lineHeight:1}}><Gl n='chevL'/></span>
+      {origen&&<span style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{origen}</span>}
+    </span>)
 }
 function FlujoPagina({origen,titulo,ctx,onBack,maxW=1060,children}){
   const isDesktop=useIsDesktop()
@@ -37415,7 +37429,7 @@ const TAB_LABELS = {tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver'
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['miCarga','Mi carga']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['miCarga','Mi carga']],
   limited:[['tasks','Tareas'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
