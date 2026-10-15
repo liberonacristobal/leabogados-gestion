@@ -20477,7 +20477,6 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               esOf?colD('Oficina','gasto propio',C.muted):colSaldo(disp,deficit>0?null:disp-aPagar),
               montoEst(aPagar,esOf?null:est))}
             {open&&<div>
-              {reservadoC>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.azulInfo,background:C.azulBg,padding:'5px 13px',borderTop:`1px solid ${C.border}`}}><span>Otros gastos por pagar</span><b style={{fontVariantNumeric:'tabular-nums'}}>{fmt(reservadoC)}</b></div>}
               {(!cubre||exc)&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'6px 13px',borderTop:`1px solid ${C.border}`}}><span style={{fontSize:12,color:exc?C.overdueText:C.muted,fontWeight:exc?600:400}}>Oficina cubre la diferencia{exc?' · activado':''}</span><Switch on={exc} onToggle={()=>setExcepNota(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})}/></div>}
               {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gsAll.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const excede=(usadoOtros+(e.amount||0)) > disp; return notaRow(e, !on&&!exc&&excede, exc&&excede, notaQ) })}
             </div>}
