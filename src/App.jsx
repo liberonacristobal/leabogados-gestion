@@ -10313,7 +10313,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       {bancoRut.map(p=><div key={p.client.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
         <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.client.id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.client.name} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {p.nFact} factura{p.nFact!==1?'s':''}</span></div>
         <div style={{display:'flex',gap:8,marginTop:6,background:C.azulBg,borderRadius:9,padding:'8px 10px',alignItems:'flex-start'}}>
-          <SIcon n='bank' s={14} c={C.azulInfo}/>
+          <SIcon n='tBanco' s={14} c={C.azulInfo}/>
           <div style={{fontSize:11,color:C.text,lineHeight:1.4,minWidth:0,flex:1}}>Banco: <span style={{color:C.muted}}>{p.bankName}</span> · <b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{p.rut}</b><div style={{fontSize:10,color:C.muted,marginTop:2}}>{p.nMovs} movimiento{p.nMovs!==1?'s':''}</div></div>{amt(fmt(Math.round(p.total)))}
         </div>
         <div style={{display:'flex',gap:8,marginTop:8}}>
