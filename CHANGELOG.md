@@ -602,3 +602,4 @@
 - 2026-10-15 · Notaría › Deuda: ordenar por Nombre/Monto/Saldo/OT; estados Con saldo · Parcial · Sin saldo; segunda línea saldo + queda/déficit; rojo solo en chip y déficit. Cobranza: fecha día-grande con el formato estándar (mes en minúscula).
 - 2026-10-15 · Facturas del mes: lista con fondo blanco y separadores sutiles entre facturas.
 - 2026-10-15 · Notaría › Deuda: panel Pendiente con Con saldo/Adelanta oficina/Personal tocables (filtran), barra con Ordenar + Agrupar ▾ (Cliente/Abogado/Estado) + Solo con saldo; columnas alineadas en escritorio (saldo, queda/déficit, monto con estado debajo); OT en dos líneas sin encabezado; bitácora replegada; móvil compacto.
+- 2026-10-15 · Notaría › Deuda: sin línea de déficit (solo Saldo y, si alcanza, Queda).
