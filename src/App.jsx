@@ -11185,6 +11185,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
   const [filter,setFilter] = useState(()=>viewMemLeer('billing')?.filter||'resumen')
+  useEffect(()=>{ if(DEMO||!user) return; logEvent('vista','billing:'+filter,{},user?.name||user?.email) },[filter])   // eslint-disable-line
   // Deep-link desde los accesos directos del Inicio: abre el cotejo SII o el checklist "Facturas del mes"
   const [cotejoMes,setCotejoMes] = useState(null)   // mes con el que abrir el cotejo (para buscar facturas antiguas del mes de un pago)
   const [cierreOpen,setCierreOpen] = useState(()=>!!viewMemLeer('billing')?.cierreOpen)
@@ -37549,6 +37550,8 @@ export default function App() {
   const [booted,setBooted]=useState(false)   // primera carga completada: las recargas posteriores NO desmontan la UI (no te sacan de donde estabas)
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
+  // Registro de pantallas visitadas (usage_events area 'vista'): para saber con datos qué se usa antes de rediseñar o quitar algo.
+  useEffect(()=>{ if(DEMO||!user?.email) return; logEvent('vista',tab,{},user?.name||user?.email) },[tab,user?.email])   // eslint-disable-line
   const isDesktop = useIsDesktop()   // Fase 1: shell de escritorio (sidebar + ancho) vs móvil actual
   const [modal,_setModal]=useState(null)
   useEffect(()=>{ setActorBitacora(user?.email||null) },[user])   // bitácora: quién hizo cada acción
