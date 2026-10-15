@@ -20128,7 +20128,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               )})}
             </div>
           </div>)
-        const bitacora = <BitacoraLista prefijo='notaria.' titulo='Bitácora' limite={6} vacio='Aún no hay registros de notaría.' etiquetas={{'notaria.liquidada':'Liquidación guardada','notaria.liquidacion_anulada':'Liquidación anulada','notaria.personal':'Marcado personal','notaria.eliminado':'Gasto anulado eliminado','notaria.cliente_asignado':'Cliente asignado','notaria.recordatorio_liquidacion':'Recordatorio para pedir la liquidación','notaria.recordatorio_liquidacion_prueba':'Recordatorio de prueba'}}/>
+        const bitacora = <BitacoraLista prefijo='notaria.' titulo='Bitácora' limite={6} vacio='Aún no hay registros de notaría.' etiquetas={{'notaria.liquidada':'Liquidación guardada','notaria.liquidacion_anulada':'Liquidación anulada','notaria.personal':'Marcado personal','notaria.eliminado':'Gasto anulado eliminado','notaria.cliente_asignado':'Cliente asignado','notaria.recordatorio_liquidacion':'Recordatorio para pedir la liquidación','notaria.recordatorio_liquidacion_prueba':'Recordatorio de prueba','notaria.ajuste_auditoria':'Ajuste de revisión','notaria.ot_cargada':'OT cargada'}}/>
         // ── Lista
         const clientCard=(cid,gsAll)=>{
           const {fondo:fondosC, reservado:reservadoC, disp, oficina:esOf}=dispCliente(cid)
