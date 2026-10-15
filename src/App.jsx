@@ -30553,6 +30553,13 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   },[grupos,aboFilter,saleById,clients])   // eslint-disable-line
   // Facturas vencidas ya contactadas hace poco (dentro del piso) — contexto, sin acción.
   const enEspera = useMemo(()=> (billing||[]).filter(b=>{ if(!facturaCobrable(b)) return false; const dl=daysLeft(b.due); if(!(dl!=null&&dl<0)) return false; const last=recMap[String(b.id)]; if(!last) return false; const gap=Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000); return gap<COBRANZA_GAP }).length, [billing,recMap,hoy])
+  // Reembolsos de gastos facturados e impagos: NO son honorarios (fuera del hero y de los totales, igual que Facturación), pero se cobran → sección aparte.
+  const reembolsos = useMemo(()=>{ const qq=_normTxt(qCob.trim())
+    return (billing||[]).filter(b=>b&&!b.deleted_at&&b.billing_type==='reembolso'&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0)
+      .filter(b=>(!aboFilter||aboDe(b)===aboFilter)&&(!qq||_normTxt(cn(b.client_id)).includes(qq)||_normTxt(b.concept).includes(qq)||String(folioN(b.invoice_no)||'').includes(qCob.trim())))
+      .map(b=>{ const dl=daysLeftB(b); const venc=dl!=null&&dl<0; return {b,acc:null,venc,diasVenc:venc?-dl:0} })
+      .sort((x,y)=>String(x.b.issued_at||'').localeCompare(String(y.b.issued_at||'')))
+  },[billing,qCob,aboFilter,clients,saleById])   // eslint-disable-line
   const vencidoTotal = grupos.reduce((a,g)=>a+g.vencido,0)
   const deudaTotal = grupos.reduce((a,g)=>a+g.total,0)
   const nVencidas = grupos.reduce((a,g)=>a+g.items.filter(x=>x.venc).length,0)
@@ -30784,6 +30791,16 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
           </div>}
         </div>
       )})}
+      {reembolsos.length>0&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginTop:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,marginBottom:4}}>
+          <span style={SEC_LBL}>Reembolsos por cobrar · {reembolsos.length}</span>
+          <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fM(reembolsos.reduce((a,x)=>a+saldoBill(x.b),0))}</span>
+        </div>
+        {reembolsos.map(x=>(<div key={x.b.id}>
+          <div onClick={onOpenClientFicha?()=>onOpenClientFicha(x.b.client_id):undefined} style={{...NOMBRE_CLI,fontSize:13,marginTop:8,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(x.b.client_id)}</div>
+          {detItem(x)}
+        </div>))}
+      </div>}
       <div style={{fontSize:10,color:C.textSoft,marginTop:12}}>Escala sola: amable → firme → final. Al confirmar {LIBERAR_UMBRAL} envíos de un cliente puedes liberarlo a automático.</div>
     </div>
   )
