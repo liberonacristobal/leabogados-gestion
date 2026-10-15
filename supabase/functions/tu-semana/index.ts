@@ -57,12 +57,14 @@ serve(async (req) => {
     }
     const soloNombres: string[] | null = (scope && scope !== "on") ? scope.split(/[,;]+/).map(s=>s.trim()).filter(Boolean) : null;
 
+    // PostgREST corta en 1.000 filas: los gastos se traen por páginas (ya son más de 1.000).
+    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const fetchAll = async () => {
       let last:any = null;
       for (let att=0; att<4; att++){
         const res = await Promise.all([
           sb.from("clients").select("id,name"),
-          sb.from("expenses").select("id,client_id,type,amount,concept,category,created_by,no_descuenta_saldo,client_rendered_at,rendered_at,paid_by_client,notaria_render_id,notaria_liquidado_at,ot_number,date,deleted_at"),
+          pageAll(()=>sb.from("expenses").select("id,client_id,type,amount,concept,category,created_by,no_descuenta_saldo,client_rendered_at,rendered_at,paid_by_client,notaria_render_id,notaria_liquidado_at,ot_number,date,deleted_at").is("deleted_at",null).order("id")),
           sb.from("petty_cash").select("user_name,amount"),
           sb.from("tasks").select("id,client_id,title,status,due,who,assignees,delegated_to,completed_at"),
           sb.from("rendiciones").select("user_name,tipo,estado_envio,sent_at,created_at"),
@@ -117,7 +119,8 @@ serve(async (req) => {
       let notaria:any = null;
       if (persona===NOTARIA_USER) {
         // Martina maneja la notaría: ve TODAS las OT pendientes de liquidar a la notaría (no solo las que cargó ella).
-        const otPend = expenses.filter((e:any)=> e.category==="Notaria" && !e.notaria_render_id && !e.notaria_liquidado_at && (Number(e.amount)||0)>1 && !e.no_descuenta_saldo);
+        // Misma definición que la Deuda de la app (notariaPend): incluye las castigadas (no_descuenta_saldo), que igual se le deben a la notaría.
+        const otPend = expenses.filter((e:any)=> e.type!=="fondo" && e.category==="Notaria" && /\d/.test(String(e.ot_number||"")) && !e.notaria_render_id && !e.notaria_liquidado_at && (Number(e.amount)||0)>1);
         const correosSinCerrar = (rendiciones||[]).filter((r:any)=> r.tipo==="notaria" && (r.estado_envio==="por_enviar" || !r.sent_at));
         if (otPend.length || correosSinCerrar.length) notaria = { nOt:otPend.length, montoOt:otPend.reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0), nCorreos:correosSinCerrar.length };
       }

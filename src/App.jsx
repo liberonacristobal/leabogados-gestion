@@ -19731,8 +19731,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const byP={}; pers.forEach(e=>{(byP[e.personal_de]=byP[e.personal_de]||[]).push(e)})
         const fonByP={}; persFon.forEach(e=>{(fonByP[e.personal_de]=fonByP[e.personal_de]||[]).push(e)})
         const personasP=[...new Set([...Object.keys(byP),...Object.keys(fonByP)])].sort((a,b)=>a.localeCompare(b,'es'))
-        const gastosP=p=>(byP[p]||[]).reduce((a,e)=>a+(e.amount||0),0)
-        const fondosP=p=>(fonByP[p]||[]).reduce((a,e)=>a+(e.amount||0),0)
+        const gastosP=p=>(byP[p]||[]).filter(e=>!e.no_descuenta_saldo&&cuentaEnSaldo(e)).reduce((a,e)=>a+(e.amount||0),0)   // mismo criterio que fgCliente y dispPersona
+        const fondosP=p=>(fonByP[p]||[]).filter(cuentaEnSaldo).reduce((a,e)=>a+(e.amount||0),0)
         const persTot = pers.reduce((a,e)=>a+(e.amount||0),0)
         return (
         <div style={{padding:'4px 20px 100px',...(isDesktop?{maxWidth:900,margin:'0 auto'}:{})}}>
@@ -20184,7 +20184,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n}),
               nombreOT(onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn, qq?`${gs.length} de ${gsAll.length}`:gsAll.length),
-              esOf?<>Oficina · gasto propio</>:<>Saldo {fmt(disp)}{deficit>0?null:<> · queda <b style={{color:C.text}}>{fmt(disp-aPagar)}</b></>}</>,
+              esOf?<>Oficina · gasto propio</>:(()=>{ const sal=saldoCliente(expenses,cid); return <>Saldo <b style={{color:sal<0?C.overdueText:C.text,fontWeight:600}}>{fmtSaldoG(sal)}</b></> })(),   // mismo saldo que la ficha del cliente (fgCliente: ya descuenta estas OT)
               esOf?colD('Oficina','gasto propio',C.muted):colSaldo(disp,deficit>0?null:disp-aPagar),
               montoEst(aPagar,esOf?null:est))}
             {open&&<div>
@@ -20201,9 +20201,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           const estKey=exc?'adelanto':sinF?'sinfondos':cubre?'cubre':'parcial'
           const resp=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'
           const hit=!qq||gs.some(e=>matchE(e,cliName(cid)))
-          return {cid,gs,porFondos,hit,estKey,resp,aPagar,disp,nom:cliName(cid)}
+          return {cid,gs,porFondos,hit,estKey,resp,aPagar,disp,sal:saldoCliente(expenses,cid),nom:cliName(cid)}
         })
-        const sKey={nombre:e=>e.nom.toLowerCase(),monto:e=>e.aPagar,saldo:e=>e.disp,ot:e=>e.gs.length}[deudaSort.col]||(e=>e.aPagar)
+        const sKey={nombre:e=>e.nom.toLowerCase(),monto:e=>e.aPagar,saldo:e=>e.sal,ot:e=>e.gs.length}[deudaSort.col]||(e=>e.aPagar)
         const sDir=deudaSort.dir==='asc'?1:-1
         const pasaEst=e=>!deudaEstF||(deudaEstF==='con'?e.disp>0:deudaEstF==='adel'?e.aPagar>e.disp:false)
         const entries=allEntries.filter(e=>e.porFondos&&e.hit&&pasaEst(e)).sort((a,b)=>{ const x=sKey(a),y=sKey(b); return (typeof x==='string'?x.localeCompare(y,'es'):x-y)*sDir })
@@ -20231,11 +20231,11 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               </div>)
           })
         })()
-        const personales=!notaResp?Object.entries(notaGroups.personal).map(([persona,gsAll])=>{ const gs=qq?gsAll.filter(e=>matchE(e,persona)):gsAll; if(qq&&!gs.length) return null; if(deudaEstF){ const dd=dispPersona(persona).disp, tt=gsAll.reduce((a,e)=>a+(e.amount||0),0); if(deudaEstF==='adel'||(deudaEstF==='con'&&!(dd>0))||(deudaEstF==='pers'&&!(tt>dd))) return null } const pc=personChip(persona); const k='p:'+persona; const open=!!qq||notaCliOpen.has(k); const tot=gsAll.reduce((a,e)=>a+(e.amount||0),0); const {fondo:fP,disp:dP}=dispPersona(persona); const sinFP=dP<=0, cubreP=dP>=tot; return (
+        const personales=!notaResp?Object.entries(notaGroups.personal).map(([persona,gsAll])=>{ const gs=qq?gsAll.filter(e=>matchE(e,persona)):gsAll; if(qq&&!gs.length) return null; if(deudaEstF){ const dd=dispPersona(persona).disp, tt=gsAll.reduce((a,e)=>a+(e.amount||0),0); if(deudaEstF==='adel'||(deudaEstF==='con'&&!(dd>0))||(deudaEstF==='pers'&&!(tt>dd))) return null } const pc=personChip(persona); const k='p:'+persona; const open=!!qq||notaCliOpen.has(k); const tot=gsAll.reduce((a,e)=>a+(e.amount||0),0); const {fondo:fP,disp:dP,otros:oP}=dispPersona(persona); const sinFP=dP<=0, cubreP=dP>=tot; return (
           <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {(()=>{ const defP=Math.max(0,tot-dP); const estP=sinFP?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubreP?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}; return filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
               nombreOT(<>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></>,gsAll.length),
-              <>Saldo {fmt(dP)}{defP>0?null:<> · queda <b style={{color:C.text}}>{fmt(dP-tot)}</b></>}</>,
+              (()=>{ const sal=fP-oP-tot; return <>Saldo <b style={{color:sal<0?C.overdueText:C.text,fontWeight:600}}>{fmtSaldoG(sal)}</b></> })(),
               colSaldo(dP,defP>0?null:dP-tot),
               montoEst(tot,estP)) })()}
             {open&&<div>{gs.map(e=>notaRow(e,false,false,notaQ))}</div>}
