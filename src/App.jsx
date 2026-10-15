@@ -3300,7 +3300,7 @@ const restoreScroll = (s) => { try{ window.scrollTo(0, s?.w||0); const d=documen
 // Estado de UI que SOBREVIVE al desmontaje de la vista (store de módulo): para restaurar el acordeón/drill abierto al volver de un cross-link. Drop-in de useState.
 const _uiStore = {}
 // Deuda notaría (escritorio): columnas compartidas por la fila del cliente y sus OT → saldo, queda/déficit y monto caen en la misma vertical.
-const NOTA_GC = '18px minmax(0,1fr) 124px 14px'
+const NOTA_GC = '18px minmax(0,1fr) auto'
 function usePersistedState(key, def){ const [v,setV]=useState(()=> key in _uiStore ? _uiStore[key] : (typeof def==='function'?def():def)); const set=useCallback(nv=>setV(prev=>{ const val=typeof nv==='function'?nv(prev):nv; _uiStore[key]=val; return val }),[key]); return [v,set] }
 const writeUFCache = (date,value) => { try{ localStorage.setItem(UF_CACHE_KEY, JSON.stringify({date,value})) }catch(_){} }
 // Devuelve {value,date,isToday}. Usa caché si es de hoy; si no, llama a la API y cachea;
@@ -18359,16 +18359,16 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const warn=bloqueado?'excede el fondo':adelanto?'adelanto':null
     const D=isDesktop
     return (
-    <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:10,rowGap:1,alignItems:'center',padding:D?'6px 10px 6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.azulBg:'transparent',opacity:bloqueado?.6:1}}>
+    <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:10,rowGap:1,alignItems:'center',padding:D?'6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.azulBg:'transparent',opacity:bloqueado?.6:1}}>
       <span style={{...(D?{}:{gridRow:'1 / 3'}),width:18,height:18,borderRadius:6,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
       {D ? <>
-        <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hl(e.concept||'—')}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.azulInfo,fontWeight:700}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</div></div>
+        <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hl(e.concept||'—')}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(47,111,134,.35)',textUnderlineOffset:2}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</div></div>
       </> : <>
         <span style={{gridColumn:2,gridRow:1,fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hl(e.concept||'—')}</span>
         <span style={{gridColumn:2,gridRow:2,fontSize:10.5,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.azulInfo,fontWeight:700}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</span>
       </>}
       <span style={{...(D?{}:{gridColumn:3,gridRow:'1 / 3'}),fontSize:12.5,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
-      <button onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{...(D?{}:{gridColumn:4,gridRow:'1 / 3'}),width:D?14:32,height:32,border:'none',background:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><SIcon n='chevron' s={14} c={C.done}/></button>
+      {!D&&<button onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{gridColumn:4,gridRow:'1 / 3',width:32,height:32,border:'none',background:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><SIcon n='chevron' s={14} c={C.done}/></button>}
     </div>
   )}
   // ¿la selección incluye gastos de clientes sin fondos? (adelantaríamos plata de la oficina)
@@ -18980,8 +18980,6 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [deudaGroup,setDeudaGroup] = useState('cliente')         // Deuda notaría: agrupar clientes por 'cliente' | 'responsable' | 'estado'
   const [deudaSort,setDeudaSort] = usePersistedState('deuda_nota_sort',{col:'monto',dir:'desc'})
   const [deudaEstF,setDeudaEstF] = useState(null)        // Deuda: filtro desde el panel (con | adel | pers)
-  const [deudaGrpMenu,setDeudaGrpMenu] = useState(false)  // Deuda: menú Agrupar abierto
-  const [deudaSortMenu,setDeudaSortMenu] = useState(false) // Deuda (móvil): menú Ordenar abierto
   const [deudaBitOpen,setDeudaBitOpen] = useState(false)  // Deuda: bitácora replegada por defecto   // Deuda: orden de clientes (nombre | monto | saldo | ot), recuerda la elección
   const [notaQ,setNotaQ] = useState('')   // Deuda notaría: buscador (OT, cliente o trámite)
   const [deudaGrpOpen,setDeudaGrpOpen] = useState(()=>new Set()) // Deuda: secciones (responsable/estado) plegadas
@@ -20138,41 +20136,20 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                   </div>
                 </div>}
           </div>)
-        // Barra: buscador + Ordenar + Agrupar ▾ + Solo con saldo (antes en el panel; render aprobado 2026-10-15)
-        const GRP=[['cliente','Cliente'],['responsable','Abogado'],['estado','Estado']]
-        const pillS=on=>({fontSize:11.5,fontWeight:on?700:600,borderRadius:20,padding:'5px 12px',minHeight:30,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted})
+        // Barra: buscador + selector de orden + selector de agrupar (mismo selector que Facturación; render aprobado 2026-10-15)
         const hayClientes=Object.keys(notaGroups.byClient).length>0
-        const ordenar=hayClientes&&<>
-          <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done,flexShrink:0}}>Ordenar</span>
-          {[['nombre','Nombre'],['monto','Monto'],['saldo','Saldo'],['ot','OT']].map(([col,lbl])=>{ const on=deudaSort.col===col; return <button key={col} onClick={()=>setDeudaSort(s=>({col,dir:s.col===col?(s.dir==='desc'?'asc':'desc'):(col==='nombre'?'asc':'desc')}))} style={pillS(on)}>{lbl}{on?(deudaSort.dir==='desc'?' ↓':' ↑'):''}</button> })}
-        </>
-        const agrupar=hayClientes&&<>
-          <button onClick={()=>setDeudaGrpMenu(o=>!o)} style={pillS(deudaGroup!=='cliente'||deudaGrpMenu)}>Agrupar: {GRP.find(g=>g[0]===deudaGroup)?.[1]} {deudaGrpMenu?'▴':'▾'}</button>
-          <button onClick={()=>setNotaFondos(v=>!v)} style={pillS(notaFondos)}>Solo con saldo</button>
-        </>
-        const SORTS=[['nombre','Nombre'],['monto','Monto'],['saldo','Saldo'],['ot','OT']]
-        const setOrden=col=>setDeudaSort(s=>({col,dir:s.col===col?(s.dir==='desc'?'asc':'desc'):(col==='nombre'?'asc':'desc')}))
-        const flecha=deudaSort.dir==='desc'?'↓':'↑'
-        const sortMenu=deudaSortMenu&&<div style={{display:'flex',marginBottom:8}}><div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:'0 6px 18px rgba(0,0,0,.08)',padding:4,minWidth:170}}>{SORTS.map(([k,l])=>{ const on=deudaSort.col===k; return <div key={k} onClick={()=>{setOrden(k);setDeudaSortMenu(false)}} style={{fontSize:12.5,padding:'9px 11px',borderRadius:7,cursor:'pointer',fontWeight:on?700:500,color:on?C.accent:C.text,background:on?C.azulBg:'transparent'}}>{l}{on?` ${flecha}`:''}</div> })}</div></div>
-        const grpMenu=deudaGrpMenu&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}><div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:'0 6px 18px rgba(0,0,0,.08)',padding:4,minWidth:170}}>{GRP.map(([k,l])=><div key={k} onClick={()=>{setDeudaGroup(k);setDeudaGrpMenu(false)}} style={{fontSize:12.5,padding:'9px 11px',borderRadius:7,cursor:'pointer',fontWeight:deudaGroup===k?700:500,color:deudaGroup===k?C.accent:C.text,background:deudaGroup===k?C.azulBg:'transparent'}}>{l}</div>)}</div></div>
+        const selS={fontSize:12.5,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:10,height:40,boxSizing:'border-box',padding:'0 10px',background:C.surface,color:C.accent,cursor:'pointer',minWidth:0,...(D?{}:{width:'100%'})}   // mismo alto que el buscador
+        const ORDS=[['monto|desc','Mayor monto'],['monto|asc','Menor monto'],['nombre|asc','Cliente A–Z'],['nombre|desc','Cliente Z–A'],['saldo|desc','Mayor saldo'],['saldo|asc','Menor saldo']]
+        const selOrden=hayClientes&&<select value={`${deudaSort.col}|${deudaSort.dir}`} onChange={ev=>{ const [col,dir]=ev.target.value.split('|'); setDeudaSort({col,dir}) }} style={selS}>{ORDS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+        const selGrupo=hayClientes&&<select value={deudaGroup} onChange={ev=>setDeudaGroup(ev.target.value)} style={selS}><option value='cliente'>Por cliente</option><option value='responsable'>Por abogado</option><option value='estado'>Por estado</option></select>
         const toolbar = D
-          ? <div style={{marginBottom:12}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                <div style={{flex:'1 1 220px',maxWidth:300,minWidth:180}}><Buscador value={notaQ} onChange={setNotaQ} placeholder='Buscar OT, cliente o trámite…' /></div>
-                {ordenar}
-                <div style={{marginLeft:'auto',display:'flex',gap:6}}>{agrupar}</div>
-              </div>
-              {grpMenu&&<div style={{marginTop:6}}>{grpMenu}</div>}
+          ? <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+              <div style={{flex:1,minWidth:200}}><Buscador value={notaQ} onChange={setNotaQ} placeholder='Buscar OT, cliente o trámite…' /></div>
+              {selOrden}{selGrupo}
             </div>
           : <div>
               <Buscador value={notaQ} onChange={setNotaQ} placeholder='Buscar OT, cliente o trámite…' style={{marginBottom:8}} />
-              {hayClientes&&<div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-                <button onClick={()=>{setDeudaSortMenu(o=>!o);setDeudaGrpMenu(false)}} style={pillS(deudaSortMenu)}>{SORTS.find(x=>x[0]===deudaSort.col)?.[1]} {flecha} {deudaSortMenu?'▴':'▾'}</button>
-                <button onClick={()=>{setDeudaGrpMenu(o=>!o);setDeudaSortMenu(false)}} style={pillS(deudaGroup!=='cliente'||deudaGrpMenu)}>{GRP.find(g=>g[0]===deudaGroup)?.[1]} {deudaGrpMenu?'▴':'▾'}</button>
-                <button onClick={()=>setNotaFondos(v=>!v)} style={{...pillS(notaFondos),marginLeft:'auto'}}>Solo con saldo</button>
-              </div>}
-              {sortMenu}
-              {grpMenu}
+              {hayClientes&&<div style={{display:'flex',gap:8,marginBottom:8}}><div style={{flex:1,minWidth:0,display:'flex'}}>{selOrden}</div><div style={{flex:1,minWidth:0,display:'flex'}}>{selGrupo}</div></div>}
             </div>
         const bitacoraFull = <BitacoraLista prefijo='notaria.' titulo='Bitácora' limite={6} vacio='Aún no hay registros de notaría.' etiquetas={{'notaria.liquidada':'Liquidación guardada','notaria.liquidacion_anulada':'Liquidación anulada','notaria.personal':'Marcado personal','notaria.eliminado':'Gasto anulado eliminado','notaria.cliente_asignado':'Cliente asignado','notaria.recordatorio_liquidacion':'Recordatorio para pedir la liquidación','notaria.recordatorio_liquidacion_prueba':'Recordatorio de prueba','notaria.ajuste_auditoria':'Ajuste de revisión','notaria.ot_cargada':'OT cargada'}}/>
         const bitacora = deudaBitOpen
@@ -20184,9 +20161,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const montoEst=(v,est)=><div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:D?15:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div>{est&&<span style={{fontSize:9.5,borderRadius:20,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',display:'inline-block',marginTop:3,background:est.bg,color:est.c}}>{est.l}</span>}</div>
         const nombreOT=(nodo,n)=><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}>{nodo} <span style={{fontSize:11,fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>· {n} OT</span></div>   // nombre completo del cliente, nunca cortado (si no cabe, baja de línea)
         const filaCab=(open,onClick,nombre,sub,cols,derecha)=> D
-          ? <div onClick={onClick} style={{display:'grid',gridTemplateColumns:NOTA_GC,columnGap:10,alignItems:'center',padding:'11px 10px 11px 14px',cursor:'pointer'}}>
+          ? <div onClick={onClick} style={{display:'grid',gridTemplateColumns:NOTA_GC,columnGap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={13} c={C.muted}/></span>
-              <div style={{minWidth:0}}>{nombre}<div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>{derecha}<span/>
+              <div style={{minWidth:0}}>{nombre}<div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>{derecha}
             </div>
           : <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
@@ -20304,7 +20281,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div style={{flex:1,minWidth:0}}>
             {!D&&toolbar}
             {deudaEstF&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:C.azulBg,borderRadius:9,padding:'6px 11px',marginBottom:8}}><span style={{flex:1}}>Mostrando: {partes.find(x=>x[0]===deudaEstF)?.[1]}</span><button onClick={()=>setDeudaEstF(null)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:28}}>Ver todo</button></div>}
-            {ocultasFondos>0&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.soonText,background:C.soonBg,borderRadius:9,padding:'7px 11px',marginBottom:8}}><span style={{flex:1}}>{ocultasFondos} OT más calzan, ocultas por "Solo con saldo".</span><button onClick={()=>setNotaFondos(false)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:30}}>Ver todos</button></div>}
+            {ocultasFondos>0&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.soonText,background:C.soonBg,borderRadius:9,padding:'7px 11px',marginBottom:8}}><span style={{flex:1}}>{ocultasFondos} OT más calzan, ocultas por el filtro de saldo.</span><button onClick={()=>setNotaFondos(false)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:30}}>Ver todos</button></div>}
             {notariaPend.length===0&&notariaAnulados.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13}}>No hay gastos de notaría pendientes de liquidar.</div>}
             {qq&&nada&&!ocultasFondos&&<div style={{color:C.muted,textAlign:'center',padding:24,fontSize:13}}>Ninguna OT calza con "{notaQ.trim()}".</div>}
             {listaClientes}
