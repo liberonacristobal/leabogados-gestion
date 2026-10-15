@@ -3624,17 +3624,18 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       // Antes esto caía a "sin año" aunque el documento SÍ tuviera fecha (facturas emitidas y anticipos/pagos conciliados).
       return yrDe(docFecha)
     }
-    let total=0, sinMonto=0, sinN=0, percibidas=0; const byYear={}; const listByYear={}; const sinList=[]; const percList=[]
+    let total=0, sinMonto=0, sinN=0, percibidas=0, cajaSubarr=0, cajaReemb=0, cajaExt=0; const byYear={}; const listByYear={}; const sinList=[]; const percList=[]
     ingConc.forEach(c=>{
       const m=abonoById[String(c.movimiento_id)]; if(!m) return
-      if(m.categoria==='Subarriendo') return                      // subarriendo = ingreso por arriendo, NO honorarios cobrados (vive en Colaboradores)
       if(!String(m.fecha||'').startsWith(_sySel)) return          // AÑO DE INGRESO A CAJA = fecha del depósito
       const monto=Number(c.monto_aplicado)||0; if(monto<=0) return
+      // Lo que NO es cobrado propio se acumula aparte solo para cuadrar el «Total a caja» con el banco.
+      if(m.categoria==='Subarriendo'){ cajaSubarr+=monto; return } // subarriendo = ingreso por arriendo, NO honorarios cobrados (vive en Colaboradores)
       if(c.tipo_destino==='factura'){
         const b=billById[String(c.factura_id)]
-        if(b&&b.billing_type==='reembolso') return               // reembolso de gastos: devuelve plata, no son honorarios
+        if(b&&b.billing_type==='reembolso'){ cajaReemb+=monto; return } // reembolso de gastos: devuelve plata, no son honorarios
         const ex=extByBill[String(c.factura_id)]
-        if(ex){ const base=ex.com+ex.mto; const p=base>0?monto*ex.com/base:0; percibidas+=p; percList.push({ id:'cp-'+c.movimiento_id+'-'+String(c.factura_id), client_id:b?.client_id||m.cliente_id, folio:b?.invoice_no, paid_at:m.fecha, _cobrado:p }); return }
+        if(ex){ cajaExt+=monto; const base=ex.com+ex.mto; const p=base>0?monto*ex.com/base:0; percibidas+=p; percList.push({ id:'cp-'+c.movimiento_id+'-'+String(c.factura_id), client_id:b?.client_id||m.cliente_id, folio:b?.invoice_no, paid_at:m.fecha, _cobrado:p }); return }
       }
       const ay=anioVentaDe(c)
       let item
@@ -3650,7 +3651,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     const anteriores = Math.max(0, total - delAnio - sinMonto)
     const prioYears = Object.keys(byYear).map(Number).filter(y=>y<selYear).sort((a,b)=>b-a)
     const allYears = Object.keys(byYear).map(Number).sort((a,b)=>b-a)
-    return {total,byYear,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar,percibidas,percList}
+    return {total,byYear,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar,percibidas,percList,cajaSubarr,cajaReemb,cajaExt,totalCaja:total+cajaSubarr+cajaReemb+cajaExt}
   },[ingConc,ingAbonos,billing,anticipos,sales,terceros,selYear])
   // Comisiones PAGADAS del año (base caja, por pagado_at) atribuidas al AÑO DE LA VENTA — espejo de ingresosPorAnioVenta.
   // Año de venta = terceros.sale_id → sales.year; si no, vía la factura (billing.sale_id → sales.year); si no, el año del documento. Así "sin año" no aparece cuando la factura tiene venta.
@@ -3687,6 +3688,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const extBillIds = useMemo(()=>new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id))),[terceros])
   // Facturado POR CUENTA de terceros (externo con retención): se muestra aparte, no suma a lo propio.
   const facturadoTerceros = useMemo(()=>{ const list=(billing||[]).filter(b=> _esFactHon(b) && extBillIds.has(String(b.id)) && String(b.issued_at||'').slice(0,4)===String(selYear)).sort((a,b)=>String(b.issued_at||'').localeCompare(String(a.issued_at||''))); return {total:list.reduce((a,b)=>a+montoFactura(b),0), list} },[billing,extBillIds,selYear])
+  // Total EMITIDO en el año (todo tipo: honorarios propios, por cuenta de terceros, reembolsos, subarriendo) → línea al pie del panel Facturado.
+  const facturadoEmitido = useMemo(()=>{ const r={total:0,reemb:0,subarr:0}; (billing||[]).forEach(b=>{ if(!b||b.deleted_at||!b.invoice_no||b.status==='Anulada'||String(b.issued_at||'').slice(0,4)!==String(selYear)) return; const v=montoFactura(b); r.total+=v; if(b.billing_type==='reembolso') r.reemb+=v; else if(b.billing_type==='subarriendo') r.subarr+=v }); return r },[billing,selYear])
   const facturadoYr = useMemo(()=> (billing||[]).filter(b=> _esFactHon(b) && !extBillIds.has(String(b.id)) && String(b.issued_at||'').slice(0,4)===String(selYear)).reduce((a,b)=>a+montoFactura(b),0), [billing,extBillIds,selYear])
   // Facturado (emitido en el año) DESGLOSADO por año de la venta → drill del embudo (2026 / 2025 / sin venta=0). Lista por factura.
   const facturadoByYear = useMemo(()=>{
@@ -3705,7 +3708,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const [resSeeAll,setResSeeAll] = useState({})                          // {`${tile}-${y}`:true} → ver TODOS los cobros de ese año (si no, tope 6)
   const [resComis,setResComis] = useState(false)                        // expandir la lista de comisiones pagadas dentro del panel
   const [resPerc,setResPerc] = useState(false)                          // expandir la lista de comisiones percibidas (Cobrado)
-  const [resFTer,setResFTer] = useState(false)                          // expandir las facturas por cuenta de terceros (Facturado)
+  const [resFTer,setResFTer] = useState(false)                          // expandir el desglose del total emitido (Facturado)
+  const [resCaja,setResCaja] = useState(false)                          // expandir el desglose del total a caja (Cobrado)
   const isDeskRes = useIsDesktop()                                      // paneles del resultado: columnas de la grilla y % largo («45% de lo vendido») solo en escritorio
   const [ingDrill,setIngDrill] = usePersistedState('d_ingdrill',null)   // año de venta cuyo detalle (facturas) está abierto ('sin' = sin año)
   // Descargar la foto "Resultado del año" como PNG branded (canvas propio → salida limpia; en iPhone usa la hoja de compartir).
@@ -3729,11 +3733,12 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
             ['Costos de terceros', '− '+fmtUFk(m.costoUF), pe(m.costo)],
             ['Meta del año', fmtUFk(metaUF), pe(m.meta)] ], bar:vPct },
         { t:`Facturado · emitido en ${selYear}`, pct:m.bruto>0?Math.min(100,Math.round(facturadoYr/m.bruto*100)):0, uf:uf(facturadoYr/ufR), clp:pe(facturadoYr),
-          lines: [...yrsFac.map(y=>[yrLbl(y), fmtUFk((fby[y]||0)/ufR), pe(fby[y]||0)]), ...(facturadoTerceros.total>0?[['Por cuenta de terceros', fmtUFk(facturadoTerceros.total/ufR), pe(facturadoTerceros.total)]]:[])] },
+          lines: [...yrsFac.map(y=>[yrLbl(y), fmtUFk((fby[y]||0)/ufR), pe(fby[y]||0)]), ...(facturadoEmitido.total>0?[['Total emitido (con terceros y reembolsos)', fmtUFk(facturadoEmitido.total/ufR), pe(facturadoEmitido.total)]]:[])] },
         { t:'Cobrado propio', uf:uf(ingYTD/ufR), clp:pe(ingYTD), lines:[
             ['Comisiones pagadas', '− '+fmtUFk(comisYTD/ufR), pe(comisYTD)],
             ['Comisiones percibidas', '+ '+fmtUFk(percYTD/ufR), pe(percYTD)],
             ['Ingreso real', fmtUFk(ingReal/ufR), pe(ingReal)],
+            ['Total a caja', fmtUFk((iv.totalCaja||0)/ufR), pe(iv.totalCaja||0)],
             ...yrsCob.map(y=>[yrLbl(y), fmtUFk((iv.byYear[y]||0)/ufR), pe(iv.byYear[y]||0)]) ] },
         { t:posM?'Margen del ejercicio':'Pérdida del ejercicio', pct:(ingYTD+percYTD)>0?Math.round(resultado/(ingYTD+percYTD)*100):0, uf:uf(resultado/ufR), clp:pe(resultado), lines:[
             ['+ Ingreso real', fmtUFk(ingReal/ufR), pe(ingReal)],
@@ -3799,8 +3804,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     const yrsCob=(iv.allYears||[]).map(y=>row(yrLbl(y), (iv.byYear[y]||0)/ufR, iv.byYear[y]||0)).join('')
     const fby=facturadoByYear.byYear||{}; const yrsFac=Object.keys(fby).map(Number).sort((a,b)=>b-a).map(y=>row(yrLbl(y), (fby[y]||0)/ufR, fby[y]||0)).join('')
     const ventasCard=card('Ventas', m.brutoUF, m.bruto, `${pct(m.bruto,m.meta)}% de la meta`, row('Neto de costos de terceros',m.netoUF,m.neto)+row('Costos de terceros',m.costoUF,m.costo,true)+row('Meta del año',metaUF,m.meta))
-    const factCard=card('Facturado', facturadoYr/ufR, facturadoYr, `${pct(facturadoYr,m.bruto)}% de lo vendido`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoTerceros.total>0?row('Por cuenta de terceros',facturadoTerceros.total/ufR,facturadoTerceros.total):''))
-    const cobCard=card('Cobrado propio', ingYTD/ufR, ingYTD, `${pct(ingYTD,metaCobranza)}% de la meta`, row('Comisiones pagadas',comisYTD/ufR,comisYTD,true)+row('+ Comisiones percibidas',percYTD/ufR,percYTD)+row('Ingreso real',ingReal/ufR,ingReal)+`<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Según año de la venta</td></tr>`+yrsCob)
+    const factCard=card('Facturado', facturadoYr/ufR, facturadoYr, `${pct(facturadoYr,m.bruto)}% de lo vendido`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoEmitido.total>0?row('Total emitido (con terceros y reembolsos)',facturadoEmitido.total/ufR,facturadoEmitido.total):''))
+    const cobCard=card('Cobrado propio', ingYTD/ufR, ingYTD, `${pct(ingYTD,metaCobranza)}% de la meta`, row('Comisiones pagadas',comisYTD/ufR,comisYTD,true)+row('+ Comisiones percibidas',percYTD/ufR,percYTD)+row('Ingreso real',ingReal/ufR,ingReal)+row('Total a caja',(iv.totalCaja||0)/ufR,iv.totalCaja||0)+`<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Según año de la venta</td></tr>`+yrsCob)
     const margCard=card(posM?'Margen del ejercicio':'Pérdida del ejercicio', resultado/ufR, resultado, `${pct(resultado,ingYTD+percYTD)}% rentabilidad`, row('+ Ingreso real',ingReal/ufR,ingReal)+row('− Costos de oficina',costYTD/ufR,costYTD,true))
     const cobranzaCard=card('Cobranza', ingYTD/ufR, ingYTD, `${pct(ingYTD,metaCobranza)}% de la meta`, row('Meta de cobranza',metaCobranza/ufR,metaCobranza)+row('Falta para la meta',Math.max(0,metaCobranza-ingYTD)/ufR,Math.max(0,metaCobranza-ingYTD)))
     const dias=new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'})
@@ -4211,8 +4216,10 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
                 {isCob&&comisList}
                 {isCob&&percYTD>0&&percChip}
                 {isCob&&percList}
-                {!isCob&&facturadoTerceros.total>0&&filaG('ft',()=>setResFTer(v=>!v),<span style={rowL}>Por cuenta de terceros</span>,null,fmtMon(facturadoTerceros.total),rowV,resFTer)}
-                {!isCob&&resFTer&&facturadoTerceros.list.map(b=>subFila(b.id,b.client_id,`${cn(b.client_id)} · N° ${folioN(b.invoice_no)||b.invoice_no}`,fmtMon(montoFactura(b)),C.accent,()=>b.client_id&&onOpenClientFicha&&onOpenClientFicha(b.client_id)))}
+                {isCob&&(()=>{ const iv=ingresosPorAnioVenta; return (<>
+                  {filaG('tc',()=>setResCaja(v=>!v),<span style={rowL}>Total a caja</span>,null,fmtMon(iv.totalCaja||0),rowV,resCaja)}
+                  {resCaja&&[['Cobrado propio',iv.total],['Por cuenta de terceros',iv.cajaExt],['Reembolsos de gastos',iv.cajaReemb],['Subarriendo',iv.cajaSubarr]].filter(([,v])=>v>0).map(([l,v])=>subFila('tc-'+l,null,l,fmtMon(v),C.accent,null))}
+                </>) })()}
                 <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',padding:'10px 14px 4px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isCob?'Cobrado':'Facturado'} según año de la venta{isDeskRes?'':' · % de lo vendido'}</div>
                 {anyOpen&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'0 14px 8px'}}><span style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.4px',marginRight:'auto'}}>Orden</span><span style={{display:'inline-flex',background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:2}}>{['fecha','monto'].map(o=>(<span key={o} onClick={()=>setResOrd(o)} style={{fontSize:10,fontWeight:800,padding:'2px 10px',borderRadius:12,cursor:'pointer',color:resOrd===o?'#fff':C.muted,background:resOrd===o?C.accent:'transparent'}}>{o==='fecha'?'Fecha':'Monto'}</span>))}</span></div>)}
                 {yrs.map(y=>{ const open=resDrill.year===y; let items=(listByYear[y]||[]).slice(); items.sort((a,b)=> resOrd==='monto' ? (montoOf(b)-montoOf(a)) : String(dateOf(b)||'').localeCompare(String(dateOf(a)||''))); const key=`${t}-${y}`; const seeAll=resSeeAll[key]; const shown=seeAll?items:items.slice(0,6);
@@ -4231,6 +4238,11 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
                       </div>) })}
                     {open&&items.length>6&&<div onClick={()=>setResSeeAll(s=>({...s,[key]:!s[key]}))} style={{textAlign:'center',padding:9,fontSize:11,fontWeight:700,color:C.azulInfo,background:C.bg,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>{seeAll?'Ver menos':`Ver las ${items.length} ›`}</div>}
                   </Fragment>) })}
+                {!isCob&&facturadoEmitido.total>0&&(()=>{ const fe=facturadoEmitido, otros=Math.max(0,fe.total-facturadoYr-facturadoTerceros.total-fe.reemb-fe.subarr)
+                  return (<>
+                    <div onClick={()=>setResFTer(v=>!v)} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'8px 14px',fontSize:11,color:C.muted,borderTop:`1px solid ${C.border}`,cursor:'pointer',whiteSpace:'nowrap'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}}>Total emitido (con terceros y reembolsos)</span><b style={{color:C.accent,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{fmtMon(fe.total)}</b></div>
+                    {resFTer&&[['Propio',facturadoYr],['Por cuenta de terceros',facturadoTerceros.total],['Reembolsos de gastos',fe.reemb],['Subarriendo',fe.subarr],['Otros',otros]].filter(([,v])=>v>0).map(([l,v])=>subFila('fe-'+l,null,l,fmtMon(v),C.accent,null))}
+                  </>) })()}
                 {verlink(isCob?'Ver todo en Cobranza':'Ver todo en Facturación',isCob?'cobranza':'billing')}
               </div>)
             })()}
