@@ -55,6 +55,8 @@ serve(async (req) => {
 
   try {
     const sb = createClient(SB_URL, SB_KEY);
+    // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
+    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const todayCL = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }); // YYYY-MM-DD
     const t0 = Date.parse(todayCL);
     const hace7 = new Date(t0 - 7 * 86400000).toISOString().slice(0, 10);
@@ -62,15 +64,15 @@ serve(async (req) => {
     // ── Datos
     const { data: tasksRaw } = await sb.from("tasks").select("id,title,due,status,client_id,assignees,delegated_to,who");
     const { data: clients } = await sb.from("clients").select("id,name");
-    const { data: billsRaw, error: billsErr } = await sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").limit(6000);
+    const { data: billsRaw, error: billsErr } = await pageAll(()=>sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").order("id"));
     if (billsErr) return json({ error: "No se pudo leer billing: " + billsErr.message }, 500);
-    const { data: movs } = await sb.from("cartola_movimientos").select("id,fecha,monto,tipo,cliente_id,estado,n_operacion").eq("tipo", "abono").is("cliente_id", null).limit(4000);
+    const { data: movs } = await pageAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,cliente_id,estado,n_operacion").eq("tipo", "abono").is("cliente_id", null).order("id"));
     // Radar "cuotas vencidas sin facturar": programadas de meses cerrados de ventas Activo, no silenciadas. Mismo criterio que el filter 'sinemitir' de la app.
-    const { data: salesRaw } = await sb.from("sales").select("id,status").limit(6000);
+    const { data: salesRaw } = await pageAll(()=>sb.from("sales").select("id,status").order("id"));
     const { data: noEmitirRaw } = await sb.from("learnings").select("key").eq("kind", "cuota_no_emitir");
     // Cobranza a CAJA (plano abono/conciliación, igual que ingresosPorAnioVenta en la app — NO billing.paid_at): conciliación a factura/anticipo × abonos no internos, por fecha del depósito. + meta del año (annual_targets).
-    const { data: concRaw } = await sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).limit(20000);
-    const { data: abRaw } = await sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").limit(20000);
+    const { data: concRaw } = await pageAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).order("id"));
+    const { data: abRaw } = await pageAll(()=>sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").order("id"));
     const { data: tgtRaw } = await sb.from("annual_targets").select("year,collection_target");
 
     // deno-lint-ignore no-explicit-any

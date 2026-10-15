@@ -35,6 +35,8 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+    // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
+    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
 
     // ── Autorización: (a) cron con secreto → corrida completa (o prueba dirigida con testTo); (b) usuario @leabogados.cl → solo a él.
     let testTo: string | null = null;
@@ -78,7 +80,7 @@ serve(async (req) => {
           sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,due,issued_at,paid_at,deleted_at,billing_type,receptor_name,sii_synced_at,sii_tipo_dte,dte_track_id"),
           sb.from("cartola_movimientos").select("id,fecha,monto,monto_conciliado,n_operacion,nombre_contraparte,cliente_id,tipo,estado,es_interno").eq("tipo","abono").in("estado",["pendiente","parcial"]),
           sb.from("anticipos").select("id,client_id,monto,fecha,nota"),
-          sb.from("conciliacion").select("anticipo_id,tipo_destino"),
+          pageAll(()=>sb.from("conciliacion").select("anticipo_id,tipo_destino").eq("tipo_destino","anticipo").order("id")),
           sb.from("expenses").select("id,client_id,amount,concept,ot_number,date").eq("type","gasto").is("sale_id",null).is("deleted_at",null).is("apertura_id",null).eq("no_descuenta_saldo",false).not("client_id","is",null).gte("date","2026-06-01"),
         ]);
         const fallo = res.find((r:any)=> r.error || r.data===null);

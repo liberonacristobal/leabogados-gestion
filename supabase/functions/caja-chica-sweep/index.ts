@@ -39,6 +39,8 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+    // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
+    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const esCron = !!CRON_SECRET && body.secret === CRON_SECRET;
     let dry = !esCron || !!body.dryRun;
     if (!esCron) {
@@ -63,7 +65,7 @@ serve(async (req) => {
       sb.from("miembros").select("nombre,rut,email,es_socio"),
       sb.from("petty_cash").select("id,user_name,amount,delivered_at,movimiento_id,notes"),
       sb.from("cartola_movimientos").select("id,tipo,monto,monto_conciliado,fecha,rut_contraparte,es_interno,categoria,estado,descripcion").eq("tipo", "cargo").gte("fecha", desde),
-      sb.from("conciliacion").select("movimiento_id"),
+      pageAll(()=>sb.from("conciliacion").select("movimiento_id").order("id")),
       sb.from("learnings").select("key").eq("kind", "cc_no_caja"),
       sb.from("learnings").select("key").eq("kind", "cc_aviso_transf"),
     ]);

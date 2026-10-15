@@ -3592,6 +3592,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const [openPagar,setOpenPagar] = useState(true)
   const [cpProvOpen,setCpProvOpen] = useState({})   // drill: facturas del proveedor desplegadas
   const [cpF,setCpF] = useState('todos')            // filtro de la sección Comisiones (mismas 4 tarjetas que el home de Comisiones)
+  const [comisOpen,setComisOpen] = usePersistedState('inicio_comis_open',false)   // sección Comisiones de Inicio: replegada por defecto (pedido 2026-10-15)
   const [cpVerTodos,setCpVerTodos] = useState(false)
   const [cpPagOpen,setCpPagOpen] = useState(false)  // sección "Pagadas este año" (colaboradores ya pagados) desplegada
   const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
@@ -4610,10 +4611,10 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
                         )})}</> }
         return (
           <div style={{padding:'16px 20px 0'}}>
-            <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8,marginBottom:8}}><span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Comisiones</span>{navTo&&<span onClick={()=>navTo({tab:'proveedores'})} style={{fontSize:12,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver comisiones ›</span>}</div>
-            {tiles}
-            {cpF!=='todos'&&<div style={{fontSize:11.5,color:C.muted,margin:'8px 2px 0',lineHeight:1.45}}>Filtro: <b style={{color:C.accent}}>{F_LBL[cpF]}</b>{dTot&&<> · {partes(dTot)}</>} <span onClick={()=>setCpF('todos')} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',marginLeft:4}}>Quitar</span></div>}
-            {filasC.length>0&&<div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:comisOpen?8:0}}><span onClick={()=>setComisOpen(o=>!o)} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',cursor:'pointer',minHeight:30}}><span style={{display:'inline-flex',transform:comisOpen?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={12} c={C.muted}/></span>Comisiones</span>{navTo&&<span onClick={()=>navTo({tab:'proveedores'})} style={{fontSize:12,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver comisiones ›</span>}</div>
+            {comisOpen&&tiles}
+            {comisOpen&&cpF!=='todos'&&<div style={{fontSize:11.5,color:C.muted,margin:'8px 2px 0',lineHeight:1.45}}>Filtro: <b style={{color:C.accent}}>{F_LBL[cpF]}</b>{dTot&&<> · {partes(dTot)}</>} <span onClick={()=>setCpF('todos')} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',marginLeft:4}}>Quitar</span></div>}
+            {comisOpen&&filasC.length>0&&<div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
               {vis.map((f,fi)=>{ const open=!!cpProvOpen[f.k]; const nom=titleCase(tituloProv(f.g.prov)); return (
                 <div key={f.k} style={{borderTop:fi?`1px solid ${C.border}`:'none'}}>
                   <div onClick={()=>{ if(f.tipo==='te'){ navTo&&f.g.prov?.id&&navTo({tab:'proveedores',provId:f.g.prov.id}); return } setCpProvOpen(o=>({...o,[f.k]:!o[f.k]})) }} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer'}}>
@@ -23192,7 +23193,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const vtog = k => setVSec(s=>({...s,[k]:!s[k]}))
   const [facEje,setFacEje] = useState('estado')   // eje de la sección Facturas: 'estado' | 'anio' | 'proyecto'
   const [fConc,setFConc] = useState([]); const [fMovs,setFMovs] = useState([])   // conciliación del cliente para ver el movimiento de una factura conciliada
-  useEffect(()=>{ if(!client?.id) return; let ok=true; Promise.all([supabase.from('conciliacion').select('factura_id,movimiento_id,tipo_destino,monto_aplicado'), supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,descripcion').eq('cliente_id',client.id)]).then(([a,b])=>{ if(ok){ setFConc(a.data||[]); setFMovs(b.data||[]) } }).catch(()=>{}); return ()=>{ ok=false } },[client?.id])
+  useEffect(()=>{ if(!client?.id) return; let ok=true; Promise.all([selectAll(()=>supabase.from('conciliacion').select('factura_id,movimiento_id,tipo_destino,monto_aplicado').order('id')), selectAll(()=>supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,descripcion').eq('cliente_id',client.id).order('id'))]).then(([a,b])=>{ if(ok){ setFConc(a.data||[]); setFMovs(b.data||[]) } }).catch(()=>{}); return ()=>{ ok=false } },[client?.id])
   const fConcByFac = useMemo(()=>{ const m={}; fConc.forEach(c=>{ if(c.factura_id&&c.tipo_destino==='factura') (m[c.factura_id]=m[c.factura_id]||[]).push(c) }); return m },[fConc])
   const fMovById = useMemo(()=>{ const m={}; fMovs.forEach(x=>m[x.id]=x); return m },[fMovs])
   const toggleDet = id => setDetFac(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
@@ -33549,7 +33550,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     if(DEMO){ setMovs(demoData.cartola_movimientos||[]); setAliases(demoData.cliente_alias||[]); setConc(demoData.conciliacion||[]); setLoading(false); return }
     // Supabase/PostgREST corta cada consulta en ~1000 filas (db-max-rows) e IGNORA .limit(8000): hay que PAGINAR
     // con .range o solo se cargaban los 1000 movimientos más nuevos (se caían los meses más antiguos de la cartola).
-    const fetchAll = async(tabla, orderCol)=>{ let all=[], from=0; const SZ=1000; for(;;){ let q=supabase.from(tabla).select('*'); if(orderCol) q=q.order(orderCol,{ascending:false}); const {data,error}=await q.range(from,from+SZ-1); if(error) throw error; if(!data||!data.length) break; all=all.concat(data); if(data.length<SZ) break; from+=SZ } return all }
+    const fetchAll = async(tabla, orderCol)=>{ let all=[], from=0; const SZ=1000; for(;;){ let q=supabase.from(tabla).select('*'); if(orderCol) q=q.order(orderCol,{ascending:false}); q=q.order('id'); const {data,error}=await q.range(from,from+SZ-1); if(error) throw error; if(!data||!data.length) break; all=all.concat(data); if(data.length<SZ) break; from+=SZ } return all }
     const [m,a,cc] = await Promise.all([
       fetchAll('cartola_movimientos','fecha'),
       supabase.from('cliente_alias').select('*').then(r=>r.data||[]),
@@ -37599,7 +37600,7 @@ export default function App() {
   const costosOfiMes = useMemo(()=>costosOficinaMes(costosOfiRows),[costosOfiRows])
   // Cuenta de abonos sin conciliar para la burbuja (admin). Re-evalúa al cambiar de tab (tras conciliar y volver).
   useEffect(()=>{ if(userRole!=='admin') return; if(DEMO){ setConcPend(5); return }; let alive=true
-    Promise.all([supabase.from('cartola_movimientos').select('id').eq('tipo','abono').eq('es_interno',false), supabase.from('conciliacion').select('movimiento_id')])
+    Promise.all([selectAll(()=>supabase.from('cartola_movimientos').select('id').eq('tipo','abono').eq('es_interno',false).order('id')), selectAll(()=>supabase.from('conciliacion').select('movimiento_id').order('id'))])
       .then(([a,c])=>{ if(!alive) return; const done=new Set((c.data||[]).map(x=>x.movimiento_id)); setConcPend((a.data||[]).filter(m=>!done.has(m.id)).length) }).catch(()=>{})
     return ()=>{alive=false} },[userRole,tab])
   const [menuOpen,setMenuOpen]=useState(false)
