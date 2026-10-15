@@ -138,6 +138,7 @@ export const demoData = {
     { id:'b17', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 3/3',          amount:26000000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-09-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     // Reembolso (excluido de facturado)
     { id:'b18', client_id:'c1', concept:'Reembolso gastos notariales',                          amount:320000,   status:'Pendiente',  invoice_no:null, issued_at:'2026-06-01', due:'2026-06-20', paid_at:null, billing_type:'reembolso', monto_terceros:0, notes:'Rendición ID demo' },
+    { id:'b18r', client_id:'c3', concept:'Reembolso gastos de constitución',                    amount:278887,   status:'Vencido',    invoice_no:'1299', issued_at:'2026-08-13', due:'2026-09-12', paid_at:null, billing_type:'reembolso', monto_terceros:0 },
     // 2025 (para el selector de año)
     { id:'b19', client_id:'c1', sale_id:'s9', concept:'Asesoría 2025 — cuota final',            amount:18000000, status:'Pagado',     invoice_no:'1120', issued_at:'2025-11-30', due:'2025-12-15', paid_at:'2025-12-12', billing_type:'honorarios', monto_terceros:0 },
     { id:'b30', client_id:'c3', sale_id:null, entity_id:null, concept:'Honorarios profesionales', amount:14000000, status:'Pagado', invoice_no:'1630', issued_at:'2026-01-10', due:'2026-01-28', paid_at:'2026-01-26', billing_type:'honorarios', monto_terceros:0 },
