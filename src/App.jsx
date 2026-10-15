@@ -4368,7 +4368,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
               const col=pagado>0?C.greenText:(porPagar>0?C.soonText:C.greenText)
               const tint=pagado>0?{fg:C.greenText,bg:C.greenBg}:{fg:C.soonText,bg:C.ambarBg}
               const sub=pagado>0?('pagado'+(porPagar>0?' · por pagar '+fmtShort(porPagar):'')):(porPagar>0?'por pagar':'sin deudas')
-              return kTile('cxp','Costos de terceros',val,col,'wallet',tint,sub) })()}
+              return kTile('cxp','Costos de terceros',val,col,'wallet',tint,sub,()=>navTo?navTo({tab:'proveedores'}):go('proveedores')) })()}   // la sección Comisiones ya está siempre visible abajo: la tarjeta lleva a Comisiones
           </div>
         </div>
       </div>
@@ -4474,7 +4474,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       </div>)}
 
       {/* Comisiones + Oficina ahora viven en la grilla única de Indicadores (arriba). Aquí solo su detalle desplegable. */}
-      {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
+      {(terceros||[]).length>0&&(()=>{   // siempre visible (antes solo al tocar «Costos de terceros»)
         if((terceros||[]).length===0) return null
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
         const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
