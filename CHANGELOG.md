@@ -603,3 +603,4 @@
 - 2026-10-15 · Facturas del mes: lista con fondo blanco y separadores sutiles entre facturas.
 - 2026-10-15 · Notaría › Deuda: panel Pendiente con Con saldo/Adelanta oficina/Personal tocables (filtran), barra con Ordenar + Agrupar ▾ (Cliente/Abogado/Estado) + Solo con saldo; columnas alineadas en escritorio (saldo, queda/déficit, monto con estado debajo); OT en dos líneas sin encabezado; bitácora replegada; móvil compacto.
 - 2026-10-15 · Notaría › Deuda: sin línea de déficit (solo Saldo y, si alcanza, Queda).
+- 2026-10-15 · Notaría › Deuda escritorio: filas en dos líneas (nombre · OT / saldo) con monto y estado en columna fija al borde derecho, alineada con las OT; nombre ya no se corta.

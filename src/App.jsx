@@ -3300,7 +3300,7 @@ const restoreScroll = (s) => { try{ window.scrollTo(0, s?.w||0); const d=documen
 // Estado de UI que SOBREVIVE al desmontaje de la vista (store de módulo): para restaurar el acordeón/drill abierto al volver de un cross-link. Drop-in de useState.
 const _uiStore = {}
 // Deuda notaría (escritorio): columnas compartidas por la fila del cliente y sus OT → saldo, queda/déficit y monto caen en la misma vertical.
-const NOTA_GC = '18px minmax(0,1fr) 96px 104px 112px 24px'
+const NOTA_GC = '18px minmax(0,1fr) 124px 14px'
 function usePersistedState(key, def){ const [v,setV]=useState(()=> key in _uiStore ? _uiStore[key] : (typeof def==='function'?def():def)); const set=useCallback(nv=>setV(prev=>{ const val=typeof nv==='function'?nv(prev):nv; _uiStore[key]=val; return val }),[key]); return [v,set] }
 const writeUFCache = (date,value) => { try{ localStorage.setItem(UF_CACHE_KEY, JSON.stringify({date,value})) }catch(_){} }
 // Devuelve {value,date,isToday}. Usa caché si es de hoy; si no, llama a la API y cachea;
@@ -18359,17 +18359,16 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const warn=bloqueado?'excede el fondo':adelanto?'adelanto':null
     const D=isDesktop
     return (
-    <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:D?12:10,rowGap:1,alignItems:'center',padding:D?'6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.azulBg:'transparent',opacity:bloqueado?.6:1}}>
+    <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:10,rowGap:1,alignItems:'center',padding:D?'6px 10px 6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.azulBg:'transparent',opacity:bloqueado?.6:1}}>
       <span style={{...(D?{}:{gridRow:'1 / 3'}),width:18,height:18,borderRadius:6,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
       {D ? <>
         <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hl(e.concept||'—')}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.azulInfo,fontWeight:700}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</div></div>
-        <span/><span/>
       </> : <>
         <span style={{gridColumn:2,gridRow:1,fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hl(e.concept||'—')}</span>
         <span style={{gridColumn:2,gridRow:2,fontSize:10.5,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.azulInfo,fontWeight:700}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</span>
       </>}
       <span style={{...(D?{}:{gridColumn:3,gridRow:'1 / 3'}),fontSize:12.5,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
-      <button onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{...(D?{}:{gridColumn:4,gridRow:'1 / 3'}),width:32,height:32,border:'none',background:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><SIcon n='chevron' s={14} c={C.done}/></button>
+      <button onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{...(D?{}:{gridColumn:4,gridRow:'1 / 3'}),width:D?14:32,height:32,border:'none',background:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><SIcon n='chevron' s={14} c={C.done}/></button>
     </div>
   )}
   // ¿la selección incluye gastos de clientes sin fondos? (adelantaríamos plata de la oficina)
@@ -20180,13 +20179,14 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           ? <div><div onClick={()=>setDeudaBitOpen(false)} style={{fontSize:11,color:C.muted,textAlign:'right',cursor:'pointer',marginBottom:4}}>Ocultar bitácora</div>{bitacoraFull}</div>
           : <div onClick={()=>setDeudaBitOpen(true)} style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',cursor:'pointer'}}><span style={{...lblK,color:C.accent,flex:1}}>Bitácora</span><span style={{fontSize:12,color:C.muted}}>ver registros ›</span></div>
         // ── Lista. Celdas comunes de la fila (escritorio: grilla NOTA_GC; móvil: dos líneas con el estado bajo la cifra).
+        const colSaldo=(saldo,queda)=><div style={{textAlign:'right',minWidth:0}}><div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>Saldo</div><div style={{fontSize:12.5,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(saldo)}</div>{queda!=null&&<div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap'}}>queda {fmt(queda)}</div>}</div>
         const colD=(k,v,col)=><div style={{textAlign:'right',minWidth:0}}><div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.done}}>{k}</div><div style={{fontSize:12.5,fontWeight:600,color:col||C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div></div>
         const montoEst=(v,est)=><div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:D?15:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div>{est&&<span style={{fontSize:9.5,borderRadius:20,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',display:'inline-block',marginTop:3,background:est.bg,color:est.c}}>{est.l}</span>}</div>
         const nombreOT=(nodo,n)=><div style={{fontSize:14,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nodo} <span style={{fontSize:11,fontWeight:500,color:C.done}}>· {n} OT</span></div>
         const filaCab=(open,onClick,nombre,sub,cols,derecha)=> D
-          ? <div onClick={onClick} style={{display:'grid',gridTemplateColumns:NOTA_GC,columnGap:12,alignItems:'center',padding:'11px 14px',cursor:'pointer'}}>
+          ? <div onClick={onClick} style={{display:'grid',gridTemplateColumns:NOTA_GC,columnGap:10,alignItems:'center',padding:'11px 10px 11px 14px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={13} c={C.muted}/></span>
-              <div style={{minWidth:0}}>{nombre}</div>{cols}{derecha}<span/>
+              <div style={{minWidth:0}}>{nombre}<div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>{derecha}<span/>
             </div>
           : <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
@@ -20208,7 +20208,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n}),
               nombreOT(onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn, qq?`${gs.length} de ${gsAll.length}`:gsAll.length),
               esOf?<>Oficina · gasto propio</>:<>Saldo {fmt(disp)}{deficit>0?null:<> · queda <b style={{color:C.text}}>{fmt(disp-aPagar)}</b></>}</>,
-              esOf?<><span/>{colD('Oficina','gasto propio',C.muted)}</>:<>{colD('Saldo',fmt(disp))}{deficit>0?<span/>:colD('Queda',fmt(disp-aPagar))}</>,
+              esOf?colD('Oficina','gasto propio',C.muted):colSaldo(disp,deficit>0?null:disp-aPagar),
               montoEst(aPagar,esOf?null:est))}
             {open&&<div>
               {reservadoC>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.azulInfo,background:C.azulBg,padding:'5px 13px',borderTop:`1px solid ${C.border}`}}><span>Otros gastos por pagar</span><b style={{fontVariantNumeric:'tabular-nums'}}>{fmt(reservadoC)}</b></div>}
@@ -20259,7 +20259,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {(()=>{ const defP=Math.max(0,tot-dP); const estP=sinFP?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubreP?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}; return filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
               nombreOT(<>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></>,gsAll.length),
               <>Saldo {fmt(dP)}{defP>0?null:<> · queda <b style={{color:C.text}}>{fmt(dP-tot)}</b></>}</>,
-              <>{colD('Saldo',fmt(dP))}{defP>0?<span/>:colD('Queda',fmt(dP-tot))}</>,
+              colSaldo(dP,defP>0?null:dP-tot),
               montoEst(tot,estP)) })()}
             {open&&<div>{gs.map(e=>notaRow(e,false,false,notaQ))}</div>}
           </div>)}):null
