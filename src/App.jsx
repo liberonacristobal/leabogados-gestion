@@ -42,7 +42,7 @@ const C = {
   toggleOff:'#CBD5DB',
   // tints canónicos de estado (consolidados): fondo + texto para ámbar/rojo/verde
   soonBg:'#FFF8E1', soonText:'#854F0B', overdueBg:'#FCEBEB', overdueText:'#A32D2D', greenBg:'#E1F5EE', greenSoft:'#EFF9F5', greenDeep:'#C9EEDF',
-  azulInfo:'#185FA5', azulBg:'#E6F1FB', tealBg:'#DFF1F2', tealText:'#155E6B', ambarBg:'#FAEEDA', coralText:'#993C1D', grisText:'#5F5E5A',
+  azulInfo:'#185FA5', azulBg:'#E6F1FB', azulBd:'#D5E6F6', overdueBd:'#F3D2D0', tealBg:'#DFF1F2', tealText:'#155E6B', ambarBg:'#FAEEDA', coralText:'#993C1D', grisText:'#5F5E5A',
   // grises de fondo (antes hex sueltos repetidos): bgSoft = filas/hover/chips suaves; bgPanel = paneles internos; bgWarm = chips neutros cálidos. Migrar los literales a estos al tocar cada vista.
   bgSoft:'#F5F7F9', bgPanel:'#FAFBFC', bgWarm:'#F1EFE8',
   // pista/fondo gris-azul de barras, chips y celdas neutras (antes #EEF1F3 suelto ×45)
@@ -939,6 +939,8 @@ const PERSON_CHIP = {
   'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:C.overdueBg,color:C.overdueText}, 'Rodrigo':{bg:'#F7E7E1',color:'#A8472A'},
 }
 const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:C.bgWarm,color:C.grisText}
+// Píldora de persona para filtrar por abogado (Banco «Abogados», Cobranza): tinte de su color; seleccionada = borde de su color.
+const pillPersonaSty = (pc,on) => ({fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',border:`1px solid ${on?pc.color:'transparent'}`,background:pc.bg,color:pc.color,whiteSpace:'nowrap'})
 // Colores de categoría de gasto — FUENTE ÚNICA (antes duplicado 5× inline). CBR beige es el único fuera de token de C.
 const CAT_COLORS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':C.bgWarm,'Registro Civil':C.ambarBg,'Movilización':C.tealBg,'Archivo Judicial':C.bgPanel,'Fondo':C.greenBg,'Otro':C.bgSoft}
 const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
@@ -17499,7 +17501,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
               <span style={{fontSize:10,color:C.textSoft,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Abogados</span>
               {ents.map(([k,n])=>{ const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); const on=respFilter===k; return (
-                <button key={k} onClick={()=>setRespFilter(on?null:k)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',border:`1px solid ${on?pc.color:'transparent'}`,background:pc.bg,color:pc.color}}>{sin?'Oficina':k} · {n}</button>
+                <button key={k} onClick={()=>setRespFilter(on?null:k)} style={pillPersonaSty(pc,on)}>{sin?'Oficina':k} · {n}</button>
               )})}
               {respFilter&&<button onClick={()=>setRespFilter(null)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Ver todos</button>}
             </div>
@@ -30509,6 +30511,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   const [sortBy,setSortBy] = useState(()=>viewMemLeer('cobranza')?.sortBy||{col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
   const [expCli,setExpCli] = useState(()=>viewMemLeer('cobranza')?.expCli??null)
   useEffect(()=>{ viewMemGuardar('cobranza',{sortBy,expCli}) },[sortBy,expCli])   // escritorio: cliente con sus facturas desplegadas
+  const [reembOpen,setReembOpen] = useState(false)   // sección Reembolsos por cobrar: plegada por defecto
   const [aboFilter,setAboFilter] = useState(null)   // anillo de abogado seleccionado → filtra la lista de clientes (hero y anillos siguen globales)
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
@@ -30650,9 +30653,13 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
     const rs = rsDeFactura(b, clientEntities)
     const nEnt = (clientEntities||[]).filter(e=>String(e.client_id)===String(b.client_id)).length
     const showRs = !!rs && (nEnt>1 || _normTxt(rs)!==_normTxt(cn(b.client_id)))
+    const acciones=(<div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:5,width:isDesktop?'auto':'100%'}}>
+          {b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}
+          {onIrConciliacion&&<button onClick={e=>{e.stopPropagation();onIrConciliacion(b)}} style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.greenBg,color:C.greenText,fontSize:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Buscar pago <Gl n='chevron'/></button>}
+        </div>)
     return (
     // Toda la fila abre la factura (→ su detalle con "Volver"); la fecha de emisión y los días de vencida son el foco.
-    <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',alignItems:'center',gap:11,borderTop:`1px solid ${C.bgSoft}`,padding:'9px 4px',cursor:onOpenFactura?'pointer':'default'}}>
+    <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'flex',flexWrap:isDesktop?'nowrap':'wrap',alignItems:'center',gap:11,borderTop:`1px solid ${C.bgSoft}`,padding:'9px 4px',cursor:onOpenFactura?'pointer':'default'}}>
       {dd?bigDate(s,sevCol):<div style={{width:44,flexShrink:0,textAlign:'center',fontSize:11,color:C.textSoft}}>—</div>}
       <div style={{flex:1,minWidth:0}}>
         {showRs
@@ -30660,18 +30667,16 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
               <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?` · ${b.concept}`:''}</div></>
           : <div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?<span style={{color:C.muted,fontWeight:500}}> · {b.concept}</span>:''}</div>}
         <div style={{display:'flex',gap:18,marginTop:3}}>
-          <div><div style={kk}>Emitida</div><div style={{...dv,color:C.text}}>{b.issued_at?fmtFechaDMY(b.issued_at):'—'}</div></div>
+          <div><div style={kk}>Emitida</div><div style={{...dv,color:C.text,whiteSpace:'nowrap'}}>{b.issued_at?fmtFechaDMY(b.issued_at):'—'}</div></div>
           <div><div style={kk}>{venc?'Vencida':'Vence en'}</div><div style={{...dv,color:sevCol}}>{venc?`${diasVenc} días`:(dl>0?`${dl} días`:'hoy')}</div></div>
         </div>
       </div>
       <div style={{textAlign:'right',flexShrink:0}}>
         <div style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</div>
         {parcial&&<div style={{fontSize:9,color:C.textSoft}}>abonado {f0(b.paid_amount)} de {f0(b.amount)}</div>}
-        <div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:5}}>
-          {b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}
-          {onIrConciliacion&&<button onClick={e=>{e.stopPropagation();onIrConciliacion(b)}} style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.greenBg,color:C.greenText,fontSize:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Buscar pago <Gl n='chevron'/></button>}
-        </div>
+        {isDesktop&&acciones}
       </div>
+      {!isDesktop&&acciones}
     </div>) }
 
   // Recordatorio de cobro = PÁGINA (antes ventana encima): mismo contenido, con '‹ Cobranza' para volver. El envío sigue con su botón y confirmación.
@@ -30681,46 +30686,32 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
         {onClose?<PageHeader origen={origen||'Inicio'} onBack={onClose} titulo='Cobranza' style={{flex:1,margin:'-12px -14px 0'}}/>:<div style={TIT_PAG}>Cobranza</div>}
       </div>
-      {/* Hero = DOS tarjetas separadas (no pareja con separador): Vencido (lo urgente) + Total por cobrar (la cartera). Ambas ordenan la lista al tocarlas. */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
-        <div onClick={()=>setSortBy({col:'vencido',dir:'desc'})} title='Ordenar por vencido' style={{background:C.overdueBg,border:'1px solid #F3D2D0',borderRadius:12,padding:'13px 15px',cursor:'pointer'}}>
-          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:700,color:C.overdueText}}>Deuda vencida</div>
-          <div style={{fontSize:24,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fM(vencidoTotal)}</div>
-          <div style={{fontSize:10,color:'#B4534F'}}>{gruposAccion.length} cliente{gruposAccion.length!==1?'s':''} · {nVencidas} factura{nVencidas!==1?'s':''}{enEspera?` · ${enEspera} en espera`:''}</div>
-        </div>
-        <div onClick={()=>setSortBy({col:'total',dir:'desc'})} title='Ordenar por deuda total' style={{background:C.accent,borderRadius:12,padding:'13px 15px',color:'#fff',cursor:'pointer'}}>
-          <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:700,color:C.onNavyLabel}}>Deuda total por cobrar</div>
-          <div style={{fontSize:24,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{fM(deudaTotal)}</div>
-          <div style={{fontSize:10,color:C.onNavyLabel}}>{grupos.length} cliente{grupos.length!==1?'s':''}{nAlDia>0?` · ${nAlDia} al día`:''}</div>
-        </div>
-      </div>
-      {/* Exposición por abogado (SIEMPRE visible): anillo con % vencido. Toca un anillo → filtra la lista a ese abogado. Muestra quién está más expuesto / trabaja sin cobrar. */}
-      {porAbogado.length>0 && <div style={{marginBottom:14}}>
-        <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:9}}>
-          <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.textSoft}}>Exposición por abogado</span>
-          {aboFilter&&<span onClick={()=>setAboFilter(null)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}><Gl n='chevL'/> Todos</span>}
-        </div>
-        <div style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop&&porAbogado.length>1?'1fr 1fr':'1fr',flexDirection:'column',gap:7}}>
-          {(()=>{ const vencidoTotal=porAbogado.reduce((s,x)=>s+(x.vencido||0),0); return porAbogado.map(a=>{ const pct=a.total>0?Math.round(a.vencido/a.total*100):0
-            const pctVencOfi=vencidoTotal>0?Math.round(a.vencido/vencidoTotal*100):0   // participación en el VENCIDO de la oficina = "quién trabaja sin que le paguen" (suma 100%)
-            const sev = pct>=60?{c:C.overdueText,bg:C.overdueBg}:pct>=30?{c:C.soonText,bg:C.soonBg}:pct>0?{c:C.muted,bg:C.bgSoft}:{c:C.greenText,bg:C.greenBg}
-            const on=aboFilter===a.abo, isX=a.abo==='Sin asignar'
-            return (
-            <div key={a.abo} onClick={()=>setAboFilter(on?null:a.abo)} title={`${a.abo} · ${a.nVenc} de ${a.n} vencidas`} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',background:'#fff',border:`1px solid ${on?C.accent:(pct>=60?'#F0C9C6':C.border)}`,borderRadius:10,cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent} inset`:'none'}}>
-              <span style={{width:26,height:26,borderRadius:8,background:sev.bg,color:sev.c,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,flexShrink:0}}>{isX?'?':(a.abo[0]||'·')}</span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:700,color:isX?C.muted:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.abo}</div>
-                <div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{pctVencOfi}% del vencido de la oficina · {a.nVenc}/{a.n} vencidas</div>
+      {(()=>{
+        // Foto de Cobranza: dos tarjetas en tonos claros (molde del Inicio). Tocar una ordena la lista por esa cifra.
+        const tile=(key,label,fig,cap,bg,bd,ico,icoCol,figCol)=>(
+          <div onClick={()=>setSortBy({col:key,dir:'desc'})} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+            <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+              <span style={{width:30,height:30,borderRadius:8,background:bd,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ico} s={16} c={icoCol}/></span>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{...SEC_LBL,whiteSpace:'nowrap'}}>{label}</div>
+                <div style={{fontSize:22,fontWeight:800,color:figCol,letterSpacing:'-.5px',lineHeight:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:5}}>{fig}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:5,whiteSpace:'nowrap'}}>{cap}</div>
               </div>
-              <div style={{textAlign:'right',flexShrink:0,lineHeight:1.25}}>
-                <div style={{fontSize:13,fontWeight:800,color:sev.c,fontVariantNumeric:'tabular-nums'}}>{fM(a.vencido)} <span style={{fontSize:11,fontWeight:400,color:C.muted}}>vencido</span></div>
-                <div style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums'}}>de {fM(a.total)} de su cartera</div>
-              </div>
-            </div>) }) })()}
-        </div>
-      </div>}
+            </div>
+          </div>)
+        const chip=a=>{ const on=aboFilter===a.abo; return (
+          <button key={a.abo} onClick={()=>setAboFilter(on?null:a.abo)} title={`${a.abo} · ${fM(a.vencido)} vencido de ${fM(a.total)} · ${a.nVenc}/${a.n} vencidas`} style={pillPersonaSty(personChip(a.abo),on)}>{a.abo} · {fM(a.vencido)}</button>) }
+        return (<>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12,alignItems:'start'}}>
+            {tile('vencido','Vencido',fM(vencidoTotal),`${nVencidas} factura${nVencidas!==1?'s':''}${isDesktop?` · ${gruposAccion.length} cliente${gruposAccion.length!==1?'s':''}`:''}`,C.overdueBg,C.overdueBd,'alert',C.overdueText,C.overdueText)}
+            {tile('total','Por cobrar',fM(deudaTotal),`${grupos.length} cliente${grupos.length!==1?'s':''}${isDesktop&&nAlDia>0?` · ${nAlDia} al día`:''}`,C.azulBg,C.azulBd,'file',C.azulInfo,C.accent)}
+          </div>
+          {grupos.length>0&&(isDesktop
+            ? <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:10}}><Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{flex:1,minWidth:0,marginRight:4}}/>{porAbogado.map(chip)}</div>
+            : <><Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{marginBottom:8}}/><div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>{porAbogado.map(chip)}</div></>)}
+        </>)
+      })()}
       {grupos.length===0 && <div style={{fontSize:13,color:C.textSoft,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
-      {grupos.length>0&&<Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{marginBottom:10}} />}
       {grupos.length>0 && (()=>{ const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]; return (
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:10}}>
           <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft}}>Ordenar</span>
@@ -30765,19 +30756,24 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
         )
       })() : gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const conVenc=g.nAccion>0||g.vencido>0; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
         <div key={g.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-            <span onClick={()=>onOpenClientFicha?onOpenClientFicha(g.cid):setExpCli(expCli===g.cid?null:g.cid)} style={{...NOMBRE_CLI,cursor:'pointer'}}>{cn(g.cid)}</span>
-            <div style={{textAlign:'right',lineHeight:1.15,flexShrink:0}}>
-              {g.vencido>0 && <><div style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft}}>Vencido</div><div style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{f0(g.vencido)}</div></>}
-              <div style={{fontSize:g.vencido>0?11:15,fontWeight:g.vencido>0?600:800,color:g.vencido>0?C.muted:C.accent,fontVariantNumeric:'tabular-nums'}}>{g.vencido>0?`Total ${f0(g.total)}`:f0(g.total)}</div>
+          {/* Plegada: nombre + vencido (o el total si está al día). Al tocar se abre el resto: total, estado, ficha, facturas y recordatorio. */}
+          <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
+            <span onClick={onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} style={{...NOMBRE_CLI,cursor:'pointer',minWidth:0}}>{cn(g.cid)}</span>
+            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+              <div style={{textAlign:'right',lineHeight:1.15}}>
+                {g.vencido>0
+                  ? <><div style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft}}>Vencido</div><div style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{f0(g.vencido)}</div>{expCli===g.cid&&<div style={{fontSize:11,fontWeight:600,color:C.muted,fontVariantNumeric:'tabular-nums'}}>Total {f0(g.total)}</div>}</>
+                  : <div style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{f0(g.total)}</div>}
+              </div>
+              <span style={{fontSize:11,color:C.muted}}>{expCli===g.cid?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
             </div>
           </div>
-          <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap',cursor:'pointer'}}>
+          {expCli===g.cid&&<>
+          <div style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap'}}>
             <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} pendiente{g.items.length!==1?'s':''}{g.maxDias>0?` · vencida hace ${nDias(g.maxDias)} · ${gapTxt}`:' · al día'}</span>
             {onOpenClientFicha&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(g.cid)}} style={{fontSize:11,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha <Gl n='chevron'/></span>}
-            <span style={{fontSize:11,color:C.accent,fontWeight:600,marginLeft:'auto'}}>{expCli===g.cid?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
           </div>
-          {expCli===g.cid&&<div style={{marginTop:6,borderTop:`1px solid ${C.bgSoft}`}}>{g.items.map(detItem)}</div>}
+          <div style={{marginTop:6,borderTop:`1px solid ${C.bgSoft}`}}>{g.items.map(detItem)}</div>
           {!conVenc
             ? <div style={{marginTop:9,fontSize:11,fontWeight:700,color:C.greenText}}>Al día — sin facturas vencidas</div>
             : <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:9,marginTop:10}}>
@@ -30789,14 +30785,15 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
                   <button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></>}
             </div>
           </div>}
+          </>}
         </div>
       )})}
       {reembolsos.length>0&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginTop:14}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,marginBottom:4}}>
-          <span style={SEC_LBL}>Reembolsos por cobrar · {reembolsos.length}</span>
+        <div onClick={()=>setReembOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,cursor:'pointer'}}>
+          <span style={{...SEC_LBL,display:'inline-flex',alignItems:'center',gap:6}}><span style={{color:C.muted}}>{reembOpen?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>Reembolsos por cobrar · {reembolsos.length}</span>
           <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fM(reembolsos.reduce((a,x)=>a+saldoBill(x.b),0))}</span>
         </div>
-        {reembolsos.map(x=>(<div key={x.b.id}>
+        {reembOpen&&reembolsos.map(x=>(<div key={x.b.id}>
           <div onClick={onOpenClientFicha?()=>onOpenClientFicha(x.b.client_id):undefined} style={{...NOMBRE_CLI,fontSize:13,marginTop:8,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(x.b.client_id)}</div>
           {detItem(x)}
         </div>))}
