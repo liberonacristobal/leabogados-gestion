@@ -4216,10 +4216,6 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
                 {isCob&&comisList}
                 {isCob&&percYTD>0&&percChip}
                 {isCob&&percList}
-                {isCob&&(()=>{ const iv=ingresosPorAnioVenta; return (<>
-                  {filaG('tc',()=>setResCaja(v=>!v),<span style={rowL}>Total a caja</span>,null,fmtMon(iv.totalCaja||0),rowV,resCaja)}
-                  {resCaja&&[['Cobrado propio',iv.total],['Por cuenta de terceros',iv.cajaExt],['Reembolsos de gastos',iv.cajaReemb],['Subarriendo',iv.cajaSubarr]].filter(([,v])=>v>0).map(([l,v])=>subFila('tc-'+l,null,l,fmtMon(v),C.accent,null))}
-                </>) })()}
                 <div style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.5px',padding:'10px 14px 4px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isCob?'Cobrado':'Facturado'} según año de la venta{isDeskRes?'':' · % de lo vendido'}</div>
                 {anyOpen&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'0 14px 8px'}}><span style={{fontSize:9,fontWeight:800,color:C.done,textTransform:'uppercase',letterSpacing:'.4px',marginRight:'auto'}}>Orden</span><span style={{display:'inline-flex',background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:2}}>{['fecha','monto'].map(o=>(<span key={o} onClick={()=>setResOrd(o)} style={{fontSize:10,fontWeight:800,padding:'2px 10px',borderRadius:12,cursor:'pointer',color:resOrd===o?'#fff':C.muted,background:resOrd===o?C.accent:'transparent'}}>{o==='fecha'?'Fecha':'Monto'}</span>))}</span></div>)}
                 {yrs.map(y=>{ const open=resDrill.year===y; let items=(listByYear[y]||[]).slice(); items.sort((a,b)=> resOrd==='monto' ? (montoOf(b)-montoOf(a)) : String(dateOf(b)||'').localeCompare(String(dateOf(a)||''))); const key=`${t}-${y}`; const seeAll=resSeeAll[key]; const shown=seeAll?items:items.slice(0,6);
@@ -4238,6 +4234,11 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
                       </div>) })}
                     {open&&items.length>6&&<div onClick={()=>setResSeeAll(s=>({...s,[key]:!s[key]}))} style={{textAlign:'center',padding:9,fontSize:11,fontWeight:700,color:C.azulInfo,background:C.bg,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>{seeAll?'Ver menos':`Ver las ${items.length} ›`}</div>}
                   </Fragment>) })}
+                {isCob&&(ingresosPorAnioVenta.totalCaja||0)>0&&(()=>{ const iv=ingresosPorAnioVenta
+                  return (<>
+                    <div onClick={()=>setResCaja(v=>!v)} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'8px 14px',fontSize:11,color:C.muted,borderTop:`1px solid ${C.border}`,cursor:'pointer',whiteSpace:'nowrap'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}}>Total a caja (con terceros y reembolsos)</span><b style={{color:C.accent,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{fmtMon(iv.totalCaja)}</b></div>
+                    {resCaja&&[['Cobrado propio',iv.total],['Por cuenta de terceros',iv.cajaExt],['Reembolsos de gastos',iv.cajaReemb],['Subarriendo',iv.cajaSubarr]].filter(([,v])=>v>0).map(([l,v])=>subFila('tc-'+l,null,l,fmtMon(v),C.accent,null))}
+                  </>) })()}
                 {!isCob&&facturadoEmitido.total>0&&(()=>{ const fe=facturadoEmitido, otros=Math.max(0,fe.total-facturadoYr-facturadoTerceros.total-fe.reemb-fe.subarr)
                   return (<>
                     <div onClick={()=>setResFTer(v=>!v)} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'8px 14px',fontSize:11,color:C.muted,borderTop:`1px solid ${C.border}`,cursor:'pointer',whiteSpace:'nowrap'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}}>Total emitido (con terceros y reembolsos)</span><b style={{color:C.accent,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{fmtMon(fe.total)}</b></div>
