@@ -15135,7 +15135,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     </div>)
   }
 
-  // ── PAGAR (página): marca pagadas las comisiones elegidas con fecha, referencia y su factura o boleta; mismo guardado de siempre. ──
+  // ── PAGAR (página): qué transferir y a quién. No marca nada: la comisión queda pagada sola al conciliarse la transferencia del banco. ──
   if(view==='pagar'&&sel&&pag){
     const ts=tercDe(sel.id).filter(t=>est(t)==='por_pagar'&&saldoT(t)>0).sort((a,b)=>venceT(a).localeCompare(venceT(b)))
     const elegidas=ts.filter(t=>pag.ids.has(t.id)), total=elegidas.reduce((a,t)=>a+saldoT(t),0)
@@ -15145,11 +15145,6 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     const togGrupo=g=>setPag(p=>{ const n=new Set(p.ids); const todas=g.ts.every(t=>n.has(t.id)); g.ts.forEach(t=>todas?n.delete(t.id):n.add(t.id)); return {...p,ids:n} })
     const toggle=id=>setPag(p=>{ const n=new Set(p.ids); n.has(id)?n.delete(id):n.add(id); return {...p,ids:n} })
     const yaPago = calces.filter(c=>(c.tipo==='com'||c.tipo==='combo')&&String(c.prov.id)===String(sel.id)&&(c.ts||[c.t]).some(t=>pag.ids.has(t.id)))
-    const docSug = docsDe(sel.id).filter(d=>!d.movimiento_id&&Number(d.tipo_dte)!==61).sort((a,b)=>String(b.fecha_emision).localeCompare(String(a.fecha_emision)))[0]
-    const inp={width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:C.card,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
-    const marcar = async () => { if(!elegidas.length||!onPagarBulk) return; setBusy('pagar')
-      const r=await onPagarBulk(elegidas.map(t=>t.id),{pagado_at:pag.fecha,referencia:pag.ref,factura_numero:pag.doc,factura_fecha:pag.docF||null}); setBusy(null)
-      if(r){ logActividad(`proveedores.${sel.id}.pagar`,{tabla:'terceros_pagos',id:elegidas[0].id,detalle:{title:`Pagó ${elegidas.length} ${elegidas.length===1?'comisión':'comisiones'}${pag.ref?' · ref. '+pag.ref:''}`,monto:total}}); appAlert(`Quedaron pagadas ${elegidas.length} ${elegidas.length===1?'comisión':'comisiones'} por ${fmt(total)}.`); setPag(null); setView('ficha') } }
     const cb = on => <span style={{width:18,height:18,borderRadius:5,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:C.card,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3'><polyline points='5 12 10 17 19 7'/></svg>}</span>
     const lista = <div style={{...card,overflow:'hidden'}}>
       <div style={{...kLbl,padding:'10px 14px 6px'}}>Comisiones por pagar</div>
@@ -15176,17 +15171,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
         {sel.rut&&<div style={{fontSize:12,color:C.muted}}><Copyable text={sel.rut}>{fmtRutCL(sel.rut)} <span style={{color:C.azulInfo,fontWeight:700}}>Copiar</span></Copyable></div>}
         {sel.datos_pago?.trim()?<div style={{marginTop:6,fontSize:12,whiteSpace:'pre-wrap',lineHeight:1.45}}><Copyable text={sel.datos_pago}>{sel.datos_pago} <span style={{color:C.azulInfo,fontWeight:700}}>Copiar</span></Copyable></div>:<div style={{marginTop:6}}>{link('+ agregar datos de pago',()=>abrirEditar(sel))}</div>}
       </div>
-      <div style={{...card,padding:'10px 14px',display:'flex',flexDirection:'column',gap:9}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div><div style={{...kLbl,marginBottom:4}}>Fecha del pago</div><input type='date' value={pag.fecha} onChange={e=>setPag(p=>({...p,fecha:e.target.value}))} style={inp}/></div>
-          <div><div style={{...kLbl,marginBottom:4}}>Referencia</div><input value={pag.ref} onChange={e=>setPag(p=>({...p,ref:e.target.value}))} placeholder='N° de operación' style={inp}/></div>
-        </div>
-        <div><div style={{...kLbl,marginBottom:4}}>Su factura o boleta</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><input value={pag.doc} onChange={e=>setPag(p=>({...p,doc:e.target.value}))} placeholder='N°' style={inp}/><input type='date' value={pag.docF} onChange={e=>setPag(p=>({...p,docF:e.target.value}))} style={inp}/></div>
-          {docSug&&!pag.doc&&<div style={{fontSize:11.5,color:C.muted,marginTop:5}}>Sugerida: su factura N° {docSug.folio} del {dmy(docSug.fecha_emision)} ({fmt(Math.abs(Number(docSug.monto)||0))}) · {link('Usar',()=>setPag(p=>({...p,doc:String(docSug.folio),docF:String(docSug.fecha_emision||'').slice(0,10)})))}</div>}</div>
-        {user&&elegidas[0]&&<div><div style={{...kLbl,marginBottom:4}}>Comprobante</div><Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={elegidas[0].id} folderKind='facturas' namePrefix={`comision_${tituloProv(sel)}`} user={user} inline/></div>}
-      </div>
-      <ActBtn variant='primary' size='lg' full disabled={!elegidas.length||busy==='pagar'} onClick={marcar}>{busy==='pagar'?'Guardando…':`Marcar pagadas · ${fmt(conBol?transferir:total)}`}</ActBtn>
-      <div style={{fontSize:11.5,color:C.muted}}>Si la transferencia ya está en el banco y calza exacto, se marca sola; esto es para un pago que no calza.</div>
+      <div style={{fontSize:11.5,color:C.muted}}>Queda pagada sola cuando la transferencia aparece en el banco.</div>
     </div>
     return (<div>
       <PageHeader origen={tituloProv(sel)} onBack={()=>{setPag(null);setView('ficha')}} titulo='Pagar' ctx={`${elegidas.length} ${elegidas.length===1?'comisión':'comisiones'} · ${fmt(conBol?transferir:total)}`}/>
