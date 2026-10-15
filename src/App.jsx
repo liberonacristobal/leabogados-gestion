@@ -144,12 +144,13 @@ async function claudeCall(body){
   return data
 }
 
-const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
+const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0).replace(/^-/,'−')   // signo menos tipográfico
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}` : '—'
 // CLP abreviado para KPIs ($216,2M / $30K). Conserva el signo.
 // Millones con 1 decimal ($40,8M); bajo $1M, 2 decimales ($0,73M). Tarjetas y resúmenes (regla «número en $M»).
-const fmtMill = n => { const a=Math.abs(Number(n)||0), s=n<0?'−':''; return s+'$'+(a/1e6).toFixed(a>=1e6?1:2).replace('.',',')+'M' }
-const fmtShort = n => { const a=Math.abs(n||0), s=n<0?'-':''; if(a>=1000000) return s+'$'+(a/1000000).toFixed(a>=10000000?0:1).replace('.',',')+'M'; if(a>=1000) return s+'$'+Math.round(a/1000)+'K'; return s+'$'+a.toLocaleString('es-CL') }
+const fmtMill = n => { const a=Math.abs(Number(n)||0), s=n<0?'−':''; if(!a) return '$0'; const v=a>=1e6?Math.round(a/1e5)/10:Math.round(a/1e4)/100; return s+'$'+v.toFixed(a>=1e6?1:2).replace('.',',')+'M' }   // redondeo en enteros: 605.000 → $0,61M
+// Cifra corta (subtítulos, chips, KPIs): $M con 1 decimal; bajo $1M, $0,XXM (regla «número en $M», 2026-10-15). Bajo $1.000, pesos.
+const fmtShort = n => { const a=Math.abs(n||0), s=n<0?'−':''; if(a>=1000) return s+fmtMill(a); return s+fmt(a) }
 // UF abreviada para KPIs (UF 9.800 / UF 6.309), sin decimales para no recargar.
 const fmtUFk = n => `UF ${Math.round(n||0).toLocaleString('es-CL')}`
 // UF de respaldo (CLP) cuando no hay valor UF del día (ufHoy) ni congelado en la venta (uf_value).
@@ -3171,7 +3172,7 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[],onOpenClientFicha}) {
     const v = val(m)
     if(v===0) return ''
     if(moneda==='UF') return v>=1000? (v/1000).toFixed(v>=10000?0:1)+'k' : Math.round(v).toString()
-    if(v>=1000000) return (v/1000000).toFixed(v>=10000000?0:1).replace('.',',')+'M'
+    if(v>=1000000) return (Math.round(v/100000)/10).toFixed(1).replace('.',',')+'M'
     if(v>=1000) return Math.round(v/1000)+'k'
     return Math.round(v).toString()
   }
@@ -3541,7 +3542,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       <div style={{minWidth:0,flex:1}}>
         {/* Label, cifra y sub en una columna → todos alineados al mismo margen (a la derecha del icono), no bajo el icono. */}
         <div style={{fontSize:10,fontWeight:600,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
-        <div style={{fontSize:(value&&String(value).length>6)?15:19,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
+        <div style={{fontSize:(value&&String(value).length>8)?15:19,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
         {sub&&<div style={{fontSize:9,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
       </div>
       <span style={{position:'absolute',top:11,right:11,color:C.textSoft,fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>{onClick?<Gl n='chevron'/>:<Gl n='chevD'/>}</span>
@@ -3954,7 +3955,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       porCobrar7.length&&{sev:1,dot:C.soon,ico:'cash',lbl:'Por cobrar esta semana',sub:`${porCobrar7.length} factura${porCobrar7.length!==1?'s':''}`,amt:fmtShort(sumSaldo(porCobrar7)),go:'billing',navLbl:`Ver las ${porCobrar7.length}`,rows:porCobrar7.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(saldoBill(b)),cid:b.client_id})),iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sumSaldo(porCobrar7))})`},
       // Caja chica por persona (alertasCajaChica, fuente única): en negativo = la oficina le debe (rojo); baja = bajo el umbral del estudio (ámbar). Acción: Entregar caja.
       ...alertasCajaChica(pettyCash,expenses).map(a=>a.tipo==='negativo'
-        ? {sev:0,dot:C.overdue,ico:'wallet',lbl:'Caja chica en negativo',sub:`${a.persona} · la oficina le debe ${fmtN(-a.saldo)}`,amt:'-'+fmtN(-a.saldo),onNav:()=>onEntregarCaja&&onEntregarCaja(a.persona,-a.saldo),navLbl:`Entregar caja ${fmtN(-a.saldo)}`,rows:[],iaTxt:`${a.persona} tiene la caja chica en negativo por ${fmtN(-a.saldo)} (la oficina le debe)`}
+        ? {sev:0,dot:C.overdue,ico:'wallet',lbl:'Caja chica en negativo',sub:`${a.persona} · la oficina le debe ${fmtN(-a.saldo)}`,amt:'−'+fmtN(-a.saldo),onNav:()=>onEntregarCaja&&onEntregarCaja(a.persona,-a.saldo),navLbl:`Entregar caja ${fmtN(-a.saldo)}`,rows:[],iaTxt:`${a.persona} tiene la caja chica en negativo por ${fmtN(-a.saldo)} (la oficina le debe)`}
         : {sev:1,dot:C.soon,ico:'wallet',lbl:'Caja chica baja',sub:`${a.persona} · quedan ${fmtN(a.saldo)} (aviso a ${fmtN(BRAND.cajaChicaUmbral)})`,amt:'',onNav:()=>onEntregarCaja&&onEntregarCaja(a.persona,null),navLbl:'Entregar caja',rows:[],iaTxt:`a ${a.persona} le quedan ${fmtN(a.saldo)} de caja chica`}),
       cajaSinLiq.length&&{sev:1,dot:C.soon,ico:'wallet',lbl:'Caja chica sin liquidar',sub:`${cajaSinLiq.length} gasto${cajaSinLiq.length!==1?'s':''}`,amt:fmtN(sum(cajaSinLiq)),go:'expenses',navLbl:`Ver los ${cajaSinLiq.length}`,rows:cajaSinLiq.slice(0,3).map(e=>({name:e.concept||'—',val:fmtN(e.amount)})),iaTxt:`${cajaSinLiq.length} gastos de caja chica sin liquidar`},
       rendCli.length&&{sev:2,dot:C.normal,ico:'file',lbl:'Rendiciones por hacer',sub:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,amt:'',go:'expenses',navLbl:`Ver los ${rendCli.length}`,rows:rcRows.slice(0,3),iaTxt:`${rendCli.length} clientes con gastos por rendir`},
@@ -9111,7 +9112,7 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
   const _dmyS=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
   const _mc=d=>{ const s=String(d||'').slice(0,10); const n=parseInt(s.slice(5,7),10); return n?`${s.slice(8,10)} ${MC[n]}`:'' }
   const fechaLbl=(d0,d1)=>{ if(d0===d1) return _mc(d0); const a=String(d0).slice(0,10),b=String(d1).slice(0,10); if(a.slice(5,7)===b.slice(5,7)) return `${a.slice(8,10)}–${b.slice(8,10)} ${MC[parseInt(a.slice(5,7),10)]}`; return `${_mc(d0)} – ${_mc(d1)}` }
-  const fmtM=n=>'$'+(Math.abs(Number(n)||0)/1e6).toFixed(1).replace('.',',')+' M'   // millones, 1 decimal (consistente con Oficina/ResultadoAnioView)
+  const fmtM=n=>fmtMill(Math.abs(Number(n)||0))   // millones, 1 decimal (helper único fmtMill)
   const yrs=(()=>{ const s=new Set([curY]); (expenses||[]).forEach(e=>{ const y=parseInt(String(e.date||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
   const inOfi=e=>ofi&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,4)===String(yr)
   const movs=(expenses||[]).filter(e=>inOfi(e)&&String(e.category||'').trim().toLowerCase()==='retiros').map(e=>({e,socio:_SOCIO_RET(e),amt:Number(e.amount)||0,date:String(e.date||'').slice(0,10)}))
@@ -9338,8 +9339,8 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
   const margen=ingresos>0?Math.round(resultado/ingresos*100):0
   const ncList=months.flatMap(m=>vMes(m).filter(d=>Number(d.tipo_dte)===61).map(d=>({folio:d.folio,rec:d.receptor_name,monto:Number(d.monto)||0,ext:!d.billing_id})))
   const estim=months.some(m=>cmBy[m]&&cmBy[m].estimado)
-  const fmtM=n=>{ const s=n<0?'−':'+'; return s+'$'+(Math.abs(n)/1e6).toFixed(1).replace('.',',')+' M' }
-  const fmtMp=n=>'$'+(Math.abs(n)/1e6).toFixed(1).replace('.',',')+' M'
+  const fmtM=n=>(n<0?'−':'+')+fmtMill(Math.abs(n))
+  const fmtMp=n=>fmtMill(Math.abs(n))
   const titulo=scope==='mes'?`${MESES[selM-1]} ${yr}`:(yr<curY?`${yr} completo`:`Enero–${MESES[maxM-1]} ${yr}`)
   const nCerrados=Array.from({length:maxM},(_,i)=>i+1).filter(m=>cmBy[m]&&cmBy[m].cerrado).length
   const CAMPOS=[['sueldos','Sueldos'],['cotizaciones','Cotizaciones'],['ppm','PPM'],['contadora','Contadora'],['arriendo','Arriendo'],['gastos_comunes','Gastos comunes'],['honorarios','Honorarios'],['otros_costos','Otros'],['subarriendo','Subarriendo (ingreso)'],['comisiones','Comisiones']]
@@ -9423,12 +9424,12 @@ function ResultadoAnioView({ terceros=[], costosOfiRows=[], isDesktop=true, onBa
 
     <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'20px 4px 10px'}}>Ingresos</div>
     {sec('fac',C.azulBg,C.accent,<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>,'Facturación propia','emitido en el SII, neto',fmtMp(facturacion),C.accent,
-      <>{row('Facturación emitida','$'+(emitida/1e6).toFixed(1).replace('.',',')+' M','SII')}
+      <>{row('Facturación emitida',fmtMill(emitida),'SII')}
         <div>
           <div onClick={e=>{e.stopPropagation();setNcOpen(!ncOpen)}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5,cursor:'pointer'}}><span style={{color:C.text,fontWeight:600}}>− Notas de crédito <span style={{color:C.textSoft,fontSize:10.5}}>{ncList.length} NC</span></span><span style={{marginLeft:'auto'}}>{chev(ncOpen)}</span><span style={{fontWeight:700,color:C.overdueText,fontVariantNumeric:'tabular-nums',marginLeft:9}}>−{fmtMp(nc)}</span></div>
           {ncOpen&&ncList.map((n,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 11px',margin:'4px 0',background:C.overdueBg,borderRadius:8,fontSize:11.5,color:C.overdueText,fontWeight:600}}><span>N° {n.folio} · {n.rec||'—'}{n.ext?' · sin enlazar':''}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(n.monto)}</span></div>)}
         </div>
-        {row('Facturación neta','$'+((emitida-nc)/1e6).toFixed(1).replace('.',',')+' M')}
+        {row('Facturación neta',fmtMill(emitida-nc))}
         {row('− Por cuenta de terceros','−'+fmtMp(terc),'se traspasa el 85%')}
         <div style={{display:'flex',padding:'9px 2px',borderTop:`2px solid ${C.border}`,fontSize:13,fontWeight:800,color:C.accent}}><span>Facturación propia</span><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>{fmtMp(facturacion)}</span></div>
       </>)}
@@ -9539,7 +9540,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const emitidoBrutoYr=(ventasRows||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(year)&&[33,34].includes(Number(d.tipo_dte))).reduce((a,d)=>a+(Number(d.monto)||0),0)
   const porCobrar=porCobrarBills(billing)   // fuente única (sin reembolsos ni por facturar), igual que Inicio/Facturación/Cobranza
   // Formato Oficina: millones con 1 decimal (igual que ResultadoAnioView.fmtMp), NO fmtShort.
-  const fM=n=>'$'+(Math.abs(Number(n)||0)/1e6).toFixed(1).replace('.',',')+' M'
+  const fM=n=>fmtMill(Math.abs(Number(n)||0))
   const MESNOM=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
   const MESCAP=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   // Filtro Año / Por mes: el selector de mes ofrece SOLO meses cerrados (los abiertos no tienen número final).
@@ -24645,7 +24646,7 @@ function ClientFicha({onAsociarTrabajo,onToggleStatus,onOpenFusion,client,client
   const porRendir = gastosPorRendirCli(expenses, client.id).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1)
   const porRendirTot = porRendir.reduce((a,e)=>a+(Number(e.amount)||0),0)
   // Embudo del cliente: cifras a UNA décima (resumen escaneable; el detalle de las filas va en fmt completo).
-  const fmtM1 = n => { const a=Math.abs(n||0),s=n<0?'−':''; if(a>=1e6) return s+'$'+(a/1e6).toFixed(1).replace('.',',')+'M'; if(a>=1e3) return s+'$'+Math.round(a/1e3)+'K'; return s+'$'+Math.round(a).toLocaleString('es-CL') }
+  const fmtM1 = fmtShort
   const ufM1 = n => n>0 ? `UF ${Math.round(n).toLocaleString('es-CL')}` : '—'   // KPI hero: UF redonda (sin ",0" colgando)
   const nVencFicha = porCobrar.filter(b=>esVencidaB(b)).length
 
@@ -25604,7 +25605,7 @@ function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendicion
   const foto=esCaja ? (personaCaja&&(
     <div style={{background:saldoPersona<0?C.overdueBg:C.azulBg,border:`1px solid ${saldoPersona<0?C.overdueBg:C.tileLineOn}`,borderRadius:12,padding:'12px 14px'}}>
       <div style={{fontSize:10,fontWeight:700,color:saldoPersona<0?C.overdueText:C.azulInfo,textTransform:'uppercase',letterSpacing:.5,marginBottom:3}}>Saldo caja · {personaCaja}</div>
-      <div style={{fontSize:22,fontWeight:800,color:saldoPersona<0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums'}}>{saldoPersona<0?'-':''}{fmt(Math.abs(saldoPersona||0))}</div>
+      <div style={{fontSize:22,fontWeight:800,color:saldoPersona<0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums'}}>{saldoPersona<0?'−':''}{fmt(Math.abs(saldoPersona||0))}</div>
       {saldoPersona<0&&<div style={{fontSize:11.5,fontWeight:600,color:C.overdueText}}>La oficina le debe {fmt(-saldoPersona)}</div>}
     </div>)) : fg&&(
     <div style={{background:C.azulBg,border:`1px solid ${C.tileLineOn}`,borderRadius:12,padding:'12px 14px'}}>
@@ -30525,7 +30526,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
-  const fM = n => '$'+((n||0)/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+'M'   // compacto para la foto (hero + anillos); el detalle por factura mantiene el peso exacto
+  const fM = n => fmtMill(n||0)   // compacto para la foto (hero + anillos); el detalle por factura mantiene el peso exacto
   useEffect(()=>{
     if(DEMO){ setRecMap({}); setOkCount({c4:3}); setAutoCli({}); setAutoGlobal(false); return }
     supabase.from('learnings').select('kind,key,value').in('kind',['factura_recordado','cobranza_ok','fd_auto','config','recordatorio_nota']).then(({data})=>{
