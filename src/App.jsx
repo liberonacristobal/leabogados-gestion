@@ -19137,8 +19137,6 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   },[expenses,clients,miembrosRev])
   useEffect(()=>{ try{ sessionStorage.removeItem(_GASTOS_VOLVER) }catch(_){} },[])
   useEffect(()=>{ if(openGastosOfi){ setSelectedClient(null); setHubOpen(false); setShowGastosOficina(true); onGastosOfiOpened&&onGastosOfiOpened() } },[openGastosOfi])   // gatillo desde el módulo Oficina → vista "Gastos oficina" (Varios y personales)
-  const [cobrosVista,setCobrosVista] = useState('carga')   // Cobros: 'carga' (por carga masiva) | 'ot' (lista de OT)
-  const [cobrosOpen,setCobrosOpen] = useState(null)        // lote de carga masiva expandido en Cobros
   const [cobrosQ,setCobrosQ] = useState('')                // buscador en Cobros (vista por OT)
   const [qMovG,setQMovG] = useState('')             // buscador dentro de los gastos del cliente abierto
   useEffect(()=>{ setQMovG('') },[selectedClient?.id])
@@ -19152,6 +19150,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [noNSending,setNoNSending] = useState(false)        // envío de consulta en curso
   const [notaCliOpen,setNotaCliOpen] = useState(()=>new Set())   // Deuda: acordeones de cliente/persona expandidos (default todos plegados)
   const [pagosOrd,setPagosOrd] = useState('nuevo')               // Pagos realizados: orden por fecha 'nuevo' | 'antiguo'
+  const [pagQ,setPagQ] = useState(''), [pagMes,setPagMes] = useState(''), [pagAnio,setPagAnio] = useState('')   // Pagos realizados: buscador + Mes + Año
+  const [cobEst,setCobEst] = useState(''), [cobMes,setCobMes] = useState(''), [cobAnio,setCobAnio] = useState('')   // Cobros: estado + Mes + Año
+  const [cobOpenM,setCobOpenM] = useState(null)   // Cobros: meses desplegados (null = solo el más reciente)
   const [showCargaPag,setShowCargaPag] = useState(false)         // Carga masiva como PÁGINA (no modal): landing con Subir + cargas recientes
   const [cargaOpen,setCargaOpen] = useState(null)                // lote expandido en la página de Carga masiva
   const [cargaGroup,setCargaGroup] = useState('cliente')         // Carga abierta: agrupar OT por 'cliente' | 'responsable' | 'estado' | 'plana'
@@ -19528,7 +19529,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 if(showCargaPag){setShowCargaPag(false);setHubOpen(true);return}                              // Carga masiva → hub
                 if(notaMenuOpen){setNotaMenuOpen(false);setHubOpen(true);return}                              // Cargar → hub
                 if(showGastosOficina){setShowGastosOficina(false);setHubOpen(true);return}                    // Gastos oficina → hub
-                if(showHistorial){setShowHistorial(false);setHubOpen(true);return}                            // Historial → hub
+                if(showHistorial){setShowHistorial(false);setShowRendiciones(true);setRendSub(null);return}   // Historial (de rendiciones) → Rendiciones
                 if(showNotaria){ if(notaTab==='enviar'){ setNotaSend(null); if(notaOrigen==='historial'){ setNotaOrigen(null); setShowNotaria(false); setNotaTab('hub'); setShowHistorial(true); return } setNotaTab('pagados');return} if(notaTab!=='hub'){setNotaTab('hub');return} setShowNotaria(false);setHubOpen(true);return }   // enviar → Pagos ; sub → Notaría ; Notaría → hub
                 setHubOpen(true)                                                                              // Clientes (default) → hub
               }} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}><Gl n='chevL'/></button>
@@ -19536,7 +19537,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,...(isDesktop&&selectedClient?{minWidth:0,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}:{})}}>
-                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Pagos realizados':notaTab==='pend'?'Deuda':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Recordatorios':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
+                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial de rendiciones':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Historial de pagos':notaTab==='pend'?'Deuda':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Recordatorios':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ver ficha <Gl n='chevron'/></span>}
                 {selectedClient&&!esOficina(selectedClient.id)&&(()=>{
@@ -19905,10 +19906,11 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           </>)
         }
         return wrap(
-          <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,1fr)':'1fr 1fr',gap:11}}>
+          <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,1fr)':'1fr 1fr',gap:11}}>
             <div onClick={()=>{setQ('');setRendSub('rendir')}} style={cardBase}>{iconSq('receipt',C.azulBg,C.accent)}<div style={{fontSize:15,fontWeight:700,color:C.text}}>Rendir a cliente</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>buscar y rendir gastos</div></div>
             <div onClick={()=>setRendSub('pend')} style={cardBase}>{iconSq('alert',pend90.length?C.soonBg:C.azulBg,pend90.length?C.soonText:C.accent)}<div style={{fontSize:15,fontWeight:700,color:C.text}}>Pendientes</div><div style={{fontSize:12,color:pend90.length?C.soonText:C.muted,marginTop:2}}>{pend90.length?`${pend90.length} cliente${pend90.length!==1?'s':''} · +90 días`:'al día'}</div></div>
             <div onClick={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}} style={cardBase}>{iconSq('clock',C.azulBg,C.accent)}<div style={{fontSize:15,fontWeight:700,color:C.text}}>Historial</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>rendiciones enviadas</div></div>
+            {<div onClick={()=>onSolicitarFondos&&onSolicitarFondos()} style={cardBase}>{iconSq('mail',C.soonBg,C.soonText)}<div style={{fontSize:15,fontWeight:700,color:C.text}}>Solicitar fondos</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>pedir provisión</div></div>}
           </div>
         )
       })()}
@@ -20002,13 +20004,10 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       {/* Vista Notaría: pendientes de liquidar a la notaría + liquidaciones (historial) */}
       {showNotaria&&notaTab==='hub'&&(()=>{
         const D=isDesktop
-        const pagadas=notaLiquidaciones.filter(r=>notaEstado(r)==='pagado')
-        const cobros=notaLiquidaciones.filter(r=>notaEstado(r)!=='pagado')
-        const pagTot=pagadas.reduce((a,r)=>a+(r.total||0),0), cobrTot=cobros.reduce((a,r)=>a+(r.total||0),0)
         const cards=[
           {t:'Deuda', ic:'clock', s:notariaPend.length?`${notariaPend.length} OT · ${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.soonText, bg:C.ambarBg, go:()=>setNotaTab('pend')},
-          {t:'Cobros', ic:'exchange', s:notaLedger.n?`${notaLedger.n} OT · ${fmtShort(notaLedger.total)}`:'lo que nos cobran', col:C.azulInfo, bg:C.azulBg, go:()=>{setCobrosVista('carga');setCobrosOpen(null);setCobrosQ('');setNotaTab('cobros')}},
-          {t:'Pagos realizados', ic:'check', s:notaLiquidaciones.length?`${notaLiquidaciones.length} ${notaLiquidaciones.length!==1?'liquidaciones':'liquidación'} · ${fmtShort(pagTot||0)}`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
+          {t:'Cobros', ic:'exchange', s:notaLedger.n?`${notaLedger.n} OT · ${fmtShort(notaLedger.total)}`:'lo que nos cobran', col:C.azulInfo, bg:C.azulBg, go:()=>{setCobrosQ('');setCobEst('');setCobMes('');setCobAnio('');setCobOpenM(null);setNotaTab('cobros')}},
+          {t:'Historial', ic:'check', s:notaLiquidaciones.length?`${notaLiquidaciones.length} pago${notaLiquidaciones.length!==1?'s':''} · ${fmtShort(notaLiquidaciones.reduce((a,r)=>a+(r.total||0),0))}`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
           {t:'Carga masiva', ic:'file', s:'importar · correo', col:C.muted, bg:C.bgSoft, go:()=>{setShowNotaria(false);setHubOpen(false);setCargaOpen(null);setShowCargaPag(true)}},
         ]
         return (
@@ -20056,56 +20055,78 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       })()}
       {/* Vista "Cobros": ledger de lo que la notaría nos cobra (por carga masiva o por OT) + errores + CSV */}
       {showNotaria&&notaTab==='cobros'&&(()=>{
+        // Cobros = cada OT que la notaría nos cobra (notaLedger, fuente única). Foto con estados que filtran + buscador/Mes/Año + meses plegables.
         const D=isDesktop
-        const cnOf = e => clients.find(c=>String(c.id)===String(e.client_id))?.name || (e.personal_de?`Personal · ${e.personal_de}`:'')
-        const estBadge = est => est==='pagada'?['Pagada',C.greenText,C.greenBg]:est==='enliq'?['En liquidación',C.azulInfo,C.azulBg]:['Por pagar',C.soonText,C.soonBg]
-        const otRow = (r,key) => { const [lbl,col,bg]=estBadge(r.estado); const errTxt=r.err==='sincliente'?'Sin cliente — asignar':r.err==='dup'?'Posible duplicado':null; return (
-          <div key={key} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:`0.5px solid ${C.track}`}}>
-            <span style={{fontSize:11,fontWeight:700,color:r.err?C.overdueText:C.azulInfo,width:64,flexShrink:0}}>{fmtOt(r.e.ot_number)||'s/OT'}</span>
+        const cnOf = e => clients.find(c=>String(c.id)===String(e.client_id))?.name || (e.personal_de?`Personal · ${e.personal_de}`:'Sin cliente')
+        const EST={porpagar:['Por pagar',C.soonText,C.soonBg],enliq:['En liquidación',C.azulInfo,C.azulBg],pagada:['Pagada',C.greenText,C.greenBg],err:['Con error',C.overdueText,C.overdueBg]}
+        const _n=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+        const qq=_n(cobrosQ.trim())
+        const base=notaLedger.rows.filter(r=>{ const d=String(r.e.date||''); if(cobAnio&&d.slice(0,4)!==cobAnio) return false; if(cobMes&&d.slice(5,7)!==cobMes) return false
+          return !qq||_n(`${r.e.ot_number||''} ${fmtOt(r.e.ot_number)} ${r.e.concept||''} ${cnOf(r.e)}`).includes(qq) })
+        const sum=a=>a.reduce((t,r)=>t+(r.e.amount||0),0)
+        const de=k=>k==='err'?base.filter(r=>r.err):base.filter(r=>r.estado===k)
+        const rows=(cobEst?de(cobEst):base).slice().sort((x,y)=>String(y.e.date||'').localeCompare(String(x.e.date||'')))
+        const groups=[]; const gi={}
+        rows.forEach(r=>{ const mk=String(r.e.date||'').slice(0,7)||'sin'; if(gi[mk]==null){ gi[mk]=groups.length; groups.push({mk,rows:[],tot:0}) } const g=groups[gi[mk]]; g.rows.push(r); g.tot+=(r.e.amount||0) })
+        const iSin=groups.findIndex(g=>g.mk==='sin'); if(iSin>=0) groups.push(groups.splice(iSin,1)[0])
+        const mesLbl = mk => { if(mk==='sin'||!/^\d{4}-\d{2}/.test(mk)) return 'Sin fecha'; const [y,m]=mk.split('-'); return mesTitulo(new Date(Number(y),Number(m)-1,1)) }
+        const filtrando=!!(qq||cobEst||cobMes)
+        const abierto=mk=>filtrando||(cobOpenM?cobOpenM.has(mk):mk===groups[0]?.mk)
+        const toggleM=mk=>setCobOpenM(p=>{ const n=new Set(p||(groups[0]?[groups[0].mk]:[])); n.has(mk)?n.delete(mk):n.add(mk); return n })
+        const anios=[...new Set(notaLedger.rows.map(r=>String(r.e.date||'').slice(0,4)).filter(Boolean))].sort().reverse()
+        const csvRows = () => { const head=['Fecha','OT','Cliente','Concepto','Monto','Estado','Error']; return [head,...rows.map(r=>[fmtFechaDMY(r.e.date)||'', r.e.ot_number||'', cnOf(r.e), r.e.concept||'', r.e.amount||0, EST[r.estado][0], r.err==='sincliente'?'Sin cliente':r.err==='dup'?'Posible duplicado':''])] }
+        const chip=k=><span style={{fontSize:9.5,fontWeight:700,color:EST[k][1],background:EST[k][2],borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{EST[k][0]}</span>
+        const fila=(r,i)=>{ const e=r.e; const errTxt=r.err==='sincliente'?'Sin cliente':r.err==='dup'?'Posible duplicado':null; return (
+          <div key={e.id} onClick={onEdit?()=>onEdit(e):undefined} style={{display:'flex',alignItems:'center',gap:12,padding:D?'9px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:onEdit?'pointer':'default'}}>
+            {diaGrande(e.date)}
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.e.concept||'—'}{cnOf(r.e)?<span style={{color:C.muted}}> · {r.e.client_id&&onOpenClientFicha?<span onClick={()=>onOpenClientFicha(r.e.client_id)} style={{cursor:'pointer'}}>{cnOf(r.e)}</span>:cnOf(r.e)}</span>:''}</div>
-              {errTxt&&<div style={{fontSize:11,fontWeight:600,color:C.overdueText}}>{errTxt}</div>}
+              <div style={{fontSize:13.5,fontWeight:600,color:r.err==='sincliente'?C.overdueText:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}}>{cnOf(e)}</span>:cnOf(e)}</div>
+              <div style={{fontSize:11.5,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:errTxt?C.overdueText:C.azulInfo,fontWeight:700}}>{fmtOt(e.ot_number)||'s/OT'}</b>{errTxt?<span style={{color:C.overdueText,fontWeight:600}}> · {errTxt}</span>:(D&&e.concept)?` · ${e.concept}`:''}</div>
             </div>
-            <span style={{fontSize:9.5,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{lbl}</span>
-            <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,minWidth:64,textAlign:'right'}}>{fmt(r.e.amount)}</span>
-          </div>
-        )}
-        const csvRows = () => { const head=['OT','Concepto','Cliente','Monto','Estado','Error','Carga','Fecha']; const body=notaLedger.cargas.flatMap(c=>c.rows.map(r=>[r.e.ot_number||'', r.e.concept||'', cnOf(r.e), r.e.amount||0, r.estado==='pagada'?'Pagada':r.estado==='enliq'?'En liquidación':'Por pagar', r.err==='sincliente'?'Sin cliente':r.err==='dup'?'Duplicado':'', c.filename, r.e.date||''])); return [head,...body] }
-        const otRows = notaLedger.cargas.flatMap(c=>c.rows.map(r=>({...r,carga:c.filename}))).sort((a,b)=>String(b.e.date||'').localeCompare(String(a.e.date||'')))
-        const q2=cobrosQ.trim().toLowerCase()
-        const otFilt = otRows.filter(r=>!q2||`${r.e.ot_number||''} ${r.e.concept||''} ${cnOf(r.e)}`.toLowerCase().includes(q2))
+            {D&&chip(r.estado)}
+            <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+              <span style={{fontSize:13.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:D?90:undefined,textAlign:'right'}}>{fmt(e.amount)}</span>
+              {!D&&chip(r.estado)}
+            </div>
+            {D&&onEdit&&<span style={{fontSize:14,color:C.textSoft,flexShrink:0}}><Gl n='chevron'/></span>}
+          </div>) }
+        const selSty={fontSize:12,fontWeight:500,color:C.muted,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:'5px 10px',cursor:'pointer',outline:'none',flexShrink:0}
+        const MESES=[['','Mes'],['01','ene'],['02','feb'],['03','mar'],['04','abr'],['05','may'],['06','jun'],['07','jul'],['08','ago'],['09','sep'],['10','oct'],['11','nov'],['12','dic']]
+        const estTile=k=>{ const rs=de(k); if(!rs.length&&k!=='porpagar'&&k!=='pagada') return null; const on=cobEst===k; const [l,col,bg]=EST[k]; return (
+          <div key={k} onClick={()=>setCobEst(on?'':k)} style={{flex:1,minWidth:0,background:bg,borderRadius:10,padding:'8px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1.5px ${col}`:'none'}}>
+            <div style={{fontSize:9.5,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:.4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l} · {rs.length}</div>
+            <div style={{fontSize:14,fontWeight:700,color:col,marginTop:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtShort(sum(rs))}</div>
+          </div>) }
         return (
-          <div style={{padding:D?'8px 20px 44px':'6px 12px 30px',maxWidth:D?820:undefined,margin:'0 auto'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-              <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-                {[['carga','Por carga'],['ot','Por OT']].map(([k,l])=><button key={k} onClick={()=>setCobrosVista(k)} style={{fontSize:12,fontWeight:600,padding:'6px 13px',border:'none',background:cobrosVista===k?C.accent:'#fff',color:cobrosVista===k?'#fff':C.muted,cursor:'pointer'}}>{l}</button>)}
+          <div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?820:undefined,margin:'0 auto'}}>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginBottom:12}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                <span style={{...SEC_LBL}}>Cobrado por la notaría{cobAnio?` en ${cobAnio}`:''}</span>
+                {rows.length>0&&<button onClick={()=>csvDownload('cobros_notaria.csv',csvRows())} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Exportar ↓</button>}
               </div>
-              <span style={{fontSize:12,color:C.muted}}>{notaLedger.n} OT · {fmt(notaLedger.total)}</span>
-              {notaLedger.n>0&&<button onClick={()=>csvDownload('cobros_notaria.csv',csvRows())} style={{marginLeft:'auto',fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Exportar CSV ↓</button>}
+              <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:25,fontWeight:800,color:C.text,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(sum(base))}</span><span style={{fontSize:12,color:C.muted}}>· {base.length} OT</span></div>
+              <div style={{display:'grid',gridTemplateColumns:`repeat(${['porpagar','enliq','pagada','err'].filter(k=>de(k).length||k==='porpagar'||k==='pagada').length},minmax(0,1fr))`,gap:8,marginTop:12}}>{['porpagar','enliq','pagada','err'].map(estTile)}</div>
             </div>
-            {notaLedger.n===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Sin cobros de notaría cargados.</div>}
-            {notaLedger.n>0&&cobrosVista==='carga'&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{notaLedger.cargas.map((c,i)=>{ const open=cobrosOpen===c.key; return (
-              <div key={c.key} style={{borderTop:i?`1px solid ${C.border}`:'none'}}>
-                <div onClick={()=>setCobrosOpen(open?null:c.key)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
-                  <span style={{fontSize:13,color:C.textSoft,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.filename}</div><div style={{fontSize:11,color:C.muted}}>{c.fecha?fmtFechaDMY(c.fecha):'—'}{c.who?` · ${c.who}`:''} · {c.rows.length} OT</div></div>
-                  {c.nErr>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{c.nErr} con error</span>}
-                  <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(c.total)}</span>
-                </div>
-                {open&&<div>{c.rows.slice().sort((a,b)=>String(b.e.date||'').localeCompare(String(a.e.date||''))).map((r,j)=>otRow(r,c.key+j))}</div>}
+            <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12}}>
+              <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px'}}>
+                <SIcon n='search' s={14} c={C.done}/>
+                <input value={cobrosQ} onChange={e=>setCobrosQ(e.target.value)} placeholder='Buscar OT, cliente o trámite' style={{border:'none',background:'none',outline:'none',fontSize:12,color:C.text,width:'100%',minWidth:0}}/>
               </div>
-            )})}</div>}
-            {notaLedger.n>0&&cobrosVista==='ot'&&<>
-              <div style={{display:'flex',alignItems:'center',gap:8,background:'#F1F4F6',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 12px',marginBottom:10}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg><input value={cobrosQ} onChange={e=>setCobrosQ(e.target.value)} placeholder='Buscar OT, concepto o cliente…' style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%'}}/></div>
-              <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{otFilt.slice(0,3000).map((r,j)=>(
-                <div key={j} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:j?`0.5px solid ${C.track}`:'none'}}>
-                  <span style={{fontSize:11,fontWeight:700,color:r.err?C.overdueText:C.azulInfo,width:64,flexShrink:0}}>{fmtOt(r.e.ot_number)||'s/OT'}</span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.e.concept||'—'}{cnOf(r.e)?<span style={{color:C.muted}}> · {cnOf(r.e)}</span>:''}</div><div style={{fontSize:10,color:C.textSoft}}>{r.carga}{r.err?<span style={{color:C.overdueText,fontWeight:600}}> · {r.err==='sincliente'?'sin cliente':'duplicado'}</span>:''}</div></div>
-                  {(()=>{ const [lbl,col,bg]=estBadge(r.estado); return <span style={{fontSize:9.5,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{lbl}</span> })()}
-                  <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,minWidth:64,textAlign:'right'}}>{fmt(r.e.amount)}</span>
+              <select value={cobMes} onChange={e=>setCobMes(e.target.value)} style={selSty}>{MESES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+              <select value={cobAnio} onChange={e=>setCobAnio(e.target.value)} style={selSty}><option value=''>Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
+            </div>
+            {notaLedger.n===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}}>Sin cobros de notaría cargados.</div>}
+            {notaLedger.n>0&&rows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:24,fontSize:13,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}}>Nada calza con el filtro.</div>}
+            {groups.map(g=>{ const op=abierto(g.mk); return (
+              <div key={g.mk} style={{marginBottom:op?12:8}}>
+                <div onClick={()=>!filtrando&&toggleM(g.mk)} style={{display:'flex',alignItems:'center',gap:8,padding:'2px 2px 6px',cursor:filtrando?'default':'pointer'}}>
+                  {!filtrando&&<span style={{fontSize:13,color:C.textSoft,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>}
+                  <span style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,flex:1}}>{mesLbl(g.mk)}</span>
+                  <span style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap'}}>{g.rows.length} OT</span>
+                  <span style={{fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:76,textAlign:'right'}}>{fmt(g.tot)}</span>
                 </div>
-              ))}{otFilt.length===0&&<div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13}}>Nada calza con la búsqueda.</div>}</div>
-            </>}
+                {op&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{g.rows.map(fila)}</div>}
+              </div>) })}
           </div>
         )
       })()}
@@ -20225,30 +20246,48 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       })()}
       {/* Vista "Pagos realizados": liquidaciones a la notaría con detalle clickeable + CSV */}
       {showNotaria&&notaTab==='pagados'&&(()=>{
+        // Pagos realizados (= liquidaciones a la notaría; reemplaza Historial › Notaría): foto + filtros + meses con subtotal.
         const D=isDesktop
+        const _n=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+        const qq=_n(pagQ.trim())
+        const gsDe=r=>(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
+        const cliN=cid=>clients.find(c=>String(c.id)===String(cid))?.name||''
+        const okF=r=>{ const ca=isoLocal(r.created_at); if(pagAnio&&ca.slice(0,4)!==pagAnio) return false; if(pagMes&&ca.slice(5,7)!==pagMes) return false
+          if(qq&&!_n(`${r.periodo||''} ${r.user_name||''} ${r.ot_numbers||''} ${gsDe(r).map(e=>`${e.ot_number||''} ${cliN(e.client_id)} ${e.personal_de||''}`).join(' ')}`).includes(qq)) return false; return true }
         const dirMul = pagosOrd==='nuevo'?1:-1
-        const list=[...notaLiquidaciones].sort((a,b)=>dirMul*String(b.created_at||'').localeCompare(String(a.created_at||'')))
+        const list=[...notaLiquidaciones].filter(okF).sort((a,b)=>dirMul*String(b.created_at||'').localeCompare(String(a.created_at||'')))
         const tot=list.reduce((a,r)=>a+(r.total||0),0)
+        const nPorEnv=list.filter(r=>notaEstado(r)==='por_enviar').length
         const groups=[]; const gi={}
-        list.forEach(r=>{ const mk=String(r.created_at||'').slice(0,7)||'sin'; if(gi[mk]==null){ gi[mk]=groups.length; groups.push({mk,rows:[],tot:0}) } const g=groups[gi[mk]]; g.rows.push(r); g.tot+=(r.total||0) })
+        list.forEach(r=>{ const mk=isoLocal(r.created_at).slice(0,7)||'sin'; if(gi[mk]==null){ gi[mk]=groups.length; groups.push({mk,rows:[],tot:0}) } const g=groups[gi[mk]]; g.rows.push(r); g.tot+=(r.total||0) })
         const mesLbl = mk => { if(mk==='sin'||!/^\d{4}-\d{2}/.test(mk)) return 'Sin fecha'; const [y,m]=mk.split('-'); return mesTitulo(new Date(Number(y),Number(m)-1,1)) }
-        const csvRows=()=>{ const head=['Fecha','Periodo','Total','Estado','N gastos','OT','Quién']; const body=list.map(r=>{ const est=notaEstado(r); return [fmtFechaDMY(r.created_at)||'', r.periodo||'', r.total||0, est==='pagado'?'Pagada':est==='enviada'?'Enviada':'Por enviar', r.n_gastos||0, r.ot_numbers||'', r.user_name||''] }); return [head,...body] }
-        const liqCard = r => { const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; const est=notaEstado(r); const dd=r.created_at?new Date(r.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?mesCorto(dd):''; const eb=est==='por_enviar'?['Por enviar',C.soonText,C.soonBg]:est==='enviada'?['Enviada',C.azulInfo,C.azulBg]:['Pagada',C.greenText,C.greenBg]; return (
-          <div key={r.id} style={{border:`1px solid ${est==='por_enviar'?'#FAC775':C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
-            <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',cursor:'pointer'}}>
+        const anios=[...new Set(notaLiquidaciones.map(r=>isoLocal(r.created_at).slice(0,4)).filter(Boolean))].sort().reverse()
+        const csvRows=()=>{ const head=['Fecha','Periodo','Total','Estado','N OT','OT','Quién','Cargo en banco']; const body=list.map(r=>[fmtFechaDMY(isoLocal(r.created_at))||'', r.periodo||'', r.total||0, notaEstado(r)==='por_enviar'?'Por enviar':'Pagada', r.n_gastos||0, r.ot_numbers||'', r.user_name||'', r.movimiento_id?'Sí':'No']); return [head,...body] }
+        const chip=r=>{ const pe=notaEstado(r)==='por_enviar'; return <span style={{fontSize:9.5,fontWeight:700,color:pe?C.soonText:C.greenText,background:pe?C.soonBg:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{pe?'Por enviar':'Pagada'}</span> }
+        const fila = (r,i) => { const open=notaLiqOpen===r.id; const gs=gsDe(r); const adding=notaLiqAdd===r.id; const est=notaEstado(r); return (
+          <div key={r.id} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
+            <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',alignItems:'center',gap:12,padding:D?'10px 14px':'10px 12px',cursor:'pointer'}}>
               {diaGrande(isoLocal(r.created_at))}
-              <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>{BRAND.notaria}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>{r.user_name?`${r.user_name} · `:''}{r.n_gastos} OT{r.ot_numbers?` · ${String(r.ot_numbers).length>28?String(r.ot_numbers).slice(0,28)+'…':r.ot_numbers}`:''}</div></div>
-              <span style={{fontSize:9.5,fontWeight:700,color:eb[1],background:eb[2],borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{eb[0]}</span>
-              <div style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(r.total)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{BRAND.notaria}</div>
+                <div style={{fontSize:11.5,color:C.muted,marginTop:1,whiteSpace:'nowrap'}}>{r.n_gastos||gs.length} OT{r.user_name?` · ${r.user_name}`:''}</div>
+              </div>
+              {D&&chip(r)}
+              <div style={{textAlign:'right',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+                <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:D?96:undefined,textAlign:'right'}}>{fmt(r.total)}</span>
+                {!D&&chip(r)}
+              </div>
               <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><Gl n='chevron'/></span>
             </div>
-            {est==='por_enviar'&&!open&&<div style={{display:'flex',justifyContent:'flex-end',padding:'0 13px 10px'}}><button onClick={ev=>{ev.stopPropagation();abrirEnvioNotaria(r)}} style={{background:C.accent,color:'#fff',fontSize:12,fontWeight:700,borderRadius:8,padding:'6px 14px',border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>Enviar</button></div>}
-            {open&&<div style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
-              {r.movimiento_id&&<div onClick={onOpenMovBanco?()=>onOpenMovBanco(r.movimiento_id):undefined} style={{display:'flex',alignItems:'baseline',gap:8,fontSize:12,padding:'0 0 8px',marginBottom:6,borderBottom:`1px solid ${C.border}`,cursor:onOpenMovBanco?'pointer':'default'}}><span style={{color:C.text,fontWeight:600}}>Pagada desde el banco</span>{onOpenMovBanco&&<span style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600}}>Ver en Banco <Gl n='chevron'/></span>}</div>}
-              {gs.map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
-                <div key={e.id} style={{display:'flex',alignItems:'baseline',gap:8,padding:'4px 0',fontSize:12}}>
-                  <span style={{fontSize:10,color:C.azulInfo,fontWeight:700,width:62,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
-                  <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{e.concept||'—'} <span style={{color:C.muted}}>· {e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}} style={{cursor:'pointer'}}>{cn}</span>:cn}</span></span>
+            {open&&<div style={{padding:D?'10px 14px 12px':'10px 12px 12px',background:C.bgSoft,borderTop:`1px solid ${C.track}`}}>
+              <div onClick={r.movimiento_id&&onOpenMovBanco?()=>onOpenMovBanco(r.movimiento_id):undefined} style={{display:'flex',alignItems:'baseline',gap:8,fontSize:12,padding:'0 0 8px',marginBottom:6,borderBottom:`1px solid ${C.border}`,cursor:r.movimiento_id&&onOpenMovBanco?'pointer':'default'}}>
+                <span style={{color:r.movimiento_id?C.text:C.muted,fontWeight:r.movimiento_id?600:400}}>{r.movimiento_id?'Cargo en el banco del estudio':'Sin cargo en el banco del estudio'}</span>
+                {r.movimiento_id&&onOpenMovBanco&&<span style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,whiteSpace:'nowrap'}}>Ver en Banco <Gl n='chevron'/></span>}
+              </div>
+              {gs.map(e=>{ const cn=cliN(e.client_id)||(e.personal_de?`Personal · ${e.personal_de}`:'Sin cliente'); return (
+                <div key={e.id} onClick={onEdit?()=>onEdit(e):undefined} style={{display:'flex',alignItems:'baseline',gap:8,padding:'5px 0',fontSize:12,cursor:onEdit?'pointer':'default'}}>
+                  <span style={{fontSize:11,color:C.azulInfo,fontWeight:700,width:66,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtOt(e.ot_number)}</span>
+                  <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}} style={{cursor:'pointer',fontWeight:600}}>{cn}</span>:<b style={{fontWeight:600}}>{cn}</b>}<span style={{color:C.muted}}> · {e.concept||'—'}</span></span>
                   <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:C.text}}>{fmt(e.amount)}</span>
                 </div>) })}
               <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>
@@ -20263,18 +20302,38 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             </div>}
           </div>
         )}
+        const selSty={fontSize:12,fontWeight:500,color:C.muted,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:'5px 10px',cursor:'pointer',outline:'none',flexShrink:0}
+        const MESES=[['','Mes'],['01','ene'],['02','feb'],['03','mar'],['04','abr'],['05','may'],['06','jun'],['07','jul'],['08','ago'],['09','sep'],['10','oct'],['11','nov'],['12','dic']]
+        const nest=(lbl,val,bg,col,go)=><div onClick={go} style={{flex:1,minWidth:0,background:bg,borderRadius:10,padding:'8px 11px',cursor:go?'pointer':'default'}}><div style={{fontSize:9.5,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:.4,whiteSpace:'nowrap'}}>{lbl}</div><div style={{fontSize:14,fontWeight:700,color:col,marginTop:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{val}</div></div>
         return (
-          <div style={{padding:D?'8px 20px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
-            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
-              <span style={{fontSize:12,color:C.muted}}>{list.length} liquidación{list.length!==1?'es':''} · <b style={{color:C.text}}>{fmt(tot)}</b></span>
-              {list.length>0&&<button onClick={()=>csvDownload('pagos_notaria.csv',csvRows())} style={{marginLeft:'auto',fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Exportar CSV ↓</button>}
-              {list.length>0&&<button onClick={()=>setPagosOrd(o=>o==='nuevo'?'antiguo':'nuevo')} title='Ordenar por fecha' style={{fontSize:12,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>{pagosOrd==='nuevo'?'Nuevo ↓':'Antiguo ↑'}</button>}
+          <div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?820:undefined,margin:'0 auto'}}>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginBottom:12}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                <span style={{...SEC_LBL}}>Pagado a la notaría{pagAnio?` en ${pagAnio}`:''}</span>
+                {list.length>0&&<button onClick={()=>csvDownload('pagos_notaria.csv',csvRows())} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Exportar ↓</button>}
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:25,fontWeight:800,color:C.greenText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span><span style={{fontSize:12,color:C.muted}}>· {list.length} pago{list.length!==1?'s':''}</span></div>
+              {(notaPendTotal>0||nPorEnv>0)&&<div style={{display:'flex',gap:8,marginTop:12}}>
+                {notaPendTotal>0&&nest('Deuda pendiente',fmt(notaPendTotal),C.tealBg,C.tealText,()=>setNotaTab('pend'))}
+                {nPorEnv>0&&nest('Por enviar',`${nPorEnv} pago${nPorEnv!==1?'s':''}`,C.soonBg,C.soonText)}
+              </div>}
             </div>
-            {list.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Sin liquidaciones registradas.</div>}
+            <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12}}>
+              <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px'}}>
+                <SIcon n='search' s={14} c={C.done}/>
+                <input value={pagQ} onChange={e=>setPagQ(e.target.value)} placeholder='Buscar OT, cliente o quién' style={{border:'none',background:'none',outline:'none',fontSize:12,color:C.text,width:'100%',minWidth:0}}/>
+              </div>
+              <select value={pagMes} onChange={e=>setPagMes(e.target.value)} style={selSty}>{MESES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+              <select value={pagAnio} onChange={e=>setPagAnio(e.target.value)} style={selSty}><option value=''>Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
+            </div>
+            {list.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}}>{notaLiquidaciones.length?'Nada calza con el filtro.':'Sin pagos registrados.'}</div>}
             {groups.map(g=>(
-              <div key={g.mk} style={{marginBottom:14}}>
-                <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>{mesLbl(g.mk)}</span><span style={{fontSize:12,color:C.muted}}>{fmt(g.tot)}</span></div>
-                {g.rows.map(liqCard)}
+              <div key={g.mk} style={{marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',margin:'0 2px 6px'}}>
+                  <span onClick={()=>setPagosOrd(o=>o==='nuevo'?'antiguo':'nuevo')} title='Cambiar orden' style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,cursor:'pointer'}}>{mesLbl(g.mk)}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(g.tot)}</span>
+                </div>
+                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{g.rows.map(fila)}</div>
               </div>
             ))}
           </div>
@@ -20296,7 +20355,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         // Selección: cuánto se paga con el fondo de cada cliente vs cuánto adelanta la oficina — total y por abogado (misma lógica de antes).
         const selByCli={}; notaSel.forEach(e=>{ const k=e.incobrable_at?'__asume__':(e.client_id||(e.personal_de?'p:'+e.personal_de:'__none__')); selByCli[k]=(selByCli[k]||0)+(e.amount||0) })
         let conFondo=0, adelanto=0, asumeSel=0; const porAbg={}
-        Object.entries(selByCli).forEach(([cid,sel])=>{ if(cid==='__asume__'){ asumeSel+=sel; return } const d=cid.startsWith('p:')?coberturaPersona(cid.slice(2),notaSel.filter(e=>!e.client_id&&!e.incobrable_at&&e.personal_de===cid.slice(2))).con:dispCliente(cid).disp; const con=Math.min(sel,d), ade=Math.max(0,sel-d); conFondo+=con; adelanto+=ade; const resp=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'; const o=porAbg[resp]=porAbg[resp]||{con:0,ade:0}; o.con+=con; o.ade+=ade })
+        Object.entries(selByCli).forEach(([cid,sel])=>{ if(cid==='__asume__'){ asumeSel+=sel; return } const d=cid.startsWith('p:')?coberturaPersona(cid.slice(2),notaSel.filter(e=>!e.client_id&&!e.incobrable_at&&e.personal_de===cid.slice(2))).con:dispCliente(cid).disp; const con=Math.min(sel,d), ade=Math.max(0,sel-d); conFondo+=con; adelanto+=ade; const resp=cid.startsWith('p:')?`Personal · ${cid.slice(2)}`:cid==='__none__'?'Sin cliente':esOficina(cid)?'Oficina':(clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'Sin abogado'); const o=porAbg[resp]=porAbg[resp]||{con:0,ade:0}; o.con+=con; o.ade+=ade })
         const abgs=Object.entries(porAbg).sort((a,b)=>(b[1].con+b[1].ade)-(a[1].con+a[1].ade))
         const D=isDesktop
         const lblK={fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}
@@ -20318,7 +20377,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           return ids })()
         const pagablesT=pagables.reduce((a,e)=>a+(e.amount||0),0)
         const btnPagables = pagables.length>0 && (
-          <button onClick={()=>{ setSelNota(new Set(pagables.map(e=>e.id))); setNotaConfirm(false) }} title={`${pagables.length} OT: lo que cubre el fondo de cada cliente o persona, más lo de la oficina y lo que asume`} style={{width:'100%',minHeight:38,marginTop:10,borderRadius:9,border:`1px solid ${C.greenText}`,background:C.greenBg,color:C.greenText,fontSize:12.5,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'0 12px'}}>
+          <button onClick={()=>{ setSelNota(new Set(pagables.map(e=>e.id))); setNotaConfirm(false); setDeudaEstF('sel'); setNotaCliOpen(new Set(pagables.map(e=>e.incobrable_at?'__asume__':e.client_id?String(e.client_id):e.personal_de?'p:'+e.personal_de:'__sinasignar__'))) }} title={`${pagables.length} OT: lo que cubre el fondo de cada cliente o persona, más lo de la oficina y lo que asume`} style={{width:'100%',minHeight:38,marginTop:10,borderRadius:9,border:`1px solid ${C.greenText}`,background:C.greenBg,color:C.greenText,fontSize:12.5,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'0 12px'}}>
             <span style={{whiteSpace:'nowrap'}}>Seleccionar con fondos</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(pagablesT)}</span>
           </button>)
         const partes=[['con','Con saldo',conFondoT,C.greenText,`${nCon} con fondo para pagar`],['adel','Adelanta oficina',adelantoT,C.soonText,`${nAdel} cliente${nAdel!==1?'s':''} · pedir fondos`],...(sinFondoT>0?[['pers','Personal sin saldo',sinFondoT,C.muted,perSin.join(' · ')||'sin cliente asignado']]:[]),...(asumeT>0?[['asume','Asume la oficina',asumeT,C.grisText,`${notaGroups.asume.length} OT incobrable${notaGroups.asume.length!==1?'s':''}`]]:[])]
@@ -20350,8 +20409,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {ln('Adelanto',fmt(adelanto),adelanto>0?C.overdueText:null)}
             {asumeSel>0&&ln('Asume la oficina',fmt(asumeSel))}
             {abgs.length>0&&<div style={{borderTop:'0.5px solid rgba(83,114,129,.25)',marginTop:6,paddingTop:6}}>
-              <div style={{...lblK,marginBottom:2}}>Fondos por abogado</div>
-              {abgs.map(([resp,o])=><Fragment key={resp}>{ln(resp==='__sin__'?'Sin responsable':String(resp).split(' ')[0],fmt(o.con+o.ade))}{o.ade>0&&<div style={{fontSize:10.5,color:C.overdueText,textAlign:'right',marginTop:-2}}>adelanto {fmt(o.ade)}</div>}</Fragment>)}
+              <div style={{...lblK,marginBottom:2}}>Por responsable</div>
+              {abgs.map(([resp,o])=><Fragment key={resp}>{ln(/^(Personal|Oficina|Sin )/.test(resp)?resp:String(resp).split(' ')[0],fmt(o.con+o.ade))}{o.ade>0&&<div style={{fontSize:10.5,color:C.overdueText,textAlign:'right',marginTop:-2}}>adelanto {fmt(o.ade)}</div>}</Fragment>)}
             </div>}
             {!notaConfirm
               ? <>
@@ -20360,7 +20419,6 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 </>
               : <div style={{marginTop:9,background:C.surface,borderRadius:9,padding:'10px 11px'}}>
                   <div style={{fontSize:12.5,color:C.text,lineHeight:1.45}}>Vas a pagar <b>{fmt(notaTotal)}</b> a la notaría{adelanto>0?<>: <b style={{color:C.greenText}}>{fmt(conFondo)}</b> con fondo y adelantas <b style={{color:C.overdueText}}>{fmt(adelanto)}</b> de la oficina</>:''}.</div>
-                  {notaSinFondosSel.length>0&&<div style={{fontSize:11.5,color:C.overdueText,marginTop:5,lineHeight:1.4}}>Incluyes {notaSinFondosSel.length} gasto{notaSinFondosSel.length!==1?'s':''} de cliente(s) sin fondos ({fmt(notaSinFondosSel.reduce((a,e)=>a+(e.amount||0),0))}).</div>}
                   <div style={{display:'flex',gap:8,marginTop:9}}>
                     <button onClick={()=>setNotaConfirm(false)} style={{flex:1,minHeight:38,borderRadius:9,border:`1px solid ${C.border}`,background:C.surface,color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                     <button disabled={notaSending} onClick={liquidarNotaria} style={{flex:2,minHeight:38,borderRadius:9,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:notaSending?'default':'pointer',opacity:notaSending?.6:1}}>{notaSending?'Guardando…':'Continuar'}</button>
@@ -20436,7 +20494,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         })
         const sKey={nombre:e=>e.nom.toLowerCase(),monto:e=>e.aPagar,saldo:e=>e.disp,ot:e=>e.gs.length}[deudaSort.col]||(e=>e.aPagar)
         const sDir=deudaSort.dir==='asc'?1:-1
-        const pasaEst=e=>!deudaEstF||(deudaEstF==='con'?e.disp>0:deudaEstF==='adel'?e.aPagar>e.disp:false)
+        const pasaEst=e=>!deudaEstF||(deudaEstF==='sel'?e.gs.some(x=>selNota.has(x.id)):deudaEstF==='con'?e.disp>0:deudaEstF==='adel'?e.aPagar>e.disp:false)
         const entries=allEntries.filter(e=>e.porFondos&&e.hit&&pasaEst(e)).sort((a,b)=>{ const x=sKey(a),y=sKey(b); return (typeof x==='string'?x.localeCompare(y,'es'):x-y)*sDir })
         const ocultasFondos=qq?allEntries.filter(e=>!e.porFondos&&e.hit).reduce((a,e)=>a+e.gs.filter(x=>matchE(x,cliName(e.cid))).length,0):0
         const listaClientes=(()=>{
@@ -20462,7 +20520,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               </div>)
           })
         })()
-        const personales=!notaResp?Object.entries(notaGroups.personal).map(([persona,gsAll])=>{ const gs=qq?gsAll.filter(e=>matchE(e,persona)):gsAll; if(qq&&!gs.length) return null; if(deudaEstF){ const cbF=coberturaPersona(persona,gsAll), dd=cbF.con, tt=cbF.ap; if(deudaEstF==='adel'||deudaEstF==='asume'||(deudaEstF==='con'&&!(dd>0))||(deudaEstF==='pers'&&!(tt>dd))) return null } const pc=personChip(persona); const k='p:'+persona; const open=!!qq||notaCliOpen.has(k); const tot=gsAll.reduce((a,e)=>a+(e.amount||0),0); const cbP=coberturaPersona(persona,gsAll), dP=cbP.disp; const sinFP=cbP.con<=0, cubreP=cbP.con>=tot; return (
+        const personales=!notaResp?Object.entries(notaGroups.personal).map(([persona,gsAll])=>{ const gs=qq?gsAll.filter(e=>matchE(e,persona)):gsAll; if(qq&&!gs.length) return null; if(deudaEstF==='sel'){ if(!gsAll.some(x=>selNota.has(x.id))) return null } else if(deudaEstF){ const cbF=coberturaPersona(persona,gsAll), dd=cbF.con, tt=cbF.ap; if(deudaEstF==='adel'||deudaEstF==='asume'||(deudaEstF==='con'&&!(dd>0))||(deudaEstF==='pers'&&!(tt>dd))) return null } const pc=personChip(persona); const k='p:'+persona; const open=!!qq||notaCliOpen.has(k); const tot=gsAll.reduce((a,e)=>a+(e.amount||0),0); const cbP=coberturaPersona(persona,gsAll), dP=cbP.disp; const sinFP=cbP.con<=0, cubreP=cbP.con>=tot; return (
           <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {(()=>{ const defP=Math.max(0,tot-dP); const estP=sinFP?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubreP?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}; return filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
               nombreOT(<>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></>,gsAll.length),
@@ -20472,7 +20530,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {open&&<div>{gs.map(e=>notaRow(e,false,false,notaQ))}</div>}
           </div>)}):null
         const asGs=(qq?notaGroups.asume.filter(e=>matchE(e,cliName(e.client_id))):notaGroups.asume)
-        const asumeBlock=!notaResp&&asGs.length>0&&(!deudaEstF||deudaEstF==='asume')&&(()=>{ const k='__asume__'; const open=!!qq||notaCliOpen.has(k); return (
+        const asumeBlock=!notaResp&&asGs.length>0&&(!deudaEstF||deudaEstF==='asume'||(deudaEstF==='sel'&&asGs.some(x=>selNota.has(x.id))))&&(()=>{ const k='__asume__'; const open=!!qq||notaCliOpen.has(k); return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
               nombreOT('Asume la oficina',notaGroups.asume.length),
@@ -20482,7 +20540,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {open&&<div>{asGs.map(e=><div key={e.id}><div style={{fontSize:11,fontWeight:700,color:C.accent,padding:D?'7px 14px 0 42px':'7px 12px 0 40px',borderTop:`0.5px solid ${C.border}`}}>{onOpenClientFicha?<span onClick={()=>onOpenClientFicha(e.client_id)} style={{cursor:'pointer'}}>{cliName(e.client_id)}</span>:cliName(e.client_id)}</div>{notaRow(e,false,false,notaQ)}</div>)}</div>}
           </div>) })()
         const sinGs=qq?notaGroups.sin.filter(e=>matchE(e)):notaGroups.sin
-        const sinBlock=!notaResp&&sinGs.length>0&&(!deudaEstF||deudaEstF==='pers')&&(()=>{ const k='__sinasignar__'; const open=!!qq||notaCliOpen.has(k); const tot=notaGroups.sin.reduce((a,e)=>a+(e.amount||0),0); return (
+        const sinBlock=!notaResp&&sinGs.length>0&&(!deudaEstF||deudaEstF==='pers'||(deudaEstF==='sel'&&sinGs.some(x=>selNota.has(x.id))))&&(()=>{ const k='__sinasignar__'; const open=!!qq||notaCliOpen.has(k); const tot=notaGroups.sin.reduce((a,e)=>a+(e.amount||0),0); return (
           <div style={{border:`1px dashed ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
@@ -20521,7 +20579,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const lista = (
           <div style={{flex:1,minWidth:0}}>
             {!D&&toolbar}
-            {deudaEstF&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:C.azulBg,borderRadius:9,padding:'6px 11px',marginBottom:8}}><span style={{flex:1}}>Mostrando: {partes.find(x=>x[0]===deudaEstF)?.[1]}</span><button onClick={()=>setDeudaEstF(null)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:28}}>Ver todo</button></div>}
+            {deudaEstF&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:C.azulBg,borderRadius:9,padding:'6px 11px',marginBottom:8}}><span style={{flex:1}}>Mostrando: {deudaEstF==='sel'?`Seleccionadas · ${selNota.size} OT`:partes.find(x=>x[0]===deudaEstF)?.[1]}</span><button onClick={()=>setDeudaEstF(null)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:28}}>Ver todo</button></div>}
             {ocultasFondos>0&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.soonText,background:C.soonBg,borderRadius:9,padding:'7px 11px',marginBottom:8}}><span style={{flex:1}}>{ocultasFondos} OT más calzan, ocultas por el filtro de saldo.</span><button onClick={()=>setNotaFondos(false)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:30}}>Ver todos</button></div>}
             {notariaPend.length===0&&notariaAnulados.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13}}>No hay gastos de notaría pendientes de liquidar.</div>}
             {qq&&nada&&!ocultasFondos&&<div style={{color:C.muted,textAlign:'center',padding:24,fontSize:13}}>Ninguna OT calza con "{notaQ.trim()}".</div>}
@@ -20688,7 +20746,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{padding:'2px 0 0'}}>
               {/* Pestañas: separa rendiciones a CLIENTES de liquidaciones a NOTARÍA */}
               {(()=>{ const tab=(id,lbl)=>{ const on=histTab===id; return <button onClick={()=>setHistTab(id)} style={{fontSize:13,fontWeight:500,background:on?C.accent:'#fff',color:on?'#fff':C.muted,border:`1px solid ${on?C.accent:C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>{lbl}</button> }
-                return <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center'}}>{tab('clientes','Clientes')}{tab('notaria',`Notaría${notaLiquidaciones.length?` · ${notaLiquidaciones.length}`:''}`)}<button onClick={()=>exportHist()} title='Exportar a CSV' style={{marginLeft:'auto',fontSize:11,fontWeight:600,background:'none',border:'none',color:C.azulInfo,cursor:'pointer',padding:'2px 4px'}}>Exportar ↓</button><button onClick={()=>setHistOrden(o=>o==='nuevo'?'antiguo':'nuevo')} title='Ordenar por fecha' style={{fontSize:15,fontWeight:500,background:'none',border:'none',color:C.muted,cursor:'pointer',padding:'2px 4px',lineHeight:1}}>{histOrden==='nuevo'?'↓':'↑'}</button></div> })()}
+                void tab; return <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center'}}><button onClick={()=>exportHist()} title='Exportar a CSV' style={{marginLeft:'auto',fontSize:11,fontWeight:600,background:'none',border:'none',color:C.azulInfo,cursor:'pointer',padding:'2px 4px'}}>Exportar ↓</button><button onClick={()=>setHistOrden(o=>o==='nuevo'?'antiguo':'nuevo')} title='Ordenar por fecha' style={{fontSize:15,fontWeight:500,background:'none',border:'none',color:C.muted,cursor:'pointer',padding:'2px 4px',lineHeight:1}}>{histOrden==='nuevo'?'↓':'↑'}</button></div> })()}
               {/* Foto: protagonista "Rendido en el año" + alertas de acción anidadas (canon de la foto). Cero recálculo: sale de rendiciones/rendirPend/notaPendTotal. */}
               {(()=>{
                 const yr = hAnio || String(new Date().getFullYear())
@@ -20782,7 +20840,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                   </div>) }
                 return (<>{agrupar(liq).map(g=><div key={g.k}>{mesHdr(g)}{cardWrap(g.items.map(notaRow))}</div>)}</>)
               })()}
-              <div style={{marginTop:16}}><BitacoraLista prefijo='gastos.' titulo='Bitácora de gastos' limite={12} vacio='Aún no hay registros.' etiquetas={{'gastos.eliminado':'Gasto eliminado (a la papelera)','gastos.personal':'Marcado como personal','gastos.notaria_pagado':'Marcado pagado a la notaría','gastos.notaria_pagado_deshecho':'Pago a la notaría desmarcado','gastos.estado_historico':'Marcado histórico (no descuenta saldo)','gastos.estado_descuenta':'Marcado que descuenta saldo','gastos.estado_deshecho':'Estado del gasto deshecho','gastos.clasificados_historico':'Clasificados como histórico','gastos.clasificados_descuenta':'Clasificados que descuentan'}}/></div>
+              <div style={{marginTop:16}}><BitacoraLista prefijo='gastos.' titulo='Bitácora de gastos' limite={12} vacio='Aún no hay registros.' etiquetas={{'gastos.cuenta_personal_ajuste':'Ajuste de cuenta personal','gastos.fondo_asignado':'Fondo asignado a un gasto','gastos.conciliado':'Gasto conciliado con el banco','gastos.mover_cliente':'Gasto movido de cliente','gastos.fondo_sin_deposito_borrado':'Fondo sin depósito borrado','gastos.categoria_corregida':'Categoría corregida','gastos.incobrable':'Marcado incobrable','gastos.eliminado':'Gasto eliminado (a la papelera)','gastos.personal':'Marcado como personal','gastos.notaria_pagado':'Marcado pagado a la notaría','gastos.notaria_pagado_deshecho':'Pago a la notaría desmarcado','gastos.estado_historico':'Marcado histórico (no descuenta saldo)','gastos.estado_descuenta':'Marcado que descuenta saldo','gastos.estado_deshecho':'Estado del gasto deshecho','gastos.clasificados_historico':'Clasificados como histórico','gastos.clasificados_descuenta':'Clasificados que descuentan'}}/></div>
             </div>
           )}
         </div>
@@ -21019,10 +21077,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     const activos = clientsWithMovs.filter(c=>c.status!=='Terminado')
     const nSin = orphans.length + revN(revNoActivo) + revN(revOcasional)
     const cards = [
-      {t:'Rendiciones', ic:'receipt', s:'Rendir a cliente', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
+      {t:'Rendiciones', ic:'receipt', s:rendirPend.length?`${rendirPend.length} por rendir · ${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))}`:'al día', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} pendiente`:'Sin pendientes', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
-      {t:'Historial', ic:'clock', s:'Rendiciones y pagos', col:C.accent, bg:C.azulBg, go:()=>setShowHistorial(true)},
-      {t:'Solicitar fondos', ic:'mail', s:'Pedir provisión al cliente', col:C.soonText, bg:C.soonBg, go:()=>onSolicitarFondos&&onSolicitarFondos()},
     ]
     // Caja chica del equipo ↔ banco: tarjeta como las demás (antes fila suelta); abre la revisión en Banco.
     if(isAdmin&&onRevisionCajaChica){ const sinCC=calceCajaChica(pettyCash,[],{}).cajasSinTransf.length
@@ -21036,6 +21092,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       const iCC=cards.findIndex(c=>c.t==='Caja chica')
       if(iCC>=0&&alCC.length) cards[iCC]={...cards[iCC], s:negCC.length?`${negCC.length} en negativo · ${fmtMill(totNeg)}`:`${alCC.length} baja${alCC.length!==1?'s':''}`, sCol:negCC.length?C.overdueText:C.soonText, go:()=>setAvisosOpen(o=>!o)}
       if(rv) cards.push({t:'Revisión de gastos', ic:'check', s:rv.txt, sCol:C.soonText, col:C.soonText, bg:C.soonBg, go:()=>setShowRevOfi(true)})
+      else if(soyRevisor||isAdmin) cards.push({t:'Revisión de gastos', ic:'check', s:'al día', col:C.soonText, bg:C.soonBg, go:()=>setShowRevOfi(true)})
     }
     // Entregas de caja (una línea por persona): se abren al tocar la tarjeta Caja chica cuando hay avisos.
     const filasCaja = alCC.map(a=>{ const neg=a.tipo==='negativo'; return (
@@ -21065,7 +21122,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           </div>
           <button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length>5?3:cards.length},minmax(0,1fr))`:'1fr 1fr',gap:8,marginBottom:12}}>
+        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length},minmax(0,1fr))`:'1fr 1fr',gap:8,marginBottom:12}}>
           {cards.map((c,i)=>(!D&&i===cards.length-1&&cards.length%2)?<div key={c.t} style={{gridColumn:'1 / -1'}}>{navCard(c)}</div>:navCard(c))}
         </div>
         {avisosCaja}
