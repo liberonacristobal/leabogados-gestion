@@ -15461,7 +15461,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const tsTodas = terceros.filter(tValida)
   const pagadasAnio = sumM(tsTodas.filter(t=>est(t)==='pagada'&&yOf(t.pagado_at||t.created_at)===yr))
   const transfAnio = filas.reduce((s,r)=>s+r.transferido,0)
-  const porCobrarTot = filas.reduce((s,r)=>s+r.porCobrarTe,0), cobAnioTot = filas.reduce((s,r)=>s+r.cobAnioTe,0)
+  const cobAnioTot = filas.reduce((s,r)=>s+r.cobAnioTe,0)
   const conDeuda = filas.filter(r=>r.porPagar>0)
   const masAntTot = conDeuda.map(r=>r.masAnt).filter(Boolean).sort()[0]
   const nCom=calces.filter(c=>c.tipo!=='sii').length, nSii=calces.filter(c=>c.tipo==='sii').length
@@ -15473,9 +15473,16 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const montoMov = xs => xs.reduce((a,x)=>a+Math.abs(Number(x.m.monto)||0),0)
   const qq=_normTxt(q.trim())
   // ── Landing (2026-10-14): 4 tarjetas que filtran · por revisar en una línea · lista de una línea que se despliega · por proveedor ⇄ por cliente ──
-  const sinFacDe = p => { const m=met(p); return m.equipo ? [] : tercDe(p.id).filter(t=>!t.factura_numero&&(est(t)==='por_pagar'||(est(t)==='pagada'&&yOf(t.pagado_at)===yr))) }
-  const filasL = filas.map(r=>{ const ts=tercDe(r.p.id), sf=sinFacDe(r.p); return {...r, cob:r.porDevengar, pagAnio:r.pagadasAnio, sinFac:sf.length, sinFacM:sumM(sf), nCli:new Set(ts.map(t=>String(cliDe(t)?.id||'x'))).size, clis:[...new Set(ts.map(t=>cliDe(t)?.name).filter(Boolean))]} })
-  const cobTot = filasL.reduce((s,r)=>s+r.cob,0)
+  // Filtro por año (2026-10-15): Por pagar y Sujeto a cobro = comisiones de facturas del cliente emitidas (o programadas) en el año elegido;
+  // Pagada = pagada en el año. Comisiones por cobrar: pendientes de facturas del año + cobradas en el año.
+  const yT = t => { const b=facDe(t); return yOf(b ? (b.issued_at||b.due) : (t.pagado_at||t.created_at)) }
+  const sinFacDe = p => { const m=met(p); return m.equipo ? [] : tercDe(p.id).filter(t=>!t.factura_numero&&((est(t)==='por_pagar'&&yT(t)===yr)||(est(t)==='pagada'&&yOf(t.pagado_at)===yr))) }
+  const filasL = filas.map(r=>{ const ts=tercDe(r.p.id), sf=sinFacDe(r.p), tsY=ts.filter(t=>yT(t)===yr), ppY=tsY.filter(t=>est(t)==='por_pagar')
+    const caY=r.caItems.filter(x=>x.cob ? String(x.b.paid_at||x.b.issued_at||'').slice(0,4)===String(yr) : yOf(x.b.issued_at)===yr)
+    return {...r, porPagar:ppY.reduce((a,t)=>a+saldoT(t),0), nPorPagar:ppY.length, masAnt:ppY.map(t=>pagoCli(t)?.fecha).filter(Boolean).sort()[0], cob:tsY.filter(t=>est(t)==='por_devengar').reduce((a,t)=>a+saldoT(t),0), pagAnio:r.pagadasAnio,
+      caItems:caY, porCobrarTe:caY.filter(x=>!x.cob).reduce((a,x)=>a+x.monto,0), sinFac:sf.length, sinFacM:sumM(sf), nCli:new Set(ts.map(t=>String(cliDe(t)?.id||'x'))).size, clis:[...new Set(ts.map(t=>cliDe(t)?.name).filter(Boolean))]} })
+  const ppTot = filasL.reduce((s,r)=>s+r.porPagar,0)
+  const cobTot = filasL.reduce((s,r)=>s+r.cob,0), porCobrarTot = filasL.reduce((s,r)=>s+r.porCobrarTe,0)
   const sinFacTot = filasL.reduce((s,r)=>s+r.sinFac,0), sinFacMTot = filasL.reduce((s,r)=>s+r.sinFacM,0)
   const enLf = r => lf==='por_pagar'?r.porPagar>0 : lf==='por_devengar'?r.cob>0 : lf==='pagada'?r.pagAnio>0 : lf==='cobrar'?(r.caItems||[]).length>0 : lf==='sinfac'?r.sinFac>0 : true
   // Landing (2026-10-15): 6 tarjetas iguales — etiqueta + cifra en $M, sin texto debajo (el detalle aparece al tocar).
@@ -15487,7 +15494,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const nP = f => filasL.filter(f).length
   const provN = n => `${n} proveedor${n!==1?'es':''}`
   const tilesL = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
-    {tileL('pp','Por pagar',sc.porPagar,'por_pagar')}
+    {tileL('pp','Por pagar',ppTot,'por_pagar')}
     {tileL('cob','Sujeto a cobro',cobTot,'por_devengar')}
     {tileL('pag',`Pagada · ${yr}`,pagadasAnio,'pagada')}
     {tileL('te','Comisiones por cobrar',porCobrarTot,'cobrar')}
@@ -15556,9 +15563,9 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   </div>
   // Por cliente: el mismo dinero visto desde el cliente (qué comisiones arrastra y a quién).
   const porCli = (()=>{ const g={}; tsTodas.forEach(t=>{ const c=cliDe(t); const k=String(c?.id||'x'); if(!g[k]) g[k]={k,c,ts:[]}; g[k].ts.push(t) })
-    return Object.values(g).map(x=>{ const provs={}; x.ts.forEach(t=>{ const pk=String(t.proveedor_id); if(!provs[pk]) provs[pk]={p:proveedores.find(p=>String(p.id)===pk),pp:0,cob:0,pag:0}; const e=est(t); if(e==='por_pagar') provs[pk].pp+=saldoT(t); else if(e==='por_devengar') provs[pk].cob+=saldoT(t); else if(yOf(t.pagado_at)===yr) provs[pk].pag+=Number(t.monto)||0 })
+    return Object.values(g).map(x=>{ const provs={}; x.ts.forEach(t=>{ const pk=String(t.proveedor_id); if(!provs[pk]) provs[pk]={p:proveedores.find(p=>String(p.id)===pk),pp:0,cob:0,pag:0}; const e=est(t); if(e==='por_pagar'){ if(yT(t)===yr) provs[pk].pp+=saldoT(t) } else if(e==='por_devengar'){ if(yT(t)===yr) provs[pk].cob+=saldoT(t) } else if(yOf(t.pagado_at)===yr) provs[pk].pag+=Number(t.monto)||0 })
       const ps=Object.values(provs); return {...x,ps,porPagar:ps.reduce((s,p)=>s+p.pp,0),cob:ps.reduce((s,p)=>s+p.cob,0),pagAnio:ps.reduce((s,p)=>s+p.pag,0),sinFac:0} })
-      .filter(x=>enLf(x)&&(!qq||_normTxt(`${x.c?.name||''} ${x.ps.map(p=>tituloProv(p.p)).join(' ')}`).includes(qq)))
+      .filter(x=>(x.porPagar+x.cob+x.pagAnio>0||lf==='cobrar')&&enLf(x)&&(!qq||_normTxt(`${x.c?.name||''} ${x.ps.map(p=>tituloProv(p.p)).join(' ')}`).includes(qq)))
       .sort((a,b)=>(b.porPagar-a.porPagar)||(b.cob-a.cob)||(b.pagAnio-a.pagAnio)) })()
   const filaCli = x => { const open=expP==='c:'+x.k, cv=v=>v?fmt(v):dash
     return <div key={x.k} onClick={()=>setExpP(open?null:'c:'+x.k)} className='pv-c' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5,cursor:'pointer',background:open?C.bgSoft:'transparent'}}>
