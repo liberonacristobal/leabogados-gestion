@@ -177,6 +177,11 @@ const NOMBRE_CLI = {fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.25,ov
 // RUT chileno con puntos y guion (12.345.678-9). Idempotente; si el texto no parece un RUT lo deja igual.
 const fmtRutCL = r => { const t=String(r??'').trim(); if(!/^[0-9.\s]+-?\s*[0-9kK]$/.test(t)) return t; const c=t.replace(/[^0-9kK]/g,'').toUpperCase(); return c.slice(0,-1).replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'-'+c.slice(-1) }
 // ISO local (aaaa-mm-dd) de un timestamp, para pasarlo a diaGrande sin desfase UTC.
+// Meses (auditoría visual 2026-10-15, punto 10): un solo juego. Abreviado 'sep' (no 'sept' del sistema); título 'Septiembre 2026'.
+const MES_L = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+const MES_C = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+const mesCorto = d => { const x=d instanceof Date?d:new Date(d); return isNaN(x)?'':MES_C[x.getMonth()] }
+const mesTitulo = d => { const x=d instanceof Date?d:new Date(d); if(isNaN(x)) return ''; const m=MES_L[x.getMonth()]; return m.charAt(0).toUpperCase()+m.slice(1)+' '+x.getFullYear() }
 const isoLocal = ts => { const d=ts?new Date(ts):null; if(!d||isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 const diaGrande = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.15,fontSize:9,color:C.done,fontWeight:600}}>sin<br/>fecha</div>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:18,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:10,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
 const bigDate = (d,col) => diaGrande(d,col)   // un solo formato de fecha grande (el de Banco, 2026-10-09): día 18 + "mmm aa"
@@ -2871,8 +2876,8 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
     for(let i=-pastN;i<horizon;i++){
       const d = new Date(now.getFullYear(), now.getMonth()+i, 1)
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
-      const label = d.toLocaleDateString('es-CL',{month:'short'})
-      const labelFull = d.toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())
+      const label = mesCorto(d)
+      const labelFull = mesTitulo(d)
       if(i<0){
         const cobrado = billing.filter(b=>b.billing_type!=='reembolso'&&okResp(b)&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').startsWith(key)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única)
         result.push({key,label,labelFull,past:true,cobrado,emitido:0,programado:0,overdue:0,total:cobrado})
@@ -3111,7 +3116,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
 function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[],onOpenClientFicha}) {
   const [openRec,setOpenRec] = usePersistedState('d_rec',false)
   const yr = currentYear
-  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+  const MESES = MES_C
   const data = useMemo(()=>{
     const arr = Array.from({length:12},(_,i)=>({mes:MESES[i], uf:0, clp:0}))
     const ufConv = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
@@ -3926,7 +3931,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     const en7plz = new Date(Date.now()+7*86400000).toISOString().slice(0,10)
     const plzVenc=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha<today)
     const plzProx=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha>=today&&p.fecha<=en7plz)
-    const fmtPlz=f=>{ try{ return new Date(f+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) }catch(_){ return f||'' } }
+    const fmtPlz=f=>{ try{ return fmtFechaDMY(f) }catch(_){ return f||'' } }
     // Cartera: proyectos críticos (rojo) y sin mover +2 semanas → al panel
     const diasCart=iso=>iso?Math.floor((Date.now()-new Date(iso+'T00:00').getTime())/86400000):null
     const cartCrit=(proyectosCartera||[]).filter(p=>p.activo!==false&&(p.estado||'verde')==='rojo')
@@ -4213,8 +4218,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
               const percItems=(ingresosPorAnioVenta.percList||[]).slice().sort((a,b)=>String(b.paid_at||'').localeCompare(String(a.paid_at||'')))
               const percChip=filaG('pc',e=>{e.stopPropagation();setResPerc(v=>!v)},<span style={rowL}>Comisiones percibidas</span>,null,`+ ${fmtMon(percYTD)}`,vPos,resPerc)
               const subFila=(k,cid,txt,val,col,onClick)=>(<div key={k} onClick={onClick} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 13px 6px 24px',fontSize:11,background:C.bgSoft,borderTop:`1px solid ${C.border}`,cursor:onClick?'pointer':'default'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{txt}</span><span style={{fontWeight:700,color:col,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{val}</span></div>)
-              const percList = resPerc && percItems.map(it=>{ const mes=it.paid_at?new Date(it.paid_at+'T12:00').toLocaleDateString('es-CL',{month:'short'}):''; return subFila(it.id,it.client_id,`${cn(it.client_id)}${it.folio?` · N° ${folioN(it.folio)||it.folio}`:''}${mes?` · ${mes}`:''}`,'+ '+fmtMon(it._cobrado),C.greenText,()=>it.client_id&&onOpenClientFicha&&onOpenClientFicha(it.client_id)) })
-              const comisList = resComis && comisPagos.slice(0,30).map((x,i)=>{ const mes=x.pagado_at?new Date(x.pagado_at+'T12:00').toLocaleDateString('es-CL',{month:'short'}):''; return (
+              const percList = resPerc && percItems.map(it=>{ const mes=it.paid_at?mesCorto(it.paid_at+'T12:00'):''; return subFila(it.id,it.client_id,`${cn(it.client_id)}${it.folio?` · N° ${folioN(it.folio)||it.folio}`:''}${mes?` · ${mes}`:''}`,'+ '+fmtMon(it._cobrado),C.greenText,()=>it.client_id&&onOpenClientFicha&&onOpenClientFicha(it.client_id)) })
+              const comisList = resComis && comisPagos.slice(0,30).map((x,i)=>{ const mes=x.pagado_at?mesCorto(x.pagado_at+'T12:00'):''; return (
                 <div key={x.id||i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 13px 6px 24px',fontSize:11,background:C.bgSoft,borderTop:`1px solid ${C.border}`}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{x.proveedor||'Colaborador'}{mes?` · ${mes}`:''}</span><span style={{fontWeight:700,color:C.overdueText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtMon(Number(x.monto)||0)}</span></div>) })
 
               // VENDIDO — neto de comisiones (devengadas) + meta/falta
@@ -4800,7 +4805,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
         const ico=(d,c)=><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={c} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
         const abrir=p=>{ onOpenProyecto?onOpenProyecto(p.id):go('cartera') }
         const groupHd=(icoEl,label,n,col,bg)=><div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 6px',background:C.bgSoft,borderTop:'1px solid #DDE2E6'}}><span style={{width:20,height:20,borderRadius:6,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icoEl}</span><span style={{flex:1,fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:col}}>{label}</span><span style={{fontSize:10,fontWeight:800,color:col}}>{n}</span></div>
-        const rowCurso=p=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?new Date(s.iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):`hace ${nDias(dd)}`); const col=CART_DOT[p.estado||'verde']; return (
+        const rowCurso=p=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?fmtFechaDMY(s.iso):`hace ${nDias(dd)}`); const col=CART_DOT[p.estado||'verde']; return (
           <div key={p.id} onClick={()=>abrir(p)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
             <span style={{width:30,height:30,borderRadius:8,background:col+'1A',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span style={{width:9,height:9,borderRadius:'50%',background:col}}/></span>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm(p)}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>{s&&<span style={{width:6,height:6,borderRadius:'50%',background:SEÑAL_COL[s.tipo]||C.muted,flexShrink:0}}/>}{s?s.texto:(p.nota||p.nombre_proyecto||'sin señales')}</div></div>
@@ -7016,7 +7021,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 }
               }} style={{padding:'10px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,textAlign:'left',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</div>
-                <div style={{fontSize:10,color:C.muted,flexShrink:0}}>{new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'})}</div>
+                <div style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(isoLocal(f.modifiedTime))}</div>
               </button>
             ))}
           </div>
@@ -8842,7 +8847,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
   const ym0 = new Date().toISOString().slice(0,7)
   const [ym,setYm] = useState(ym0)   // mes visible, navegable ‹ ›
   const shiftYm = d => { const [Y,M]=ym.split('-').map(Number); const dt=new Date(Y,M-1+d,1); setYm(dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')) }
-  const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  const MESES = MES_C
   const anio = ym0.slice(0,4)
   const mesesOpt = MESES.map((m,i)=>({v:`${anio}-${String(i+1).padStart(2,'0')}-01`, l:`${m.charAt(0).toUpperCase()+m.slice(1)} ${anio}`}))
   useEffect(()=>{ let alive=true
@@ -9082,7 +9087,7 @@ function RetirosOficinaModal({ expenses=[], clients=[], billing=[], terceros=[],
         <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderTop:`1px solid ${C.border}`,fontSize:13}}>
           <span style={{width:9,height:9,borderRadius:'50%',background:col,flexShrink:0}}/>
           <span style={{fontWeight:700,color:C.accent}}>{r.socio}</span>
-          <span style={{color:C.muted,fontSize:11}}>{dt?dt.toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'—'}</span>
+          <span style={{color:C.muted,fontSize:11}}>{dt?fmtFechaDMY(isoLocal(dt)):'—'}</span>
           <span style={{marginLeft:'auto',fontWeight:800,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(r.amount)}</span>
         </div>) })}
       <div style={{padding:'8px 16px 12px',fontSize:11,color:C.done}}>Se identifican por el RUT del socio en la glosa. Excluidos del costo de oficina automáticamente.</div>
@@ -10207,7 +10212,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       {facDup.map((g,i)=><div key={i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{g.rs||cName(g.cid)}{g.rut?<span style={{color:C.muted,fontWeight:400}}> · {fmtRutCL(g.rut)}</span>:''}</div>
         <div style={{fontSize:10,color:C.muted,marginTop:1}}>{g.concept||'—'}</div></div>{amt(fmt(g.amount||0))}</div>
-        {g.rows.map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:11,color:C.muted,marginTop:3,paddingLeft:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}><span style={{fontWeight:600,color:C.accent}}>{b.invoice_no?`N° ${folioN(b.invoice_no)}`:'Programada'}</span><span>· {b.status} · {b.due?new Date(b.due+'T12:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'—'}</span>{lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
+        {g.rows.map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:11,color:C.muted,marginTop:3,paddingLeft:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}><span style={{fontWeight:600,color:C.accent}}>{b.invoice_no?`N° ${folioN(b.invoice_no)}`:'Programada'}</span><span>· {b.status} · {b.due?fmtFechaDMY(b.due):'—'}</span>{lk(()=>onOpenFactura&&onOpenFactura(b))}</div>)}
       </div>)}
     </div>}
     {rutMulti.length>0&&<div style={secBox}>{sh('RUT repetido en fichas',C.coralText,rutMulti.length)}
@@ -10922,7 +10927,7 @@ function DepurarCobradasModal({rows=[], clients=[], respaldoMap={}, onOpenFactur
   const [sel,setSel] = useState(()=>new Set(rows.map(r=>r.id)))
   const toggle = id => setSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
   const cn = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || '—'
-  const fdmy = d => d ? new Date(String(d).slice(0,10)+'T00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'2-digit'}) : '—'
+  const fdmy = d => d ? fmtFechaDMY(d) : '—'
   const fpago = b => b.paid_at||b.payment_date||b.reconciled_at||null
   const evidencia = b => { const resp=respaldoMap[b.id]||0, ab=b.paid_amount||0; if(resp>=(b.amount||0)&&resp>0) return `Conciliada con el banco · ${fmt(resp)}`; if(ab>0) return `Abonos imputados · ${fmt(ab)}`; return 'Saldo $0 (sin movimiento)' }
   const selRows = rows.filter(r=>sel.has(r.id))
@@ -11759,7 +11764,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [selected,setSelected] = useState(()=>new Set())
   const toggleSel = id => setSelected(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
   const clearSel = () => setSelected(new Set())
-  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+  const MONTHS = MES_C
   // Rediseño tab Emitidas: dos acordeones maestros (cerrados por defecto)
   const [openPendiente,setOpenPendiente] = useState(false)
   const [openPorFacturar,setOpenPorFacturar] = useState(false)
@@ -19622,7 +19627,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               {cargas.length>0&&<button onClick={exportarHistCSV} style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>Exportar CSV</button>}
             </div>
             {cargas.length===0&&<div style={{color:C.muted,textAlign:'center',padding:28,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Aún no hay cargas. Sube un Excel para empezar.</div>}
-            <div style={{display:'flex',flexDirection:'column',gap:8}}>{cargas.map(c=>{ const open=cargaOpen===c.id; const dd=c.created_at?new Date(c.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; const undone=c.status==='undone'
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>{cargas.map(c=>{ const open=cargaOpen===c.id; const dd=c.created_at?new Date(c.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?mesCorto(dd):''; const undone=c.status==='undone'
               const rz=c.resumen; const nErr=undone?0:(rz?.error||0); const nCarg=rz?.cargadas ?? c.gs.length; const nOmit=rz?.omitidas||0; const nNoN=undone?0:((rz?.noNuestras||[]).length)
               const dotCol=undone?C.done:(nErr>0?C.overdue:C.normal); return (
               <div key={c.id} style={{border:`1px solid ${nErr>0?'#F3C9C4':C.border}`,borderRadius:12,overflow:'hidden',opacity:undone?.6:1}}>
@@ -20060,9 +20065,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const tot=list.reduce((a,r)=>a+(r.total||0),0)
         const groups=[]; const gi={}
         list.forEach(r=>{ const mk=String(r.created_at||'').slice(0,7)||'sin'; if(gi[mk]==null){ gi[mk]=groups.length; groups.push({mk,rows:[],tot:0}) } const g=groups[gi[mk]]; g.rows.push(r); g.tot+=(r.total||0) })
-        const mesLbl = mk => { if(mk==='sin'||!/^\d{4}-\d{2}/.test(mk)) return 'Sin fecha'; const [y,m]=mk.split('-'); return new Date(Number(y),Number(m)-1,1).toLocaleDateString('es-CL',{month:'long',year:'numeric'}) }
+        const mesLbl = mk => { if(mk==='sin'||!/^\d{4}-\d{2}/.test(mk)) return 'Sin fecha'; const [y,m]=mk.split('-'); return mesTitulo(new Date(Number(y),Number(m)-1,1)) }
         const csvRows=()=>{ const head=['Fecha','Periodo','Total','Estado','N gastos','OT','Quién']; const body=list.map(r=>{ const est=notaEstado(r); return [fmtFechaDMY(r.created_at)||'', r.periodo||'', r.total||0, est==='pagado'?'Pagada':est==='enviada'?'Enviada':'Por enviar', r.n_gastos||0, r.ot_numbers||'', r.user_name||''] }); return [head,...body] }
-        const liqCard = r => { const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; const est=notaEstado(r); const dd=r.created_at?new Date(r.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; const eb=est==='por_enviar'?['Por enviar',C.soonText,C.soonBg]:est==='enviada'?['Enviada',C.azulInfo,C.azulBg]:['Pagada',C.greenText,C.greenBg]; return (
+        const liqCard = r => { const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; const est=notaEstado(r); const dd=r.created_at?new Date(r.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?mesCorto(dd):''; const eb=est==='por_enviar'?['Por enviar',C.soonText,C.soonBg]:est==='enviada'?['Enviada',C.azulInfo,C.azulBg]:['Pagada',C.greenText,C.greenBg]; return (
           <div key={r.id} style={{border:`1px solid ${est==='por_enviar'?'#FAC775':C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
             <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',cursor:'pointer'}}>
               {diaGrande(isoLocal(r.created_at))}
@@ -22036,7 +22041,7 @@ function DocumentosDrive({client, onCount, onPick}){
           <button key={f.id} type='button' onClick={()=>esCarpeta?entrarSub(f):(onPick?onPick(f):abrir(f))} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:esCarpeta?C.bgSoft:'#fff',cursor:'pointer',textAlign:'left'}}>
             <SIcon n={esCarpeta?'building':'file'} s={14} c={esCarpeta?C.muted:C.accent}/>
             <span style={{flex:1,minWidth:0,fontSize:12,color:esCarpeta?C.text:C.accent,fontWeight:esCarpeta?600:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
-            <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{esCarpeta?<Gl n='chevron'/>:(f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'')}</span>
+            <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{esCarpeta?<Gl n='chevron'/>:(f.modifiedTime?fmtFechaDMY(isoLocal(f.modifiedTime)):'')}</span>
           </button>
         )})}
       </div>}
@@ -24202,7 +24207,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
         {grupos.map(([cid,rs])=>{ const tot=rs.reduce((a,r)=>a+(r.monto||0),0); const rec=rs.reduce((a,r)=>a+(reqEstado(r).k==='rec'?(depositoDe(r)?.amount||r.monto||0):0),0); return (
           <div key={cid} style={{marginBottom:12}}>
             <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',background:C.accent,borderRadius:10}}><span style={{flex:1,minWidth:0,fontSize:13,fontWeight:800,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cnReq(cid)}</span><span style={{fontSize:11,color:'#AEC4CE',fontWeight:600,flexShrink:0}}>pedido {fmt(tot)}{rec>0?` · recibido ${fmt(rec)}`:''}</span></div>
-            {rs.map(r=>{ const est=reqEstado(r); const dd=r.enviada_at?new Date(r.enviada_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?dd.toLocaleDateString('es-CL',{month:'short'}).replace('.',''):''; return (
+            {rs.map(r=>{ const est=reqEstado(r); const dd=r.enviada_at?new Date(r.enviada_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?mesCorto(dd):''; return (
               <div key={r.id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 11px',borderBottom:`.5px solid ${C.track}`}}>
                 {diaGrande(isoLocal(r.enviada_at))}
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.asunto||'Solicitud de fondos'}</div><div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.enviada_por?`${r.enviada_por} · `:''}a {r.para||'—'}{r.monto?` · ${fmt(r.monto)}`:''}{r.n_adjuntos>0?` · ${r.n_adjuntos} adj.`:''}</div></div>
@@ -24691,7 +24696,7 @@ function ClientFicha({onAsociarTrabajo,onToggleStatus,onOpenFusion,client,client
                 ? <div style={{padding:'12px 14px',fontSize:12,color:C.muted}}>Sin tareas pendientes.</div>
                 : tks.map(t=>(<div key={t.id} onClick={()=>onEditTask&&onEditTask(t)} style={{display:'flex',alignItems:'flex-start',gap:9,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onEditTask?'pointer':'default',fontSize:12}}>
                     <span style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),marginTop:5,flexShrink:0}}/>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.title}</div><div style={{fontSize:10,color:C.muted}}>{taskAssignees(t).join(', ')||'—'}{t.due?` · vence ${new Date(t.due+'T12:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'})}`:''}</div></div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.title}</div><div style={{fontSize:10,color:C.muted}}>{taskAssignees(t).join(', ')||'—'}{t.due?` · vence ${fmtFechaDMY(t.due)}`:''}</div></div>
                   </div>))}
               {onAddTask&&<div onClick={()=>onAddTask()} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>+ Nueva tarea</div>}
             </div>
@@ -27189,7 +27194,7 @@ function printTasks(tasks, clients, filterLabel) {
   const today = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
   const rows = tasks.map(t=>{
     const client = clients.find(c=>c.id===t.client_id)
-    const due = t.due ? new Date(t.due+'T00:00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : '—'
+    const due = t.due ? fmtFechaDMY(t.due) : '—'
     const urgent = t.due && daysLeft(t.due)<0 ? 'color:#E24B4A;font-weight:600' : ''
     return `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid ${C.border};font-size:12px">${t.title}</td>
@@ -28905,7 +28910,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
               {precFiles.map(f=>{ const sel=precSel&&precSel.id===f.id; return (
                 <button key={f.id} type='button' onClick={()=>elegirPrec(f)} disabled={precReading} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:8,border:`1px solid ${sel?C.accent:C.border}`,background:sel?C.azulBg:'#fff',cursor:'pointer',textAlign:'left'}}>
                   <span style={{fontSize:12,fontWeight:sel?700:500,color:sel?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sel?<><Gl n='tick'/>{" "}</>:''}{f.name}</span>
-                  <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'})}</span>
+                  <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(isoLocal(f.modifiedTime))}</span>
                 </button>
               )})}
             </div>
@@ -28996,7 +29001,7 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
   const cargar=async()=>{ try{ const {data}=await supabase.from('plazos').select('*').order('fecha',{ascending:true,nullsFirst:false}); setRows(data||[]) }catch(_){ setRows([]) } }
   useEffect(()=>{ cargar() },[])
   const cn=id=>clients.find(c=>String(c.id)===String(id))?.name||''
-  const fmtF=f=>{ try{ return new Date(f+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'}) }catch(_){ return f||'' } }
+  const fmtF=f=>{ try{ return fmtFechaDMY(f) }catch(_){ return f||'' } }
   const extraerPlazos=async(file)=>{
     setExtBusy(true); setExtErr(null); setMostrarPicker(false)
     try{
@@ -30074,7 +30079,7 @@ function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clie
   const HOY = new Date().toISOString().slice(0,10)
   const SEMANAS = 6
   const cnm = id => clients.find(c=>String(c.id)===String(id))?.name || ''
-  const fmtCorto = iso => iso ? new Date(String(iso).slice(0,10)+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : ''
+  const fmtCorto = iso => iso ? fmtFechaDMY(iso) : ''
   const fmtLargo = iso => iso ? new Date(String(iso).slice(0,10)+'T00:00').toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}) : ''
   const inp = { fontSize:12, padding:'6px 8px', borderRadius:8, border:`1px solid ${C.border}`, color:C.text, background:'#fff' }
   const [vac,setVac] = useState([])
@@ -32290,7 +32295,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
       const d0=new Date(minF+'T12:00'), d1=new Date(maxF+'T12:00')
       const months=[]; { const c=new Date(d0.getFullYear(),d0.getMonth(),1); const end=new Date(d1.getFullYear(),d1.getMonth(),1); while(c<=end){ months.push(new Date(c)); c.setMonth(c.getMonth()+1) } }
       const span=Math.max(1,(d1-d0)); const pos=f=>{ const d=new Date(String(f).slice(0,10)+'T12:00'); return Math.max(0,Math.min(100,((d-d0)/span)*100)) }
-      const monthCols=months.map(m=>`<div style="flex:1;border-left:1px solid #E4E8EB;padding:3px 4px;font-size:9px;color:#537281;text-transform:uppercase">${m.toLocaleDateString('es-CL',{month:'short'})} ${String(m.getFullYear()).slice(2)}</div>`).join('')
+      const monthCols=months.map(m=>`<div style="flex:1;border-left:1px solid #E4E8EB;padding:3px 4px;font-size:9px;color:#537281;text-transform:uppercase">${mesCorto(m)} ${String(m.getFullYear()).slice(2)}</div>`).join('')
       const hoyPos=pos(hoy)
       const filas = pasos.length? pasos.map((h,i)=>{ const plan=h.plazo?pos(h.plazo):null, real=h.fecha?pos(h.fecha):null
         const metaTxt = [h.plazo?`plazo ${String(h.plazo).slice(0,10)}`:null, h.fecha?`hecho ${String(h.fecha).slice(0,10)}`:null].filter(Boolean).join(' · ')
@@ -32565,7 +32570,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
           return <div style={{ ...card, padding:0, overflow:'hidden' }}>
             {items.map((it,i)=>{ const dd=cartDiasPlazo(it.fecha); const k=KIND[it.kind]||KIND.Tarea; const dc=dd==null?C.muted:dd<0?C.overdue:dd<=7?'#E09B2D':C.greenText
               return <div key={i} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:i?`1px solid ${C.border}`:'none' }}>
-                <div style={{ textAlign:'center', minWidth:40, flexShrink:0 }}><div style={{ fontSize:15, fontWeight:700, color:dc, lineHeight:1 }}>{new Date(it.fecha+'T12:00').getDate()}</div><div style={{ fontSize:9, color:C.muted, textTransform:'uppercase' }}>{new Date(it.fecha+'T12:00').toLocaleDateString('es-CL',{month:'short'})}</div></div>
+                <div style={{ textAlign:'center', minWidth:40, flexShrink:0 }}><div style={{ fontSize:15, fontWeight:700, color:dc, lineHeight:1 }}>{new Date(it.fecha+'T12:00').getDate()}</div><div style={{ fontSize:9, color:C.muted, textTransform:'uppercase' }}>{mesCorto(it.fecha+'T12:00')}</div></div>
                 <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.texto}</div><div style={{ fontSize:10.5, fontWeight:600, color:dc }}>{dd==null?'':dd<0?`vencido ${-dd}d`:dd===0?'hoy':`en ${dd} días`}</div></div>
                 <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:k.c, background:k.bg, borderRadius:20, padding:'2px 8px', flexShrink:0 }}>{it.kind}</span>
               </div>
@@ -32759,7 +32764,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
     const d0=new Date(minF+'T12:00'), d1=new Date(maxF+'T12:00'); const span=Math.max(1,(d1-d0))
     const pos=f=>Math.max(0,Math.min(100,((new Date(String(f).slice(0,10)+'T12:00')-d0)/span)*100))
     const months=[]; { const c=new Date(d0.getFullYear(),d0.getMonth(),1); const end=new Date(d1.getFullYear(),d1.getMonth(),1); while(c<=end){ months.push(new Date(c)); c.setMonth(c.getMonth()+1) } }
-    const monthCols=months.map(m=>`<div style="flex:1;border-left:1px solid #E4E8EB;padding:3px 4px;font-size:9px;color:#537281;text-transform:uppercase">${m.toLocaleDateString('es-CL',{month:'short'})} ${String(m.getFullYear()).slice(2)}</div>`).join('')
+    const monthCols=months.map(m=>`<div style="flex:1;border-left:1px solid #E4E8EB;padding:3px 4px;font-size:9px;color:#537281;text-transform:uppercase">${mesCorto(m)} ${String(m.getFullYear()).slice(2)}</div>`).join('')
     const hoyPos=pos(hoy)
     const filas = items.map(x=>{ const fs=x.fechas.map(pos); const a=Math.min(...fs), b=Math.max(...fs)
       const rombos = x.hs.map(h=>{ const plan=h.plazo?pos(h.plazo):null, real=h.fecha?pos(h.fecha):null
