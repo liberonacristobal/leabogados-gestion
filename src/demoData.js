@@ -238,11 +238,18 @@ export const demoData = {
   proveedores: [
     { id:'pv1', nombre:'Andrés Rojas',    razon_social:'Rojas Abogados SpA',  rut:'77.900.100-2', datos_pago:'Banco de Chile · cuenta corriente 00-123-45678-90 · 77.900.100-2 · pagos@rojasabogados.cl' },
     { id:'pv2', nombre:'María José Soto', razon_social:'MJ Asesorías Ltda.',  rut:'76.500.300-4' },
+    { id:'pv3', nombre:'Tomás Vidal',     razon_social:'Tomás Vidal Pérez',   rut:'17.456.789-3', documento:'boleta', datos_pago:'BancoEstado · cuenta RUT 17456789 · tvidal@correo.cl' },
+  ],
+  // Boletas de honorarios recibidas (quien emite boleta: costo = bruto; retención al F29; se le transfiere el líquido)
+  boletas_honorarios: [
+    { id:'bh1', proveedor_id:'pv3', emisor_rut:'17.456.789-3', emisor_nombre:'Tomás Vidal Pérez', folio:12, fecha:'2026-08-01', bruto:176991, retencion:26991, liquido:150000, tasa:.1525, glosa:'PRESTACION DE SERVICIOS LEGALES', storage_path:null },
   ],
   terceros_pagos: [
     { id:'tp1', billing_id:'b4',  proveedor_id:'pv1', proveedor:'Andrés Rojas',    monto:4000000, estado:'por_pagar', tipo_costo:'clp', sale_id:'s7', created_at:'2026-03-22' },
     { id:'tp2', billing_id:'b10', proveedor_id:'pv2', proveedor:'María José Soto', monto:3000000, estado:'pendiente', tipo_costo:'clp', sale_id:'s6', created_at:'2026-05-28' },
     { id:'tp3', billing_id:'b5',  proveedor_id:'pv1', proveedor:'Andrés Rojas',    monto:1500000, estado:'pagado', pagado_at:'2026-05-10', movimiento_id:'movpv2', tipo_costo:'clp', comision_pct:15, comision_monto:264706, created_at:'2026-04-05' },
+    { id:'tp4', billing_id:'b5',  proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:176991, liquido:150000, retencion:26991, bhe_id:'bh1', factura_numero:'12', factura_fecha:'2026-08-01', estado:'pagado', pagado_at:'2026-08-06', tipo_costo:'pct', valor:10, created_at:'2026-04-05' },
+    { id:'tp5', billing_id:'b4',  proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:212389, liquido:180000, retencion:32389, estado:'por_pagar', tipo_costo:'pct', valor:10, created_at:'2026-03-22' },
   ],
   // Facturas que los proveedores le emiten al estudio (SII · registro de compras)
   sii_compras_docs: [

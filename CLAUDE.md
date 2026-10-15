@@ -153,6 +153,14 @@ Refuerza con dientes "cuestionar el propio análisis" y "nunca de memoria". Mnem
 
 Nunca usar líneas o franjas de color a la izquierda para marcar estado: ni `borderLeft` de color, ni `boxShadow: inset Npx 0 0`, ni divs-franja verticales. Aplica a la app Y a todo render, mockup o propuesta. El estado se lee por el color de la cifra o del texto, un punto tenue o el chip del canon. Las etiquetas/títulos de sección y de KPI van en `C.accent` (visibles por jerarquía), no en gris claro.
 
+## REGLA DE ORO: formato de fechas (uno solo en toda la app)
+
+Auditoría visual 2026-10-15. Aplica a la app, renders, correos, PDF, exportaciones y a cualquier respuesta con fechas:
+- **Fecha en texto = dd-mm-aaaa** (`15-10-2026`) con `fmtFechaDMY(iso)`; desde un timestamp, `fmtFechaDMY(isoLocal(ts))`. Nunca `toLocaleDateString('es-CL',{day,month:'short'})` ("15 sept"), nunca "15/10/26" ni fechas sin año.
+- **Fecha grande** (filas de lista) = `diaGrande(iso)`: día grande + "mmm aa" chico. Nunca un bloque de fecha hecho a mano.
+- **Meses**: abreviado en minúscula de 3 letras con `MES_C`/`mesCorto` ("sep", nunca "sept" ni "SEP"); título de período con `mesTitulo` ("Septiembre 2026"). Encabezados con día de la semana y prosa de documentos ("15 de octubre de 2026") son la única excepción.
+- Antes de dar por terminado un cambio con fechas, revisar que todas salgan de estos helpers (sin `toLocaleDateString` nuevo).
+
 ## Economía de espacio en formularios
 
 - Formularios y paneles deben ser densos pero legibles. Eliminar padding decorativo, márgenes inflados y secciones que obligan a scroll innecesario.

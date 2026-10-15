@@ -14633,6 +14633,25 @@ async function conciliarPagoComisiones(m, ids, sum){
 }
 // Nombre a mostrar de un proveedor (fuente única; antes copiado en 7 lugares).
 const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
+// ── Boletas de honorarios (módulo país Chile) ── Quien emite boleta: nuestro COSTO es el bruto; la retención la paga el estudio
+// al SII (F29) y al proveedor se le transfiere el líquido. La tasa cambia cada año (Ley 21.133): agregar aquí el año nuevo.
+const RETENCION_BHE = {2024:.1375, 2025:.145, 2026:.1525, 2027:.16, 2028:.17}
+const tasaBHE = f => { const y=Number(String(f||'').slice(0,4))||new Date().getFullYear(); const ks=Object.keys(RETENCION_BHE).map(Number).sort((a,b)=>a-b); return RETENCION_BHE[Math.min(Math.max(y,ks[0]),ks[ks.length-1])] }
+const pctBHE = t => `${(t*100).toLocaleString('es-CL',{maximumFractionDigits:2})} %`
+const esBoletaProv = p => p?.documento==='boleta'
+// Lo que se le transfiere por una comisión (líquido si emite boleta; si factura, el monto). Toda conciliación con el banco usa esto.
+const pagarT = t => t?.liquido!=null ? (Number(t.liquido)||0) : (Number(t?.monto)||0)
+// Costo de una comisión nueva de quien emite boleta. % y UF: lo pactado es lo que RECIBE (líquido) → costo = líquido ÷ (1 − tasa).
+// Monto fijo ($): se ingresa el costo (bruto) → líquido = bruto × (1 − tasa). Quien factura: monto tal cual.
+const costoComision = (prov, m, tipo, fecha) => { if(!esBoletaProv(prov)||!(m>0)) return {monto:m}
+  const t=tasaBHE(fecha)
+  if(tipo==='pct'||tipo==='uf'){ const bruto=Math.round(m/(1-t)); return {monto:bruto, liquido:m, retencion:bruto-m} }
+  const liq=Math.round(m*(1-t)); return {monto:m, liquido:liq, retencion:m-liq} }
+// Abre el PDF de una boleta guardada (bucket privado `documentos`, link firmado de 2 min). La ventana se abre antes del await (iPhone).
+const abrirDocumento = async path => { if(!path) return; const w=window.open('','_blank')
+  const {data,error}=await supabase.storage.from('documentos').createSignedUrl(path,120)
+  if(error||!data?.signedUrl){ w&&w.close(); appAlert('No se pudo abrir el archivo: '+(error?.message||'sin enlace')); return }
+  if(w) w.location.href=data.signedUrl; else window.location.href=data.signedUrl }
 // Estado de una comisión (FUENTE ÚNICA): 'pagada' (ya se le pagó) · 'por_pagar' (el cliente ya pagó esa cuota) · 'por_devengar' (el cliente aún no la paga).
 // Se deriva de la factura del cliente y no solo del flag guardado: si la cuota está Pagada, la comisión queda por pagar aunque el flag
 // (que mueve handleConciliarTerceros) no haya alcanzado a cambiar. `b` = la cuota del cliente (billing) o null si la comisión no tiene cuota.
@@ -14694,6 +14713,11 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   // del abono del cliente para cada cuota con comisión (conciliación factura → movimiento).
   const [docs,setDocs] = useState([]), [cargos,setCargos] = useState([]), [concs,setConcs] = useState([]), [gastosCat,setGastosCat] = useState({}), [abonoCli,setAbonoCli] = useState({})
   const ruts = useMemo(()=>new Set(proveedores.map(p=>_nRut(p.rut)).filter(Boolean)),[proveedores])
+  // Boletas de honorarios de los proveedores (bruto, retención, líquido, PDF en el bucket privado `documentos`).
+  const [bhes,setBhes] = useState([])
+  useEffect(()=>{ if(DEMO){ setBhes(demoData.boletas_honorarios||[]); return } const ids=proveedores.filter(esBoletaProv).map(p=>p.id); if(!ids.length) return
+    supabase.from('boletas_honorarios').select('*').in('proveedor_id',ids).order('fecha',{ascending:false}).then(({data})=>setBhes(data||[]),()=>{}) },[proveedores])
+  const bheDe = t => t?.bhe_id ? bhes.find(b=>String(b.id)===String(t.bhe_id)) : null
   const billIds = useMemo(()=>[...new Set(terceros.map(t=>t.billing_id).filter(Boolean).map(String))],[terceros])
   useEffect(()=>{ let vivo=true
     if(DEMO){ setDocs(demoData.sii_compras_docs||[]); const movs=demoData.cartola_movimientos||[]; setCargos(movs.filter(m=>m.tipo==='cargo'&&ruts.has(_nRut(m.rut_contraparte)))); setConcs(demoData.conciliacion||[])
@@ -14729,7 +14753,10 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const tValida = t => { if(!t.billing_id) return true; const b=facDe(t); return !!b && b.status!=='Anulada' && !b.deleted_at }
   const tercDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&tValida(t))
   const est = t => estadoComision(t, facDe(t))
-  const saldoT = t => est(t)==='pagada' ? 0 : Math.max(0,(Number(t.monto)||0)-aporteDe(t.id))   // lo que falta pagarle de esa comisión
+  // Saldo de una comisión en COSTO (bruto si emite boleta) y en lo que falta TRANSFERIRLE (líquido). Los aportes son plata del banco (líquido).
+  const ratioT = t => { const p=pagarT(t); return p>0 ? (Number(t.monto)||0)/p : 1 }
+  const saldoT = t => est(t)==='pagada' ? 0 : Math.max(0,(Number(t.monto)||0)-Math.round(aporteDe(t.id)*ratioT(t)))   // lo que falta pagarle de esa comisión (costo)
+  const saldoPag = t => est(t)==='pagada' ? 0 : Math.max(0,pagarT(t)-aporteDe(t.id))   // lo que falta TRANSFERIRLE (calce con el banco)
   const venceT = t => String(facDe(t)?.due||facDe(t)?.issued_at||'9')
   const pagoCli = t => { const b=facDe(t); if(!b) return null; const a=abonoCli[String(b.id)]; return a ? {fecha:a.fecha,mov:a.mov} : (b.status==='Pagado'&&b.paid_at ? {fecha:String(b.paid_at).slice(0,10),mov:null} : null) }
   const sumM = a => a.reduce((s,t)=>s+(Number(t.monto)||0),0)
@@ -14821,18 +14848,21 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   // a una cuenta nueva tiene tope), (c) un pago ↔ una factura del SII. Se compara contra el SALDO (descontados aportes parciales). Lo ambiguo no entra.
   const calces = useMemo(()=>{ const out=[]
     proveedores.forEach(p=>{ const cs=cargosDe(p.id)
-      const libres=cs.filter(m=>(m._cl==='sinclas'||(m._cl==='proveedor'&&!(Number(m.monto_conciliado)>0)))&&!aporteAsig[m.id]).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)))
-      const xp=tercDe(p.id).filter(t=>est(t)==='por_pagar'&&saldoT(t)>0)
+      const xp=tercDe(p.id).filter(t=>est(t)==='por_pagar'&&saldoPag(t)>0)
+      // A quien es del equipo (sueldo/caja) y además cobra comisiones, sus transferencias quedan en "Equipo" o sin categoría: también se
+      // prueban, solo para el calce exacto y único con sus comisiones (un sueldo nunca calza con una comisión).
+      const r0=_nRut(p.rut), deEquipo = xp.length ? cargos.filter(m=>_nRut(m.rut_contraparte)===r0&&!(Number(m.monto_conciliado)>0)&&!concDe(m.id).length&&(!m.categoria||m.categoria==='Equipo')&&!cs.some(x=>x.id===m.id)).map(m=>({...m,_cl:'sinclas'})) : []
+      const libres=[...cs,...deEquipo].filter(m=>(m._cl==='sinclas'||(m._cl==='proveedor'&&!(Number(m.monto_conciliado)>0)))&&!aporteAsig[m.id]).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)))
       const amt=m=>Math.abs(Number(m.monto)||0)
       const usados=new Set()
-      libres.forEach(m=>{ const a=amt(m); const ts=xp.filter(t=>Math.abs(saldoT(t)-a)<=1); if(ts.length!==1) return; if(libres.filter(o=>Math.abs(amt(o)-a)<=1).length!==1) return
+      libres.forEach(m=>{ const a=amt(m); const ts=xp.filter(t=>Math.abs(saldoPag(t)-a)<=1); if(ts.length!==1) return; if(libres.filter(o=>Math.abs(amt(o)-a)<=1).length!==1) return
         usados.add(m.id); out.push({k:'c:'+m.id,tipo:'com',prov:p,m,ms:[m],t:ts[0],ts:[ts[0]]}) })
       // combos por cliente
       const porCli={}; xp.forEach(t=>{ const k=String(cliDe(t)?.id||'x'); (porCli[k]=porCli[k]||[]).push(t) })
       const targets=[]; Object.values(porCli).forEach(g=>{ g.forEach(t=>targets.push([t])); if(g.length>1) targets.push(g) })
       const L=libres.filter(m=>!usados.has(m.id)), wins=[]
       for(let i=0;i<L.length;i++) for(let n=1;n<=3&&i+n<=L.length;n++){ const w=L.slice(i,i+n); if(n>1&&(_diasEntre(w[0].fecha,w[n-1].fecha)||0)>10) break; wins.push(w) }
-      const hits=[]; targets.forEach(ts=>{ const sum=ts.reduce((s,t)=>s+saldoT(t),0); wins.forEach(w=>{ if(w.length===1&&ts.length===1) return; if(Math.abs(w.reduce((s,m)=>s+amt(m),0)-sum)<=1) hits.push({ts,w}) }) })
+      const hits=[]; targets.forEach(ts=>{ const sum=ts.reduce((s,t)=>s+saldoPag(t),0); wins.forEach(w=>{ if(w.length===1&&ts.length===1) return; if(Math.abs(w.reduce((s,m)=>s+amt(m),0)-sum)<=1) hits.push({ts,w}) }) })
       hits.forEach(h=>{ const mismoT=hits.filter(x=>x.ts===h.ts).length, mismaW=hits.filter(x=>x.w===h.w).length; if(mismoT!==1||mismaW!==1) return
         if(h.w.some(m=>usados.has(m.id))) return; h.w.forEach(m=>usados.add(m.id))
         out.push({k:'x:'+h.w.map(m=>m.id).join('+'),tipo:'combo',prov:p,ms:h.w,m:h.w[h.w.length-1],ts:h.ts,t:h.ts[0]}) })
@@ -14865,7 +14895,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     const tsO=[...ts].sort((a,b)=>cliPrim[cliKey(a)].localeCompare(cliPrim[cliKey(b)])||cliKey(a).localeCompare(cliKey(b))||venceT(a).localeCompare(venceT(b)))
     const msO=[...ms].sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)))
     const avail=msO.map(m=>Math.abs(Number(m.monto)||0)), alloc=[], completa={}; let mi=0
-    for(const t of tsO){ let need=saldoT(t)
+    for(const t of tsO){ let need=saldoPag(t)
       while(need>0.5&&mi<msO.length){ const take=Math.min(need,avail[mi]); if(take>0){ alloc.push({m:msO[mi],t,monto:Math.round(take)}); need-=take; avail[mi]-=take } if(avail[mi]<=0.5) mi++ }
       if(need<=0.5){ const last=alloc.filter(a=>a.t.id===t.id).pop(); if(last) completa[t.id]=last.m } }
     const fechaDe=m=>String(m.fecha).slice(0,10)
@@ -14906,7 +14936,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     setBusy(null)
   }
 
-  const enlazar = async (lista) => {
+  const enlazar = async (lista, silencioso=false) => {
     if(!lista.length||busy) return 0
     setBusy('enl'); let ok=0
     for(const c of lista){
@@ -14921,9 +14951,18 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       }catch(e){ appAlert(`Se enlazaron ${ok} de ${lista.length}. No se pudo enlazar ${c.tipo!=='sii'?'el pago con la comisión':`la factura N° ${c.d.folio}`}: ${e.message||e}`); setBusy(null); setSelEnl(null); return ok }
     }
     setBusy(null); setSelEnl(null)
-    if(ok) appAlert(ok===1?'Quedó enlazado.':`Quedaron enlazados ${ok}.`)
+    if(ok&&!silencioso) appAlert(ok===1?'Quedó enlazado.':`Quedaron enlazados ${ok}.`)
     return ok
   }
+  // Conciliación sola: un pago del banco que calza EXACTO y ÚNICO con comisiones por pagar (mismo cliente) se enlaza sin botón
+  // (regla "compuerta → aprende → se libera"; lo ambiguo sigue en "Por enlazar"). Cada enlace deja historial y se puede deshacer.
+  const autoIntentados = useRef(new Set())
+  useEffect(()=>{ if(DEMO||busy) return
+    const auto=calces.filter(c=>(c.tipo==='com'||c.tipo==='combo')&&!autoIntentados.current.has(c.k))
+    if(!auto.length) return
+    auto.forEach(c=>autoIntentados.current.add(c.k))
+    enlazar(auto,true)
+  },[calces])
   // "Pasar a por pagar": el cliente ya pagó la cuota pero el flag quedó atrás. Compuerta: tú confirmas; deja historial.
   const pasarAPorPagar = async ts => {
     if(!ts.length) return
@@ -14946,8 +14985,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const selAnio = <select value={yr} onChange={e=>setYr(e.target.value)} title='Año de lo pagado y transferido' style={{fontSize:12.5,fontWeight:700,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',background:C.card,outline:'none',cursor:'pointer'}}>{anios.map(y=><option key={y} value={y}>{y}</option>)}</select>
   const sel = proveedores.find(p=>String(p.id)===String(selId))
   const abrirFicha = (id,filtro='todas',cli=null) => { setSelId(String(id)); setView('ficha'); setCf(filtro); setCliF(cli); setNVer(5); setExpT(null); setEvMas(false); setCMas(false); setAsgOpen(false); setRetOpen(false) }
-  const abrirNuevo = () => { setF({nombre:'',razon_social:'',rut:'',datos_pago:''}); setOkDistinto(false); setCompletarCola([]); setView('form') }
-  const abrirEditar = (p,cola=[]) => { setF({id:p.id,nombre:p.nombre||'',razon_social:p.razon_social||'',rut:p.rut||'',datos_pago:p.datos_pago||''}); setOkDistinto(false); setCompletarCola(cola); setSelId(String(p.id)); setView('form') }
+  const abrirNuevo = () => { setF({nombre:'',razon_social:'',rut:'',datos_pago:'',documento:null}); setOkDistinto(false); setCompletarCola([]); setView('form') }
+  const abrirEditar = (p,cola=[]) => { setF({id:p.id,nombre:p.nombre||'',razon_social:p.razon_social||'',rut:p.rut||'',datos_pago:p.datos_pago||'',documento:p.documento||null}); setOkDistinto(false); setCompletarCola(cola); setSelId(String(p.id)); setView('form') }
   const abrirPagar = p => { const ts=tercDe(p.id).filter(t=>est(t)==='por_pagar'); const nums=[...new Set(ts.map(t=>t.factura_numero).filter(Boolean))]
     // Si las comisiones ya tienen su boleta/factura registrada (y es una sola), se trae sola: no se vuelve a escribir.
     const d0 = nums.length===1 ? ts.find(t=>t.factura_numero===nums[0]) : null
@@ -14992,6 +15031,9 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
           <div><div style={{...kLbl,marginBottom:5}}>Razón social</div><input value={f.razon_social} onChange={e=>up('razon_social',e.target.value)} placeholder='Ej: Díaz & Asociados SpA' style={inp}/></div>
           <div><div style={{...kLbl,marginBottom:5}}>RUT</div><input value={f.rut} onChange={e=>up('rut',e.target.value)} placeholder='Ej: 76.123.456-7' style={inp}/></div>
         </div>
+        <div><div style={{...kLbl,marginBottom:5}}>Documento que emite</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{[['factura','Factura'],['boleta','Boleta de honorarios']].map(([k,l])=>{ const on=(f.documento||'factura')===k; return <span key={k} onClick={()=>up('documento',k)} style={{fontSize:12,fontWeight:on?700:600,borderRadius:20,padding:'5px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.card,color:on?C.accent:C.muted}}>{l}</span> })}</div>
+          {f.documento==='boleta'&&<div style={{fontSize:11.5,color:C.textSoft,marginTop:5}}>Costo = bruto de la boleta. Se le transfiere el líquido y la retención ({pctBHE(tasaBHE())} en {new Date().getFullYear()}) va al F29.</div>}</div>
         <div><div style={{...kLbl,marginBottom:5}}>Datos de pago · para transferir</div><textarea autoFocus={completarCola.length>0} value={f.datos_pago} onChange={e=>up('datos_pago',e.target.value)} placeholder='Banco, tipo de cuenta, N° de cuenta, RUT, correo…' style={{...inp,height:'auto',minHeight:72,padding:'9px 11px',resize:'vertical',fontFamily:'inherit'}}/></div>
         {provParecidos.length>0&&<div style={{border:`1px solid ${C.soon}`,background:C.soonBg,borderRadius:9,padding:'8px 10px'}}>
           <div style={{fontSize:11.5,fontWeight:700,color:C.soonText,marginBottom:5}}>Ya existe un proveedor parecido. ¿Es alguno de estos?</div>
@@ -15011,11 +15053,29 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     const toggle=id=>setBol(p=>{ const n=new Set(p.ids); n.has(id)?n.delete(id):n.add(id); return {...p,ids:n} })
     const inp={width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:C.card,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
     const cb = on => <span style={{width:18,height:18,borderRadius:5,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:C.card,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3'><polyline points='5 12 10 17 19 7'/></svg>}</span>
-    const dif = monto>0&&elegidas.length ? monto-total : null
-    const guardar = async () => { if(!bol.numero.trim()||!elegidas.length) return; setBusy('bol')
+    // Boleta de honorarios: se ingresa el BRUTO (total honorarios); la app calcula la retención con la tasa del año y el líquido,
+    // y lo compara con lo que se le debe transferir por las comisiones elegidas.
+    const conBol=esBoletaProv(sel), tasaB=tasaBHE(bol.fecha), retB=Math.round(monto*tasaB), liqB=monto-retB, sumPag=elegidas.reduce((a,t)=>a+pagarT(t),0)
+    const dif = monto>0&&elegidas.length ? (conBol ? liqB-sumPag : monto-total) : null
+    const guardar = async () => { if(!bol.numero.trim()||!elegidas.length) return; if(conBol&&!(monto>0)){ appAlert('Falta el bruto de la boleta.'); return } setBusy('bol')
       const patch={factura_numero:bol.numero.trim(),factura_fecha:bol.fecha||null}, ids=elegidas.map(t=>t.id)
-      if(!DEMO){ const {error}=await supabase.from('terceros_pagos').update(patch).in('id',ids); if(error){ setBusy(null); appAlert('No se pudo guardar: '+error.message); return } }
-      setTerceros&&setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,...patch}:t))
+      const porId={}
+      if(conBol){
+        const folio=parseInt(String(bol.numero).replace(/\D/g,''))||0, rutN=_nRut(sel.rut).slice(0,-1)
+        let storage_path=null
+        if(bol.file&&!DEMO){ storage_path=`bhe/${rutN}/BHE_${rutN}_N${String(folio).padStart(4,'0')}.pdf`
+          const up=await supabase.storage.from('documentos').upload(storage_path,bol.file,{contentType:'application/pdf',upsert:true}); if(up.error){ setBusy(null); appAlert('No se pudo subir el PDF: '+up.error.message); return } }
+        let bheId=null
+        if(!DEMO){ const {data:bh,error}=await supabase.from('boletas_honorarios').upsert({proveedor_id:sel.id,emisor_rut:fmtRutCL(sel.rut),emisor_nombre:sel.razon_social||tituloProv(sel),folio,fecha:bol.fecha,bruto:monto,retencion:retB,liquido:liqB,tasa:tasaB,storage_path,created_by:user?.name||null},{onConflict:'emisor_rut,folio'}).select().single()
+          if(error){ setBusy(null); appAlert('No se pudo guardar la boleta: '+error.message); return } bheId=bh.id; setBhes(p=>[bh,...p.filter(x=>x.id!==bh.id)]) }
+        // El bruto, la retención y el líquido de la boleta se reparten entre las comisiones según lo que se le transfiere por cada una.
+        let accB=0, accR=0
+        elegidas.forEach((t,i)=>{ const last=i===elegidas.length-1, sh=sumPag>0?pagarT(t)/sumPag:1/elegidas.length
+          const b2=last?monto-accB:Math.round(monto*sh), r2=last?retB-accR:Math.round(retB*sh); accB+=b2; accR+=r2
+          porId[t.id]={...patch,bhe_id:bheId,monto:b2,retencion:r2,liquido:b2-r2} })
+      }
+      if(!DEMO){ for(const id of ids){ const {error}=await supabase.from('terceros_pagos').update(porId[id]||patch).eq('id',id); if(error){ setBusy(null); appAlert('No se pudo guardar: '+error.message); return } } }
+      setTerceros&&setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,...(porId[t.id]||patch)}:t))
       logActividad(`proveedores.${sel.id}.boleta`,{tabla:'terceros_pagos',id:ids[0],detalle:{title:`N° ${patch.factura_numero} · ${ids.length} ${ids.length===1?'comisión':'comisiones'}`,monto:monto||total}})
       setBusy(null); appAlert(`Quedó guardada la boleta N° ${patch.factura_numero} en ${ids.length===1?'1 comisión':ids.length+' comisiones'}.`); setBol(null); setView('ficha') }
     const lista = <div style={{...card,overflow:'hidden'}}>
@@ -15032,9 +15092,14 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
           <div><div style={{...kLbl,marginBottom:4}}>N° de boleta o factura</div><input autoFocus value={bol.numero} onChange={e=>setBol(p=>({...p,numero:e.target.value}))} placeholder='Ej: 245' style={inp}/></div>
           <div><div style={{...kLbl,marginBottom:4}}>Fecha</div><input type='date' value={bol.fecha} onChange={e=>setBol(p=>({...p,fecha:e.target.value}))} style={inp}/></div>
         </div>
-        <div><div style={{...kLbl,marginBottom:4}}>Monto de la boleta</div><input inputMode='numeric' value={bol.monto} onChange={e=>setBol(p=>({...p,monto:e.target.value}))} placeholder='$' style={inp}/>
-          {dif!=null&&<div style={{fontSize:11.5,marginTop:5,color:dif===0?C.greenText:C.soonText,fontWeight:600}}>{dif===0?'Cuadra con las comisiones elegidas':`${dif>0?'La boleta es':'Las comisiones son'} ${fmt(Math.abs(dif))} más${dif>0?'':' que la boleta'}`}</div>}</div>
-        {user&&elegidas[0]&&<div><div style={{...kLbl,marginBottom:4}}>Archivo de la boleta</div><Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={elegidas[0].id} folderKind='facturas' namePrefix={`boleta_${tituloProv(sel)}`} user={user} inline/></div>}
+        <div><div style={{...kLbl,marginBottom:4}}>{conBol?'Bruto de la boleta (total honorarios)':'Monto de la boleta'}</div><input inputMode='numeric' value={bol.monto} onChange={e=>setBol(p=>({...p,monto:e.target.value}))} placeholder='$' style={inp}/>
+          {conBol&&monto>0&&<div style={{display:'flex',flexDirection:'column',gap:2,marginTop:6,fontSize:12}}>
+            <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Retención {pctBHE(tasaB)} · va al F29</span><span style={num}>{fmt(retB)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Líquido a transferir</span><b style={num}>{fmt(liqB)}</b></div></div>}
+          {dif!=null&&<div style={{fontSize:11.5,marginTop:5,color:Math.abs(dif)<=1?C.greenText:C.soonText,fontWeight:600}}>{Math.abs(dif)<=1?'Cuadra con las comisiones elegidas':conBol?`El líquido es ${fmt(Math.abs(dif))} ${dif>0?'más':'menos'} que lo que se le debe por las comisiones elegidas (${fmt(sumPag)})`:`${dif>0?'La boleta es':'Las comisiones son'} ${fmt(Math.abs(dif))} más${dif>0?'':' que la boleta'}`}</div>}</div>
+        {conBol&&<div><div style={{...kLbl,marginBottom:4}}>PDF de la boleta</div><input type='file' accept='application/pdf' onChange={e=>setBol(p=>({...p,file:e.target.files?.[0]||null}))} style={{fontSize:12}}/>
+          <div style={{fontSize:11,color:C.textSoft,marginTop:3}}>Se guarda con la boleta y se descarga desde cada comisión.</div></div>}
+        {user&&elegidas[0]&&!conBol&&<div><div style={{...kLbl,marginBottom:4}}>Archivo de la boleta</div><Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={elegidas[0].id} folderKind='facturas' namePrefix={`boleta_${tituloProv(sel)}`} user={user} inline/></div>}
       </div>
       <ActBtn variant='primary' size='lg' full disabled={!bol.numero.trim()||!elegidas.length||busy==='bol'} onClick={guardar}>{busy==='bol'?'Guardando…':'Guardar'}</ActBtn>
       <div style={{fontSize:11.5,color:C.muted}}>Al pagar, la boleta ya viene escrita. No cambia el estado de las comisiones.</div>
@@ -15049,6 +15114,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   if(view==='pagar'&&sel&&pag){
     const ts=tercDe(sel.id).filter(t=>est(t)==='por_pagar'&&saldoT(t)>0).sort((a,b)=>venceT(a).localeCompare(venceT(b)))
     const elegidas=ts.filter(t=>pag.ids.has(t.id)), total=elegidas.reduce((a,t)=>a+saldoT(t),0)
+    // Quien emite boleta: el costo es el bruto; se le transfiere el líquido y la diferencia (retención) va al F29.
+    const conBol=esBoletaProv(sel), transferir=elegidas.reduce((a,t)=>a+saldoPag(t),0), retSel=total-transferir
     const gruposP={}; ts.forEach(t=>{ const c=cliDe(t); const k=String(c?.id||'x'); (gruposP[k]=gruposP[k]||{cli:c,ts:[]}).ts.push(t) })
     const togGrupo=g=>setPag(p=>{ const n=new Set(p.ids); const todas=g.ts.every(t=>n.has(t.id)); g.ts.forEach(t=>todas?n.delete(t.id):n.add(t.id)); return {...p,ids:n} })
     const toggle=id=>setPag(p=>{ const n=new Set(p.ids); n.has(id)?n.delete(id):n.add(id); return {...p,ids:n} })
@@ -15067,7 +15134,12 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
         {g.ts.map(t=>{ const b=facDe(t), pc=pagoCli(t), d=_diasDesde(pc?.fecha), ap=aporteDe(t.id); return <div key={t.id} onClick={()=>toggle(t.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px 9px 22px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
           {cb(pag.ids.has(t.id))}<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b?.invoice_no?`Factura ${folioN(b.invoice_no)}`:trabajoDe(t).titulo}</div><div style={{fontSize:11,color:C.muted}}>{pc?`el cliente pagó el ${dmy(pc.fecha)}${d!=null?` · hace ${nDias(d)}`:''}`:'cuota del cliente pagada'}{ap>0?` · ya pagaste ${fmt(ap)} de ${fmt(t.monto)}`:''}</div></div>
           <span style={{fontSize:13,fontWeight:700,...num}}>{fmt(saldoT(t))}</span></div> })}</div> })}
-      <div style={{display:'flex',justifyContent:'space-between',padding:'10px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontWeight:700}}><span>Total a pagar</span><span style={num}>{fmt(total)}</span></div>
+      {conBol ? <div style={{padding:'10px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,display:'flex',flexDirection:'column',gap:4}}>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5}}><span style={{color:C.muted}}>Costo (bruto)</span><b style={num}>{fmt(total)}</b></div>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5}}><span style={{color:C.muted}}>Retención {pctBHE(tasaBHE(pag.fecha))} · va al F29</span><span style={num}>{fmt(retSel)}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:2}}><span style={{fontWeight:700}}>Transferir a {tituloProv(sel)}</span><span style={{fontSize:18,fontWeight:700,color:C.accent,...num}}>{fmt(transferir)}</span></div>
+      </div>
+      : <div style={{display:'flex',justifyContent:'space-between',padding:'10px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontWeight:700}}><span>Total a pagar</span><span style={num}>{fmt(total)}</span></div>}
     </div>
     const aviso = yaPago.length>0 && <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,border:`1px solid ${C.greenText}`,borderRadius:12,padding:'10px 12px'}}>
       <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.greenText}}>Ya hay {yaPago.length===1?'un pago':yaPago.length+' pagos'} del banco que calza{yaPago.length===1?'':'n'}</div><div style={{fontSize:11.5,color:C.greenText}}>{yaPago.map(c=>`${(c.ms||[c.m]).map(m=>`${fmt(Math.abs(Number(m.monto)||0))} el ${dm(m.fecha)}`).join(' + ')}${facDe(c.t)?.invoice_no?' · factura '+folioN(facDe(c.t).invoice_no):''}`).join(' · ')}. Enlázalo en vez de registrar otro pago.</div></div>
@@ -15088,10 +15160,11 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
           {docSug&&!pag.doc&&<div style={{fontSize:11.5,color:C.muted,marginTop:5}}>Sugerida: su factura N° {docSug.folio} del {dmy(docSug.fecha_emision)} ({fmt(Math.abs(Number(docSug.monto)||0))}) · {link('Usar',()=>setPag(p=>({...p,doc:String(docSug.folio),docF:String(docSug.fecha_emision||'').slice(0,10)})))}</div>}</div>
         {user&&elegidas[0]&&<div><div style={{...kLbl,marginBottom:4}}>Comprobante</div><Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={elegidas[0].id} folderKind='facturas' namePrefix={`comision_${tituloProv(sel)}`} user={user} inline/></div>}
       </div>
-      <ActBtn variant='primary' size='lg' full disabled={!elegidas.length||busy==='pagar'} onClick={marcar}>{busy==='pagar'?'Guardando…':`Marcar pagadas · ${fmt(total)}`}</ActBtn>
+      <ActBtn variant='primary' size='lg' full disabled={!elegidas.length||busy==='pagar'} onClick={marcar}>{busy==='pagar'?'Guardando…':`Marcar pagadas · ${fmt(conBol?transferir:total)}`}</ActBtn>
+      <div style={{fontSize:11.5,color:C.muted}}>Si la transferencia ya está en el banco y calza exacto, se marca sola; esto es para un pago que no calza.</div>
     </div>
     return (<div>
-      <PageHeader origen={tituloProv(sel)} onBack={()=>{setPag(null);setView('ficha')}} titulo='Pagar' ctx={`${elegidas.length} ${elegidas.length===1?'comisión':'comisiones'} · ${fmt(total)}`}/>
+      <PageHeader origen={tituloProv(sel)} onBack={()=>{setPag(null);setView('ficha')}} titulo='Pagar' ctx={`${elegidas.length} ${elegidas.length===1?'comisión':'comisiones'} · ${fmt(conBol?transferir:total)}`}/>
       {wrap(isDesktop ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.3fr) minmax(0,1fr)',gap:14,alignItems:'start'}}><div style={{display:'flex',flexDirection:'column',gap:12,minWidth:0}}>{lista}{aviso}</div>{form}</div> : <>{lista}{aviso}{form}</>)}
     </div>)
   }
@@ -15131,6 +15204,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   // ── FICHA ──
   if(view==='ficha'&&sel){
     const m0=met(sel), ts=tercDe(sel.id), dsAll=docsDe(sel.id), csAll=cargosDe(sel.id), cli=clienteDe(sel), fq=factQueTePaga(sel)
+    const conBolF = esBoletaProv(sel)   // emite boleta de honorarios: costo bruto · retención · líquido
     const ws=trabajosDe(ts)
     // Por cliente: la bolsa de comisiones separada por cliente (unos pagan al día y otros no).
     const porCliente = (()=>{ const g={}; ts.forEach(t=>{ const c=cliDe(t); const k=String(c?.id||'x'); (g[k]=g[k]||{k,cli:c,ts:[]}).ts.push(t) })
@@ -15178,7 +15252,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
         const otros=pagosLibresDe(sel.id).filter(x=>x.id!==m.id&&Math.abs(_diasEntre(m.fecha,x.fecha)||0)<=20)
         const tSel=cand.filter(t=>enlSel.has('t:'+t.id)), dSel=dsC.filter(d=>enlSel.has('d:'+d.id)), mSel=otros.filter(x=>enlSel.has('m:'+x.id))
         const mm=Math.abs(Number(m.monto)||0)+mSel.reduce((a,x)=>a+Math.abs(Number(x.monto)||0),0)
-        const pendT=t=>est(t)==='pagada'?(Number(t.monto)||0):saldoT(t), dif=tSel.length?mm-tSel.reduce((a,t)=>a+pendT(t),0):null
+        const pendT=t=>est(t)==='pagada'?pagarT(t):saldoPag(t), dif=tSel.length?mm-tSel.reduce((a,t)=>a+pendT(t),0):null
         const grupos={}; cand.forEach(t=>{ const c=cliDe(t); const k=String(c?.id||'x'); (grupos[k]=grupos[k]||{cli:c,ts:[]}).ts.push(t) })
         const nClis=new Set(tSel.map(t=>String(cliDe(t)?.id||'x'))).size
         return caja(`¿Qué pagó la transferencia del ${dmy(m.fecha)} por ${fmt(Math.abs(Number(m.monto)||0))}?`, <>
@@ -15235,6 +15309,13 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       {tile('pp','Por pagar',m0.porPagar,m0.porPagar>0?(isDesktop&&m0.masAnt?`Ya cobrado · desde ${dmy(m0.masAnt)}`:'Ya cobrado'):'Al día','por_pagar')}
       {tile('cob','Sujeto a cobro',alCobroTot,`${tCob.length} factura${tCob.length!==1?'s':''} sin cobrar`,'por_devengar')}
     </div>
+    // Quien emite boleta: costo pagado del año separado en retención (F29) y líquido (transferido).
+    const bolStrip = esBoletaProv(sel) ? (()=>{ const py=tPag.filter(t=>yOf(t.pagado_at||t.created_at)===yr), cto=sumM(py), liq=py.reduce((a,t)=>a+pagarT(t),0), nB=new Set(py.map(t=>t.bhe_id).filter(Boolean)).size
+      const it=(l,v,s2)=><div style={{minWidth:0}}><div style={kLbl}>{l}</div><div style={{fontSize:isDesktop?17:15,fontWeight:700,color:C.accent,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:C.textSoft}}>{s2}</div></div>
+      return <div style={{...card,padding:'10px 14px',display:'flex',flexDirection:'column',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.azulBg,color:C.accent,whiteSpace:'nowrap'}}>Emite boleta · retención {pctBHE(tasaBHE(yr+'-01-01'))} ({yr})</span><span style={{fontSize:11,color:C.textSoft}}>{nB} boleta{nB!==1?'s':''} pagada{nB!==1?'s':''} en {yr}</span></div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10}}>{it(`Costo pagado ${yr}`,cto,'bruto')}{it('Retención · F29',cto-liq,'pagada al SII')}{it('Líquido transferido',liq,`a ${tituloProv(sel).split(' ')[0]}`)}</div>
+      </div> })() : null
     // Por revisar: pastilla con contador; al tocarla se despliega cada punto con su acción.
     const pagSinBancoP = pagadasSinBancoDe(sel.id)
     const revItems = [
@@ -15256,7 +15337,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       {accItems.length>0&&<>{secLbl('Acciones')}{accItems.map((x,i)=><div key={x.k} onClick={x.on} className='pv-c' style={{padding:'9px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}><div style={{fontSize:12.5,fontWeight:600}}>{x.t}</div><div style={{fontSize:11,color:C.muted}}>{x.s}</div></div>)}</>}
     </div> : null
     const btnBoleta = <ActBtn variant='ghost' size='lg' onClick={()=>abrirBoleta(sel)}>Registrar factura de {tituloProv(sel).split(' ')[0]}</ActBtn>
-    const btnPagar = m0.porPagar>0 ? <ActBtn variant='primary' size='lg' full={!isDesktop} onClick={()=>abrirPagar(sel)}>Pagar {fmt(m0.porPagar)} <Gl n='chevron'/></ActBtn> : null
+    const aTransferir = tPP.reduce((a,t)=>a+saldoPag(t),0)   // quien emite boleta: se le transfiere el líquido
+    const btnPagar = m0.porPagar>0 ? <ActBtn variant='primary' size='lg' full={!isDesktop} onClick={()=>abrirPagar(sel)}>Pagar {fmt(conBolF?aTransferir:m0.porPagar)} <Gl n='chevron'/></ActBtn> : null
     const acciones = <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{revPill}<span style={{flex:1}}/>{isDesktop&&btnPagar}</div>
     // Por cliente: la bolsa separada por cliente; tocar filtra las comisiones, el nombre abre su ficha.
     const porClienteCard = porCliente.length>0 ? <div style={{...card,overflow:'hidden'}}>
@@ -15270,10 +15352,13 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
       {porCliente.length>5&&<div onClick={()=>setCliMas(v=>!v)} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}>{cliMas?'Ver menos':`Ver ${porCliente.length-5} más ›`}</div>}
     </div> : null
     // Comisiones por factura: una línea (fecha · folio · glosa · comisión y estado); al tocar se despliega la cadena cliente → proveedor → pago.
+    // Quien emite boleta de honorarios: en escritorio la fila muestra costo (bruto) · retención · líquido · boleta.
+    const BOL_GC = '92px 82px 92px 74px'
+    const bolCab = conBolF&&isDesktop ? <div style={{display:'flex',justifyContent:'flex-end',padding:'6px 14px',...TH_BAND}}><div style={{display:'grid',gridTemplateColumns:BOL_GC,columnGap:12,textAlign:'right'}}><span>Costo (bruto)</span><span>Retención</span><span>Líquido</span><span style={{textAlign:'left'}}>Boleta</span></div></div> : null
     const estLbl = t => { const e=est(t); if(e==='por_pagar') return [aporteDe(t.id)>0?'Pago parcial':'Por pagar',C.soonText]; if(e==='por_devengar') return ['Sujeto a cobro',C.muted]; return [esAnt(t)?'Anticipo':'Pagada',esAnt(t)?C.azulInfo:C.muted] }
     const det = (l,v) => <div style={{display:'flex',justifyContent:'space-between',gap:12,fontSize:11.5,padding:'2px 0',maxWidth:340}}><span style={{color:C.muted,whiteSpace:'nowrap'}}>{l}</span><span style={{textAlign:'right',fontWeight:600,color:C.text,minWidth:0}}>{v}</span></div>
     const lk = (txt,on) => on ? <span onClick={e=>{e.stopPropagation();on()}} style={{color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>{txt} <Gl n='chevron'/></span> : <span style={{whiteSpace:'nowrap'}}>{txt}</span>
-    const filaT = t => { const b=facDe(t), pc=pagoCli(t), [eL,eC]=estLbl(t), open=expT===t.id, e=est(t), w=trabajoDe(t), ap=aporteDe(t.id)
+    const filaT = t => { const b=facDe(t), pc=pagoCli(t), [eL,eC]=estLbl(t), open=expT===t.id, e=est(t), w=trabajoDe(t), ap=aporteDe(t.id), bh=bheDe(t)
       const glosa = b ? glosaFactura(b) : (w.titulo||'Sin factura del cliente')
       const cliTxt = pc ? lk(dmy(pc.fecha),pc.mov&&onIrBanco?()=>onIrBanco(pc.mov):(b&&onOpenFactura?()=>onOpenFactura(b):null))
         : !b ? 'Sin factura del cliente' : b.status==='Programada' ? 'Por facturar' : b.status==='Vencido' ? `Vencida${b.due?' hace '+nDias(_diasDesde(b.due)):''}` : `Por cobrar${b.due?' · vence '+dmy(b.due):''}`
@@ -15285,7 +15370,12 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
             {open&&<div style={{marginTop:7}} onClick={e=>e.stopPropagation()}>
               {b&&det('Tu factura',lk(`Factura N° ${folioN(b.invoice_no)||'—'} · ${fmt(montoFactura(b))}`,onOpenFactura?()=>onOpenFactura(b):null))}
               {det('Cliente pagó',cliTxt)}
-              {!m0.equipo&&det(`${tituloProv(sel)} facturó`,t.factura_numero?`Factura N° ${t.factura_numero}${t.factura_fecha?' · '+dmy(t.factura_fecha):''}`:lk('Sin factura del proveedor',()=>abrirBoleta(sel)))}
+              {!m0.equipo&&!conBolF&&det(`${tituloProv(sel)} facturó`,t.factura_numero?`Factura N° ${t.factura_numero}${t.factura_fecha?' · '+dmy(t.factura_fecha):''}`:lk('Sin factura del proveedor',()=>abrirBoleta(sel)))}
+              {conBolF&&<>
+                {det('Boleta',bh?<span onClick={()=>abrirDocumento(bh.storage_path)} title='Descargar la boleta (PDF)' style={{display:'inline-flex',alignItems:'center',gap:4,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}><SIcon n='download' s={12} c={C.accent}/>N° {bh.folio} · {dmy(bh.fecha)}</span>:t.factura_numero?`N° ${t.factura_numero}${t.factura_fecha?' · '+dmy(t.factura_fecha):''}`:lk('Sin boleta · registrar',()=>abrirBoleta(sel)))}
+                {det('Costo (bruto)',fmt(Number(t.monto)||0))}
+                {det(`Retención ${pctBHE(bh?Number(bh.tasa)||tasaBHE(bh.fecha):tasaBHE(t.pagado_at||venceT(t)))} · F29`,fmt(t.retencion!=null?Number(t.retencion)||0:(Number(t.monto)||0)-pagarT(t)))}
+                {det(e==='pagada'?'Líquido transferido':'Líquido a transferir',fmt(pagarT(t)))}</>}
               {det('Le pagaste',t.estado==='pagado'?lk(t.pagado_at?dmy(t.pagado_at):'Pagada',t.movimiento_id&&onIrBanco?()=>onIrBanco(t.movimiento_id):null):ap>0?`${fmt(ap)} · faltan ${fmt(Math.max(0,(Number(t.monto)||0)-ap))}`:e==='por_pagar'?lk('Pagar',()=>abrirPagar(sel)):'—')}
               {w.sale&&det('Trabajo',lk(w.titulo,onOpenSale?()=>onOpenSale(w.sale):null))}
               {t.referencia&&<div style={{fontSize:11,color:C.textSoft,marginTop:3}}>{t.referencia}</div>}
@@ -15294,7 +15384,13 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
                 {e==='pagada'&&onRevertirPago&&link('Deshacer pago',async()=>{ if(await appConfirm('¿Deshacer este pago? La comisión vuelve a "por pagar".')){ onRevertirPago(t); logActividad(`proveedores.${sel.id}.deshacer`,{tabla:'terceros_pagos',id:t.id,detalle:{title:b?.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'Comisión',monto:Number(t.monto)||0}}) } },C.muted)}
               </div></div>}
           </div>
-          <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:e==='por_pagar'?C.text:C.muted,...num}}>{fmt(e==='pagada'?t.monto:saldoT(t))}</div><div style={{fontSize:10.5,fontWeight:700,color:eC}}>{eL}</div></div>
+          {conBolF&&isDesktop ? <div style={{display:'grid',gridTemplateColumns:BOL_GC,columnGap:12,textAlign:'right',flexShrink:0,alignItems:'baseline'}}>
+            <span style={{fontSize:13,fontWeight:700,color:e==='por_pagar'?C.text:C.muted,...num}}>{fmt(e==='pagada'?t.monto:saldoT(t))}</span>
+            <span style={{fontSize:12,color:C.textSoft,...num}}>{fmt(t.retencion!=null?Number(t.retencion)||0:(Number(t.monto)||0)-pagarT(t))}</span>
+            <span style={{fontSize:12,color:C.textSoft,...num}}>{fmt(e==='pagada'?pagarT(t):saldoPag(t))}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:eC,textAlign:'left'}}>{bh?<span onClick={ev=>{ev.stopPropagation();abrirDocumento(bh.storage_path)}} title='Descargar la boleta (PDF)' style={{display:'inline-flex',alignItems:'center',gap:3,color:C.accent,cursor:'pointer'}}><SIcon n='download' s={11} c={C.accent}/>N° {bh.folio}</span>:eL}</span>
+          </div>
+          : <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:e==='por_pagar'?C.text:C.muted,...num}}>{fmt(e==='pagada'?t.monto:saldoT(t))}</div><div style={{fontSize:10.5,fontWeight:700,color:eC}}>{eL}</div></div>}
         </div>
         {enlP?.tid===t.id&&panelEnlace()}</Fragment> }
     const exportCuotas = () => exportCSV(`comisiones_${tituloProv(sel).replace(/\s+/g,'_')}.csv`,['Emitida','Cliente','Tu factura','Glosa','Cliente pagó','Factura del proveedor','Comisión','Le pagaste','Estado'],
@@ -15310,6 +15406,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||b.receptor_name||'Sin cliente'}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)} · `:''}{b.concept||'—'} · {fmt(b.amount)}</div></div>
             <input type='number' value={montos[b.id]||''} onChange={e=>setMontos(p=>({...p,[b.id]:e.target.value}))} placeholder='Su parte $' style={{width:100,height:34,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12.5,padding:'0 8px',outline:'none',boxSizing:'border-box'}}/>
             <ActBtn variant='primary' disabled={asgBusy===b.id||!(parseInt(montos[b.id])||0)} onClick={()=>asignar(b.id)}>{asgBusy===b.id?'…':'Asignar'}</ActBtn></div> })}</div> })()}
+      {tsF.length>0&&bolCab}
       {tsF.length===0 ? <div style={{padding:'16px 14px',fontSize:12.5,color:C.muted}}>{ts.length?'Nada en este filtro.':'Sin comisiones todavía. Aparecen al agregarlo en el reparto de una venta o con "+ Asignar factura".'}</div> : tsMostrar.map(filaT)}
       {tsF.length>tsMostrar.length&&<div onClick={()=>setNVer(n=>n+20)} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}>Ver {Math.min(20,tsF.length-tsMostrar.length)} más <Gl n='chevron'/></div>}
       {tsF.length>0&&<div style={{display:'flex',justifyContent:'flex-end',gap:10,padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12}}><span style={{color:C.muted}}>Total{cliF||cf!=='todas'?' del filtro':''}</span><b style={{...num}}>{fmt(tsF.reduce((x,t)=>x+(est(t)==='pagada'?(Number(t.monto)||0):saldoT(t)),0))}</b></div>}
@@ -15380,10 +15477,10 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     return (<div>{css}
       <PageHeader origen='Proveedores' onBack={()=>setView('list')} titulo={tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
       {wrap(isDesktop ? <>
-        {datosStrip}{tiles}{acciones}{revPanel}
-        <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
+        {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}
+        <div style={{display:'grid',gridTemplateColumns:conBolF?'minmax(0,1fr) minmax(0,2.8fr)':'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
         {minis}{secAbierta&&secAbierta.el}
-      </> : <>{tiles}{datosStrip}{btnPagar}{acciones}{revPanel}{porClienteCard}{comisionesCard}{minis}</>)}
+      </> : <>{tiles}{bolStrip}{datosStrip}{btnPagar}{acciones}{revPanel}{porClienteCard}{comisionesCard}{minis}</>)}
     </div>)
   }
 
@@ -34956,17 +35053,18 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   // FIFO por antigüedad + tolerancia + residual visible ("diferencia esperada", no descuadre).
   const [terc,setTerc] = useState([])
   const [pagoSel,setPagoSel] = useState({})   // movId → Set(terceroId) seleccionados
-  useEffect(()=>{ if(DEMO){ setTerc(demoData.terceros_pagos||[]); return } supabase.from('terceros_pagos').select('id,sale_id,billing_id,proveedor_id,proveedor,monto,estado,pagado_at,movimiento_id,naturaleza,referencia').then(({data})=>setTerc(data||[]),()=>{}) },[])
+  useEffect(()=>{ if(DEMO){ setTerc(demoData.terceros_pagos||[]); return } supabase.from('terceros_pagos').select('id,sale_id,billing_id,proveedor_id,proveedor,monto,liquido,retencion,estado,pagado_at,movimiento_id,naturaleza,referencia').then(({data})=>setTerc(data||[]),()=>{}) },[])
   const provDeCargo = m => { const k=crNormRut(m?.rut_contraparte); if(!k) return null; return [...(proveedores||[]),...provExtra].find(p=>crNormRut(p.rut)===k)||null }
   const bDue = id => { const b=(billing||[]).find(x=>String(x.id)===String(id)); return b?.paid_at||b?.due||'' }
   const billDe = id => id ? (billing||[]).find(x=>String(x.id)===String(id)) : null
   const estT = t => { const b=billDe(t.billing_id); if(t.billing_id&&(!b||b.status==='Anulada'||b.deleted_at)) return null; return estadoComision(t,b) }
   const comisPorPagar = provId => (terc||[]).filter(t=>String(t.proveedor_id)===String(provId)&&estT(t)==='por_pagar').sort((a,b)=>String(bDue(a.billing_id)).localeCompare(String(bDue(b.billing_id))))
   const comisAlCobro = provId => (terc||[]).filter(t=>String(t.proveedor_id)===String(provId)&&estT(t)==='por_devengar').sort((a,b)=>String(bDue(a.billing_id)).localeCompare(String(bDue(b.billing_id))))
-  const provConComisiones = prov => { if(!prov) return false; const k=crNormRut(prov.rut); if(k&&(EQUIPO_RUT[k]||SOCIO_RUT[k])) return false   // al equipo y a los socios se les paga sueldo/caja chica: su clasificador no se oculta
+  const provConComisiones = prov => { if(!prov) return false; const k=crNormRut(prov.rut); if(k&&SOCIO_RUT[k]) return false
+    if(k&&EQUIPO_RUT[k]&&!comisPorPagar(prov.id).length) return false   // al equipo se le paga sueldo/caja chica; solo si además tiene comisiones por pagar (Martín) se ofrecen
     return (terc||[]).some(t=>String(t.proveedor_id)===String(prov.id)) }
   const [otroServ,setOtroServ] = useState({})   // movId → true: el pago a un proveedor con comisiones se clasifica como otro servicio (gasto)
-  const preselFifo = (lista,objetivo)=>{ const out=new Set(); let acc=0; for(const t of lista){ if(acc>=objetivo) break; out.add(t.id); acc+=(t.monto||0) } return out }
+  const preselFifo = (lista,objetivo)=>{ const out=new Set(); let acc=0; for(const t of lista){ if(acc>=objetivo) break; out.add(t.id); acc+=pagarT(t) } return out }
   const fFifoDate = iso => { try{ const d=new Date(String(iso).slice(0,10)+'T00:00:00'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${d.getUTCDate()} ${M[d.getUTCMonth()]} ${d.getUTCFullYear()}` }catch{ return '' } }
   const conciliarComisiones = async (m,prov,selIds)=>{
     if(!selIds.length||busy===m.id) return
@@ -34986,7 +35084,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     }
     setBusy(m.id)
     try{
-      const sum=(terc||[]).filter(t=>selIds.includes(t.id)).reduce((a,t)=>a+(t.monto||0),0)
+      const sum=(terc||[]).filter(t=>selIds.includes(t.id)).reduce((a,t)=>a+pagarT(t),0)
       let res={aplicado:(Number(m.monto_conciliado)||0)+sum,estado:m.estado}
       if(!DEMO) res=await conciliarPagoComisiones({...m,categoria:'Proveedor'},selIds,sum)
       setTerc(p=>p.map(t=>selIds.includes(t.id)?{...t,estado:'pagado',pagado_at:String(m.fecha).slice(0,10),movimiento_id:m.id}:t))
@@ -35001,7 +35099,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     if(busy===m.id) return; setBusy(m.id)
     try{
       const rows=(terc||[]).filter(t=>String(t.movimiento_id)===String(m.id))
-      const sum=rows.reduce((a,t)=>a+(t.monto||0),0)
+      const sum=rows.reduce((a,t)=>a+pagarT(t),0)
       // Los registrados directo desde Banco (costo posterior a la venta) se borran; los que venían por pagar vuelven a por pagar.
       const desdeBanco=rows.filter(t=>String(t.referencia||'').startsWith(REF_COSTO_BANCO)).map(t=>t.id)
       const ids=rows.filter(t=>!desdeBanco.includes(t.id)).map(t=>t.id)
@@ -35059,7 +35157,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     const pagadasAqui=(terc||[]).filter(t=>String(t.movimiento_id)===String(m.id))
     const yaConc=(concByMov[m.id]||[]).some(c=>c.tipo_destino==='tercero')||pagadasAqui.length>0
     if(yaConc){
-      const sum=pagadasAqui.reduce((a,t)=>a+(t.monto||0),0)
+      const sum=pagadasAqui.reduce((a,t)=>a+pagarT(t),0)
       return <div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
         <span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap'}}>→ {pagadasAqui.length===1?(pagadasAqui[0].naturaleza==='complementario'?'servicio complementario':'comisión'):`${pagadasAqui.length} costos de terceros`} de {prov.nombre}{(()=>{ const sid=pagadasAqui[0]?.sale_id; const sv=(sales||[]).find(x=>String(x.id)===String(sid)); return sv?` · ${sv.title||'venta'}`:'' })()} · {fmtM(sum)}</span>
         <button disabled={busy===m.id} onClick={()=>deshacerComisiones(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button>
@@ -35074,7 +35172,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     const exacto=(()=>{ const L=debe.slice(0,14), hits=[]; const rec=(i,acc,sum)=>{ if(hits.length>1) return; if(acc.length&&Math.abs(sum-cargo)<=1){ hits.push(acc); return } if(acc.length>=4||i>=L.length||sum>cargo+1) return; rec(i+1,[...acc,L[i]],sum+(Number(L[i].monto)||0)); rec(i+1,acc,sum) }; rec(0,[],0); return hits.length===1?new Set(hits[0].map(t=>t.id)):null })()
     const sel=pagoSel[m.id]||exacto||preselFifo(debe,cargo)
     const selArr=lista.filter(t=>sel.has(t.id))
-    const sumSel=selArr.reduce((a,t)=>a+(t.monto||0),0)
+    const sumSel=selArr.reduce((a,t)=>a+pagarT(t),0)
     const diff=cargo-sumSel
     const toggle=id=>{ const n=new Set(sel); n.has(id)?n.delete(id):n.add(id); setPagoSel(s=>({...s,[m.id]:n})) }
     const cliNom=b=>(clients||[]).find(c=>String(c.id)===String(b?.client_id))?.name||''
@@ -35085,7 +35183,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
           <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliNom(b)||prov.nombre}{b?.invoice_no?` · Factura N° ${folioN(b.invoice_no)}`:''}</div>
           <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{est==='por_pagar'?`Cliente pagó ${fmtFechaDMY(b?.paid_at)}`:'El cliente aún no paga'}{glosaFactura(b)?` · ${glosaFactura(b)}`:''}</div>
         </div>
-        <span style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(t.monto)}</span>
+        <span style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(pagarT(t))}</span>
       </div>) }
     return <div style={{marginTop:6,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',background:C.bgPanel}} onClick={e=>e.stopPropagation()}>
       <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:4}}><span style={{flex:1,fontSize:13,fontWeight:700,color:C.accent}}>Pago de comisión a {prov.nombre}</span>{onOpenProveedor&&<span onClick={e=>{e.stopPropagation();onOpenProveedor(prov.id)}} style={{fontSize:11.5,fontWeight:700,color:C.accent,cursor:'pointer'}}>Ficha <Gl n='chevron'/></span>}</div>
@@ -38139,7 +38237,7 @@ export default function App() {
               const v = parseFloat(row.valor)||0
               const mSin = row.tipo==='uf' ? Math.round(v*(sUfVal||0)) : row.tipo==='pct' ? 0 : Math.round(restanteFijo??v)
               if(mSin>0) nuevos.push({sale_id:data.id, billing_id:null, proveedor_id:row.proveedor_id,
-                proveedor:provNom, rut:prov?.rut||null, tipo_costo:row.tipo||null, valor:v||null, monto:mSin,
+                proveedor:provNom, rut:prov?.rut||null, tipo_costo:row.tipo||null, valor:v||null, ...costoComision(prov,mSin,row.tipo,null),
                 estado:'pendiente', created_by:user?.name||null})
               continue
             }
@@ -38155,7 +38253,7 @@ export default function App() {
               if(m<=0) continue
               nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
                 proveedor: provNom, rut:prov?.rut||null,
-                tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, monto:m,
+                tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, ...costoComision(prov,m,row.tipo,cuota.paid_at||cuota.due),
                 estado: cuota.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null})
             }
           }
@@ -39124,7 +39222,7 @@ export default function App() {
   const handleSaveProveedor=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const payload={nombre:f.nombre?.trim()||null,razon_social:f.razon_social?.trim()||null,rut:f.rut?.trim()||null,datos_pago:f.datos_pago?.trim()||null}
+      const payload={nombre:f.nombre?.trim()||null,razon_social:f.razon_social?.trim()||null,rut:f.rut?.trim()||null,datos_pago:f.datos_pago?.trim()||null,documento:f.documento||null}
       if(f.id){
         const {data,error}=await supabase.from('proveedores').update(payload).eq('id',f.id).select().single()
         if(error)throw error; setProveedores(p=>p.map(x=>x.id===data.id?data:x)); setSaving(false); return data
@@ -39142,7 +39240,7 @@ export default function App() {
     try{
       const payload=limpio.map(it=>{ const fac=(billing||[]).find(b=>String(b.id)===String(it.billing_id)); const m=parseInt(it.monto)||0
         return {sale_id:fac?.sale_id||null, billing_id:it.billing_id, proveedor_id:proveedorId,
-          proveedor:prov.razon_social||prov.nombre||null, rut:prov.rut||null, tipo_costo:'clp', valor:m, monto:m,
+          proveedor:prov.razon_social||prov.nombre||null, rut:prov.rut||null, tipo_costo:'clp', valor:m, ...costoComision(prov,m,'clp',fac?.paid_at||fac?.issued_at),
           estado: fac?.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null} })
       const {error}=await supabase.from('terceros_pagos').insert(payload)
       if(error)throw error
