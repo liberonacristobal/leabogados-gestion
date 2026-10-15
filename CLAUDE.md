@@ -161,6 +161,16 @@ Auditoría visual 2026-10-15. Aplica a la app, renders, correos, PDF, exportacio
 - **Meses**: abreviado en minúscula de 3 letras con `MES_C`/`mesCorto` ("sep", nunca "sept" ni "SEP"); título de período con `mesTitulo` ("Septiembre 2026"). Encabezados con día de la semana y prosa de documentos ("15 de octubre de 2026") son la única excepción.
 - Antes de dar por terminado un cambio con fechas, revisar que todas salgan de estos helpers (sin `toLocaleDateString` nuevo).
 
+## REGLA DE ORO: todo render se muestra completo y verificado
+
+Ningún render (propuesta, antes/después, mockup) se le muestra al usuario si no pasa este checklist. Nace del 2026-10-15: se mostraron tarjetas deformes, textos cortados y alertas con otra forma, en un pedazo suelto de la vista.
+1. **La vista COMPLETA, en contexto:** header, filtros, tarjetas, alertas y lista, en escritorio (1280) y celular (375). Nunca un pedazo suelto, porque lo que se ve bien aislado se desordena en la vista.
+2. **Hermanos = misma forma y tamaño:** los elementos del mismo nivel usan el mismo componente (no tarjeta al lado de píldora), y la grilla calza (filas completas, sin huecos ni piezas sueltas).
+3. **Solo el dato:** etiqueta + cifra. Texto debajo solo si es indispensable. Todo texto cabe en 1 línea, sin cortarse con «…».
+4. **Formatos:** $M con 1 decimal en tarjetas y resúmenes, fechas dd-mm-aaaa, cifras a la derecha.
+5. **Reusar los componentes de la app** (tarjeta KPI canónica, fila de lista, PageHeader), sin inventar formas nuevas.
+6. **Mirar antes de mostrar:** abrir el render, revisar la captura a 1280 y a 375 contra los puntos 1–5 y corregir lo que falle antes de enviarlo.
+
 ## Economía de espacio en formularios
 
 - Formularios y paneles deben ser densos pero legibles. Eliminar padding decorativo, márgenes inflados y secciones que obligan a scroll innecesario.
