@@ -233,7 +233,22 @@ const _ICON_PATHS = {
   download:'M12 3v12m0 0-4-4m4 4 4-4M4 20h16',
   arrowUp:'M12 19V5M6 11l6-6 6 6',
   arrowDown:'M12 5v14M6 13l6 6 6-6',
+  // Tarjetas KPI (render aprobado 2026-10-15): un ícono por concepto, el mismo en todas las vistas
+  tCobrar:'M12 3v11M7.5 9.5 12 14l4.5-4.5M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3',
+  tFavor:'M5.5 6h13A2.5 2.5 0 0 1 21 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-8A2.5 2.5 0 0 1 5.5 6zM3 10h18M16 15h2',
+  tCero:'M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17M8.5 10.5h7M8.5 13.5h7',
+  tPct:'M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17M9 15l6-6M9.3 9.3h.01M14.7 14.7h.01',
+  tCheck:'M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17M8.3 12.3l2.5 2.5 5-5.3',
+  tPagar:'M5 19 19 5M9 5h10v10',
+  tEspera:'M7 3h10M7 21h10M8 3c0 4 8 5 8 9s-8 5-8 9M16 3c0 4-8 5-8 9s8 5 8 9',
+  tEntra:'M9 4a5 5 0 1 0 0 10a5 5 0 1 0 0-10M14.5 10.2A5 5 0 1 1 10.2 18M19 3v4h-4',
+  tSinFac:'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9.5 13.5l5 5M14.5 13.5l-5 5',
+  tIdentif:'M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13M15.5 15.5 20 20M8.8 9a1.8 1.8 0 1 1 2.6 1.6c-.6.3-.9.7-.9 1.3M10.5 14h.01',
+  tEnlazar:'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  tBanco:'M3 9.5 12 4l9 5.5M5 10v7M10 10v7M14 10v7M19 10v7M3 20h18',
 }
+// Ícono de tarjeta KPI: cuadrito blanco (o gris claro sobre tarjeta blanca) con el ícono en el color del estado.
+const KpiIco = ({n,c,soft}) => <span style={{width:28,height:28,borderRadius:8,background:soft?C.bgSoft:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={n} s={16} c={c}/></span>
 const SIcon = ({n,s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d={_ICON_PATHS[n]||''}/></svg>
 // Chispa (sugerido/aprendido/IA): reemplaza el glifo ✦ por un SVG nítido y consistente en toda plataforma. fill=currentColor → hereda el color del texto/botón donde va.
 const Sparkle = ({s=11,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill={c||'currentColor'} style={{display:'inline-block',verticalAlign:'-1px',flexShrink:0}} aria-hidden='true'><path d='M12 2l2.2 6.2L20.5 10l-6.3 2.1L12 18l-2.2-5.9L3.5 10l6.3-1.8z'/></svg>
@@ -4515,16 +4530,18 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
         const nProv = f => grupos.filter(f).length, provN = n => `${n} proveedor${n!==1?'es':''}`
         const sujetoDe = g => g.cuentas.filter(t=>eDer(t)!=='por_pagar'), ppDe = g => g.cuentas.filter(t=>eDer(t)==='por_pagar')
         const KT={pp:[C.soonBg,C.soonText,'transparent'],cob:[C.azulBg,C.accent,'transparent'],pag:[C.greenBg,C.greenText,'transparent'],te:['#fff',C.accent,C.border]}
-        const tileC=(k,l,v,sub)=>{ const [bg,fg,bd]=KT[k], on=cpF===k; return <div key={k} onClick={()=>setCpF(on?'todos':k)} style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
-          <div style={{fontSize:10,fontWeight:700,color:fg,textTransform:'uppercase',letterSpacing:.5}}>{l}</div><div style={{fontSize:isDeskRes?19:16,fontWeight:700,color:fg,letterSpacing:-.4,fontVariantNumeric:'tabular-nums',marginTop:2,whiteSpace:'nowrap'}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85}}>{sub}</div></div> }
+        const ICO_C={pp:'tPagar',cob:'tEspera',pag:'tCheck',te:'tEntra'}
+        const tileC=(k,l,v,sub)=>{ const [bg,fg,bd]=KT[k], on=cpF===k; return <div key={k} onClick={()=>setCpF(on?'todos':k)} style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5,display:'flex',gap:10,alignItems:'flex-start'}}>
+          {isDeskRes&&<KpiIco n={ICO_C[k]} c={fg} soft={bg===C.tileBg||bg===C.card||bg===C.surface}/>}
+          <div style={{minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:fg,textTransform:'uppercase',letterSpacing:.5}}>{l}</div><div style={{fontSize:isDeskRes?19:16,fontWeight:700,color:fg,letterSpacing:-.4,fontVariantNumeric:'tabular-nums',marginTop:2,whiteSpace:'nowrap'}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
         const nPP=nProv(g=>ppDe(g).length>0), nCob=nProv(g=>sujetoDe(g).length>0)
         const tiles=<div style={{display:'grid',gridTemplateColumns:isDeskRes?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
-          {tileC('pp','Por pagar',porPagarTot,porPagarTot>0?(isDeskRes?`${provN(nPP)} · el cliente ya pagó`:'El cliente ya pagó'):'Al día')}
-          {tileC('cob','Sujeto a cobro',pendienteTot,`${provN(nCob)}${isDeskRes?' · cuando paguen los clientes':''}`)}
+          {tileC('pp','Por pagar',porPagarTot,porPagarTot>0?(isDeskRes?`${provN(nPP)} · ya cobrado`:'Ya cobrado'):'Al día')}
+          {tileC('cob','Sujeto a cobro',pendienteTot,provN(nCob))}
           {tileC('pag',`Pagada · ${yr}`,pagadoYr,provN(gruposPag.length))}
-          {tileC('te',isDeskRes?'Comisiones por cobrar':'Te pagan',aFavorTot,retPendTot>0?`+${fmt(retPendTot)} sujeto a cobro`:'cobradas')}
+          {tileC('te','Nos pagan',aFavorTot,retPendTot>0?`+${fmt(retPendTot)} sujeto a cobro`:'cobradas')}
         </div>
-        const F_LBL={pp:'Por pagar',cob:'Sujeto a cobro',pag:`Pagada · ${yr}`,te:isDeskRes?'Comisiones por cobrar':'Te pagan'}
+        const F_LBL={pp:'Por pagar',cob:'Sujeto a cobro',pag:`Pagada · ${yr}`,te:'Nos pagan'}
         // Desglose de lo sujeto a cobro (solo con ese filtro): de qué depende que se libere.
         const desg = xs => { const by={atr:0,dia:0,fac:0}; xs.forEach(t=>{ by[cuandoT(t)]+=Number(t.monto)||0 }); return by }
         const dTot = cpF==='cob' ? desg(grupos.flatMap(sujetoDe)) : null
@@ -15104,7 +15121,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     </div>
     const retRows = ts.filter(t=>Number(t.comision_monto)>0).sort((a,b)=>(facDe(b)?.status==='Pagado')-(facDe(a)?.status==='Pagado')||Number(b.comision_monto)-Number(a.comision_monto))
     const aFavor = (m0.retCob>0||m0.retPend>0||fq.length>0) ? <div style={{...card,overflow:'hidden'}}>
-      <div style={{...kLbl,padding:'10px 14px 4px'}}>Comisiones por cobrar</div>
+      <div style={{...kLbl,padding:'10px 14px 4px'}}>Nos pagan</div>
       {(m0.retCob>0||m0.retPend>0)&&<div onClick={()=>setRetOpen(o=>!o)} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600}}>Retención al facturar por él <span style={{color:C.done}}>{retOpen?'▴':'▾'}</span></div><div style={{fontSize:11,color:C.muted}}>cobrada{m0.retPend>0?` · ${fmtShort(m0.retPend)} más al cobrar`:''}</div></div><span style={{fontSize:13,fontWeight:700,color:C.greenText,...num}}>{fmt(m0.retCob)}</span></div>}
       {retOpen&&retRows.map(t=>{ const b=facDe(t), cl=cliDe(t), cob=b?.status==='Pagado'; return <div key={t.id} onClick={()=>b&&onOpenFactura&&onOpenFactura(b)} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'7px 14px 7px 26px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b?.invoice_no?`Factura ${folioN(b.invoice_no)}`:'Factura'}{cl?' · ':''}{cl&&celda(<span style={sub}>{cl.name}</span>,()=>onOpenClientFicha&&onOpenClientFicha(cl.id))}</div><div style={{fontSize:10.5,color:C.muted}}>{Number(t.comision_pct)?`${Number(t.comision_pct)}% · `:''}{cob?'cobrada':'al cobrar'}</div></div><span style={{fontSize:12.5,fontWeight:600,color:cob?C.text:C.muted,...num}}>{fmt(Number(t.comision_monto)||0)}</span></div> })}
       {fq.length>0&&<div onClick={()=>cli&&onOpenClientFicha&&onOpenClientFicha(cli.id)} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:cli?'pointer':'default'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600}}>Comisiones que te factura</div><div style={{fontSize:11,color:C.muted}}>{fq.length} factura{fq.length!==1?'s':''} · pagado {fmt(m0.fPag)}</div></div><span style={{fontSize:13,fontWeight:700,...num}}>{fmt(fq.reduce((s,b)=>s+(Number(b.amount)||0),0))}</span></div>}
@@ -15179,14 +15196,16 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     const band = (titulo,der) => <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}><span style={{...kLbl,color:C.accent,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo}</span>{der}</div>
     const ordTog = (v,set) => <span onClick={()=>set(-v)} style={{fontSize:11.5,fontWeight:600,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>{v<0?'↓ Más nuevo':'↑ Más antiguo'}</span>
     const KP = {com:[C.card,C.accent,C.border],pag:[C.greenBg,C.greenText,'transparent'],pp:[C.soonBg,C.soonText,'transparent'],cob:[C.azulBg,C.accent,'transparent']}
-    const tile = (k,l,v,s,filtro) => { const [bg,fg,bd]=KP[k], on=cf===filtro&&filtro!=='todas'; return <div key={k} onClick={()=>{setCf(on?'todas':filtro);setNVer(5)}} className='pv-c' style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
-      <div style={{...kLbl,color:fg}}>{l}</div><div style={{fontSize:isDesktop?19:16,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85}}>{s}</div></div> }
+    const ICO_P={com:'tPct',pag:'tCheck',pp:'tPagar',cob:'tEspera'}
+    const tile = (k,l,v,s,filtro) => { const [bg,fg,bd]=KP[k], on=cf===filtro&&filtro!=='todas'; return <div key={k} onClick={()=>{setCf(on?'todas':filtro);setNVer(5)}} className='pv-c' style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5,display:'flex',gap:10,alignItems:'flex-start'}}>
+      {isDesktop&&<KpiIco n={ICO_P[k]} c={fg} soft={k==='com'}/>}
+      <div style={{minWidth:0}}><div style={{...kLbl,color:fg}}>{l}</div><div style={{fontSize:isDesktop?19:16,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div></div></div> }
     const nAnt = tPag.filter(esAnt).length
     const tiles = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
       {tile('com','Comisiones',m0.total,`${nCli} cliente${nCli!==1?'s':''} · ${ts.length} factura${ts.length!==1?'s':''}`,'todas')}
       {tile('pag','Pagada',m0.pagada,`${tPag.length} factura${tPag.length!==1?'s':''}${nAnt?` · ${nAnt} anticipo${nAnt!==1?'s':''}`:''}`,'pagada')}
-      {tile('pp','Por pagar',m0.porPagar,m0.porPagar>0?(isDesktop&&m0.masAnt?`El cliente ya pagó · desde ${dmy(m0.masAnt)}`:'El cliente ya pagó'):'Al día','por_pagar')}
-      {tile('cob','Sujeto a cobro',alCobroTot,`${tCob.length} factura${tCob.length!==1?'s':''} que el cliente aún no paga`,'por_devengar')}
+      {tile('pp','Por pagar',m0.porPagar,m0.porPagar>0?(isDesktop&&m0.masAnt?`Ya cobrado · desde ${dmy(m0.masAnt)}`:'Ya cobrado'):'Al día','por_pagar')}
+      {tile('cob','Sujeto a cobro',alCobroTot,`${tCob.length} factura${tCob.length!==1?'s':''} sin cobrar`,'por_devengar')}
     </div>
     // Por revisar: pastilla con contador; al tocarla se despliega cada punto con su acción.
     const pagSinBancoP = pagadasSinBancoDe(sel.id)
@@ -15312,7 +15331,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
     const secs = [
       pagosCard&&{k:'pagos',t:'Pagos del banco',v:fmt(pagTot),s:`${pagosY.length} en ${yr}${ultPagoF?' · último '+dmy(ultPagoF):''}`,el:pagosCard},
       docsCard&&{k:'sii',t:'Facturas en el SII',v:fmt(docNet),s:`${facY.length} factura${facY.length!==1?'s':''}${nNC?` y ${nNC} NC`:''} en ${yr}${ultDoc?' · última F'+ultDoc.folio:''}`,el:docsCard},
-      aFavor&&{k:'cobrar',t:'Comisiones por cobrar',v:fmt(m0.aFavor),s:m0.retPend>0?`${fmt(m0.retPend)} sujeto a cobro`:'te paga comisión',el:aFavor},
+      aFavor&&{k:'cobrar',t:'Nos pagan',v:fmt(m0.aFavor),s:m0.retPend>0?`${fmt(m0.retPend)} sujeto a cobro`:'te paga comisión',el:aFavor},
       {k:'hist',t:'Historial',v:null,s:'Pagos, enlaces y cambios',el:bita},
     ].filter(Boolean)
     const secAbierta = secs.find(x=>x.k===secAb)
@@ -15365,26 +15384,29 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   const sinFacTot = filasL.reduce((s,r)=>s+r.sinFac,0), sinFacMTot = filasL.reduce((s,r)=>s+r.sinFacM,0)
   const enLf = r => lf==='por_pagar'?r.porPagar>0 : lf==='por_devengar'?r.cob>0 : lf==='pagada'?r.pagAnio>0 : lf==='cobrar'?(r.aFavor>0||r.retPend>0) : lf==='sinfac'?r.sinFac>0 : true
   const KPL = {pp:[C.soonBg,C.soonText,'transparent'],cob:[C.azulBg,C.accent,'transparent'],pag:[C.greenBg,C.greenText,'transparent'],te:[C.card,C.accent,C.border]}
-  const tileL = (k,l,v,s,f) => { const [bg,fg,bd]=KPL[k], on=lf===f; return <div key={k} onClick={()=>setLf(on?'todos':f)} className='pv-c' style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
-    <div style={{...kLbl,color:fg}}>{l}</div><div style={{fontSize:isDesktop?19:16,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85}}>{s}</div></div> }
+  const ICO_L={pp:'tPagar',cob:'tEspera',pag:'tCheck',te:'tEntra'}
+  const tileL = (k,l,v,s,f) => { const [bg,fg,bd]=KPL[k], on=lf===f; return <div key={k} onClick={()=>setLf(on?'todos':f)} className='pv-c' style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5,display:'flex',gap:10,alignItems:'flex-start'}}>
+    {isDesktop&&<KpiIco n={ICO_L[k]} c={fg} soft={bg===C.card||bg===C.surface||bg===C.tileBg}/>}
+    <div style={{minWidth:0}}><div style={{...kLbl,color:fg}}>{l}</div><div style={{fontSize:isDesktop?19:16,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div></div></div> }
   const nP = f => filasL.filter(f).length
   const provN = n => `${n} proveedor${n!==1?'es':''}`
   const tilesL = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
-    {tileL('pp','Por pagar',sc.porPagar,sc.porPagar>0?(isDesktop?`${nP(r=>r.porPagar>0)} proveedor${nP(r=>r.porPagar>0)!==1?'es':''} · el cliente ya pagó`:'El cliente ya pagó'):'Al día','por_pagar')}
-    {tileL('cob','Sujeto a cobro',cobTot,`${provN(nP(r=>r.cob>0))}${isDesktop?' · cuando paguen los clientes':''}`,'por_devengar')}
+    {tileL('pp','Por pagar',sc.porPagar,sc.porPagar>0?(isDesktop?`${provN(nP(r=>r.porPagar>0))} · ya cobrado`:'Ya cobrado'):'Al día','por_pagar')}
+    {tileL('cob','Sujeto a cobro',cobTot,provN(nP(r=>r.cob>0)),'por_devengar')}
     {tileL('pag',`Pagada · ${yr}`,pagadasAnio,provN(nP(r=>r.pagAnio>0)),'pagada')}
-    {tileL('te',isDesktop?'Comisiones por cobrar':'Te pagan',aFavorTot,retPendTot>0?(isDesktop?`te pagan · ${fmt(retPendTot)} más sujeto a cobro`:`+${fmt(retPendTot)} sujeto a cobro`):'cobradas','cobrar')}
+    {tileL('te','Nos pagan',aFavorTot,retPendTot>0?`+${fmt(retPendTot)} sujeto a cobro`:'cobradas','cobrar')}
   </div>
   // Por revisar: tarjetitas chicas bajo los KPI (solo las que tienen algo); cada una lleva a su lista.
   const nEnl = nCom+nSii+sinEnl.length+pagSinBanco.length
   const revCards = [
-    sinFacTot>0&&{k:'sf',t:'Sin factura',v:fmt(sinFacMTot),s:`${sinFacTot} comisi${sinFacTot===1?'ón':'ones'}`,on:()=>setLf(lf==='sinfac'?'todos':'sinfac'),act:lf==='sinfac'},
-    porIdent.length>0&&{k:'pi',t:'Por identificar',v:fmt(montoMov(porIdent)),s:`${porIdent.length} pago${porIdent.length!==1?'s':''}`,on:()=>abrirFicha(porIdent[0].p.id)},
-    nEnl>0&&{k:'en',t:'Por enlazar',v:String(nEnl),s:(nCom+nSii)>0?'calces exactos':'pagos sin enlazar',on:()=>{ if(nCom+nSii>0){setSelEnl(null);setView('enlazar')} else abrirFicha((sinEnl[0]||pagSinBanco[0]).p.id) }},
-    sinDatos.length>0&&{k:'sd',t:'Sin datos de pago',v:String(sinDatos.length),s:`proveedor${sinDatos.length!==1?'es':''}`,on:()=>abrirEditar(sinDatos[0],sinDatos.map(p=>p.id))},
+    sinFacTot>0&&{k:'sf',ic:'tSinFac',t:'Sin factura',v:fmt(sinFacMTot),s:`${sinFacTot} comisi${sinFacTot===1?'ón':'ones'}`,on:()=>setLf(lf==='sinfac'?'todos':'sinfac'),act:lf==='sinfac'},
+    porIdent.length>0&&{k:'pi',ic:'tIdentif',t:'Por identificar',v:fmt(montoMov(porIdent)),s:`${porIdent.length} pago${porIdent.length!==1?'s':''}`,on:()=>abrirFicha(porIdent[0].p.id)},
+    nEnl>0&&{k:'en',ic:'tEnlazar',t:'Por enlazar',v:`${nEnl} pago${nEnl!==1?'s':''}`,s:(nCom+nSii)>0?'calces exactos':null,on:()=>{ if(nCom+nSii>0){setSelEnl(null);setView('enlazar')} else abrirFicha((sinEnl[0]||pagSinBanco[0]).p.id) }},
+    sinDatos.length>0&&{k:'sd',ic:'tBanco',t:'Sin datos de pago',v:`${sinDatos.length} proveedor${sinDatos.length!==1?'es':''}`,s:null,on:()=>abrirEditar(sinDatos[0],sinDatos.map(p=>p.id))},
   ].filter(Boolean)
-  const revisarL = revCards.length ? <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>{revCards.map(x=><div key={x.k} onClick={x.on} className='pv-c' style={{background:x.act?C.azulBg:C.card,border:`1px solid ${x.act?C.accent:C.border}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',minWidth:0}}>
-    <div style={{...kLbl,fontSize:9.5}}>{x.t}</div><div style={{fontSize:14,fontWeight:700,color:C.text,marginTop:2,...num}}>{x.v}</div><div style={{fontSize:11,color:C.muted}}>{x.s}</div></div>)}</div> : null
+  const revisarL = revCards.length ? <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>{revCards.map(x=><div key={x.k} onClick={x.on} className='pv-c' style={{background:x.act?C.azulBg:C.card,border:`1px solid ${x.act?C.accent:C.border}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',minWidth:0,display:'flex',gap:10,alignItems:'center'}}>
+    {isDesktop&&x.ic&&<KpiIco n={x.ic} c={C.accent} soft/>}
+    <div style={{minWidth:0}}><div style={{...kLbl,fontSize:9.5}}>{x.t}</div><div style={{fontSize:14,fontWeight:700,color:C.text,marginTop:2,...num}}>{x.v}</div>{x.s&&<div style={{fontSize:11,color:C.muted}}>{x.s}</div>}</div></div>)}</div> : null
   // Por proveedor
   let vis = filasL.filter(r=>enLf(r)&&(!qq||_normTxt(`${r.p.nombre||''} ${r.p.razon_social||''} ${r.p.rut||''} ${r.clis.join(' ')}`).includes(qq)||(_nRut(q)&&_nRut(r.p.rut).includes(_nRut(q)))))
   vis = [...vis].sort((a,b)=> ord.k==='nombre' ? tituloProv(a.p).localeCompare(tituloProv(b.p),'es')*ord.dir : ((a[ord.k]-b[ord.k])*ord.dir || (b.cob-a.cob) || tituloProv(a.p).localeCompare(tituloProv(b.p),'es')))
@@ -15469,10 +15491,10 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],clie
   </div>)}</div>
   const exportar = () => modo==='cli'
     ? exportCSV(`comisiones_por_cliente.csv`,['Cliente','Proveedores','Por pagar','Sujeto a cobro',`Pagada ${yr}`],porCli.map(x=>[x.c?.name||'Sin cliente',x.ps.map(p=>tituloProv(p.p)).join(' · '),Math.round(x.porPagar),Math.round(x.cob),Math.round(x.pagAnio)]))
-    : exportCSV(`proveedores.csv`,['Proveedor','Razón social','RUT','Clientes','Por pagar','Sujeto a cobro',`Pagada ${yr}`,'Sin factura del proveedor','Comisiones por cobrar'],[...vis.map(r=>[tituloProv(r.p),r.p.razon_social||'',r.p.rut||'',r.clis.join(' · '),Math.round(r.porPagar),Math.round(r.cob),Math.round(r.pagAnio),r.sinFac,Math.round(r.aFavor)]),['TOTAL','','','',Math.round(vis.reduce((s,r)=>s+r.porPagar,0)),Math.round(vis.reduce((s,r)=>s+r.cob,0)),Math.round(vis.reduce((s,r)=>s+r.pagAnio,0)),vis.reduce((s,r)=>s+r.sinFac,0),Math.round(vis.reduce((s,r)=>s+r.aFavor,0))]])
+    : exportCSV(`proveedores.csv`,['Proveedor','Razón social','RUT','Clientes','Por pagar','Sujeto a cobro',`Pagada ${yr}`,'Sin factura del proveedor','Nos pagan'],[...vis.map(r=>[tituloProv(r.p),r.p.razon_social||'',r.p.rut||'',r.clis.join(' · '),Math.round(r.porPagar),Math.round(r.cob),Math.round(r.pagAnio),r.sinFac,Math.round(r.aFavor)]),['TOTAL','','','',Math.round(vis.reduce((s,r)=>s+r.porPagar,0)),Math.round(vis.reduce((s,r)=>s+r.cob,0)),Math.round(vis.reduce((s,r)=>s+r.pagAnio,0)),vis.reduce((s,r)=>s+r.sinFac,0),Math.round(vis.reduce((s,r)=>s+r.aFavor,0))]])
   const segModo = <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>{[['prov','Por proveedor'],['cli','Por cliente']].map(([k,l])=><span key={k} onClick={()=>{setModo(k);setExpP(null)}} style={{fontSize:12,fontWeight:700,padding:'6px 12px',cursor:'pointer',background:modo===k?C.accent:C.card,color:modo===k?'#fff':C.muted}}>{l}</span>)}</div>
   const btnExcelL = <span onClick={exportar} title='Descargar Excel' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/></span>
-  const lfTxt = lf!=='todos' ? <span style={{fontSize:11.5,color:C.muted}}>Filtro: <b style={{color:C.accent}}>{({por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',pagada:`Pagada ${yr}`,cobrar:'Comisiones por cobrar',sinfac:'Sin factura del proveedor'})[lf]}</b> {link('Quitar',()=>setLf('todos'),C.accent)}</span> : null
+  const lfTxt = lf!=='todos' ? <span style={{fontSize:11.5,color:C.muted}}>Filtro: <b style={{color:C.accent}}>{({por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',pagada:`Pagada ${yr}`,cobrar:'Nos pagan',sinfac:'Sin factura del proveedor'})[lf]}</b> {link('Quitar',()=>setLf('todos'),C.accent)}</span> : null
   return (<div>{css}
     <PageHeader origen={origen} onBack={onBack} titulo='Proveedores' ctx={isDesktop?`${proveedores.length} proveedores`:null} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{isDesktop&&btnExcelL}<ActBtn variant='primary' onClick={abrirNuevo} title='Nuevo proveedor'>{isDesktop?'+ Nuevo':'+'}</ActBtn></span>}/>
     {wrap(<>
@@ -19254,11 +19276,13 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 </div>
               )}
               // Tiles suaves que filtran (Por cobrar / A favor / En $0): conteo de clientes, no montos. Tocar el activo lo suelta (= todos).
-              const tiles = [['neg','Por cobrar',C.overdueBg,C.overdueText],['pos','A favor',C.azulBg,C.accent],['cero','En $0',C.surface,C.muted]].map(([k,l,bg,col])=>{ const on=saldoFilter===k; const n=baseAll.filter(matchC).filter(c=>pasaSaldo(c,k)).length; return (
-                <button key={k} type='button' onClick={()=>setSaldoFilter(on?'todos':k)} aria-pressed={on} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:(k==='cero'?C.border:'transparent')}`,borderRadius:12,padding:'9px 12px',cursor:'pointer',minWidth:0,fontFamily:'inherit'}}>
-                  <div style={{fontSize:10,fontWeight:600,letterSpacing:.4,textTransform:'uppercase',opacity:.9,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
-                  <div style={{fontSize:20,fontWeight:700,letterSpacing:-.4,lineHeight:1.15,fontVariantNumeric:'tabular-nums'}}>{n}</div>
-                  <div style={{fontSize:11,opacity:.8}}>clientes</div>
+              const tiles = [['neg','Por cobrar',C.overdueBg,C.overdueText,'tCobrar'],['pos','A favor',C.azulBg,C.accent,'tFavor'],['cero','En $0',C.surface,C.muted,'tCero']].map(([k,l,bg,col,ic])=>{ const on=saldoFilter===k; const n=baseAll.filter(matchC).filter(c=>pasaSaldo(c,k)).length; return (
+                <button key={k} type='button' onClick={()=>setSaldoFilter(on?'todos':k)} aria-pressed={on} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:(k==='cero'?C.border:'transparent')}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',minWidth:0,fontFamily:'inherit',display:'flex',gap:10,alignItems:'center'}}>
+                  {isDesktop&&<KpiIco n={ic} c={col} soft={k==='cero'}/>}
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:10,fontWeight:600,letterSpacing:.4,textTransform:'uppercase',opacity:.9,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+                    <div style={{fontSize:isDesktop?19:16,fontWeight:700,letterSpacing:-.4,lineHeight:1.2,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{n} <span style={{fontSize:isDesktop?13:12,fontWeight:600}}>cliente{n!==1?'s':''}</span></div>
+                  </div>
                 </button>) })
               const ORDS=[['saldo','Saldo: mayor a menor'],['saldoAsc','Saldo: menor a mayor'],['az','Nombre A–Z'],['reciente',isDesktop?'Último movimiento: más nuevo':'Fecha: más nuevo'],['actividad',isDesktop?'Último movimiento: más antiguo':'Fecha: más antiguo'],['nombre','Por abogado']]
               return (<>
