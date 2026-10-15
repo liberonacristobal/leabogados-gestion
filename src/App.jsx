@@ -3366,7 +3366,7 @@ function computeAgingCartera(billingRows, clientesMap){
   // Mismo universo que porCobrarBills (fuente única del "por cobrar"): emitidas con folio, no borradas.
   // Sin esto el aging contaba facturas borradas y sin folio (por facturar), inflando el total ~$40M.
   const pend = (billingRows||[]).filter(b=>(b.status==='Pendiente'||b.status==='Vencido') && b.invoice_no && !b.deleted_at)
-  const diasVenc = b => { const dl=daysLeft(b.due); return dl===null?null:-dl }
+  const diasVenc = b => { const dl=daysLeftB(b); return dl===null?null:-dl }   // misma base que Cobranza (emisión + 30)
   const bucketDe = b => { const dv=diasVenc(b); if(dv===null) return 'current'; if(dv>60) return 'overdue'; if(dv>30) return 'warning'; return 'current' }
   const total = pend.reduce((a,b)=>a+saldoBill(b),0)
   const pct = m => total>0?Math.round(m/total*100):0
@@ -3867,6 +3867,9 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const [top5Open,setTop5Open] = usePersistedState('d_top5',false)
   const [agingBucket,setAgingBucket] = usePersistedState('d_aging',null)   // tramo del aging abierto para ver su detalle
   const agingData = useMemo(()=>computeAgingCartera(billing.filter(b=>b.billing_type!=='reembolso'), clientesMap),[billing,clientesMap])
+  // Vencido = TODO lo vencido (porCobrarBills + esVencidaB), lo mismo que muestra Cobranza; el aging +60 queda solo para su gráfico.
+  const vencidoBills = useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&!['reembolso','nota_credito'].includes(b.billing_type)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&esVencidaB(b)),[billing])
+  const vencidoTot = vencidoBills.reduce((a,b)=>a+saldoBill(b),0)
   // Proyección de ingresos (cifra del tile): por cobrar + programadas con vencimiento hasta fin de año. Mirror de CashflowProjection.baseProj/projTotalAll.
   // Proyección: excluye programadas fantasma (ya emitidas, alta confianza) para no contar dos veces la cuota y su factura gemela.
   const billingProj = useMemo(()=> (fantasmaIds&&fantasmaIds.size) ? (billing||[]).filter(b=> !fantasmaIds.has(String(b.id))) : (billing||[]), [billing,fantasmaIds])
@@ -3950,8 +3953,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   // Prioridades financieras (alertas del dueño) — se computa aquí para usar el conteo en la tarjeta de Accesos directos y reusar en la lista. De datos que ya existen.
   const prioridades = (()=>{
     const hoy=new Date().toISOString().slice(0,10)
-    const vencMonto=agingData?.buckets?.overdue?.monto||0
-    const vencN=agingData?.buckets?.overdue?.items?.length||0
+    const vencMonto=vencidoTot
+    const vencN=vencidoBills.length
     const progVenc=(billingProj||[]).filter(b=> b && !b.deleted_at && b.status==='Programada' && b.due && b.due<hoy)
     const progMonto=progVenc.reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
     const porIdent=ingresosPorAnioVenta.porIdentificar||0
@@ -4002,7 +4005,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
   const _fin8ISO = (()=>{ const d=new Date(); d.setDate(d.getDate()+56); return d.toISOString().slice(0,10) })()
   const flujoNeto8 = (billing||[]).filter(b=>b&&!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido','Programada'].includes(b.status)&&b.due&&String(b.due).slice(0,10)<=_fin8ISO).reduce((a,b)=>a+saldoBill(b),0) - (costosOfiMes*(56/30.4)+comisSaldo.porPagar+comisSaldo.porDevengar)
-  const vencMes = agingData?.buckets?.overdue?.monto||0
+  const vencMes = vencidoTot
   // Mi trabajo (operativo del usuario)
   const _miIniT = INICIALES_RESP[user?.name]||null
   const mineProyN = (proyectosCartera||[]).filter(p=>p&&p.activo!==false&&(!_miIniT||(p.responsable||'')===_miIniT)).length
@@ -4100,7 +4103,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
         const cobroPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%), igual que ventaPct
         const bePct=costosOfiAnual>0?Math.min(100,Math.round(ingYTD/costosOfiAnual*100)):0
         const margenPct=(ingYTD+percYTD)>0?Math.round(resultado/(ingYTD+percYTD)*100):0   // rentabilidad = margen ÷ ingresos propios (honorarios + comisiones percibidas)
-        const vencido=agingData?.buckets?.overdue?.monto||0
+        const vencido=vencidoTot
         return (<>
           <div style={{padding:'14px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,position:'relative'}}>
@@ -5347,7 +5350,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
       if(s.activated_at) m.gan++
       if(s.status==='Rechazada') m.rech++
       if(s.status==='Propuesta') m.pipe++
-      if(['Activo','Terminado'].includes(s.status)&&Number(s.year)===yr){
+      if(!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&ventaCuentaEnAnio(s,yr)&&!esSubarriendo(s)){   // misma regla que metricasAnio (Inicio/Ventas): renovación anual de recurrentes, sin subarriendo
         const clp=ventaCLP(s,ufRef)
         m.vendido+=clp; m.nV++; m.cli.add(String(s.client_id))
         m.cliV[s.client_id]=(m.cliV[s.client_id]||0)+1; m.cliVend[s.client_id]=(m.cliVend[s.client_id]||0)+clp
@@ -9647,7 +9650,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; cobradoYr+=ingresosMesBill(billing,mm); const f=facSiiPeriodo(mm); factSiiYr+=f; if(m<=_curM) resYr += f + subMesT(mm) - costoBrutoMes(mm) - comMesT(mm) }
   // "Facturación del año" = número GRUESO: todos los folios emitidos (33/34) tal cual, sin restar NC ni terceros. El afinado (− NC − terceros = propia) vive en Resultado del año.
   const emitidoBrutoYr=(ventasRows||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(year)&&[33,34].includes(Number(d.tipo_dte))).reduce((a,d)=>a+(Number(d.monto)||0),0)
-  const porCobrar=(billing||[]).filter(b=>b&&!b.deleted_at&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
+  const porCobrar=porCobrarBills(billing)   // fuente única (sin reembolsos ni por facturar), igual que Inicio/Facturación/Cobranza
   // Formato Oficina: millones con 1 decimal (igual que ResultadoAnioView.fmtMp), NO fmtShort.
   const fM=n=>'$'+(Math.abs(Number(n)||0)/1e6).toFixed(1).replace('.',',')+' M'
   const MESNOM=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
@@ -13230,9 +13233,9 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
         : filter==='clientes' ? (()=>{
           const hoy=new Date().toISOString().slice(0,10)
           const addDays=(d,n)=>{ if(!d) return ''; const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10) }
-          const venceDe=b=> b.due || (b.issued_at?addDays(b.issued_at,30):'')
-          // Vencida DERIVADA: emitida pendiente cuyo vencimiento (o emisión + 30 días) ya pasó.
-          const estadoReal=b=> (b.status==='Pendiente' && venceDe(b) && venceDe(b)<hoy) ? 'Vencido' : b.status
+          const venceDe=b=> venceBill(b)   // fuente única del vencimiento (emisión + 30), igual que Cobranza y la ficha
+          // Vencida DERIVADA con el helper único (esVencidaB), igual que Cobranza y la ficha.
+          const estadoReal=b=> (b.status==='Pendiente' && esVencidaB(b)) ? 'Vencido' : b.status
           const diasVencC=b=>{ const v=venceDe(b); if(!v) return null; return Math.round((new Date(hoy)-new Date(v+'T00:00:00'))/86400000) }
           const bucketC=b=>{ const d=diasVencC(b); if(d==null||d<=0) return 'aldia'; if(d<=30) return '1-30'; if(d<=60) return '31-60'; if(d<=90) return '61-90'; return '90' }
           const matchEst=b=>{ if(agingF && bucketC(b)!==agingF) return false; if(estSel.size===0) return true; const er=estadoReal(b); return estSel.has(er)||(estSel.has('Pagado')&&er==='Anticipada') }
@@ -13645,8 +13648,8 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
 })() : filter==='all' ? (()=>{
           const hoy=new Date().toISOString().slice(0,10)
           const addDays=(d,n)=>{ if(!d) return ''; const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10) }
-          const venceDe=b=> b.due || (b.issued_at?addDays(b.issued_at,30):'')
-          const estadoReal=b=> (b.status==='Pendiente' && venceDe(b) && venceDe(b)<hoy) ? 'Vencido' : b.status
+          const venceDe=b=> venceBill(b)   // fuente única del vencimiento (emisión + 30), igual que Cobranza y la ficha
+          const estadoReal=b=> (b.status==='Pendiente' && esVencidaB(b)) ? 'Vencido' : b.status
           const diasVencC=b=>{ const v=venceDe(b); if(!v) return null; return Math.round((new Date(hoy)-new Date(v+'T00:00:00'))/86400000) }
           const bucketC=b=>{ const d=diasVencC(b); if(d==null||d<=0) return 'aldia'; if(d<=30) return '1-30'; if(d<=60) return '31-60'; if(d<=90) return '61-90'; return '90' }
           const matchEst=b=>{ if(agingF && bucketC(b)!==agingF) return false; if(estSel.size===0) return true; const er=estadoReal(b); return estSel.has(er)||(estSel.has('Pagado')&&er==='Anticipada') }
@@ -22735,7 +22738,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
         ))}
       </div>
       {Object.keys(grupos).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin facturas.</div>}
-      {Object.entries(grupos).map(([rs,fs])=>{ const abierta=!!openRS[rs]; const rut=(fs.find(b=>b.receptor_rut)||{}).receptor_rut||(clientEntities.find(en=>en.name===rs)||{}).rut||''; const pend=fs.reduce((s,b)=>s+saldoBill(b),0); return (<div key={rs} style={{marginBottom:8}}>
+      {Object.entries(grupos).map(([rs,fs])=>{ const abierta=!!openRS[rs]; const rut=(fs.find(b=>b.receptor_rut)||{}).receptor_rut||(clientEntities.find(en=>en.name===rs)||{}).rut||''; const pend=porCobrarBills(fs); return (<div key={rs} style={{marginBottom:8}}>
         <div onClick={()=>setOpenRS(p=>({...p,[rs]:!p[rs]}))} style={{display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${C.border}`,paddingBottom:4,marginBottom:1,cursor:'pointer'}}>
           <span style={{fontSize:14,color:C.done,lineHeight:1,transform:abierta?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}{rut?<span style={{color:C.done,fontWeight:600}}> · {rut}</span>:''}</div></div>
