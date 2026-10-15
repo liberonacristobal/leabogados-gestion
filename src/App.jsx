@@ -48,7 +48,8 @@ const C = {
   // pista/fondo gris-azul de barras, chips y celdas neutras (antes #EEF1F3 suelto ×45)
   track:'#EEF1F3',
   // tiles del grid del Inicio (kTile): fondo, borde y borde-abierto
-  tileBg:'#FFFFFF', tileLine:'#E4E8EB', tileLineOn:'#CFE0E6',   // tarjetas: mismo blanco y borde que Accesos directos (más contraste con la página)
+  tileBg:'#FFFFFF', tileLine:'#E4E8EB', tileLineOn:'#CFE0E6', selBg:'#F3F8FC',   // selBg: fila seleccionada (celeste muy tenue)
+    // tarjetas: mismo blanco y borde que Accesos directos (más contraste con la página)
   // sub-paleta SOBRE NAVY (heroes con fondo accent #003C50, p.ej. Saldo del cliente / Vendido): label azul claro, botón navy profundo, divisor, verde/rojo claros legibles sobre navy
   onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
   // tenues con letra oscura: chips y botón de guardar (azul) y avisos en línea (crema + café)
@@ -18535,7 +18536,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const warn=bloqueado?'excede el fondo':adelanto?'adelanto':null
     const D=isDesktop
     return (
-    <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:10,rowGap:1,alignItems:'center',padding:D?'6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.azulBg:'transparent',opacity:bloqueado?.6:1}}>
+    <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:10,rowGap:1,alignItems:'center',padding:D?'6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.selBg:'transparent',opacity:bloqueado?.6:1}}>
       <span style={{...(D?{}:{gridRow:'1 / 3'}),width:18,height:18,borderRadius:6,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
       {D ? <>
         <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hl(e.concept||'—')}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(47,111,134,.35)',textUnderlineOffset:2}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</div></div>
@@ -20373,13 +20374,13 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:12,color:C.muted}}>{BRAND.notaria} · {notariaPend.length} OT</span><span style={{fontSize:24,fontWeight:800,color:C.accent,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(notaPendTotal)}</span></div>
             {D
               ? <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:10}}>{partes.map(([k,l,v,col,sub])=>{ const on=deudaEstF===k; return (
-                  <div key={k} onClick={()=>setDeudaEstF(f=>f===k?null:k)} style={{display:'flex',alignItems:'center',gap:10,border:`1px solid ${on?C.accent:C.tileLine}`,background:on?C.azulBg:C.tileBg,borderRadius:10,padding:'7px 10px',cursor:'pointer'}}>
+                  <div key={k} onClick={()=>setDeudaEstF(f=>f===k?null:k)} style={{display:'flex',alignItems:'center',gap:10,border:`1px solid ${on?C.accent:C.tileLine}`,background:on?C.selBg:C.tileBg,borderRadius:10,padding:'7px 10px',cursor:'pointer'}}>
                     <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:col===C.muted?C.text:col}}>{l}</div><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
                     <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:col===C.muted?C.text:col,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div><div style={{fontSize:10,color:C.muted}}>{pctP(v)}</div></div>
                   </div>) })}</div>
               : <div style={{borderTop:`1px solid ${C.track}`,paddingTop:6,marginTop:8}}>{partes.map(([k,l,v,col])=>{ const on=deudaEstF===k; return (
-                  <div key={k} onClick={()=>setDeudaEstF(f=>f===k?null:k)} style={{display:'flex',alignItems:'center',gap:8,minHeight:30,padding:'0 6px',margin:'0 -6px',borderRadius:8,background:on?C.azulBg:'transparent',cursor:'pointer'}}>
+                  <div key={k} onClick={()=>setDeudaEstF(f=>f===k?null:k)} style={{display:'flex',alignItems:'center',gap:8,minHeight:30,padding:'0 6px',margin:'0 -6px',borderRadius:8,background:on?C.selBg:'transparent',cursor:'pointer'}}>
                     <span style={{width:7,height:7,borderRadius:'50%',background:col,flexShrink:0}}/>
                     <span style={{flex:1,fontSize:12.5,fontWeight:on?700:600,color:col===C.muted?C.text:col}}>{l}</span>
                     <span style={{fontSize:10.5,color:C.muted}}>{pctP(v)}</span>
@@ -20388,7 +20389,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {btnPagables}
           </div>)
         const selBox = selNota.size>0 && (
-          <div style={{background:adelanto>0?C.overdueBg:C.azulBg,border:`1px solid ${adelanto>0?C.overdueText:C.accent}`,borderRadius:12,padding:'11px 13px'}}>
+          <div style={{background:adelanto>0?C.overdueBg:C.tileBg,border:`1px solid ${adelanto>0?C.overdueText:C.accent}`,borderRadius:12,padding:'11px 13px'}}>
             <div style={{...lblK,color:adelanto>0?C.overdueText:C.accent}}>Seleccionadas</div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,marginTop:2}}><span style={{fontSize:13,fontWeight:700,color:adelanto>0?C.overdueText:C.accent}}>{selNota.size} OT</span><span style={{fontSize:16,fontWeight:800,color:adelanto>0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(notaTotal)}</span></div>
             {ln('Con saldo',fmt(conFondo),C.greenText)}
@@ -20564,7 +20565,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const lista = (
           <div style={{flex:1,minWidth:0}}>
             {!D&&toolbar}
-            {deudaEstF&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:C.azulBg,borderRadius:9,padding:'6px 11px',marginBottom:8}}><span style={{flex:1}}>Mostrando: {deudaEstF==='sel'?`Seleccionadas · ${selNota.size} OT`:partes.find(x=>x[0]===deudaEstF)?.[1]}</span><button onClick={()=>setDeudaEstF(null)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:28}}>Ver todo</button></div>}
+            {deudaEstF&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:9,padding:'6px 11px',marginBottom:8}}><span style={{flex:1}}>Mostrando: {deudaEstF==='sel'?`Seleccionadas · ${selNota.size} OT`:partes.find(x=>x[0]===deudaEstF)?.[1]}</span><button onClick={()=>setDeudaEstF(null)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:28}}>Ver todo</button></div>}
             {ocultasFondos>0&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.soonText,background:C.soonBg,borderRadius:9,padding:'7px 11px',marginBottom:8}}><span style={{flex:1}}>{ocultasFondos} OT más calzan, ocultas por el filtro de saldo.</span><button onClick={()=>setNotaFondos(false)} style={{border:'none',background:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',minHeight:30}}>Ver todos</button></div>}
             {notariaPend.length===0&&notariaAnulados.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13}}>No hay gastos de notaría pendientes de liquidar.</div>}
             {qq&&nada&&!ocultasFondos&&<div style={{color:C.muted,textAlign:'center',padding:24,fontSize:13}}>Ninguna OT calza con "{notaQ.trim()}".</div>}
