@@ -17463,7 +17463,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {notaria&&resultado.imported>0&&onNavigate&&<div style={{textAlign:'left',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
         <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:C.muted,padding:'8px 12px',background:C.bgPanel,borderBottom:`.5px solid ${C.border}`}}>Próximos pasos</div>
         {resultado.sinCliente>0&&<div onClick={()=>onNavigate('orphans')} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><span style={{width:26,height:26,borderRadius:8,background:C.overdueBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2'><circle cx='9' cy='8' r='3'/><path d='M4 19c0-3 2-5 5-5'/><path d='M17 12v4M17 19v.01'/></svg></span><span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>Resolver las {resultado.sinCliente} sin cliente</span><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>}
-        <div onClick={()=>onNavigate('deuda')} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><span style={{width:26,height:26,borderRadius:8,background:C.ambarBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></svg></span><span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>Pagar a la notaría · Deuda</span><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>
+        <div onClick={()=>onNavigate('deuda')} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',cursor:'pointer',borderBottom:`.5px solid ${C.track}`}}><span style={{width:26,height:26,borderRadius:8,background:C.ambarBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></svg></span><span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>Pagar a la notaría</span><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>
         <div onClick={()=>onNavigate('rendir')} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',cursor:'pointer'}}><span style={{width:26,height:26,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2'><path d='M4 4h16v14H4z'/><path d='M8 8h8M8 12h5'/></svg></span><span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>Rendir a los clientes</span><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>
       </div>}
       {/* Parte por parte: tras Corregir queda el paso de Importar (y viceversa), sin perder el otro */}
@@ -19306,22 +19306,22 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     setNoNSending(false)
   }
   // Resolver una OT "no nuestra" (NO se borra: pasa a "Resueltas" con su resolución). 'era_nuestra' crea el gasto de notaría
-  // con los datos de la OT (queda en Deuda › "Sin cliente ni persona" para asignarle cliente); 'respondida' solo la cierra.
+  // con los datos de la OT (queda en Pagar › "Sin cliente ni persona" para asignarle cliente); 'respondida' solo la cierra.
   const resolverNoNuestra = async(item, resolucion) => {
     try{
       const now=new Date().toISOString(); let expense_id=null
       if(resolucion==='era_nuestra'){
-        if(!(await appConfirm(`¿${item.ot} sí era nuestra? Se carga el gasto de notaría por ${fmt(item.monto)} en Deuda › "Sin cliente ni persona", para asignarle cliente.`))) return
+        if(!(await appConfirm(`¿${item.ot} sí era nuestra? Se carga el gasto de notaría por ${fmt(item.monto)} en Pagar › "Sin cliente ni persona", para asignarle cliente.`))) return
         if(!DEMO){ const {data,error}=await supabase.from('expenses').insert({type:'gasto',client_id:null,amount:item.monto||0,concept:item.concepto||item.materia||'Notaría',subconcept:item.subconcepto||null,ot_number:item.ot,requirente:item.requirente||null,materia:item.materia||null,category:'Notaria',date:_fechaISO(item.fecha),paid_by_client:true}).select().single()
           if(error) throw error; expense_id=data.id; setExpenses(p=>[data,...p]) }
       }
-      await noNUpdate(item,{estado:'resuelta',resolucion,resuelta_at:now,resuelta_por:currentUserName||null,...(expense_id?{expense_id}:{})},{accion:resolucion==='era_nuestra'?'era_nuestra':'respondida',detalle:resolucion==='era_nuestra'?'Sí era nuestra · gasto cargado en Deuda':'La notaría respondió'})
+      await noNUpdate(item,{estado:'resuelta',resolucion,resuelta_at:now,resuelta_por:currentUserName||null,...(expense_id?{expense_id}:{})},{accion:resolucion==='era_nuestra'?'era_nuestra':'respondida',detalle:resolucion==='era_nuestra'?'Sí era nuestra · gasto cargado en Pagar':'La notaría respondió'})
       setNoNSel(p=>{ const n=new Set(p); n.delete(item.id); return n })
     }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) }
   }
   const reabrirNoNuestra = async(item) => {
     try{
-      if(item.expense_id&&!(await appConfirm('Vuelve a la revisión. El gasto que se cargó en Deuda se mantiene; elimínalo allí si no corresponde.'))) return
+      if(item.expense_id&&!(await appConfirm('Vuelve a la revisión. El gasto que se cargó en Pagar se mantiene; elimínalo allí si no corresponde.'))) return
       await noNUpdate(item,{estado:item.consultadaAt?'consultada':'pendiente',resolucion:null,resuelta_at:null,resuelta_por:null},{accion:'reabierta',detalle:'Volvió a la revisión'})
     }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) }
   }
@@ -19537,7 +19537,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,...(isDesktop&&selectedClient?{minWidth:0,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}:{})}}>
-                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial de rendiciones':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Historial de pagos':notaTab==='pend'?'Deuda':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Recordatorios':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
+                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial de rendiciones':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Historial de pagos':notaTab==='pend'?'Pagar':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Recordatorios':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ver ficha <Gl n='chevron'/></span>}
                 {selectedClient&&!esOficina(selectedClient.id)&&(()=>{
@@ -20005,7 +20005,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       {showNotaria&&notaTab==='hub'&&(()=>{
         const D=isDesktop
         const cards=[
-          {t:'Deuda', ic:'clock', s:notariaPend.length?`${notariaPend.length} OT · ${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.soonText, bg:C.ambarBg, go:()=>setNotaTab('pend')},
+          {t:'Pagar', ic:'clock', s:notariaPend.length?`${notariaPend.length} OT · ${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.soonText, bg:C.ambarBg, go:()=>setNotaTab('pend')},
           {t:'Cobros', ic:'exchange', s:notaLedger.n?`${notaLedger.n} OT · ${fmtShort(notaLedger.total)}`:'lo que nos cobran', col:C.azulInfo, bg:C.azulBg, go:()=>{setCobrosQ('');setCobEst('');setCobMes('');setCobAnio('');setCobOpenM(null);setNotaTab('cobros')}},
           {t:'Historial', ic:'check', s:notaLiquidaciones.length?`${notaLiquidaciones.length} pago${notaLiquidaciones.length!==1?'s':''} · ${fmtShort(notaLiquidaciones.reduce((a,r)=>a+(r.total||0),0))}`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
           {t:'Carga masiva', ic:'file', s:'importar · correo', col:C.muted, bg:C.bgSoft, go:()=>{setShowNotaria(false);setHubOpen(false);setCargaOpen(null);setShowCargaPag(true)}},
@@ -20314,7 +20314,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:25,fontWeight:800,color:C.greenText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span><span style={{fontSize:12,color:C.muted}}>· {list.length} pago{list.length!==1?'s':''}</span></div>
               {(notaPendTotal>0||nPorEnv>0)&&<div style={{display:'flex',gap:8,marginTop:12}}>
-                {notaPendTotal>0&&nest('Deuda pendiente',fmt(notaPendTotal),C.tealBg,C.tealText,()=>setNotaTab('pend'))}
+                {notaPendTotal>0&&nest('Por pagar',fmt(notaPendTotal),C.tealBg,C.tealText,()=>setNotaTab('pend'))}
                 {nPorEnv>0&&nest('Por enviar',`${nPorEnv} pago${nPorEnv!==1?'s':''}`,C.soonBg,C.soonText)}
               </div>}
             </div>
