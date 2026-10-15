@@ -605,3 +605,4 @@
 - 2026-10-15 · Notaría › Deuda: sin línea de déficit (solo Saldo y, si alcanza, Queda).
 - 2026-10-15 · Notaría › Deuda escritorio: filas en dos líneas (nombre · OT / saldo) con monto y estado en columna fija al borde derecho, alineada con las OT; nombre ya no se corta.
 - 2026-10-15 · Notaría › Deuda: el nombre del cliente se muestra completo (baja de línea en vez de cortarse).
+- 2026-10-15 · Notaría › Deuda: la página usa más ancho y el panel Pendiente es más compacto (290 px).
