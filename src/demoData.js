@@ -183,6 +183,11 @@ export const demoData = {
     { id:'xv2', client_id:'c2', type:'gasto', amount:45000,  concept:'Copias de escrituras para due diligence', category:'Notaria', ot_number:'48402', date:'2026-08-26', created_by:'Martina' },
     { id:'ofr1', client_id:'c0', type:'gasto', amount:18500, concept:'Insumos de oficina', category:'Oficina', date:'2026-10-03', created_by:'Martina' },
     { id:'ofr2', client_id:'c0', type:'gasto', amount:42000, concept:'Courier documentos', category:'Oficina', date:'2026-10-08', created_by:'Martina' },
+    { id:'pf0', client_id:null, personal_de:'Cristóbal', type:'fondo', amount:10000, concept:'Aporte de Cristóbal a la cuenta de gastos', category:'Fondo', date:'2026-02-09' },
+    { id:'pf1', client_id:null, personal_de:'Cristóbal', type:'fondo', amount:105000, concept:'Fondo por rendir · de Juan Pérez Soto · para Cristóbal', category:'Fondo', date:'2026-09-03' },
+    { id:'pg1', client_id:null, personal_de:'Cristóbal', reembolso_fondo_id:'pf1', type:'gasto', amount:49100, concept:'Copia escritura pública', category:'Archivo Judicial', date:'2026-10-02', created_by:'Cristóbal', paid_by_client:false },
+    { id:'pg2', client_id:null, personal_de:'Cristóbal', type:'gasto', amount:14390, concept:'Uber Ministerio de Hacienda a oficina', category:'Movilización', date:'2026-08-24', created_by:'Cristóbal', paid_by_client:false },
+    { id:'pg3', client_id:null, personal_de:'Cristóbal', type:'gasto', amount:10052, concept:'Visita terreno CBR San Bernardo', category:'CBR', date:'2026-09-25', created_by:'Cristóbal', paid_by_client:false },
     { id:'xv3', client_id:'c2', type:'fondo', amount:500000, concept:'Provisión de fondos (conciliación bancaria)', category:'Fondo', date:'2026-08-12', created_by:'Cristóbal' },
     // Notaría — carga masiva "bi1" (por pagar): alimenta Notaría (Deuda / Cobros / Carga masiva).
     { id:'n1',  bulk_import_id:'bi1', client_id:'c1', type:'gasto', amount:80000,  ot_number:'48301', concept:'Gastos notariales — Compraventa',            category:'Notaria', date:'2026-08-18', created_by:'Martina', paid_by_client:false },
@@ -195,7 +200,7 @@ export const demoData = {
     { id:'n8',  bulk_import_id:'bi1', client_id:'c6', type:'gasto', amount:110000, ot_number:'48330', concept:'Gastos notariales — Compraventa',            category:'Notaria', date:'2026-08-20', created_by:'Martina', paid_by_client:false },
     { id:'n9',  bulk_import_id:'bi1', client_id:'c2', type:'gasto', amount:25000,  ot_number:'48340', concept:'Gastos notariales — Reconocimiento de deuda', category:'Notaria', date:'2026-08-20', created_by:'Martina', paid_by_client:false },
     { id:'n10', bulk_import_id:'bi1', client_id:'c8', type:'gasto', amount:20000,  ot_number:'48345', incobrable_at:'2026-10-13T12:00:00', no_descuenta_saldo:true, concept:'Gastos notariales — Poder',                  category:'Notaria', date:'2026-08-21', created_by:'Martina', paid_by_client:false },
-    { id:'n11', bulk_import_id:'bi1', client_id:null, personal_de:'Cristóbal', type:'gasto', amount:35000, ot_number:'48333', concept:'Gastos notariales — Mandato especial', category:'Notaria', date:'2026-08-21', created_by:'Martina', paid_by_client:false },
+    { id:'n11', bulk_import_id:'bi1', client_id:null, personal_de:'Cristóbal', reembolso_fondo_id:'pf1', type:'gasto', amount:35000, ot_number:'48333', concept:'Gastos notariales — Mandato especial', category:'Notaria', date:'2026-08-21', created_by:'Martina', paid_by_client:false },
     { id:'n12', bulk_import_id:'bi1', client_id:null, personal_de:'Erasmo',    type:'gasto', amount:45000, ot_number:'48350', concept:'Gastos notariales — Autorización de domicilio', category:'Notaria', date:'2026-08-21', created_by:'Martina', paid_by_client:false },
     // Notaría — carga "bi2" YA liquidada (Pagos realizados / Cobros pagados): notaria_render_id → rn1.
     { id:'q1', bulk_import_id:'bi2', client_id:'c1', type:'gasto', amount:60000,  ot_number:'48210', concept:'Gastos notariales — Escritura',      category:'Notaria', date:'2026-07-14', created_by:'Martina', notaria_render_id:'rn1', notaria_liquidado_at:'2026-07-25', paid_by_client:false },
