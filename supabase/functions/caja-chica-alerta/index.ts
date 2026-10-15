@@ -25,6 +25,8 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const sb = createClient(SB_URL, SB_KEY);
+    // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
+    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const esCron = !!CRON_SECRET && body.secret === CRON_SECRET;
     let dry = !esCron || !!body.dryRun;
     if (!esCron) {
@@ -38,7 +40,7 @@ serve(async (req) => {
     const [{ data: estudio }, { data: petty }, { data: gastos }, { data: abiertas }, { data: admins }] = await Promise.all([
       sb.from("estudios").select("id,nombre,caja_chica_umbral,dominio").limit(1).maybeSingle(),
       sb.from("petty_cash").select("user_name,amount,delivered_at"),
-      sb.from("expenses").select("created_by,amount,type,paid_by_client").eq("type", "gasto").is("deleted_at", null),
+      pageAll(()=>sb.from("expenses").select("created_by,amount,type,paid_by_client").eq("type", "gasto").is("deleted_at", null).order("id")),
       sb.from("caja_chica_alertas").select("id,user_name,tipo,saldo").eq("estado", "abierta"),
       sb.from("miembros").select("email,rol,nombre").eq("rol", "admin"),
     ]);
