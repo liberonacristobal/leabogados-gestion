@@ -2524,14 +2524,14 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
           {pendientes.length===0&&<div style={{color:C.textSoft,textAlign:'center',padding:36,fontSize:13}}>{pettyQ?'Sin resultados para la búsqueda':'No tienes gastos pendientes de liquidar'}</div>}
           {isDesktop && pendientes.length>0 ? (
             /* Escritorio: tabla (misma fuente `pendientes`, misma selección). Móvil: filas de abajo, intactas. */
-            <div style={{padding:'0 14px'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5}}>
-              <thead><tr>{['','Fecha','Concepto','Cliente','Categoría','Monto'].map((h,i)=><th key={i} style={{...TH_BAND,textAlign:i===5?'right':'left',padding:'6px 8px',borderBottom:`1px solid ${C.border}`}}>{h}</th>)}</tr></thead>
+            <div style={{padding:'0 14px'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5,tableLayout:'fixed'}}>
+              <colgroup><col style={{width:30}}/><col style={{width:88}}/><col/><col style={{width:66}}/><col style={{width:84}}/></colgroup>
+              <thead><tr>{['','Fecha','Concepto · cliente','Categoría','Monto'].map((h,i)=><th key={i} style={{...TH_BAND,textAlign:i===4?'right':'left',padding:'6px 8px',borderBottom:`1px solid ${C.border}`}}>{h}</th>)}</tr></thead>
               <tbody>{pendientes.map(e=>{ const client=clients.find(cl=>cl.id===e.client_id); const isSel=selected.has(e.id); const bdg=catBadge(e.category); return (
                 <tr key={e.id} onClick={()=>toggleSelect(e.id)} style={{cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,width:28}}><span style={{display:'inline-flex',width:17,height:17,borderRadius:6,alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>{isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,whiteSpace:'nowrap',color:C.muted}}>{fmtFechaDMY(e.date)}{(()=>{ const d=diasDe(e.date); return d!=null&&d>30?<div style={{fontSize:10,color:C.soonText,fontWeight:600}}>hace {d} días</div>:null })()}</td>
-                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,fontWeight:600,color:C.text}}>{e.concept||'—'}{onEditExpense&&<span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{marginLeft:8,fontSize:11,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>editar</span>}</td>
-                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?<span style={{color:C.textSoft}}>—</span>:<span onClick={onEditExpense?(ev=>{ev.stopPropagation();onEditExpense(e)}):undefined} style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'1px 6px',cursor:onEditExpense?'pointer':'default',whiteSpace:'nowrap'}}>falta cliente{onEditExpense?<>{" "}· completar{" "}<Gl n='chevron'/></>:''}</span>)}</td>
+                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={e.concept||''}>{e.concept||'—'}</div><div style={{fontSize:11.5,marginTop:1,display:'flex',alignItems:'baseline',gap:8,minWidth:0}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?<span style={{color:C.textSoft}}>—</span>:<span onClick={onEditExpense?(ev=>{ev.stopPropagation();onEditExpense(e)}):undefined} style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'1px 6px',cursor:onEditExpense?'pointer':'default',whiteSpace:'nowrap'}}>falta cliente{onEditExpense?<>{" "}· completar{" "}<Gl n='chevron'/></>:''}</span>)}</span>{onEditExpense&&<span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>editar</span>}</div></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}>{e.category?<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,fontWeight:700,background:bdg.bg,color:bdg.color,whiteSpace:'nowrap'}}>{catLabel(e.category)}</span>:<span style={{fontSize:10,color:C.soon,fontWeight:600}}>sin categoría</span>}</td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right',fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtCLP(e.amount)}</td>
                 </tr>) })}</tbody>
@@ -22222,16 +22222,16 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           : <button type='button' onClick={()=>setInternoOpen(true)} style={{marginBottom:8,fontSize:11,color:C.azulInfo,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>Gasto interno <Gl n='chevD'/></button>
       )}
       {/* Fila 1: Categoría · Monto · Fecha (categoría no aplica a fondos). Fecha = botón-calendario breve. */}
-      <div style={{display:'grid',gridTemplateColumns:isFondo?'1fr 1fr':'1.05fr 1fr 0.92fr',gap:7,marginBottom:8}}>
-        {!isFondo&&(
-          <FloatFld label='Categoría' mb={0}><select value={f.category} onChange={e=>up('category',e.target.value)} style={{...fInp,cursor:'pointer'}}>{CATS_GASTO.map(o=><option key={o} value={o}>{o}</option>)}</select></FloatFld>
+      <div style={{display:'grid',gridTemplateColumns:isFondo||!_Dmv?'minmax(0,1fr) minmax(0,1fr)':'1.05fr 1fr 0.92fr',gap:7,marginBottom:8}}>
+        {!isFondo&&(<div style={{gridColumn:_Dmv?'auto':'1 / -1',minWidth:0}}>
+          <FloatFld label='Categoría' mb={0}><select value={f.category} onChange={e=>up('category',e.target.value)} style={{...fInp,cursor:'pointer'}}>{CATS_GASTO.map(o=><option key={o} value={o}>{o}</option>)}</select></FloatFld></div>
         )}
         <FloatFld label='Monto' mb={0}><input type='number' value={f.amount} onChange={e=>up('amount',e.target.value)} placeholder='0' style={fInp}/></FloatFld>
         <FloatFld label='Fecha' mb={0}>
           <div style={{position:'relative'}}>
-            <div style={{...fInp,display:'flex',alignItems:'center',gap:4,color:f.date?C.text:C.muted}}>
-              <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='16' y1='2' x2='16' y2='6'/></svg>
-              {f.date?fechaConAnio(f.date):'Fecha'}
+            <div style={{...fInp,display:'flex',alignItems:'center',gap:4,color:f.date?C.text:C.muted,whiteSpace:'nowrap',overflow:'hidden'}}>
+              <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2' style={{flexShrink:0}}><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='16' y1='2' x2='16' y2='6'/></svg>
+              {f.date?fmtFechaDMY(f.date):'Fecha'}
             </div>
             <input type='date' value={f.date||''} onChange={e=>up('date',e.target.value)} onClick={e=>{try{e.currentTarget.showPicker&&e.currentTarget.showPicker()}catch{}}} style={{position:'absolute',inset:0,width:'100%',height:'100%',opacity:0,border:'none',margin:0,padding:0,cursor:'pointer'}}/>
           </div>
@@ -22290,12 +22290,6 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
         </div>
       )}
       {!isFondo&&!expense?.id&&<div style={{fontSize:10,color:C.muted,marginTop:6}}>Guarda el gasto para adjuntar comprobantes.</div>}
-      {!isFondo&&f.client_id&&!f.personal_de&&(
-        <div style={{display:'flex',alignItems:'center',gap:9,marginTop:10}}>
-          <Switch on={!!f.no_descuenta_saldo} onToggle={()=>up('no_descuenta_saldo',!f.no_descuenta_saldo)}/>
-          <span style={{fontSize:12,color:C.text}}>Gasto histórico</span>
-        </div>
-      )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
