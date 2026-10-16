@@ -169,33 +169,35 @@ serve(async (req) => {
 
     const out: unknown[] = [];
     const destinos = [...new Set(items.map((i) => i.dest))].filter((d) => !Array.isArray(body.solo) || body.solo.includes(d));
+    // Dos correos posibles por socio y día, nunca mezclados:
+    //   · carga       — solo los clientes a los que se les cargó gasto hoy (uno solo, o juntos si son varios).
+    //   · seguimiento — los que cumplen 15 días sin solicitud ni depósito, aunque hoy no se les haya cargado nada.
     for (const dest of destinos) {
-      const mios = items.filter((i) => i.dest === dest).sort((a, b) => b.deuda - a.deuda);
-      if (!mios.length) continue;
-      const cargas = mios.filter((i) => i.tipo === "carga"), segs = mios.filter((i) => i.tipo === "seguimiento");
-      const top = [...(cargas.length ? cargas : segs)].sort((a, b) => b.n - a.n)[0];
-      const conCC = mios.some((i) => i.n >= CC_DESDE);
-      const totalMios = mios.reduce((a, i) => a + i.deuda, 0);
-      const subject = mios.length === 1
-        ? `${top.tipo === "seguimiento" ? "Seguimiento - " : ""}Aviso ${top.n} - ${top.c.name}: ${fm(top.deuda)} sin fondos`
-        : `Aviso ${top.n} - ${mios.length} clientes sin fondos: ${fm(totalMios)}`;   // el asunto sale en ASCII (notify-task quita · y °)
-      // Seguimientos: una fila por cliente (el nombre abre la solicitud de fondos ya armada).
-      const segHtml = segs.length ? `<div style="font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:${NAVY};font-weight:700;margin:4px 0 6px;">Siguen sin fondos · seguimiento de 15 días</div>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">${segs.map((i) => `<tr><td style="padding:7px 0;border-top:1px solid ${LINE};"><a href="${APP}/?pedirfondos=${i.c.id}&monto=${Math.round(i.deuda)}" style="font-size:13.5px;font-weight:700;color:${NAVY};text-decoration:none;">${esc(i.c.name)}</a><div style="font-size:11.5px;white-space:nowrap;color:${i.n >= CC_DESDE ? RED : MUT};">Aviso N° ${i.n}${i.dias != null ? ` · ${i.dias} días` : ""}${i.otSin.length ? ` · ${i.otSin.length} OT` : ""}</div></td><td style="padding:7px 0 7px 10px;border-top:1px solid ${LINE};text-align:right;white-space:nowrap;vertical-align:top;font-size:14px;font-weight:800;color:${RED};">${fm(i.deuda)}</td></tr>`).join("")}</table>` : "";
+      const delSocio = items.filter((i) => i.dest === dest).sort((a, b) => b.deuda - a.deuda);
       const neg = negPorAbg[dest] || { n: 0, total: 0 };
-      // Saludo: qué pasó hoy (gastos nuevos) y qué sigue pendiente (seguimientos), en lenguaje simple.
-      const nG = cargas.reduce((a, i) => a + i.cargaHoy.length, 0);
-      const fraseCarga = cargas.length === 1
-        ? `Hoy se ${nG === 1 ? "cargó un gasto nuevo" : `cargaron ${nG} gastos nuevos`} a <b>${esc(cargas[0].c.name)}</b>, que no tiene fondos para cubrirlo${nG === 1 ? "" : "s"}.`
-        : `Hoy se cargaron gastos nuevos a <b>${cargas.length} clientes tuyos</b> que no tienen fondos para cubrirlos.`;
-      const fraseSeg = segs.length === 1
-        ? `<b>${esc(segs[0].c.name)}</b> lleva 15 días o más sin fondos y todavía no se le han pedido.`
-        : `<b>${segs.length} clientes</b> llevan 15 días o más sin fondos y todavía no se les han pedido.`;
-      const pedir = mios.length === 1 ? "Por favor, pídele fondos" : "Por favor, pídeles fondos";
-      const intro = cargas.length && segs.length ? `${fraseCarga} Además, ${fraseSeg} ${pedir} para que la oficina no siga adelantando plata.`
-        : cargas.length ? `${fraseCarga} ${pedir} antes de seguir adelantando plata de la oficina.`
-        : `${fraseSeg} ${pedir} hoy.`;
-      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+      for (const tipo of ["carga", "seguimiento"]) {
+        const lista = delSocio.filter((i) => i.tipo === tipo);
+        if (!lista.length) continue;
+        const esSeg = tipo === "seguimiento";
+        const top = [...lista].sort((a, b) => b.n - a.n)[0];
+        const conCC = lista.some((i) => i.n >= CC_DESDE);
+        const total = lista.reduce((a, i) => a + i.deuda, 0);
+        // el asunto sale en ASCII (notify-task quita · y °)
+        const subject = lista.length === 1
+          ? `${esSeg ? "Seguimiento - " : ""}Aviso ${top.n} - ${top.c.name}: ${fm(top.deuda)} sin fondos`
+          : `${esSeg ? "Seguimiento - " : ""}${lista.length} clientes sin fondos: ${fm(total)}`;
+        const nG = lista.reduce((a, i) => a + i.cargaHoy.length, 0);
+        const uno = lista.length === 1;
+        const intro = esSeg
+          ? (uno ? `<b>${esc(top.c.name)}</b> lleva 15 días o más sin fondos y todavía no se le han pedido. Por favor, pídele fondos hoy.`
+                 : `Estos <b>${lista.length} clientes</b> llevan 15 días o más sin fondos y todavía no se les han pedido. Por favor, pídeles fondos hoy.`)
+          : (uno ? `Hoy se ${nG === 1 ? "cargó un gasto nuevo" : `cargaron ${nG} gastos nuevos`} a <b>${esc(top.c.name)}</b>, que no tiene fondos para cubrirlo${nG === 1 ? "" : "s"}. Por favor, pídele fondos antes de seguir adelantando plata de la oficina.`
+                 : `Hoy se cargaron gastos nuevos a <b>${lista.length} clientes tuyos</b> que no tienen fondos para cubrirlos. Por favor, pídeles fondos antes de seguir adelantando plata de la oficina.`);
+        // Seguimientos: una fila por cliente (el nombre abre la solicitud de fondos ya armada).
+        const cuerpo = esSeg
+          ? `<table style="width:100%;border-collapse:collapse;margin-bottom:14px;">${lista.map((i) => `<tr><td style="padding:7px 0;border-top:1px solid ${LINE};"><a href="${APP}/?pedirfondos=${i.c.id}&monto=${Math.round(i.deuda)}" style="font-size:13.5px;font-weight:700;color:${NAVY};text-decoration:none;">${esc(i.c.name)}</a><div style="font-size:11.5px;white-space:nowrap;color:${i.n >= CC_DESDE ? RED : MUT};">Aviso N° ${i.n}${i.dias != null ? ` · ${i.dias} días` : ""}${i.otSin.length ? ` · ${i.otSin.length} OT` : ""}</div></td><td style="padding:7px 0 7px 10px;border-top:1px solid ${LINE};text-align:right;white-space:nowrap;vertical-align:top;font-size:14px;font-weight:800;color:${RED};">${fm(i.deuda)}</td></tr>`).join("")}</table>`
+          : lista.map(bloque).join("");
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;background:#EEF1F3;margin:0;padding:16px;">
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid ${LINE};">
   <div style="background:${NAVY};padding:16px 22px;"><img src="${APP}/le-logo-blanco.png" alt="Liberona Escala Abogados" height="24" style="height:24px;display:block;border:0;"/></div>
@@ -204,24 +206,24 @@ serve(async (req) => {
     <p style="margin:0 0 14px;">${intro}</p>
     <table style="width:100%;border-collapse:collapse;background:#FBEDEC;border-radius:10px;margin-bottom:16px;"><tr>
       <td style="padding:12px 0 12px 14px;width:1%;white-space:nowrap;font-size:30px;font-weight:800;color:${RED};line-height:1;">N° ${top.n}</td>
-      <td style="padding:12px 14px;font-size:13px;"><b style="color:${RED};">${top.tipo === "seguimiento" ? "Seguimiento de 15 días" : "Aviso sobre " + esc(top.c.name)}</b><br/><span style="font-size:11.5px;color:${MUT};">${top.tipo === "seguimiento" ? esc(top.c.name) + " · sin solicitud ni depósito" : top.fr ? "Solicitud sin depósito" : "Sin solicitud de fondos"}</span></td>
+      <td style="padding:12px 14px;font-size:13px;"><b style="color:${RED};">${esSeg ? "Seguimiento de 15 días" : "Aviso sobre " + esc(top.c.name)}</b><br/><span style="font-size:11.5px;color:${MUT};">${esSeg ? esc(top.c.name) + " · sin solicitud ni depósito" : top.fr ? "Solicitud sin depósito" : "Sin solicitud de fondos"}</span></td>
     </tr></table>
-    ${cargas.map(bloque).join("")}
-    ${segHtml}
+    ${cuerpo}
     <table style="width:100%;border-collapse:collapse;background:${SOFT};border-radius:10px;margin:4px 0 14px;"><tr><td style="padding:12px 14px;font-size:13px;">Tus clientes sin fondos</td><td style="padding:12px 14px;font-size:13px;font-weight:700;text-align:right;white-space:nowrap;">${neg.n} · ${fm(neg.total)}</td></tr></table>
   </div>
   <div style="border-top:1px solid ${LINE};padding:12px 22px 14px;font-size:11px;color:${MUT};">Liberona Escala Abogados</div>
 </div></body></html>`;
 
-      const to = testTo || SOCIOS[dest];
-      const cc = testTo ? undefined : (conCC ? SOCIOS[OTRO[dest]] : undefined);
-      const resumen = { dest, to, cc: conCC ? SOCIOS[OTRO[dest]] : null, subject, clientes: mios.map((i) => ({ cliente: i.c.name, tipo: i.tipo, n: i.n, deuda: Math.round(i.deuda), dias: i.dias, otSin: i.otSin.length })) };
-      if (dryRun) { out.push({ ...resumen, html }); continue; }
-      await enviar(to, cc, (testTo ? "[PRUEBA] " : "") + subject, html);
-      out.push(resumen);
-      if (!testTo) {
-        const rows = mios.map((i) => ({ client_id: i.c.id, fecha: hoy, tipo: i.tipo, n: i.n, deuda: Math.round(i.deuda), enviado_a: to, cc: cc || null }));
-        await sb.from("avisos_fondos").upsert(rows, { onConflict: "client_id,fecha" });
+        const to = testTo || SOCIOS[dest];
+        const cc = testTo ? undefined : (conCC ? SOCIOS[OTRO[dest]] : undefined);
+        const resumen = { dest, tipo, to, cc: conCC ? SOCIOS[OTRO[dest]] : null, subject, clientes: lista.map((i) => ({ cliente: i.c.name, n: i.n, deuda: Math.round(i.deuda), dias: i.dias, otSin: i.otSin.length })) };
+        if (dryRun) { out.push({ ...resumen, html }); continue; }
+        await enviar(to, cc, (testTo ? "[PRUEBA] " : "") + subject, html);
+        out.push(resumen);
+        if (!testTo) {
+          const rows = lista.map((i) => ({ client_id: i.c.id, fecha: hoy, tipo: i.tipo, n: i.n, deuda: Math.round(i.deuda), enviado_a: to, cc: cc || null }));
+          await sb.from("avisos_fondos").upsert(rows, { onConflict: "client_id,fecha" });
+        }
       }
     }
     return json({ ok: true, hoy, dryRun, testTo, enviados: out.length, out });
