@@ -38157,6 +38157,16 @@ export default function App() {
     try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
     handleOpenClientFicha(cli)
   }catch(_){} },[clients,handleOpenClientFicha])
+  // Deep-links del correo "Aviso de gastos sin fondos" (edge aviso-fondos):
+  //   ?pedirfondos=<id>&monto=<n> → abre la solicitud de fondos al cliente ya armada.
+  //   ?pausafondos=<id>           → "Ya lo hablé": pausa los avisos de ese cliente 15 días (learnings aviso_fondos_pausa).
+  useEffect(()=>{ try{ const qs=new URLSearchParams(window.location.search); const pid=qs.get('pedirfondos'), zid=qs.get('pausafondos'); if((!pid&&!zid)||!clients.length) return
+    try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
+    const c=clients.find(x=>String(x.id)===String(pid||zid)); if(!c) return
+    if(pid){ const m=Math.round(Number(qs.get('monto'))||0)||null; setModal({type:'solicitarFondos',data:{client:c,sale:null,monto:m,responsable:c.abogado_responsable||null}}); return }
+    const hasta=isoLocal(Date.now()+15*86400000)
+    setLearningKV('aviso_fondos_pausa',String(c.id),hasta).then(()=>{ logActividad('fondos.aviso_pausado',{tabla:'clients',id:c.id,detalle:{cliente:c.name,hasta}}); appAlert(`Listo: los avisos de fondos de ${c.name} quedan pausados hasta el ${fmtFechaDMY(hasta)}.`) })
+  }catch(_){} },[clients])
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
