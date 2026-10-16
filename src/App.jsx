@@ -82,6 +82,7 @@ const BRAND = {
   pago: {
     honorarios: { banco:'Banco BICE', cuenta:'1403834', email:'contacto@leabogados.cl' },
     gastos:     { banco:'Banco BICE', cuenta:'1383922', cuentaFmt:'138392-2', email:'administracion@leabogados.cl' },
+    dolares:    { banco:'Banco BICE', cuenta:'01301087698', moneda:'USD', email:'contacto@leabogados.cl' },
   },
 }
 BRAND.logoUrl = 'https://' + BRAND.dominio         // base ABSOLUTA para logos en correos (deriva del dominio, no se cablea)
