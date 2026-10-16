@@ -100,9 +100,9 @@ serve(async (req) => {
   try {
     const token = await getToken();
     const dryRun = !!body.dryRun;
-    // Buscar los últimos correos de la contadora con asunto VALORES (2 meses de ventana).
-    const q = encodeURIComponent(`from:${CONTADORA_FROM} subject:VALORES newer_than:2m`);
-    const rs = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=5`, { headers: { Authorization: "Bearer " + token } });
+    // Correos VALORES de la contadora de los últimos 13 meses: completa todo mes abierto de la planilla (los cerrados no se tocan).
+    const q = encodeURIComponent(`from:${CONTADORA_FROM} subject:VALORES newer_than:13m`);
+    const rs = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=15`, { headers: { Authorization: "Bearer " + token } });
     const ds = await rs.json();
     if (!rs.ok) throw new Error(ds?.error?.message || "Error al buscar en Gmail");
     const ids: string[] = (ds.messages || []).map((m: Record<string, string>) => m.id);
@@ -145,9 +145,17 @@ serve(async (req) => {
         if (contadora) patch.contadora = contadora;
         if (cotizaciones && ppm) patch.estimado = false;   // datos reales → deja de ser estimado
         if (Object.keys(patch).length > 1) {
-          const { data: ex } = await sb.from("oficina_costos_mensual").select("id").eq("estudio_id", "lea").eq("anio", yy).eq("mes", mm).limit(1);
-          if (ex && ex.length) await sb.from("oficina_costos_mensual").update(patch).eq("id", ex[0].id);
-          else await sb.from("oficina_costos_mensual").insert({ estudio_id: "lea", anio: yy, mes: mm, ...patch });
+          // La tabla no tiene columna id: la clave es (estudio_id, anio, mes). Antes se pedía "id" → error silencioso y la planilla nunca se actualizaba.
+          const { data: ex, error: exErr } = await sb.from("oficina_costos_mensual").select("anio,cerrado").eq("estudio_id", "lea").eq("anio", yy).eq("mes", mm).limit(1);
+          if (exErr) throw new Error("planilla: " + exErr.message);
+          // Un mes ya cerrado no se toca (sus cifras quedaron fijas al cerrar).
+          if (ex && ex.length && ex[0].cerrado) { guardados.push({ ...valor, planilla: "cerrado" }); continue; }
+          // Solo se crea fila para meses del año en curso: un mes antiguo sin planilla quedaría con costos parciales (sin sueldos ni arriendo).
+          if (!(ex && ex.length) && yy !== new Date().getFullYear()) { guardados.push({ ...valor, planilla: "sin planilla" }); continue; }
+          const r = (ex && ex.length)
+            ? await sb.from("oficina_costos_mensual").update(patch).eq("estudio_id", "lea").eq("anio", yy).eq("mes", mm)
+            : await sb.from("oficina_costos_mensual").insert({ estudio_id: "lea", anio: yy, mes: mm, ...patch });
+          if (r.error) throw new Error("planilla: " + r.error.message);
           planilla = true;
         }
       }
