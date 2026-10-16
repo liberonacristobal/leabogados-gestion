@@ -19499,7 +19499,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                   </div>
                   {/* Gastos sin cliente: primera fila, en tono de aviso y borde punteado (no es un cliente). No suma en los tiles; desaparece en cero. */}
                   {verEquipo&&miembros.map(rowMiembro)}
-                  {!verEquipo&&isAdmin&&!q2&&orphans.length>0&&(()=>{ const tot=orphans.reduce((a,e)=>a+(Number(e.amount)||0),0); const desde=orphans.map(e=>String(e.date||'').slice(0,10)).filter(Boolean).sort()[0]
+                  {!verEquipo&&!q2&&orphans.length>0&&(()=>{ const tot=orphans.reduce((a,e)=>a+(Number(e.amount)||0),0); const desde=orphans.map(e=>String(e.date||'').slice(0,10)).filter(Boolean).sort()[0]
                     return (
                     <div onClick={()=>setShowOrphans(true)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer',background:C.avisoBg}}>
                       <span style={{width:30,height:30,borderRadius:9,background:C.avisoMid,border:`1px dashed ${C.avisoLine}`,boxSizing:'border-box',color:C.avisoText,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>?</span>
@@ -19555,7 +19555,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 if(showNotaria){ if(notaTab==='enviar'){ setNotaSend(null); if(notaOrigen==='historial'){ setNotaOrigen(null); setShowNotaria(false); setNotaTab('hub'); setShowHistorial(true); return } setNotaTab('pagados');return} if(notaTab!=='hub'){setNotaTab('hub');return} setShowNotaria(false);setHubOpen(true);return }   // enviar → Pagos ; sub → Notaría ; Notaría → hub
                 setHubOpen(true)                                                                              // Clientes (default) → hub
               }} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'inline-flex',alignItems:'center',gap:8}}><BackBtn origen={
-                selectedClient?'Gastos':showOrphans?'Revisión':showRevision?(revSub?'Revisión':'Clientes'):(showReasignar||showBuscarClientes)?'Clientes':showRendiciones?(rendSub?'Rendiciones':'Gastos'):showHistorial?'Rendiciones':showNotaria?(notaTab==='enviar'?'Historial':notaTab!=='hub'?'Notaría':'Gastos'):'Gastos'}/><span style={{color:C.textSoft,fontWeight:400}}>|</span></button>
+                selectedClient?'Gastos':showOrphans?(showRevision?'Revisión':'Gastos'):showRevision?(revSub?'Revisión':'Clientes'):(showReasignar||showBuscarClientes)?'Clientes':showRendiciones?(rendSub?'Rendiciones':'Gastos'):showHistorial?'Rendiciones':showNotaria?(notaTab==='enviar'?'Historial':notaTab!=='hub'?'Notaría':'Gastos'):'Gastos'}/><span style={{color:C.textSoft,fontWeight:400}}>|</span></button>
             )}
             <div style={{minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
@@ -38959,6 +38959,9 @@ export default function App() {
       // Aprende para futuras cargas: el nombre crudo (src_name) de cada gasto asignado → este cliente, igual que el modal de carga.
       try{ const nombres=[...new Set(ids.map(id=>(expenses||[]).find(x=>x.id===id)?.src_name).filter(Boolean).map(n=>String(n).toLowerCase().trim()).filter(n=>n.length>1))]; nombres.forEach(n=>handleLearnAlias(n,clientId)) }catch(_){}
       // Trazabilidad: registra cada reasignación (from→to). No rompe si la tabla expense_audit no existe aún.
+      // Bitácora: cada asignación (también la de los limited desde «Gastos sin cliente») queda con quién la hizo y desde dónde venía.
+      try{ const cn=clientId?(clients||[]).find(c=>String(c.id)===String(clientId))?.name||null:null
+        previos.forEach(pv=>{ if(String(pv.client_id)!==String(clientId)) logActividad(clientId?'gastos.asignado':'gastos.desasignado',{tabla:'expenses',id:pv.id,detalle:{title:pv.concept,name:cn,monto:pv.amount,de:pv.client_id?(clients||[]).find(c=>String(c.id)===String(pv.client_id))?.name||null:'Sin cliente'}}) }) }catch(_){}
       try{
         const rows = ids.map(id=>{ const e=(expenses||[]).find(x=>x.id===id); return { expense_id:id, from_client_id:e?.client_id||null, to_client_id:clientId, concept:e?.concept||null, amount:e?.amount??null, moved_by:user?.name||null } }).filter(r=>String(r.from_client_id)!==String(r.to_client_id))
         if(rows.length){ const {data}=await supabase.from('expense_audit').insert(rows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) }
@@ -38971,7 +38974,7 @@ export default function App() {
         try{ const rows=previos.filter(pv=>String(pv.client_id)!==String(clientId)).map(pv=>({expense_id:pv.id,from_client_id:clientId,to_client_id:pv.client_id,concept:pv.concept,amount:pv.amount,moved_by:user?.name||null})); if(rows.length){ const {data}=await supabase.from('expense_audit').insert(rows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) } }catch(_){}
       }})
     }catch(e){ appAlert('Error: '+e.message) }
-  },[expenses,handleLearnAlias])
+  },[expenses,clients,handleLearnAlias])
   // Depurar Costos de Oficina: mueve al cliente interno los gastos con categoría de oficina (Arriendo/Sueldos/…) que quedaron en otro cliente. Reversible.
   const handleMoverAOficina=useCallback(async(rows)=>{
     const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
