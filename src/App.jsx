@@ -18434,6 +18434,14 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const rs=BRAND.nombreLegal, rut=BRAND.rut
     setNotaBolRS(rs); setNotaBolRUT(rut)
     setNotaMsg(notaDefaultMsg(periodo, rs, rut))
+    // OT que marcamos como "no nuestras" y siguen sin resolver: el correo de pago lo dice (por eso no se incluyen en la transferencia).
+    if(!DEMO) supabase.from('notaria_no_nuestras').select('ot,monto,materia,estado,resolucion').then(({data})=>{
+      const pend=(data||[]).filter(x=>x.estado!=='resuelta'&&x.resolucion!=='era_nuestra'); if(!pend.length) return
+      const pl=pend.length>1
+      const lista=pend.map(x=>`• OT ${String(x.ot).replace(/^OT-?/i,'')}${x.materia?` · ${x.materia}`:''}${Number(x.monto)?` · $${Number(x.monto).toLocaleString('es-CL')}`:''}`).join('\n')
+      const p=`\n\nAdemás, en su estado de cuenta aparece${pl?'n las siguientes OT, que no corresponden':' la siguiente OT, que no corresponde'} a trabajos de nuestra oficina, por lo que no ${pl?'las':'la'} incluimos en este pago. Les agradeceremos revisar${pl?'las':'la'}:\n${lista}`
+      setNotaMsg(m=>{ if(String(m||'').includes('no corresponde')) return m; const i=String(m||'').indexOf('\n\nQuedamos atentos'); return i>=0?m.slice(0,i)+p+m.slice(i):String(m||'')+p })
+    }).catch(()=>{})
     setNotaSubject(`Liquidación de gastos y comprobante de transferencia — ${BRAND.nombre} — ${periodo}`)
     setNotaOrigen(showHistorial?'historial':null); setShowHistorial(false)   // si venía de Historial, el título y el 'volver' lo saben
     setNotaSend(r); setShowNotaria(true); setNotaTab('enviar')
