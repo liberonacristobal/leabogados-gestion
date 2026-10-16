@@ -1933,6 +1933,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
   expenses = (expenses||[]).filter(Boolean)   // blindaje: una fila vacía no debe tumbar la vista
   const me = currentUserName || ''
   const isDesktop = useIsDesktop()   // escritorio: PENDIENTES y CAJA lado a lado; móvil: pestañas (idéntico a antes)
+  const [movOpen,setMovOpen] = useState(false)   // mi movilización (control de Uber), visible al liquidar
   const [tab,setTab] = useState(()=>{ try{ const v=sessionStorage.getItem('cc_tab'); if(v){ sessionStorage.removeItem('cc_tab'); return v } }catch(_){} return 'liquidar' }) // liquidar | caja (desde el resumen de Tareas puede llegar 'caja')
   const [selected,setSelected] = useState(new Set())
   const [saving,setSaving] = useState(false)
@@ -2380,6 +2381,8 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
         : <div style={{display:'flex',flexDirection:'column',gap:12}}>{panel.props.children[0]}{lista}{panel.props.children.slice(1)}</div>}
     </FlujoPagina>
   }
+  if(movOpen) return <MovilizacionView expenses={expenses} clients={clients} persona={me} origen='Caja chica' onBack={()=>setMovOpen(false)} onEdit={onEditExpense}/>
+  const _mv = movilizacionDatos(expenses, clients, {persona:me, anio:String(new Date().getFullYear())}), _mvMes=_mv.meses[0]
   return (
     <div style={{maxWidth:isDesktop?1120:820,margin:'0 auto'}}>{/* escritorio: PENDIENTES y CAJA lado a lado (1120). Móvil: columna + pestañas, idéntico. */}
       {/* Confirmación post-liquidación (PASO 3) */}
@@ -2483,22 +2486,29 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
               </div>
               {sinLiquidar>0&&<span style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.soon,background:'#fff',border:'0.5px solid #F5E2CC',padding:'5px 11px',borderRadius:20,whiteSpace:'nowrap'}}>{misPendientes.length} por liquidar · {fmtCLP(sinLiquidar)}</span>}
             </div>) })()}
+            {_mv.tot.n>0&&<div onClick={()=>setMovOpen(true)} style={{marginTop:8,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+              <span style={{width:30,height:30,borderRadius:9,background:C.tealBg||C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><MovIcon s={15} c={C.tealText||C.accent}/></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Mi movilización{_mvMes&&_mvMes.k!=='sin fecha'?` · ${MES_L[+_mvMes.k.slice(5,7)-1]||''}`:''}</div>
+                <div style={{fontSize:11.5,color:_mv.sinMotivo.length?C.soonText:C.muted,fontWeight:_mv.sinMotivo.length?600:400,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{_mv.sinMotivo.length?`${_mv.sinMotivo.length} viaje${_mv.sinMotivo.length!==1?'s':''} sin motivo · complétalos`:`${_mvMes?_mvMes.n:0} viaje${_mvMes&&_mvMes.n===1?'':'s'} este mes · ${_mv.tot.n} en el año`}</div></div>
+              {_mvMes&&<span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(_mvMes.tot)}</span>}
+              <span style={{color:C.textSoft}}><Gl n='chevron'/></span>
+            </div>}
             {saldoCaja>=0&&saldoCaja<=(BRAND.cajaChicaUmbral||0)&&<div style={{marginTop:8,background:C.soonBg,borderRadius:10,padding:'9px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}><span style={{fontSize:13,fontWeight:700,color:C.soonText}}>Caja chica baja</span><span style={{fontSize:11.5,color:C.soonText}}>Quedan {fmtCLP(saldoCaja)} · aviso a la oficina</span></div>}
           </div>
           {/* MIS GASTOS + asistente IA + conteo */}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'2px 14px 8px'}}>
-            <span style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:10,fontWeight:600,color:C.textSoft,letterSpacing:'.05em',textTransform:'uppercase'}}>Por liquidar · {misPendientes.length}</span>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'2px 14px 8px'}}>
+            <span style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}><span style={{fontSize:10,fontWeight:600,color:C.textSoft,letterSpacing:'.05em',textTransform:'uppercase',whiteSpace:'nowrap'}}>Por liquidar · {misPendientes.length}</span>
               {misPendientes.length>1&&<button onClick={()=>setSelected(prev=>prev.size===misPendientes.length?new Set():new Set(misPendientes.map(e=>e.id)))} style={{height:26,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{selected.size===misPendientes.length?'Quitar selección':'Seleccionar todos'}</button>}</span>
-            <div style={{display:'flex',alignItems:'center',gap:10}}>
-              {misPendientes.length>0&&<button onClick={runAsistente} style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+              {misPendientes.length>0&&<button onClick={runAsistente} style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
                 <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.6 4.6L18 9.2l-4.4 1.6L12 15l-1.6-4.2L6 9.2l4.4-1.6z'/><path d='M19 14l.7 2 2 .7-2 .7L19 19.4 18.3 17.4l-2-.7 2-.7z'/></svg>
                 Asistente IA
               </button>}
-              <span style={{fontSize:11,color:C.muted}}>{pendientes.length} gasto{pendientes.length!==1?'s':''}</span>
+              {isDesktop&&<span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{pendientes.length} gasto{pendientes.length!==1?'s':''}</span>}
             </div>
           </div>
           {/* Pills de categoría */}
-          <div style={{display:'flex',gap:6,overflowX:'auto',padding:'0 14px 10px'}}>
+          <div style={{display:'flex',gap:6,flexWrap:isDesktop?'nowrap':'wrap',overflowX:isDesktop?'auto':'visible',padding:'0 14px 10px'}}>
             {CAT_PILLS.map(([val,lbl])=>{ const on=fCat===val; return (
               <button key={val||'todos'} onClick={()=>setFCat(val)} style={{height:24,display:'inline-flex',alignItems:'center',padding:'0 11px',borderRadius:20,fontSize:11,whiteSpace:'nowrap',cursor:'pointer',flexShrink:0,
                 border:on?'0.5px solid #003C50':'0.5px solid #E4E8EB',background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{lbl}</button>
@@ -19344,6 +19354,7 @@ const ESTADOS_G=[['vigentes','Vigentes'],['inactivos','Inactivos'],['incobrables
 function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMovBanco,expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,onMoverAOficina,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened,openGastosOfi,onGastosOfiOpened,costosOfiMes=0,onOpenCostosOfi,onIrConciliacion,bulkImports=[],onUndoImport,navTo,onNavDone,onSolicitarFondos}) {
   const { marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
   const [orfPersona,setOrfPersona] = useState(null)   // gasto sin cliente → selector "Personal de" abierto (id)
+  const [showMov,setShowMov] = useState(false)   // Revisar › Movilización
   // Hub de Gastos: cara de entrada (hero Por cobrar/A favor + 6 tarjetas). Al tocar una tarjeta se navega a la vista existente. Presentación pura — no toca cifras.
   const [hubOpen,setHubOpen] = useState(()=>{ const vm=viewMemLeer('gastos'); return vm ? vm.hubOpen : !gastosVolverLeer() })
   // Revisión de gastos cargados a la oficina por el equipo: quién revisa sale de miembros.revisa_gastos (configurable por estudio).
@@ -21272,12 +21283,15 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       </div>}
     </FlujoPagina>)
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
-  if(showRevisar&&revisarRes&&!showOrphans){ const r=revisarRes; const nT=3; const pg=(
-    <FlujoPagina origen='Gastos' titulo='Revisar' onBack={()=>setShowRevisar(false)} maxW={isDesktop&&nT===3?1000:760}>
-      <div style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${Math.max(nT,2)},minmax(0,1fr))`:(nT===2?'1fr 1fr':'1fr'),gap:isDesktop?12:8}}>
+  if(showRevisar&&showMov){ const pg=<MovilizacionView expenses={expenses} clients={clients} persona={isAdmin?null:currentUserName} isAdmin={isAdmin} origen='Revisar' onBack={()=>setShowMov(false)} onEdit={onEdit}/>
+    return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
+  if(showRevisar&&revisarRes&&!showOrphans){ const r=revisarRes; const nT=4; const _mv=movilizacionDatos(expenses,clients,{persona:isAdmin?null:currentUserName, anio:String(new Date().getFullYear())}); const _mvMes=_mv.meses[0]; const pg=(
+    <FlujoPagina origen='Gastos' titulo='Revisar' onBack={()=>setShowRevisar(false)} maxW={isDesktop&&nT>=3?1000:760}>
+      <div style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${Math.max(nT,2)},minmax(0,1fr))`:(nT===2||nT===4?'1fr 1fr':'1fr'),gap:isDesktop?12:8}}>
         <HubTile ic='wallet' bg={C.greenBg} col={C.greenText} t='Caja chica' s={r.caja.s} sM={r.caja.sM} sCol={r.caja.col} onClick={()=>isAdmin?setRevCaja(true):(onIrCajaChica&&onIrCajaChica())}/>
         {r.verGas&&<HubTile ic='check' bg={C.soonBg} col={C.soonText} t='Gastos' s={r.gas.s} sCol={r.gas.col} onClick={()=>setShowRevOfi(true)}/>}
         <HubTile ic='alert' bg={C.overdueBg} col={C.overdueText} t='Sin cliente' s={r.sinCli.s} sCol={r.sinCli.col} onClick={()=>setShowOrphans(true)}/>
+        <HubTile icNode={<MovIcon s={isDesktop?17:15} c={C.tealText||C.accent}/>} bg={C.tealBg||C.azulBg} t='Movilización' s={_mv.sinMotivo.length?`${_mv.sinMotivo.length} sin motivo`:_mvMes?`${fmt(_mvMes.tot)} en ${MES_C[+_mvMes.k.slice(5,7)-1]||''}`:'sin viajes'} sCol={_mv.sinMotivo.length?C.soonText:undefined} onClick={()=>setShowMov(true)}/>
       </div>
       {r.consultas.length>0&&<div style={{marginTop:16}}>
         <div style={{...SEC_LBL,margin:'0 2px 6px'}}>Por consultar · {r.consultas.length}</div>
@@ -22134,6 +22148,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const _hoyISO = (()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro',date:expense.date||_hoyISO})
   // Movilización: medio + desde + hasta + motivo (mismo criterio que al registrar). Si la glosa ya viene armada, se precarga.
+  const _Dmv = useIsDesktop()
   const [mv,setMv] = useState(()=>{ const m=String(expense.concept||'').match(/^Movilización (.+?)–(.+?)(?: para (.+))?$/); return {medio:expense.subcategory||medioMovDe(expense.concept), desde:m?m[1]:'', hasta:m?m[2]:'', motivo:m&&m[3]?m[3]:''} })
   const movDet = MEDIO_CON_DETALLE.has(mv.medio)
   const movFalta = f.type!=='fondo' && f.category==='Movilización' && (!mv.medio || (movDet && (!mv.desde.trim()||!mv.hasta.trim()||mv.motivo.trim().length<4)))
@@ -22236,10 +22251,11 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       <FloatFld label='Descripción'><textarea value={f.concept} onChange={e=>up('concept',e.target.value)} rows={2} placeholder='Descripción...' style={{...fInp,height:'auto',resize:'none',fontFamily:'inherit',paddingTop:2}}/></FloatFld>
       {!isFondo&&f.category==='Movilización'&&(()=>{ const fi=(k,label)=>{ const v=mv[k]||'', bad=!v.trim()||(k==='motivo'&&v.trim().length<4)
           return <FloatFld label={label} mb={0}><input value={v} onChange={e=>setMv(p=>({...p,[k]:e.target.value}))} style={{...fInp,borderColor:bad?C.overdueText:undefined}}/></FloatFld> }
-        return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8,marginBottom:8}}>
-          <FloatFld label='Medio' mb={0}><select value={mv.medio} onChange={e=>setMv(p=>({...p,medio:e.target.value}))} style={{...fInp,cursor:'pointer',borderColor:mv.medio?undefined:C.overdueText}}><option value=''>Elegir medio</option>{MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)}</select></FloatFld>
+        return (<div style={{display:'grid',gridTemplateColumns:_Dmv?'150px minmax(0,1fr) minmax(0,1fr)':'minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:8}}>
+          <div style={{gridColumn:_Dmv?'auto':'1 / -1',minWidth:0}}><FloatFld label='Medio' mb={0}><select value={mv.medio} onChange={e=>setMv(p=>({...p,medio:e.target.value}))} style={{...fInp,cursor:'pointer',borderColor:mv.medio?undefined:C.overdueText}}><option value=''>Elegir medio</option>{MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)}</select></FloatFld></div>
           {movDet&&<>{fi('desde','Desde')}{fi('hasta','Hasta')}
           <div style={{gridColumn:'1 / -1'}}>{fi('motivo','Motivo (para qué fue)')}</div></>}
+          {movFalta&&<div style={{gridColumn:'1 / -1',fontSize:11.5,color:C.overdueText,fontWeight:600}}>{mv.medio?'Completa desde, hasta y motivo para guardar':'Elige el medio para guardar'}</div>}
         </div>) })()}
       {/* Proyecto + adjuntar en la misma línea */}
       {!isFondo&&(
@@ -24919,7 +24935,10 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const _grp = rendGruposProyecto({expenses, clientId:r.client_id, scopeEntId:entId, gastos:det, excludeRenderId:r.id, clientEntities})
   const _persona = esPersona(client?.name)
   // Fondos adicionales en el mismo correo (ej. falta plata para lo que viene): suma al saldo a cargo o se descuenta del saldo a favor.
-  const [adic,setAdic] = useState({on:false,monto:'',motivo:''})
+  const [adicRaw,setAdic] = useState({monto:'',motivo:''})
+  const adic = {...adicRaw, on:(parseInt(adicRaw.monto)||0)>0}   // sin interruptor: si hay monto, se pide
+  // Sugerencia con datos reales (no inventada): el último fondo que mandó este cliente.
+  const ultFondo = (expenses||[]).filter(e=>e.type==='fondo'&&e.client_id===r.client_id&&!e.deleted_at&&(e.amount||0)>0).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))[0]||null
   const [para,setPara] = useState(r?.dirigido_email || client?.email || '')
   // Cc: gente del cliente (con chips, aprendida y editable) + copia al estudio (responsable + quienes cargaron los gastos).
   const EMAIL_BY_NAME = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
@@ -24991,13 +25010,13 @@ Kind regards,`
     const Y = adic.on ? Math.max(0, parseInt(adic.monto)||0) : 0, sal = Math.abs(saldoCliente), mot = adic.motivo.trim() ? ` (${adic.motivo.trim()})` : ''
     let cierre = ''
     if(saldoCliente < 0){
-      cierre = Y ? `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}. Además, para los próximos trámites${mot} solicitamos una provisión de fondos de ${fmtN(Y)}, por lo que le agradeceremos transferir un total de ${fmtN(sal+Y)} a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
+      cierre = Y ? `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}. Además, para los próximos trámites${mot} solicitamos fondos adicionales por ${fmtN(Y)}, por lo que le agradeceremos transferir un total de ${fmtN(sal+Y)} a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
         : `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}, que le agradeceremos transferir a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
     } else if(saldoCliente > 0){
-      cierre = Y ? `\n\nEl fondo recibido fue de ${fmtN(totFondosCli)} y los gastos rendidos suman ${fmtN(_rs.rendido)}, resultando un saldo a su favor de ${abs}. Para los próximos trámites${mot} solicitamos una provisión de fondos de ${fmtN(Y)}; ${Y>sal?`descontado su saldo a favor, le agradeceremos transferir ${fmtN(Y-sal)} a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`:'su saldo a favor la cubre, por lo que lo mantendremos como fondo para esos trámites.'}`
+      cierre = Y ? `\n\nEl fondo recibido fue de ${fmtN(totFondosCli)} y los gastos rendidos suman ${fmtN(_rs.rendido)}, resultando un saldo a su favor de ${abs}. Para los próximos trámites${mot} solicitamos fondos adicionales por ${fmtN(Y)}; ${Y>sal?`descontado su saldo a favor, le agradeceremos transferir ${fmtN(Y-sal)} a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`:'su saldo a favor los cubre, por lo que lo mantendremos como fondo para esos trámites.'}`
         : `\n\nEl fondo recibido fue de ${fmtN(totFondosCli)} y los gastos rendidos suman ${fmtN(_rs.rendido)}, resultando un saldo a su favor de ${abs}. Le agradeceremos indicarnos la cuenta corriente a la que prefiere que le devolvamos el excedente, escribiéndonos a ${BRAND.pago.honorarios.email}.`
     } else if(Y){
-      cierre = `\n\nPara los próximos trámites${mot} solicitamos una provisión de fondos de ${fmtN(Y)}, que le agradeceremos transferir a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
+      cierre = `\n\nPara los próximos trámites${mot} solicitamos fondos adicionales por ${fmtN(Y)}, que le agradeceremos transferir a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
     }
     const listaY = a => a.length<2 ? (a[0]||'') : `${a.slice(0,-1).join(', ')} y ${a[a.length-1]}`
     const proyTxt = _grp ? `, separada por proyecto: ${listaY(_grp.grupos.map(x=>x.proyecto||'sin proyecto'))}` : (r.project?` del proyecto ${r.project}${r.subproject?` (${r.subproject})`:''}`:'')
@@ -25151,8 +25170,11 @@ Saludos cordiales,`
         <input value={asunto} onChange={e=>setAsunto(e.target.value)} style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
       </div>
       <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:12}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}><Switch on={adic.on} onToggle={()=>setAdic(p=>({...p,on:!p.on}))}/><span style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Pedir fondos adicionales</span></div>
-        {adic.on&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Fondos adicionales</span>
+          {ultFondo&&!adic.on&&<button type='button' onClick={()=>setAdic(p=>({...p,monto:String(Math.round(ultFondo.amount))}))} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>Último fondo {fmt(ultFondo.amount)}</button>}
+          {adic.on&&<span style={{marginLeft:'auto',fontSize:11.5,color:C.muted,whiteSpace:'nowrap'}}>{saldoCliente<0?`total a transferir ${fmt(Math.abs(saldoCliente)+(parseInt(adic.monto)||0))}`:saldoCliente>0?`a transferir ${fmt(Math.max(0,(parseInt(adic.monto)||0)-saldoCliente))}`:''}</span>}
+        </div>
+        {<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
           <span style={{display:'flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,background:'#fff',width:150}}><span style={{fontSize:13,color:C.muted,padding:'0 2px 0 10px'}}>$</span><input value={adic.monto?Number(adic.monto).toLocaleString('es-CL'):''} onChange={e=>setAdic(p=>({...p,monto:e.target.value.replace(/\D/g,'')}))} inputMode='numeric' placeholder='Monto' style={{border:'none',outline:'none',fontSize:13,padding:'8px 8px 8px 2px',width:'100%',background:'none'}}/></span>
           <input value={adic.motivo} onChange={e=>setAdic(p=>({...p,motivo:e.target.value}))} placeholder='Para qué (opcional)' style={{flex:'1 1 180px',minWidth:0,border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'8px 10px',outline:'none'}}/>
         </div>}
@@ -26044,6 +26066,86 @@ function PaginaSobre({origen,titulo,ctx,onBack,maxW=640,children}){
 }
 // Tarjeta de acceso de los hubs (Gastos, Notaría, Rendiciones, Revisar): una sola forma en toda la app — ícono a la izquierda, texto a la derecha.
 // sM = subtítulo corto para el celular (todo en 1 línea, sin «…»).
+// ── MOVILIZACIÓN (control de Uber y traslados) ─────────────────────────────────────────────
+// Fuente única: gastos categoría Movilización. persona=null → todo el equipo (admin, desde Revisar); persona='Martina' → solo lo
+// suyo (Caja chica de cada uno). Cargo: oficina (cliente interno) · cliente · personal. «Sin motivo» = consulta pendiente.
+const _NOM_MAIL = {cl:'Cristóbal',ee:'Erasmo',mc:'Martín',mp:'Martina',rd:'Rodrigo'}
+const nombreCargador = s => { const v=String(s||'').trim(); if(!v) return 'Sin registro'; if(v.includes('@')) return _NOM_MAIL[v.split('@')[0]]||v; return v }
+const MovIcon = ({s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M5 17h14l-1.5-6h-11z'/><circle cx='8' cy='18' r='1.6'/><circle cx='16' cy='18' r='1.6'/><path d='M7 11l1.5-4h7l1.5 4'/></svg>
+function movilizacionDatos(expenses, clients, {persona=null, anio=null}={}){
+  const ofi=new Set((clients||[]).filter(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')).map(c=>String(c.id)))
+  const movs=(expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&e.category==='Movilización'&&(!anio||String(e.date||'').slice(0,4)===String(anio))&&(!persona||nombreCargador(e.created_by)===persona))
+    .map(e=>({...e, _p:nombreCargador(e.created_by), _cargo:e.personal_de?'per':(e.client_id&&ofi.has(String(e.client_id))?'ofi':(e.client_id?'cli':'ofi')), _sin:e.revision_estado==='consultar'}))
+    .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
+  const dup=new Set(); movs.forEach((a,i)=>movs.slice(i+1).forEach(b=>{ if(a._p===b._p&&a.date&&a.date===b.date&&Math.abs((a.amount||0)-(b.amount||0))<=200&&String(a.client_id)===String(b.client_id)){ dup.add(a.id); dup.add(b.id) } }))
+  const sum=l=>l.reduce((t,e)=>t+(e.amount||0),0)
+  const agr=l=>({n:l.length, tot:sum(l), ofi:sum(l.filter(e=>e._cargo==='ofi')), cli:sum(l.filter(e=>e._cargo==='cli')), per:sum(l.filter(e=>e._cargo==='per')), sin:l.filter(e=>e._sin).length})
+  const porMes={}; movs.forEach(e=>{ const k=String(e.date||'').slice(0,7)||'sin fecha'; (porMes[k]=porMes[k]||[]).push(e) })
+  const porPersona={}; movs.forEach(e=>{ (porPersona[e._p]=porPersona[e._p]||[]).push(e) })
+  return {movs, tot:agr(movs), sinMotivo:movs.filter(e=>e._sin), duplicados:movs.filter(e=>dup.has(e.id)), meses:Object.keys(porMes).sort().reverse().map(k=>({k, movs:porMes[k], ...agr(porMes[k])})), personas:Object.keys(porPersona).map(k=>({k, movs:porPersona[k], ...agr(porPersona[k])})).sort((a,b)=>b.tot-a.tot)}
+}
+function MovilizacionView({expenses, clients, persona=null, isAdmin=false, onBack, origen='Volver', onEdit}){
+  const isDesktop=useIsDesktop()
+  const anios=[...new Set((expenses||[]).filter(e=>e.category==='Movilización'&&e.date).map(e=>String(e.date).slice(0,4)))].sort().reverse()
+  const [anio,setAnio]=useState(anios[0]||String(new Date().getFullYear()))
+  const [per,setPer]=useState(persona)
+  const [abierto,setAbierto]=useState(null)   // mes desplegado | 'sin' | 'dup'
+  const d=movilizacionDatos(expenses, clients, {persona:per, anio})
+  const todos=isAdmin&&!persona ? movilizacionDatos(expenses, clients, {anio}).personas.map(x=>x.k) : []
+  const cliN=id=>(clients||[]).find(c=>String(c.id)===String(id))?.name
+  const card={background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
+  const num={fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}
+  const pill=(on)=>({fontSize:11.5,fontWeight:600,border:`1px solid ${on?C.azulTenueOn||C.border:C.border}`,borderRadius:20,padding:'3px 10px',background:on?C.azulBg:C.card,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'})
+  const exportar=async()=>{ try{ const XLSX=await loadXLSXStyle()
+    const CG={ofi:'Oficina',cli:'Cliente',per:'Personal'}
+    const rows=d.movs.map(e=>[e.date?fmtFechaDMY(e.date):'', e._p, e.subcategory||'', e.concept||'', e._cargo==='cli'?(cliN(e.client_id)||''):(e.personal_de?`Personal ${e.personal_de}`:'Oficina'), e.project||'', CG[e._cargo], e.amount||0, e._sin?'Falta el motivo':''])
+    const ws=XLSX.utils.aoa_to_sheet([[`Movilización ${anio}${per?` · ${per}`:''}`],[],['Fecha','Persona','Medio','Glosa','Cliente','Proyecto','Cargado a','Monto','Pendiente'],...rows,[],['Total','','','','','','',d.tot.tot]])
+    ws['!cols']=[{wch:11},{wch:12},{wch:13},{wch:60},{wch:26},{wch:28},{wch:11},{wch:11},{wch:16}]
+    Object.keys(ws).forEach(k=>{ if(/^H\d+$/.test(k)&&typeof ws[k].v==='number'){ ws[k].z='"$"#,##0' } })
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movilización'); XLSX.writeFile(wb,`Movilizacion ${anio}${per?` ${per}`:''}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+  const fila=e=>(<div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,cursor:onEdit?'pointer':'default'}}>
+    {diaGrande(e.date)}
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
+      <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[!per&&e._p, e.subcategory, e._cargo==='cli'?cliN(e.client_id):(e._cargo==='per'?'Personal':'Oficina')].filter(Boolean).join(' · ')}{e._sin&&<b style={{color:C.soonText}}> · falta el motivo</b>}</div></div>
+    <span style={{...num,fontSize:13.5,fontWeight:700,color:C.text}}>{fmt(e.amount)}</span></div>)
+  const desglose=x=>[`Oficina ${fmt(x.ofi)}`,`Clientes ${fmt(x.cli)}`,x.per?`Personal ${fmt(x.per)}`:null].filter(Boolean).join(' · ')
+  const prom=x=>x.n?fmt(Math.round(x.tot/x.n)):'—'
+  const alerta=(k,t,sub,lista)=>(<div style={{...card,minWidth:0,overflow:'hidden'}}><div onClick={()=>setAbierto(abierto===k?null:k)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',cursor:'pointer'}}>
+    <span style={{width:30,height:30,borderRadius:8,background:C.soonBg,display:'grid',placeItems:'center',color:C.soonText,fontWeight:700,flexShrink:0}}>!</span>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</div><div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
+    <span style={{color:C.textSoft}}><Gl n={abierto===k?'chevU':'chevD'}/></span></div>
+    {abierto===k&&lista.map(fila)}</div>)
+  return (<FlujoPagina origen={origen} titulo='Movilización' ctx={per||(isAdmin?'todo el equipo':null)} onBack={onBack} maxW={1100}>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:12}}>
+      <select value={anio} onChange={e=>{setAnio(e.target.value);setAbierto(null)}} style={{...pill(true),outline:'none'}}>{(anios.length?anios:[anio]).map(y=><option key={y} value={y}>{y}</option>)}</select>
+      {todos.length>1&&<>{[null,...todos].map(p=><span key={p||'todos'} onClick={()=>{setPer(p);setAbierto(null)}} style={pill(per===p)}>{p||'Todos'}</span>)}</>}
+      <span onClick={exportar} title='Descargar Excel' style={{marginLeft:'auto',...pill(false),display:'inline-flex',alignItems:'center',gap:5}}><SIcon n='download' s={13} c={C.accent}/>Excel</span>
+    </div>
+    <div style={{...card,padding:'14px 16px'}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Movilización {anio}</div>
+      <div style={{fontSize:isDesktop?30:26,fontWeight:700,color:C.accent,...num,letterSpacing:-.5}}>{fmt(d.tot.tot)}</div>
+      <div style={{fontSize:12.5,color:C.muted}}>{d.tot.n} viaje{d.tot.n!==1?'s':''} · promedio {prom(d.tot)} por viaje</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:1,background:C.border,borderRadius:8,overflow:'hidden',marginTop:10}}>
+        {[['A la oficina',d.tot.ofi],['A clientes',d.tot.cli],['Personales',d.tot.per]].map(([l,v])=><div key={l} style={{background:C.bgSoft,padding:'8px 11px',minWidth:0}}><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:isDesktop?15:13.5,fontWeight:700,color:C.text,...num}}>{fmt(v)}</div><div style={{fontSize:10.5,color:C.textSoft}}>{d.tot.tot?Math.round(v*100/d.tot.tot):0}%</div></div>)}
+      </div>
+    </div>
+    {(d.sinMotivo.length>0||d.duplicados.length>0)&&<div style={{display:'grid',gridTemplateColumns:isDesktop&&d.sinMotivo.length&&d.duplicados.length?'minmax(0,1fr) minmax(0,1fr)':'minmax(0,1fr)',gap:10,marginTop:10,alignItems:'start'}}>
+      {d.sinMotivo.length>0&&alerta('sin',`${d.sinMotivo.length} viaje${d.sinMotivo.length!==1?'s':''} sin motivo`,`${fmt(d.sinMotivo.reduce((t,e)=>t+(e.amount||0),0))} · completa desde, hasta y motivo`,d.sinMotivo)}
+      {d.duplicados.length>0&&alerta('dup',`${d.duplicados.length} posibles duplicados`,'mismo día, monto y cliente · revisa en Uber',d.duplicados)}
+    </div>}
+    <div style={{display:'grid',gridTemplateColumns:isDesktop&&!per?'minmax(0,1.3fr) minmax(0,1fr)':'minmax(0,1fr)',gap:14,marginTop:14,alignItems:'start'}}>
+      <div style={{minWidth:0}}><div style={{...SEC_LBL,margin:'0 2px 6px'}}>Por mes</div><div style={{...card,overflow:'hidden'}}>{d.meses.map((m,i)=>(<div key={m.k} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
+        <div onClick={()=>setAbierto(abierto===m.k?null:m.k)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{m.k==='sin fecha'?'Sin fecha':mesTitulo(m.k+'-15')}</div><div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.n} viaje{m.n!==1?'s':''} · prom. {prom(m)}{m.sin?<b style={{color:C.soonText}}> · {m.sin} sin motivo</b>:''}</div><div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{desglose(m)}</div></div>
+          <span style={{...num,fontSize:14,fontWeight:700,color:C.text}}>{fmt(m.tot)}</span><span style={{color:C.textSoft}}><Gl n={abierto===m.k?'chevU':'chevD'}/></span></div>
+        {abierto===m.k&&m.movs.map(fila)}</div>))}{!d.meses.length&&<div style={{padding:22,textAlign:'center',fontSize:13,color:C.muted}}>Sin movilización registrada en {anio}.</div>}</div></div>
+      {!per&&d.personas.length>0&&<div style={{minWidth:0}}><div style={{...SEC_LBL,margin:'0 2px 6px'}}>Por persona</div><div style={{...card,overflow:'hidden'}}>{d.personas.map((x,i)=>(
+        <div key={x.k} onClick={()=>todos.length>1&&setPer(x.k)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:todos.length>1?'pointer':'default'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{x.k}</div><div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.n} viaje{x.n!==1?'s':''} · prom. {prom(x)}{x.sin?<b style={{color:C.soonText}}> · {x.sin} sin motivo</b>:''}</div><div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{desglose(x)}</div></div>
+          <span style={{...num,fontSize:14,fontWeight:700,color:C.text}}>{fmt(x.tot)}</span><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>))}</div></div>}
+    </div>
+  </FlujoPagina>)
+}
 function HubTile({ic,icNode,t,s,sM,sCol,col,bg,cardBg,cardBd,tCol,onClick}){
   const D=useIsDesktop()
   return (
