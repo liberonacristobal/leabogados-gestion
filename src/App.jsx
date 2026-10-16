@@ -35698,7 +35698,10 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     }
     if(!provConComisiones(prov)) return null
     if(otroServ[m.id]) return <div style={{marginTop:5,fontSize:11,color:C.muted}} onClick={e=>e.stopPropagation()}>Clasificando como otro servicio · <span onClick={()=>setOtroServ(p=>({...p,[m.id]:false}))} style={{color:C.accent,fontWeight:700,cursor:'pointer'}}>Es pago de comisión <Gl n='chevron'/></span></div>
-    const debe=comisPorPagar(prov.id), alCobro=comisAlCobro(prov.id), verAnt=!!pagoSel['ant:'+m.id]
+    // Comisiones ya marcadas pagadas a mano sin su movimiento del banco (±45 días): se ofrecen para enlazarlas con este cargo
+    // (si no, al llegar la cartola solo aparecían las por pagar y el pago real no se podía conciliar).
+    const sinBanco=(terc||[]).filter(t=>String(t.proveedor_id)===String(prov.id)&&t.estado==='pagado'&&!t.movimiento_id&&t.pagado_at&&Math.abs((new Date(String(t.pagado_at).slice(0,10))-new Date(String(m.fecha).slice(0,10)))/864e5)<=45)
+    const debe=[...comisPorPagar(prov.id),...sinBanco], alCobro=comisAlCobro(prov.id), verAnt=!!pagoSel['ant:'+m.id]
     const lista=verAnt?[...debe,...alCobro]:debe
     const cargo=(m.monto||0)-(m.monto_conciliado||0)
     // Preselección: un calce EXACTO y único (1 a 4 comisiones) gana; si no, FIFO por antigüedad.
@@ -35714,7 +35717,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
         <span style={{width:18,height:18,borderRadius:6,flexShrink:0,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'transparent',color:'#fff',fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>{on?<Gl n='tick'/>:''}</span>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliNom(b)||prov.nombre}{b?.invoice_no?` · Factura N° ${folioN(b.invoice_no)}`:''}</div>
-          <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{est==='por_pagar'?`Cliente pagó ${fmtFechaDMY(b?.paid_at)}`:'El cliente aún no paga'}{glosaFactura(b)?` · ${glosaFactura(b)}`:''}</div>
+          <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.estado==='pagado'&&!t.movimiento_id?`Marcada pagada ${fmtFechaDMY(t.pagado_at)} · falta el banco`:est==='por_pagar'?`Cliente pagó ${fmtFechaDMY(b?.paid_at)}`:'El cliente aún no paga'}{glosaFactura(b)?` · ${glosaFactura(b)}`:''}</div>
         </div>
         <span style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(pagarT(t))}</span>
       </div>) }
