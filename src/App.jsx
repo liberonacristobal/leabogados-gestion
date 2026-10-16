@@ -3580,7 +3580,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
   )
 }
 
-function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,onEntregarCaja,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
+function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onAddTask,onEditTask,onCompleteTask,onPreviewTask,onEntregarCaja,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
   const go = t => navTo ? navTo({tab:t}) : setTab(t)   // salto que apila origen+scroll (navTo) para que "Volver" regrese al Inicio en su posición exacta
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   const [verTodosProy,setVerTodosProy] = useState(false)   // "Ver todos" en Mis proyectos: carga mis terminados y muestra los 3 grupos
@@ -3698,16 +3698,9 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const [comisOpen,setComisOpen] = usePersistedState('inicio_comis_open',false)   // sección Comisiones de Inicio: replegada por defecto (pedido 2026-10-15)
   const [cpVerTodos,setCpVerTodos] = useState(false)
   const [cpPagOpen,setCpPagOpen] = useState(false)  // sección "Pagadas este año" (colaboradores ya pagados) desplegada
-  const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
-  const [payGroup,setPayGroup] = useState(null)        // varias cuentas del mismo proveedor pagadas juntas
-  const [payFecha,setPayFecha] = useState('')
-  const [payRef,setPayRef] = useState('')
   const [tareaPersOpen,setTareaPersOpen] = useState({})
   const [tareaHoyOpen,setTareaHoyOpen] = usePersistedState('d_atenHoy',{})   // tiles "Hoy" desplegados (acordeón)
   const [tareasCorte,setTareasCorte] = useState('todas')   // tablero equipo: 'todas' | 'delegaron' | 'delegue'
-  const [payDoc,setPayDoc] = useState('')          // N° documento fiscal del proveedor (factura/boleta)
-  const [payDocF,setPayDocF] = useState('')        // fecha del documento
-  const [payingNow,setPayingNow] = useState(false)
   const [dashMoneda,setDashMoneda] = useState('UF')   // switch global UF/CLP de los KPIs del dashboard (default UF: este KPI usa UF de venta, no del día)
   const [iaHoy,setIaHoy] = useState(null)       // resumen IA de "qué atender hoy"
   const [iaHoyBusy,setIaHoyBusy] = useState(false)
@@ -4596,140 +4589,6 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       </div>)}
 
       {/* Comisiones + Oficina ahora viven en la grilla única de Indicadores (arriba). Aquí solo su detalle desplegable. */}
-      {payTercero&&(()=>{
-        const prov=(proveedores||[]).find(p=>String(p.id)===String(payTercero.proveedor_id))
-        const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
-        const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-        const fac=(billing||[]).find(b=>String(b.id)===String(payTercero.billing_id))
-        const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
-        const venta=(sales||[]).find(s=>String(s.id)===String(payTercero.sale_id))
-        const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}${fac?.invoice_no?` · Factura N° ${folioN(fac.invoice_no)}`:''}`
-        const subtit = [prov?.razon_social?.trim(), prov?.rut].filter(Boolean).join(' · ')
-        const copiar=()=>{ if(prov?.datos_pago){ navigator.clipboard?.writeText(prov.datos_pago); } }
-        const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercero(payTercero.id,{pagado_at:payFecha,referencia:payRef,factura_numero:payDoc,factura_fecha:payDocF}); setPayingNow(false); if(r) setPayTercero(null) }
-        const fl={fontSize:10,fontWeight:600,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
-        const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
-        return (
-          <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setPayTercero(null)}>
-            <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:400,maxHeight:'90vh',overflowY:'auto'}}>
-              <div style={{display:'flex',alignItems:'center',gap:11,padding:'16px 18px',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:1}}>
-                <span style={{width:42,height:42,borderRadius:12,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(prov))}</span>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(prov)}</div>
-                  {subtit&&<div style={{fontSize:12,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subtit}</div>}
-                </div>
-                <button onClick={()=>setPayTercero(null)} style={{marginLeft:'auto',width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
-                </button>
-              </div>
-              <div style={{padding:'16px 18px'}}>
-                <div style={{textAlign:'center',marginBottom:14}}>
-                  <div style={{fontSize:30,fontWeight:600,letterSpacing:-.6,color:C.text}}>{fmt(payTercero.monto)}</div>
-                  <div style={{fontSize:12,color:C.textSoft,marginTop:3}}>Por: {ori}</div>
-                </div>
-                <div style={{marginBottom:13}}>
-                  <span style={fl}>Datos de transferencia</span>
-                  {prov?.datos_pago?.trim()?(
-                    <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:10,padding:'10px 12px',position:'relative'}}>
-                      <button onClick={copiar} style={{position:'absolute',top:9,right:9,fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 9px',cursor:'pointer'}}>Copiar</button>
-                      <pre style={{fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,color:C.text,whiteSpace:'pre-wrap',lineHeight:1.55,margin:0,paddingRight:54}}>{prov.datos_pago}</pre>
-                    </div>
-                  ):(
-                    <div style={{fontSize:12,color:C.textSoft,background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}>Sin datos de pago. Agrégalos en Proveedores.</div>
-                  )}
-                </div>
-                <div style={{marginBottom:13}}>
-                  <span style={fl}>Factura del proveedor</span>
-                  {user&&<Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={payTercero.id} folderKind='facturas' namePrefix={`${tituloProv(prov)} · ${fac?.invoice_no?`Factura N° ${folioN(fac.invoice_no)}`:'pago'}`} user={user}/>}
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-                  <div><span style={fl}>Fecha de pago</span><input type='date' value={payFecha} onChange={e=>setPayFecha(e.target.value)} style={inp}/></div>
-                  <div><span style={fl}>Referencia</span><input value={payRef} onChange={e=>setPayRef(e.target.value)} placeholder='N° transferencia' style={inp}/></div>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-                  <div><span style={fl}>Documento del proveedor</span><input value={payDoc} onChange={e=>setPayDoc(e.target.value)} placeholder='N° factura/boleta' style={inp}/></div>
-                  <div><span style={fl}>Fecha documento</span><input type='date' value={payDocF} onChange={e=>setPayDocF(e.target.value)} style={inp}/></div>
-                </div>
-                <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setPayTercero(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                  <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.greenText,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':'Marcar pagado'}</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {payGroup&&(()=>{
-        const prov=payGroup.prov
-        const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
-        const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-        const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
-        const subtit = [prov?.razon_social?.trim(), prov?.rut].filter(Boolean).join(' · ')
-        const copiar=()=>{ if(prov?.datos_pago){ navigator.clipboard?.writeText(prov.datos_pago); } }
-        const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercerosBulk(payGroup.cuentas.map(t=>t.id),{pagado_at:payFecha,referencia:payRef,factura_numero:payDoc,factura_fecha:payDocF}); setPayingNow(false); if(r) setPayGroup(null) }
-        const fl={fontSize:10,fontWeight:600,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
-        const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
-        return (
-          <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setPayGroup(null)}>
-            <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:400,maxHeight:'90vh',overflowY:'auto'}}>
-              <div style={{display:'flex',alignItems:'center',gap:11,padding:'16px 18px',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:1}}>
-                <span style={{width:42,height:42,borderRadius:12,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(prov))}</span>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(prov)}</div>
-                  {subtit&&<div style={{fontSize:12,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subtit}</div>}
-                </div>
-                <button onClick={()=>setPayGroup(null)} style={{marginLeft:'auto',width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
-                </button>
-              </div>
-              <div style={{padding:'16px 18px'}}>
-                <div style={{textAlign:'center',marginBottom:14}}>
-                  <div style={{fontSize:30,fontWeight:600,letterSpacing:-.6,color:C.text}}>{fmt(payGroup.total)}</div>
-                  <div style={{fontSize:12,color:C.textSoft,marginTop:3}}>{payGroup.cuentas.length} cuotas en una transferencia</div>
-                </div>
-                <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
-                  {payGroup.cuentas.map((t,i)=>{
-                    const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
-                    const venta=(sales||[]).find(s=>String(s.id)===String(t.sale_id))
-                    const ori=`${venta?.title||fac?.invoice_no?`Factura N° ${folioN(fac.invoice_no)}`:'—'}`
-                    return (
-                      <div key={t.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.border}`:'none',fontSize:12,color:C.text}}>
-                        <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{venta?.title?venta.title:''}{fac?.invoice_no?`${venta?.title?' · ':''}Factura N° ${folioN(fac.invoice_no)}`:''}{fac?.paid_at?` · cobrada ${fmtDMY(fac.paid_at)}`:''}</span>
-                        <span style={{fontWeight:600,flexShrink:0}}>{fmt(t.monto)}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-                <div style={{marginBottom:13}}>
-                  <span style={fl}>Datos de transferencia</span>
-                  {prov?.datos_pago?.trim()?(
-                    <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:10,padding:'10px 12px',position:'relative'}}>
-                      <button onClick={copiar} style={{position:'absolute',top:9,right:9,fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 9px',cursor:'pointer'}}>Copiar</button>
-                      <pre style={{fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,color:C.text,whiteSpace:'pre-wrap',lineHeight:1.55,margin:0,paddingRight:54}}>{prov.datos_pago}</pre>
-                    </div>
-                  ):(
-                    <div style={{fontSize:12,color:C.textSoft,background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}>Sin datos de pago. Agrégalos en Proveedores.</div>
-                  )}
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-                  <div><span style={fl}>Fecha de pago</span><input type='date' value={payFecha} onChange={e=>setPayFecha(e.target.value)} style={inp}/></div>
-                  <div><span style={fl}>Referencia</span><input value={payRef} onChange={e=>setPayRef(e.target.value)} placeholder='N° transferencia' style={inp}/></div>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-                  <div><span style={fl}>Documento del proveedor</span><input value={payDoc} onChange={e=>setPayDoc(e.target.value)} placeholder='N° factura/boleta' style={inp}/></div>
-                  <div><span style={fl}>Fecha documento</span><input type='date' value={payDocF} onChange={e=>setPayDocF(e.target.value)} style={inp}/></div>
-                </div>
-                <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setPayGroup(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                  <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.greenText,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':`Marcar ${payGroup.cuentas.length} pagadas`}</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
       {/* Mis proyectos — su tile vive en la grilla única de Indicadores (arriba). Aquí solo su lista desplegable. */}
       {misProyOpen&&(()=>{
         const miIni=INICIALES_RESP[user?.name]||null; const isMine=p=>!miIni||(p.responsable||'')===miIni
@@ -14726,7 +14585,7 @@ const _diasEntre = (a,b) => { const x=String(a||'').slice(0,10), y=String(b||'')
 // ── PROVEEDORES (página, tab 'proveedores'): SOLO a quienes les pagas comisión o que te pagan comisiones. El subarriendo y los servicios
 // de oficina no van aquí. Lenguaje aprobado (2026-10-14): Comisiones · Pagada · Por pagar (el cliente ya pagó) · Sujeto a cobro (el cliente aún no paga) · Anticipo · Comisiones por cobrar (lo que te pagan). Las comisiones se
 // siguen POR TRABAJO (la venta; o "Facturas a {cliente}" cuando no hay venta) y POR CUOTA: vence · cliente pagó (fecha del banco) · le pagaste.
-function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anticipos=[],expenses=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onPagarBulk,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado}) {
+function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anticipos=[],expenses=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado}) {
   const isDesktop = useIsDesktop()
   const mem = viewMemLeer('proveedores')
   const [view,setView] = useState(mem?.view||'list')   // list | ficha | form | enlazar | pagar
@@ -14751,7 +14610,6 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const [okDistinto,setOkDistinto] = useState(false)
   const [completarCola,setCompletarCola] = useState([])   // "Completar datos de pago": recorre los que faltan uno tras otro
   const [selEnl,setSelEnl] = useState(null)
-  const [pag,setPag] = useState(null)                      // página Pagar: {ids:Set, fecha, ref, doc, docF}
   const [bol,setBol] = useState(null)                      // página Registrar boleta/factura: {ids:Set, numero, fecha, monto}
   const [enlP,setEnlP] = useState(null)                    // enlace a mano abierto: {mid} un pago · {tid} una comisión pagada · {did} una factura del SII
   const [enlSel,setEnlSel] = useState(()=>new Set())
@@ -15038,10 +14896,6 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const abrirFicha = (id,filtro='todas',cli=null) => { setSelId(String(id)); setView('ficha'); setCf(filtro); setCliF(cli); setNVer(5); setExpT(null); setEvMas(false); setCMas(false); setAsgOpen(false); setRetOpen(false) }
   const abrirNuevo = () => { setF({nombre:'',razon_social:'',rut:'',datos_pago:'',documento:null}); setOkDistinto(false); setCompletarCola([]); setView('form') }
   const abrirEditar = (p,cola=[]) => { setF({id:p.id,nombre:p.nombre||'',razon_social:p.razon_social||'',rut:p.rut||'',datos_pago:p.datos_pago||'',documento:p.documento||null}); setOkDistinto(false); setCompletarCola(cola); setSelId(String(p.id)); setView('form') }
-  const abrirPagar = p => { const ts=tercDe(p.id).filter(t=>est(t)==='por_pagar'); const nums=[...new Set(ts.map(t=>t.factura_numero).filter(Boolean))]
-    // Si las comisiones ya tienen su boleta/factura registrada (y es una sola), se trae sola: no se vuelve a escribir.
-    const d0 = nums.length===1 ? ts.find(t=>t.factura_numero===nums[0]) : null
-    setSelId(String(p.id)); setPag({ids:new Set(ts.map(t=>t.id)),fecha:hoyISO,ref:'',doc:d0?String(d0.factura_numero):'',docF:d0?.factura_fecha?String(d0.factura_fecha).slice(0,10):''}); setView('pagar') }
   const abrirBoleta = p => { const sinDoc=tercDe(p.id).filter(t=>est(t)!=='pagada'&&!t.factura_numero); const pp=sinDoc.filter(t=>est(t)==='por_pagar')
     setSelId(String(p.id)); setBol({ids:new Set((pp.length?pp:[]).map(t=>t.id)),numero:'',fecha:hoyISO,monto:''}); setView('boleta') }
   const card = {background:C.card,border:`1px solid ${C.border}`,borderRadius:12}
@@ -15170,49 +15024,6 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   }
 
   // ── PAGAR (página): qué transferir y a quién. No marca nada: la comisión queda pagada sola al conciliarse la transferencia del banco. ──
-  if(view==='pagar'&&sel&&pag){
-    const ts=tercDe(sel.id).filter(t=>est(t)==='por_pagar'&&saldoT(t)>0).sort((a,b)=>venceT(a).localeCompare(venceT(b)))
-    const elegidas=ts.filter(t=>pag.ids.has(t.id)), total=elegidas.reduce((a,t)=>a+saldoT(t),0)
-    // Quien emite boleta: el costo es el bruto; se le transfiere el líquido y la diferencia (retención) va al F29.
-    const conBol=esBoletaProv(sel), transferir=elegidas.reduce((a,t)=>a+saldoPag(t),0), retSel=total-transferir
-    const gruposP={}; ts.forEach(t=>{ const c=cliDe(t); const k=String(c?.id||'x'); (gruposP[k]=gruposP[k]||{cli:c,ts:[]}).ts.push(t) })
-    const togGrupo=g=>setPag(p=>{ const n=new Set(p.ids); const todas=g.ts.every(t=>n.has(t.id)); g.ts.forEach(t=>todas?n.delete(t.id):n.add(t.id)); return {...p,ids:n} })
-    const toggle=id=>setPag(p=>{ const n=new Set(p.ids); n.has(id)?n.delete(id):n.add(id); return {...p,ids:n} })
-    const yaPago = calces.filter(c=>(c.tipo==='com'||c.tipo==='combo')&&String(c.prov.id)===String(sel.id)&&(c.ts||[c.t]).some(t=>pag.ids.has(t.id)))
-    const cb = on => <span style={{width:18,height:18,borderRadius:5,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:C.card,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3'><polyline points='5 12 10 17 19 7'/></svg>}</span>
-    const lista = <div style={{...card,overflow:'hidden'}}>
-      <div style={{...kLbl,padding:'10px 14px 6px'}}>Comisiones por pagar</div>
-      {ts.length===0&&<div style={{padding:'12px 14px',fontSize:12.5,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>No tiene comisiones por pagar.</div>}
-      {Object.values(gruposP).map(g=>{ const cp=comoPaga(g.cli?.id), todas=g.ts.every(t=>pag.ids.has(t.id)), sub2=g.ts.reduce((a,t)=>a+saldoT(t),0); return <div key={g.cli?.id||'x'}>
-        <div onClick={()=>togGrupo(g)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',background:C.bgSoft,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>{cb(todas)}<span style={{fontSize:12.5,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.cli?.name||'Sin cliente'}</span>{cp&&<span style={{flexShrink:1,minWidth:0}}>{tono(cp.tono,cp.txt)}</span>}<span style={{marginLeft:'auto',fontSize:12.5,fontWeight:700,...num}}>{fmt(sub2)}</span></div>
-        {g.ts.map(t=>{ const b=facDe(t), pc=pagoCli(t), d=_diasDesde(pc?.fecha), ap=aporteDe(t.id); return <div key={t.id} onClick={()=>toggle(t.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px 9px 22px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
-          {cb(pag.ids.has(t.id))}<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b?.invoice_no?`Factura ${folioN(b.invoice_no)}`:trabajoDe(t).titulo}</div><div style={{fontSize:11,color:C.muted}}>{pc?`el cliente pagó el ${dmy(pc.fecha)}${d!=null?` · hace ${nDias(d)}`:''}`:'cuota del cliente pagada'}{ap>0?` · ya pagaste ${fmt(ap)} de ${fmt(t.monto)}`:''}</div></div>
-          <span style={{fontSize:13,fontWeight:700,...num}}>{fmt(saldoT(t))}</span></div> })}</div> })}
-      {conBol ? <div style={{padding:'10px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,display:'flex',flexDirection:'column',gap:4}}>
-        <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5}}><span style={{color:C.muted}}>Costo (bruto)</span><b style={num}>{fmt(total)}</b></div>
-        <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5}}><span style={{color:C.muted}}>Retención {pctBHE(tasaBHE(pag.fecha))} · va al F29 del mes de la boleta</span><span style={num}>{fmt(retSel)}</span></div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:2}}><span style={{fontWeight:700}}>Transferir a {tituloProv(sel)}</span><span style={{fontSize:18,fontWeight:700,color:C.accent,...num}}>{fmt(transferir)}</span></div>
-      </div>
-      : <div style={{display:'flex',justifyContent:'space-between',padding:'10px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontWeight:700}}><span>Total a pagar</span><span style={num}>{fmt(total)}</span></div>}
-    </div>
-    const aviso = yaPago.length>0 && <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,border:`1px solid ${C.greenText}`,borderRadius:12,padding:'10px 12px'}}>
-      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.greenText}}>Ya hay {yaPago.length===1?'un pago':yaPago.length+' pagos'} del banco que calza{yaPago.length===1?'':'n'}</div><div style={{fontSize:11.5,color:C.greenText}}>{yaPago.map(c=>`${(c.ms||[c.m]).map(m=>`${fmt(Math.abs(Number(m.monto)||0))} el ${dm(m.fecha)}`).join(' + ')}${facDe(c.t)?.invoice_no?' · factura '+folioN(facDe(c.t).invoice_no):''}`).join(' · ')}. Enlázalo en vez de registrar otro pago.</div></div>
-      <ActBtn variant='softGreen' disabled={!!busy} onClick={async()=>{ const n=await enlazar(yaPago); if(n){ const cub=new Set(yaPago.flatMap(c=>(c.ts||[c.t]).map(t=>t.id))); const quedan=elegidas.filter(t=>!cub.has(t.id)); if(!quedan.length){ setPag(null); setView('ficha') } else setPag(p=>{ const s2=new Set(p.ids); cub.forEach(id=>s2.delete(id)); return {...p,ids:s2} }) } }}>Enlazar <Gl n='chevron'/></ActBtn></div>
-    const form = <div style={{display:'flex',flexDirection:'column',gap:12}}>
-      <div style={{...card,padding:'10px 14px'}}>
-        <div style={kLbl}>Transferir a</div>
-        <div style={{fontSize:13,fontWeight:600,marginTop:4}}>{sel.razon_social||tituloProv(sel)}</div>
-        {sel.rut&&<div style={{fontSize:12,color:C.muted}}><Copyable text={sel.rut}>{fmtRutCL(sel.rut)} <span style={{color:C.azulInfo,fontWeight:700}}>Copiar</span></Copyable></div>}
-        {sel.datos_pago?.trim()?<div style={{marginTop:6,fontSize:12,whiteSpace:'pre-wrap',lineHeight:1.45}}><Copyable text={sel.datos_pago}>{sel.datos_pago} <span style={{color:C.azulInfo,fontWeight:700}}>Copiar</span></Copyable></div>:<div style={{marginTop:6}}>{link('+ agregar datos de pago',()=>abrirEditar(sel))}</div>}
-      </div>
-      <div style={{fontSize:11.5,color:C.muted}}>Queda pagada sola cuando la transferencia aparece en el banco.</div>
-    </div>
-    return (<div>
-      <PageHeader origen={tituloProv(sel)} onBack={()=>{setPag(null);setView('ficha')}} titulo='Pagar' ctx={`${elegidas.length} ${elegidas.length===1?'comisión':'comisiones'} · ${fmt(conBol?transferir:total)}`}/>
-      {wrap(isDesktop ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.3fr) minmax(0,1fr)',gap:14,alignItems:'start'}}><div style={{display:'flex',flexDirection:'column',gap:12,minWidth:0}}>{lista}{aviso}</div>{form}</div> : <>{lista}{aviso}{form}</>)}
-    </div>)
-  }
-
   // ── POR ENLAZAR (compuerta: tú confirmas; todo enlace se puede deshacer) ──
   if(view==='enlazar'){
     const marcados = selEnl || new Set(calces.map(c=>c.k))
@@ -15382,9 +15193,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       {accItems.length>0&&<>{secLbl('Acciones')}{accItems.map((x,i)=><div key={x.k} onClick={x.on} className='pv-c' style={{padding:'9px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}><div style={{fontSize:12.5,fontWeight:600}}>{x.t}</div><div style={{fontSize:11,color:C.muted}}>{x.s}</div></div>)}</>}
     </div> : null
     const btnBoleta = <ActBtn variant='ghost' size='lg' onClick={()=>abrirBoleta(sel)}>Registrar factura de {tituloProv(sel).split(' ')[0]}</ActBtn>
-    const aTransferir = tPP.reduce((a,t)=>a+saldoPag(t),0)   // quien emite boleta: se le transfiere el líquido
-    const btnPagar = m0.porPagar>0 ? <ActBtn variant='primary' size='lg' full={!isDesktop} onClick={()=>abrirPagar(sel)}>Pagar {fmt(conBolF?aTransferir:m0.porPagar)} <Gl n='chevron'/></ActBtn> : null
-    const acciones = <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{revPill}<span style={{flex:1}}/>{isDesktop&&btnPagar}</div>
+    const acciones = <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{revPill}</div>
     // Por cliente: la bolsa separada por cliente; tocar filtra las comisiones, el nombre abre su ficha.
     const porClienteCard = porCliente.length>0 ? <div style={{...card,overflow:'hidden'}}>
       {band('Por cliente',cliF?link('Ver todos',()=>setCliF(null),C.accent):null)}
@@ -15422,7 +15231,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
                 {det(`Retención ${pctBHE(bh?Number(bh.tasa)||tasaBHE(bh.fecha):tasaBHE(fechaBHE(t.pagado_at,venceT(t))))}`,fmt(t.retencion!=null?Number(t.retencion)||0:(Number(t.monto)||0)-pagarT(t)))}
                 {(()=>{ const f=f29BHE(bh?.fecha||t.factura_fecha||(t.estado==='pagado'?t.pagado_at:null),expenses,tituloProv(sel)); return f?det('F29',<span style={{color:f.estado==='pagada'?C.greenText:f.estado==='ira'?C.muted:C.soonText}}>{f.txt}</span>):null })()}
                 {det(e==='pagada'?'Líquido transferido':'Líquido a transferir',fmt(pagarT(t)))}</>}
-              {det('Le pagaste',t.estado==='pagado'?lk(t.pagado_at?dmy(t.pagado_at):'Pagada',t.movimiento_id&&onIrBanco?()=>onIrBanco(t.movimiento_id):null):ap>0?`${fmt(ap)} · faltan ${fmt(Math.max(0,(Number(t.monto)||0)-ap))}`:e==='por_pagar'?lk('Pagar',()=>abrirPagar(sel)):'—')}
+              {det('Le pagaste',t.estado==='pagado'?lk(t.pagado_at?dmy(t.pagado_at):'Pagada',t.movimiento_id&&onIrBanco?()=>onIrBanco(t.movimiento_id):null):ap>0?`${fmt(ap)} · faltan ${fmt(Math.max(0,(Number(t.monto)||0)-ap))}`:e==='por_pagar'?'Por pagar':'—')}
               {w.sale&&det('Trabajo',lk(w.titulo,onOpenSale?()=>onOpenSale(w.sale):null))}
               {t.referencia&&<div style={{fontSize:11,color:C.textSoft,marginTop:3}}>{t.referencia}</div>}
               <div style={{display:'flex',gap:12,marginTop:5,flexWrap:'wrap'}}>
@@ -15526,7 +15335,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
         {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}
         <div style={{display:'grid',gridTemplateColumns:conBolF?'minmax(0,1fr) minmax(0,2.8fr)':'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
         {minis}{secAbierta&&secAbierta.el}
-      </> : <>{tiles}{bolStrip}{datosStrip}{btnPagar}{acciones}{revPanel}{porClienteCard}{comisionesCard}{minis}</>)}
+      </> : <>{tiles}{bolStrip}{datosStrip}{acciones}{revPanel}{porClienteCard}{comisionesCard}{minis}</>)}
     </div>)
   }
 
@@ -15605,7 +15414,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
           {!r.equipo&&(ultDoc?qi(`Su última factura N° ${ultDoc.folio} · ${dmy(ultDoc.fecha_emision)}`,fmt(Math.abs(Number(ultDoc.monto)||0)),()=>abrirFicha(r.p.id)):qi('Sin facturas en el SII','—'))}
           {!r.equipo&&qi('Sin factura del proveedor',r.sinFac||'—',r.sinFac?()=>abrirFicha(r.p.id,'sinfac'):null)}</>)}
       </div>
-      <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}><ActBtn variant='ghost' onClick={()=>abrirFicha(r.p.id)}>Ver ficha <Gl n='chevron'/></ActBtn>{r.porPagar>0&&<ActBtn variant='primary' onClick={()=>abrirPagar(r.p)}>Pagar {fmt(r.porPagar)} <Gl n='chevron'/></ActBtn>}</div>
+      <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}><ActBtn variant='ghost' onClick={()=>abrirFicha(r.p.id)}>Ver ficha <Gl n='chevron'/></ActBtn></div>
     </div> }
   const subProv = r => [r.equipo?'Equipo':(r.p.razon_social||r.p.rut||null), r.nCli?(r.nCli===1&&r.clis[0]?r.clis[0]:`${r.nCli} clientes`):null].filter(Boolean).join(' · ')
   const filaProv = r => { const open=expP===r.p.id, cv=v=>v?fmtMill(v):dash
@@ -15627,7 +15436,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const bandL = (t,der) => <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:C.bgSoft,borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}><span style={{...kLbl,flex:1}}>{t}</span>{der}</div>
   const filaMovil = (r,k) => <div key={r.p.id} onClick={()=>abrirFicha(r.p.id,k==='pp'?'por_pagar':k==='cob'?'por_devengar':'todas')} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
     <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(r.p)}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{k==='pp'&&r.masAnt?`${r.nPorPagar} factura${r.nPorPagar!==1?'s':''} · desde ${dmy(r.masAnt)}`:(r.clis.slice(0,3).join(' · ')||subProv(r))}</div></div>
-    <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:700,color:k==='pp'?C.soonText:C.muted,...num}}>{fmtMill(k==='pp'?r.porPagar:k==='cob'?r.cob:r.pagAnio)}</div>{k==='pp'&&<div onClick={e=>{e.stopPropagation();abrirPagar(r.p)}} style={{fontSize:11,fontWeight:700,color:C.accent}}>Pagar <Gl n='chevron'/></div>}</div></div>
+    <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:700,color:k==='pp'?C.soonText:C.muted,...num}}>{fmtMill(k==='pp'?r.porPagar:k==='cob'?r.cob:r.pagAnio)}</div></div></div>
   const gPP=vis.filter(r=>r.porPagar>0).sort((a,b)=>b.porPagar-a.porPagar), gCob=vis.filter(r=>!(r.porPagar>0)&&r.cob>0).sort((a,b)=>b.cob-a.cob), gPag=vis.filter(r=>!(r.porPagar>0)&&!(r.cob>0)&&r.pagAnio>0)
   const listaProvMovil = <div style={{...card,overflow:'hidden'}}>
     {gPP.length>0&&<>{bandL(`Por pagar · ${gPP.length}`)}{gPP.map(r=>filaMovil(r,'pp'))}</>}
@@ -40067,26 +39876,6 @@ export default function App() {
     }catch(e){appAlert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
   },[terceros])
 
-  // Pagar a un proveedor: la cuenta pasa a 'pagado' con fecha y referencia (transferencia manual).
-  const handlePagarTercero=useCallback(async(terceroId,{pagado_at,referencia,factura_numero,factura_fecha})=>{
-    try{
-      const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null,factura_numero:factura_numero||null,factura_fecha:factura_fecha||null}).eq('id',terceroId).select().single()
-      if(error)throw error
-      setTerceros(p=>p.map(t=>t.id===data.id?data:t))
-      return data
-    }catch(e){appAlert('Error: '+e.message); return null}
-  },[])
-  // Pagar varias cuentas del mismo proveedor en una sola transferencia (mismo fecha y referencia).
-  const handlePagarTercerosBulk=useCallback(async(ids,{pagado_at,referencia,factura_numero,factura_fecha})=>{
-    try{
-      if(!ids?.length) return null
-      const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null,factura_numero:factura_numero||null,factura_fecha:factura_fecha||null}).in('id',ids).select()
-      if(error)throw error
-      const ajustes=[]; for(const d of (data||[])){ const pt=reajusteBHEPago(d,d.pagado_at); if(pt){ await supabase.from('terceros_pagos').update(pt).eq('id',d.id); ajustes.push({...d,...pt}) } }
-      setTerceros(p=>p.map(t=>{const u=ajustes.find(d=>d.id===t.id)||(data||[]).find(d=>d.id===t.id); return u||t}))
-      return data
-    }catch(e){appAlert('Error: '+e.message); return null}
-  },[])
   // Resuelve un grupo de duplicados: conserva uno (y le limpia el folio "Factura ") y elimina los demás (soft-delete con deshacer).
   const handleResolveDup=useCallback(async(keepId,dropIds,opts={})=>{
     try{
@@ -40816,7 +40605,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
         <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onAjustarNotaria={handleAjustarNotaria} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
@@ -40875,7 +40664,7 @@ export default function App() {
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Oficina' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})}/>
             </div>}
-            {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onPagarBulk={handlePagarTercerosBulk} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
+            {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
