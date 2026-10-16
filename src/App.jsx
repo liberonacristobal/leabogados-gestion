@@ -163,8 +163,10 @@ const RENDCAT = c => c==='CBR'?'Conservador de Bienes Raíces':(c==='Notaria'||c
 // Glosa que ve el cliente (rendición, correo, PDF): el nombre de la app de transporte se lee como "Movilización" (más sobrio).
 const glosaCliente = t => String(t||'').replace(/\b(uber|cabify|didi)\b/gi,'Movilización')
 // Movilización: el medio va en subcategory (control de Uber) y la glosa se arma "Movilización Desde–Hasta para motivo".
-const MEDIOS_MOV = ['Uber','Cabify','DiDi','Taxi','Metro / bus','Bencina / peaje','Estacionamiento']
-const medioMovDe = t => { const n=String(t||'').toLowerCase(); return /cabify/.test(n)?'Cabify':/\bdidi\b/.test(n)?'DiDi':/taxi/.test(n)?'Taxi':/metro|\bbip\b|bus\b/.test(n)?'Metro / bus':/bencina|peaje|tag\b/.test(n)?'Bencina / peaje':/estacionamiento/.test(n)?'Estacionamiento':'Uber' }
+const MEDIOS_MOV = ['Uber','Cabify','DiDi','Taxi','Carga BIP','Estacionamiento','Bencina / peaje']
+// Solo los traslados por app/taxi son excepcionales y exigen trayecto y motivo; la carga BIP (transporte público) no pide más.
+const MEDIO_CON_DETALLE = new Set(['Uber','Cabify','DiDi','Taxi'])
+const medioMovDe = t => { const n=String(t||'').toLowerCase(); return /\buber\b/.test(n)?'Uber':/cabify/.test(n)?'Cabify':/\bdidi\b/.test(n)?'DiDi':/taxi/.test(n)?'Taxi':/metro|\bbip\b|\bbus\b|micro|transporte p/.test(n)?'Carga BIP':/bencina|peaje|\btag\b/.test(n)?'Bencina / peaje':/estacionamiento/.test(n)?'Estacionamiento':'' }
 const glosaMovilizacion = (desde,hasta,motivo) => { const m=String(motivo||'').trim().replace(/^para\s+/i,''); return `Movilización ${String(desde||'').trim()}–${String(hasta||'').trim()}${m?` para ${m}`:''}` }
 // Fecha DD-MM-AAAA a partir de un ISO 'AAAA-MM-DD'
 const fmtFechaDMY = d => { if(!d) return '—'; const p=String(d).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(d) }
@@ -1225,6 +1227,26 @@ const saldoDelta = e => !cuentaEnSaldo(e) ? 0 : e.type==='fondo' ? (e.amount||0)
 // fuera lo resumido en una apertura y los gastos históricos (no_descuenta_saldo) no descuentan.
 // Alcance: scopeEntId null = todo el cliente; con RS = esa RS + los movimientos sin RS (notaría sin RS no queda fuera).
 // excludeRenderId deja fuera de "rendiciones previas" la rendición que se está mostrando.
+// Rendición con 2+ proyectos (FUENTE ÚNICA de su desglose): un bloque por proyecto con sus fondos, lo rendido antes y los gastos
+// de esta rendición. Mismo universo y reglas que rendicionFondo → Σ saldos de los bloques + «otros» = saldo de la rendición.
+// «otros» = proyectos sin gastos en esta rendición (fondos o rendiciones previas de otros trabajos). null si hay 0-1 proyecto.
+function rendGruposProyecto({expenses, clientId, scopeEntId=null, gastos=[], excludeRenderId=null, sales=[], clientEntities=[]}){
+  const tit=id=>(sales||[]).find(s=>String(s.id)===String(id))?.title
+  const key=e=>e.project||tit(e.sale_id)||''
+  if(new Set(gastos.map(key).filter(Boolean)).size<2) return null
+  const propios=new Set(gastos.map(e=>String(e.id)))
+  const g={}; const G=k=>g[k]||(g[k]={proyecto:k,gastos:[],fondos:[],previo:0})
+  gastos.forEach(e=>G(key(e)).gastos.push(e))
+  ;(expenses||[]).filter(e=>e.client_id===clientId && cuentaEnSaldo(e) && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id)).forEach(e=>{
+    if(propios.has(String(e.id))) return
+    if(e.type==='fondo') G(key(e)).fondos.push(e)
+    else if(!e.no_descuenta_saldo && e.client_rendered_at && e.client_render_id && e.client_render_id!==excludeRenderId) G(key(e)).previo+=(e.amount||0)
+  })
+  const entDe=x=>{ const v=(sales||[]).find(s=>String(s.client_id)===String(clientId)&&s.title===x.proyecto); const id=v?.entity_id||(x.gastos.find(e=>e.entity_id)||{}).entity_id; return id?((clientEntities||[]).find(c=>c.id===id)||null):null }
+  const todos=Object.values(g).map(x=>{ const totFondos=x.fondos.reduce((a,e)=>a+(e.amount||0),0), totGastos=x.gastos.reduce((a,e)=>a+(e.amount||0),0)
+    return {...x, fondos:x.fondos.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))), totFondos, totGastos, saldo:totFondos-x.previo-totGastos, ent:entDe(x)} })
+  return {grupos:todos.filter(x=>x.gastos.length), otros:todos.filter(x=>!x.gastos.length).reduce((a,x)=>a+x.saldo,0)}
+}
 function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=null){
   const movs=(expenses||[]).filter(e=>e.client_id===clientId && cuentaEnSaldo(e) && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id))
   const fondos=movs.filter(e=>e.type==='fondo').sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
@@ -1308,7 +1330,7 @@ function horasReporteHtml({ razon, periodo, dirigidoA, entradas, estimadas, cons
   return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>${T.title} — ${razon||''}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;background:#fff'>${body}<button class='print-btn no-print' onclick='window.print()'>${T.print}</button></body></html>`
 }
 
-function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null, project=null, subproject=null, lang='es' }){
+function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null, project=null, subproject=null, lang='es', grupos=null }){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4', TXT='#3D3D3D'
   const EN = lang==='en'
   const T = EN ? {title:'Expense Report',outstanding:'Outstanding balance — transfer to Liberona Escala',company:'Company',rut:'Tax ID (RUT)',bank:'Bank',account:'Checking account',confEmail:'Confirmation email',fundSummary:'Fund summary',reportPrev:'Report',previous:'previous',fundsReceived:'Funds received',thisReport:'This report',availBalance:'Available balance',expPeriod:'Expenses (period)',balFavor:'Balance in your favor',balPending:'Outstanding balance',project:'Project',reportNo:'Report No.',period:'Period',issued:'Issued',attn:'Attn',date:'Date',concept:'Description',category:'Category',amount:'Amount',totalExp:'Total expenses',noFunds:'No funds recorded',fundsSection:'Funds received',footerDoc:'Expense report',printBtn:'Print / Save PDF',receiptBadge:'✓ receipt',fundDefault:'Funds received',expW:n=>`${n} expense${n!==1?'s':''}`,withReceipt:(a,b)=>`${a} of ${b} with supporting receipts (available upon request).`}
@@ -1316,7 +1338,8 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
   // Saldo disponible = fondos recibidos − rendido en tandas anteriores − esta rendición.
   const saldo = totFondos - rendidoAntes - totGastos
   const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg=MUTED; if(c.includes('notar')){bg='#E6F1FB';fg=A} else if(c.includes('transp')){bg='#E1F5EE';fg=C.greenText} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${RENDCAT(cat)}</span>` }
-  const filasGastos = gastos.map(e=>`<tr><td style='white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${glosaCliente(e.concept)||'—'}${e.ot_number?` <span style='font-size:8px;font-weight:700;color:#185FA5;white-space:nowrap'>${String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>`:''}${e.respaldo?` <span style='font-size:8px;font-weight:700;color:#0F6E56;background:#E1F5EE;padding:1px 5px;border-radius:4px;white-space:nowrap'>${T.receiptBadge}</span>`:''}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600;white-space:nowrap'>${fmtN(e.amount)}</td></tr>`).join('')
+  const filaGasto = e=>`<tr><td style='white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${glosaCliente(e.concept)||'—'}${e.ot_number?` <span style='font-size:8px;font-weight:700;color:#185FA5;white-space:nowrap'>${String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>`:''}${e.respaldo?` <span style='font-size:8px;font-weight:700;color:#0F6E56;background:#E1F5EE;padding:1px 5px;border-radius:4px;white-space:nowrap'>${T.receiptBadge}</span>`:''}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600;white-space:nowrap'>${fmtN(e.amount)}</td></tr>`
+  const filasGastos = gastos.map(filaGasto).join('')
   const conRespaldoN = gastos.filter(e=>e.respaldo).length
   const filasFondos = fondos.length ? fondos.map(e=>`<tr><td style='width:90px;white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||T.fundDefault}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('') : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>${T.noFunds}</td></tr>`
   let saldoBox=''
@@ -1334,7 +1357,16 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
   const kpiRow = `<div style='display:flex;gap:1px;background:${GRAY}'>${kpiCard(T.fundsReceived,fmtN(totFondos),'#fff','#0F6E56')}${kpiCard(T.expPeriod,fmtN(totGastos),'#fff',TXT)}${kpiCard(saldoPos?T.balFavor:T.balPending,(saldo<0?'−':'')+fmtN(Math.abs(saldo)),saldoPos?C.greenBg:C.overdueBg,saldoPos?C.greenText:C.overdueText)}</div>`
   const proyTxt = project ? `${project}${subproject?` · ${subproject}`:''}` : ''
   const proyBar = proyTxt ? `<div style='background:#fff;padding:7px 26px;border-bottom:1px solid ${GRAY};font-size:10px;color:${TXT}'><span style='color:${MUTED};font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:9px'>${T.project}</span><span style='margin-left:10px;font-weight:600'>${proyTxt}</span></div>` : ''
-  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>${T.title} — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='${BRAND.nombre}' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'>${correlativo?`<span style='font-weight:700'>${T.reportNo} ${correlativo}</span>`:''}<span style='${correlativo?sep:"font-weight:700"}'>${T.issued}: ${fechaEmision}</span><span style='${sep}'>${T.expW(gastos.length)}</span></div>${dirigidoA?`<div style='font-weight:600'>${T.attn}: ${dirigidoA}</div>`:''}</div>${kpiRow}${proyBar}<div style='padding:20px 26px 0'><table><thead><tr><th>${T.date}</th><th>${T.concept}</th><th>${T.category}</th><th style='text-align:right'>${T.amount}</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>${T.totalExp}</span><span>${fmtN(totGastos)}</span></div>${conRespaldoN>0?`<div style='font-size:9px;color:${MUTED};padding:3px 10px 0'>${T.withReceipt(conRespaldoN,gastos.length)}</div>`:''}<div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>${T.fundsSection}</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>${BRAND.direccionCalle} · ${BRAND.ciudad} · ${BRAND.web}</span><span>${T.footerDoc}</span></div></div><button class='print-btn no-print' onclick='window.print()'>${T.printBtn}</button></body></html>`
+  const cuerpoUno = `${proyBar}<div style='padding:20px 26px 0'><table><thead><tr><th>${T.date}</th><th>${T.concept}</th><th>${T.category}</th><th style='text-align:right'>${T.amount}</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>${T.totalExp}</span><span>${fmtN(totGastos)}</span></div>${conRespaldoN>0?`<div style='font-size:9px;color:${MUTED};padding:3px 10px 0'>${T.withReceipt(conRespaldoN,gastos.length)}</div>`:''}<div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>${T.fundsSection}</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div>`
+  // 2+ proyectos: un bloque por proyecto (razón social, gastos, fondos, rendido antes, saldo) + imputación de saldos al final.
+  const cuerpoGrupos = grupos ? (()=>{ const L=EN?{exp:'Project expenses',prev:'Previously reported',fav:'Balance in favor of the project',due:'Balance to cover',imp:'Summary by project · balance allocation',others:'Other funds and previous reports',note:'Balances in favor are applied to the balances to cover',tot:saldo<0?T.balPending:T.balFavor,proj:'Project'}:{exp:'Gastos del proyecto',prev:'Rendido anteriormente',fav:'Saldo a favor del proyecto',due:'Saldo por cubrir del proyecto',imp:'Resumen por proyecto · imputación de saldos',others:'Otros fondos y rendiciones anteriores',note:'Los saldos a favor se imputan a los saldos por cubrir',tot:saldo<0?T.balPending:T.balFavor,proj:'Proyecto'}
+      const sgn=v=>(v<0?'−':v>0?'+':'')+fmtN(Math.abs(v))
+      const bloques=grupos.grupos.map((x,i)=>`<div style='margin-bottom:20px;page-break-inside:auto'><div style='display:flex;justify-content:space-between;align-items:flex-end;gap:10px;border-bottom:1.5px solid ${A};padding-bottom:6px;margin-bottom:2px'><div><div style='font-size:8.5px;font-weight:700;color:${MUTED};text-transform:uppercase;letter-spacing:.5px'>${L.proj} ${i+1}</div><div style='font-size:12.5px;font-weight:700;color:${A}'>${x.proyecto||'—'}</div></div>${x.ent?`<div style='text-align:right;font-size:9.5px;font-weight:600'>${x.ent.name}${x.ent.rut?`<div style='color:${MUTED};font-weight:400'>${fmtRutCL(x.ent.rut)}</div>`:''}</div>`:''}</div><table><thead><tr><th>${T.date}</th><th>${T.concept}</th><th>${T.category}</th><th style='text-align:right'>${T.amount}</th></tr></thead><tbody>${x.gastos.map(filaGasto).join('')}</tbody></table><div style='display:flex;justify-content:space-between;padding:7px 10px;font-weight:700;font-size:10.5px;border-top:1px solid ${GRAY}'><span>${L.exp}</span><span>${fmtN(x.totGastos)}</span></div>${x.fondos.length?`<div style='font-size:9px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px'>${T.fundsSection}</div><table><tbody>${x.fondos.map(e=>`<tr><td style='width:90px;white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||T.fundDefault}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('')}</tbody></table>`:''}${x.previo?`<div style='display:flex;justify-content:space-between;padding:6px 10px;font-size:10px;color:${MUTED}'><span>${L.prev}</span><span>−${fmtN(x.previo)}</span></div>`:''}<div style='display:flex;justify-content:space-between;padding:8px 10px;border-radius:6px;margin-top:6px;font-weight:700;font-size:11px;background:${x.saldo<0?'#FCEBEB':'#E1F5EE'};color:${x.saldo<0?'#A32D2D':'#0F6E56'}'><span>${x.saldo<0?L.due:L.fav}</span><span>${sgn(x.saldo)}</span></div></div>`).join('')
+      const mixto=grupos.grupos.some(x=>x.saldo>0)&&grupos.grupos.some(x=>x.saldo<0)
+      const rr=(l,v,st='')=>`<div style='display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10.5px;${st}'><span>${l}</span><span style='white-space:nowrap;font-weight:600'>${v}</span></div>`
+      const imp=`<div style='background:${A};border-radius:8px;padding:13px 18px;color:#fff;margin-top:4px;page-break-inside:avoid'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:6px'>${L.imp}</div>${grupos.grupos.map(x=>rr(x.proyecto||'—',sgn(x.saldo))).join('')}${Math.round(grupos.otros)?rr(L.others,sgn(grupos.otros)):''}${mixto?`<div style='font-size:9.5px;color:${AZUL3};padding:2px 0 4px'>${L.note}</div>`:''}<div style='display:flex;justify-content:space-between;padding:8px 0 0;margin-top:4px;border-top:1px solid rgba(255,255,255,.22);font-weight:700;font-size:13px'><span>${L.tot}</span><span style='white-space:nowrap'>${saldo<0?'−':''}${fmtN(Math.abs(saldo))}</span></div></div>`
+      return `<div style='padding:20px 26px 0'>${bloques}${imp}${saldoBox}</div>` })() : ''
+  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>${T.title} — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='${BRAND.nombre}' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'>${correlativo?`<span style='font-weight:700'>${T.reportNo} ${correlativo}</span>`:''}<span style='${correlativo?sep:"font-weight:700"}'>${T.issued}: ${fechaEmision}</span><span style='${sep}'>${T.expW(gastos.length)}</span></div>${dirigidoA?`<div style='font-weight:600'>${T.attn}: ${dirigidoA}</div>`:''}</div>${kpiRow}${grupos?cuerpoGrupos:cuerpoUno}<div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>${BRAND.direccionCalle} · ${BRAND.ciudad} · ${BRAND.web}</span><span>${T.footerDoc}</span></div></div><button class='print-btn no-print' onclick='window.print()'>${T.printBtn}</button></body></html>`
 }
 
 // "Ver PDF" desde el historial: arma los datos de una rendición YA registrada y usa la fuente única.
@@ -1371,6 +1403,7 @@ function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='
     rendidoAntes, rendicionesPrevias: previas, correlativo: r.correlativo,
     project: r.project || null, subproject: r.subproject || null,
     lang,
+    grupos: rendGruposProyecto({expenses, clientId:client&&client.id, scopeEntId:entId, gastos, excludeRenderId:r.id, clientEntities}),
   })
 }
 
@@ -15956,7 +15989,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     if(fechas.length){ const ini=fechas[0], fin=fechas[fechas.length-1]; periodo = mesAno(ini)===mesAno(fin) ? mesAno(ini) : `${dia(ini)} \u2013 ${dia(fin)}` }
     // Rendiciones anteriores de este fondo (la tanda actual a\u00fan no est\u00e1 rendida \u2192 queda fuera).
     const {previas, rendidoAntes} = _fondoRend
-    return rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA: atencionVal||null, gastos: gastosSel.map(e=>({...e,respaldo:conRespaldo.has(String(e.id))})), fondos: fondosList, totGastos: totalSel, totFondos: fondosDisp, rendidoAntes, rendicionesPrevias: previas, correlativo: nextCorr, project: proyecto||null, subproject: (subproyecto||'').trim()||null })
+    return rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA: atencionVal||null, gastos: gastosSel.map(e=>({...e,respaldo:conRespaldo.has(String(e.id))})), fondos: fondosList, totGastos: totalSel, totFondos: fondosDisp, rendidoAntes, rendicionesPrevias: previas, correlativo: nextCorr, project: proyecto||null, subproject: (subproyecto||'').trim()||null, grupos: rendGruposProyecto({expenses, clientId:client.id, scopeEntId:singleRS?null:selEnt, gastos:gastosSel.map(e=>({...e,...proyPatch(e)})), sales, clientEntities}) })
   }
 
   const handleGenerar = async(modo='pdf') => {
@@ -21601,7 +21634,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Movilización','Archivo Judicial','Otro']
 // Categorías que casi siempre son de un cliente: cargadas a la oficina, se pregunta antes de guardar.
 const CATS_DE_CLIENTE = new Set(['Notaria','CBR','Diario Oficial','Registro Civil','Archivo Judicial'])
-const _CAT_KW = [[/\b(uber|cabify|didi|taxi|metro|bencina|peaje|estacionamiento|transvip)\b/,'Movilización'],[/\bnotari/,'Notaria'],[/diario oficial/,'Diario Oficial'],[/registro civil/,'Registro Civil'],[/archivo judicial/,'Archivo Judicial'],[/\b(cbr|conservador|certificad|inscripci)/,'CBR']]
+const _CAT_KW = [[/\b(uber|cabify|didi|taxi|metro|bip|micro|bencina|peaje|estacionamiento|transvip|movilizaci[oó]n)\b/,'Movilización'],[/\bnotari/,'Notaria'],[/diario oficial/,'Diario Oficial'],[/registro civil/,'Registro Civil'],[/archivo judicial/,'Archivo Judicial'],[/\b(cbr|conservador|certificad|inscripci)/,'CBR']]
 const _NOM_GENERICO = new Set(['sociedad','limitada','inversiones','servicios','comercial','inmobiliaria','asesorias','agricola','empresa','empresas','chile','holding','group','capital','consultores','compania','ingenieria','construccion','constructora','desarrollo','gestion','proyectos','abogados','familia','sucesion','corporacion','fundacion','internacional','sociedades','negocios','transportes','importadora','exportadora','distribuidora','oficina','certificado','notaria','escritura','compraventa'])
 const _tokG = s => _normTxt(s).split(' ').filter(w=>w.length>=5)
 const _esOfiCli = c => !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||''))
@@ -21710,7 +21743,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const cliDe = r => r.cli || selectedClient
   const projDe = r => r.cli ? r.proj : project
 
-  const updateRow = (id,patch) => setRows(p=>{ let n=p.map(r=>r.id===id?{...r,...patch}:r); const last=n[n.length-1]; if(last&&(last.concept||last.amount)) n=[...n,nuevaFila(last.date)]; return n })
+  const updateRow = (id,patch) => setRows(p=>{ let n=p.map(r=>r.id===id?{...r,...patch}:r); const last=n[n.length-1]; if(last&&(last.concept||last.amount)) n=[...n,{...nuevaFila(last.date),...(last.category==='Movilización'?{category:'Movilización'}:{})}]; return n })   // tanda de movilización: la fila nueva ya viene en Movilización
   const removeRow = id => setRows(p=>{ const n=p.filter(r=>r.id!==id); return n.length?n:[nuevaFila()] })
   const moverFila = (r,c) => {
     updateRow(r.id,{cli:c,proj:projDefault(c.id),resp:'mov',picking:false,pq:''})
@@ -21721,12 +21754,14 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const llenas = rows.filter(r=>r.amount&&parseInt(r.amount)>0)
   // Movilización (Uber y similares) es excepcional: siempre con medio, trayecto y motivo. La glosa que ve el cliente se arma de ahí.
   const movMedio = r => r.mvMedio || medioMovDe(r.concept)
-  const faltaMovDe = r => catDe(r)==='Movilización' && (!r.mvDesde.trim()||!r.mvHasta.trim()||r.mvMotivo.trim().length<4)
+  const faltaMovDe = r => { if(catDe(r)!=='Movilización') return false; const md=movMedio(r); return !md || (MEDIO_CON_DETALLE.has(md) && (!r.mvDesde.trim()||!r.mvHasta.trim()||r.mvMotivo.trim().length<4)) }
   const faltaMov = llenas.some(faltaMovDe)
   const gastoDeFila = r => { const cat=catDe(r)
     if(cat!=='Movilización') return {concept:r.concept, subcategory:cat==='Otro'?(r.subcategory?.trim()||null):null}
-    const concept=glosaMovilizacion(r.mvDesde,r.mvHasta,r.mvMotivo), orig=String(r.concept||'').trim()
-    return {concept, subcategory:movMedio(r), ...(orig.split(/\s+/).length>2&&orig!==concept?{notas:`Glosa original: ${orig}`}:{})} }
+    const md=movMedio(r), orig=String(r.concept||'').trim()
+    if(!MEDIO_CON_DETALLE.has(md)) return {concept:orig||md, subcategory:md}
+    const concept=glosaMovilizacion(r.mvDesde,r.mvHasta,r.mvMotivo)
+    return {concept, subcategory:md, ...(orig.split(/\s+/).length>2&&orig!==concept?{notas:`Glosa original: ${orig}`}:{})} }
   const avisoDe = r => {
     if(r.resp) return null
     const cli=cliDe(r); if(!cli) return null
@@ -21837,15 +21872,16 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   // Movilización: medio + desde + hasta + motivo (obligatorios). Lo que falta se marca en rojo suave.
   const lineaMov = r => { const fi=(k,ph,w)=>{ const v=r[k]||'', bad=!v.trim()||(k==='mvMotivo'&&v.trim().length<4)
       return <input value={v} onChange={e=>updateRow(r.id,{[k]:e.target.value})} placeholder={ph} style={{...inS,height:30,fontSize:12.5,flex:w,minWidth:0,borderColor:bad?C.overdueText:C.border}}/> }
-    return (<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,marginTop:6}}>
-      {selTxt(movMedio(r),movMedio(r),MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>),v=>updateRow(r.id,{mvMedio:v}),C.accent,600)}
-      <div style={{display:'flex',gap:6,flex:'1 1 220px',minWidth:0}}>{fi('mvDesde','Desde',1)}{fi('mvHasta','Hasta',1)}</div>
-      <div style={{display:'flex',flex:'2 1 220px',minWidth:0}}>{fi('mvMotivo','Motivo (para qué fue)',1)}</div>
+    const md=movMedio(r)
+    return (<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,marginTop:6,fontSize:12.5}}>
+      {selTxt(md,md||'Elegir medio',[<option key='' value=''>Elegir medio</option>,...MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)],v=>updateRow(r.id,{mvMedio:v}),md?C.accent:C.overdueText,600)}
+      {MEDIO_CON_DETALLE.has(md)&&<><div style={{display:'flex',gap:6,flex:'1 1 220px',minWidth:0}}>{fi('mvDesde','Desde',1)}{fi('mvHasta','Hasta',1)}</div>
+      <div style={{display:'flex',flex:'2 1 220px',minWidth:0}}>{fi('mvMotivo','Motivo (para qué fue)',1)}</div></>}
     </div>) }
   const glosaInput = r => <input data-gconcept='1' value={r.concept} onChange={e=>updateRow(r.id,{concept:e.target.value})} placeholder='Descripción' style={{...inS,flex:1,minWidth:0}}/>
 
   const btnGuardar = (
-    <button type='button' disabled={!puedeGuardar} onClick={saveAll} title={bloqueadas?'Responde el aviso para guardar':faltaProyecto||faltaProyFila?'Falta el proyecto':faltaMov?'Falta el trayecto y el motivo de la movilización':undefined}
+    <button type='button' disabled={!puedeGuardar} onClick={saveAll} title={bloqueadas?'Responde el aviso para guardar':faltaProyecto||faltaProyFila?'Falta el proyecto':faltaMov?'Falta el medio o el trayecto y motivo de la movilización':undefined}
       style={{width:isDesktop?220:'100%',height:38,borderRadius:8,border:`1px solid ${C.azulTenueOn}`,background:C.azulTenueOn,color:C.accent,fontSize:13,fontWeight:700,cursor:puedeGuardar?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeGuardar?1:.5,fontFamily:'inherit'}}>
       {saving?<Spin/>:null}{saving?'Guardando...':llenas.length>1?`Guardar ${llenas.length} gastos${personal?' personales':''}`:personal?'Guardar gasto personal':'Guardar gasto'}
     </button>)
@@ -22076,7 +22112,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
                     {montoInput(r,isDesktop?120:86)}
                   </div>
                   {!ultima&&<div style={{marginTop:6,marginLeft:54}}>{subLinea(r,ultima)}</div>}
-                  {!ultima&&catDe(r)==='Movilización'&&<div style={{marginLeft:54}}>{lineaMov(r)}</div>}
+                  {(!ultima||r.category==='Movilización')&&catDe(r)==='Movilización'&&<div style={{marginLeft:54}}>{lineaMov(r)}</div>}
                   {a&&!r.picking&&<div style={{marginLeft:54}}>{aviso(r,a)}</div>}
                   {r.picking&&<div style={{marginLeft:54}}>{filaCliente(r)}</div>}
                 </div>)
@@ -22099,9 +22135,11 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro',date:expense.date||_hoyISO})
   // Movilización: medio + desde + hasta + motivo (mismo criterio que al registrar). Si la glosa ya viene armada, se precarga.
   const [mv,setMv] = useState(()=>{ const m=String(expense.concept||'').match(/^Movilización (.+?)–(.+?)(?: para (.+))?$/); return {medio:expense.subcategory||medioMovDe(expense.concept), desde:m?m[1]:'', hasta:m?m[2]:'', motivo:m&&m[3]?m[3]:''} })
-  const movFalta = f.type!=='fondo' && f.category==='Movilización' && (!mv.desde.trim()||!mv.hasta.trim()||mv.motivo.trim().length<4)
+  const movDet = MEDIO_CON_DETALLE.has(mv.medio)
+  const movFalta = f.type!=='fondo' && f.category==='Movilización' && (!mv.medio || (movDet && (!mv.desde.trim()||!mv.hasta.trim()||mv.motivo.trim().length<4)))
   // Al completar una movilización pendiente: glosa armada, medio en subcategoría, lo escrito antes a notas y la consulta queda resuelta.
   const movPatch = () => { if(f.type==='fondo'||f.category!=='Movilización') return {}
+    if(!movDet) return {subcategory:mv.medio||null, concept:String(f.concept||'').trim()||mv.medio, ...(f.revision_estado==='consultar'?{revision_estado:'consulta_resuelta',revisado_at:new Date().toISOString()}:{})}
     const concept=glosaMovilizacion(mv.desde,mv.hasta,mv.motivo), orig=String(f.concept||'').trim()
     const notas = orig&&orig!==concept&&!/^Movilización .+–/.test(orig)&&!String(f.notas||'').includes(orig) ? [f.notas,`Glosa original: ${orig}`].filter(Boolean).join(' · ') : (f.notas||null)
     return {concept, subcategory:mv.medio||null, notas, ...(f.revision_estado==='consultar'?{revision_estado:'consulta_resuelta',revisado_at:new Date().toISOString()}:{})} }
@@ -22199,9 +22237,9 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       {!isFondo&&f.category==='Movilización'&&(()=>{ const fi=(k,label)=>{ const v=mv[k]||'', bad=!v.trim()||(k==='motivo'&&v.trim().length<4)
           return <FloatFld label={label} mb={0}><input value={v} onChange={e=>setMv(p=>({...p,[k]:e.target.value}))} style={{...fInp,borderColor:bad?C.overdueText:undefined}}/></FloatFld> }
         return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8,marginBottom:8}}>
-          <FloatFld label='Medio' mb={0}><select value={mv.medio} onChange={e=>setMv(p=>({...p,medio:e.target.value}))} style={{...fInp,cursor:'pointer'}}>{MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)}</select></FloatFld>
-          {fi('desde','Desde')}{fi('hasta','Hasta')}
-          <div style={{gridColumn:'1 / -1'}}>{fi('motivo','Motivo (para qué fue)')}</div>
+          <FloatFld label='Medio' mb={0}><select value={mv.medio} onChange={e=>setMv(p=>({...p,medio:e.target.value}))} style={{...fInp,cursor:'pointer',borderColor:mv.medio?undefined:C.overdueText}}><option value=''>Elegir medio</option>{MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)}</select></FloatFld>
+          {movDet&&<>{fi('desde','Desde')}{fi('hasta','Hasta')}
+          <div style={{gridColumn:'1 / -1'}}>{fi('motivo','Motivo (para qué fue)')}</div></>}
         </div>) })()}
       {/* Proyecto + adjuntar en la misma línea */}
       {!isFondo&&(
@@ -24877,6 +24915,11 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const saldoCliente = _rs.saldo
   const totFondosCli = _rs.totFondos
   const debeCliente = saldoCliente < 0
+  // 2+ proyectos: el correo los nombra y explica la imputación de saldos (misma fuente que el PDF).
+  const _grp = rendGruposProyecto({expenses, clientId:r.client_id, scopeEntId:entId, gastos:det, excludeRenderId:r.id, clientEntities})
+  const _persona = esPersona(client?.name)
+  // Fondos adicionales en el mismo correo (ej. falta plata para lo que viene): suma al saldo a cargo o se descuenta del saldo a favor.
+  const [adic,setAdic] = useState({on:false,monto:'',motivo:''})
   const [para,setPara] = useState(r?.dirigido_email || client?.email || '')
   // Cc: gente del cliente (con chips, aprendida y editable) + copia al estudio (responsable + quienes cargaron los gastos).
   const EMAIL_BY_NAME = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
@@ -24934,24 +24977,35 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
       } else if(saldoCliente > 0){
         cierre = `\n\nThe funds received amounted to ${fmtN(totFondosCli)} and the reported expenses total ${fmtN(_rs.rendido)}, leaving a balance of ${abs} in your favor. Please let us know the bank account to which you would like the surplus refunded, by writing to ${BRAND.pago.honorarios.email}.`
       }
+      const Ye = adic.on ? Math.max(0, parseInt(adic.monto)||0) : 0
+      if(Ye) cierre += `\n\nFor the upcoming steps we also request an additional fund of ${fmtN(Ye)}.`
       return `${saludoCliEn(client?.name)},
 
-Please find attached your expense report${r.correlativo?` No. ${r.correlativo}`:''}${r.project?` for the ${r.project} project${r.subproject?` (${r.subproject})`:''}`:''}. The attached document contains an itemized breakdown of each disbursement.${cierre}
+I hope you are doing well. Please find attached your expense report${r.correlativo?` No. ${r.correlativo}`:''}${r.project?` for the ${r.project} project${r.subproject?` (${r.subproject})`:''}`:''}. The attached document contains an itemized breakdown of each disbursement.${cierre}
 
 We remain at your disposal for any questions.
 
 Kind regards,`
     }
     const cuentaLEA = `\n  RUT: ${fmtRutCL(BRAND.rut)}\n  Banco: ${BRAND.pago.gastos.banco}\n  Cuenta Corriente: ${BRAND.pago.gastos.cuentaFmt}\n  Comprobante a: ${BRAND.pago.gastos.email}`
+    const Y = adic.on ? Math.max(0, parseInt(adic.monto)||0) : 0, sal = Math.abs(saldoCliente), mot = adic.motivo.trim() ? ` (${adic.motivo.trim()})` : ''
     let cierre = ''
     if(saldoCliente < 0){
-      cierre = `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}, que le agradeceremos transferir a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
+      cierre = Y ? `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}. Además, para los próximos trámites${mot} solicitamos una provisión de fondos de ${fmtN(Y)}, por lo que le agradeceremos transferir un total de ${fmtN(sal+Y)} a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
+        : `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}, que le agradeceremos transferir a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
     } else if(saldoCliente > 0){
-      cierre = `\n\nEl fondo recibido fue de ${fmtN(totFondosCli)} y los gastos rendidos suman ${fmtN(_rs.rendido)}, resultando un saldo a su favor de ${abs}. Le agradeceremos indicarnos la cuenta corriente a la que prefiere que le devolvamos el excedente, escribiéndonos a ${BRAND.pago.honorarios.email}.`
+      cierre = Y ? `\n\nEl fondo recibido fue de ${fmtN(totFondosCli)} y los gastos rendidos suman ${fmtN(_rs.rendido)}, resultando un saldo a su favor de ${abs}. Para los próximos trámites${mot} solicitamos una provisión de fondos de ${fmtN(Y)}; ${Y>sal?`descontado su saldo a favor, le agradeceremos transferir ${fmtN(Y-sal)} a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`:'su saldo a favor la cubre, por lo que lo mantendremos como fondo para esos trámites.'}`
+        : `\n\nEl fondo recibido fue de ${fmtN(totFondosCli)} y los gastos rendidos suman ${fmtN(_rs.rendido)}, resultando un saldo a su favor de ${abs}. Le agradeceremos indicarnos la cuenta corriente a la que prefiere que le devolvamos el excedente, escribiéndonos a ${BRAND.pago.honorarios.email}.`
+    } else if(Y){
+      cierre = `\n\nPara los próximos trámites${mot} solicitamos una provisión de fondos de ${fmtN(Y)}, que le agradeceremos transferir a la cuenta de ${BRAND.nombreLegal}:${cuentaLEA}`
     }
+    const listaY = a => a.length<2 ? (a[0]||'') : `${a.slice(0,-1).join(', ')} y ${a[a.length-1]}`
+    const proyTxt = _grp ? `, separada por proyecto: ${listaY(_grp.grupos.map(x=>x.proyecto||'sin proyecto'))}` : (r.project?` del proyecto ${r.project}${r.subproject?` (${r.subproject})`:''}`:'')
+    const fav = _grp ? _grp.grupos.filter(x=>x.saldo>0) : [], cub = _grp ? _grp.grupos.filter(x=>x.saldo<0) : []
+    const imputTxt = fav.length&&cub.length ? ` El saldo a su favor de ${listaY(fav.map(x=>`${x.proyecto} (${fmtN(x.saldo)})`))} se imputó a ${listaY(cub.map(x=>x.proyecto))}.` : ''
     return `${saludoCli(client?.name)}:
 
-Adjuntamos su rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''}${r.project?` del proyecto ${r.project}${r.subproject?` (${r.subproject})`:''}`:''}. En el documento adjunto encontrará el detalle de cada desembolso.${cierre}
+Espero que ${_persona?'estés':'estén'} muy bien. Adjuntamos su rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''}${proyTxt}. En el documento adjunto encontrará el detalle de cada desembolso.${imputTxt}${cierre}
 
 Quedamos atentos a cualquier consulta.
 
@@ -24966,7 +25020,8 @@ Saludos cordiales,`
   const _untokR=(t,lg)=>{ let s=String(t); for(const [tok,val] of _rendPairs(lg)){ s=s.split(tok).join(val) } return s }
   const [body,setBody] = useState(()=>cuerpoCorreo('es'))
   const aplicarBaseR=lg=>{ const tpl=learnedTplR.current[lg]; setBody(tpl?_untokR(tpl,lg):cuerpoCorreo(lg)) }
-  useEffect(()=>{ setAsunto(asuntoFor(lang)); if(!bodyTocadoR.current) aplicarBaseR(lang) },[lang])  // toggle ES|EN: asunto siempre; cuerpo respeta tu edición
+  useEffect(()=>{ setAsunto(asuntoFor(lang)); if(!bodyTocadoR.current) aplicarBaseR(lang) },[lang])
+  useEffect(()=>{ if(!bodyTocadoR.current) setBody(adic.on?cuerpoCorreo(lang):(learnedTplR.current[lang]?_untokR(learnedTplR.current[lang],lang):cuerpoCorreo(lang))) },[adic.on,adic.monto,adic.motivo])   // eslint-disable-line
   // Carga tu última redacción (cliente + signo de saldo + idioma) y la aplica con las cifras de ESTA rendición.
   useEffect(()=>{ if(!r?.client_id) return; let alive=true
     ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','rendicion_msg').eq('key',keyR(lg)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTplR.current[lg]=data.value; if(lg===lang&&!bodyTocadoR.current) setBody(_untokR(data.value,lg)) },()=>{}) })
@@ -25057,7 +25112,9 @@ Saludos cordiales,`
       try{ if(cc.length){ await supabase.from('learnings').delete().eq('kind','rendicion_cc').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_cc',key:String(r.client_id),value:cc.join(', '),meta:{}}) } }catch(_){}
       // Recordar el destinatario "Para" de la rendición → lo reusa la devolución (que va al mismo).
       try{ if((para||'').trim()){ await supabase.from('learnings').delete().eq('kind','rendicion_para').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_para',key:String(r.client_id),value:para.trim(),meta:{}}) } }catch(_){}
-      try{ if(r.client_id) await setLearningKV('rendicion_msg', keyR(lang), _tokR(body,lang)) }catch(_){}   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
+      try{ if(r.client_id && !adic.on) await setLearningKV('rendicion_msg', keyR(lang), _tokR(body,lang)) }catch(_){}
+      // Fondos adicionales pedidos en la rendición: quedan en el historial de solicitudes (cruce con el depósito, avisos).
+      if(adic.on && (parseInt(adic.monto)||0)>0){ try{ await supabase.from('fund_requests').insert({ client_id:r.client_id||null, sale_id:null, monto:parseInt(adic.monto)||0, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, n_adjuntos:1 }) }catch(_){} }   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
       try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
       appAlert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
       onClose()
@@ -25092,6 +25149,13 @@ Saludos cordiales,`
       <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',marginBottom:12}}>
         <div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>Asunto</div>
         <input value={asunto} onChange={e=>setAsunto(e.target.value)} style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
+      </div>
+      <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:12}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}><Switch on={adic.on} onToggle={()=>setAdic(p=>({...p,on:!p.on}))}/><span style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Pedir fondos adicionales</span></div>
+        {adic.on&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+          <span style={{display:'flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,background:'#fff',width:150}}><span style={{fontSize:13,color:C.muted,padding:'0 2px 0 10px'}}>$</span><input value={adic.monto?Number(adic.monto).toLocaleString('es-CL'):''} onChange={e=>setAdic(p=>({...p,monto:e.target.value.replace(/\D/g,'')}))} inputMode='numeric' placeholder='Monto' style={{border:'none',outline:'none',fontSize:13,padding:'8px 8px 8px 2px',width:'100%',background:'none'}}/></span>
+          <input value={adic.motivo} onChange={e=>setAdic(p=>({...p,motivo:e.target.value}))} placeholder='Para qué (opcional)' style={{flex:'1 1 180px',minWidth:0,border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'8px 10px',outline:'none'}}/>
+        </div>}
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
         <Lbl>Mensaje</Lbl>
@@ -26390,6 +26454,7 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
   const scopeEntId = entsClient.length>1 ? gEnt : null
   const ent = entsClient.length===1 ? entsClient[0] : (gEnt ? (clientEntities||[]).find(x=>x.id===gEnt) : null)
   const { fondos, totFondos, previas, rendidoAntes } = rendicionFondo(expenses, client&&client.id, scopeEntId, r.id)
+  const grp = rendGruposProyecto({expenses, clientId:client&&client.id, scopeEntId, gastos, excludeRenderId:r.id, clientEntities})
   const razon = (ent&&ent.name) || (client&&client.name) || '—'
   const rut = (ent&&ent.rut) || (client&&client.rut) || ''
   const totGastos = gastos.reduce((a,e)=>a+(e.amount||0),0)
@@ -26421,14 +26486,8 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
   kcard(1,T.expPeriod,fmtN(totGastos),[245,247,249],cTxt)
   kcard(2,sPos?T.balFavor:T.balPending,(saldo<0?'-':'')+fmtN(Math.abs(saldo)),sPos?[225,245,238]:[252,235,235],sPos?cGreen:cRed)
   y+=bh+20
-  // ===== Proyecto =====
-  if(r.project){ doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(83,114,129); doc.text(T.project, M, y); doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(61,61,61); doc.text(String(r.project+(r.subproject?` · ${r.subproject}`:'')).slice(0,70), M+58, y); y+=20 }
-  // ===== Tabla gastos =====
-  doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8)
-  doc.text(T.date, M, y); doc.text(T.concept, M+72, y); doc.text(T.category, cCat, y); doc.text(T.amount, cMonto, y, {align:'right'})
-  y+=7; doc.setDrawColor(228,232,235); doc.setLineWidth(1); doc.line(M,y,W-M,y); y+=16
   const ensure=(n)=>{ if(y > H-70-n){ doc.addPage(); y=56 } }
-  gastos.forEach(e=>{
+  const filaG=e=>{
     ensure(24)
     const ot=e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):''
     const seg2 = !!(ot||e.respaldo)
@@ -26442,7 +26501,15 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
       if(e.respaldo){ doc.setTextColor(15,110,86); doc.text(EN?'✓ receipt':'✓ respaldo', sx, y+11) }
     }
     y += seg2?23:18
-  })
+  }
+  if(!grp){
+  // ===== Proyecto =====
+  if(r.project){ doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(83,114,129); doc.text(T.project, M, y); doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(61,61,61); doc.text(String(r.project+(r.subproject?` · ${r.subproject}`:'')).slice(0,70), M+58, y); y+=20 }
+  // ===== Tabla gastos =====
+  doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8)
+  doc.text(T.date, M, y); doc.text(T.concept, M+72, y); doc.text(T.category, cCat, y); doc.text(T.amount, cMonto, y, {align:'right'})
+  y+=7; doc.setDrawColor(228,232,235); doc.setLineWidth(1); doc.line(M,y,W-M,y); y+=16
+  gastos.forEach(filaG)
   y+=2; doc.setDrawColor(0,60,80); doc.setLineWidth(1.2); doc.line(M,y,W-M,y); y+=16
   doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(61,61,61); doc.text(T.totalExp, M, y); doc.text(fmtN(totGastos), cMonto, y, {align:'right'}); y+=28
   // ===== Fondos recibidos =====
@@ -26461,6 +26528,41 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
     lrow(T.thisRep, totGastos, true)
     yy+=3; doc.setDrawColor(90,110,125); doc.setLineWidth(0.5); doc.line(M+16,yy-9,W-M-16,yy-9)
     doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255); doc.text(T.avail, M+16, yy+4); doc.text((saldo<0?'-':'')+fmtN(saldo), W-M-16, yy+4, {align:'right'})
+    y += boxH+14
+  }
+  } else {
+    // 2+ proyectos: bloque por proyecto (razón social, gastos, fondos, rendido antes, saldo) + imputación de saldos.
+    const L=EN?{proj:'PROJECT',exp:'Project expenses',prev:'Previously reported',fav:'Balance in favor of the project',due:'Balance to cover',imp:'SUMMARY BY PROJECT · BALANCE ALLOCATION',others:'Other funds and previous reports',note:'Balances in favor are applied to the balances to cover',tot:sPos?T.balFavor:T.balPending}:{proj:'PROYECTO',exp:'Gastos del proyecto',prev:'Rendido anteriormente',fav:'Saldo a favor del proyecto',due:'Saldo por cubrir del proyecto',imp:'RESUMEN POR PROYECTO · IMPUTACIÓN DE SALDOS',others:'Otros fondos y rendiciones anteriores',note:'Los saldos a favor se imputan a los saldos por cubrir',tot:sPos?T.balFavor:T.balPending}
+    const sgn=v=>(v<0?'-':v>0?'+':'')+fmtN(Math.abs(v))
+    grp.grupos.forEach((x,i)=>{
+      ensure(80)
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(83,114,129); doc.text(`${L.proj} ${i+1}`, M, y)
+      if(x.ent){ doc.setFontSize(8.5); doc.setTextColor(61,61,61); doc.text(String(x.ent.name).slice(0,52), W-M, y, {align:'right'}) }
+      y+=13; doc.setFont('helvetica','bold'); doc.setFontSize(11.5); doc.setTextColor(0,60,80); doc.text(String(x.proyecto||'—').slice(0,58), M, y)
+      if(x.ent&&x.ent.rut){ doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(83,114,129); doc.text(fmtRutCL(x.ent.rut), W-M, y, {align:'right'}) }
+      y+=7; doc.setDrawColor(0,60,80); doc.setLineWidth(1.2); doc.line(M,y,W-M,y); y+=14
+      doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8)
+      doc.text(T.date, M, y); doc.text(T.concept, M+72, y); doc.text(T.category, cCat, y); doc.text(T.amount, cMonto, y, {align:'right'}); y+=16
+      x.gastos.forEach(filaG)
+      y+=2; doc.setDrawColor(228,232,235); doc.setLineWidth(0.8); doc.line(M,y,W-M,y); y+=14
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(L.exp, M, y); doc.text(fmtN(x.totGastos), cMonto, y, {align:'right'}); y+=18
+      if(x.fondos.length){ ensure(30); doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,60,80); doc.text(T.fundsSection, M, y); y+=14
+        x.fondos.forEach(fo=>{ ensure(16); doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(fmtFechaDMY(fo.date), M, y); doc.text(String(fo.concept||T.received).slice(0,52), M+72, y); doc.setFont('helvetica','bold'); doc.setTextColor(15,110,86); doc.text(fmtN(fo.amount), cMonto, y, {align:'right'}); y+=16 }) }
+      if(x.previo){ ensure(16); doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(83,114,129); doc.text(L.prev, M, y); doc.text('-'+fmtN(x.previo), cMonto, y, {align:'right'}); y+=16 }
+      ensure(26); const neg=x.saldo<0; doc.setFillColor(neg?252:225,neg?235:245,neg?235:238); doc.roundedRect(M,y-4,W-2*M,22,4,4,'F')
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(neg?163:15,neg?45:110,neg?45:86); doc.text(neg?L.due:L.fav, M+10, y+11); doc.text(sgn(x.saldo), W-M-10, y+11, {align:'right'}); y+=36
+    })
+    const mixto=grp.grupos.some(x=>x.saldo>0)&&grp.grupos.some(x=>x.saldo<0)
+    const nL=grp.grupos.length+(Math.round(grp.otros)?1:0)+(mixto?1:0)
+    const boxH=36+nL*15+20
+    ensure(boxH+10); doc.setFillColor(0,60,80); doc.roundedRect(M,y,W-2*M,boxH,6,6,'F')
+    let yy=y+20; doc.setTextColor(153,171,180); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(L.imp, M+16, yy); yy+=17
+    const lrow=(lbl,val,muted)=>{ doc.setFont('helvetica',muted?'normal':'bold'); doc.setFontSize(9.5); doc.setTextColor(muted?153:255,muted?171:255,muted?180:255); doc.text(String(lbl).slice(0,62), M+16, yy); if(val) doc.text(val, W-M-16, yy, {align:'right'}); yy+=15 }
+    grp.grupos.forEach(x=>lrow(x.proyecto||'—', sgn(x.saldo)))
+    if(Math.round(grp.otros)) lrow(L.others, sgn(grp.otros))
+    if(mixto) lrow(L.note, '', true)
+    yy+=3; doc.setDrawColor(90,110,125); doc.setLineWidth(0.5); doc.line(M+16,yy-9,W-M-16,yy-9)
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255); doc.text(L.tot, M+16, yy+4); doc.text((saldo<0?'-':'')+fmtN(Math.abs(saldo)), W-M-16, yy+4, {align:'right'})
     y += boxH+14
   }
   // ===== Saldo a su cargo (si el cliente debe) =====
