@@ -83,6 +83,7 @@ export const demoData = {
   ],
   // Vendido 2026 ≈ $527M (≈63% de la meta de $800M)
   sales: [
+    { id:'ssub', client_id:'c4', title:'Subarrendamiento oficina', moneda:'CLP', amount_clp:1080000, year:2026, month:3, status:'Activo', cobro_type:'mensual', cobro_config:{subarriendo:true}, responsible:'Cristóbal', created_at:'2026-03-01' },
     { id:'s1',  client_id:'c1', entity_id:'e1', title:'Asesoría corporativa permanente', area:'Corporativo', moneda:'UF',  amount_uf:90,   cost_uf:0,   uf_value:39000, year:2026, month:1, status:'Activo', cobro_type:'mensual',       responsible:'Cristóbal', created_at:'2026-01-05' },
     { id:'s2',  client_id:'c2', entity_id:'e2', title:'Reorganización societaria',         area:'Corporativo', moneda:'UF',  amount_uf:1500, cost_uf:150, uf_value:39000, year:2026, month:2, status:'Activo', cobro_type:'cuotas',        responsible:'Erasmo',    created_at:'2026-02-10' },
     { id:'s3',  client_id:'c3',               title:'Litigio laboral colectivo',          area:'Litigios',    moneda:'CLP', amount_clp:75000000,  cost_clp:0, year:2026, month:3, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2026-03-02' },
@@ -109,6 +110,10 @@ export const demoData = {
   ],
   // Facturado 2026 ≈ $271M · Cobrado ≈ $143M · Por cobrar ≈ $128M · Programado ≈ $65M
   billing: [
+    { id:'bsub1', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina (marzo–abril 2026)', amount:2160000, status:'Pagado', invoice_no:'321', issued_at:'2026-04-13', due:'2026-05-13', paid_at:'2026-04-07', billing_type:'subarriendo', receptor_name:'TECH ARAUCANÍA SPA', receptor_rut:'77.777.888-9', monto_terceros:0 },
+    { id:'bsub2', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Octubre 2026', amount:1080000, status:'Pagado', invoice_no:'487', issued_at:'2026-10-07', due:'2026-11-06', paid_at:'2026-10-06', billing_type:'subarriendo', receptor_name:'TECH ARAUCANÍA SPA', receptor_rut:'77.777.888-9', monto_terceros:0 },
+    { id:'bsub3', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Noviembre 2026', amount:1080000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-12-01', billing_type:'subarriendo', monto_terceros:0 },
+    { id:'bsub4', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Diciembre 2026', amount:1080000, status:'Programada', invoice_no:null, issued_at:null, due:'2027-01-01', billing_type:'subarriendo', monto_terceros:0 },
     // Pagadas (cobrado 2026)
     { id:'b1',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios enero',        amount:3510000,  status:'Pagado',     invoice_no:'1201', issued_at:'2026-01-31', due:'2026-02-15', paid_at:'2026-02-10', billing_type:'honorarios', monto_terceros:0 },
     { id:'bag1', client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios agosto',        amount:3200000, status:'Pagado',    invoice_no:'1250', issued_at:'2026-08-05', due:'2026-08-20', paid_at:'2026-08-18', billing_type:'honorarios', monto_terceros:0 },
@@ -276,6 +281,10 @@ export const demoData = {
     { id:'dpv3', folio:'55',  tipo_dte:34, fecha_emision:'2026-06-10', emisor_rut:'76.500.300-4', monto:3000000, proveedor_id:'pv2', movimiento_id:null },
   ],
   anticipos: [
+    { id:'antsub6', client_id:'c4', sale_id:'ssub', monto:1080000, fecha:'2026-06-01', nota:'Subarriendo junio 2026 (pago sin factura, conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+    { id:'antsub7', client_id:'c4', sale_id:'ssub', monto:1080000, fecha:'2026-07-02', nota:'Subarriendo julio 2026 (pago sin factura, conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+    { id:'antsub8', client_id:'c4', sale_id:'ssub', monto:1080000, fecha:'2026-08-03', nota:'Subarriendo agosto 2026 (pago sin factura, conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+    { id:'antsub9', client_id:'c4', sale_id:'ssub', monto:1080000, fecha:'2026-09-01', nota:'Subarriendo septiembre 2026 (pago sin factura, conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'ant1', client_id:'c4', monto:1500000, fecha:'2026-06-10', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'ant2', client_id:'c4', monto:1500000, fecha:'2026-07-15', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'ant3', client_id:'c4', monto:1200000, fecha:'2026-08-01', nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
@@ -283,6 +292,13 @@ export const demoData = {
   ],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.
   cartola_movimientos: [
+    { id:'ms3', fecha:'2026-03-02', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
+    { id:'ms4', fecha:'2026-04-07', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
+    { id:'ms6', fecha:'2026-06-01', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
+    { id:'ms7', fecha:'2026-07-02', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
+    { id:'ms8', fecha:'2026-08-03', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
+    { id:'ms9', fecha:'2026-09-01', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
+    { id:'ms10', fecha:'2026-10-06', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
     { id:'movn0', fecha:'2026-08-21', monto:320000, tipo:'cargo', es_interno:false, estado:'conciliado', monto_conciliado:320000, categoria:'Notaría', rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'8.215.914-2', nombre_contraparte:'MARÍA SOLEDAD LASCAR MERINO', descripcion:'Transf. a terceros vía Internet a cuenta 206659341 ItauChile, MARÍA SOLEDAD LASCAR MERINO' },
     { id:'movn1', fecha:'2026-07-27', monto:180000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'8.215.914-2', nombre_contraparte:'MARÍA SOLEDAD LASCAR MERINO', descripcion:'Transf. a terceros vía Internet a cuenta 206659341 ItauChile, MARÍA SOLEDAD LASCAR MERINO' },
     { id:'movn2', fecha:'2026-09-16', monto:240000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, rol_cuenta:'gastos', cliente_id:null, rut_contraparte:'8.215.914-2', nombre_contraparte:'MARÍA SOLEDAD LASCAR MERINO', descripcion:'Transf. a terceros vía Internet a cuenta 206659341 ItauChile, MARÍA SOLEDAD LASCAR MERINO' },
@@ -327,6 +343,13 @@ export const demoData = {
   ],
   cliente_alias: [],
   conciliacion: [
+    { id:'cms3', movimiento_id:'ms3', tipo_destino:'factura', factura_id:'bsub1', anticipo_id:null, monto_aplicado:1080000, origen:'demo' },
+    { id:'cms4', movimiento_id:'ms4', tipo_destino:'factura', factura_id:'bsub1', anticipo_id:null, monto_aplicado:1080000, origen:'demo' },
+    { id:'cms6', movimiento_id:'ms6', tipo_destino:'anticipo', factura_id:null, anticipo_id:'antsub6', monto_aplicado:1080000, origen:'demo' },
+    { id:'cms7', movimiento_id:'ms7', tipo_destino:'anticipo', factura_id:null, anticipo_id:'antsub7', monto_aplicado:1080000, origen:'demo' },
+    { id:'cms8', movimiento_id:'ms8', tipo_destino:'anticipo', factura_id:null, anticipo_id:'antsub8', monto_aplicado:1080000, origen:'demo' },
+    { id:'cms9', movimiento_id:'ms9', tipo_destino:'anticipo', factura_id:null, anticipo_id:'antsub9', monto_aplicado:1080000, origen:'demo' },
+    { id:'cms10', movimiento_id:'ms10', tipo_destino:'factura', factura_id:'bsub2', anticipo_id:null, monto_aplicado:1080000, origen:'demo' },
     { id:'conpv2', movimiento_id:'movpv2', tipo_destino:'tercero', factura_id:null, anticipo_id:null, monto_aplicado:1500000, origen:'demo' },
     { id:'con1', movimiento_id:'mov1', tipo_destino:'factura', factura_id:'b10', anticipo_id:null, monto_aplicado:40000000, origen:'demo', marco_pago:true },
     { id:'con2', movimiento_id:'mov2', tipo_destino:'factura', factura_id:'b11', anticipo_id:null, monto_aplicado:23400000, origen:'demo', marco_pago:true },
