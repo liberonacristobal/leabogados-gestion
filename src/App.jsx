@@ -21726,7 +21726,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const gastoDeFila = r => { const cat=catDe(r)
     if(cat!=='Movilización') return {concept:r.concept, subcategory:cat==='Otro'?(r.subcategory?.trim()||null):null}
     const concept=glosaMovilizacion(r.mvDesde,r.mvHasta,r.mvMotivo), orig=String(r.concept||'').trim()
-    return {concept, subcategory:movMedio(r), ...(orig&&orig!==concept?{notas:`Glosa original: ${orig}`}:{})} }
+    return {concept, subcategory:movMedio(r), ...(orig.split(/\s+/).length>2&&orig!==concept?{notas:`Glosa original: ${orig}`}:{})} }
   const avisoDe = r => {
     if(r.resp) return null
     const cli=cliDe(r); if(!cli) return null
@@ -22097,6 +22097,14 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSave,onClose,onDelete,saving,user,onAttachChange}) {
   const _hoyISO = (()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro',date:expense.date||_hoyISO})
+  // Movilización: medio + desde + hasta + motivo (mismo criterio que al registrar). Si la glosa ya viene armada, se precarga.
+  const [mv,setMv] = useState(()=>{ const m=String(expense.concept||'').match(/^Movilización (.+?)–(.+?)(?: para (.+))?$/); return {medio:expense.subcategory||medioMovDe(expense.concept), desde:m?m[1]:'', hasta:m?m[2]:'', motivo:m&&m[3]?m[3]:''} })
+  const movFalta = f.type!=='fondo' && f.category==='Movilización' && (!mv.desde.trim()||!mv.hasta.trim()||mv.motivo.trim().length<4)
+  // Al completar una movilización pendiente: glosa armada, medio en subcategoría, lo escrito antes a notas y la consulta queda resuelta.
+  const movPatch = () => { if(f.type==='fondo'||f.category!=='Movilización') return {}
+    const concept=glosaMovilizacion(mv.desde,mv.hasta,mv.motivo), orig=String(f.concept||'').trim()
+    const notas = orig&&orig!==concept&&!/^Movilización .+–/.test(orig)&&!String(f.notas||'').includes(orig) ? [f.notas,`Glosa original: ${orig}`].filter(Boolean).join(' · ') : (f.notas||null)
+    return {concept, subcategory:mv.medio||null, notas, ...(f.revision_estado==='consultar'?{revision_estado:'consulta_resuelta',revisado_at:new Date().toISOString()}:{})} }
   const [showPersonal,setShowPersonal] = useState(!!expense.personal_de)
   const [internoOpen,setInternoOpen] = useState(false)   // popover "Gasto interno · ¿oficina o miembro?"
   const esOficinaCli = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
@@ -22188,6 +22196,13 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
         </FloatFld>
       )}
       <FloatFld label='Descripción'><textarea value={f.concept} onChange={e=>up('concept',e.target.value)} rows={2} placeholder='Descripción...' style={{...fInp,height:'auto',resize:'none',fontFamily:'inherit',paddingTop:2}}/></FloatFld>
+      {!isFondo&&f.category==='Movilización'&&(()=>{ const fi=(k,label)=>{ const v=mv[k]||'', bad=!v.trim()||(k==='motivo'&&v.trim().length<4)
+          return <FloatFld label={label} mb={0}><input value={v} onChange={e=>setMv(p=>({...p,[k]:e.target.value}))} style={{...fInp,borderColor:bad?C.overdueText:undefined}}/></FloatFld> }
+        return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8,marginBottom:8}}>
+          <FloatFld label='Medio' mb={0}><select value={mv.medio} onChange={e=>setMv(p=>({...p,medio:e.target.value}))} style={{...fInp,cursor:'pointer'}}>{MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)}</select></FloatFld>
+          {fi('desde','Desde')}{fi('hasta','Hasta')}
+          <div style={{gridColumn:'1 / -1'}}>{fi('motivo','Motivo (para qué fue)')}</div>
+        </div>) })()}
       {/* Proyecto + adjuntar en la misma línea */}
       {!isFondo&&(
         <div style={{display:'flex',gap:8,alignItems:'stretch',marginBottom:8}}>
@@ -22230,7 +22245,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
