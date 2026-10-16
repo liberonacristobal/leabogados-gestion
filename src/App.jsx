@@ -17339,7 +17339,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       if(concilMatch[r.id]){ const g=live.find(e=>!used.has(e.id)&&String(e.id)===String(concilMatch[r.id])); if(g) return {g,via:'manual'} }
       const o=normOt(r.ot); if(o&&byOt[o]){ const c=byOt[o].find(e=>!used.has(e.id)); if(c) return {g:c,via:'ot'} }
       if(r.fecha){ let cands = live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.date||'')===String(r.fecha||''))
-        if(r.client_id){ const sc=cands.filter(e=>String(e.client_id||'')===String(r.client_id)); if(sc.length) cands=sc }  // mismo cliente primero (evita calce cruzado, clave en fondos sin OT)
+        // Fecha+monto solo calza dentro del MISMO cliente, nunca cruzado: el 25-06-2026 la caja chica de Martina
+        // (Hugo Figueroa, CBR $8.000 del 10-04) se pegó a la OT 448251 de Juan Pablo Mir (misma fecha y monto) y el
+        // gasto de Hugo nunca se creó. Tampoco calza una fila sin OT con un gasto que sí tiene OT, ni una caja chica
+        // con un gasto ya pagado a la notaría (ese lo pagó la oficina, no la caja).
+        if(r.client_id){ cands=cands.filter(e=>!e.client_id||String(e.client_id)===String(r.client_id)); const sc=cands.filter(e=>e.client_id); if(sc.length) cands=sc }   // un gasto aún sin cliente sí puede ser el mismo
+        if(!normOt(r.ot)) cands=cands.filter(e=>!normOt(e.ot_number))
+        if(cajaOwner) cands=cands.filter(e=>!e.notaria_liquidado_at&&!e.notaria_render_id)
         if(cands.length===1) return {g:cands[0],via:'fecha'}
         if(cands.length>1){ const rt=tok(r.concepto); let best=cands[0],bn=-1; cands.forEach(e=>{ const n=ov(tok(e.concept),rt); if(n>bn){bn=n;best=e} }); return {g:best,via:'fecha',score:bn} } }
       // Sin OT ni fecha que calce (históricos sin fecha): cliente + monto + glosa (≥1 palabra en común).
