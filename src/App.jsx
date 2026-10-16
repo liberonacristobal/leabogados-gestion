@@ -2789,6 +2789,7 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioAct
     check:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M4 12l5 5L20 6"/></svg>,
     folder:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
     clock:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>,
+    building:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1"/></svg>,
     bank:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><line x1="3" y1="21" x2="21" y2="21"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="5 6 12 3 19 6"/><line x1="4" y1="10" x2="4" y2="21"/><line x1="20" y1="10" x2="20" y2="21"/><line x1="8" y1="14" x2="8" y2="17"/><line x1="12" y1="14" x2="12" y2="17"/><line x1="16" y1="14" x2="16" y2="17"/></svg>,
     chart:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8"/><rect x="12" y="6" width="3" height="12"/><rect x="17" y="13" width="3" height="5"/></svg>,
     send:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
@@ -2808,6 +2809,7 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioAct
         {cap:'Finanzas', items:[
           {id:'conciliacion',label:'Banco',ic:'bank',mod:'finanzas'},
           {id:'proveedores',label:'Comisiones',ic:'pct',mod:'finanzas'},
+          {id:'presupuestoOficina',label:'Oficina',ic:'building',mod:'finanzas'},
           {id:'cobranza',label:'Cobranza',ic:'send',mod:'finanzas'},
           {id:'horas',label:'Horas',ic:'clock',mod:'horas'},
           {id:'inteligencia',label:'Inteligencia',ic:'chart',mod:'nucleo'},
@@ -9571,12 +9573,21 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const facH=esMes?facSiiPeriodo(ymSel):facYTD, subH=esMes?subMesT(ymSel):subYTD, cosPlan=esMes?costoBrutoMes(ymSel):cosYTD, comH=esMes?comMesT(ymSel):comYTD, gvH=esMes?gastosVariosOfiMes(expenses,clients,ymSel):gvYTD
   const cosH=cosPlan+gvH                                 // costos de operación = planilla + gastos varios (fuente única con ResultadoAnioView)
   const ingH=facH+subH, egrH=cosH+comH, resH=ingH-egrH, margH=ingH>0?Math.round(resH/ingH*100):0
+  // FUENTE ÚNICA con el Inicio y el Estado de resultados (2026-10-16): resultadoMes por mes (ingresos = facturación propia SII + subarriendo
+  // + comisión de externos; costos = planilla sin PPM + gastos varios; comisiones PAGADAS). Año = enero..mes actual; Por mes = el mes elegido.
+  const fuR = useFuentesResultado()
+  const depsR = {billing,terceros,costosOfiRows,expenses,clients}
+  const mesesR = Array.from({length:_curM},(_,i)=>resultadoMes(fuR,depsR,`${year}-${String(i+1).padStart(2,'0')}`))
+  const selMR = Math.min(Math.max(1,selM||_curM),_curM)
+  const rSel = scope==='mes' ? [mesesR[selMR-1]] : mesesR
+  const R = rSel.reduce((a,x)=>({fac:a.fac+x.fac,sub:a.sub+x.sub,rex:a.rex+x.rex,ing:a.ing+x.ing,cos:a.cos+x.cos,gv:a.gv+x.gv,com:a.com+x.com,res:a.res+x.res,ppm:a.ppm+x.ppm,nCom:a.nCom+x.comList.length}),{fac:0,sub:0,rex:0,ing:0,cos:0,gv:0,com:0,res:0,ppm:0,nCom:0})
+  const rMesSel = mesesR[selMR-1]
   // Por resolver: facturas del SII sin enlazar (acción) + meses pasados aún sin cerrar (se cierran solos; estado, no acción).
   const sinEnl=(ventasRows||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(year)&&[33,34,61].includes(Number(d.tipo_dte))&&!d.billing_id).length
   const pend=Array.from({length:Math.max(0,_curM-1)},(_,i)=>i+1).filter(m=>!(rcmBy[m]&&rcmBy[m].cerrado))
   const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,overflow:'hidden'}
   const L=t=><div style={{...SEC_LBL,margin:'22px 4px 9px'}}>{t}</div>
-  const selPill={fontSize:12,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:20,padding:'6px 12px',background:C.azulBg,color:C.accent,cursor:'pointer',fontFamily:'inherit'}
+  const selPill={fontSize:11.5,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',background:C.card,color:C.accent,cursor:'pointer',fontFamily:'inherit',outline:'none'}
   const row=(path,ibg,icol,nm,am,amc,on,first)=>(
     <div onClick={on} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',borderTop:first?'none':`1px solid ${C.bgSoft}`,cursor:on?'pointer':'default'}}>
       <span style={{width:30,height:30,borderRadius:9,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>
@@ -9593,48 +9604,57 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
     doc:<><path d='M14 2H6a2 2 0 0 0-2 2v16l4-2 4 2 4-2V8z'/><path d='M14 2v6h6'/></>,
     iva:<><rect x='3' y='4' width='18' height='16' rx='2'/><path d='M3 10h18'/></>}
   return (<div>
-    {/* Filtro: Año / Por mes + selector de mes (solo cerrados) + año */}
-    <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:9,flexWrap:'wrap',marginBottom:13}}>
-      <span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{[['anio','Año'],['mes','Por mes']].map(([v,l])=><span key={v} onClick={()=>setScope(v)} style={{fontSize:11,fontWeight:700,padding:'7px 14px',cursor:'pointer',background:scope===v?C.accent:'transparent',color:scope===v?'#fff':C.muted}}>{l}</span>)}</span>
-      {scope==='mes'&&mesesCerrados.length>0&&<select value={selMEff} onChange={e=>setSelM(parseInt(e.target.value,10))} style={selPill}>{mesesCerrados.map(m=><option key={m} value={m}>{MESCAP[m-1]}</option>)}</select>}
+    {/* Filtro: Año / Por mes + mes + año */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:9,flexWrap:'wrap',marginBottom:12}}>
+      <span style={{display:'inline-flex',background:C.card,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',padding:2,gap:2}}>{[['anio','Año'],['mes','Por mes']].map(([v,l])=><span key={v} onClick={()=>setScope(v)} style={{fontSize:11.5,fontWeight:600,padding:'2px 10px',borderRadius:20,cursor:'pointer',background:scope===v?C.azulBg:'transparent',color:scope===v?C.accent:C.muted}}>{l}</span>)}</span>
+      {scope==='mes'&&<select value={selMR} onChange={e=>setSelM(parseInt(e.target.value,10))} style={selPill}>{Array.from({length:_curM},(_,i)=>i+1).map(m=><option key={m} value={m}>{MESCAP[m-1]}</option>)}</select>}
       <span style={{...selPill,cursor:'default'}}>{year}</span>
     </div>
 
-    {/* PROTAGONISTA: el resultado (Año YTD / mes cerrado) */}
-    <div onClick={()=>onOpenResultadoAnio&&onOpenResultadoAnio()} style={{background:C.accent,color:'#fff',borderRadius:18,padding:'20px 22px',cursor:'pointer',position:'relative'}}>
-      <span style={{position:'absolute',top:18,right:18,color:'#85B7EB',fontSize:16,fontWeight:700}}><Gl n='chevron'/></span>
-      <div style={{fontSize:10.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:'#85B7EB'}}>{esMes?`Resultado · ${MESNOM[selMEff-1]} ${year} · cerrado`:`Resultado · enero–${MESNOM[_curM-1]} ${year} · al día`}</div>
-      <div style={{fontSize:isDesktop?40:32,fontWeight:800,letterSpacing:-1.4,margin:'10px 0 4px',lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{resH>=0?'+':'−'}{fM(resH)}</div>
-      <div style={{fontSize:11.5,color:'#85B7EB'}}>ingresos − egresos</div>
-      <div style={{display:'flex',gap:9,marginTop:16}}>
-        {[['Ingresos',fM(ingH),'#7FD7A9'],['Egresos',fM(egrH),'#F0B9BD'],['Margen',margH+'%','#fff']].map(([k,v,c],i)=><div key={i} style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#85B7EB'}}>{k}</div><div style={{fontSize:16,fontWeight:800,marginTop:2,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</div></div>)}
-      </div>
-    </div>
-
-    {L('Composición')}
-    <div style={card}>
-      {row(IC.fac,C.azulBg,C.azulInfo,'Facturación propia',fM(facH),C.azulInfo,()=>onOpenResultadoAnio&&onOpenResultadoAnio(),true)}
-      {row(IC.peop,C.overdueBg,C.overdueText,'Costos de operación','−'+fM(cosH),C.overdueText,()=>setSub('costos'))}
-      {row(IC.com,C.soonBg,C.soonText,'Comisiones a colaboradores',comH>0?'−'+fM(comH):'$0',C.soonText,()=>onOpenResultadoAnio&&onOpenResultadoAnio())}
-      {row(IC.bld,C.greenBg,C.greenText,'Subarriendo',subH>0?'+'+fM(subH):'$0',C.greenText,()=>onOpenSubarriendo?onOpenSubarriendo():(onOpenResultadoAnio&&onOpenResultadoAnio()))}
-    </div>
-
-    {(sinEnl>0||pend.length>0)&&L('Por resolver')}
-    {sinEnl>0&&<div onClick={()=>onOpenSiiSinEnlazar?onOpenSiiSinEnlazar():(onOpenResultadoAnio&&onOpenResultadoAnio())} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',background:C.overdueBg,border:'1px solid #F1D7D7',borderRadius:13,cursor:'pointer'}}>
-      <span style={{width:32,height:32,borderRadius:9,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2.3' strokeLinecap='round' strokeLinejoin='round'><path d='M12 9v4M12 17h.01'/><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z'/></svg></span>
-      <span style={{flex:1,minWidth:0}}><span style={{display:'block',fontSize:13,fontWeight:700,color:C.accent}}>{sinEnl} factura{sinEnl!==1?'s':''} del SII sin enlazar</span><span style={{display:'block',fontSize:11,color:C.overdueText,marginTop:2}}>{sinEnl!==1?'no están asociadas':'no está asociada'} a una venta</span></span>
-      <span style={{fontSize:11.5,fontWeight:800,color:C.overdueText,flexShrink:0}}>revisar <Gl n='chevron'/></span>
-    </div>}
-    {pend.length>0&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 8px 2px',fontSize:11.5,color:C.muted}}><span style={{width:7,height:7,borderRadius:'50%',background:C.soonText,flexShrink:0}}/><span><b style={{color:C.accent}}>{pend.map(m=>MESCAP[m-1]).join(', ')}</b> se cierra{pend.length>1?'n':''} solo{pend.length>1?'s':''} al llegar sus datos</span></div>}
+    {/* KPIs (preponderantes): Resultado = Ingresos − Egresos, y su margen. Composición = las partes, en tarjetas chicas que SUMAN los KPIs. */}
+    {(()=>{ const kLbl={fontSize:isDesktop?10.5:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+      const per = scope==='mes' ? `${MESNOM[selMR-1]} ${year}` : `ene–${MES_C[_curM-1]} ${year}`
+      const estado = scope==='mes' ? (rMesSel?.cerrado?'cerrado':'provisorio') : 'al día'
+      const egr = R.cos+R.com
+      const margen = R.ing ? R.res/R.ing*100 : null
+      const kt=(k,ic,[bg,fg],lab,val,sub,on)=>{ const blanco=bg===C.card; return <div key={k} onClick={on} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 11px',display:'flex',gap:12,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
+        {isDesktop&&<KpiIco n={ic} c={fg} soft={blanco}/>}
+        <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?26:20,fontWeight:800,color:fg,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
+      const tRes = R.res>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText]
+      const sg = v => (v<0?'−':'')+fmtMill(Math.abs(v))
+      // Tarjeta chica (composición / gestión): ícono + etiqueta + cifra; misma forma para todas las hermanas.
+      const st=(k,path,ibg,icol,lab,val,vcol,on)=><div key={k} onClick={on} className='pv-c' style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
+        {isDesktop&&<span style={{width:28,height:28,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>}
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:11.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14.5,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
+      const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
+      const abrirRes=()=>scope==='mes'?(onOpenEstadoResultados&&onOpenEstadoResultados()):(onOpenResultadoAnio&&onOpenResultadoAnio())
+      return <>
+        <div style={grid4}>
+          {kt('res','chart',tRes,'Resultado',sg(R.res),`${per} · ${estado}`,abrirRes)}
+          {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(R.ing),'facturación + subarriendo',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
+          {kt('egr','wallet',[C.soonBg,C.soonText],'Egresos',egr?'−'+fmtMill(egr):'$0','costos + comisiones',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
+          {kt('mar','tPct',[C.card,C.accent],'Margen',margen==null?'—':`${margen.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos',abrirRes)}
+        </div>
+        {L('Composición')}
+        <div style={grid4}>
+          {st('fac',IC.fac,C.azulBg,C.azulInfo,'Facturación propia',fmtMill(R.fac+R.rex),C.azulInfo,()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
+          {st('sub',IC.bld,C.greenBg,C.greenText,'Subarriendo',R.sub?'+'+fmtMill(R.sub):'$0',C.greenText,()=>onOpenSubarriendo&&onOpenSubarriendo())}
+          {st('cos',IC.peop,C.overdueBg,C.overdueText,'Costos de operación',R.cos?'−'+fmtMill(R.cos):'$0',C.overdueText,()=>setSub('costos'))}
+          {st('com',IC.com,C.soonBg,C.soonText,'Comisiones',R.com?'−'+fmtMill(R.com):'$0',C.soonText,()=>onOpenProveedores&&onOpenProveedores())}
+        </div>
+      </> })()}
 
     {L('Gestión de la oficina')}
-    <div style={card}>
-      {row(IC.peop,C.azulBg,C.accent,'Costos · planilla',fM(cosPlan),C.accent,()=>setSub('costos'),true)}
-      {row(IC.ret,C.tealBg,C.tealText,'Ingresos de socios',fM(ret.total),C.tealText,()=>onOpenRetiros&&onOpenRetiros())}
-      {row(IC.doc,C.bgWarm,C.muted,'Gastos varios',fM(gvH),C.accent,()=>onOpenVarios&&onOpenVarios())}
-      {row(IC.iva,C.azulBg,C.azulInfo,'Compras · IVA',fM(ivaCreditoC),C.azulInfo,()=>setSub('compras'))}
-      {onOpenProveedores&&(()=>{ const pp=saldoComisiones(terceros,billing).porPagar; return row(IC.com,C.soonBg,C.soonText,'Proveedores',pp>0?fM(pp)+' por pagar':'al día',pp>0?C.soonText:C.greenText,()=>onOpenProveedores()) })()}
-    </div>
+    {(()=>{ const pp=saldoComisiones(terceros,billing).porPagar
+      const st=(k,path,ibg,icol,lab,val,vcol,on)=><div key={k} onClick={on} className='pv-c' style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
+        {isDesktop&&<span style={{width:28,height:28,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>}
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:11.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14.5,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
+      return <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
+        {st('gv',IC.doc,C.bgWarm,C.muted,'Gastos varios',fmtMill(R.gv),C.accent,()=>onOpenVarios&&onOpenVarios())}
+        {st('ret',IC.ret,C.tealBg,C.tealText,'Ingresos de socios',fmtMill(ret.total),C.tealText,()=>onOpenRetiros&&onOpenRetiros())}
+        {st('iva',IC.iva,C.azulBg,C.azulInfo,'Compras · IVA',fmtMill(ivaCreditoC),C.azulInfo,()=>setSub('compras'))}
+        {st('prov',IC.com,C.soonBg,C.soonText,'Proveedores',pp>0?fmtMill(pp):'al día',pp>0?C.soonText:C.greenText,()=>onOpenProveedores&&onOpenProveedores())}
+      </div> })()}
 
     {L('De la firma')}
     <div onClick={()=>onOpenCobranza&&onOpenCobranza()} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,cursor:'pointer'}}>
@@ -40611,7 +40631,7 @@ export default function App() {
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} terceros={terceros} billing={billing} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
             {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack} origen={origenNav('Inicio')}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack} origen={origenNav('Inicio')}/>}
-            {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
+            {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1100,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Oficina' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})}/>
             </div>}
