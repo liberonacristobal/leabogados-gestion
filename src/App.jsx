@@ -26363,27 +26363,30 @@ function buildLiquidacionExcelWS(XLSX, {gastos, clients, titulo, sub}){
   const NAVY='003C50', WHITE='FFFFFF', LINE='E4E8EB', ZEBRA='F5F7F9', TXT='3D3D3D', MUT='537281', AZ='185FA5'
   const fmtOt = ot => ot?(String(ot).toUpperCase().startsWith('OT')?ot:'OT-'+ot):'—'
   const gs=[...gastos].sort((a,b)=>(a.ot_number||'')>(b.ot_number||'')?1:-1)
-  const rows=gs.map(e=>[fmtOt(e.ot_number), e.concept||'—', clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente', e.amount||0])
+  // Abogado = responsable interno del cliente: la notaría sabe por quién va cada OT al leer el detalle, sin decirlo en el correo.
+  const cliOf = e => clients.find(c=>String(c.id)===String(e.client_id))
+  const rows=gs.map(e=>[fmtOt(e.ot_number), e.concept||'—', cliOf(e)?.name||'Sin cliente', cliOf(e)?.abogado_responsable||'—', e.amount||0])
   const total=gs.reduce((a,e)=>a+(e.amount||0),0)
-  const ws=XLSX.utils.aoa_to_sheet([[titulo,'','',''],[sub||'','','',''],['OT','Descripción','Cliente','Costo'],...rows,['','','Total',total]])
-  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:3}},{s:{r:1,c:0},e:{r:1,c:3}}]
-  ws['!cols']=[{wch:15},{wch:56},{wch:24},{wch:15}]
+  const ws=XLSX.utils.aoa_to_sheet([[titulo,'','','',''],[sub||'','','','',''],['OT','Descripción','Cliente','Abogado','Costo'],...rows,['','','','Total',total]])
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:4}},{s:{r:1,c:0},e:{r:1,c:4}}]
+  ws['!cols']=[{wch:15},{wch:52},{wch:24},{wch:13},{wch:15}]
   ws['!rows']=[{hpt:28},{hpt:16},{hpt:20}]
   const bd={top:{style:'thin',color:{rgb:LINE}},bottom:{style:'thin',color:{rgb:LINE}},left:{style:'thin',color:{rgb:LINE}},right:{style:'thin',color:{rgb:LINE}}}
   const S=(addr,s)=>{ if(ws[addr]) ws[addr].s=s }
   S('A1',{font:{bold:true,sz:14,color:{rgb:WHITE}},fill:{patternType:'solid',fgColor:{rgb:NAVY}},alignment:{horizontal:'left',vertical:'center'}})
   S('A2',{font:{sz:10,italic:true,color:{rgb:MUT}},alignment:{horizontal:'left',vertical:'center'}})
-  ;['A3','B3','C3','D3'].forEach((a,i)=>S(a,{font:{bold:true,sz:11,color:{rgb:WHITE}},fill:{patternType:'solid',fgColor:{rgb:NAVY}},alignment:{horizontal:i===3?'right':'left',vertical:'center'},border:bd}))
+  ;['A3','B3','C3','D3','E3'].forEach((a,i)=>S(a,{font:{bold:true,sz:11,color:{rgb:WHITE}},fill:{patternType:'solid',fgColor:{rgb:NAVY}},alignment:{horizontal:i===4?'right':'left',vertical:'center'},border:bd}))
   const n=rows.length
   for(let i=0;i<n;i++){ const r=4+i; const z=i%2===1?{fill:{patternType:'solid',fgColor:{rgb:ZEBRA}}}:{}
     S('A'+r,{font:{sz:10,bold:true,color:{rgb:AZ}},alignment:{horizontal:'left',vertical:'center'},border:bd,...z})
     S('B'+r,{font:{sz:10,color:{rgb:TXT}},alignment:{horizontal:'left',vertical:'center',wrapText:true},border:bd,...z})
     S('C'+r,{font:{sz:10,color:{rgb:MUT}},alignment:{horizontal:'left',vertical:'center'},border:bd,...z})
-    const d='D'+r; if(ws[d]){ ws[d].t='n'; ws[d].z='"$"#,##0'; ws[d].s={font:{sz:10,color:{rgb:TXT}},numFmt:'"$"#,##0',alignment:{horizontal:'right',vertical:'center'},border:bd,...z} }
+    S('D'+r,{font:{sz:10,color:{rgb:MUT}},alignment:{horizontal:'left',vertical:'center'},border:bd,...z})
+    const d='E'+r; if(ws[d]){ ws[d].t='n'; ws[d].z='"$"#,##0'; ws[d].s={font:{sz:10,color:{rgb:TXT}},numFmt:'"$"#,##0',alignment:{horizontal:'right',vertical:'center'},border:bd,...z} }
   }
   const tr=4+n
-  S('C'+tr,{font:{bold:true,sz:11,color:{rgb:TXT}},alignment:{horizontal:'right',vertical:'center'},border:{top:{style:'medium',color:{rgb:NAVY}}}})
-  const dt='D'+tr; if(ws[dt]){ ws[dt].t='n'; ws[dt].z='"$"#,##0'; ws[dt].s={font:{bold:true,sz:12,color:{rgb:NAVY}},numFmt:'"$"#,##0',alignment:{horizontal:'right',vertical:'center'},border:{top:{style:'medium',color:{rgb:NAVY}}}} }
+  S('D'+tr,{font:{bold:true,sz:11,color:{rgb:TXT}},alignment:{horizontal:'right',vertical:'center'},border:{top:{style:'medium',color:{rgb:NAVY}}}})
+  const dt='E'+tr; if(ws[dt]){ ws[dt].t='n'; ws[dt].z='"$"#,##0'; ws[dt].s={font:{bold:true,sz:12,color:{rgb:NAVY}},numFmt:'"$"#,##0',alignment:{horizontal:'right',vertical:'center'},border:{top:{style:'medium',color:{rgb:NAVY}}}} }
   return ws
 }
 // Excel de liquidación en base64 (para adjuntar al correo de la notaría).
