@@ -19157,6 +19157,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const revOfiItems = useMemo(()=>{ const adm=new Set(miembrosRev.admins.map(m=>m.nombre).filter(Boolean))
     return (expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&e.client_id&&e.created_by&&!/@|^audit/i.test(e.created_by)&&!adm.has(e.created_by)&&(!e.revision_estado||e.revision_estado==='nose')&&(()=>{ const c=(clients||[]).find(x=>String(x.id)===String(e.client_id)); return !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')) })())
   },[expenses,clients,miembrosRev])
+  const revOfiVis = (isAdmin||soyRevisor) ? revOfiItems : revOfiItems.filter(e=>e.created_by===currentUserName)   // limited: solo lo que cargó
   useEffect(()=>{ try{ sessionStorage.removeItem(_GASTOS_VOLVER) }catch(_){} },[])
   useEffect(()=>{ if(openGastosOfi){ setSelectedClient(null); setHubOpen(false); setShowGastosOficina(true); onGastosOfiOpened&&onGastosOfiOpened() } },[openGastosOfi])   // gatillo desde el módulo Oficina → vista "Gastos oficina" (Varios y personales)
   const [cobrosQ,setCobrosQ] = useState('')                // buscador en Cobros (vista por OT)
@@ -20993,7 +20994,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       </div>
     </FlujoPagina>
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{page}</div>:page }
-  if(showRevOfi&&(soyRevisor||isAdmin)){ const pg=<RevisionOficinaPage items={revOfiItems} setExpenses={setExpenses} clients={clients} sales={sales} clientEntities={clientEntities} me={currentUserName} isAdmin={isAdmin} revisor={revisorNombre} onBack={()=>setShowRevOfi(false)}/>
+  if(showRevOfi){ const pg=<RevisionOficinaPage items={revOfiVis} setExpenses={setExpenses} clients={clients} sales={sales} clientEntities={clientEntities} me={currentUserName} isAdmin={isAdmin} revisor={revisorNombre} onBack={()=>setShowRevOfi(false)}/>
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
   // Revisar = caja chica del equipo + gastos que revisa el equipo. Una sola fuente para la tarjeta del hub y la página.
   // Revisar es para todos: cada uno ve lo suyo (caja chica y gastos del equipo solo admin/revisor; sin cliente y consultas, todos).
@@ -21001,14 +21002,16 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     const alCC = isAdmin ? alertasCajaChica(pettyCash,expenses) : []
     const negCC = alCC.filter(a=>a.tipo==='negativo'), totNeg = negCC.reduce((t,a)=>t-a.saldo,0)
     const sinCC = isAdmin ? calceCajaChica(pettyCash,[],{}).cajasSinTransf.length : 0
-    const caja = negCC.length ? {s:`${negCC.length} en negativo · ${fmtMill(totNeg)}`, sM:`${negCC.length} en negativo`, col:C.overdueText} : alCC.length ? {s:`${alCC.length} baja${alCC.length!==1?'s':''}`, col:C.soonText} : sinCC ? {s:`${sinCC} sin conciliar`, col:C.soonText} : {s:'al día'}
-    const nP=revOfiItems.filter(e=>!e.revision_estado).length, nN=revOfiItems.filter(e=>e.revision_estado==='nose').length
+    const miSaldo = isAdmin ? null : ((pettyCash||[]).some(p=>p.user_name===currentUserName) ? saldoCajaChica(pettyCash,expenses,currentUserName) : null)
+    const caja = !isAdmin ? (miSaldo==null ? {s:'sin caja entregada'} : miSaldo<0 ? {s:`la oficina te debe ${fmtN(-miSaldo)}`, col:C.overdueText} : {s:`disponible ${fmtN(miSaldo)}`, col:miSaldo<=(BRAND.cajaChicaUmbral||0)?C.soonText:undefined})
+      : negCC.length ? {s:`${negCC.length} en negativo · ${fmtMill(totNeg)}`, sM:`${negCC.length} en negativo`, col:C.overdueText} : alCC.length ? {s:`${alCC.length} baja${alCC.length!==1?'s':''}`, col:C.soonText} : sinCC ? {s:`${sinCC} sin conciliar`, col:C.soonText} : {s:'al día'}
+    const nP=revOfiVis.filter(e=>!e.revision_estado).length, nN=revOfiVis.filter(e=>e.revision_estado==='nose').length
     const gas = isAdmin ? (nN?{s:`${nN} para decidir`,col:C.soonText}:nP?{s:`${nP}${revisorNombre?` de ${revisorNombre}`:' en revisión'}`,col:C.soonText}:{s:'al día'}) : (nP?{s:`${nP} por revisar`,col:C.soonText}:{s:'al día'})
     const nGas = isAdmin?(nN||nP):nP
     const resumen = [negCC.length?`${negCC.length} caja${negCC.length!==1?'s':''} en negativo`:sinCC?`${sinCC} caja${sinCC!==1?'s':''} sin conciliar`:null, nGas?`${nGas} gasto${nGas!==1?'s':''}`:null].filter(Boolean).join(' · ')
     const sinPorPersona={}; if(isAdmin) calceCajaChica(pettyCash,[],{}).cajasSinTransf.forEach(x=>{ const u=x.petty?.user_name; if(u) sinPorPersona[u]=(sinPorPersona[u]||0)+1 })
     const consultas = (expenses||[]).filter(e=>!e.deleted_at&&e.revision_estado==='consultar'&&(isAdmin||e.revisado_por===currentUserName)).sort((a,b)=>String(a.revisado_por||'').localeCompare(String(b.revisado_por||''),'es')||String(b.date||'').localeCompare(String(a.date||'')))
-    const verGas = isAdmin||soyRevisor
+    const verGas = true   // todos ven Gastos (el limited, solo lo que cargó)
     const sinCli = orphans.length ? {s:`${orphans.length} por asignar`, col:C.soonText} : {s:'al día'}
     const resumenC = [verGas?resumen:null, orphans.length?`${orphans.length} sin cliente`:null, consultas.length?`${consultas.length} consulta${consultas.length!==1?'s':''}`:null].filter(Boolean).join(' · ')
     return {alCC, caja, gas, verGas, sinCli, resumen:resumenC, sinCC, sinPorPersona, consultas, col:negCC.length&&isAdmin?C.overdueText:resumenC?C.soonText:undefined}
@@ -21033,10 +21036,10 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       </div>}
     </FlujoPagina>)
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
-  if(showRevisar&&revisarRes&&!showOrphans){ const r=revisarRes; const nT=(isAdmin?1:0)+(r.verGas?1:0)+1; const pg=(
+  if(showRevisar&&revisarRes&&!showOrphans){ const r=revisarRes; const nT=3; const pg=(
     <FlujoPagina origen='Gastos' titulo='Revisar' onBack={()=>setShowRevisar(false)} maxW={isDesktop&&nT===3?1000:760}>
       <div style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${Math.max(nT,2)},minmax(0,1fr))`:(nT===2?'1fr 1fr':'1fr'),gap:isDesktop?12:8}}>
-        {isAdmin&&<HubTile ic='wallet' bg={C.greenBg} col={C.greenText} t='Caja chica' s={r.caja.s} sM={r.caja.sM} sCol={r.caja.col} onClick={()=>setRevCaja(true)}/>}
+        <HubTile ic='wallet' bg={C.greenBg} col={C.greenText} t='Caja chica' s={r.caja.s} sM={r.caja.sM} sCol={r.caja.col} onClick={()=>isAdmin?setRevCaja(true):(onIrCajaChica&&onIrCajaChica())}/>
         {r.verGas&&<HubTile ic='check' bg={C.soonBg} col={C.soonText} t='Gastos' s={r.gas.s} sCol={r.gas.col} onClick={()=>setShowRevOfi(true)}/>}
         <HubTile ic='alert' bg={C.overdueBg} col={C.overdueText} t='Sin cliente' s={r.sinCli.s} sCol={r.sinCli.col} onClick={()=>setShowOrphans(true)}/>
       </div>
