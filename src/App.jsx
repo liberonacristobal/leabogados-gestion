@@ -8967,6 +8967,90 @@ function sugerirVentaGasto(e, ventas, aprendidoSaleId){
   return {venta:null, regla:'decidir', auto:false, porque:`${ventas.length} trabajos posibles`}
 }
 
+// «¿Cuánto se puede retirar?» (Socios). Dos lecturas en paralelo, ambas desde la fuente:
+// · En el banco hoy (manda): saldo de la última cartola con saldo de la cuenta de honorarios + movimientos posteriores
+//   − reserva (learnings config.reserva_caja, editable) − comisiones por pagar de facturas ya pagadas por el cliente.
+// · Caja del año (control): cobrado (ingresosMesBill) − costos reales (resultadoMes.cos) − comisiones pagadas − PPM pagado − retirado.
+const RESERVA_CAJA_DEF = 30000000
+function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], nSocios=2, totalRet=0, yr, isDesktop=true }){
+  const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
+  const [banco,setBanco]=useState(null)        // {saldo, al} | null (sin cartola con saldo)
+  const [reserva,setReserva]=useState(RESERVA_CAJA_DEF)
+  const [editRes,setEditRes]=useState(false)
+  const [resTxt,setResTxt]=useState('')
+  useEffect(()=>{ if(DEMO){ setBanco({saldo:42500000,al:new Date().toISOString().slice(0,10)}); return } let v=true
+    ;(async()=>{ try{
+      const {data:lr}=await supabase.from('learnings').select('value,updated_at').eq('kind','config').eq('key','reserva_caja').order('updated_at',{ascending:false}).limit(1)
+      if(v&&lr&&lr[0]&&Number(lr[0].value)>=0) setReserva(Number(lr[0].value))
+      const {data:cg}=await supabase.from('cartola_cargas').select('saldo_final,fecha_hasta,created_at').eq('rol_cuenta','honorarios').not('saldo_final','is',null).order('fecha_hasta',{ascending:false}).order('created_at',{ascending:false}).limit(1)
+      const ult=cg&&cg[0]; if(!ult){ if(v) setBanco(null); return }
+      const movs=await selectAll(()=>supabase.from('cartola_movimientos').select('tipo,monto,fecha').eq('rol_cuenta','honorarios').gt('fecha',ult.fecha_hasta).order('id'))
+      const rows=(movs&&movs.data)||movs||[]
+      let saldo=Number(ult.saldo_final)||0, al=String(ult.fecha_hasta).slice(0,10)
+      ;(Array.isArray(rows)?rows:[]).forEach(m=>{ const x=Number(m.monto)||0; saldo+= m.tipo==='abono'?x:-x; const f=String(m.fecha||'').slice(0,10); if(f>al) al=f })
+      if(v) setBanco({saldo,al})
+    }catch(_){ if(v) setBanco(null) } })()
+    return ()=>{v=false} },[])
+  const guardarReserva=async()=>{ const n=Math.round(Number(String(resTxt).replace(/\D/g,''))||0); setEditRes(false); if(!(n>=0)||n>1e11) return; setReserva(n); if(DEMO) return; try{ await setLearningKV('config','reserva_caja',n) }catch(e){ appAlert('No se pudo guardar la reserva: '+(e.message||e)) } }
+  const bById=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b) m[String(b.id)]=b }); return m },[billing])
+  // Comisiones que ya son de otro: el cliente pagó la factura pero la comisión aún no sale del banco.
+  const porPagar=useMemo(()=>(terceros||[]).filter(t=>{ if(!t||t.estado==='pagado'||!t.billing_id) return false; const b=bById[String(t.billing_id)]; return b&&!b.deleted_at&&b.status==='Pagado' }).reduce((a,t)=>a+(Number(t.monto)||0),0),[terceros,bById])
+  const fu=useFuentesResultado()
+  const maxM=yr<curY?12:(yr>curY?0:curM)
+  const caja=useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients}; let cob=0,cos=0,com=0
+    for(let m=1;m<=maxM;m++){ const ym=`${yr}-${String(m).padStart(2,'0')}`; cob+=ingresosMesBill(billing,ym); cos+=Number(resultadoMes(fu,deps,ym).cos)||0; com+=comisionMesTerc(terceros,ym) }
+    const ofi=(clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')))
+    const ppm=ofi?(expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,4)===String(yr)&&String(e.category||'')==='Impuestos y patentes'&&/ppm/i.test(String(e.subcategory||''))).reduce((a,e)=>a+(Number(e.amount)||0),0):0
+    const gen=cob-cos-com-ppm
+    return {cob,cos,com,ppm,gen,sin:gen-totalRet} },[fu,billing,terceros,costosOfiRows,expenses,clients,yr,maxM,totalRet])   // eslint-disable-line react-hooks/exhaustive-deps
+  const fM=n=>(n<0?'−':'')+fmtMill(Math.abs(Number(n)||0))
+  const neg=n=>Math.abs(Number(n)||0)<1?'$0':'−'+fmtMill(Math.abs(Number(n)||0))
+  const esHoy=yr===curY
+  const disp=banco?banco.saldo-reserva-porPagar:null
+  const ln=(l,v,{tot,menos}={})=><div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderTop:tot?`2px solid ${C.border}`:`1px solid ${C.border}`,fontSize:12.5}}>
+    <span style={{color:tot?C.accent:C.text,fontWeight:tot?800:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{l}</span>
+    <span style={{marginLeft:'auto',fontWeight:tot?800:700,color:tot?C.accent:(menos?C.muted:C.text),fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
+  const colH=(t,sub)=><div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}}><span style={{...SEC_LBL,whiteSpace:'nowrap'}}>{t}</span><span style={{marginLeft:'auto',fontSize:11,color:C.done,whiteSpace:'nowrap'}}>{sub}</span></div>
+  const colSt={border:`1px solid ${C.border}`,borderRadius:14,padding:'13px 14px 9px',minWidth:0}
+  const resLbl=editRes
+    ? <span style={{display:'inline-flex',alignItems:'center',gap:6}}><input autoFocus onFocus={e=>e.target.select()} inputMode='numeric' value={resTxt} onChange={e=>{ const d=e.target.value.replace(/\D/g,''); setResTxt(d?Number(d).toLocaleString('es-CL'):'') }} onKeyDown={e=>{ if(e.key==='Enter') guardarReserva(); if(e.key==='Escape') setEditRes(false) }} style={{width:118,fontSize:12,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 8px',color:C.accent}}/><button onClick={guardarReserva} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 10px',cursor:'pointer'}}>Guardar</button></span>
+    : <span onClick={()=>{ setResTxt(Number(reserva).toLocaleString('es-CL')); setEditRes(true) }} style={{fontSize:11,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>reserva {fmtMill(reserva)} · <span style={{color:C.azulInfo,fontWeight:700}}>editar</span></span>
+  const perLbl=maxM===12?String(yr):`ene–${MES_C[maxM-1]}${isDesktop?' '+yr:''}`
+  return (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}}>
+    <div style={{padding:'15px 18px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+      <span style={{width:30,height:30,borderRadius:9,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18M5 21V10l7-5 7 5v11'/><path d='M9 21v-6h6v6'/></svg></span>
+      <span style={{fontSize:13,fontWeight:800,color:C.accent,letterSpacing:-.2}}>¿Cuánto se puede retirar?</span>
+      <span style={{marginLeft:'auto'}}>{resLbl}</span>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:isDesktop&&esHoy?'1fr 1fr':'1fr',gap:12,padding:'0 16px 16px'}}>
+      {esHoy&&<div style={{...colSt,background:C.bgSoft}}>
+        {colH('En el banco hoy',banco?`${isDesktop?'cuenta honorarios · ':''}${fmtFechaDMY(banco.al)}`:'')}
+        {banco ? <>
+          {ln('Saldo en la cuenta',fM(banco.saldo))}
+          {ln('− Reserva',neg(reserva),{menos:true})}
+          {ln(isDesktop?'− Comisiones por pagar (ya cobradas)':'− Comisiones por pagar',neg(porPagar),{menos:true})}
+          <div style={{display:'flex',alignItems:'flex-end',gap:10,marginTop:6,padding:'12px',borderRadius:12,background:disp>=0?C.greenBg:C.overdueBg}}>
+            <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:disp>=0?C.greenText:C.overdueText,whiteSpace:'nowrap'}}>{disp>=0?(isDesktop?'Disponible para retirar':'Disponible'):'Bajo la reserva'}
+              {disp>0&&nSocios>1&&<span style={{display:'block',fontSize:11,fontWeight:600,textTransform:'none',letterSpacing:0,marginTop:2,opacity:.85}}>{fmtMill(disp/nSocios)} por socio</span>}</span>
+            <span style={{marginLeft:'auto',fontSize:isDesktop?26:22,fontWeight:800,letterSpacing:-.6,color:disp>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fM(disp)}</span>
+          </div></>
+          : <div style={{fontSize:12,color:C.muted,padding:'8px 0 6px'}}>Falta una cartola con saldo de la cuenta de honorarios.</div>}
+      </div>}
+      <div style={colSt}>
+        {colH('Caja del año',perLbl)}
+        {isDesktop&&<>
+          {ln('Cobrado',fM(caja.cob))}
+          {ln('− Costos reales',neg(caja.cos),{menos:true})}
+          {ln('− Comisiones pagadas',neg(caja.com),{menos:true})}
+          {ln('− PPM pagado',neg(caja.ppm),{menos:true})}
+        </>}
+        {ln('Caja generada',fM(caja.gen),{tot:isDesktop})}
+        {ln('− Retirado',neg(totalRet),{menos:true})}
+        {ln('Sin retirar del año',fM(caja.sin),{tot:true})}
+      </div>
+    </div>
+  </div>)
+}
 function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
   const GAP=3   // días: transferencias del mismo socio a ≤3 días = el mismo retiro
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
@@ -9084,6 +9168,8 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
           <div style={{fontSize:11,color:C.textSoft,marginTop:5}}>{k[2]}</div>
         </div>)}
     </div>
+
+    <DisponibleRetiroCard expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} nSocios={SOC.length} totalRet={totalRet} yr={yr} isDesktop={isDesktop}/>
 
     <div ref={porSocioRef} style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
