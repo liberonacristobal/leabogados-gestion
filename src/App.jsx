@@ -21456,6 +21456,34 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
 const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Movilización','Archivo Judicial','Otro']
 // Categorías que casi siempre son de un cliente: cargadas a la oficina, se pregunta antes de guardar.
+// Trámites (CBR, notaría, RC, archivo, DO): la glosa tiene que decir de qué es — inmueble, sociedad o persona.
+// Genérica = solo palabras de trámite y el nombre del CBR/notaría («1 Copia con Vigencia», «3 certificados de dominio vigente»).
+const _GEN_DET = new Set('certificado certificados cert certs copia copias solicitud solicitar pedido varios varias diversos vigente vigentes vigencia vigencias sin no dominio dominios hipoteca hipotecas gravamen gravamenes prohibicion prohibiciones litigio litigios inscripcion inscripciones incripcion reinscripcion inscrito inscritos anotacion anotaciones nota notas margen marginal marginales estudio titulo titulos inmueble inmuebles propiedad propiedades registro reg comercio civil archivo judicial diario oficial publicacion extracto autorizada autorizadas autorizado simple escritura escrituras publica ep documento documentos tramite tramites gasto gastos pago pagos saldo diferencia caratula cbr conservador bienes raices notaria notarial notariales poder poderes mandato sociedad sociedades constitucion modificacion transformacion rectificacion ampliacion duplicado posesion efectiva pe capital acreditacion certificacion firma firmas sii impuesto alzamiento usufructo carta certificada matrimonio nacimiento defuncion santiago stgo para de del la las el los y e o u por con en a al un una uno dos tres cuatro cinco seis siete ocho nueve diez sb otros otras rc do vehiculos vehiculo patentes'.split(' '))
+const glosaSinDetalle = concept => { let n=_normTxt(concept); if(!n) return true
+  n=n.replace(/\b(cbr|conservador|notaria)( de)? [a-z]+( [a-z]+)?/g,' ')
+  return !n.split(' ').some(w=>w.length>=3&&!/^\d+$/.test(w)&&!_GEN_DET.has(w)) }
+// «fs 1918v 2862 1949 San Bernardo» → «fs 1918v N° 2862 de 1949 · San Bernardo». Sin fojas queda tal como se escribió.
+const deQueTexto = s => { const t=String(s||'').trim().replace(/\s+/g,' ')
+  const m=t.match(/^(?:(?:fs|fj|fjs|fojas)\.?\s*)?(\d+\s*(?:v|vta|vuelta)?)\s*[,;-]?\s*(?:n[°º.]?|nro\.?|n[uú]mero)?\s*(\d+)\s*[,;-]?\s*(?:de|del|a[ñn]o)?\s*((?:18|19|20)\d{2})\b\s*(.*)$/i)
+  if(!m) return t
+  const fs=m[1].replace(/\s+/g,'').replace(/(vta|vuelta)$/i,'v'), resto=m[4].replace(/^(cbr|de|del)\s+/i,'').trim()
+  return `fs ${fs} N° ${m[2]} de ${m[3]}${resto?` · ${resto}`:''}` }
+// Lo aprendido de «¿De qué?» por cliente (key = client_id) o persona (key = p:Nombre): lo más reciente primero.
+function useDeQueAprendido(){
+  const [deq,setDeq] = useState({})
+  useEffect(()=>{ let on=true
+    selectAll(()=>supabase.from('learnings').select('key,value,updated_at,id').eq('kind','gasto_deque').order('updated_at',{ascending:false}).order('id')).then(r=>{ if(!on) return; const m={}
+      ;(r?.data||[]).forEach(x=>{ if(!x.key||!x.value) return; const l=m[x.key]=m[x.key]||[]; if(!l.some(v=>_normTxt(v)===_normTxt(x.value))) l.push(x.value) }); setDeq(m) },()=>{})
+    return ()=>{on=false} },[])
+  const aprender = (scope,valor) => { const v=String(valor||'').trim(); if(!scope||!v) return
+    learnPut('gasto_deque',scope,v); setDeq(p=>({...p,[scope]:[v,...(p[scope]||[]).filter(x=>_normTxt(x)!==_normTxt(v))]})) }
+  return [deq,aprender]
+}
+// Chips de «¿De qué?»: lo aprendido para ese cliente/persona + sus razones sociales.
+const deQueOpciones = (deq,scope,clientId,clientEntities) => { const out=[]
+  const add=v=>{ const t=String(v||'').trim(); if(t&&!out.some(x=>_normTxt(x)===_normTxt(t))) out.push(t) }
+  ;(deq[scope]||[]).forEach(add); if(clientId) (clientEntities||[]).filter(e=>String(e.client_id)===String(clientId)).forEach(e=>add(e.name))
+  return out.slice(0,5) }
 // Subcategoría de «Otro»: nunca un medio de movilización (un envío o despacho no es un Uber).
 const subOtro = s => { const t=String(s||'').trim(); return t && !MEDIOS_MOV.some(m=>m.toLowerCase()===t.toLowerCase()) ? t : null }
 const CATS_DE_CLIENTE = new Set(['Notaria','CBR','Diario Oficial','Registro Civil','Archivo Judicial'])
@@ -21468,7 +21496,7 @@ const _hoyLocal = () => { const d=new Date(); return `${d.getFullYear()}-${Strin
 function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName,estudioId,onIrCliente,onLanding}) {
   const isDesktop = useIsDesktop()
   const hoy = _hoyLocal()
-  const nuevaFila = date => ({id:Date.now()+Math.random(),category:null,concept:'',amount:'',date:date||hoy,paid_by_client:false,subcategory:'',cli:null,proj:'',resp:null,picking:false,pq:'',mvMedio:'',mvDesde:'',mvHasta:'',mvMotivo:''})
+  const nuevaFila = date => ({id:Date.now()+Math.random(),category:null,concept:'',amount:'',date:date||hoy,paid_by_client:false,subcategory:'',cli:null,proj:'',resp:null,picking:false,pq:'',mvMedio:'',mvDesde:'',mvHasta:'',mvMotivo:'',deQue:''})
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient&&preClient.id?preClient:null)   // {personal_de} = gasto personal precargado (cuenta del equipo)
   // Gasto personal de un miembro: en vez de cliente se elige la persona (personal_de). La tanda entera es de esa persona.
@@ -21532,6 +21560,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 
   // Lo aprendido (glosa → cliente / categoría).
   const [learn,setLearn] = useState({cli:{},cat:{}})
+  const [deq,aprenderDeQue] = useDeQueAprendido()
   useEffect(()=>{ let on=true
     const rd=k=>selectAll(()=>supabase.from('learnings').select('key,value,updated_at,id').eq('kind',k).order('updated_at',{ascending:true}).order('id')).then(r=>{ const m={}; (r?.data||[]).forEach(x=>{ if(x.key&&x.value) m[x.key]=x.value }); return m },()=>({}))
     Promise.all([rd('gasto_cliente'),rd('gasto_categoria')]).then(([cli,cat])=>{ if(on) setLearn({cli,cat}) })
@@ -21581,8 +21610,14 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const movMedio = r => r.mvMedio || medioMovDe(r.concept)
   const faltaMovDe = r => { if(catDe(r)!=='Movilización') return false; const md=movMedio(r); return !md || (MEDIO_CON_DETALLE.has(md) && (!r.mvDesde.trim()||!r.mvHasta.trim()||r.mvMotivo.trim().length<4)) }
   const faltaMov = llenas.some(faltaMovDe)
+  // Trámite sin «de qué»: la línea ¿De qué? lo completa (chip o texto libre); sin eso no se guarda.
+  const pideDeQue = r => CATS_DE_CLIENTE.has(catDe(r)) && glosaSinDetalle(r.concept)
+  const faltaDetDe = r => pideDeQue(r) && !String(r.deQue||'').trim()
+  const faltaDet = llenas.filter(faltaDetDe).length
+  const deQueScope = r => personal?`p:${personal}`:(cliDe(r)?.id?String(cliDe(r).id):null)
   const gastoDeFila = r => { const cat=catDe(r)
-    if(cat!=='Movilización') return {concept:r.concept, subcategory:cat==='Otro'?subOtro(r.subcategory):null}
+    if(cat!=='Movilización'){ const dq=pideDeQue(r)&&String(r.deQue||'').trim()?deQueTexto(r.deQue):''
+      return {concept:dq?`${String(r.concept||'').trim()} · ${dq}`:r.concept, subcategory:cat==='Otro'?subOtro(r.subcategory):null} }
     const md=movMedio(r), orig=String(r.concept||'').trim()
     if(!MEDIO_CON_DETALLE.has(md)) return {concept:orig||md, subcategory:md}
     const concept=glosaMovilizacion(r.mvDesde,r.mvHasta,r.mvMotivo)
@@ -21597,7 +21632,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const faltaProyecto = !personal&&!esOficina&&!project.trim()&&llenas.some(r=>!r.cli)
   const faltaProyFila = llenas.some(r=>r.cli&&!_esOfiCli(r.cli)&&!r.proj)
   const bloqueadas = llenas.filter(r=>avisoDe(r)?.bloquea).length
-  const puedeGuardar = (!!selectedClient||!!personal)&&llenas.length>0&&!faltaProyecto&&!faltaProyFila&&!bloqueadas&&!faltaMov&&!saving
+  const puedeGuardar = (!!selectedClient||!!personal)&&llenas.length>0&&!faltaProyecto&&!faltaProyFila&&!bloqueadas&&!faltaMov&&!faltaDet&&!saving
 
   const saveAll = async() => {
     if(!puedeGuardar) return
@@ -21609,6 +21644,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         try{
           await onSave({client_id:null,personal_de:personal,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:null,project:null,subproject:null,...gastoDeFila(r),paid_by_client:false})
           count++
+          if(pideDeQue(r)&&String(r.deQue||'').trim()) aprenderDeQue(`p:${personal}`,deQueTexto(r.deQue))
           logActividad('gastos.personal',{tabla:'expenses',detalle:{title:r.concept||cat,persona:personal,monto:parseInt(r.amount)}})
         }catch(e){ errores.push(r.concept||cat||'Fila') }
       }
@@ -21623,6 +21659,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       try {
         await onSave({client_id:cli.id,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:ent,project:proj,subproject:!r.cli&&esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,...gastoDeFila(r),paid_by_client:cat==='Notaria'})   // lo que carga el equipo es siempre caja chica; notaría va por su liquidación
         count++
+        if(pideDeQue(r)&&String(r.deQue||'').trim()) aprenderDeQue(String(cli.id),deQueTexto(r.deQue))
         // Si se corrigió el cliente desde el aviso, la glosa queda aprendida para ese cliente.
         if(r.resp==='mov'){ const gk=glosaKey(r.concept||''); if(gk) learnPut('gasto_cliente',gk,cli.id) }
       } catch(e){ errores.push(r.concept||cat||'Fila') }
@@ -21703,10 +21740,17 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       {MEDIO_CON_DETALLE.has(md)&&<><div style={{display:'flex',gap:6,flex:'1 1 220px',minWidth:0}}>{fi('mvDesde','Desde',1)}{fi('mvHasta','Hasta',1)}</div>
       <div style={{display:'flex',flex:'2 1 220px',minWidth:0}}>{fi('mvMotivo','Motivo (para qué fue)',1)}</div></>}
     </div>) }
+  const lineaDeQue = r => { const op=deQueOpciones(deq,deQueScope(r),personal?null:cliDe(r)?.id,clientEntities), v=String(r.deQue||'')
+    const falta=!v.trim()&&!!r.amount
+    return (<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,marginTop:6,fontSize:12}}>
+      <span style={{fontWeight:700,color:falta?C.overdueText:C.accent,whiteSpace:'nowrap'}}>¿De qué?</span>
+      {op.map(o=>{ const on=_normTxt(v)===_normTxt(o); return <button key={o} type='button' onClick={()=>updateRow(r.id,{deQue:on?'':o})} style={{...chip(),height:26,fontWeight:on?700:500,background:on?C.azulTenueOn:C.azulTenue,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis'}}>{o}</button> })}
+      <input value={op.some(o=>_normTxt(o)===_normTxt(v))?'':v} onChange={e=>updateRow(r.id,{deQue:e.target.value})} placeholder={isDesktop?'Inmueble, sociedad o fs/N°/año':'o escribe…'} style={{...inS,height:28,fontSize:12.5,flex:'1 1 180px',minWidth:0,borderColor:falta?C.overdueText:C.border}}/>
+    </div>) }
   const glosaInput = r => <input data-gconcept='1' value={r.concept} onChange={e=>updateRow(r.id,{concept:e.target.value})} placeholder='Descripción' style={{...inS,flex:1,minWidth:0}}/>
 
   const btnGuardar = (
-    <button type='button' disabled={!puedeGuardar} onClick={saveAll} title={bloqueadas?'Responde el aviso para guardar':faltaProyecto||faltaProyFila?'Falta el proyecto':faltaMov?'Falta el medio o el trayecto y motivo de la movilización':undefined}
+    <button type='button' disabled={!puedeGuardar} onClick={saveAll} title={bloqueadas?'Responde el aviso para guardar':faltaProyecto||faltaProyFila?'Falta el proyecto':faltaMov?'Falta el medio o el trayecto y motivo de la movilización':faltaDet?'Falta de qué es (inmueble, sociedad o persona)':undefined}
       style={{width:isDesktop?220:'100%',height:38,borderRadius:8,border:`1px solid ${C.azulTenueOn}`,background:C.azulTenueOn,color:C.accent,fontSize:13,fontWeight:700,cursor:puedeGuardar?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeGuardar?1:.5,fontFamily:'inherit'}}>
       {saving?<Spin/>:null}{saving?'Guardando...':llenas.length>1?`Guardar ${llenas.length} gastos${personal?' personales':''}`:personal?'Guardar gasto personal':'Guardar gasto'}
     </button>)
@@ -21938,6 +21982,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
                   </div>
                   {!ultima&&<div style={{marginTop:6,marginLeft:54}}>{subLinea(r,ultima)}</div>}
                   {(!ultima||r.category==='Movilización')&&catDe(r)==='Movilización'&&<div style={{marginLeft:54}}>{lineaMov(r)}</div>}
+                  {!ultima&&pideDeQue(r)&&<div style={{marginLeft:54}}>{lineaDeQue(r)}</div>}
                   {a&&!r.picking&&<div style={{marginLeft:54}}>{aviso(r,a)}</div>}
                   {r.picking&&<div style={{marginLeft:54}}>{filaCliente(r)}</div>}
                 </div>)
@@ -21949,7 +21994,9 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         </>
       )}
 
-      {(selectedClient||personal)&&<div style={{display:'flex',justifyContent:isDesktop?'flex-end':'stretch',marginTop:12}}>{btnGuardar}</div>}
+      {(selectedClient||personal)&&<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',justifyContent:isDesktop?'flex-end':'stretch',gap:10,marginTop:12}}>
+        {faltaDet>0&&<span style={{fontSize:12,color:C.overdueText,width:isDesktop?'auto':'100%',textAlign:isDesktop?'right':'center'}}>{faltaDet===1?'1 gasto: falta de qué es':`${faltaDet} gastos: falta de qué son`}</span>}
+        {btnGuardar}</div>}
     </>
   )
 }
@@ -21963,6 +22010,9 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const [mv,setMv] = useState(()=>{ const m=String(expense.concept||'').match(/^Movilización (.+?)–(.+?)(?: para (.+))?$/); return {medio:expense.subcategory||medioMovDe(expense.concept), desde:m?m[1]:'', hasta:m?m[2]:'', motivo:m&&m[3]?m[3]:''} })
   const movDet = MEDIO_CON_DETALLE.has(mv.medio)
   const movFalta = f.type!=='fondo' && f.category==='Movilización' && (!mv.medio || (movDet && (!mv.desde.trim()||!mv.hasta.trim()||mv.motivo.trim().length<4)))
+  // Trámite cuya glosa no dice de qué es (inmueble, sociedad o persona): mismo control que al registrar.
+  const [deqE] = useDeQueAprendido()
+  const detFalta = f.type!=='fondo' && CATS_DE_CLIENTE.has(f.category) && glosaSinDetalle(f.concept)
   // Al completar una movilización pendiente: glosa armada, medio en subcategoría, lo escrito antes a notas y la consulta queda resuelta.
   const movPatch = () => { if(f.type==='fondo'||f.category!=='Movilización') return {}
     if(!movDet) return {subcategory:mv.medio||null, concept:String(f.concept||'').trim()||mv.medio, ...(f.revision_estado==='consultar'?{revision_estado:'consulta_resuelta',revisado_at:new Date().toISOString()}:{})}
@@ -22060,6 +22110,12 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
         </FloatFld>
       )}
       <FloatFld label='Descripción'><textarea value={f.concept} onChange={e=>up('concept',e.target.value)} rows={2} placeholder='Descripción...' style={{...fInp,height:'auto',resize:'none',fontFamily:'inherit',paddingTop:2}}/></FloatFld>
+      {detFalta&&(()=>{ const op=deQueOpciones(deqE,f.personal_de?`p:${f.personal_de}`:String(f.client_id||''),f.personal_de?null:f.client_id,clientEntities)
+        return <div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,margin:'-4px 0 10px',fontSize:12}}>
+          <span style={{fontWeight:700,color:C.overdueText,whiteSpace:'nowrap'}}>¿De qué?</span>
+          {op.map(o=><button key={o} type='button' onClick={()=>up('concept',`${String(f.concept||'').trim()} · ${o}`)} style={{display:'inline-flex',alignItems:'center',height:26,padding:'0 12px',borderRadius:8,fontSize:12,fontWeight:500,background:C.azulTenue,color:C.accent,border:'1px solid transparent',cursor:'pointer',fontFamily:'inherit',maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o}</button>)}
+          <span style={{color:C.muted}}>{op.length?'o agrégalo en la descripción':'Agrega en la descripción el inmueble, la sociedad o fs/N°/año'}</span>
+        </div> })()}
       {!isFondo&&f.category==='Movilización'&&(()=>{ const fi=(k,label)=>{ const v=mv[k]||'', bad=!v.trim()||(k==='motivo'&&v.trim().length<4)
           return <FloatFld label={label} mb={0}><input value={v} onChange={e=>setMv(p=>({...p,[k]:e.target.value}))} style={{...fInp,borderColor:bad?C.overdueText:undefined}}/></FloatFld> }
         return (<div style={{display:'grid',gridTemplateColumns:_Dmv?'150px minmax(0,1fr) minmax(0,1fr)':'minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:8}}>
@@ -22104,7 +22160,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?subOtro(f.subcategory):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta||detFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':detFalta?'Falta de qué es (inmueble, sociedad o persona)':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?subOtro(f.subcategory):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
