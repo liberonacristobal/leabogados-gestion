@@ -4110,7 +4110,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     o.pct=margenPct(o.res,o.ing); return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow])
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
-  const flujoNeto8 = flujoCajaProyectado({billing:(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing, terceros, costosOfiRows}).fin   // misma fuente que la página Flujo de caja
+  const flujoNeto8 = flujoCajaProyectado({billing:(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing, terceros, costosOfiRows, anticipos}).fin   // misma fuente que la página Flujo de caja
   const vencMes = vencidoTot
   // Mi trabajo (operativo del usuario)
   const _miIniT = INICIALES_RESP[user?.name]||null
@@ -9862,7 +9862,7 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
 //   sin cuota pero con venta → repartida entre las cuotas pendientes de esa venta; sin nada → «sin cuota» (aviso para asignarla).
 // · Oficina = presupuesto mensual (costosOficinaMes) ÷ 4,33 por semana.
 const FLUJO_DUDA_DIAS = 30
-function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], semanas=8, hoy=new Date() }){
+function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], semanas=8, hoy=new Date() }){
   const DAY=86400000
   const d0=new Date(hoy); d0.setHours(12,0,0,0)
   const mon=new Date(d0); mon.setDate(d0.getDate()-((d0.getDay()+6)%7))
@@ -9879,8 +9879,15 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], semana
   Object.entries(grp).forEach(([c,a])=>{ const u=a.sort((x,y)=>y.p-x.p).slice(0,12); histDe[c]=u.length; ritmoDe[c]=u.length>=3?Math.round(med(u.map(x=>x.d))):ritmoEstudio })
   const ritmo=c=>ritmoDe[String(c||'')]??ritmoEstudio
   const weeks=Array.from({length:semanas},(_,i)=>{ const ws=new Date(monT+i*7*DAY); return {ini:`${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,'0')}-${String(ws.getDate()).padStart(2,'0')}`,entra:0,com:0} })
-  const cli={}; const C_=c=>{ const k=String(c||''); return cli[k]||(cli[k]={cid:k,entra:0,duda:0,sin:0,com:0,comFuera:0,nVenc:0,ritmo:ritmo(k),hist:histDe[k]||0}) }
+  const cli={}; const C_=c=>{ const k=String(c||''); return cli[k]||(cli[k]={cid:k,entra:0,duda:0,sin:0,com:0,comFuera:0,antic:0,nVenc:0,ritmo:ritmo(k),hist:histDe[k]||0}) }
   const st={}; const duda={n:0,monto:0,cli:new Set()}, sinE={n:0,monto:0,previas:0}
+  // Pagos ya recibidos sin factura (anticipo disponible): esa plata ya entró, así que rebaja las cuotas programadas más antiguas
+  // de su venta (o del cliente, si el anticipo no tiene venta). Solo falta emitir la factura. El subarriendo se paga por mes y no se cruza.
+  const cubierto={}; let antTot=0
+  ;(anticipos||[]).filter(a=>a&&a.estado==='disponible'&&!a.billing_id&&Number(a.monto)>0).sort((x,y)=>String(x.fecha||'').localeCompare(String(y.fecha||''))).forEach(a=>{
+    let r=Number(a.monto)
+    vivas.filter(b=>b.status==='Programada'&&!b.invoice_no&&b.billing_type!=='subarriendo'&&(a.sale_id?String(b.sale_id)===String(a.sale_id):String(b.client_id)===String(a.client_id)))
+      .sort((x,y)=>String(x.due||'').localeCompare(String(y.due||''))).forEach(b=>{ if(r<1) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0); if(!(m>0)) return; const u=Math.min(m,r); cubierto[b.id]=(cubierto[b.id]||0)+u; r-=u; antTot+=u }) })
   vivas.forEach(b=>{
     const c=C_(b.client_id)
     if(['Pendiente','Vencido'].includes(b.status)&&b.invoice_no){ const m=saldoBill(b); if(!(m>0)) return
@@ -9889,7 +9896,7 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], semana
       const esp=base+c.ritmo*DAY
       if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
       const w=wIdx(Math.max(esp,hoyT)); st[b.id]={w,m,cid:c.cid}; if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
-    if(b.status==='Programada'&&!b.invoice_no){ const m=montoFactura(b)||Number(b.amount)||0; if(!(m>0)) return
+    if(b.status==='Programada'&&!b.invoice_no){ const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0); if(cubierto[b.id]) c.antic+=cubierto[b.id]; if(!(m>=1)){ if(cubierto[b.id]) st[b.id]={pagadaAnt:true,cid:c.cid}; return }
       const due=b.due||b.issued_at; const dYm=String(due||'').slice(0,7)
       if(!dYm||dYm<curYm){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
       const w=wIdx(Math.max(tD(due)??hoyT,hoyT)+c.ritmo*DAY); st[b.id]={w,m,cid:c.cid}; if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
@@ -9898,7 +9905,7 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], semana
   const porVenta={}; vivas.forEach(b=>{ if(b.sale_id&&st[b.id]) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
   let comFuera=0; const sinCuota=[]
   const aplica=(b,monto)=>{ const s0=st[b.id], c=C_(b.client_id)
-    if(b.status==='Pagado'){ weeks[0].com+=monto; c.com+=monto; return }
+    if(b.status==='Pagado'||s0?.pagadaAnt){ weeks[0].com+=monto; c.com+=monto; return }
     if(!s0) return
     if(s0.fuera){ comFuera+=monto; c.comFuera+=monto; return }
     if(s0.w<semanas){ weeks[s0.w].com+=monto; c.com+=monto } }
@@ -9914,10 +9921,10 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], semana
   const E=weeks.reduce((a,w)=>a+w.entra,0), Cm=weeks.reduce((a,w)=>a+w.com,0), O=oficinaSem*semanas
   const sinCuotaTot=sinCuota.reduce((a,x)=>a+x.monto,0)
   const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
-  return {weeks,E,C:Cm,O,fin:run,ritmoEstudio,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,sinCuota,sinCuotaTot,clientes}
+  return {weeks,E,C:Cm,O,fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,sinCuota,sinCuotaTot,clientes}
 }
-function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], clients=[], isDesktop=false, onOpenClientFicha }){
-  const F=useMemo(()=>flujoCajaProyectado({billing,terceros,costosOfiRows}),[billing,terceros,costosOfiRows])
+function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[], clients=[], isDesktop=false, onOpenClientFicha }){
+  const F=useMemo(()=>flujoCajaProyectado({billing,terceros,costosOfiRows,anticipos}),[billing,terceros,costosOfiRows,anticipos])
   const [fil,setFil]=useState('todos')
   const nomDe=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c.name }); return m },[clients])
   const nom=cid=>nomDe[cid]||'Sin cliente'
@@ -40993,7 +41000,7 @@ export default function App() {
             </div>}
             {tab==='flujoCaja'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1180,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Flujo de caja' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
-              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} clients={clients} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha}/>
+              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} clients={clients} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha}/>
             </div>}
             {tab==='miCarga'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Mi carga' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
