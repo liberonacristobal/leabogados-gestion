@@ -4495,7 +4495,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
               const val=porPagar>0?fmtShort(porPagar):'Al día'
               const col=porPagar>0?C.soonText:C.greenText
               const tint=porPagar>0?{fg:C.soonText,bg:C.ambarBg}:{fg:C.greenText,bg:C.greenBg}
-              const sub=isDeskRes?(pagado>0?`pagadas ${selYear} ${fmtShort(pagado)}`:`sin pagos en ${selYear}`):(porPagar>0?'por pagar':'sin deudas')
+              const ant=comisPorPagarAnteriores(comisSaldo)
+              const sub=ant?<span style={{color:C.soonText,fontWeight:700}}>{isDeskRes?'incluye ':''}{fmtShort(ant.monto)} de {ant.txt}</span>:isDeskRes?(pagado>0?`pagadas ${selYear} ${fmtShort(pagado)}`:`sin pagos en ${selYear}`):(porPagar>0?'por pagar':'sin deudas')
               return kTile('cxp',isDeskRes?'Comisiones por pagar':'Comisiones',val,col,'tPct',tint,sub,()=>navTo?navTo({tab:'proveedores'}):go('proveedores')) })()}
           </div>
         </div>
@@ -9659,7 +9660,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       const perKey = scope==='mes' ? `${year}-${String(selMR).padStart(2,'0')}` : String(year)
       const enPer = d => String(d||'').startsWith(perKey)
       // Comisiones por pagar = saldo vivo, misma fuente que Inicio y Comisiones (saldoComisiones), como Flujo y Por cobrar de esta sección.
-      const pp=saldoComisiones(terceros,billing).porPagar
+      const scO=saldoComisiones(terceros,billing), pp=scO.porPagar, ppAnt=comisPorPagarAnteriores(scO)
       const retPer = ret.rows.filter(r=>enPer(r.date)).reduce((a,r)=>a+r.amount,0)
       const ivaPeriodo = comprasRows.filter(d=>enPer(d.fecha_emision)).reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
       const st=(k,path,ibg,icol,lab,val,vcol,on,bg)=><div key={k} onClick={on} className='pv-c' style={{background:bg||C.card,border:`1px solid ${bg?'transparent':C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
@@ -9671,7 +9672,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
         <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
           {st('flu',IC.flujo,fin>=0?C.greenBg:C.overdueBg,finCol,isDesktop?'Flujo de caja · 8 semanas':'Flujo de caja',(fin>0?'+':fin<0?'−':'')+fmtMill(Math.abs(fin)),finCol,()=>onOpenFlujoCaja&&onOpenFlujoCaja())}
           {st('cob',IC.send,C.azulBg,C.azulInfo,'Por cobrar',fmtMill(porCobrar),porCobrar>0?C.soonText:C.greenText,()=>onOpenCobranza&&onOpenCobranza())}
-          {st('prov',IC.prov,C.soonBg,C.soonText,isDesktop?'Comisiones por pagar':'Por pagar',pp>0?'−'+fmtMill(pp):'al día',pp>0?C.soonText:C.greenText,()=>onOpenProveedores&&onOpenProveedores())}
+          {st('prov',IC.prov,C.soonBg,C.soonText,isDesktop?'Comisiones por pagar':'Por pagar',pp>0?<>{'−'+fmtMill(pp)}{ppAnt&&<span style={{fontSize:10.5,fontWeight:700}}> · {isDesktop?`${fmtMill(ppAnt.monto)} de ${ppAnt.txt}`:ppAnt.txt}</span>}</>:'al día',pp>0?C.soonText:C.greenText,()=>onOpenProveedores&&onOpenProveedores())}
           {st('ret',IC.ret,C.tealBg,C.tealText,isDesktop?'Ingresos de socios':'Socios',fmtMill(retPer),C.tealText,()=>onOpenRetiros&&onOpenRetiros(),C.tealBg)}
         </div>
         {L('Gestión de la oficina')}
@@ -14899,7 +14900,7 @@ const estadoComision = (t, b) => t?.estado==='pagado' ? 'pagada' : (t?.estado===
 // Saldos de comisiones (fuente única para Inicio, Oficina y Proveedores). Excluye las de cuotas borradas o anuladas.
 function saldoComisiones(terceros=[], billing=[]){
   const byId=new Map((billing||[]).map(b=>[String(b.id),b]))
-  const r={pagada:0,porPagar:0,porDevengar:0,total:0,provsPorPagar:new Set(),desfasadas:[],porPagarDesde:null}
+  const r={pagada:0,porPagar:0,porDevengar:0,total:0,provsPorPagar:new Set(),desfasadas:[],porPagarDesde:null,porPagarAnio:{}}
   ;(terceros||[]).forEach(t=>{ if(!t) return
     const b=t.billing_id?byId.get(String(t.billing_id)):null
     if(t.billing_id&&(!b||b.status==='Anulada'||b.deleted_at)) return
@@ -14907,10 +14908,15 @@ function saldoComisiones(terceros=[], billing=[]){
     r.total+=m
     if(e==='pagada') r.pagada+=m
     else if(e==='por_pagar'){ r.porPagar+=m; r.provsPorPagar.add(String(t.proveedor_id)); if(t.estado!=='por_pagar') r.desfasadas.push(t)
-      const d=String(b?.paid_at||'').slice(0,10); if(d&&(!r.porPagarDesde||d<r.porPagarDesde)) r.porPagarDesde=d }
+      const d=String(b?.paid_at||'').slice(0,10); if(d&&(!r.porPagarDesde||d<r.porPagarDesde)) r.porPagarDesde=d
+      // año en que nació la deuda = cuando pagó el cliente (o se emitió/creó si no hay pago registrado)
+      const y=+String(b?.paid_at||b?.issued_at||b?.due||t.created_at||'').slice(0,4); if(y>1990) r.porPagarAnio[y]=(r.porPagarAnio[y]||0)+m }
     else r.porDevengar+=m })
   return r
 }
+// Parte de las comisiones por pagar que viene de años anteriores al actual: {monto, txt:'2025' | '2024–2025'} o null.
+const comisPorPagarAnteriores = sc => { const yAct=new Date().getFullYear(); const ys=Object.keys(sc?.porPagarAnio||{}).map(Number).filter(y=>y<yAct).sort(); if(!ys.length) return null
+  const monto=ys.reduce((a,y)=>a+(sc.porPagarAnio[y]||0),0); return monto>0?{monto,txt:ys.length>1?`${ys[0]}–${ys[ys.length-1]}`:String(ys[0])}:null }
 const _diasDesde = iso => { const s=String(iso||'').slice(0,10); if(!/^\d{4}-\d\d-\d\d$/.test(s)) return null; return Math.round((Date.now()-new Date(s+'T12:00').getTime())/864e5) }
 const _diasEntre = (a,b) => { const x=String(a||'').slice(0,10), y=String(b||'').slice(0,10); if(!x||!y) return null; return Math.round((new Date(y+'T12:00')-new Date(x+'T12:00'))/864e5) }
 
