@@ -9916,7 +9916,8 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
     if(!ps.length){ sinCuota.push({prov:t.proveedor||'Colaborador',monto,sale_id:t.sale_id||null}); return }
     const tot=ps.reduce((a,x)=>a+(st[x.id]?.m||0),0)||1
     ps.forEach(x=>aplica(x,monto*(st[x.id]?.m||0)/tot)) })
-  const oficinaSem=costosOficinaMes(costosOfiRows)/4.3333
+  // Oficina al costo bruto: los ingresos fijos del presupuesto (subarriendo) ya entran por su propia factura; restarlos aquí los contaba dos veces.
+  const oficinaSem=costosOficinaMes((costosOfiRows||[]).filter(r=>!r.es_ingreso))/4.3333
   let run=0; weeks.forEach(w=>{ w.of=oficinaSem; w.sale=oficinaSem+w.com; run+=w.entra-w.sale; w.run=run })
   const E=weeks.reduce((a,w)=>a+w.entra,0), Cm=weeks.reduce((a,w)=>a+w.com,0), O=oficinaSem*semanas
   const sinCuotaTot=sinCuota.reduce((a,x)=>a+x.monto,0)
