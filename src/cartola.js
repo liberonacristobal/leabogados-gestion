@@ -173,7 +173,7 @@ export function parseCartola(aoa, { filename='' } = {}){
   for(let i=0;i<Math.min(_hdr>=0?_hdr:25,rows.length);i++){ for(const cell of rows[i]){ const f=fechaDesdeGlosa(_flat(cell)); if(f) fechaHeader=f } }
   // --- Saldos del período (si la planilla los trae): permiten verificar que no falte ningún movimiento
   //     (saldo inicial + abonos − cargos = saldo final) y encadenar cartolas sucesivas de la misma cuenta. ---
-  const saldoDe = rx => { for(let i=0;i<Math.min(40,rows.length);i++){ const cells=rows[i].map(_norm); const k=cells.findIndex(c=>rx.test(c)); if(k<0) continue
+  const saldoDe = rx => { for(let i=0;i<rows.length;i++){ const cells=rows[i].map(_norm); const k=cells.findIndex(c=>rx.test(c)); if(k<0) continue
     const v=parseMonto((rows[i+1]||[])[k]) || parseMonto(rows[i].slice(k+1).find(x=>parseMonto(x)>0)); if(v) return v } return null }
   const saldoInicial = saldoDe(/^saldo inicial/), saldoFinal = saldoDe(/^saldo (final|contable)/)
   // --- Totales del "Resumen del Período": los labels (Total Cargos / Total Abonos) están en una

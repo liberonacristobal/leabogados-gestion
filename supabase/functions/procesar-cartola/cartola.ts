@@ -150,8 +150,9 @@ export function parseCartola(aoa: any[], { filename = '' }: { filename?: string 
   const _hdr = rows.findIndex(r => { const c = r.map(_norm); return c.some((x: string) => x.includes('descrip')) && c.some((x: string) => x.includes('abono')) })
   for (let i = 0; i < Math.min(_hdr >= 0 ? _hdr : 25, rows.length); i++) { for (const cell of rows[i]) { const f = fechaDesdeGlosa(_flat(cell)); if (f) fechaHeader = f } }
   // Saldos del período (si vienen): saldo inicial + abonos − cargos = saldo final, y encadenan cartolas de la misma cuenta.
+  // Se buscan en TODA la hoja: en la cartola BICE vienen al final, en el «Resumen del período» (filas ~51–52).
   const saldoDe = (rx: RegExp) => {
-    for (let i = 0; i < Math.min(40, rows.length); i++) {
+    for (let i = 0; i < rows.length; i++) {
       const cells = rows[i].map(_norm); const k = cells.findIndex((c: string) => rx.test(c)); if (k < 0) continue
       const v = parseMonto((rows[i + 1] || [])[k]) || parseMonto(rows[i].slice(k + 1).find((x: unknown) => parseMonto(x) > 0)); if (v) return v
     }
