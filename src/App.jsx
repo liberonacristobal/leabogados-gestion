@@ -4110,7 +4110,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     o.pct=margenPct(o.res,o.ing); return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow])
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
-  const flujoNeto8 = flujoCajaProyectado({billing:(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing, terceros, costosOfiRows, anticipos}).fin   // misma fuente que la página Flujo de caja
+  const costoOp8 = useMemo(()=>costoOperacionReal(fuRes,{billing,terceros,costosOfiRows,expenses,clients}),[fuRes,billing,terceros,costosOfiRows,expenses,clients])
+  const flujoNeto8 = flujoCajaProyectado({billing:(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing, terceros, costosOfiRows, anticipos, costoOp:costoOp8}).fin   // misma fuente que la página Flujo de caja
   const vencMes = vencidoTot
   // Mi trabajo (operativo del usuario)
   const _miIniT = INICIALES_RESP[user?.name]||null
@@ -9733,6 +9734,24 @@ function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[
   const ing=fac+sub+rex, res=ing-cos-com
   return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
 }
+// Costo de operación REAL para proyectar (fuente única): promedio de los últimos 3 meses cerrados del resultado (costos + PPM)
+// y el calendario de pago aprendido del banco: qué parte del gasto del mes sale cada día. Sin planilla o sin pagos → null (se usa el presupuesto).
+function costoOperacionReal(fu, deps, hoy=new Date(), meses=3){
+  const ofi=(deps.clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))); if(!ofi) return null
+  const yms=[]; for(let i=1;i<=meses;i++){ const d=new Date(hoy.getFullYear(),hoy.getMonth()-i,1); yms.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`) }
+  const rs=yms.map(ym=>resultadoMes(fu,deps,ym)).filter(r=>r.conPlanilla)
+  if(!rs.length) return null
+  const mensual=rs.reduce((a,r)=>a+r.cos+(Number(r.ppm)||0),0)/rs.length
+  const NO=new Set(['Retiros','Comisiones','Proveedores','Honorarios','Notaria','Notaría','CBR','Registro Civil','Archivo Judicial','Diario Oficial'])
+  const peso={}; let tot=0
+  ;(deps.expenses||[]).forEach(e=>{ if(!e||e.deleted_at||e.type!=='gasto'||String(e.client_id)!==String(ofi.id)||NO.has(String(e.category||''))) return
+    const f=String(e.date||'').slice(0,10); if(!yms.includes(f.slice(0,7))) return
+    const [Y,M,D]=f.split('-').map(Number), last=new Date(Y,M,0).getDate(), k=D===last?30:Math.min(D,29), m=Number(e.amount)||0
+    if(m>0){ peso[k]=(peso[k]||0)+m; tot+=m } })
+  if(!(tot>0)) return null
+  Object.keys(peso).forEach(k=>{ peso[k]/=tot })
+  return {mensual, peso, meses:rs.map(r=>r.ym)}
+}
 // Fuentes del resultado (ventas del SII + planilla de costos reales), cargadas una vez por sesión y compartidas por la página y el Inicio.
 let _fuentesRes=null, _fuentesResP=null
 function useFuentesResultado(){
@@ -9862,7 +9881,7 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
 //   sin cuota pero con venta → repartida entre las cuotas pendientes de esa venta; sin nada → «sin cuota» (aviso para asignarla).
 // · Oficina = presupuesto mensual (costosOficinaMes) ÷ 4,33 por semana.
 const FLUJO_DUDA_DIAS = 30
-function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], semanas=8, hoy=new Date() }){
+function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], costoOp=null, semanas=8, hoy=new Date() }){
   const DAY=86400000
   const d0=new Date(hoy); d0.setHours(12,0,0,0)
   const mon=new Date(d0); mon.setDate(d0.getDate()-((d0.getDay()+6)%7))
@@ -9921,14 +9940,20 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
     ps.forEach(x=>aplica(x,monto*(st[x.id]?.m||0)/tot)) })
   // Oficina al costo bruto: los ingresos fijos del presupuesto (subarriendo) ya entran por su propia factura; restarlos aquí los contaba dos veces.
   const oficinaSem=costosOficinaMes((costosOfiRows||[]).filter(r=>!r.es_ingreso))/4.3333
-  let run=0; weeks.forEach(w=>{ w.of=oficinaSem; w.sale=oficinaSem+w.com; run+=w.entra-w.sale; w.run=run })
-  const E=weeks.reduce((a,w)=>a+w.entra,0), Cm=weeks.reduce((a,w)=>a+w.com,0), O=oficinaSem*semanas
+  // Con costo real: cada semana lleva el costo mensual × la parte del calendario de pago que cae en sus días, desde hoy (lo ya pagado no se cuenta).
+  const ofDe=i=>{ if(!(costoOp&&costoOp.mensual>0&&costoOp.peso)) return oficinaSem; let v=0
+    for(let j=0;j<7;j++){ const d=new Date(monT+(i*7+j)*DAY); if(d.getTime()<hoyT) continue; const D=d.getDate(), last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); const k=D===last?30:(D>=30?null:D); if(k) v+=costoOp.mensual*(costoOp.peso[k]||0) }
+    return v }
+  let run=0; weeks.forEach((w,i)=>{ w.of=ofDe(i); w.sale=w.of+w.com; run+=w.entra-w.sale; w.run=run })
+  const E=weeks.reduce((a,w)=>a+w.entra,0), Cm=weeks.reduce((a,w)=>a+w.com,0), O=weeks.reduce((a,w)=>a+w.of,0)
   const sinCuotaTot=sinCuota.reduce((a,x)=>a+x.monto,0)
   const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
-  return {weeks,E,C:Cm,O,fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
+  return {weeks,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
 }
-function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[], clients=[], isDesktop=false, onOpenClientFicha }){
-  const F=useMemo(()=>flujoCajaProyectado({billing,terceros,costosOfiRows,anticipos}),[billing,terceros,costosOfiRows,anticipos])
+function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[], expenses=[], clients=[], isDesktop=false, onOpenClientFicha }){
+  const fu=useFuentesResultado()
+  const costoOp=useMemo(()=>costoOperacionReal(fu,{billing,terceros,costosOfiRows,expenses,clients}),[fu,billing,terceros,costosOfiRows,expenses,clients])
+  const F=useMemo(()=>flujoCajaProyectado({billing,terceros,costosOfiRows,anticipos,costoOp}),[billing,terceros,costosOfiRows,anticipos,costoOp])
   const [fil,setFil]=useState('todos')
   const nomDe=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c.name }); return m },[clients])
   const nom=cid=>nomDe[cid]||'Sin cliente'
@@ -9956,7 +9981,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
     <div style={{fontSize:isDesktop?30:26,fontWeight:800,color:F.fin>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums',lineHeight:1.1,margin:'4px 0 8px'}}>{F.fin>=0?'+':''}{fM(F.fin)}</div>
     {ln('Cobranza proyectada',`+${fM(F.E)}`,C.greenText)}
     {ln('Egresos proyectados',`−${fM(F.O+F.C)}`,C.overdueText)}
-    {ln('Gastos de operación',`−${fM(F.O)}`,null,true)}
+    {ln(isDesktop?`Gastos de operación · ${F.costoReal?'costo real':'presupuesto'}`:'Gastos de operación',`−${fM(F.O)}`,null,true)}
     {ln('Comisiones por pagar',`−${fM(F.C)}`,null,true)}
   </div>
   // Por cobrar sin fecha: lo que se debe pero no se proyecta porque no se sabe cuándo entra. Cada cobro lleva debajo las comisiones que dependen de él.
@@ -41009,7 +41034,7 @@ export default function App() {
             </div>}
             {tab==='flujoCaja'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1180,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Flujo de caja' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
-              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} clients={clients} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha}/>
+              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} expenses={expenses} clients={clients} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha}/>
             </div>}
             {tab==='miCarga'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Mi carga' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
