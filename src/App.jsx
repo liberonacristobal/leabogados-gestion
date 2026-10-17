@@ -3619,7 +3619,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n={icon} s={14} c={fg}/></span>}
       <div style={{minWidth:0,flex:1}}>
         {/* Label, cifra y sub en una columna → todos alineados al mismo margen (a la derecha del icono), no bajo el icono. */}
-        <div style={{fontSize:10,fontWeight:600,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
+        <div style={{fontSize:10,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
         <div style={{fontSize:(value&&String(value).length>8)?15:19,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
         {sub&&<div style={{fontSize:9,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
       </div>
@@ -4117,9 +4117,11 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   // Mi trabajo (operativo del usuario)
   const _miIniT = INICIALES_RESP[user?.name]||null
   const mineProyN = (proyectosCartera||[]).filter(p=>p&&p.activo!==false&&(!_miIniT||(p.responsable||'')===_miIniT)).length
-  const tareasPendN = (tasks||[]).filter(t=>t&&t.status!=='Terminado').length
+  // «Mis» = asignadas a quien mira (como la lista de Tareas), no las de todo el equipo.
+  const esMiaT = t => t && t.status!=='Terminado' && !t.archived && ((t.assignees&&t.assignees.includes(user?.name)) || t.who===user?.name)
+  const tareasPendN = (tasks||[]).filter(esMiaT).length
   const _wk7ISO = (()=>{ const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10) })()
-  const cargaSemN = (tasks||[]).filter(t=>t&&t.status!=='Terminado'&&t.due&&String(t.due).slice(0,10)<=_wk7ISO).length
+  const cargaSemN = (tasks||[]).filter(t=>esMiaT(t)&&t.due&&String(t.due).slice(0,10)<=_wk7ISO).length
 
   // PÁGINA Prioridades financieras (early-return): abre desde el menú Finanzas (sidebar) o ⌘K; cada alerta navega a su fuente (y cierra la página para que el volver caiga en Inicio).
   // (Página «Prioridades financieras» retirada 2026-10-14: duplicaba avisos que ya viven en Inicio, Cobranza, Banco y Comisiones.)
@@ -4482,17 +4484,19 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
         <div style={{padding:'6px 20px 0'}}>
           {/* Señales financieras — todas clickeables a su fuente. Resultado del mes y Flujo de caja abren su página; el resto navega o despliega. */}
           <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
-            {kTile('resmes','Resultado del mes',fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',{fg:C.greenText,bg:C.greenBg},(resMesDif>=0?'▲ ':'▼ ')+fmtShort(Math.abs(resMesDif))+' vs mes previo',onOpenEstadoResultados)}
-            {kTile('flujo','Flujo de caja',(flujoNeto8>0?'+':'')+fmtShort(flujoNeto8),flujoNeto8>=0?C.accent:C.overdueText,'wallet',{fg:C.tealText,bg:C.tealBg},'proyectado · 8 semanas',onOpenFlujoCaja)}
-            {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'chart',{fg:C.greenText,bg:C.greenBg},'emitido'+(emFacTot>0?' · '+emPct+'% pagado':''),()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
-            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},vencMes>0?('vencido '+fmtShort(vencMes)):'del año',()=>go('cobranza'))}
-            {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.tealText,'clock',{fg:C.tealText,bg:C.tealBg},'ingresos · al 31 dic')}
+            {/* Orden por pares (2026-10-17): el mes (Resultado · Emitido) → la caja (Flujo · Por cobrar) → el año (Proyección · Comisiones). Ícono propio por tarjeta; verde solo para lo bueno con signo. */}
+            {kTile('resmes','Resultado del mes',(resMes>0?'+':'')+fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',resMes>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},<><Gl n={resMesDif>=0?'arrowUp':'arrowDown'}/> {fmtShort(Math.abs(resMesDif))} vs {isDeskRes?'mes previo':MES_C[+_ymPrev(_ymNow).slice(5,7)-1]}</>,onOpenEstadoResultados)}
+            {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'file',{fg:C.accent,bg:C.azulBg},emFacTot>0?`${emPct}% pagado`:'sin emitir aún',()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
+            {kTile('flujo','Flujo de caja',(flujoNeto8>0?'+':'')+fmtShort(flujoNeto8),flujoNeto8>=0?C.greenText:C.overdueText,'exchange',flujoNeto8>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},'neto · 8 semanas',onOpenFlujoCaja)}
+            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}</span>:'del año',()=>go('cobranza'))}
+            {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.accent,'clock',{fg:C.accent,bg:C.azulBg},`${isDeskRes?'ingresos ':''}al ${fmtFechaDMY(`${new Date().getFullYear()}-12-31`)}`)}
             {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.totalTodo, porPagar=cxpTotDash
-              const val=pagado>0?fmtShort(pagado):(porPagar>0?fmtShort(porPagar):'Al día')
-              const col=pagado>0?C.greenText:(porPagar>0?C.soonText:C.greenText)
-              const tint=pagado>0?{fg:C.greenText,bg:C.greenBg}:{fg:C.soonText,bg:C.ambarBg}
-              const sub=pagado>0?('pagado'+(porPagar>0?' · por pagar '+fmtShort(porPagar):'')):(porPagar>0?'por pagar':'sin deudas')
-              return kTile('cxp','Comisiones',val,col,'wallet',tint,sub,()=>navTo?navTo({tab:'proveedores'}):go('proveedores')) })()}
+              // La cifra grande es lo accionable (por pagar, saldo vivo), igual que «Comisiones por pagar» en Oficina; lo pagado del año va debajo.
+              const val=porPagar>0?fmtShort(porPagar):'Al día'
+              const col=porPagar>0?C.soonText:C.greenText
+              const tint=porPagar>0?{fg:C.soonText,bg:C.ambarBg}:{fg:C.greenText,bg:C.greenBg}
+              const sub=isDeskRes?(pagado>0?`pagadas ${selYear} ${fmtShort(pagado)}`:`sin pagos en ${selYear}`):(porPagar>0?'por pagar':'sin deudas')
+              return kTile('cxp',isDeskRes?'Comisiones por pagar':'Comisiones',val,col,'tPct',tint,sub,()=>navTo?navTo({tab:'proveedores'}):go('proveedores')) })()}
           </div>
         </div>
       </div>
@@ -4500,9 +4504,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
         {lvlLabel('Mi trabajo')}
         <div style={{padding:'6px 20px 0'}}>
           <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
-            {kTile('misproy','Mis proyectos',String(mineProyN),C.text,'briefcase',{fg:C.text,bg:C.border},'activos',()=>go('cartera'))}
-            {kTile('mistareas','Mis tareas',String(tareasPendN),C.accent,'receipt',{fg:C.accent,bg:C.azulBg},'pendientes',()=>go('tasks'))}
-            {kTile('micarga','Mi carga',String(cargaSemN),C.soonText,'clock',{fg:C.soonText,bg:C.ambarBg},'esta semana',()=>onAcceso&&onAcceso('micarga'))}
+            {kTile('misproy','Mis proyectos',String(mineProyN),C.accent,'briefcase',{fg:C.accent,bg:C.azulBg},'activos',()=>go('cartera'))}
+            {kTile('mistareas','Mis tareas',String(tareasPendN),C.accent,'check',{fg:C.accent,bg:C.azulBg},cargaSemN>0?<>{isDeskRes?'pendientes · ':''}<span style={{color:C.soonText,fontWeight:700}}>{cargaSemN} esta semana</span></>:'pendientes',()=>go('tasks'))}
           </div>
         </div>
       </div>
@@ -9655,10 +9658,8 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
     {(()=>{ // Todo del MISMO período de la página: año a la fecha o el mes elegido (salvo Flujo de caja y Por cobrar, que son saldo vivo).
       const perKey = scope==='mes' ? `${year}-${String(selMR).padStart(2,'0')}` : String(year)
       const enPer = d => String(d||'').startsWith(perKey)
-      // Comisiones por pagar: nacieron en el período (su cliente pagó en el período).
-      const bById=new Map((billing||[]).map(b=>[String(b.id),b]))
-      const pp=(terceros||[]).reduce((a,t)=>{ if(!t) return a; const b=t.billing_id?bById.get(String(t.billing_id)):null; if(t.billing_id&&(!b||b.status==='Anulada'||b.deleted_at)) return a
-        return estadoComision(t,b)==='por_pagar'&&enPer(b?.paid_at||t.created_at)?a+(Number(t.monto)||0):a },0)
+      // Comisiones por pagar = saldo vivo, misma fuente que Inicio y Comisiones (saldoComisiones), como Flujo y Por cobrar de esta sección.
+      const pp=saldoComisiones(terceros,billing).porPagar
       const retPer = ret.rows.filter(r=>enPer(r.date)).reduce((a,r)=>a+r.amount,0)
       const ivaPeriodo = comprasRows.filter(d=>enPer(d.fecha_emision)).reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
       const st=(k,path,ibg,icol,lab,val,vcol,on,bg)=><div key={k} onClick={on} className='pv-c' style={{background:bg||C.card,border:`1px solid ${bg?'transparent':C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
@@ -11252,7 +11253,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   const shiftMes = d => { const [y,m]=mes.split('-').map(Number); let mm=m+d, yy=y; while(mm<=0){mm+=12;yy--} while(mm>12){mm-=12;yy++}; setMes(`${yy}-${String(mm).padStart(2,'0')}`); setExpand(null) }   // mantiene la tarjeta activa (estFiltro) al cambiar de mes: sin resetearla, la lista persiste y el ancho no colapsa
   const mesLabel = `${MESNOM[+mes.slice(5,7)-1]} ${mes.slice(0,4)}`
   const pct = x => `${Math.round(x*100)}%`
-  const deltaTxt = (a,b)=>{ if(!b) return a>0?'nuevo':''; const d=Math.round((a-b)/b*100); return `${d>=0?'▲':'▼'} ${Math.abs(d)}%` }
+  const deltaTxt = (a,b)=>{ if(!b) return a>0?'nuevo':''; const d=Math.round((a-b)/b*100); return <><Gl n={d>=0?'arrowUp':'arrowDown'}/> {Math.abs(d)}%</> }
   const deltaCol = (a,b,inv)=>{ if(a===b) return C.done; const up=a>b; return (inv?!up:up)?C.greenText:C.overdueText }
 
   const visibles = estFiltro==='porcobrar' ? filas.filter(f=>f.est==='detectado'||f.est==='sinpago')
