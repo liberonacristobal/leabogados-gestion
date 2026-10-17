@@ -9540,8 +9540,8 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       const estado = scope==='mes' ? (rMesSel?.cerrado?'cerrado':'provisorio') : 'al día'
       const egr = R.cos+R.com
       const margen = R.ing ? R.res/R.ing*100 : null
-      const kt=(k,ic,[bg,fg],lab,val,sub,on)=>{ const blanco=bg===C.card; return <div key={k} onClick={on} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 11px',display:'flex',gap:12,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
-        {isDesktop&&<KpiIco n={ic} c={fg} soft={blanco}/>}
+      const kt=(k,ic,[bg,fg],lab,val,sub,on)=>{ const blanco=bg===C.card; return <div key={k} onClick={on} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
+        <KpiIco n={ic} c={fg} soft={blanco}/>
         <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?26:20,fontWeight:800,color:fg,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
       const tRes = R.res>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText]
       const sg = v => (v<0?'−':'')+fmtMill(Math.abs(v))
@@ -9554,7 +9554,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       return <>
         <div style={grid4}>
           {kt('res','chart',tRes,'Resultado',sg(R.res),`${per} · ${estado}`,abrirRes)}
-          {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(R.ing),'facturación + subarriendo',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
+          {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(R.ing),'incluye subarriendo',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {kt('egr','wallet',[C.soonBg,C.soonText],'Egresos',egr?'−'+fmtMill(egr):'$0','costos + comisiones',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {kt('mar','tPct',[C.card,C.accent],'Margen',margen==null?'—':`${margen.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos',abrirRes)}
         </div>
@@ -9568,16 +9568,21 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       </> })()}
 
     {L('Gestión de la oficina')}
-    {(()=>{ const pp=saldoComisiones(terceros,billing).porPagar
-      // IVA crédito del MISMO período que el resto de la página (año a la fecha o el mes elegido), no de todas las compras cargadas.
-      const perIva = scope==='mes' ? `${year}-${String(selMR).padStart(2,'0')}` : String(year)
-      const ivaPeriodo = comprasRows.filter(d=>String(d.fecha_emision||'').startsWith(perIva)).reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
-      const st=(k,path,ibg,icol,lab,val,vcol,on)=><div key={k} onClick={on} className='pv-c' style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
-        {isDesktop&&<span style={{width:28,height:28,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>}
+    {(()=>{ // Todo del MISMO período de la página: año a la fecha o el mes elegido.
+      const perKey = scope==='mes' ? `${year}-${String(selMR).padStart(2,'0')}` : String(year)
+      const enPer = d => String(d||'').startsWith(perKey)
+      // Proveedores: comisiones por pagar que nacieron en el período (su cliente pagó en el período).
+      const bById=new Map((billing||[]).map(b=>[String(b.id),b]))
+      const pp=(terceros||[]).reduce((a,t)=>{ if(!t) return a; const b=t.billing_id?bById.get(String(t.billing_id)):null; if(t.billing_id&&(!b||b.status==='Anulada'||b.deleted_at)) return a
+        return estadoComision(t,b)==='por_pagar'&&enPer(b?.paid_at||t.created_at)?a+(Number(t.monto)||0):a },0)
+      const retPer = ret.rows.filter(r=>enPer(r.date)).reduce((a,r)=>a+r.amount,0)
+      const ivaPeriodo = comprasRows.filter(d=>enPer(d.fecha_emision)).reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
+      const st=(k,path,ibg,icol,lab,val,vcol,on,bg)=><div key={k} onClick={on} className='pv-c' style={{background:bg||C.card,border:`1px solid ${bg?'transparent':C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
+        {isDesktop&&<span style={{width:28,height:28,borderRadius:8,background:bg?C.card:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>}
         <div style={{minWidth:0,flex:1}}><div style={{fontSize:11.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14.5,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
       return <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
+        {st('ret',IC.ret,C.tealBg,C.tealText,'Ingresos de socios',fmtMill(retPer),C.tealText,()=>onOpenRetiros&&onOpenRetiros(),C.tealBg)}
         {st('gv',IC.doc,C.bgWarm,C.muted,'Gastos varios',fmtMill(R.gv),C.accent,()=>onOpenVarios&&onOpenVarios())}
-        {st('ret',IC.ret,C.tealBg,C.tealText,'Ingresos de socios',fmtMill(ret.total),C.tealText,()=>onOpenRetiros&&onOpenRetiros())}
         {st('iva',IC.iva,C.azulBg,C.azulInfo,'Compras · IVA',fmtMill(ivaPeriodo),C.azulInfo,()=>setSub('compras'))}
         {st('prov',IC.com,C.soonBg,C.soonText,'Proveedores',pp>0?fmtMill(pp):'al día',pp>0?C.soonText:C.greenText,()=>onOpenProveedores&&onOpenProveedores())}
       </div> })()}
