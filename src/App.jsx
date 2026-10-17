@@ -21516,7 +21516,7 @@ const _hoyLocal = () => { const d=new Date(); return `${d.getFullYear()}-${Strin
 function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName,estudioId,onIrCliente,onLanding}) {
   const isDesktop = useIsDesktop()
   const hoy = _hoyLocal()
-  const nuevaFila = date => ({id:Date.now()+Math.random(),category:null,concept:'',amount:'',date:date||hoy,paid_by_client:false,subcategory:'',cli:null,proj:'',resp:null,picking:false,pq:'',mvMedio:'',mvDesde:'',mvHasta:'',mvMotivo:'',deQue:''})
+  const nuevaFila = date => ({id:Date.now()+Math.random(),category:null,concept:'',amount:'',date:date||hoy,paid_by_client:false,subcategory:'',cli:null,proj:'',resp:null,picking:false,pq:'',mvMedio:'',mvDesde:'',mvHasta:'',mvMotivo:'',deQue:'',dupOk:false})
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient&&preClient.id?preClient:null)   // {personal_de} = gasto personal precargado (cuenta del equipo)
   // Gasto personal de un miembro: en vez de cliente se elige la persona (personal_de). La tanda entera es de esa persona.
@@ -21634,6 +21634,17 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const pideDeQue = r => CATS_DE_CLIENTE.has(catDe(r)) && glosaSinDetalle(r.concept)
   const faltaDetDe = r => pideDeQue(r) && !String(r.deQue||'').trim()
   const faltaDet = llenas.filter(faltaDetDe).length
+  // Posible duplicado: mismo día y mismo monto que un gasto ya cargado (o que otra fila de esta carga).
+  // Movilización: lo cargó la misma persona y el monto difiere en ≤ $200 (la app de Uber cambia unos pesos). Resto: mismo cliente o persona y monto exacto.
+  const gastosPorFecha = useMemo(()=>{ const m=new Map(); (expenses||[]).forEach(e=>{ if(e.deleted_at||e.type==='fondo'||!e.date) return; const k=String(e.date).slice(0,10); (m.get(k)||m.set(k,[]).get(k)).push(e) }); return m },[expenses])
+  const dupDe = r => { if(!r.amount||r.dupOk) return null; const monto=parseInt(r.amount)||0, f=r.date||hoy, mov=catDe(r)==='Movilización'
+    const cid=personal?null:cliDe(r)?.id
+    const igual=e=>{ const d=Math.abs((Number(e.amount)||0)-monto); if(mov) return (e.category==='Movilización')&&d<=200&&(!userName||e.created_by===userName)
+      return d===0&&(personal?e.personal_de===personal:String(e.client_id)===String(cid)) }
+    const ya=(gastosPorFecha.get(f)||[]).find(igual); if(ya) return {fecha:ya.date,concept:ya.concept,amount:ya.amount}
+    const otra=llenas.find(o=>o.id!==r.id&&(o.date||hoy)===f&&Math.abs((parseInt(o.amount)||0)-monto)<=(mov?200:0)&&rows.indexOf(o)<rows.indexOf(r)&&(mov?catDe(o)==='Movilización':cliDe(o)?.id===cliDe(r)?.id))
+    return otra?{fecha:f,concept:otra.concept,amount:otra.amount,enCarga:true}:null }
+  const dupPend = llenas.filter(r=>dupDe(r)).length
   const deQueScope = r => personal?`p:${personal}`:(cliDe(r)?.id?String(cliDe(r).id):null)
   const gastoDeFila = r => { const cat=catDe(r)
     if(cat!=='Movilización'){ const dq=pideDeQue(r)&&String(r.deQue||'').trim()?deQueTexto(r.deQue):''
@@ -21652,7 +21663,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const faltaProyecto = !personal&&!esOficina&&!project.trim()&&llenas.some(r=>!r.cli)
   const faltaProyFila = llenas.some(r=>r.cli&&!_esOfiCli(r.cli)&&!r.proj)
   const bloqueadas = llenas.filter(r=>avisoDe(r)?.bloquea).length
-  const puedeGuardar = (!!selectedClient||!!personal)&&llenas.length>0&&!faltaProyecto&&!faltaProyFila&&!bloqueadas&&!faltaMov&&!faltaDet&&!saving
+  const puedeGuardar = (!!selectedClient||!!personal)&&llenas.length>0&&!faltaProyecto&&!faltaProyFila&&!bloqueadas&&!faltaMov&&!faltaDet&&!dupPend&&!saving
 
   const saveAll = async() => {
     if(!puedeGuardar) return
@@ -21760,6 +21771,14 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       {MEDIO_CON_DETALLE.has(md)&&<><div style={{display:'flex',gap:6,flex:'1 1 220px',minWidth:0}}>{fi('mvDesde','Desde',1)}{fi('mvHasta','Hasta',1)}</div>
       <div style={{display:'flex',flex:'2 1 220px',minWidth:0}}>{fi('mvMotivo','Motivo (para qué fue)',1)}</div></>}
     </div>) }
+  const avisoDup = (r,d) => (
+    <div style={{marginTop:8,background:C.avisoBg,border:`1px solid ${C.avisoLine}`,borderRadius:8,padding:'7px 10px',color:C.avisoText,fontSize:12,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+      <span style={{flex:'1 1 220px',minWidth:0}}>{d.enCarga?'Otra fila de esta carga tiene el mismo día y monto':`Ya hay un gasto parecido el ${fmtFechaDMY(d.fecha)}`}: «{d.concept||'sin glosa'}» {fmt(d.amount)}. ¿Es otro?</span>
+      <span style={{display:'flex',gap:6,marginLeft:'auto'}}>
+        <button type='button' onClick={()=>updateRow(r.id,{dupOk:true})} style={chip('aviso1')}>Es otro</button>
+        <button type='button' onClick={()=>removeRow(r.id)} style={chip('aviso2')}>Quitar</button>
+      </span>
+    </div>)
   const lineaDeQue = r => { const op=deQueOpciones(deq,deQueScope(r),personal?null:cliDe(r)?.id,clientEntities), v=String(r.deQue||'')
     const falta=!v.trim()&&!!r.amount
     return (<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,marginTop:6,fontSize:12}}>
@@ -21770,7 +21789,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const glosaInput = r => <input data-gconcept='1' value={r.concept} onChange={e=>updateRow(r.id,{concept:e.target.value})} placeholder='Descripción' style={{...inS,flex:1,minWidth:0}}/>
 
   const btnGuardar = (
-    <button type='button' disabled={!puedeGuardar} onClick={saveAll} title={bloqueadas?'Responde el aviso para guardar':faltaProyecto||faltaProyFila?'Falta el proyecto':faltaMov?'Falta el medio o el trayecto y motivo de la movilización':faltaDet?'Falta de qué es (inmueble, sociedad o persona)':undefined}
+    <button type='button' disabled={!puedeGuardar} onClick={saveAll} title={bloqueadas?'Responde el aviso para guardar':faltaProyecto||faltaProyFila?'Falta el proyecto':faltaMov?'Falta el medio o el trayecto y motivo de la movilización':faltaDet?'Falta de qué es (inmueble, sociedad o persona)':dupPend?'Responde el aviso de posible duplicado':undefined}
       style={{width:isDesktop?220:'100%',height:38,borderRadius:8,border:`1px solid ${C.azulTenueOn}`,background:C.azulTenueOn,color:C.accent,fontSize:13,fontWeight:700,cursor:puedeGuardar?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeGuardar?1:.5,fontFamily:'inherit'}}>
       {saving?<Spin/>:null}{saving?'Guardando...':llenas.length>1?`Guardar ${llenas.length} gastos${personal?' personales':''}`:personal?'Guardar gasto personal':'Guardar gasto'}
     </button>)
@@ -22004,6 +22023,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
                   {(!ultima||r.category==='Movilización')&&catDe(r)==='Movilización'&&<div style={{marginLeft:54}}>{lineaMov(r)}</div>}
                   {!ultima&&pideDeQue(r)&&<div style={{marginLeft:54}}>{lineaDeQue(r)}</div>}
                   {a&&!r.picking&&<div style={{marginLeft:54}}>{aviso(r,a)}</div>}
+                  {!ultima&&(()=>{ const d=dupDe(r); return d?<div style={{marginLeft:54}}>{avisoDup(r,d)}</div>:null })()}
                   {r.picking&&<div style={{marginLeft:54}}>{filaCliente(r)}</div>}
                 </div>)
             })}
