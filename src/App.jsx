@@ -21456,8 +21456,10 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
 const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Movilización','Archivo Judicial','Otro']
 // Categorías que casi siempre son de un cliente: cargadas a la oficina, se pregunta antes de guardar.
+// Subcategoría de «Otro»: nunca un medio de movilización (un envío o despacho no es un Uber).
+const subOtro = s => { const t=String(s||'').trim(); return t && !MEDIOS_MOV.some(m=>m.toLowerCase()===t.toLowerCase()) ? t : null }
 const CATS_DE_CLIENTE = new Set(['Notaria','CBR','Diario Oficial','Registro Civil','Archivo Judicial'])
-const _CAT_KW = [[/\b(uber|cabify|didi|taxi|metro|bip|micro|bencina|peaje|estacionamiento|transvip|movilizaci[oó]n)\b/,'Movilización'],[/\bnotari/,'Notaria'],[/diario oficial/,'Diario Oficial'],[/registro civil/,'Registro Civil'],[/archivo judicial/,'Archivo Judicial'],[/\b(cbr|conservador|certificad|inscripci)/,'CBR']]
+const _CAT_KW = [[/\b(uber|cabify|didi|taxi|metro|bip|micro|bencina|peaje|estacionamiento|transvip|movilizaci[oó]n)\b/,'Movilización'],[/\bnotari/,'Notaria'],[/\b(env[ií]o|despacho|chilexpress|starken|dhl|courier|correos de chile|carta certificada|encomienda)\b/,'Otro'],[/diario oficial/,'Diario Oficial'],[/registro civil/,'Registro Civil'],[/archivo judicial/,'Archivo Judicial'],[/\b(cbr|conservador|certificad|inscripci)/,'CBR']]
 const _NOM_GENERICO = new Set(['sociedad','limitada','inversiones','servicios','comercial','inmobiliaria','asesorias','agricola','empresa','empresas','chile','holding','group','capital','consultores','compania','ingenieria','construccion','constructora','desarrollo','gestion','proyectos','abogados','familia','sucesion','corporacion','fundacion','internacional','sociedades','negocios','transportes','importadora','exportadora','distribuidora','oficina','certificado','notaria','escritura','compraventa'])
 const _tokG = s => _normTxt(s).split(' ').filter(w=>w.length>=5)
 const _esOfiCli = c => !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||''))
@@ -21580,7 +21582,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const faltaMovDe = r => { if(catDe(r)!=='Movilización') return false; const md=movMedio(r); return !md || (MEDIO_CON_DETALLE.has(md) && (!r.mvDesde.trim()||!r.mvHasta.trim()||r.mvMotivo.trim().length<4)) }
   const faltaMov = llenas.some(faltaMovDe)
   const gastoDeFila = r => { const cat=catDe(r)
-    if(cat!=='Movilización') return {concept:r.concept, subcategory:cat==='Otro'?(r.subcategory?.trim()||null):null}
+    if(cat!=='Movilización') return {concept:r.concept, subcategory:cat==='Otro'?subOtro(r.subcategory):null}
     const md=movMedio(r), orig=String(r.concept||'').trim()
     if(!MEDIO_CON_DETALLE.has(md)) return {concept:orig||md, subcategory:md}
     const concept=glosaMovilizacion(r.mvDesde,r.mvHasta,r.mvMotivo)
@@ -22102,7 +22104,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?subOtro(f.subcategory):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
