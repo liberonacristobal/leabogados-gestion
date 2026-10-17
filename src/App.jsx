@@ -3357,7 +3357,9 @@ const _tokVenta = s => _normTxt(s||'').split(' ').filter(w=>w.length>=4 && !_GLO
 function matchVentaFactura(fac, ventasCliente, ufRef){
   const ventas=(ventasCliente||[]).filter(v=>v && !v.deleted_at && !['Borrador','Propuesta','Rechazada'].includes(v.status))
   if(!ventas.length) return {ok:false, reason:'sin ventas del cliente'}
-  const issueY = fac.issued_at ? +String(fac.issued_at).slice(0,4) : null
+  // Clientes que abonan primero y piden la factura después: la venta es del año del PRIMER abono, no de la emisión (Barahona, Schroder)
+  const refIso = fac._primerPago || fac.issued_at
+  const issueY = refIso ? +String(refIso).slice(0,4) : null
   const amt = Math.abs(fac.amount||0)
   const facTok = new Set(_tokVenta(fac.concept))
   const near = (a,b)=> b>0 && Math.abs(a-b)/b <= 0.02
@@ -13617,7 +13619,9 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             {sinAnio.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Todas las facturas pagadas tienen su año de venta.</div>}
             {sinAnio.map(b=>{
               const c=clients.find(x=>x.id===b.client_id)
-              const sug=b.client_id?anioLearned[String(b.client_id)]:null
+              // si la factura documenta abonos anteriores, el año sugerido es el del primer abono (la venta es de cuando pagó)
+              const pp=(anticipos||[]).filter(a=>String(a.billing_id)===String(b.id)&&a.fecha).map(a=>String(a.fecha)).sort()[0]
+              const sug=(pp&&b.issued_at&&pp.slice(0,4)<String(b.issued_at).slice(0,4))?+pp.slice(0,4):(b.client_id?anioLearned[String(b.client_id)]:null)
               const clientSales=b.client_id?sales.filter(s=>String(s.client_id)===String(b.client_id)):[]
               return (
                 <div key={b.id} style={{padding:'10px 0',borderBottom:`0.5px solid ${C.border}`}}>
@@ -40444,9 +40448,11 @@ export default function App() {
     if(!pend.length){ if(!opts.silent) appAlert('No hay facturas pagadas sin año por reprocesar.'); return {asociadas:0,pendientes:0} }
     const cn = id => clients.find(c=>String(c.id)===String(id))?.name || null
     const ventasPorCliente={}; sales.forEach(s=>{ (ventasPorCliente[String(s.client_id)]=ventasPorCliente[String(s.client_id)]||[]).push(s) })
+    const primerPago={}; (anticipos||[]).forEach(a=>{ if(a.billing_id&&a.fecha){ const k=String(a.billing_id); if(!primerPago[k]||a.fecha<primerPago[k]) primerPago[k]=a.fecha } })
     const log=[]; let asociadas=0, pendientes=0
     for(const b of pend){
-      const m=matchVentaFactura(b, ventasPorCliente[String(b.client_id)]||[], ufR)
+      const pp=primerPago[String(b.id)]
+      const m=matchVentaFactura((pp&&(!b.issued_at||pp<b.issued_at))?{...b,_primerPago:pp}:b, ventasPorCliente[String(b.client_id)]||[], ufR)
       if(m.ok){
         const {error}=await supabase.from('billing').update({sale_id:m.sale_id,sale_year:null}).eq('id',b.id).is('sale_id',null).is('sale_year',null)
         if(error){ pendientes++; log.push({factura:folioN(b.invoice_no)||b.id,estado:'ERROR',msg:error.message}); continue }
@@ -40458,7 +40464,7 @@ export default function App() {
     try{ if(asociadas||pendientes) console.info(`[reproceso sin año] ${asociadas} asociadas · ${pendientes} pendientes`, log) }catch(_){}
     if(!opts.silent) appAlert(`Reproceso listo · ${pend.length} revisadas.\n✓ ${asociadas} asociada${asociadas!==1?'s':''} a su venta.\n${pendientes} pendiente${pendientes!==1?'s':''} — asígnalas a mano en "Sin año".`)
     return {asociadas,pendientes,log}
-  },[sales,billing,clients])
+  },[sales,billing,clients,anticipos])
   // Cruce AUTÓNOMO (sin botón): al cargar, la app intenta asociar sola las facturas pagadas sin año a su venta (matchVentaFactura),
   // en silencio; solo las ambiguas quedan en la cola "Sin año" para tu criterio. Corre una vez por sesión, es idempotente y no pisa lo manual.
   const _reprocRan = useRef(false)
