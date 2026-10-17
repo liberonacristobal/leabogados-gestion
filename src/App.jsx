@@ -8843,66 +8843,6 @@ function retirosOficinaData(expenses, clients, year){
   out.rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
   return out
 }
-function RetirosOficinaModal({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[] }){
-  const year = new Date().getFullYear()
-  const d = retirosOficinaData(expenses, clients, year)
-  const socios = Object.entries(d.porSocio).sort((a,b)=>b[1]-a[1])
-  const maxS = Math.max(1, ...socios.map(s=>s[1]))
-  const dif = socios.length>=2 ? Math.abs(socios[0][1]-socios[1][1]) : 0
-  // Utilidad distribuible YTD = Σ (cobrado − costos − comisiones) de cada mes del año (misma fuente única que Estado de resultados).
-  const _mNow = new Date().getFullYear()===year ? new Date().getMonth()+1 : 12
-  let margenYTD=0; for(let i=1;i<=_mNow;i++){ const m=`${year}-${String(i).padStart(2,'0')}`; margenYTD += ingresosMesBill(billing,m)-costosOficinaMes(costosOfiRows,m)-comisionMesTerc(terceros,m) }
-  const disponible = margenYTD - d.total
-  const pctRet = margenYTD>0 ? Math.round(d.total/margenYTD*100) : 0
-  const ini = n => String(n||'').split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()
-  return (<div>
-    <div style={{background:C.accent,color:'#fff',borderRadius:12,padding:'16px 18px',marginBottom:12}}>
-      <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,opacity:.85}}>Retirado en {year}</div>
-      <div style={{fontSize:25,fontWeight:800,marginTop:4,fontVariantNumeric:'tabular-nums'}}>{fmt(d.total)}</div>
-      <div style={{fontSize:11,opacity:.75,marginTop:3}}>{d.rows.length} retiro{d.rows.length!==1?'s':''} · distribución de utilidades (no es costo)</div>
-    </div>
-    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
-      <div style={{...SEC_LBL,padding:'12px 16px 4px'}}>Por socio · {year}</div>
-      {socios.map(([s,v])=>{ const col=_SOCIO_COL[s]||C.muted; const pct=Math.round(v/(d.total||1)*100); return (
-        <div key={s} style={{padding:'13px 16px',borderTop:`1px solid ${C.border}`}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-            <span style={{width:32,height:32,borderRadius:'50%',background:col,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:12,flexShrink:0}}>{ini(s)}</span>
-            <span style={{fontWeight:800,color:C.accent,fontSize:14}}>{s}</span>
-            <span style={{marginLeft:'auto',textAlign:'right'}}><b style={{fontSize:18,fontWeight:800,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</b><div style={{fontSize:10,color:C.muted}}>{pct}% del total</div></span>
-          </div>
-          <div style={{height:11,borderRadius:8,background:C.bgSoft,overflow:'hidden'}}><div style={{height:'100%',width:(v/maxS*100)+'%',background:col,borderRadius:8}}/></div>
-        </div>) })}
-      {dif>0 && <div style={{display:'flex',alignItems:'center',gap:10,margin:'14px 16px',background:C.soonBg,border:'1px solid #F0E4B8',borderRadius:12,padding:'10px 12px'}}>
-        <span style={{flexShrink:0}}><SIcon n='alert' s={17} c={C.soonText}/></span>
-        <div style={{fontSize:12,color:C.soonText}}><b>Diferencia entre socios: {fmt(dif)}.</b> Si los retiros deben ser parejos, ajustar en el próximo.</div></div>}
-      {socios.length===0 && <div style={{padding:20,textAlign:'center',color:C.textSoft,fontSize:13}}>Sin retiros registrados este año.</div>}
-    </div>
-    {margenYTD>0 && (()=>{ const cmp=(lbl,val,w,col)=>(
-        <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px'}}>
-          <div style={{fontSize:11,color:C.muted,width:150,flexShrink:0}}>{lbl}</div>
-          <div style={{flex:1,height:13,borderRadius:8,background:C.bgSoft,overflow:'hidden',position:'relative'}}><div style={{position:'absolute',top:0,bottom:0,left:0,width:Math.max(0,Math.min(100,w))+'%',background:col,borderRadius:8}}/></div>
-          <div style={{width:92,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:col}}>{fmt(val)}</div>
-        </div>)
-      return (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginTop:12}}>
-        <div style={{...SEC_LBL,padding:'12px 16px 4px'}}>Retiros vs utilidad distribuible · {year}</div>
-        {cmp('Margen acumulado', margenYTD, 100, C.greenText)}
-        {cmp('Ya retirado', d.total, margenYTD>0?d.total/margenYTD*100:0, C.tealText)}
-        {cmp('Disponible para retirar', disponible, margenYTD>0?disponible/margenYTD*100:0, C.done)}
-        <div style={{padding:'4px 16px 12px',fontSize:11,color:disponible<0?C.overdueText:C.muted}}>{disponible<0?`Se ha retirado más que la utilidad del año (${fmt(-disponible)} sobre el margen).`:`Van ${pctRet}% del margen distribuido — control de que los retiros no superen la utilidad real.`}</div>
-      </div>) })()}
-    {d.rows.length>0 && <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginTop:12}}>
-      <div style={{...SEC_LBL,padding:'12px 16px 4px'}}>Movimientos</div>
-      {d.rows.slice(0,15).map(r=>{ const col=_SOCIO_COL[r.socio]||C.muted; const dt=r.date?new Date(r.date+'T12:00'):null; return (
-        <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderTop:`1px solid ${C.border}`,fontSize:13}}>
-          <span style={{width:9,height:9,borderRadius:'50%',background:col,flexShrink:0}}/>
-          <span style={{fontWeight:700,color:C.accent}}>{r.socio}</span>
-          <span style={{color:C.muted,fontSize:11}}>{dt?fmtFechaDMY(isoLocal(dt)):'—'}</span>
-          <span style={{marginLeft:'auto',fontWeight:800,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(r.amount)}</span>
-        </div>) })}
-      <div style={{padding:'8px 16px 12px',fontSize:11,color:C.textSoft}}>Se identifican por el RUT del socio en la glosa. Excluidos del costo de oficina automáticamente.</div>
-    </div>}
-  </div>)
-}
 // Módulo Oficina — hub BENTO. Protagonista = Resultado DEVENGADO (Facturado SII − costos − comisiones);
 // Caja hoy (ancla config caja_ancla + movimientos de cartola) y Flujo del mes son contexto. Puertas: Costos, Retiros, Gastos varios.
 // Cada cifra sale de su fuente única; el detalle reusa CostosOficinaModal/EstadoResultadosModal/FlujoCajaModal/RetirosOficinaModal (nada en paralelo).
@@ -9534,21 +9474,11 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   // Ventas del SII (sii_cargas_docs) = fuente de verdad de lo emitido, TODO el año (billing está incompleto). Facturación propia = tipo 33/34 − notas de crédito (61) − facturas por cuenta de terceros.
   const [ventasRows,setVentasRows] = useState([])
   useEffect(()=>{ if(DEMO){ setVentasRows([]); return } let v=true; selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,billing_id').order('id')).then(({data})=>{ if(v&&data) setVentasRows(data) },()=>{}); return ()=>{v=false} },[])
-  const extBillIds = useMemo(()=>new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id))),[terceros])
-  const facSiiPeriodo = ym => (ventasRows||[]).filter(d=>String(d.fecha_emision||'').startsWith(ym)).reduce((a,d)=>{ const t=Number(d.tipo_dte); if(t===61) return a-(Number(d.monto)||0); if((t===33||t===34)&&!extBillIds.has(String(d.billing_id))) return a+(Number(d.monto)||0); return a },0)
   const ym = new Date().toISOString().slice(0,7), year=new Date().getFullYear()
   // Costos REALES desde la planilla editable (oficina_costos_mensual); si falta un mes, cae al presupuesto. Subarriendo y comisiones también salen de la planilla.
   const [rcmRows,setRcmRows]=useState([])
   useEffect(()=>{ if(DEMO){ setRcmRows([]); return } let v=true; supabase.from('oficina_costos_mensual').select('*').eq('anio',year).then(({data})=>{ if(v&&data) setRcmRows(data) },()=>{}); return ()=>{v=false} },[year])
   const rcmBy=useMemo(()=>{ const m={}; (rcmRows||[]).forEach(r=>{ m[r.mes]=r }); return m },[rcmRows])
-  const _ym2m=yy=>parseInt(String(yy).slice(5,7),10)
-  const costoBrutoMes=mm=>{ const r=rcmBy[_ym2m(mm)]; if(r) return Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos); return costosOficinaMes(costosOfiRows, mm) }
-  const subMesT=mm=>{ const r=rcmBy[_ym2m(mm)]; return r?Number(r.subarriendo):0 }
-  const comMesT=mm=>{ const r=rcmBy[_ym2m(mm)]; return r?Number(r.comisiones):comisionMesTerc(terceros,mm) }
-  const costoMes = costoBrutoMes(ym)
-  const comiMes = comMesT(ym)
-  const factSiiMes = facSiiPeriodo(ym)                             // DEVENGADO: emitido en el SII (propia, neto NC)
-  const resMes = factSiiMes + subMesT(ym) - costoMes - comiMes     // resultado del mes (devengado) — protagonista
   const ret = retirosOficinaData(expenses, clients, year)
   const retMes = ret.rows.filter(r=>String(r.date||'').slice(0,7)===ym).reduce((a,r)=>a+r.amount,0)
   const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
@@ -9557,8 +9487,6 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const porCobrarEq = ofi ? (expenses||[]).filter(e=>!e.deleted_at&&e.personal_de&&String(e.client_id)===String(ofi.id)&&!e.pagado_cliente_at).reduce((a,e)=>a+(Number(e.amount)||0),0) : 0
   // KPIs del año (YTD): facturación propia desde el SII (todo el año) − costos − comisiones; cobrado a caja; por cobrar (saldo vivo).
   const _curM = new Date().getMonth()+1
-  let factSiiYr=0, resYr=0, cobradoYr=0
-  for(let m=1;m<=12;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; cobradoYr+=ingresosMesBill(billing,mm); const f=facSiiPeriodo(mm); factSiiYr+=f; if(m<=_curM) resYr += f + subMesT(mm) - costoBrutoMes(mm) - comMesT(mm) }
   // "Facturación del año" = número GRUESO: todos los folios emitidos (33/34) tal cual, sin restar NC ni terceros. El afinado (− NC − terceros = propia) vive en Resultado del año.
   const emitidoBrutoYr=(ventasRows||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(year)&&[33,34].includes(Number(d.tipo_dte))).reduce((a,d)=>a+(Number(d.monto)||0),0)
   const porCobrar=porCobrarBills(billing)   // fuente única (sin reembolsos ni por facturar), igual que Inicio/Facturación/Cobranza
@@ -9567,15 +9495,6 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
   const MESNOM=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
   const MESCAP=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   // Filtro Año / Por mes: el selector de mes ofrece SOLO meses cerrados (los abiertos no tienen número final).
-  const mesesCerrados=Array.from({length:12},(_,i)=>i+1).filter(m=>rcmBy[m]&&rcmBy[m].cerrado)
-  const selMEff=mesesCerrados.includes(selM)?selM:(mesesCerrados.length?mesesCerrados[mesesCerrados.length-1]:_curM)
-  const esMes=scope==='mes'&&mesesCerrados.length>0
-  const ymSel=`${year}-${String(selMEff).padStart(2,'0')}`
-  let facYTD=0,subYTD=0,cosYTD=0,comYTD=0,gvYTD=0
-  for(let m=1;m<=_curM;m++){ const mm=`${year}-${String(m).padStart(2,'0')}`; facYTD+=facSiiPeriodo(mm); subYTD+=subMesT(mm); cosYTD+=costoBrutoMes(mm); comYTD+=comMesT(mm); gvYTD+=gastosVariosOfiMes(expenses,clients,mm) }
-  const facH=esMes?facSiiPeriodo(ymSel):facYTD, subH=esMes?subMesT(ymSel):subYTD, cosPlan=esMes?costoBrutoMes(ymSel):cosYTD, comH=esMes?comMesT(ymSel):comYTD, gvH=esMes?gastosVariosOfiMes(expenses,clients,ymSel):gvYTD
-  const cosH=cosPlan+gvH                                 // costos de operación = planilla + gastos varios (fuente única con ResultadoAnioView)
-  const ingH=facH+subH, egrH=cosH+comH, resH=ingH-egrH, margH=ingH>0?Math.round(resH/ingH*100):0
   // FUENTE ÚNICA con el Inicio y el Estado de resultados (2026-10-16): resultadoMes por mes (ingresos = facturación propia SII + subarriendo
   // + comisión de externos; costos = planilla sin PPM + gastos varios; comisiones PAGADAS). Año = enero..mes actual; Por mes = el mes elegido.
   const fuR = useFuentesResultado()
