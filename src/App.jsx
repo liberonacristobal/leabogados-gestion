@@ -3658,8 +3658,6 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const vendidoNetoUF = vendidoBrutoUF - costoUF
   // ① P&L / ② break-even — costos de oficina acumulados (respetan el quiebre de mes vía costosOficinaMes).
   const _mNow = new Date().getMonth()+1
-  const costosOfiYTD = useMemo(()=>{ let t=0; for(let i=1;i<=_mNow;i++) t+=costosOficinaMes(costosOfiRows, `${yr}-${String(i).padStart(2,'0')}`); return t },[costosOfiRows,yr,_mNow])
-  const costosOfiAnual = useMemo(()=>{ let t=0; for(let i=1;i<=12;i++) t+=costosOficinaMes(costosOfiRows, `${yr}-${String(i).padStart(2,'0')}`); return t },[costosOfiRows,yr])
   // Clientes permanentes con margen real NEGATIVO (para la alerta "rinde bajo su costo"). Usa el helper único margenDeSale (mismo cálculo que Horas→Rentabilidad).
   const [margenNeg,setMargenNeg] = useState([])
   // Puesta en marcha de Horas: horas propias cargadas ESTA semana (null=aún no sé; 0=no cargó → nudge para encender el módulo).
@@ -3861,9 +3859,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   // Recuadros por sección (Ventas/Facturado/Cobrado/Margen/Cobranza), logo real, fecha de corte destacada, cifras en UF y en pesos.
   const descargarResultado = async () => {
     try{
-      const ingYTD=ingresosPorAnioVenta.total||0, comisYTD=comisPagadasAnioVenta.total||0, costYTD=costosOfiYTD||0
+      const ingYTD=ingresosPorAnioVenta.total||0, comisYTD=comisPagadasAnioVenta.total||0
       const percYTD=ingresosPorAnioVenta.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
-      const resultado=ingReal-costYTD, posM=resultado>=0
       const vPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0            // sin tope (sobrecumplimiento), igual que en pantalla
       const cobPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0 // sin tope (sobrecumplimiento)
       const uf=n=>fmtUFk(n), pe=n=>(n<0?'−$':'$')+Math.abs(Math.round(n||0)).toLocaleString('es-CL'), pS=n=>fmtShort(n)
@@ -3885,7 +3882,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
             ['Ingreso real', fmtUFk(ingReal/ufR), pe(ingReal)],
             ['Total a caja', fmtUFk((iv.totalCaja||0)/ufR), pe(iv.totalCaja||0)],
             ...yrsCob.map(y=>[yrLbl(y), fmtUFk((iv.byYear[y]||0)/ufR), pe(iv.byYear[y]||0)]) ] },
-        { t:resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', pct:resAnio.pct!=null?Math.round(resAnio.pct):0, uf:uf(resAnio.res/ufR), clp:pe(resAnio.res), lines:[
+        { t:resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', pct:resAnio.pct!=null?Math.round(resAnio.pct):null, uf:uf(resAnio.res/ufR), clp:pe(resAnio.res), lines:[
             ['+ Ingresos', fmtUFk(resAnio.ing/ufR), pe(resAnio.ing)],
             ['− Costos de operación', fmtUFk(resAnio.cos/ufR), pe(resAnio.cos)],
             ['− Comisiones pagadas', fmtUFk(resAnio.com/ufR), pe(resAnio.com)] ] },
@@ -3937,9 +3934,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   // Imprimir informe del año (HTML limpio → Imprimir/PDF). Recuadros por sección, logo, fecha de corte destacada, cifras en UF y pesos.
   const imprimirResultado = () => {
     const iv=ingresosPorAnioVenta, ufR=ufRef||1
-    const ingYTD=iv.total||0, comisYTD=comisPagadasAnioVenta.total||0, costYTD=costosOfiYTD||0
+    const ingYTD=iv.total||0, comisYTD=comisPagadasAnioVenta.total||0
     const percYTD=iv.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
-    const resultado=ingReal-costYTD, posM=resultado>=0
     const A='#003C50', MUT='#537281', AZ3='#99ABB4', GRAY='#E4E8EB', GREEN=C.greenText, RED='#C0453F'
     const pe=n=>(n<0?'−$':'$')+Math.abs(Math.round(n||0)).toLocaleString('es-CL')
     const pct=(a,b)=>b>0?Math.round(a/b*100):0
@@ -3952,7 +3948,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     const ventasCard=card('Ventas', m.brutoUF, m.bruto, `${pct(m.bruto,m.meta)}% de la meta`, row('Neto de costos de terceros',m.netoUF,m.neto)+row('Costos de terceros',m.costoUF,m.costo,true)+row('Meta del año',metaUF,m.meta))
     const factCard=card('Facturado', facturadoYr/ufR, facturadoYr, `${pct(facturadoYr,m.bruto)}% de lo vendido`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoEmitido.total>0?row('Total emitido (con terceros y reembolsos)',facturadoEmitido.total/ufR,facturadoEmitido.total):''))
     const cobCard=card('Cobrado propio', ingYTD/ufR, ingYTD, `${pct(ingYTD,metaCobranza)}% de la meta`, row('Comisiones pagadas',comisYTD/ufR,comisYTD,true)+row('+ Comisiones percibidas',percYTD/ufR,percYTD)+row('Ingreso real',ingReal/ufR,ingReal)+row('Total a caja',(iv.totalCaja||0)/ufR,iv.totalCaja||0)+`<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Según año de la venta</td></tr>`+yrsCob)
-    const margCard=card(resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', resAnio.res/ufR, resAnio.res, `${pct1(resAnio.pct)||0}% sobre los ingresos`, row('+ Ingresos',resAnio.ing/ufR,resAnio.ing)+row('Costos de operación',resAnio.cos/ufR,resAnio.cos,true)+row('Comisiones pagadas',resAnio.com/ufR,resAnio.com,true))
+    const margCard=card(resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', resAnio.res/ufR, resAnio.res, (resAnio.pct!=null?`${pct1(resAnio.pct)}% sobre los ingresos`:'— sobre los ingresos'), row('+ Ingresos',resAnio.ing/ufR,resAnio.ing)+row('Costos de operación',resAnio.cos/ufR,resAnio.cos,true)+row('Comisiones pagadas',resAnio.com/ufR,resAnio.com,true))
     const cobranzaCard=card('Cobranza', ingYTD/ufR, ingYTD, `${pct(ingYTD,metaCobranza)}% de la meta`, row('Meta de cobranza',metaCobranza/ufR,metaCobranza)+row('Falta para la meta',Math.max(0,metaCobranza-ingYTD)/ufR,Math.max(0,metaCobranza-ingYTD)))
     const dias=new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'})
     const hhmm=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})
@@ -4054,6 +4050,11 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     setIaHoyBusy(false)
   }
 
+  const fuRes = useFuentesResultado()
+  // Resultado real del año en curso (misma fuente que Oficina / Estado de resultados) para las alertas de costos: no el presupuesto.
+  const resYTDReal = useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients}, o={ing:0,cos:0,com:0,res:0}
+    for(let i=1;i<=_mNow;i++){ const r=resultadoMes(fuRes,deps,`${currentYear}-${String(i).padStart(2,'0')}`); o.ing+=r.ing; o.cos+=r.cos; o.com+=r.com; o.res+=r.res }
+    return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,currentYear,_mNow])
   // Prioridades financieras (alertas del dueño) — se computa aquí para usar el conteo en la tarjeta de Accesos directos y reusar en la lista. De datos que ya existen.
   const prioridades = (()=>{
     const hoy=new Date().toISOString().slice(0,10)
@@ -4067,7 +4068,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     const _pd=new Date(); _pd.setDate(1); _pd.setMonth(_pd.getMonth()-1); const prevYm=_pd.toISOString().slice(0,7)
     const _pdLbl=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+prevYm.slice(5,7)-1]
     const entraPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm)).reduce((s,a)=>s+(Number(a.monto)||0),0)
-    const cuestaPrev=costosOficinaMes(costosOfiRows, prevYm)
+    const cuestaPrev=resultadoMes(fuRes,{billing,terceros,costosOfiRows,expenses,clients},prevYm).cos   // costo REAL del mes (banco + planilla + gastos varios)
     const cnA=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'cliente'
     const _wk=(()=>{ const d=new Date(); const m=new Date(d); m.setDate(d.getDate()-((d.getDay()+6)%7)); return m.toLocaleDateString('en-CA') })()
     const raw=[
@@ -4078,7 +4079,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>go('repricing')},
       (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>go('horas')},
       porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
-      (costosOfiYTD>0 && ingYTD_a>0 && ingYTD_a<costosOfiYTD) && {key:'estructura',sev:'a',icon:'wallet',monto:costosOfiYTD-ingYTD_a,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(ingYTD_a)} < costos ${fmtMon(costosOfiYTD)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
+      (resYTDReal.ing>0 && resYTDReal.res<0) && {key:'estructura',sev:'a',icon:'wallet',monto:-resYTDReal.res,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(resYTDReal.ing)} < costos ${fmtMon(resYTDReal.cos+resYTDReal.com)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
     ].filter(Boolean)
     const off=(alertOff&&typeof alertOff==='object')?alertOff:{}
     return raw.filter(a=> off[a.key]==null || (a.monto||0) > off[a.key]*1.2 )
@@ -4101,13 +4102,12 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const emCliName = b => (clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'—'
 
   // Resultado del mes — FUENTE ÚNICA (resultadoMes), idéntico al de la página Estado de resultados.
-  const fuRes = useFuentesResultado()
   const resMes = resultadoMes(fuRes, {billing,terceros,costosOfiRows,expenses,clients}, _ymNow).res
   const resMesDif = resMes - resultadoMes(fuRes, {billing,terceros,costosOfiRows,expenses,clients}, _ymPrev(_ymNow)).res
   // MARGEN del año = el MISMO resultado del Estado de resultados / Oficina / Resultado del año (devengado): Σ resultadoMes del año elegido.
   const resAnio = useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients}, ult=selYear===currentYear?_mNow:12, o={ing:0,cos:0,com:0,res:0}
     for(let i=1;i<=ult;i++){ const r=resultadoMes(fuRes,deps,`${selYear}-${String(i).padStart(2,'0')}`); o.ing+=r.ing; o.cos+=r.cos; o.com+=r.com; o.res+=r.res }
-    o.pct=o.ing>0?o.res/o.ing*100:null; return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow])
+    o.pct=margenPct(o.res,o.ing); return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow])
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
   const _fin8ISO = (()=>{ const d=new Date(); d.setDate(d.getDate()+56); return d.toISOString().slice(0,10) })()
@@ -4196,21 +4196,15 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       })()}
 
       {/* ESTADO DEL NEGOCIO — embudo Vender→Facturar→Cobrar→Ganar. Reusa fuentes únicas (metricasAnio, ingresosPorAnioVenta, aging, costos). */}
-      {(m.bruto>0||costosOfiAnual>0)&&(()=>{
+      {(m.bruto>0||resAnio.ing>0)&&(()=>{
         const ingYTD=ingresosPorAnioVenta.total||0
         const comisYTD=comisPagadasAnioVenta.total||0                    // comisiones PAGADAS del año por ventas propias (base caja) — se restan
         const percYTD=ingresosPorAnioVenta.percibidas||0                  // comisiones PERCIBIDAS (nuestro % de facturas por cuenta de terceros) — se suman
         const ingReal=ingYTD-comisYTD+percYTD                             // Ingreso real = cobrado propio − comisiones pagadas + comisiones percibidas
-        const resultado=ingReal-costosOfiYTD                              // Margen = Ingreso real − Costos de oficina (base caja)
-        const proyR=(ingYTD+proyIngresosDash)-costosOfiAnual
-        const pos=resultado>=0
         const ventaPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%)
         const ventaNetoPct=metaUF>0?Math.round(m.netoUF/metaUF*100):0   // venta NETA (neto de comisiones) vs la MISMA meta
         const factPct=m.bruto>0?Math.min(100,Math.round(facturadoYr/m.bruto*100)):0
         const cobroPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%), igual que ventaPct
-        const bePct=costosOfiAnual>0?Math.min(100,Math.round(ingYTD/costosOfiAnual*100)):0
-        const margenPct=(ingYTD+percYTD)>0?Math.round(resultado/(ingYTD+percYTD)*100):0   // rentabilidad = margen ÷ ingresos propios (honorarios + comisiones percibidas)
-        const vencido=vencidoTot
         return (<>
           <div style={{padding:'14px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,position:'relative'}}>
@@ -9311,7 +9305,7 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
   const ingresos=S(m=>R(m,'ing'))
   const egresos=costosOper+comis
   const resultado=S(m=>R(m,'res'))
-  const margen=ingresos>0?Math.round(resultado/ingresos*100):0
+  const margenV=margenPct(resultado,ingresos), margen=margenV==null?null:Math.round(margenV)
   const ncList=months.flatMap(m=>vMes(m).filter(d=>Number(d.tipo_dte)===61).map(d=>({folio:d.folio,rec:d.receptor_name,monto:Number(d.monto)||0,ext:!d.billing_id})))
   const estim=months.some(m=>cmBy[m]&&cmBy[m].estimado)
   const fmtM=n=>(n<0?'−':'+')+fmtMill(Math.abs(n))
@@ -9393,7 +9387,7 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
       <div style={{display:'flex',gap:9,marginTop:15}}>
         <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Ingresos</div><div style={{fontSize:16,fontWeight:800,marginTop:2,color:'#7FD7A9',fontVariantNumeric:'tabular-nums'}}>{fmtMp(ingresos)}</div></div>
         <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Egresos</div><div style={{fontSize:16,fontWeight:800,marginTop:2,color:'#F0B9BD',fontVariantNumeric:'tabular-nums'}}>{fmtMp(egresos)}</div></div>
-        <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Margen</div><div style={{fontSize:16,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{margen}%</div></div>
+        <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Margen</div><div style={{fontSize:16,fontWeight:800,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{margen==null?'—':margen+'%'}</div></div>
       </div>
     </div>
 
@@ -9625,7 +9619,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       const per = scope==='mes' ? `${MESNOM[selMR-1]} ${year}` : `ene–${MES_C[_curM-1]} ${year}`
       const estado = scope==='mes' ? (rMesSel?.cerrado?'cerrado':'provisorio') : 'al día'
       const egr = R.cos+R.com
-      const margen = R.ing ? R.res/R.ing*100 : null
+      const margen = margenPct(R.res, R.ing)
       const kt=(k,ic,[bg,fg],lab,val,sub,on)=>{ const blanco=bg===C.card; return <div key={k} onClick={on} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
         <KpiIco n={ic} c={fg} soft={blanco}/>
         <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?26:20,fontWeight:800,color:fg,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
@@ -9738,7 +9732,7 @@ function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[
   const byP={}; (terceros||[]).filter(t=>t&&t.comision_pct==null&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).forEach(t=>{ const k=String(t.proveedor_id||t.proveedor||'x'); if(!byP[k]) byP[k]={pid:t.proveedor_id,nombre:t.proveedor||'Colaborador',m:0,ts:[]}; byP[k].m+=Number(t.monto)||0; byP[k].ts.push(t) })
   const comList=Object.values(byP).sort((a,b)=>b.m-a.m), com=comList.reduce((a,x)=>a+x.m,0)
   const ing=fac+sub+rex, res=ing-cos-com
-  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,margen:ing?res/ing*100:null,ppm,rem:row?rem:0,remEst,remItems:remB.items,estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
+  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
 }
 // Fuentes del resultado (ventas del SII + planilla de costos reales), cargadas una vez por sesión y compartidas por la página y el Inicio.
 let _fuentesRes=null, _fuentesResP=null
@@ -9752,6 +9746,8 @@ function useFuentesResultado(){
 }
 const _ymPrev = ym => { const [Y,M]=String(ym).split('-').map(Number); const d=new Date(Y,M-2,1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }
 // Tono por margen (comparativa mensual): pérdida rojo · bajo ámbar · medio verde suave · bueno verde · muy bueno verde intenso.
+// Margen % (fuente única): sin ingresos, o con una pérdida mayor que los ingresos (p. ej. −1.623 % en un mes casi sin facturar), no informa → null («—»).
+const margenPct = (res, ing) => { const i=Number(ing)||0; if(!(i>0)) return null; const m=(Number(res)||0)/i*100; return m<-100?null:m }
 const tonoMargen = m => m==null ? [C.bgSoft,C.muted] : m<0 ? [C.overdueBg,C.overdueText] : m<30 ? [C.soonBg,C.soonText] : m<55 ? [C.greenSoft,C.greenText] : m<70 ? [C.greenBg,C.greenText] : [C.greenDeep,C.greenText]
 function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expenses=[], clients=[], isDesktop=false, onOpenProveedor, onOpenFactura, onOpenResultadoAnio, onOpenSubarriendo }){
   const fu = useFuentesResultado()
