@@ -1544,7 +1544,7 @@ function LoginScreen({loading, denied, onRetry}) {
       </div>
       <div style={{fontFamily:MONO,fontWeight:700,fontSize:sm?27:31,letterSpacing:'-.02em',color:INK}}>Firm<span style={{color:GRN}}>Desk</span></div>
       <div style={{fontFamily:MONO,fontSize:12,color:'#95A0A2',marginTop:8,marginBottom:denied?20:38}}>Every number, in its place.</div>
-      {denied&&<div style={{maxWidth:320,background:'#FDECEA',border:'1px solid #F3C9C4',borderRadius:12,padding:'11px 15px',fontSize:13,color:'#A3312B',marginBottom:22,lineHeight:1.5,textAlign:'center'}}>Tu cuenta no tiene acceso a FirmDesk. Pídele a tu estudio que te invite y vuelve a entrar.</div>}
+      {denied&&<div style={{maxWidth:320,background:'#FDECEA',border:'1px solid #F3C9C4',borderRadius:12,padding:'11px 15px',fontSize:13,color:'#A3312B',marginBottom:22,lineHeight:1.5,textAlign:'center'}}>Tu cuenta no tiene acceso a FirmDesk. Pídele a un administrador de tu oficina que te invite y vuelve a entrar.</div>}
       <button onClick={()=>{ onRetry&&onRetry(); signInWithGoogle() }} disabled={loading} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:9,minWidth:sm?220:240,background:'#fff',border:'1px solid #DADFDE',borderRadius:12,padding:'13px 18px',color:INK,fontSize:14,fontWeight:600,cursor:loading?'default':'pointer'}}>
         {loading?<Spin/>:<>
           <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-3.9H24v7.1h12c-.2 1.9-1.5 4.7-4.3 6.6l6.6 5.1C42.6 41.6 45 33.6 45 24z"/><path fill="#34A853" d="M24 46c5.9 0 10.8-1.9 14.4-5.3l-6.6-5.1c-1.8 1.2-4.2 2-7.8 2-6 0-11-4-12.8-9.5l-6.8 5.3C7.9 40.9 15.3 46 24 46z"/><path fill="#FBBC05" d="M11.2 28.1c-.5-1.4-.7-2.8-.7-4.1s.3-2.8.7-4.1l-6.8-5.3C3 17.4 2 20.6 2 24s1 6.6 2.4 9.4l6.8-5.3z"/><path fill="#EA4335" d="M24 10.5c3.3 0 5.6 1.4 6.9 2.6l5.8-5.7C33.1 4.1 28.9 2 24 2 15.3 2 7.9 7.1 4.4 14.6l6.8 5.3C13 14.5 18 10.5 24 10.5z"/></svg>
@@ -2372,8 +2372,8 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
         </div>
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
           <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Se envía a</div>
-          <input value={enviarA} onChange={e=>setEnviarA(e.target.value)} placeholder='correo@estudio.cl' style={inp}/>
-          <div style={{fontSize:10.5,color:C.muted,margin:'4px 0 8px'}}>Administradores del estudio (de la lista de miembros). Puedes cambiarlo.</div>
+          <input value={enviarA} onChange={e=>setEnviarA(e.target.value)} placeholder='correo@oficina.cl' style={inp}/>
+          <div style={{fontSize:10.5,color:C.muted,margin:'4px 0 8px'}}>Administradores de la oficina (de la lista de miembros). Puedes cambiarlo.</div>
           <input value={cc} onChange={e=>setCc(e.target.value)} placeholder='CC (opcional)' style={inp}/>
         </div>
         <ActBtn variant='primary' size='lg' full disabled={saving} onClick={()=>handleLiquidar(true)}>{saving?'Liquidando…':'Liquidar y enviar'}</ActBtn>
@@ -4709,7 +4709,7 @@ function ComparativoSocios({socios=[], heroData=null, year=new Date().getFullYea
       dso:dsoD?Math.round(dsoN/dsoD):null,convCaja:vendido?cobrado/vendido*100:null,convCajaNeta:vendido?cobradoNeto/vendido*100:null,pctVencido:porCobrar?vencido/porCobrar*100:0} },[socios])
   const heroSocios = useMemo(()=>socios.filter(s=>s.abo==='Cristóbal'||s.abo==='Erasmo').concat(socios.filter(s=>s.abo!=='Cristóbal'&&s.abo!=='Erasmo')),[socios])
   const exportar = ()=>{ try{
-    const head=['Métrica',...socios.map(s=>s.abo),'Estudio']
+    const head=['Métrica',...socios.map(s=>s.abo),'Oficina']
     const rows=[head]
     CMP_ROWS.forEach(r=>{ if(r.b){ rows.push([r.b]); return } rows.push([r.l, ...socios.map(s=>_cmpFmt(s[r.k],r.f)), _cmpFmt(est[r.k],r.f)]) })
     const csv=rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\n')
@@ -4864,7 +4864,7 @@ function ComparativoSocios({socios=[], heroData=null, year=new Date().getFullYea
     const conv = ctx.fact>0 ? Math.round(ctx.cob/ctx.fact*100) : null
     const ticket = ctx.nV>0 ? ctx.vendido/ctx.nV : 0
     const rec = ctx.vendido>0 ? Math.round(ctx.recCLP/ctx.vendido*100) : 0
-    const ctxLbl = !isSel ? 'del estudio' : (cockSel.size===1 ? [...cockSel][0] : `${cockSel.size} socios`)
+    const ctxLbl = !isSel ? 'de la oficina' : (cockSel.size===1 ? [...cockSel][0] : `${cockSel.size} socios`)
     const seg = k => { const tot=T[k]||1; return rows.map(s=>{ const w=(Number(s[k])||0)/tot*100; const on=!isSel||cockSel.has(s.abo); return <i key={s.abo} title={`${s.abo}: ${fmtShort(s[k])}`} style={{width:w+'%',height:'100%',display:'block',background:on?heroColL(s.abo):'rgba(255,255,255,.13)'}}/> }) }
     const bar = (lab,k) => (
       <div style={{marginTop:9}}>
@@ -4924,7 +4924,7 @@ function ComparativoSocios({socios=[], heroData=null, year=new Date().getFullYea
         <div style={{display:'grid',gridTemplateColumns:`1.5fr repeat(${socios.length},1fr) 1fr`,columnGap:8,alignItems:'end',padding:'11px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.textSoft}}>Métrica 2026</span>
           {socios.map(s=><span key={s.abo} style={{...nc,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:6,fontSize:13,fontWeight:800,color:col(s.abo)}}><Dot a={s.abo}/>{s.abo}</span>)}
-          <span style={{...nc,fontSize:12,fontWeight:800,color:C.accent}}>Estudio</span>
+          <span style={{...nc,fontSize:12,fontWeight:800,color:C.accent}}>Oficina</span>
         </div>
         {CMP_ROWS.map((r,i)=>{
           if(r.b) return <div key={'b'+i} style={{padding:'9px 14px 5px',fontSize:9,fontWeight:800,letterSpacing:.6,textTransform:'uppercase',color:C.accent,background:C.bgSoft,borderTop:`1px solid ${C.border}`}}>{r.b}</div>
@@ -5506,7 +5506,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         </div>
         </div>)}
         {biSec==='socios'&&(<div style={{marginTop:12}}>
-          <div style={{fontSize:11,color:C.muted,margin:'0 2px 10px',lineHeight:1.5}}>La foto del estudio, de fuente única. Cada barra es el total, segmentado por abogado; toca un socio para ver lo suyo. La rentabilidad (margen por hora) se encenderá cuando se carguen horas.</div>
+          <div style={{fontSize:11,color:C.muted,margin:'0 2px 10px',lineHeight:1.5}}>La foto de la oficina, de fuente única. Cada barra es el total, segmentado por abogado; toca un socio para ver lo suyo. La rentabilidad (margen por hora) se encenderá cuando se carguen horas.</div>
           <ComparativoSocios socios={socios} heroData={heroData} year={yr} isDesktop={isDesktop}/>
         </div>)}
         {biSec==='ia'&&(<div style={{marginTop:12}}>
@@ -7215,7 +7215,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           {cobroType==='hora'&&(
             <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10}}>
-                <Fld label='Tarifa (UF/hora)'><Inp type='number' step='0.1' value={tarifaHoraUF} onChange={e=>setTarifaHoraUF(e.target.value)} placeholder='3.0 (estudio)'/></Fld>
+                <Fld label='Tarifa (UF/hora)'><Inp type='number' step='0.1' value={tarifaHoraUF} onChange={e=>setTarifaHoraUF(e.target.value)} placeholder='3.0 (oficina)'/></Fld>
                 <Fld label='Tope de horas'><Inp type='number' value={topeHoras} onChange={e=>setTopeHoras(e.target.value)} placeholder='Ej: 20'/></Fld>
               </div>
               <div style={{display:'flex',gap:6,marginTop:8}}>
@@ -7223,7 +7223,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   <button key={v} type='button' onClick={()=>setTopePeriodo(v)} style={{flex:1,padding:'7px',borderRadius:8,border:`1.5px solid ${topePeriodo===v?C.accent:C.border}`,background:topePeriodo===v?C.azulBg:'#fff',color:topePeriodo===v?C.accent:C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
                 ))}
               </div>
-              <div style={{fontSize:11,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'8px 10px',marginTop:9,lineHeight:1.45}}>No genera cuotas programadas — se factura por las horas cargadas a esta venta. Tarifa vacía usa la del estudio (3 UF/h).</div>
+              <div style={{fontSize:11,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'8px 10px',marginTop:9,lineHeight:1.45}}>No genera cuotas programadas — se factura por las horas cargadas a esta venta. Tarifa vacía usa la de la oficina (3 UF/h).</div>
             </div>
           )}
           {cobroType==='cuotas'&&(
@@ -8539,7 +8539,7 @@ function parseDTE(d){
     ref:{ folio:((refB.match(/<FolioRef>([^<]+)<\/FolioRef>/)||[])[1]||'').trim(), cod:+((refB.match(/<CodRef>(\d+)<\/CodRef>/)||[])[1]||0)||null, razon:(refB.match(/<RazonRef>([^<]+)<\/RazonRef>/)||[])[1]||'' }
   }
 }
-// Módulos del estudio (entitlements): qué tiene contratado el estudio. Apagar uno lo oculta de la nav para todos.
+// Módulos de la oficina (entitlements): qué tiene contratado el estudio. Apagar uno lo oculta de la nav para todos.
 // Fuente de verdad: learnings 'fd_modulo_off' (value 'off'/'on'). Para LEA: sin filas = todo ON = sin cambio.
 const MODULOS_DESC = { nucleo:'Clientes, tareas, inicio', horas:'Timesheet, rentabilidad, repricing', finanzas:'Ventas, facturación, cobranza, conciliación', sii:'DTE, RCV, factura electrónica', gastos:'Rendición, caja chica, notaría', proyectos:'Cartera, plazos, calendario', bi:'Inteligencia, márgenes, oportunidades', ialegal:'Redacción, plazos, Drive', portal:'Portal externo del cliente' }
 function ModulosModal({ onChange }){
@@ -8555,7 +8555,7 @@ function ModulosModal({ onChange }){
   }
   return (
     <div>
-      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>Qué módulos tiene activos el estudio. Apagar uno lo oculta de la navegación para todo el equipo. El Núcleo va siempre.</div>
+      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>Qué módulos tiene activos la oficina. Apagar uno lo oculta de la navegación para todo el equipo. El Núcleo va siempre.</div>
       {MODULOS.map(m=>{
         const on = m.core || !off.has(m.id)
         return (
@@ -8598,7 +8598,7 @@ function RolesModal({ onOpenUsers }){
   const puede = (roleId,capId)=> capId==='__sistema' ? roleId==='admin' : (VIEWS_PALETTE[roleId]||[]).some(([v])=>v===capId)
   return (
     <div>
-      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>Qué ve cada rol. Refleja la configuración actual del estudio; para cambiar quién pertenece a cada rol usa Gestión de usuarios.</div>
+      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>Qué ve cada rol. Refleja la configuración actual de la oficina; para cambiar quién pertenece a cada rol usa Gestión de usuarios.</div>
       {/* Miembros por rol */}
       <div style={{display:'flex',gap:10,marginBottom:16}}>
         {ROLES_DEF.map(r=>(
@@ -15593,7 +15593,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       {band(asgOpen?'Agregar comisión a una factura tuya':tituloLista,asgOpen?link('Cerrar',()=>setAsgOpen(false),C.accent):ordTog(ordC,setOrdC))}
       {asgOpen&&(()=>{ const yaAsig=new Set(ts.map(t=>String(t.billing_id))); const asignables = facQ.trim() ? billing.filter(b=>{ if(b.status==='Anulada'||b.billing_type==='reembolso'||yaAsig.has(String(b.id))) return false; const c=clients.find(x=>String(x.id)===String(b.client_id)); return _normTxt(`${c?.name||''} ${b.concept||''} ${b.invoice_no||''} ${b.receptor_name||''}`).includes(_normTxt(facQ)) }).slice(0,10) : []
         const asignar = async bid => { const m=parseInt(montos[bid])||0; if(!m||!onAsignarFacturas) return; setAsgBusy(bid); const ok=await onAsignarFacturas(sel.id,[{billing_id:bid,monto:m}]); setAsgBusy(null); if(ok){ setMontos(p=>{const n={...p};delete n[bid];return n}); const b=billing.find(x=>String(x.id)===String(bid)); logActividad(`proveedores.${sel.id}.asignar`,{tabla:'billing',id:bid,detalle:{title:b?.invoice_no?`Factura ${folioN(b.invoice_no)}`:'Factura',monto:m}}) } }
-        return <div style={{padding:'0 14px 10px'}}><Buscador value={facQ} onChange={setFacQ} placeholder='Factura del estudio: cliente, concepto o N°…' autoFocus/>
+        return <div style={{padding:'0 14px 10px'}}><Buscador value={facQ} onChange={setFacQ} placeholder='Factura de la oficina: cliente, concepto o N°…' autoFocus/>
           {facQ.trim()&&asignables.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Sin facturas (o ya están asignadas a este proveedor).</div>}
           {asignables.map(b=>{ const c=clients.find(x=>String(x.id)===String(b.client_id)); return <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderTop:`1px solid ${C.bgSoft}`}}>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||b.receptor_name||'Sin cliente'}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)} · `:''}{b.concept||'—'} · {fmt(b.amount)}</div></div>
@@ -17142,7 +17142,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const dest=String(notaDest||NOTA_DEST_DEFAULT).split(/[,;]/).map(x=>x.trim()).filter(x=>x.includes('@')&&!/@leabogados\.cl$/i.test(x)).join(', ')
     if(!dest){ appAlert('Falta el correo de la notaría.'); return }
     if(!selRows.length){ appAlert('Selecciona al menos una OT para consultar.'); return }
-    if(!(await appConfirm(`Enviar a la notaría (${dest}) una consulta por ${selRows.length} OT que no reconocemos, pidiendo detalle? El estudio va en copia.`))) return
+    if(!(await appConfirm(`Enviar a la notaría (${dest}) una consulta por ${selRows.length} OT que no reconocemos, pidiendo detalle? La oficina va en copia.`))) return
     setConsultando(true)
     try{
       const ccEstudio=BRAND.ccNotaria||undefined
@@ -19021,7 +19021,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
     if(!gs.length){ appAlert('Esta liquidación no tiene gastos vivos para reenviar.'); return }
     const periodo=r.periodo||periodoNota(gs)
-    if(!await appConfirm(`¿Reenviar la liquidación (${periodo}) a la notaría?\n${dest}\nCon copia al estudio.`)) return
+    if(!await appConfirm(`¿Reenviar la liquidación (${periodo}) a la notaría?\n${dest}\nCon copia a la oficina.`)) return
     setReenviando(r.id)
     const ccEstudio=BRAND.ccNotaria||undefined
     try{
@@ -19670,7 +19670,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     const dest=String(cleanNotaDest(notaEmail)||NOTARIA_DEFAULT).split(/[,;]/).map(x=>x.trim()).filter(x=>x.includes('@')&&!/@leabogados\.cl$/i.test(x)).join(', ')
     if(!dest){ appAlert('Falta el correo de la notaría.'); return }
     if(!items.length){ appAlert('Selecciona al menos una OT para consultar.'); return }
-    if(!(await appConfirm(`¿Enviar a la notaría (${dest}) una consulta por ${items.length} OT que no reconocemos, pidiendo detalle? El estudio va en copia.`))) return
+    if(!(await appConfirm(`¿Enviar a la notaría (${dest}) una consulta por ${items.length} OT que no reconocemos, pidiendo detalle? La oficina va en copia.`))) return
     setNoNSending(true)
     try{
       const ccEstudio=BRAND.ccNotaria||undefined
@@ -20617,7 +20617,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               <button onClick={()=>setNoNSel(sel.length===NN.activos.length?new Set():new Set(NN.activos.map(x=>x.id)))} style={nb('ghost',{flex:1,minHeight:38})}>{sel.length===NN.activos.length&&sel.length?'Ninguna':'Todas'}</button>
               <button disabled={noNSending||!sel.length} onClick={()=>consultarNoNuestras(sel.map(x=>({...x,motivo:x.materia,nombre:x.requirente})))} style={nb('pri',{flex:2,minHeight:38,opacity:(noNSending||!sel.length)?.55:1,cursor:(noNSending||!sel.length)?'default':'pointer'})}>{noNSending?'Enviando…':`Consultar a la notaría${sel.length?` (${sel.length})`:''}`}</button>
             </div>
-            <div style={{fontSize:11,color:C.muted,marginTop:7,lineHeight:1.4}}>Va a {cleanNotaDest(notaEmail)||NOTARIA_DEFAULT}, dirigido a {NOTA_DIRIGIDO}, con el estudio en copia.{NN.ultConsulta?` Última consulta: ${fmtFechaDMY(String(NN.ultConsulta).slice(0,10))}.`:''}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:7,lineHeight:1.4}}>Va a {cleanNotaDest(notaEmail)||NOTARIA_DEFAULT}, dirigido a {NOTA_DIRIGIDO}, con la oficina en copia.{NN.ultConsulta?` Última consulta: ${fmtFechaDMY(String(NN.ultConsulta).slice(0,10))}.`:''}</div>
           </div>)
         const bit=<BitacoraLista prefijo='notaria.nonuestra' titulo='Bitácora' limite={8} vacio='Aún no hay registros.' etiquetas={{'notaria.nonuestra_registradas':'Registradas desde la carga','notaria.nonuestra_consultada':'Consultada a la notaría','notaria.nonuestra_era_nuestra':'Sí era nuestra · gasto cargado','notaria.nonuestra_respondida':'La notaría respondió','notaria.nonuestra_reabierta':'Volvió a la revisión'}}/>
         const lista=(
@@ -20684,7 +20684,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             </div>
             {open&&<div style={{padding:D?'10px 14px 12px':'10px 12px 12px',background:C.bgSoft,borderTop:`1px solid ${C.track}`}}>
               <div onClick={r.movimiento_id&&onOpenMovBanco?()=>onOpenMovBanco(r.movimiento_id):undefined} style={{display:'flex',alignItems:'baseline',gap:8,fontSize:12,padding:'0 0 8px',marginBottom:6,borderBottom:`1px solid ${C.border}`,cursor:r.movimiento_id&&onOpenMovBanco?'pointer':'default'}}>
-                <span style={{color:r.movimiento_id?C.text:C.muted,fontWeight:r.movimiento_id?600:400}}>{r.movimiento_id?'Cargo en el banco del estudio':'Sin cargo en el banco del estudio'}</span>
+                <span style={{color:r.movimiento_id?C.text:C.muted,fontWeight:r.movimiento_id?600:400}}>{r.movimiento_id?'Cargo en el banco de la oficina':'Sin cargo en el banco de la oficina'}</span>
                 {r.movimiento_id&&onOpenMovBanco&&<span style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,whiteSpace:'nowrap'}}>Ver en Banco <Gl n='chevron'/></span>}
               </div>
               {gs.map(e=>{ const cn=cliN(e.client_id)||(e.personal_de?`Personal · ${e.personal_de}`:'Sin cliente'); return (
@@ -21014,7 +21014,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const esEstudio = (notaBolRS||'')===BRAND.nombreLegal
         const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,background:'#fff',color:C.text,boxSizing:'border-box',outline:'none'}
         const confirmarEnviar=async()=>{ if(!compFile){appAlert('Adjunta el comprobante de transferencia.');return} if(!dest){appAlert('Falta el correo de la notaría.');return}
-          if(!await appConfirm(`¿Enviar a la notaría (${dest}) el aviso de pago de ${gsS.length} OT por ${fmt(totS)} con tu comprobante, pidiendo emitir las boletas a nombre de ${notaBolRS} · ${notaBolRUT}? El estudio queda en copia.`)) return
+          if(!await appConfirm(`¿Enviar a la notaría (${dest}) el aviso de pago de ${gsS.length} OT por ${fmt(totS)} con tu comprobante, pidiendo emitir las boletas a nombre de ${notaBolRS} · ${notaBolRUT}? La oficina queda en copia.`)) return
           await enviarNotaria(notaSend); setNotaTab('pagados') }
         const guardarDespues=async()=>{ if(!await appConfirm('¿Guardar como pendiente de enviar? Todavía NO se avisa a la notaría; el correo lo mandas desde "Pagos realizados" cuando tengas el comprobante.')) return; setNotaSend(null); setNotaTab('pagados') }
         const marcarSinCorreo=async()=>{ if(!await appConfirm('¿Marcar esta liquidación como YA PAGADA, sin enviar correo? La notaría NO recibe aviso — solo para OT que ya pagaste antes.')) return; try{ const {error}=await supabase.from('rendiciones').update({estado_envio:'pagado'}).eq('id',notaSend.id); if(error) throw error; if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===notaSend.id?{...x,estado_envio:'pagado'}:x)); logActividad('notaria.liquidacion_pagada_sin_correo',{tabla:'rendiciones',id:notaSend.id,detalle:{title:`${notaSend.n_gastos||0} OT · ${notaSend.periodo||''}`,monto:notaSend.total}}) }catch(err){ appAlert('No se pudo marcar como pagada: '+(err.message||err)); return }; setNotaSend(null); setNotaTab('pagados') }   // antes el error se tragaba en silencio y la pantalla la mostraba pagada igual
@@ -21041,7 +21041,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div style={{border:`1px solid ${C.accent}44`,background:C.azulBg,borderRadius:11,padding:11,marginBottom:14}}>
             <div style={{fontSize:10,color:C.accent,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,marginBottom:7}}>Boletas a nombre de</div>
             <div style={{display:'flex',gap:6,marginBottom:9}}>
-              <button onClick={()=>{setNotaBolPick(false);aplicarBoletas(BRAND.nombreLegal,BRAND.rut)}} style={{flex:1,fontSize:12,fontWeight:600,borderRadius:8,padding:'7px',cursor:'pointer',border:`1px solid ${esEstudio?C.accent:C.border}`,background:esEstudio?C.accent:'#fff',color:esEstudio?'#fff':C.muted}}>El estudio</button>
+              <button onClick={()=>{setNotaBolPick(false);aplicarBoletas(BRAND.nombreLegal,BRAND.rut)}} style={{flex:1,fontSize:12,fontWeight:600,borderRadius:8,padding:'7px',cursor:'pointer',border:`1px solid ${esEstudio?C.accent:C.border}`,background:esEstudio?C.accent:'#fff',color:esEstudio?'#fff':C.muted}}>La oficina</button>
               <button onClick={()=>{ if(entsLiq.length===1){ aplicarBoletas(entsLiq[0].name,entsLiq[0].rut||''); setNotaBolPick(false) } else setNotaBolPick(v=>!v) }} style={{flex:1,fontSize:12,fontWeight:600,borderRadius:8,padding:'7px',cursor:'pointer',border:`1px solid ${!esEstudio?C.accent:C.border}`,background:!esEstudio?C.accent:'#fff',color:!esEstudio?'#fff':C.muted}}>El cliente{entsLiq.length>1?<>{" "}<Gl n='chevD'/></>:''}</button>
             </div>
             {notaBolPick&&entsLiq.length>0&&<div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:9}}>{entsLiq.map(en=>(<button key={en.id} onClick={()=>{aplicarBoletas(en.name,en.rut||'');setNotaBolPick(false)}} style={{textAlign:'left',border:`1px solid ${C.border}`,background:'#fff',borderRadius:8,padding:'7px 10px',cursor:'pointer',fontSize:12.5,color:C.text}}>{en.name}<span style={{color:C.muted}}> · {en.rut||'sin RUT'}</span></button>))}</div>}
@@ -24477,7 +24477,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
           </div> })()}
           <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>ccInput.trim()&&addCc(ccInput)} placeholder='Agregar correo y Enter' style={inp}/>
           {sugCc.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>{sugCc.slice(0,6).map(c=><button key={c.email} onClick={()=>addCc(c.email)} style={{fontSize:11,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre||c.email}</button>)}</div>}
-          {studioEmails.length>0&&<label style={{display:'flex',gap:7,alignItems:'center',marginTop:8,fontSize:11,color:C.muted,cursor:'pointer'}}><input type='checkbox' checked={studioOn} onChange={e=>setStudioOn(e.target.checked)}/>Copia al estudio ({studioEmails.join(', ')})</label>}
+          {studioEmails.length>0&&<label style={{display:'flex',gap:7,alignItems:'center',marginTop:8,fontSize:11,color:C.muted,cursor:'pointer'}}><input type='checkbox' checked={studioOn} onChange={e=>setStudioOn(e.target.checked)}/>Copia a la oficina ({studioEmails.join(', ')})</label>}
         </div>
         <div style={{marginBottom:12}}>
           <label style={flabel}>Comprobante de transferencia</label>
@@ -25399,7 +25399,7 @@ Saludos cordiales,`
           {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>
             {sug.map(c=><button key={c.email} onClick={()=>addOne(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre?c.nombre+' · ':''}{c.email}</button>)}
           </div>}
-          {studioEmails.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}><Switch on={studioOn} onToggle={()=>setStudioOn(v=>!v)}/><span style={{fontSize:12,color:C.text}}>Copia al estudio <span style={{color:C.textSoft}}>({studioEmails.join(', ')})</span></span></div>}
+          {studioEmails.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}><Switch on={studioOn} onToggle={()=>setStudioOn(v=>!v)}/><span style={{fontSize:12,color:C.text}}>Copia a la oficina <span style={{color:C.textSoft}}>({studioEmails.join(', ')})</span></span></div>}
         </div>
         )
       })()}
@@ -29939,7 +29939,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
   return (
     <div style={{padding:'2px 2px 6px',...(isDesk?{display:'flex',alignItems:'flex-start',gap:18}:{})}}>
     <div style={isDesk?{width:420,flexShrink:0}:undefined}>
-      <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.5}}>La IA redacta en el formato del estudio. <b>Tú validas y editas</b> antes de usarlo — nada se envía solo.</div>
+      <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.5}}>La IA redacta en el formato de la oficina. <b>Tú validas y editas</b> antes de usarlo — nada se envía solo.</div>
       <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
         {TIPOS_REDACCION.map(t=>(<button key={t.k} onClick={()=>setTipo(t.k)} style={{fontSize:12,fontWeight:600,padding:'5px 12px',borderRadius:20,border:`1px solid ${tipo===t.k?C.accent:C.border}`,background:tipo===t.k?C.azulBg:'#fff',color:tipo===t.k?C.accent:C.muted,cursor:'pointer'}}>{t.lbl}</button>))}
       </div>
@@ -29964,7 +29964,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
       {SII_TIPOS.includes(tipo)&&siiNov.length>0&&(
         <label style={{display:'flex',alignItems:'center',gap:7,fontSize:12,color:C.muted,margin:'0 2px 10px',cursor:'pointer'}}>
           <input type='checkbox' checked={cruzarSii} onChange={e=>setCruzarSii(e.target.checked)} style={{accentColor:C.accent,width:15,height:15}}/>
-          Cruzar con el radar SII del estudio <span style={{color:C.azulInfo,fontWeight:600}}>({siiNov.length} novedades vigentes)</span>
+          Cruzar con el radar SII de la oficina <span style={{color:C.azulInfo,fontWeight:600}}>({siiNov.length} novedades vigentes)</span>
         </label>
       )}
       {PREC_FOLDERS[tipo]&&(
@@ -32080,7 +32080,7 @@ function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing=[], cu
   const exportYTD = () => {
     const rows=ytdData.filter(d=>!d.sinCfg).map(d=>`<tr><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3'>${cn(d.cid).replace(/</g,'&lt;')}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.est)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right'>${fh(d.cons)} h</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;text-align:right;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#537281'}'>${d.exCLP>0?f0(d.exCLP):'—'}</td><td style='padding:6px 10px;border-bottom:1px solid #EFF1F3;font-weight:700;color:${d.exCLP>0?'#A32D2D':'#0F6E56'}'>${d.exCLP>0?'Reajustar':'OK'}</td></tr>`).join('')
     const heroExc = excedenteYTD>0?`<div style='background:#F5F7F9;border-radius:8px;padding:12px 14px;margin-bottom:16px'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#537281;font-weight:700'>Podrías haber facturado · ${anioAct}</div><div style='font-size:22px;font-weight:800;color:#003C50;margin-top:2px'>${f0(excedenteYTD)}</div><div style='font-size:10px;color:#537281;margin-top:2px'>Trabajo facturable por sobre lo incluido cada mes, a tu valor hora (cobrarlo es opcional). Base para el reajuste ${Number(anioAct)+1}.</div></div>`:''
-    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>${BRAND.nombre}</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'>${heroExc}<table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Incluidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Consumidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Podrías facturar</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno del estudio — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rentabilidad permanentes — uso interno</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D;background:#fff'><div style='max-width:640px;margin:0 auto'><div style='background:#003C50;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:15px;font-weight:700'>${BRAND.nombre}</div><div style='font-size:10px;opacity:.85'>Rentabilidad de asesorías permanentes · YTD ${anioAct}</div></div><span style='font-size:10px;font-weight:700;background:#E24B4A;padding:3px 9px;border-radius:5px'>USO INTERNO</span></div><div style='padding:20px 24px'>${heroExc}<table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='color:#537281;text-transform:uppercase;font-size:9px'><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Cliente</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Incluidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Consumidas YTD</th><th style='text-align:right;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Podrías facturar</th><th style='text-align:left;padding:6px 10px;border-bottom:1px solid #E4E8EB'>Acción</th></tr></thead><tbody>${rows}</tbody></table><div style='margin-top:16px;font-size:10px;color:#537281'>Documento de uso interno de la oficina — no distribuir al cliente. Base para revisar tarifas ${Number(anioAct)+1}.</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
   const guardarManual = () => { if(!mf.client_id||!(Number(mf.horas)>0)){ appAlert('Elige cliente y horas.'); return } addHora({ client_id:mf.client_id, fecha:mf.fecha||hoy, horas:Number(mf.horas), glosa:mf.glosa, billable:mf.billable }); setManual(false); setMf({client_id:'',fecha:'',horas:1,glosa:'',billable:true}); setMq('') }
@@ -33838,7 +33838,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const descargarGanttPortafolio = () => {
     const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     const hoy=new Date().toISOString().slice(0,10)
-    const filtro = selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'
+    const filtro = selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Toda la oficina'
     const items = (proyectos||[]).filter(p=>p.activo!==false && !p.pausado && ((selPer&&selPer!=='all')?esDePersona(p,selPer):true))
       .map(p=>{ const hs=hitosDe(p); const fechas=[]; hs.forEach(h=>{ if(h.plazo) fechas.push(String(h.plazo).slice(0,10)); if(h.fecha) fechas.push(String(h.fecha).slice(0,10)) })
         const done=hs.filter(h=>h.hecho).length; const next=hs.filter(h=>!h.hecho).sort((a,b)=>((a.orden==null?1e9:a.orden)-(b.orden==null?1e9:b.orden)))[0]
@@ -33917,7 +33917,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Cumplimiento</div>
             {conPlan.length>0 && <span onClick={exportar} style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Exportar CSV ↓</span>}
           </div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · {conPlan.length} proyecto{conPlan.length!==1?'s':''} con plan</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Toda la oficina'} · {conPlan.length} proyecto{conPlan.length!==1?'s':''} con plan</div>
         </div>
         {!conPlan.length ? <div style={{ ...card, textAlign:'center', fontSize:13, color:C.muted, padding:'32px 16px' }}>Aún no hay proyectos con plan para medir.</div> : <>
           {/* Protagonista: cumplimiento de plazos, con a tiempo / tarde anidados */}
@@ -34013,7 +34013,7 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Pendientes</div>
             {conPlan.length>0 && <span onClick={descargarGanttPortafolio} title='Todos los proyectos en un mismo eje de tiempo' style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Carta Gantt del portafolio ↓</span>}
           </div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Todo el estudio'} · lo que pide tu acción, de un vistazo</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Toda la oficina'} · lo que pide tu acción, de un vistazo</div>
         </div>
         {/* La foto (canon): un protagonista "Por atender" (pasos con plazo), con Vencido/Por vencer anidados; debajo, lo que es de PROYECTOS (sin mover / sin plan). Cada cifra baja a su lista. */}
         {(()=>{ const irA = id => { const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}) }
@@ -34180,11 +34180,11 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
         </select>}
         <div style={{ position:'relative' }}>
           <button onClick={()=>setPerOpen(o=>!o)} style={{ display:'inline-flex', alignItems:'center', gap:7, fontSize:12.5, fontWeight:600, color:C.text, background:'#fff', border:`1px solid ${C.border}`, borderRadius:9, padding:'5px 9px 5px 6px', cursor:'pointer' }}>
-            {selPer==='all' ? <span style={{ padding:'0 2px' }}>Todo el estudio</span> : <>{perAv(selPer,21)}{NOMBRE_DE_INI[selPer]||selPer}</>}
+            {selPer==='all' ? <span style={{ padding:'0 2px' }}>Toda la oficina</span> : <>{perAv(selPer,21)}{NOMBRE_DE_INI[selPer]||selPer}</>}
             <span style={{ color:C.az3||C.done, fontSize:11 }}><Gl n='chevD'/></span>
           </button>
           {perOpen && <div style={{ position:'absolute', top:'calc(100% + 5px)', left:0, zIndex:30, background:'#fff', border:`1px solid ${C.border}`, borderRadius:10, boxShadow:'0 8px 26px rgba(8,34,45,.14)', padding:5, minWidth:190 }}>
-            <button onClick={()=>{ setSelPer('all'); setPerOpen(false); setOpenId(null) }} style={{ ...perItem, color:C.accent }}>Todo el estudio{selPer==='all'&&<span style={{ marginLeft:'auto', color:C.greenText, fontWeight:800 }}><Gl n='tick'/></span>}</button>
+            <button onClick={()=>{ setSelPer('all'); setPerOpen(false); setOpenId(null) }} style={{ ...perItem, color:C.accent }}>Toda la oficina{selPer==='all'&&<span style={{ marginLeft:'auto', color:C.greenText, fontWeight:800 }}><Gl n='tick'/></span>}</button>
             <div style={{ height:1, background:C.border, margin:'4px 2px' }}/>
             {['CL','EE','MC','MP','RD'].map(i=><button key={i} onClick={()=>{ setSelPer(i); setPerOpen(false); setOpenId(null) }} style={perItem}>{perAv(i)}{NOMBRE_DE_INI[i]||i}{selPer===i&&<span style={{ marginLeft:'auto', color:C.greenText, fontWeight:800 }}><Gl n='tick'/></span>}</button>)}
           </div>}
@@ -34289,7 +34289,7 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAddHito, 
         {step==='picker'&&(
           <>
             <div style={{ fontSize:13, color:C.muted, marginBottom:10 }}>Elige la propuesta de honorarios aceptada. La IA leerá su alcance y armará el plan para tu revisión.</div>
-            <div style={lbl}>Propuestas del estudio</div>
+            <div style={lbl}>Propuestas de la oficina</div>
             <div style={{ display:'flex', alignItems:'center', gap:6, border:`1.5px solid ${C.accent}`, background:'#fff', borderRadius:8, padding:'6px 9px', marginBottom:8 }}>
               <input value={propQ} onChange={e=>setPropQ(e.target.value)} placeholder='Buscar propuesta por nombre…' style={{ border:'none', outline:'none', fontSize:13, color:C.text, flex:1, minWidth:0, background:'none' }}/>
             </div>
@@ -34911,7 +34911,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     // override (sugerencia aceptada sin abrir el editor) usa el RUT/nombre del propio movimiento, no el formulario.
     const rut = override ? (mov.rut_contraparte||null) : ((editForm.rut||'').trim() || mov.rut_contraparte || null)
     const nombre = override ? (mov.nombre_contraparte||null) : ((editForm.nombre||'').trim() || mov.nombre_contraparte || null)
-    if(rut && esRutPropio(rut)){ appAlert('Ese es el RUT propio del estudio: es un movimiento interno, no se asocia a un cliente.'); return }
+    if(rut && esRutPropio(rut)){ appAlert('Ese es el RUT propio de la oficina: es un movimiento interno, no se asocia a un cliente.'); return }
     // Seguridad del alias: si este RUT ya está mapeado a OTRO cliente, avisar y pedir confirmación (nunca cambiar en silencio).
     if(rut){ const prev=aliases.find(a=>crNormRut(a.rut_pagador)===crNormRut(rut))
       if(prev && String(prev.cliente_id)!==String(clientId) && !await appConfirm(`Este RUT ya está asociado a "${cmap[prev.cliente_id]||'otro cliente'}". ¿Reasignarlo a "${cmap[clientId]||'este cliente'}"? Afectará todos sus movimientos.`)) return }
@@ -36918,7 +36918,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
       return {esCli,esAmb,sweep,gap:sw?sw.gap:null,node:<div title="El banco no imprime quién envió; asigna por el monto o tu memoria" style={{fontSize:9.5,fontWeight:700,color:esCli?C.azulInfo:C.soonText,background:esCli?C.azulBg:C.soonBg,borderRadius:20,padding:'2px 8px',display:'inline-block',whiteSpace:'nowrap'}}>{txt}</div>} })()
     const gm = gmI?.node
     // Marcar traspaso interno (movimiento entre las 2 cuentas propias del estudio) — la opción que faltaba. Cuando calza EXACTO con un pago ya conciliado (sweep), va como acción PRIMARIA en un toque.
-    const intBtn = gmI?.esAmb ? <button disabled={busy===m.id} onClick={()=>marcarTraspasoInterno(m)} style={gmI.sweep?bG:bGh} title={gmI.sweep?`Calza con el pago de ${gmI.sweep} en la otra cuenta BICE — es el mismo dinero moviéndose entre cuentas del estudio`:'Marcar como movimiento entre las cuentas propias del estudio'}>{gmI.sweep?<><Gl n='tick'/>{" "}Es traspaso interno</>:'Marcar traspaso interno'}</button> : null
+    const intBtn = gmI?.esAmb ? <button disabled={busy===m.id} onClick={()=>marcarTraspasoInterno(m)} style={gmI.sweep?bG:bGh} title={gmI.sweep?`Calza con el pago de ${gmI.sweep} en la otra cuenta BICE — es el mismo dinero moviéndose entre cuentas de la oficina`:'Marcar como movimiento entre las cuentas propias de la oficina'}>{gmI.sweep?<><Gl n='tick'/>{" "}Es traspaso interno</>:'Marcar traspaso interno'}</button> : null
     const wrap=kids=><div onClick={stop} style={{marginTop:7}}>{gm}<div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:gm?6:0}}>{kids}</div></div>
     if(!m.cliente_id){
       const sc=sugMov(m)
@@ -38484,7 +38484,7 @@ export function PortalApp(){
     <div style={wrap}><div style={card}><Brand right={salirBtn}/>
       <div style={{padding:'30px 22px',textAlign:'center'}}>
         <div style={{fontSize:15,fontWeight:700,color:C.accent,marginBottom:6}}>Aún no tienes acceso</div>
-        <div style={{fontSize:13,color:C.muted,lineHeight:1.5}}>Este correo no tiene un espacio habilitado. Escríbele a tu abogado del estudio para que active tu portal.</div>
+        <div style={{fontSize:13,color:C.muted,lineHeight:1.5}}>Este correo no tiene un espacio habilitado. Escríbele a tu abogado de la oficina para que active tu portal.</div>
       </div>
     </div></div>
   )
@@ -39794,7 +39794,7 @@ export default function App() {
         fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+(await tokenSesion()),'apikey':supabase.supabaseKey},
-          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.name||'el estudio'})
+          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.name||'la oficina'})
         }).catch(()=>{})
       }
       // Aviso al ASIGNADOR cuando la tarea se marca Terminada (solo en la transición) y la asignó otra persona.
@@ -39854,7 +39854,7 @@ export default function App() {
       fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+(await tokenSesion()),'apikey':supabase.supabaseKey},
-        body:JSON.stringify({task:{...data,client_name:client?.name||'',who:(to||[]).join(', ')},assignedBy:user?.name||'el estudio'})
+        body:JSON.stringify({task:{...data,client_name:client?.name||'',who:(to||[]).join(', ')},assignedBy:user?.name||'la oficina'})
       }).catch(()=>{})
       // Además, avisar a quien ASIGNÓ la tarea que fue delegada (si la asignó otra persona).
       if(data.assigned_by && data.assigned_by!==user?.name){
@@ -40989,7 +40989,7 @@ export default function App() {
                 <div style={{fontSize:10,color:C.textSoft,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>SISTEMA</div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'modulos'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polygon points='12 2 2 7 12 12 22 7 12 2'/><polyline points='2 17 12 22 22 17'/><polyline points='2 12 12 17 22 12'/></svg>
-                  Módulos del estudio
+                  Módulos de la oficina
                 </div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'roles'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
@@ -41228,7 +41228,7 @@ export default function App() {
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
         {/* 'revisionDatos' ya NO es modal: página 'flujo'. */}
-        {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos del estudio' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
+        {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos de la oficina' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
         {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} onClose={()=>setModal(null)}/>}
         {/* 'report' ya NO es modal: página 'flujo'. */}
