@@ -9908,18 +9908,27 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
 // total acordado. Si lo supera, el exceso cubre las programadas más antiguas (FIFO): ya se facturaron con otro texto,
 // otra fecha u otro plan. Cubierta ≥ 80% de la cuota → cubierta entera (diferencia de UF o de plan). En UF se convierte con
 // la UF del día de cada documento (caché de mindicador); sin UF disponible no se infiere nada (no se esconde plata).
+// Lo facturado de UNA venta medido en la moneda de su honorario (UF con la UF del día de cada documento). Fuente única para
+// «cuotas cubiertas» (flujo/radar) y «cuotas sin generar» (Revisión): ambos comparan MONTOS contra el plan, nunca cuántas filas hay.
+// null = no aplica (recurrente, sin plan) · ok:false = falta la UF de alguna fecha (no se infiere nada).
+function coberturaVenta(s, bs=[], uf={}){
+  if(!s||s.cobro_type==='mensual'||bs.some(b=>/mensual|permanente/i.test(String(b.concept||'')))) return null
+  const enUF=s.moneda==='UF'||(!s.amount_clp&&Number(s.amount_uf)>0), plan=enUF?Number(s.amount_uf)||0:Number(s.amount_clp)||0; if(!(plan>0)) return null
+  const ufDe=d=>{ const k=String(d||'').slice(0,10); if(!k) return null; if(uf[k]) return uf[k]; const ks=Object.keys(uf).filter(x=>/^\d{4}-\d\d-\d\d$/.test(x)&&x<=k).sort(); return ks.length?uf[ks[ks.length-1]]:null }
+  let ok=true; const u=(m,d)=>{ if(!enUF) return m; const v=ufDe(d); if(!v){ ok=false; return 0 } return m/v }
+  let usado=0; const prog=[]
+  bs.forEach(b=>{ if(!b||b.deleted_at||b.status==='Anulada'||['reembolso','nota_credito'].includes(b.billing_type)) return
+    if(b.invoice_no) usado+=u(montoFactura(b),b.issued_at||b.due); else if(b.status==='Anticipada') usado+=u(Number(b.amount)||0,b.issued_at||b.due); else if(b.status==='Programada') prog.push({b,uu:u(Number(b.amount)||0,b.issued_at||b.created_at||b.due)}) })
+  return {plan, usado, prog, ok, enUF}
+}
 function cuotasCubiertasVenta(billing=[], sales=[], ufFechas=null){
   const uf=ufFechas||ufFechaCache()||{}
-  const ufDe=d=>{ const k=String(d||'').slice(0,10); if(!k) return null; if(uf[k]) return uf[k]; const ks=Object.keys(uf).filter(x=>/^\d{4}-\d\d-\d\d$/.test(x)&&x<=k).sort(); return ks.length?uf[ks[ks.length-1]]:null }
   const out=new Map(), porVenta={}
   ;(billing||[]).forEach(b=>{ if(b&&!b.deleted_at&&b.sale_id&&b.status!=='Anulada'&&!['reembolso','nota_credito'].includes(b.billing_type)) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
   ;(sales||[]).forEach(s=>{ if(!s||s.deleted_at||s.status!=='Activo') return; const bs=porVenta[String(s.id)]; if(!bs) return
     // Recurrentes (mensual / asesoría permanente): el monto de la venta es la cuota del mes, no el total → no aplica.
-    if(s.cobro_type==='mensual'||bs.some(b=>/mensual|permanente/i.test(String(b.concept||'')))) return
-    const enUF=s.moneda==='UF'||(!s.amount_clp&&Number(s.amount_uf)>0), plan=enUF?Number(s.amount_uf)||0:Number(s.amount_clp)||0; if(!(plan>0)) return
-    let ok=true; const u=(m,d)=>{ if(!enUF) return m; const v=ufDe(d); if(!v){ ok=false; return 0 } return m/v }
-    let usado=0; const prog=[]
-    bs.forEach(b=>{ if(b.invoice_no) usado+=u(montoFactura(b),b.issued_at||b.due); else if(b.status==='Anticipada') usado+=u(Number(b.amount)||0,b.issued_at||b.due); else if(b.status==='Programada') prog.push({b,uu:u(Number(b.amount)||0,b.issued_at||b.created_at||b.due)}) })
+    const cv=coberturaVenta(s,bs,uf); if(!cv) return
+    const {plan,usado,prog,ok}=cv
     if(!ok||!prog.length) return
     let exceso=usado+prog.reduce((a,x)=>a+x.uu,0)-plan
     if(!(exceso>plan*0.03)) return
@@ -10369,7 +10378,16 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     selectAll(()=>supabase.from('cartola_movimientos').select('rut_contraparte,nombre_contraparte,monto').not('rut_contraparte','is',null).order('id')).then(({data})=>{ if(data) setMovsRut(data.filter(m=>m.nombre_contraparte)) },()=>{})
     supabase.from('learnings').select('key').eq('kind','rut_banco_no').then(({data})=>{ if(data) setRutNo(new Set(data.map(r=>r.key))) },()=>{})
   },[])
-  const cuotasSinGen=saludRows.filter(v=>v.faltan_cuotas)
+  // Faltan cuotas solo si lo generado (facturado + anticipado + programado) NO alcanza el honorario: una venta a «3 cuotas»
+  // facturada en 1 o 2 documentos que suman el total no tiene nada pendiente (nCuotas=3 es el valor por defecto del formulario).
+  const cuotasSinGen=useMemo(()=>{
+    const uf={...(ufFechaCache()||{}),...(ufMapFechas||{})}, porVenta={}
+    ;(billing||[]).forEach(b=>{ if(b&&b.sale_id) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
+    return saludRows.filter(v=>{ if(!v.faltan_cuotas) return false
+      const s=(sales||[]).find(x=>String(x.id)===String(v.id)); const cv=s&&coberturaVenta(s,porVenta[String(v.id)]||[],uf)
+      if(!cv||!cv.ok) return true
+      return cv.usado+cv.prog.reduce((a,x)=>a+x.uu,0) < cv.plan*0.97 })
+  },[saludRows,sales,billing,ufMapFechas])
   const honorarioDesc=saludRows.filter(v=>v.honorario_descuadrado)
   // Ventas COBRADAS en Borrador/Propuesta: tienen facturas emitidas/pagadas pero su estado las deja FUERA de "Vendido" (que cuenta solo Activo+Terminado). Trabajo real invisible → candidato a pasar a Terminado. Client-side desde sales+billing.
   const ventasBorradorCobrado=useMemo(()=>{
