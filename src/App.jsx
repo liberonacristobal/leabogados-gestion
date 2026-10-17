@@ -4111,7 +4111,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
   const costoOp8 = useMemo(()=>costoOperacionReal(fuRes,{billing,terceros,costosOfiRows,expenses,clients}),[fuRes,billing,terceros,costosOfiRows,expenses,clients])
-  const flujoNeto8 = flujoCajaProyectado({billing:(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing, terceros, costosOfiRows, anticipos, costoOp:costoOp8}).fin   // misma fuente que la página Flujo de caja
+  const noEmitir8 = useNoEmitirSet(), ufFechas8 = useUFFechas(billing)
+  const flujoNeto8 = flujoCajaProyectado({billing:(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing, terceros, costosOfiRows, anticipos, costoOp:costoOp8, sales, noEmitir:noEmitir8, ufFechas:ufFechas8}).fin   // misma fuente que la página Flujo de caja
   const vencMes = vencidoTot
   // Mi trabajo (operativo del usuario)
   const _miIniT = INICIALES_RESP[user?.name]||null
@@ -9752,6 +9753,20 @@ function costoOperacionReal(fu, deps, hoy=new Date(), meses=3){
   Object.keys(peso).forEach(k=>{ peso[k]/=tot })
   return {mensual, peso, meses:rs.map(r=>r.ym)}
 }
+// Cuotas marcadas «No corresponde» (learnings cuota_no_emitir): la misma marca que silencia el radar de Facturación.
+let _noEmitirP=null
+function useNoEmitirSet(){
+  const [s,setS]=useState(()=>new Set())
+  useEffect(()=>{ if(DEMO) return; if(!_noEmitirP) _noEmitirP=supabase.from('learnings').select('key').eq('kind','cuota_no_emitir').then(({data})=>new Set((data||[]).map(r=>String(r.key))),()=>new Set())
+    let v=true; _noEmitirP.then(x=>{ if(v) setS(x) }); return ()=>{v=false} },[])
+  return s
+}
+// UF por fecha de los documentos (caché de mindicador), para convertir lo facturado a UF con la UF de su día.
+function useUFFechas(billing){
+  const [m,setM]=useState(()=>ufFechaCache())
+  useEffect(()=>{ if(DEMO) return; const ds=[]; (billing||[]).forEach(b=>{ if(b&&b.issued_at) ds.push(b.issued_at) }); if(!ds.length) return; let v=true; fetchUFFechas(ds).then(x=>{ if(v&&x) setM(x) }).catch(()=>{}); return ()=>{v=false} },[billing])
+  return m
+}
 // Fuentes del resultado (ventas del SII + planilla de costos reales), cargadas una vez por sesión y compartidas por la página y el Inicio.
 let _fuentesRes=null, _fuentesResP=null
 function useFuentesResultado(){
@@ -9880,8 +9895,32 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
 // · Comisión por pagar: cuota ya pagada → esta semana; ligada a una cuota → la misma semana de su cuota (fuera, si su cuota está fuera);
 //   sin cuota pero con venta → repartida entre las cuotas pendientes de esa venta; sin nada → «sin cuota» (aviso para asignarla).
 // · Oficina = presupuesto mensual (costosOficinaMes) ÷ 4,33 por semana.
+// Cuotas programadas que YA están cubiertas por su propia venta (fuente única para el flujo y el radar «sin facturar»).
+// Por venta activa: lo facturado (DTE emitidos de la venta) + cuotas anticipadas + programadas abiertas no puede superar el
+// total acordado. Si lo supera, el exceso cubre las programadas más antiguas (FIFO): ya se facturaron con otro texto,
+// otra fecha u otro plan. Cubierta ≥ 80% de la cuota → cubierta entera (diferencia de UF o de plan). En UF se convierte con
+// la UF del día de cada documento (caché de mindicador); sin UF disponible no se infiere nada (no se esconde plata).
+function cuotasCubiertasVenta(billing=[], sales=[], ufFechas=null){
+  const uf=ufFechas||ufFechaCache()||{}
+  const ufDe=d=>{ const k=String(d||'').slice(0,10); if(!k) return null; if(uf[k]) return uf[k]; const ks=Object.keys(uf).filter(x=>/^\d{4}-\d\d-\d\d$/.test(x)&&x<=k).sort(); return ks.length?uf[ks[ks.length-1]]:null }
+  const out=new Map(), porVenta={}
+  ;(billing||[]).forEach(b=>{ if(b&&!b.deleted_at&&b.sale_id&&b.status!=='Anulada'&&!['reembolso','nota_credito'].includes(b.billing_type)) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
+  ;(sales||[]).forEach(s=>{ if(!s||s.deleted_at||s.status!=='Activo') return; const bs=porVenta[String(s.id)]; if(!bs) return
+    // Recurrentes (mensual / asesoría permanente): el monto de la venta es la cuota del mes, no el total → no aplica.
+    if(s.cobro_type==='mensual'||bs.some(b=>/mensual|permanente/i.test(String(b.concept||'')))) return
+    const enUF=s.moneda==='UF'||(!s.amount_clp&&Number(s.amount_uf)>0), plan=enUF?Number(s.amount_uf)||0:Number(s.amount_clp)||0; if(!(plan>0)) return
+    let ok=true; const u=(m,d)=>{ if(!enUF) return m; const v=ufDe(d); if(!v){ ok=false; return 0 } return m/v }
+    let usado=0; const prog=[]
+    bs.forEach(b=>{ if(b.invoice_no) usado+=u(montoFactura(b),b.issued_at||b.due); else if(b.status==='Anticipada') usado+=u(Number(b.amount)||0,b.issued_at||b.due); else if(b.status==='Programada') prog.push({b,uu:u(Number(b.amount)||0,b.issued_at||b.created_at||b.due)}) })
+    if(!ok||!prog.length) return
+    let exceso=usado+prog.reduce((a,x)=>a+x.uu,0)-plan
+    if(!(exceso>plan*0.03)) return
+    prog.sort((x,y)=>String(x.b.due||'').localeCompare(String(y.b.due||''))).forEach(({b,uu})=>{ if(exceso<=0||!(uu>0)) return; const t=Math.min(exceso,uu)
+      out.set(String(b.id), t>=uu*0.8 ? {total:true,m:Number(b.amount)||0} : {total:false,m:(Number(b.amount)||0)*t/uu}); exceso-=uu }) })
+  return out
+}
 const FLUJO_DUDA_DIAS = 30
-function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], costoOp=null, semanas=8, hoy=new Date() }){
+function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], costoOp=null, sales=null, noEmitir=null, ufFechas=null, semanas=8, hoy=new Date() }){
   const DAY=86400000
   const d0=new Date(hoy); d0.setHours(12,0,0,0)
   const mon=new Date(d0); mon.setDate(d0.getDate()-((d0.getDay()+6)%7))
@@ -9904,11 +9943,15 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
   // de su venta (o del cliente, si el anticipo no tiene venta). Solo falta emitir la factura. El subarriendo es mensual: un pago sin factura
   // cubre solo la cuota de ESE mes (pago entre 15 días antes y 20 días después de su vencimiento), nunca la de otro mes.
   const cubierto={}; let antTot=0
+  // Programadas que no son plata por facturar: venta no activa, marcadas «No corresponde», o ya cubiertas por lo facturado en su venta.
+  const saleSt={}; (sales||[]).forEach(x=>{ if(x&&!x.deleted_at) saleSt[String(x.id)]=x.status })
+  const cubV=sales?cuotasCubiertasVenta(billing,sales,ufFechas):new Map()
+  const fueraProg=b=>(sales&&b.sale_id&&saleSt[String(b.sale_id)]!=='Activo')||(noEmitir&&noEmitir.has(String(b.id)))||cubV.get(String(b.id))?.total
   ;(anticipos||[]).filter(a=>a&&a.estado==='disponible'&&!a.billing_id&&Number(a.monto)>0).sort((x,y)=>String(x.fecha||'').localeCompare(String(y.fecha||''))).forEach(a=>{
     let r=Number(a.monto)
     const fa=new Date(String(a.fecha||'').slice(0,10)+'T12:00:00').getTime()
     const mesOk=b=>{ const d=new Date(String(b.due||'').slice(0,10)+'T12:00:00').getTime(); return !isNaN(fa)&&!isNaN(d)&&fa>=d-15*86400000&&fa<=d+20*86400000 }
-    vivas.filter(b=>b.status==='Programada'&&!b.invoice_no&&(a.sale_id?String(b.sale_id)===String(a.sale_id):String(b.client_id)===String(a.client_id))&&(b.billing_type==='subarriendo'?mesOk(b):true))
+    vivas.filter(b=>b.status==='Programada'&&!b.invoice_no&&!fueraProg(b)&&(a.sale_id?String(b.sale_id)===String(a.sale_id):String(b.client_id)===String(a.client_id))&&(b.billing_type==='subarriendo'?mesOk(b):true))
       .sort((x,y)=>String(x.due||'').localeCompare(String(y.due||''))).forEach(b=>{ if(r<1) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0); if(!(m>0)) return; const u=Math.min(m,r); cubierto[b.id]=(cubierto[b.id]||0)+u; r-=u; antTot+=u }) })
   vivas.forEach(b=>{
     const c=C_(b.client_id)
@@ -9918,7 +9961,7 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
       const esp=base+c.ritmo*DAY
       if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
       const w=wIdx(Math.max(esp,hoyT)); st[b.id]={w,m,cid:c.cid}; if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
-    if(b.status==='Programada'&&!b.invoice_no){ const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0); if(cubierto[b.id]) c.antic+=cubierto[b.id]; if(!(m>=1)){ if(cubierto[b.id]) st[b.id]={pagadaAnt:true,cid:c.cid}; return }
+    if(b.status==='Programada'&&!b.invoice_no){ if(fueraProg(b)) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0)-(cubV.get(String(b.id))?.m||0); if(cubierto[b.id]) c.antic+=cubierto[b.id]; if(!(m>=1)){ if(cubierto[b.id]) st[b.id]={pagadaAnt:true,cid:c.cid}; return }
       const due=b.due||b.issued_at; const dYm=String(due||'').slice(0,7)
       if(!dYm||dYm<curYm){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
       const w=wIdx(Math.max(tD(due)??hoyT,hoyT)+c.ritmo*DAY); st[b.id]={w,m,cid:c.cid}; if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
@@ -9950,10 +9993,11 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
   const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
   return {weeks,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
 }
-function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[], expenses=[], clients=[], isDesktop=false, onOpenClientFicha }){
+function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[], expenses=[], clients=[], sales=[], isDesktop=false, onOpenClientFicha }){
   const fu=useFuentesResultado()
+  const noEmitir=useNoEmitirSet(), ufFechas=useUFFechas(billing)
   const costoOp=useMemo(()=>costoOperacionReal(fu,{billing,terceros,costosOfiRows,expenses,clients}),[fu,billing,terceros,costosOfiRows,expenses,clients])
-  const F=useMemo(()=>flujoCajaProyectado({billing,terceros,costosOfiRows,anticipos,costoOp}),[billing,terceros,costosOfiRows,anticipos,costoOp])
+  const F=useMemo(()=>flujoCajaProyectado({billing,terceros,costosOfiRows,anticipos,costoOp,sales,noEmitir,ufFechas}),[billing,terceros,costosOfiRows,anticipos,costoOp,sales,noEmitir,ufFechas])
   const [fil,setFil]=useState('todos')
   const nomDe=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c.name }); return m },[clients])
   const nom=cid=>nomDe[cid]||'Sin cliente'
@@ -13219,7 +13263,8 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               // Radar "Cuotas vencidas sin facturar": programadas de meses CERRADOS (antes del actual), dentro de la vida de la app (2026-06-06), de ventas Activas, que no marcaste "no corresponde". Candidatas a emitir, por revisar.
               const _m1=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-01`
               const _saleAct={}; (sales||[]).forEach(s=>{ if(!s.deleted_at) _saleAct[String(s.id)]=s.status })
-              const sinEmitirCands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&_saleAct[String(b.sale_id)]==='Activo'&&b.due&&b.due>='2026-06-06'&&b.due<_m1&&!noEmitirSet.has(String(b.id)))
+              const _cubV=cuotasCubiertasVenta(billing,sales)
+              const sinEmitirCands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&_saleAct[String(b.sale_id)]==='Activo'&&b.due&&b.due>='2026-06-06'&&b.due<_m1&&!noEmitirSet.has(String(b.id))&&!_cubV.get(String(b.id))?.total)
               const sinEmitirN=sinEmitirCands.length
               const _emitBasePC=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
               // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
@@ -13617,7 +13662,8 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
           const MN3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
           const mesLbl=d=>{ const m=String(d||'').slice(0,7).match(/^(\d{4})-(\d\d)$/); return m?`${MN3[+m[2]-1]} ${m[1].slice(2)}`:'' }
-          const cands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&saleById[String(b.sale_id)]&&!saleById[String(b.sale_id)].deleted_at&&saleById[String(b.sale_id)].status==='Activo'&&b.due&&b.due>='2026-06-06'&&b.due<m1&&!noEmitirSet.has(String(b.id)))
+          const cubV=cuotasCubiertasVenta(billing,sales)
+          const cands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&saleById[String(b.sale_id)]&&!saleById[String(b.sale_id)].deleted_at&&saleById[String(b.sale_id)].status==='Activo'&&b.due&&b.due>='2026-06-06'&&b.due<m1&&!noEmitirSet.has(String(b.id))&&!cubV.get(String(b.id))?.total)
           const byCli={}; cands.forEach(b=>{ const k=String(b.client_id||'—'); (byCli[k]=byCli[k]||[]).push(b) })
           const keys=Object.keys(byCli).sort((a,b)=>{ const na=(clients||[]).find(c=>String(c.id)===a)?.name||''; const nb=(clients||[]).find(c=>String(c.id)===b)?.name||''; return na.localeCompare(nb,'es') })
           keys.forEach(k=>byCli[k].sort((x,y)=>String(x.due).localeCompare(String(y.due))))
@@ -41034,7 +41080,7 @@ export default function App() {
             </div>}
             {tab==='flujoCaja'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1180,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Flujo de caja' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
-              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} expenses={expenses} clients={clients} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha}/>
+              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha}/>
             </div>}
             {tab==='miCarga'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Mi carga' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
