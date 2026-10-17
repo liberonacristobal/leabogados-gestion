@@ -21634,15 +21634,14 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const pideDeQue = r => CATS_DE_CLIENTE.has(catDe(r)) && glosaSinDetalle(r.concept)
   const faltaDetDe = r => pideDeQue(r) && !String(r.deQue||'').trim()
   const faltaDet = llenas.filter(faltaDetDe).length
-  // Posible duplicado: mismo día y mismo monto que un gasto ya cargado (o que otra fila de esta carga).
-  // Movilización: lo cargó la misma persona y el monto difiere en ≤ $200 (la app de Uber cambia unos pesos). Resto: mismo cliente o persona y monto exacto.
-  const gastosPorFecha = useMemo(()=>{ const m=new Map(); (expenses||[]).forEach(e=>{ if(e.deleted_at||e.type==='fondo'||!e.date) return; const k=String(e.date).slice(0,10); (m.get(k)||m.set(k,[]).get(k)).push(e) }); return m },[expenses])
-  const dupDe = r => { if(!r.amount||r.dupOk) return null; const monto=parseInt(r.amount)||0, f=r.date||hoy, mov=catDe(r)==='Movilización'
-    const cid=personal?null:cliDe(r)?.id
-    const igual=e=>{ const d=Math.abs((Number(e.amount)||0)-monto); if(mov) return (e.category==='Movilización')&&d<=200&&(!userName||e.created_by===userName)
-      return d===0&&(personal?e.personal_de===personal:String(e.client_id)===String(cid)) }
-    const ya=(gastosPorFecha.get(f)||[]).find(igual); if(ya) return {fecha:ya.date,concept:ya.concept,amount:ya.amount}
-    const otra=llenas.find(o=>o.id!==r.id&&(o.date||hoy)===f&&Math.abs((parseInt(o.amount)||0)-monto)<=(mov?200:0)&&rows.indexOf(o)<rows.indexOf(r)&&(mov?catDe(o)==='Movilización':cliDe(o)?.id===cliDe(r)?.id))
+  // Posible duplicado (solo Movilización, sin cargas BIP): misma persona, mismo día y misma cifra que un viaje ya cargado o que otra fila de esta carga.
+  const gastosPorFecha = useMemo(()=>{ const m=new Map(); (expenses||[]).forEach(e=>{ if(e.deleted_at||e.type==='fondo'||!e.date||e.category!=='Movilización') return; const k=String(e.date).slice(0,10); (m.get(k)||m.set(k,[]).get(k)).push(e) }); return m },[expenses])
+  const esBip = (medio,concept) => medio==='Carga BIP' || medioMovDe(concept)==='Carga BIP'
+  const dupDe = r => { if(!r.amount||r.dupOk||catDe(r)!=='Movilización'||esBip(movMedio(r),r.concept)) return null
+    const monto=parseInt(r.amount)||0, f=r.date||hoy
+    const ya=(gastosPorFecha.get(f)||[]).find(e=>(Number(e.amount)||0)===monto&&!esBip(e.subcategory,e.concept)&&(personal?e.personal_de===personal||e.created_by===userName:(!userName||e.created_by===userName)))
+    if(ya) return {fecha:ya.date,concept:ya.concept,amount:ya.amount}
+    const otra=llenas.find(o=>o.id!==r.id&&rows.indexOf(o)<rows.indexOf(r)&&(o.date||hoy)===f&&(parseInt(o.amount)||0)===monto&&catDe(o)==='Movilización'&&!esBip(movMedio(o),o.concept))
     return otra?{fecha:f,concept:otra.concept,amount:otra.amount,enCarga:true}:null }
   const dupPend = llenas.filter(r=>dupDe(r)).length
   const deQueScope = r => personal?`p:${personal}`:(cliDe(r)?.id?String(cliDe(r).id):null)
