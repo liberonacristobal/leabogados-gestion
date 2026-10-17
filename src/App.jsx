@@ -9590,12 +9590,14 @@ function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[
     if(t===61){ fac-=m; facDocs.push({...d,b,nc:true}); return }
     if(t!==33&&t!==34) return
     if(extIds.has(String(d.billing_id))) return
+    if(b&&b.billing_type==='reembolso') return   // gasto facturado al cliente: nunca es ingreso
     if(b&&b.billing_type==='subarriendo'){ subFac+=m; return }
     fac+=m; facDocs.push({...d,b}); if(!d.billing_id) sinReg.push(d) })
   const [Y,Mo]=String(ym).split('-').map(Number)
   const row=(fu?.plan||[]).find(r=>Number(r.anio)===Y&&Number(r.mes)===Mo)
   const n=k=>Number(row?.[k])||0
-  const sub = subFac>0 ? subFac : n('subarriendo')
+  // Subarriendo del mes: la planilla manda (una factura puede cubrir varios meses, p. ej. F321 marzo–abril); sin planilla, lo facturado.
+  const sub = n('subarriendo')>0 ? n('subarriendo') : subFac
   const rexItems=(terceros||[]).filter(t=>t&&Number(t.comision_monto)>0&&t.billing_id).map(t=>({t,b:bById[String(t.billing_id)]})).filter(x=>x.b&&!x.b.deleted_at&&x.b.status!=='Anulada'&&String(x.b.issued_at||'').startsWith(ym))
   const rex=rexItems.reduce((a,x)=>a+(Number(x.t.comision_monto)||0),0)
   const eff=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
