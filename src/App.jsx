@@ -9257,8 +9257,9 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
   const vMes=m=>(ventas||[]).filter(d=>String(d.fecha_emision||'').startsWith(pad(m)))
   // FUENTE ÚNICA: cada mes sale de resultadoMes (la misma del Estado de resultados y del Inicio); el año es la suma de sus meses.
   const bTipo=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b) m[String(b.id)]=b.billing_type||'honorarios' }); return m },[billing])
-  const rmes=useMemo(()=>{ const fuY={sii:ventas||[],plan:cm||[]}, deps={billing,terceros,costosOfiRows,expenses,clients}, o={}
-    for(let m=1;m<=maxM;m++) o[m]=resultadoMes(fuY,deps,pad(m)); return o },[ventas,cm,billing,terceros,costosOfiRows,expenses,clients,yr,maxM])   // eslint-disable-line react-hooks/exhaustive-deps
+  const fuB=useFuentesResultado()   // quién paga con boleta (miembros), para las remuneraciones desde el banco
+  const rmes=useMemo(()=>{ const fuY={sii:ventas||[],plan:cm||[],boleta:fuB.boleta}, deps={billing,terceros,costosOfiRows,expenses,clients}, o={}
+    for(let m=1;m<=maxM;m++) o[m]=resultadoMes(fuY,deps,pad(m)); return o },[ventas,cm,fuB,billing,terceros,costosOfiRows,expenses,clients,yr,maxM])   // eslint-disable-line react-hooks/exhaustive-deps
   const R=(m,k)=>Number(rmes[m]?.[k])||0
   // Desglose de la facturación propia (cuadra con resultadoMes.fac): emitida sin facturas de gastos ni de subarriendo − NC − externos.
   const propiaDoc=d=>!['reembolso','subarriendo'].includes(bTipo[String(d.billing_id)])
@@ -9381,12 +9382,11 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
 
     <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Egresos</div>
     {sec('cos',C.azulBg,C.accent,<><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></>,'Costos de operación','planilla + gastos varios',fmtMp(costosOper),C.accent,
-      <>{row('Sueldos (líquido)',fmtMp(sueldos))}
+      <>{row('Remuneraciones',fmtMp(S(m=>R(m,'rem'))),months.some(m=>rmes[m]?.remEst&&cmBy[m])?'banco · mes en curso de la planilla':'pagadas en el banco')}
         {row('Cotizaciones',fmtMp(cotiz),'de Claudia')}
         {row('Contadora',fmt(contadora))}
         {row('Arriendo',fmtMp(arriendo))}
         {row('Gastos comunes',fmtMp(ggcc))}
-        {honor>0?row('Honorarios (Martina)',fmtMp(honor)):null}
         {otrosC>0?row('Otros (planilla)',fmtMp(otrosC)):null}
         {gvar>0?row('Gastos varios',fmtMp(gvar),'tarjeta, servicios, misc'):null}
         <div style={{display:'flex',padding:'9px 2px',borderTop:`2px solid ${C.border}`,fontSize:13,fontWeight:800,color:C.accent}}><span>Total costos</span><span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>{fmtMp(costosOper)}</span></div>
@@ -9604,6 +9604,21 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
 // egresos  = costos de operación del mes (planilla real SIN PPM; sin planilla, presupuesto sin PPM) + gastos varios + comisiones PAGADAS en el mes (bruto).
 // El PPM va aparte (anticipo del impuesto anual). Un mes es provisorio hasta que la planilla lo cierra (15 del mes siguiente).
 const esPPMcosto = r => String(r?.categoria||'')==='Impuestos y patentes' && /ppm/i.test(String(r?.item||''))
+// Remuneraciones REALES del mes desde el banco: gastos «Sueldos»/«Bono» de la oficina asignados al MES TRABAJADO
+// (se pagan a fin de mes o los primeros días del siguiente: hasta el día 10 cuenta para el mes anterior).
+// Quien emite boleta (miembros.paga_con_boleta) cuesta el BRUTO = líquido transferido ÷ (1 − tasa de retención del año).
+function remuneracionesBancoMes(expenses, clients, ym, boleta){
+  const ofi=(clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))); if(!ofi) return {total:0,items:[]}
+  const items=[]
+  ;(expenses||[]).forEach(e=>{ if(!e||e.deleted_at||e.type!=='gasto'||String(e.client_id)!==String(ofi.id)) return
+    if(!['Sueldos','Bono'].includes(String(e.category||''))) return
+    const d=String(e.date||'').slice(0,10); if(d.length<10) return
+    const dia=Number(d.slice(8,10)); const mesTrab = dia<=10 ? _ymPrev(d.slice(0,7)) : d.slice(0,7)
+    if(mesTrab!==ym) return
+    const liq=Number(e.amount)||0, bol=boleta&&boleta.has(_normTxt(e.subcategory||''))
+    items.push({e, persona:e.subcategory||'', liquido:liq, costo:bol?Math.round(liq/(1-tasaBHE(d))):liq, boleta:!!bol}) })
+  return {total:items.reduce((a,x)=>a+x.costo,0), items}
+}
 function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[], clients=[]}, ym){
   const bById={}; (billing||[]).forEach(b=>{ if(b) bById[String(b.id)]=b })
   const extIds=new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id)))
@@ -9625,7 +9640,10 @@ function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[
   const rexItems=(terceros||[]).filter(t=>t&&Number(t.comision_monto)>0&&t.billing_id).map(t=>({t,b:bById[String(t.billing_id)]})).filter(x=>x.b&&!x.b.deleted_at&&x.b.status!=='Anulada'&&String(x.b.issued_at||'').startsWith(ym))
   const rex=rexItems.reduce((a,x)=>a+(Number(x.t.comision_monto)||0),0)
   const eff=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
-  let cosLines = row ? [['rem','Remuneraciones',n('sueldos')+n('honorarios')],['cot','Cotizaciones',n('cotizaciones')],['arr','Arriendo y GGCC',n('arriendo')+n('gastos_comunes')],['con','Contadora',n('contadora')],['otr','Otros costos',n('otros_costos')]]
+  // Remuneraciones: lo pagado en el banco para ese mes; si aún no hay pagos (mes en curso), la planilla.
+  const remB=remuneracionesBancoMes(expenses,clients,ym,fu?.boleta), remEst=!(remB.total>0)
+  const rem = remB.total>0 ? remB.total : (n('sueldos')+n('honorarios'))
+  let cosLines = row ? [['rem','Remuneraciones',rem],['cot','Cotizaciones',n('cotizaciones')],['arr','Arriendo y GGCC',n('arriendo')+n('gastos_comunes')],['con','Contadora',n('contadora')],['otr','Otros costos',n('otros_costos')]]
     : [['pre','Presupuesto de oficina',(costosOfiRows||[]).filter(r=>!esPPMcosto(r)).reduce((a,r)=>a+(Number(eff(r))||0)*(r.es_ingreso?-1:1),0)]]
   const ppm = row ? n('ppm') : (costosOfiRows||[]).filter(esPPMcosto).reduce((a,r)=>a+(Number(eff(r))||0),0)
   const gvItems=gastosVariosOfiItems(expenses,clients,ym), gv=gvItems.reduce((a,e)=>a+(Number(e.amount)||0),0)
@@ -9634,15 +9652,15 @@ function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[
   const byP={}; (terceros||[]).filter(t=>t&&t.comision_pct==null&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).forEach(t=>{ const k=String(t.proveedor_id||t.proveedor||'x'); if(!byP[k]) byP[k]={pid:t.proveedor_id,nombre:t.proveedor||'Colaborador',m:0,ts:[]}; byP[k].m+=Number(t.monto)||0; byP[k].ts.push(t) })
   const comList=Object.values(byP).sort((a,b)=>b.m-a.m), com=comList.reduce((a,x)=>a+x.m,0)
   const ing=fac+sub+rex, res=ing-cos-com
-  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,margen:ing?res/ing*100:null,ppm,estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
+  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,margen:ing?res/ing*100:null,ppm,rem:row?rem:0,remEst,remItems:remB.items,estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
 }
 // Fuentes del resultado (ventas del SII + planilla de costos reales), cargadas una vez por sesión y compartidas por la página y el Inicio.
 let _fuentesRes=null, _fuentesResP=null
 function useFuentesResultado(){
-  const [f,setF]=useState(()=>_fuentesRes||{sii:[],plan:[]})
+  const [f,setF]=useState(()=>_fuentesRes||{sii:[],plan:[],boleta:new Set()})
   useEffect(()=>{ if(DEMO) return; if(_fuentesRes){ setF(_fuentesRes); return }
-    if(!_fuentesResP) _fuentesResP=Promise.all([selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').order('id')),supabase.from('oficina_costos_mensual').select('*')])
-      .then(([a,b])=>{ _fuentesRes={sii:a?.data||[],plan:b?.data||[]}; return _fuentesRes }).catch(()=>{ _fuentesResP=null; return {sii:[],plan:[]} })
+    if(!_fuentesResP) _fuentesResP=Promise.all([selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').order('id')),supabase.from('oficina_costos_mensual').select('*'),supabase.from('miembros').select('nombre').eq('paga_con_boleta',true)])
+      .then(([a,b,c])=>{ _fuentesRes={sii:a?.data||[],plan:b?.data||[],boleta:new Set((c?.data||[]).map(x=>_normTxt(x.nombre)))}; return _fuentesRes }).catch(()=>{ _fuentesResP=null; return {sii:[],plan:[],boleta:new Set()} })
     let v=true; _fuentesResP.then(x=>{ if(v) setF(x) }); return ()=>{v=false} },[])
   return f
 }
@@ -9699,7 +9717,7 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
       {r.sub!==0||rp.sub!==0 ? ln({k:'sub',l:'Subarriendo',v:r.sub,p:rp.sub,on:onOpenSubarriendo}) : null}
       {r.rex!==0||rp.rex!==0 ? ln({k:'rex',l:'Comisión de externos',v:r.rex,p:rp.rex,on:()=>setSub2(s=>s==='rex'?null:'rex'),open:sub2==='rex',children:r.rexItems.map((x,i)=>subFila('r'+i,`Factura N° ${folioN(x.b.invoice_no)}`,clients.find(c=>String(c.id)===String(x.b.client_id))?.name||'',Number(x.t.comision_monto)||0,onOpenFactura?()=>onOpenFactura(x.b):null))}) : null}</>
     : k==='cos' ? r.cosLines.map(x=> x.k==='gv' ? ln({k:x.k,l:x.l,v:x.m,p:cosP(x.k),neg:true,on:()=>setSub2(s=>s==='gv'?null:'gv'),open:sub2==='gv',children:r.gvItems.map((e,i)=>subFila('g'+i,fmtFechaDMY(e.date),e.concept||e.category||'',Number(e.amount)||0,null))})
-        : ln({k:x.k,l:x.l,v:x.m,p:cosP(x.k),neg:true,est:x.k==='cot'&&r.estimado,on:onOpenResultadoAnio}))
+        : ln({k:x.k,l:x.l,v:x.m,p:cosP(x.k),neg:true,est:(x.k==='cot'&&r.estimado)||(x.k==='rem'&&r.remEst),on:onOpenResultadoAnio}))
     : r.comList.length ? r.comList.map(x=>ln({k:'c'+(x.pid||x.nombre),l:x.nombre,v:x.m,neg:true,on:x.pid&&onOpenProveedor?()=>onOpenProveedor(x.pid):null}))
     : <div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones pagadas este mes</div>
   const detCard = k => <div style={{...card}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>{({ing:'Ingresos',cos:'Costos de operación',com:'Comisiones pagadas'})[k]} de {MES_L[cM-1].toLowerCase()}</span>{k!=='com'&&<span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>vs {MES_L[(cM+10)%12].toLowerCase()}</span>}</div>{detalle(k)}</div>
