@@ -4110,8 +4110,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     o.pct=margenPct(o.res,o.ing); return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow])
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
-  const _fin8ISO = (()=>{ const d=new Date(); d.setDate(d.getDate()+56); return d.toISOString().slice(0,10) })()
-  const flujoNeto8 = (billing||[]).filter(b=>b&&!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido','Programada'].includes(b.status)&&b.due&&String(b.due).slice(0,10)<=_fin8ISO).reduce((a,b)=>a+saldoBill(b),0) - (costosOfiMes*(56/30.4)+comisSaldo.porPagar+comisSaldo.porDevengar)
+  const flujoNeto8 = flujoCajaProyectado({billing:(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing, terceros, costosOfiRows}).fin   // misma fuente que la página Flujo de caja
   const vencMes = vencidoTot
   // Mi trabajo (operativo del usuario)
   const _miIniT = INICIALES_RESP[user?.name]||null
@@ -9855,39 +9854,136 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
   )
 }
 // Flujo de caja proyectado, semana a semana: entra (cobros esperados + programadas) vs sale (costos de oficina + proveedores). Marca la semana apretada.
-function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], saldoInicial=0 }){
-  // FLUJO NETO (entra − sale), sin saldo absoluto: no depende de un saldo manual del banco (dato que no se alimenta). Muestra cuánto MÁS entra que sale cada semana y acumulado.
-  const now=new Date(); const day=(now.getDay()+6)%7; const mon=new Date(now); mon.setDate(now.getDate()-day); mon.setHours(0,0,0,0)
-  const iso=d=>d.toISOString().slice(0,10)
-  const costosMes=costosOficinaMes(costosOfiRows); const costoSem=costosMes/4.3333
-  const cxp=(()=>{ const billOk=bid=>{ if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }; return (terceros||[]).filter(t=>t&&(t.estado==='por_pagar'||t.estado==='pendiente')&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0) })()
-  const pend=(billing||[]).filter(b=>b&&!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido','Programada'].includes(b.status)&&b.due)
-  const weeks=[]; let run=0
-  for(let i=0;i<8;i++){ const ws=new Date(mon); ws.setDate(mon.getDate()+i*7); const we=new Date(ws); we.setDate(ws.getDate()+7); const wsI=iso(ws), weI=iso(we)
-    // La semana 0 absorbe también lo VENCIDO (due en el pasado) = cobro esperado ya; el resto, por su vencimiento.
-    const entra=pend.filter(b=>{ const d=String(b.due).slice(0,10); return i===0 ? d<weI : (d>=wsI && d<weI) }).reduce((a,b)=>a+saldoBill(b),0)
-    const sale=costoSem + (i===0?cxp:0)
-    run += entra - sale
-    weeks.push({ lbl:`${ws.getDate()}-${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][ws.getMonth()]}`, entra, sale, run })
-  }
-  const maxV=Math.max(1,...weeks.map(w=>Math.max(w.entra,w.sale)))
-  const apretada=weeks.find(w=>w.run<0)
-  return (
-    <div style={{padding:'2px 0 4px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12,gap:8}}>
-        <span style={{fontSize:12,color:C.muted}}>Próximas 8 semanas · lo que entra vs lo que sale</span>
-        <span style={{fontSize:14,fontWeight:800,color:weeks[weeks.length-1].run>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{weeks[weeks.length-1].run>=0?'+':'−'}{fmt(Math.abs(weeks[weeks.length-1].run))} <span style={{fontSize:10,fontWeight:600,color:C.textSoft}}>neto</span></span>
-      </div>
-      <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
-        <div style={{display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr 1fr',padding:'8px 12px',...TH_BAND}}><span>Semana</span><span style={{textAlign:'right'}}>Entra</span><span style={{textAlign:'right'}}>Sale</span><span style={{textAlign:'right'}}>Neto acum.</span></div>
-        {weeks.map((w,i)=>(<div key={i} style={{display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr 1fr',padding:'8px 12px',fontSize:12,fontVariantNumeric:'tabular-nums',borderTop:`1px solid ${C.bgSoft}`,background:i%2?C.bgSoft:'#fff'}}><span style={{color:C.muted}}>{w.lbl}</span><span style={{textAlign:'right',color:w.entra>0?C.greenText:C.done}}>{w.entra>0?'+'+fmt(w.entra):'—'}</span><span style={{textAlign:'right',color:w.sale>0?C.overdueText:C.done}}>{w.sale>0?'−'+fmt(w.sale):'—'}</span><span style={{textAlign:'right',fontWeight:700,color:w.run<0?C.overdueText:C.accent}}>{w.run<0?'−'+fmt(Math.abs(w.run)):fmt(w.run)}</span></div>))}
-      </div>
-      {apretada
-        ? <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.overdueBg,borderRadius:10,padding:'10px 12px'}}><span style={{fontSize:11,fontWeight:700,color:C.overdueText}}>Semana del {apretada.lbl} · sale más de lo que entra (acumulado)</span><span style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>−{fmt(Math.abs(apretada.run))}</span></div>
-        : <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.greenBg,borderRadius:10,padding:'10px 12px'}}><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Caja neta proyectada en 8 semanas</span><span style={{fontSize:14,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>+{fmt(weeks[weeks.length-1].run)}</span></div>}
-      <div style={{fontSize:10,color:C.textSoft,marginTop:9,lineHeight:1.5}}>Es el flujo <b>neto</b> (cuánto más entra que sale), no el saldo del banco — así no depende de ningún dato que haya que cargar a mano. Entra = cobros esperados (lo vencido entra en la semana 0 + por cobrar + programadas por su vencimiento). Sale = costos de oficina por semana + comisiones por pagar.</div>
-    </div>
-  )
+// FLUJO DE CAJA PROYECTADO POR CLIENTE — fuente única de la página Flujo de caja y de la tarjeta de Inicio (aprobado 09-10-2026).
+// · Ritmo del cliente = mediana de días emisión→pago de sus últimas 12 facturas pagadas (0..365); con <3 pagadas, la mediana del estudio (último año).
+// · Emitida pendiente: entra en emisión + ritmo (o esta semana si ya pasó). Si lleva más de FLUJO_DUDA_DIAS sobre su ritmo → «en duda», fuera del flujo.
+// · Programada: si vencía en un mes anterior al actual → «sin emitir», fuera del flujo; si no, entra en max(vencimiento, hoy) + ritmo.
+// · Comisión por pagar: cuota ya pagada → esta semana; ligada a una cuota → la misma semana de su cuota (fuera, si su cuota está fuera);
+//   sin cuota pero con venta → repartida entre las cuotas pendientes de esa venta; sin nada → «sin cuota» (aviso para asignarla).
+// · Oficina = presupuesto mensual (costosOficinaMes) ÷ 4,33 por semana.
+const FLUJO_DUDA_DIAS = 30
+function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], semanas=8, hoy=new Date() }){
+  const DAY=86400000
+  const d0=new Date(hoy); d0.setHours(12,0,0,0)
+  const mon=new Date(d0); mon.setDate(d0.getDate()-((d0.getDay()+6)%7))
+  const tD=s=>{ const t=new Date(String(s||'').slice(0,10)+'T12:00:00').getTime(); return isNaN(t)?null:t }
+  const hoyT=d0.getTime(), monT=mon.getTime()
+  const wIdx=t=>t<monT?0:Math.floor((t-monT)/(7*DAY))
+  const med=a=>{ if(!a.length) return null; const x=[...a].sort((p,q)=>p-q), m=Math.floor(x.length/2); return x.length%2?x[m]:(x[m-1]+x[m])/2 }
+  const curYm=`${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}`
+  const vivas=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso')
+  const pag=vivas.filter(b=>b.status==='Pagado'&&b.paid_at&&b.issued_at&&b.invoice_no).map(b=>({c:String(b.client_id||''),p:tD(b.paid_at),d:Math.round((tD(b.paid_at)-tD(b.issued_at))/DAY)})).filter(x=>x.p&&x.d>=0&&x.d<=365)
+  const ritmoEstudio=Math.round(med(pag.filter(x=>x.p>=hoyT-365*DAY).map(x=>x.d))??med(pag.map(x=>x.d))??30)
+  const grp={}; pag.forEach(x=>{ (grp[x.c]=grp[x.c]||[]).push(x) })
+  const ritmoDe={}, histDe={}
+  Object.entries(grp).forEach(([c,a])=>{ const u=a.sort((x,y)=>y.p-x.p).slice(0,12); histDe[c]=u.length; ritmoDe[c]=u.length>=3?Math.round(med(u.map(x=>x.d))):ritmoEstudio })
+  const ritmo=c=>ritmoDe[String(c||'')]??ritmoEstudio
+  const weeks=Array.from({length:semanas},(_,i)=>{ const ws=new Date(monT+i*7*DAY); return {ini:`${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,'0')}-${String(ws.getDate()).padStart(2,'0')}`,entra:0,com:0} })
+  const cli={}; const C_=c=>{ const k=String(c||''); return cli[k]||(cli[k]={cid:k,entra:0,duda:0,sin:0,com:0,comFuera:0,nVenc:0,ritmo:ritmo(k),hist:histDe[k]||0}) }
+  const st={}; const duda={n:0,monto:0,cli:new Set()}, sinE={n:0,monto:0,previas:0}
+  vivas.forEach(b=>{
+    const c=C_(b.client_id)
+    if(['Pendiente','Vencido'].includes(b.status)&&b.invoice_no){ const m=saldoBill(b); if(!(m>0)) return
+      if(b.status==='Vencido') c.nVenc++
+      const base=tD(b.issued_at)??tD(b.due); if(base==null) return
+      const esp=base+c.ritmo*DAY
+      if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
+      const w=wIdx(Math.max(esp,hoyT)); st[b.id]={w,m,cid:c.cid}; if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
+    if(b.status==='Programada'&&!b.invoice_no){ const m=montoFactura(b)||Number(b.amount)||0; if(!(m>0)) return
+      const due=b.due||b.issued_at; const dYm=String(due||'').slice(0,7)
+      if(!dYm||dYm<curYm){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
+      const w=wIdx(Math.max(tD(due)??hoyT,hoyT)+c.ritmo*DAY); st[b.id]={w,m,cid:c.cid}; if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
+  })
+  const bById={}; vivas.forEach(b=>{ bById[String(b.id)]=b })
+  const porVenta={}; vivas.forEach(b=>{ if(b.sale_id&&st[b.id]) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
+  let comFuera=0; const sinCuota=[]
+  const aplica=(b,monto)=>{ const s0=st[b.id], c=C_(b.client_id)
+    if(b.status==='Pagado'){ weeks[0].com+=monto; c.com+=monto; return }
+    if(!s0) return
+    if(s0.fuera){ comFuera+=monto; c.comFuera+=monto; return }
+    if(s0.w<semanas){ weeks[s0.w].com+=monto; c.com+=monto } }
+  ;(terceros||[]).forEach(t=>{ if(!t||t.estado==='pagado') return; const monto=Number(t.monto)||0; if(!(monto>0)) return
+    const b=t.billing_id?bById[String(t.billing_id)]:null
+    if(t.billing_id){ if(b) aplica(b,monto); return }
+    const ps=t.sale_id?(porVenta[String(t.sale_id)]||[]):[]
+    if(!ps.length){ sinCuota.push({prov:t.proveedor||'Colaborador',monto,sale_id:t.sale_id||null}); return }
+    const tot=ps.reduce((a,x)=>a+(st[x.id]?.m||0),0)||1
+    ps.forEach(x=>aplica(x,monto*(st[x.id]?.m||0)/tot)) })
+  const oficinaSem=costosOficinaMes(costosOfiRows)/4.3333
+  let run=0; weeks.forEach(w=>{ w.of=oficinaSem; w.sale=oficinaSem+w.com; run+=w.entra-w.sale; w.run=run })
+  const E=weeks.reduce((a,w)=>a+w.entra,0), Cm=weeks.reduce((a,w)=>a+w.com,0), O=oficinaSem*semanas
+  const sinCuotaTot=sinCuota.reduce((a,x)=>a+x.monto,0)
+  const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
+  return {weeks,E,C:Cm,O,fin:run,ritmoEstudio,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,sinCuota,sinCuotaTot,clientes}
+}
+function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], clients=[], isDesktop=false, onOpenClientFicha }){
+  const F=useMemo(()=>flujoCajaProyectado({billing,terceros,costosOfiRows}),[billing,terceros,costosOfiRows])
+  const [fil,setFil]=useState('todos')
+  const nomDe=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c.name }); return m },[clients])
+  const nom=cid=>nomDe[cid]||'Sin cliente'
+  const fM=n=>(n<0?'−':'')+fmtMill(Math.abs(n))
+  const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'12px 14px'}
+  const k={fontSize:10,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',color:C.accent}
+  const ln=(l,v,col,sub)=><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'5px 0 5px '+(sub?12:0)+'px',borderTop:`1px solid ${C.bgSoft}`,fontSize:sub?12:13,color:sub?C.muted:C.text}}><span style={{minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</span><span style={{fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:col||C.text}}>{v}</span></div>
+  const aviso=(bg,fg,t,d,v,on)=><div onClick={on} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,borderRadius:10,padding:'9px 12px',background:bg,color:fg,cursor:on?'pointer':'default'}}><span style={{minWidth:0}}><span style={{display:'block',fontSize:12,fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</span><span style={{display:'block',fontSize:11,opacity:.85,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d}</span></span><span style={{fontSize:14,fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
+  const th={...TH_BAND,padding:isDesktop?'7px 6px':'7px 5px',textAlign:'right',whiteSpace:'nowrap'}
+  const td={padding:isDesktop?'7px 6px':'7px 5px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',fontSize:12}
+  const dim=<span style={{color:C.done}}>—</span>
+  const pos=v=>v?<span style={{color:C.greenText}}>+{fM(v)}</span>:dim
+  const negv=v=>v?<span style={{color:C.overdueText}}>−{fM(v)}</span>:dim
+  const lista=F.clientes.filter(c=>fil==='todos'||(fil==='com'&&(c.com||c.comFuera))||(fil==='duda'&&(c.duda||c.sin)))
+  const descargar=async()=>{ try{
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const head=['Cliente','Paga a los (días)','Facturas pagadas usadas','Entra 8 sem.','Comisiones 8 sem.','Neto','En duda','Sin emitir','Comisiones fuera del flujo','Facturas vencidas']
+      const data=F.clientes.map(c=>[nom(c.cid),c.ritmo,c.hist,Math.round(c.entra),Math.round(c.com),Math.round(c.entra-c.com),Math.round(c.duda),Math.round(c.sin),Math.round(c.comFuera),c.nVenc])
+      const sem=[['Semana del','Entra','Oficina','Comisiones','Neto acumulado'],...F.weeks.map(w=>[fmtFechaDMY(w.ini),Math.round(w.entra),Math.round(w.of),Math.round(w.com),Math.round(w.run)])]
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([head,...data]),'Por cliente'); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sem),'Por semana')
+      XLSX.writeFile(wb,`Flujo_de_caja_${new Date().toISOString().slice(0,10)}.xlsx`)
+    }catch(e){ appAlert('No se pudo generar el Excel: '+(e.message||e)) } }
+  const foto=<div style={card}>
+    <div style={k}>Caja neta · 8 semanas</div>
+    <div style={{fontSize:isDesktop?30:26,fontWeight:800,color:F.fin>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums',lineHeight:1.1,margin:'4px 0 8px'}}>{F.fin>=0?'+':''}{fM(F.fin)}</div>
+    {ln(isDesktop?'Entra · según cómo paga cada cliente':'Entra',`+${fM(F.E)}`,C.greenText)}
+    {ln('Sale',`−${fM(F.O+F.C)}`,C.overdueText)}
+    {ln('Oficina',`−${fM(F.O)}`,null,true)}
+    {ln(isDesktop?'Comisiones · cuando paga su cliente':'Comisiones',`−${fM(F.C)}`,null,true)}
+  </div>
+  const fuera=(F.duda.n||F.sinEmitir.n||F.comFuera>0||F.sinCuota.length)?<div>
+    <div style={{...k,margin:'2px 2px 6px'}}>Fuera del flujo</div>
+    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+      {F.duda.n>0&&aviso(C.overdueBg,C.overdueText,`En duda · ${F.duda.n} factura${F.duda.n!==1?'s':''}, ${F.duda.nCli} cliente${F.duda.nCli!==1?'s':''}`,isDesktop?`más de ${FLUJO_DUDA_DIAS} días sobre lo que ese cliente suele tardar`:`${FLUJO_DUDA_DIAS}+ días sobre su ritmo de pago`,fM(F.duda.monto),()=>setFil('duda'))}
+      {F.sinEmitir.n>0&&aviso(C.soonBg,C.soonText,`Cuotas sin emitir · ${F.sinEmitir.n}`,F.sinEmitir.previas?`${isDesktop?'no entran hasta emitirlas · ':''}${F.sinEmitir.previas} son de antes de junio`:'no entran hasta emitirlas',fM(F.sinEmitir.monto),()=>setFil('duda'))}
+      {F.comFuera>0&&aviso(C.azulBg,C.azulInfo,'Comisiones atadas a esas cuotas','salen solo si su cliente paga',fM(F.comFuera),()=>setFil('com'))}
+      {F.sinCuota.length>0&&aviso(C.soonBg,C.soonText,`Comisión sin cuota · ${F.sinCuota.length}`,[...new Set(F.sinCuota.map(x=>x.prov))].slice(0,2).join(', ')+' · asígnale la cuota para proyectarla',fM(F.sinCuotaTot))}
+    </div></div>:null
+  const tSem=<div>
+    <div style={{...k,margin:'2px 2px 6px'}}>Semana a semana</div>
+    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+      <thead><tr><th style={{...th,textAlign:'left'}}>Semana del</th><th style={th}>Entra</th>{isDesktop?<><th style={th}>Oficina</th><th style={th}>Comisiones</th></>:<th style={th}>Sale</th>}<th style={th}>Neto acum.</th></tr></thead>
+      <tbody>{F.weeks.map((w,i)=>{ const P=v=>v?<span style={{color:C.greenText}}>+{fM(v)}</span>:dim, N=v=>v?<span style={{color:C.overdueText}}>−{fM(v)}</span>:dim; return <tr key={i}><td style={{...td,textAlign:'left',color:C.muted}}>{fmtFechaDMY(w.ini)}</td><td style={td}>{P(w.entra)}</td>{isDesktop?<><td style={td}>{N(w.of)}</td><td style={td}>{N(w.com)}</td></>:<td style={td}>{N(w.sale)}</td>}<td style={{...td,fontWeight:700,color:w.run<0?C.overdueText:C.text}}>{fM(w.run)}</td></tr> })}</tbody>
+    </table></div></div>
+    {F.weeks.find(w=>w.run<0)&&<div style={{marginTop:8,borderRadius:10,padding:'9px 12px',background:C.overdueBg,color:C.overdueText,fontSize:12,fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?'Semana del ':'Desde el '}{fmtFechaDMY(F.weeks.find(w=>w.run<0).ini)} · sale más de lo que entra{isDesktop?' (acumulado)':''}</div>}
+  </div>
+  const chip=(v,l)=><button key={v} onClick={()=>setFil(v)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 10px',border:'none',cursor:'pointer',background:fil===v?C.accent:C.bgSoft,color:fil===v?'#fff':C.muted}}>{l}</button>
+  const tCli=<div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',margin:'2px 2px 6px'}}><span style={k}>Por cliente</span><span onClick={descargar} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Descargar Excel</span></div>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>{chip('todos','Todos')}{chip('com','Con comisiones')}{chip('duda','En duda o sin emitir')}</div>
+    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+      <thead><tr><th style={{...th,textAlign:'left'}}>Cliente</th><th style={th}>Entra</th><th style={th}>Comisiones</th><th style={th}>En duda</th>{isDesktop&&<th style={th}>Sin emitir</th>}</tr></thead>
+      <tbody>{lista.map(c=><tr key={c.cid} onClick={()=>c.cid&&onOpenClientFicha&&onOpenClientFicha(c.cid)} style={{cursor:c.cid?'pointer':'default'}}>
+        <td style={{...td,textAlign:'left',whiteSpace:'normal',minWidth:isDesktop?140:104}}><span style={{fontWeight:700,color:C.accent}}>{nom(c.cid)}</span><span style={{display:'block',fontSize:10.5,color:C.muted,marginTop:1}}>{isDesktop?(c.hist>=3?`paga a los ${c.ritmo} días`:`sin historial · ${c.ritmo} días`):`${c.ritmo} días${c.hist>=3?'':' (estudio)'}`}{c.nVenc>0&&<> · <span style={{color:C.overdueText,fontWeight:700,whiteSpace:'nowrap'}}>{c.nVenc} {isDesktop?`vencida${c.nVenc!==1?'s':''}`:'venc.'}</span></>}</span></td>
+        <td style={td}>{pos(c.entra)}</td>
+        <td style={td}>{negv(c.com)}{isDesktop&&c.comFuera>0&&<span style={{display:'block',fontSize:10.5,color:C.muted}}>+{fM(c.comFuera)} fuera</span>}</td>
+        <td style={td}>{c.duda?<span style={{color:C.overdueText}}>{fM(c.duda)}</span>:dim}</td>
+        {isDesktop&&<td style={td}>{c.sin?fM(c.sin):dim}</td>}
+      </tr>)}
+      {isDesktop&&lista.length>0&&<tr><td style={{...td,textAlign:'left',fontWeight:800}}>Total {lista.length} cliente{lista.length!==1?'s':''}</td><td style={{...td,fontWeight:800,color:C.greenText}}>+{fM(lista.reduce((a,c)=>a+c.entra,0))}</td><td style={{...td,fontWeight:800,color:C.overdueText}}>−{fM(lista.reduce((a,c)=>a+c.com,0))}</td><td style={{...td,fontWeight:800,color:C.overdueText}}>{fM(lista.reduce((a,c)=>a+c.duda,0))}</td><td style={{...td,fontWeight:800}}>{fM(lista.reduce((a,c)=>a+c.sin,0))}</td></tr>}
+      </tbody></table></div></div>
+    <div style={{fontSize:10.5,color:C.done,marginTop:6}}>Sin historial = menos de 3 facturas pagadas · usa la mediana del estudio ({F.ritmoEstudio} días)</div>
+  </div>
+  return isDesktop
+    ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,370px) minmax(0,1fr)',gap:16,alignItems:'start'}}><div style={{display:'flex',flexDirection:'column',gap:12,minWidth:0}}>{foto}{fuera}{tSem}</div><div style={{minWidth:0}}>{tCli}</div></div>
+    : <div style={{display:'flex',flexDirection:'column',gap:12}}>{foto}{fuera}{tSem}{tCli}</div>
 }
 // Fusionar clientes: une dos fichas duplicadas en una SIN perder nada. Sobreviviente = el que tiene datos.
 // Motor server-side (edge fn fusionar-clientes) reasigna todas las FKs; la app previsualiza y avisa al abogado responsable.
@@ -40895,9 +40991,9 @@ export default function App() {
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Estado de resultados' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
               <EstadoResultadosModal billing={billing} costosOfiRows={costosOfiRows} terceros={terceros} expenses={expenses} clients={clients} isDesktop={isDesktop} onOpenProveedor={id=>navTo({tab:'proveedores',provId:id})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})}/>
             </div>}
-            {tab==='flujoCaja'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:600,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
+            {tab==='flujoCaja'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1180,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Flujo de caja' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
-              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros}/>
+              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} clients={clients} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha}/>
             </div>}
             {tab==='miCarga'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Mi carga' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
