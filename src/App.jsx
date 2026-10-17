@@ -9882,11 +9882,14 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
   const cli={}; const C_=c=>{ const k=String(c||''); return cli[k]||(cli[k]={cid:k,entra:0,duda:0,sin:0,com:0,comFuera:0,antic:0,nVenc:0,ritmo:ritmo(k),hist:histDe[k]||0}) }
   const st={}; const duda={n:0,monto:0,cli:new Set()}, sinE={n:0,monto:0,previas:0}
   // Pagos ya recibidos sin factura (anticipo disponible): esa plata ya entró, así que rebaja las cuotas programadas más antiguas
-  // de su venta (o del cliente, si el anticipo no tiene venta). Solo falta emitir la factura. El subarriendo se paga por mes y no se cruza.
+  // de su venta (o del cliente, si el anticipo no tiene venta). Solo falta emitir la factura. El subarriendo es mensual: un pago sin factura
+  // cubre solo la cuota de ESE mes (pago entre 15 días antes y 20 días después de su vencimiento), nunca la de otro mes.
   const cubierto={}; let antTot=0
   ;(anticipos||[]).filter(a=>a&&a.estado==='disponible'&&!a.billing_id&&Number(a.monto)>0).sort((x,y)=>String(x.fecha||'').localeCompare(String(y.fecha||''))).forEach(a=>{
     let r=Number(a.monto)
-    vivas.filter(b=>b.status==='Programada'&&!b.invoice_no&&b.billing_type!=='subarriendo'&&(a.sale_id?String(b.sale_id)===String(a.sale_id):String(b.client_id)===String(a.client_id)))
+    const fa=new Date(String(a.fecha||'').slice(0,10)+'T12:00:00').getTime()
+    const mesOk=b=>{ const d=new Date(String(b.due||'').slice(0,10)+'T12:00:00').getTime(); return !isNaN(fa)&&!isNaN(d)&&fa>=d-15*86400000&&fa<=d+20*86400000 }
+    vivas.filter(b=>b.status==='Programada'&&!b.invoice_no&&(a.sale_id?String(b.sale_id)===String(a.sale_id):String(b.client_id)===String(a.client_id))&&(b.billing_type==='subarriendo'?mesOk(b):true))
       .sort((x,y)=>String(x.due||'').localeCompare(String(y.due||''))).forEach(b=>{ if(r<1) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0); if(!(m>0)) return; const u=Math.min(m,r); cubierto[b.id]=(cubierto[b.id]||0)+u; r-=u; antTot+=u }) })
   vivas.forEach(b=>{
     const c=C_(b.client_id)
