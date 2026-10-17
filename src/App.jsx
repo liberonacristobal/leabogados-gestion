@@ -8767,7 +8767,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
                   <div onClick={()=>abrirEdit(r)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,color:C.text}}>{r.item}</div>
-                      {r.desde&&r.monto_prev!=null&&<div style={{fontSize:10,color:C.soonText,fontWeight:600,marginTop:1}}>subió en {MESES[+String(r.desde).slice(5,7)-1]} · antes {fmt(r.monto_prev)}</div>}
+                      {r.desde&&r.monto_prev!=null&&<div style={{fontSize:10,color:C.soonText,fontWeight:600,marginTop:1}}>{!Number(r.monto_prev)?'nuevo desde':Number(r.monto)<Number(r.monto_prev)?'bajó en':'subió en'} {MESES[+String(r.desde).slice(5,7)-1]}{Number(r.monto_prev)?` · antes ${fmt(r.monto_prev)}`:''}</div>}
                     </div>
                     <span style={{fontSize:13,fontWeight:600,color:r.es_ingreso?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{r.es_ingreso?'−':''}{fmt(eff(r))}</span>
                     <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'/></svg>
