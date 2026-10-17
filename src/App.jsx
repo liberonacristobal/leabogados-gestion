@@ -9525,7 +9525,8 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
     bld:<><rect x='3' y='4' width='18' height='16' rx='2'/><path d='M3 10h18M8 4v16'/></>,
     ret:<><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></>,
     doc:<><path d='M14 2H6a2 2 0 0 0-2 2v16l4-2 4 2 4-2V8z'/><path d='M14 2v6h6'/></>,
-    iva:<><rect x='3' y='4' width='18' height='16' rx='2'/><path d='M3 10h18'/></>}
+    iva:<><rect x='3' y='4' width='18' height='16' rx='2'/><path d='M3 10h18'/></>,
+    prov:<><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/></>}
   return (<div>
     {/* Filtro: Año / Por mes + mes + año */}
     <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:9,flexWrap:'wrap',marginBottom:12}}>
@@ -9547,7 +9548,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       const sg = v => (v<0?'−':'')+fmtMill(Math.abs(v))
       // Tarjeta chica (composición / gestión): ícono + etiqueta + cifra; misma forma para todas las hermanas.
       const st=(k,path,ibg,icol,lab,val,vcol,on)=><div key={k} onClick={on} className='pv-c' style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
-        {isDesktop&&<span style={{width:28,height:28,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>}
+        <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>
         <div style={{minWidth:0,flex:1}}><div style={{fontSize:11.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14.5,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
       const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
       const abrirRes=()=>scope==='mes'?(onOpenEstadoResultados&&onOpenEstadoResultados()):(onOpenResultadoAnio&&onOpenResultadoAnio())
@@ -9562,7 +9563,7 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
         <div style={grid4}>
           {st('fac',IC.fac,C.azulBg,C.azulInfo,'Facturación propia',fmtMill(R.fac+R.rex),C.azulInfo,()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {st('sub',IC.bld,C.greenBg,C.greenText,'Subarriendo',R.sub?'+'+fmtMill(R.sub):'$0',C.greenText,()=>onOpenSubarriendo&&onOpenSubarriendo())}
-          {st('cos',IC.peop,C.overdueBg,C.overdueText,'Costos de operación',R.cos?'−'+fmtMill(R.cos):'$0',C.overdueText,()=>setSub('costos'))}
+          {st('cos',IC.peop,C.overdueBg,C.overdueText,isDesktop?'Costos de operación':'Costos',R.cos?'−'+fmtMill(R.cos):'$0',C.overdueText,()=>setSub('costos'))}
           {st('com',IC.com,C.soonBg,C.soonText,'Comisiones',R.com?'−'+fmtMill(R.com):'$0',C.soonText,()=>onOpenProveedores&&onOpenProveedores())}
         </div>
       </> })()}
@@ -9578,13 +9579,13 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
       const retPer = ret.rows.filter(r=>enPer(r.date)).reduce((a,r)=>a+r.amount,0)
       const ivaPeriodo = comprasRows.filter(d=>enPer(d.fecha_emision)).reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
       const st=(k,path,ibg,icol,lab,val,vcol,on,bg)=><div key={k} onClick={on} className='pv-c' style={{background:bg||C.card,border:`1px solid ${bg?'transparent':C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
-        {isDesktop&&<span style={{width:28,height:28,borderRadius:8,background:bg?C.card:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>}
+        <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:bg?C.card:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>
         <div style={{minWidth:0,flex:1}}><div style={{fontSize:11.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14.5,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
       return <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
         {st('ret',IC.ret,C.tealBg,C.tealText,'Ingresos de socios',fmtMill(retPer),C.tealText,()=>onOpenRetiros&&onOpenRetiros(),C.tealBg)}
         {st('gv',IC.doc,C.bgWarm,C.muted,'Gastos varios',fmtMill(R.gv),C.accent,()=>onOpenVarios&&onOpenVarios())}
         {st('iva',IC.iva,C.azulBg,C.azulInfo,'Compras · IVA',fmtMill(ivaPeriodo),C.azulInfo,()=>setSub('compras'))}
-        {st('prov',IC.com,C.soonBg,C.soonText,'Proveedores',pp>0?fmtMill(pp):'al día',pp>0?C.soonText:C.greenText,()=>onOpenProveedores&&onOpenProveedores())}
+        {st('prov',IC.prov,C.soonBg,C.soonText,'Proveedores',pp>0?fmtMill(pp):'al día',pp>0?C.soonText:C.greenText,()=>onOpenProveedores&&onOpenProveedores())}
       </div> })()}
 
     {L('De la firma')}
