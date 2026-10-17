@@ -995,11 +995,18 @@ const comisionMesTerc = (terceros, ym) => (terceros||[]).filter(t=>t&&t.estado==
 // Gastos varios de oficina: cargos del cliente interno que NO están ya en la planilla de costos (sueldos, previsión, PPM, contadora,
 // arriendo, gastos comunes, honorarios), ni retiros/comisiones, ni trámites reembolsables. 2026-10-15: se excluyen también
 // «Leyes sociales», «Remuneraciones» y el PPM (Impuestos y patentes › PPM), que la conciliación del banco empezó a registrar y se contaban dos veces.
-const _GV_EXCL = new Set(['Sueldos','Retiros','Comisiones','Proveedores','Bono','Contadora','Arriendo','Gastos comunes','Honorarios','Arriendo y espacio','Notaria','Notaría','CBR','Registro Civil','Archivo Judicial','Diario Oficial','Leyes sociales','Remuneraciones'])
+// 2026-10-17: de «Arriendo y espacio» solo se excluye arriendo/GGCC (vienen de la planilla); la limpieza sí es gasto vario.
+const _GV_EXCL = new Set(['Sueldos','Retiros','Comisiones','Proveedores','Bono','Contadora','Arriendo','Gastos comunes','Honorarios','Notaria','Notaría','CBR','Registro Civil','Archivo Judicial','Diario Oficial','Leyes sociales','Remuneraciones'])
 function gastosVariosOfiItems(expenses, clients, ym){
   const ofi=(clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')))
   if(!ofi) return []
-  return (expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').startsWith(ym)&&!_GV_EXCL.has(String(e.category||''))&&!(String(e.category||'')==='Impuestos y patentes'&&/ppm/i.test(String(e.subcategory||''))))
+  return (expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').startsWith(ym)&&!_GV_EXCL.has(String(e.category||''))&&!(String(e.category||'')==='Impuestos y patentes'&&/ppm/i.test(String(e.subcategory||'')))&&!(String(e.category||'')==='Arriendo y espacio'&&!/limpieza|aseo/i.test(String(e.subcategory||''))))
+}
+// Contadora pagada en el banco en el mes (incluye extras como la Operación Renta, que la planilla no trae).
+function contadoraBancoMes(expenses, clients, ym){
+  const ofi=(clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')))
+  if(!ofi) return 0
+  return (expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').startsWith(ym)&&(String(e.category||'')==='Contadora'||/contador/i.test(String(e.subcategory||'')))).reduce((a,e)=>a+(Number(e.amount)||0),0)
 }
 function gastosVariosOfiMes(expenses, clients, ym){ return gastosVariosOfiItems(expenses,clients,ym).reduce((a,e)=>a+(Number(e.amount)||0),0) }
 // Facturado SII (DEVENGADO) de un período: SOLO facturas con DTE real (dte_xml not null) — el único facturado que reconoce el SII.
@@ -9384,7 +9391,7 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
     {sec('cos',C.azulBg,C.accent,<><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></>,'Costos de operación','planilla + gastos varios',fmtMp(costosOper),C.accent,
       <>{row('Remuneraciones',fmtMp(S(m=>R(m,'rem'))),months.some(m=>rmes[m]?.remEst&&cmBy[m])?'banco · mes en curso de la planilla':'pagadas en el banco')}
         {row('Cotizaciones',fmtMp(cotiz),'de Claudia')}
-        {row('Contadora',fmt(contadora))}
+        {row('Contadora',fmt(S(m=>Number((rmes[m]?.cosLines||[]).find(x=>x.k==='con')?.m)||0)))}
         {row('Arriendo',fmtMp(arriendo))}
         {row('Gastos comunes',fmtMp(ggcc))}
         {otrosC>0?row('Otros (planilla)',fmtMp(otrosC)):null}
@@ -9417,9 +9424,83 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
     <div style={{fontSize:11,color:C.muted,lineHeight:1.6,margin:'14px 4px 0'}}>Misma fuente que el Estado de resultados. {estim?'Algunos meses incluyen estimados (cotizaciones/PPM de Claudia aún pendientes).':''}</div>
 
     {(()=>{
+      // Presupuesto vs real. Presupuesto = Costos de oficina por categoría (sin PPM ni subarriendo, vigente por mes con desde/monto_prev).
+      // Real = las mismas líneas de costo de resultadoMes (planilla + banco + gastos varios), así el total cuadra con «Costos de operación».
+      const allM=Array.from({length:maxM},(_,i)=>i+1)
+      const CATS=[['rem','Remuneraciones'],['cot','Leyes sociales'],['arr','Arriendo y GGCC'],['gv','Gastos varios'],['con','Contadora']]
+      const budCat=r=>{ const c=String(r.categoria||''), it=String(r.item||''); if(/contador/i.test(it)) return 'con'; if(c==='Remuneraciones') return 'rem'; if(c==='Leyes sociales') return 'cot'; if(c==='Arriendo y espacio'&&!/limpieza|aseo/i.test(it)) return 'arr'; return 'gv' }
+      const vacio=()=>({rem:0,cot:0,arr:0,gv:0,con:0})
+      const budM=m=>{ const o=vacio(); (costosOfiRows||[]).filter(r=>r&&r.activo!==false&&!r.es_ingreso&&!esPPMcosto(r)).forEach(r=>{ const eff=(r.desde&&pad(m)<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; o[budCat(r)]+=Number(eff)||0 }); return o }
+      const LMAP={rem:'rem',cot:'cot',arr:'arr',con:'con',otr:'gv',gv:'gv'}
+      const realM=m=>{ const r=rmes[m]; const o=vacio(); if(!r) return o; if(!r.conPlanilla){ const b=budM(m); Object.keys(o).forEach(k=>o[k]=b[k]); o.gv+=Number(r.gv)||0; return o }
+        ;(r.cosLines||[]).forEach(x=>{ const k=LMAP[x.k]; if(k) o[k]+=Number(x.m)||0 }); return o }
+      const tot=o=>Object.values(o).reduce((a,v)=>a+v,0)
+      const filas=allM.map(m=>{ const b=budM(m), r=realM(m); return {m,b,r,bt:tot(b),rt:tot(r),est:!!(rmes[m]&&(rmes[m].estimado||!rmes[m].conPlanilla))} })
+      const bud=filas.reduce((a,f)=>a+f.bt,0), real=filas.reduce((a,f)=>a+f.rt,0), dv=real-bud
+      if(!(bud>0)) return null
+      const resto=Array.from({length:12-maxM},(_,i)=>maxM+1+i), budResto=resto.reduce((a,m)=>a+tot(budM(m)),0)
+      const proy=real+budResto, budAnio=bud+budResto
+      const catTot=k=>({b:filas.reduce((a,f)=>a+f.b[k],0), r:filas.reduce((a,f)=>a+f.r[k],0)})
+      const gvGrupos=(()=>{ const g={}; allM.forEach(m=>(rmes[m]?.gvItems||[]).forEach(e=>{ const l=[e.category,e.subcategory].filter(Boolean).join(' › ')||'Sin categoría'; g[l]=(g[l]||0)+(Number(e.amount)||0) }))
+        const otr=allM.reduce((a,m)=>a+(Number((rmes[m]?.cosLines||[]).find(x=>x.k==='otr')?.m)||0),0); if(otr) g['Otros (planilla)']=otr
+        return Object.entries(g).sort((a,b)=>b[1]-a[1]) })()
+      const dCol=v=>Math.abs(v)<1?C.done:v>0?C.overdueText:C.greenText
+      const dTxt=v=>Math.abs(v)<1?'—':(v>0?'+':'−')+fmtMill(Math.abs(v))
+      const pct=bud>0?Math.abs(dv)/bud*100:0
+      const per=maxM===12?String(yr):`ene–${MES_C[maxM-1]}`
+      const kLb={fontSize:isDesktop?10:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+      const kt=(k,ic,bg,fg,lab,val,sub)=>{ const blanco=bg===C.card; return <div key={k} style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'13px 13px':'11px 10px',display:'flex',gap:isDesktop?11:8,alignItems:'center',minWidth:0}}>
+        <KpiIco n={ic} c={fg} soft={blanco}/>
+        <div style={{minWidth:0,flex:1}}><div style={{...kLb,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?22:18,fontWeight:800,color:fg,letterSpacing:-.5,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
+      const sobre=dv>0
+      const estChip=<span style={{fontSize:9.5,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 6px',marginLeft:5}}>est.</span>
+      // Fila única para ambos formatos: escritorio = 4 columnas; celular = nombre con «ppto.» debajo, desvío y real a la derecha.
+      const fila=(key,lab,b,r,{est,sub,open,on,tot:esTot,ppto}={})=>{ const d=r==null?null:r-b
+        const nameCol=sub?C.muted:C.accent
+        if(isDesktop) return <div key={key} onClick={on} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 110px 110px 100px',gap:10,alignItems:'center',padding:sub?'5px 14px 5px 30px':'9px 14px',borderTop:sub?'none':`1px solid ${esTot?C.border:C.bgSoft}`,background:sub||open?C.bgSoft:'transparent',cursor:on?'pointer':'default',fontSize:sub?11.5:12.5,fontVariantNumeric:'tabular-nums'}}>
+          <span style={{fontWeight:esTot?800:sub?600:700,color:nameCol,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}{est?estChip:null}{on?<span style={{marginLeft:6,display:'inline-block',verticalAlign:'middle'}}>{chev(open)}</span>:null}</span>
+          <span style={{textAlign:'right',color:sub?C.muted:C.text,fontWeight:esTot?800:500}}>{fmtMill(b)}</span>
+          <span style={{textAlign:'right',color:sub?C.muted:C.text,fontWeight:esTot?800:600}}>{r==null?<span style={{color:C.done}}>{ppto||'—'}</span>:fmtMill(r)}</span>
+          <span style={{textAlign:'right',fontWeight:sub?600:700,color:d==null?C.done:dCol(d)}}>{d==null?'—':dTxt(d)}</span>
+        </div>
+        return <div key={key} onClick={on} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto auto',gap:10,alignItems:'center',padding:sub?'6px 12px 6px 24px':'9px 12px',borderTop:sub?'none':`1px solid ${esTot?C.border:C.bgSoft}`,background:sub||open?C.bgSoft:'transparent',cursor:on?'pointer':'default',fontSize:sub?11.5:12.5,fontVariantNumeric:'tabular-nums'}}>
+          <span style={{minWidth:0}}><span style={{display:'block',fontWeight:esTot?800:sub?600:700,color:nameCol,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}{est?estChip:null}</span><span style={{display:'block',fontSize:10.5,color:C.done,whiteSpace:'nowrap'}}>ppto. {fmtMill(b)}</span></span>
+          <span style={{fontSize:11.5,fontWeight:700,textAlign:'right',minWidth:54,color:d==null?C.done:dCol(d)}}>{d==null?'—':dTxt(d)}</span>
+          <span style={{fontWeight:esTot?800:700,textAlign:'right',minWidth:58,color:sub?C.muted:C.text}}>{r==null?<span style={{color:C.done,fontWeight:500}}>{ppto||'—'}</span>:fmtMill(r)}</span>
+        </div> }
+      const head=(t)=>isDesktop?<div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 110px 110px 100px',gap:10,padding:'8px 14px',background:C.bgSoft}}>{[t,'Presupuesto','Real','Desvío'].map((h,i)=><span key={h} style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.accent,textAlign:i?'right':'left',whiteSpace:'nowrap'}}>{h}</span>)}</div>:null
+      const pvOpen=open&&String(open).startsWith('pv')?open:(scope==='mes'?'pvm'+selM:null)
+      const tg=id=>setOpen(o=>(o===id||(!o&&pvOpen===id))?'pvx':id)
+      const mesFilas=f=>{ const id='pvm'+f.m, o=pvOpen===id; return [fila(id,isDesktop?MESES[f.m-1]:MES_C[f.m-1],f.bt,f.rt,{est:f.est,open:o,on:()=>tg(id)}),
+        ...(o?CATS.map(([k,l])=>fila(id+k,l,f.b[k],f.r[k],{sub:true})):[])] }
+      const ordM=isDesktop?filas:[...filas].reverse()
+      const card2={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}
+      const secT=t=><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.accent,margin:'16px 4px 8px'}}>{t}</div>
+      return <>
+        <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Presupuesto vs real · {per}{maxM<12?' '+yr:''}</div>
+        <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
+          {kt('pb','file',C.card,C.accent,'Presupuesto',fmtMill(bud),`costos ${per}`)}
+          {kt('pr','wallet',C.azulBg,C.accent,'Real',fmtMill(real),'banco + planilla')}
+          {kt('pd','alert',sobre?C.ambarBg:C.greenBg,sobre?C.soonText:C.greenText,'Desvío',dTxt(dv),`${pct.toFixed(1).replace('.',',')} % ${sobre?'sobre':'bajo'} ppto.`)}
+          {kt('pp','chart',C.tealBg,C.tealText,'Proyección',fmtMill(proy),`ppto. ${fmtMill(budAnio)}`)}
+        </div>
+        {secT('Mes a mes')}
+        <div style={card2}>{head('Mes')}{ordM.flatMap(mesFilas)}
+          {resto.length>0&&fila('pvresto',isDesktop?`${MESES[maxM]}${resto.length>1?'–'+MESES[11]:''}`:`${MES_C[maxM]}${resto.length>1?'–'+MES_C[11]:''}`,budResto,null,{ppto:'proyectado'})}
+          {fila('pvtot',String(yr),budAnio,proy,{tot:true})}
+        </div>
+        {secT(`Por categoría · ${per}`)}
+        <div style={card2}>{head('Categoría')}
+          {CATS.flatMap(([k,l])=>{ const t=catTot(k), id='pvc'+k, o=pvOpen===id, dr=k==='gv'&&gvGrupos.length>0
+            return [fila(id,l,t.b,t.r,dr?{open:o,on:()=>tg(id)}:{}), ...(dr&&o?gvGrupos.map(([g,v])=><div key={id+g} style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) 110px 110px 100px':'minmax(0,1fr) auto',gap:10,padding:isDesktop?'5px 14px 5px 30px':'6px 12px 6px 24px',background:C.bgSoft,fontSize:11.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}><span style={{minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}}>{g}</span>{isDesktop?<span/>:null}<span style={{whiteSpace:'nowrap',fontWeight:600,textAlign:'right'}}>{fmtMill(v)}</span>{isDesktop?<span/>:null}</div>):[])] })}
+          {fila('pvctot','Total',bud,real,{tot:true})}
+        </div>
+      </>
+    })()}
+
+    {(()=>{
       const allM=Array.from({length:maxM},(_,i)=>i+1)
       const sinEnl=(ventas||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(yr)&&[33,34,61].includes(Number(d.tipo_dte))&&!d.billing_id)
-      const desv=allM.filter(m=>{ const r=cmBy[m]; if(!r) return false; const real=Number(r.sueldos)+Number(r.cotizaciones)+Number(r.ppm)+Number(r.contadora)+Number(r.arriendo)+Number(r.gastos_comunes)+Number(r.honorarios)+Number(r.otros_costos); const bud=costosOficinaMes(costosOfiRows,pad(m)); return bud>0&&Math.abs(real-bud)/bud>0.2 })
       const faltaClaudia=allM.filter(m=>{ const r=cmBy[m]; return r && (Number(r.cotizaciones)===0||Number(r.ppm)===0||r.estimado) })
       const sldFalta=allM.filter(m=>{ const r=cmBy[m]; return !r || Number(r.sueldos)===0 })
       const pendCierre=allM.filter(m=>cierreDisponible(m)&&mesEstado(m)!=='cerrado')   // ya corresponde cerrar por fecha, pero faltan datos o está estimado
@@ -9428,7 +9509,6 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
         [pendCierre.length===0,'Cierre de meses',pendCierre.length?`${pendCierre.length} mes${pendCierre.length!==1?'es':''} por cerrar · faltan datos reales (completa abajo)`:`se cierran solos · ${nCerrados} cerrado${nCerrados!==1?'s':''}`, null],
         [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia', faltaClaudia.length?{label:'editar',on:()=>abrirEditor(faltaClaudia[0])}:null],
         [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],
-        [desv.length===0,'Costos vs presupuesto',desv.length?`${desv.length} mes${desv.length!==1?'es':''} con desvío mayor a 20% vs el presupuesto`:'en línea con el presupuesto', desv.length?{label:'editar',on:()=>abrirEditor(desv[0])}:null],
       ]
       return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
         <div style={card}>{(()=>{ const out=[]; checks.forEach(([ok,t,d,act],i)=>{
@@ -9643,7 +9723,8 @@ function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[
   // Remuneraciones: lo pagado en el banco para ese mes; si aún no hay pagos (mes en curso), la planilla.
   const remB=remuneracionesBancoMes(expenses,clients,ym,fu?.boleta), remEst=!(remB.total>0)
   const rem = remB.total>0 ? remB.total : (n('sueldos')+n('honorarios'))
-  let cosLines = row ? [['rem','Remuneraciones',rem],['cot','Cotizaciones',n('cotizaciones')],['arr','Arriendo y GGCC',n('arriendo')+n('gastos_comunes')],['con','Contadora',n('contadora')],['otr','Otros costos',n('otros_costos')]]
+  const conB=contadoraBancoMes(expenses,clients,ym)
+  let cosLines = row ? [['rem','Remuneraciones',rem],['cot','Cotizaciones',n('cotizaciones')],['arr','Arriendo y GGCC',n('arriendo')+n('gastos_comunes')],['con','Contadora',conB>0?conB:n('contadora')],['otr','Otros costos',n('otros_costos')]]
     : [['pre','Presupuesto de oficina',(costosOfiRows||[]).filter(r=>!esPPMcosto(r)).reduce((a,r)=>a+(Number(eff(r))||0)*(r.es_ingreso?-1:1),0)]]
   const ppm = row ? n('ppm') : (costosOfiRows||[]).filter(esPPMcosto).reduce((a,r)=>a+(Number(eff(r))||0),0)
   const gvItems=gastosVariosOfiItems(expenses,clients,ym), gv=gvItems.reduce((a,e)=>a+(Number(e.amount)||0),0)
