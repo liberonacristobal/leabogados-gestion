@@ -39418,13 +39418,19 @@ export default function App() {
       // Salvaguarda: avisar si hay facturas emitidas (con folio) asociadas (caso de alto riesgo: sí confirma)
       const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('sale_id',id)
       const emitidas = (cuotas||[]).filter(b=>b.invoice_no)
+      // Gastos/fondos y comisiones no se van con la venta: quedarían colgando de una venta eliminada (la base lo bloquea, trg_guard_sale_delete)
+      const [{count:nG},{count:nT}] = DEMO ? [{count:0},{count:0}] : await Promise.all([
+        supabase.from('expenses').select('id',{count:'exact',head:true}).eq('sale_id',id).is('deleted_at',null),
+        supabase.from('terceros_pagos').select('id',{count:'exact',head:true}).eq('sale_id',id)])
+      if((nG||0)+(nT||0)>0){ appAlert(`Esta venta tiene ${[nG?`${nG} gasto${nG===1?'':'s'} o fondo${nG===1?'':'s'}`:'',nT?`${nT} comisi${nT===1?'ón':'ones'}`:''].filter(Boolean).join(' y ')}. Muévelos a otra venta antes de eliminarla.`); return }
       if(emitidas.length>0 && !await appConfirm(`Esta venta tiene ${emitidas.length} factura(s) ya emitida(s). ¿Eliminar la venta y TODAS sus cuotas igual?`)) return
       // Soft-delete: la venta y sus cuotas van a la papelera (restaurables), no se borran físicamente
       const now=new Date().toISOString()
       const saleRow=sales.find(x=>x.id===id)
       const cuotasRows=billing.filter(b=>b.sale_id===id)
       await supabase.from('billing').update({deleted_at:now}).eq('sale_id',id)
-      await supabase.from('sales').update({deleted_at:now}).eq('id',id)
+      const {error:eS}=await supabase.from('sales').update({deleted_at:now}).eq('id',id)
+      if(eS && !DEMO){ if(cuotasRows.length) await supabase.from('billing').update({deleted_at:null}).in('id',cuotasRows.map(c=>c.id)); appAlert('No se pudo eliminar la venta: '+eS.message); return }
       setBilling(p=>p.filter(b=>b.sale_id!==id))
       setSales(p=>p.filter(x=>x.id!==id))
       setModal(null)
