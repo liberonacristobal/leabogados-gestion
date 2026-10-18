@@ -162,7 +162,7 @@ serve(async (req) => {
       }
     }
 
-    const { data: clients } = await sb.from("clients").select("id,name,status");
+    const { data: clients } = await sb.from("clients").select("id,name,status,drive_folder_id");
     const clientByName = new Map<string, any>();
     (clients || []).forEach((c) => { if (!clientByName.has(norm(c.name))) clientByName.set(norm(c.name), c); });
 
@@ -170,6 +170,7 @@ serve(async (req) => {
     // learnings kind 'cliente_folder': key = nombre de folder normalizado, value = client_id.
     const { data: aliasRows } = await sb.from("learnings").select("key,value").eq("kind", "cliente_folder");
     const aliasSet = new Set<string>((aliasRows || []).map((r) => norm(String(r.key))));
+    const aliasMap = new Map<string, string>((aliasRows || []).map((r) => [norm(String(r.key)), String(r.value)]));
 
     // Candidatos (para dry-run y para aplicar). Fuzzy contra clientes VIVOS: una carpeta nueva que se
     // parece demasiado a un cliente existente (typo) NO se crea a ciegas → va a compuerta humana (needsReview),
@@ -197,7 +198,10 @@ serve(async (req) => {
       if (terminadosByName.has(nm)) wouldTerminate.push(c.name);
     }
     if (body.dryRun) {
-      return json({ ok: true, dryRun: true, activos: activos.length, terminados: terminadosByName.size,
+      // deno-lint-ignore no-explicit-any
+      const byIdDry = new Map<string, any>((clients || []).map((c) => [String(c.id), c]));
+      const wouldLink = [...new Set(activos.map((f) => clientByName.get(norm(f.name)) || byIdDry.get(aliasMap.get(norm(f.name)) || "")).filter((c) => c && !c.drive_folder_id).map((c) => c.name))];
+      return json({ ok: true, dryRun: true, activos: activos.length, terminados: terminadosByName.size, wouldLinkN: wouldLink.length, wouldLink,
         wouldAddN: wouldAdd.length, wouldAdd: wouldAdd.slice(0, 80),
         needsReviewN: needsReview.length, needsReview: needsReview.slice(0, 80),
         wouldTerminateN: wouldTerminate.length, wouldTerminate: wouldTerminate.slice(0, 80) });
@@ -210,7 +214,7 @@ serve(async (req) => {
     for (const f of activos) {
       if (clientByName.has(norm(f.name)) || aliasSet.has(norm(f.name))) continue;
       if (!safeAdd.has(norm(f.name))) continue;   // near-duplicate (typo) → no crear, va a revisión
-      const { data: nc, error } = await sb.from("clients").insert({ name: f.name, status: "Activo" }).select("id,name").single();
+      const { data: nc, error } = await sb.from("clients").insert({ name: f.name, status: "Activo", drive_folder_id: f.id }).select("id,name,drive_folder_id").single();
       if (!error && nc) { added.push(f.name); clientByName.set(norm(f.name), nc); }
       else if (error) addErrors.push(`${f.name}: ${error.message || error.code || "?"}`);
     }
@@ -230,7 +234,20 @@ serve(async (req) => {
       if (!error) terminated.push(c.name);
     }
 
-    const summary = { at: new Date().toISOString(), added, addedN: added.length, terminated, terminatedN: terminated.length,
+    // 3) VINCULAR: cliente reconocido por nombre o alias aprendido, sin drive_folder_id → guarda el id de su carpeta
+    //    (así la app abre su carpeta y no intenta crearla de nuevo). Solo rellena vacíos; nunca pisa un vínculo existente.
+    const linked: string[] = [];
+    // deno-lint-ignore no-explicit-any
+    const byId = new Map<string, any>((clients || []).map((c) => [String(c.id), c]));
+    // Primero las carpetas con el nombre exacto del cliente; después las que calzan por alias (la exacta manda).
+    const porNombre = (f: any) => clientByName.get(norm(f.name)), porAlias = (f: any) => byId.get(aliasMap.get(norm(f.name)) || "");
+    for (const [f, c] of [...activos.map((f) => [f, porNombre(f)]), ...activos.map((f) => [f, porNombre(f) ? null : porAlias(f)])] as any[]) {
+      if (!c || c.drive_folder_id) continue;
+      const { error } = await sb.from("clients").update({ drive_folder_id: f.id }).eq("id", c.id).is("drive_folder_id", null);
+      if (!error) { c.drive_folder_id = f.id; linked.push(c.name); }
+    }
+
+    const summary = { at: new Date().toISOString(), added, addedN: added.length, terminated, terminatedN: terminated.length, linked, linkedN: linked.length,
       needsReview, needsReviewN: needsReview.length, activos: activos.length };
     await setConfig(sb, "clientes_drive_sync_last", JSON.stringify(summary));
     return json({ ok: true, ...summary, addErrors });

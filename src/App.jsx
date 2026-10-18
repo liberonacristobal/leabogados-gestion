@@ -39143,13 +39143,13 @@ export default function App() {
   // Carpeta en Drive por cliente ACTIVO (best-effort, idempotente). Se dispara cuando un cliente queda Activo.
   // Anti-duplicado en dos capas: (a) drive_folder_id ya seteado → no llama; (b) el edge reusa la carpeta si ya existe;
   // (c) aprende learnings 'cliente_folder' (nombre normalizado → client_id) para que el sync Drive→app NUNCA recree un duplicado.
-  const ensureClientDriveFolder=useCallback(async(cli)=>{
+  const ensureClientDriveFolder=useCallback(async(cli,{silent=false}={})=>{
     try{
       if(!cli || cli.status!=='Activo' || cli.drive_folder_id || cli.is_occasional || cli.is_internal) return
       const nm=(cli.name||'').trim(); if(!nm) return
       const res=await driveCall({action:'createFolder', name:nm})
       // Carpeta MUY parecida ya en Drive → no creo otra; aviso para que el usuario la revise/ajuste manualmente (evita carpetas duplicadas).
-      if(res?.conflict){ const nombres=(res.similar||[]).map(s=>`• ${s.name}`).join('\n'); appAlert(`Ojo con Drive: ya hay ${(res.similar||[]).length>1?'carpetas parecidas':'una carpeta parecida'} a «${nm}»:\n\n${nombres}\n\nNo creé una nueva para no duplicar. Revisa/ajusta la carpeta en Drive (o renombra) y vuelve a guardar el cliente.`); return }
+      if(res?.conflict){ if(silent) return; const nombres=(res.similar||[]).map(s=>`• ${s.name}`).join('\n'); appAlert(`Ojo con Drive: ya hay ${(res.similar||[]).length>1?'carpetas parecidas':'una carpeta parecida'} a «${nm}»:\n\n${nombres}\n\nNo creé una nueva para no duplicar. Revisa/ajusta la carpeta en Drive (o renombra) y vuelve a guardar el cliente.`); return }
       const fid=res?.folderId||res?.id; if(!fid) return
       await supabase.from('clients').update({drive_folder_id:fid}).eq('id',cli.id)
       setClients(p=>p.map(c=>c.id===cli.id?{...c,drive_folder_id:fid}:c))
@@ -39172,6 +39172,12 @@ export default function App() {
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
       ensureProyectoCartera(data)   // si quedó Activa, aparece en el Panel de Cartera (idempotente)
+      // Venta Activa → su cliente tiene carpeta en Drive. Cubre los clientes creados desde el formulario rápido de la venta
+      // (no pasan por el editor de clientes). Se lee el cliente de la BD porque puede ser recién creado; sin alertas aquí.
+      if(!DEMO && data.status==='Activo' && data.client_id && !(clients.find(c=>String(c.id)===String(data.client_id))?.drive_folder_id)){
+        supabase.from('clients').select('id,name,status,drive_folder_id,is_occasional,is_internal').eq('id',data.client_id).maybeSingle()
+          .then(({data:cli})=>{ if(cli) ensureClientDriveFolder(cli,{silent:true}) },()=>{})
+      }
       // Insertar cuotas (función reutilizable)
       const insertarCuotas = async() => {
         // Resguardo: no crear una programada por un cobro que YA está representado por una factura de esta venta.
