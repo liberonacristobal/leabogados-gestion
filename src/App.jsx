@@ -38948,15 +38948,22 @@ export default function App() {
       setSession(session)
       if(session){ loadUserRole(session.user.email).then(u=>{ if(u) setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]}) }).catch(()=>{}) }
     }).catch(()=>{}).finally(()=>{ clearTimeout(authSafety); finishAuth() })
-    const {data:{subscription}}=onAuthChange(async(_,session)=>{
+    // El callback es SÍNCRONO y lo que consulta Supabase va diferido (setTimeout 0). Al abrir la app con el token vencido,
+    // supabase-js renueva DENTRO de su inicialización y espera a este callback; si aquí se hace `await supabase.from(...)`,
+    // esa consulta espera a que termine la inicialización → bloqueo mutuo y la app queda para siempre en el loader
+    // (visto en prod 18-10: el iPhone renovó el token y no hizo ninguna consulta más). Recargar "arreglaba" porque el token ya quedaba renovado.
+    const {data:{subscription}}=onAuthChange((event,session)=>{
       finishAuth()   // llegó un evento de auth → ya no bloquees el spinner
       setSession(session)
-      if(session){
-        let u=null; try{ u = await loadUserRole(session.user.email) }catch(_){}
-        if(u) setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})   // si el rol no resolvió, un efecto reintenta (no dejamos user con rol null)
-        if(session.provider_token)saveDriveToken(session.provider_token)
-        if(session.provider_refresh_token)saveDriveRefresh(session.provider_refresh_token, session.user.email)   // conexión permanente de Drive (plan B)
-      } else { setUser(null); setUserRole(null); setActualRole(null) }
+      if(!session){ setUser(null); setUserRole(null); setActualRole(null); return }
+      if(session.provider_token)saveDriveToken(session.provider_token)
+      const email=session.user.email, prt=session.provider_refresh_token
+      setTimeout(async()=>{
+        if(prt)saveDriveRefresh(prt, email)   // conexión permanente de Drive (plan B)
+        if(event==='TOKEN_REFRESHED') return   // renovar el token no cambia el rol (y no debe mandar al limitado a Tareas cada hora)
+        let u=null; try{ u = await loadUserRole(email) }catch(_){}
+        if(u) setUser({email,name:u?.name||email.split('@')[0]})   // si el rol no resolvió, un efecto reintenta (no dejamos user con rol null)
+      },0)
     })
     return ()=>{ clearTimeout(authSafety); subscription.unsubscribe() }
   },[])
