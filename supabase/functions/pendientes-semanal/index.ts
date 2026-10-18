@@ -100,7 +100,7 @@ serve(async (req) => {
     const hoyCL = new Date().toLocaleDateString("en-CA",{ timeZone:"America/Santiago" });
     const t0 = Date.parse(hoyCL);
     const diasVenc = (iso:string)=> iso ? Math.round((t0 - Date.parse(String(iso).slice(0,10))) / 86400000) : null; // + = vencida
-    const fDia = (iso:string)=>{ try { return new Date(String(iso).slice(0,10)+"T00:00:00").toLocaleDateString("es-CL",{ day:"numeric", month:"short" }); } catch { return String(iso); } };
+    const fDia = (iso:string)=>{ const m = String(iso || "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso || ""); };   // dd-mm-aaaa (fmtFechaDMY)
 
     // Rango de la semana en curso (lunes a domingo) para el saludo.
     const _hoy = new Date(hoyCL+"T00:00:00Z");

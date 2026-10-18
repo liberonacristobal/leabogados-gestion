@@ -28,7 +28,7 @@ const LIMITADOS = [
 const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
 const qpSafe = (h:string) => String(h||"").replace(/[ \t]+$/gm,"");
 const diasDesde = (iso:string|null) => iso ? Math.floor((Date.now()-new Date(iso).getTime())/86400000) : null;
-const fechaCL = (iso:string|null) => { if(!iso) return "nunca"; try{ return new Date(iso).toLocaleDateString("es-CL",{day:"2-digit",month:"long"}); }catch(_){ return String(iso).slice(0,10); } };
+const fechaCL = (iso:string|null) => { if(!iso) return "nunca"; const m = String(iso).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso); };   // dd-mm-aaaa
 
 async function sendMail(to:string, subject:string, html:string){
   const client = new SMTPClient({ connection:{ hostname:"smtp.gmail.com", port:465, tls:true, auth:{ username:GMAIL_USER, password:GMAIL_PASS } } });
