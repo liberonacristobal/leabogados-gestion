@@ -3406,7 +3406,8 @@ function matchVentaFactura(fac, ventasCliente, ufRef){
   return {ok:true, sale_id:best.v.id, year:best.v.year, score:best.sc, why:best.why.join('+'), title:best.v.title||'Venta'}
 }
 // Costo de terceros (reparto) de una venta en UF, anualizado si es recurrente. Fuente única del costo → margen de contribución = ventaUF − costoVentaUF.
-const costoVentaUF = (s, ufRef) => ((parseFloat(s?.cost_uf)||0)*(esRecurrente(s)?12:1)) + (s?.moneda==='CLP'&&s?.cost_clp&&ufRef>0 ? (parseFloat(s.cost_clp)||0)/ufRef*(esRecurrente(s)?12:1) : 0)
+const costoVentaUF = (s, ufRef) => { const u=(parseFloat(s?.uf_value)>0?parseFloat(s.uf_value):ufRef)   // costo pactado en pesos → UF de la venta (congelada), no la de hoy
+  return ((parseFloat(s?.cost_uf)||0)*(esRecurrente(s)?12:1)) + (s?.moneda==='CLP'&&s?.cost_clp&&u>0 ? (parseFloat(s.cost_clp)||0)/u*(esRecurrente(s)?12:1) : 0) }
 // Marca en terceros_pagos.referencia de un costo registrado directo desde un cargo de Banco (su Deshacer lo borra).
 const REF_COSTO_BANCO = 'Registrado desde Banco'
 // Comisiones a terceros de UNA venta — FUENTE ÚNICA. Si la venta tiene comisiones registradas (terceros_pagos, sin las de
@@ -3562,25 +3563,34 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Sin cliente'
   const rsDe = b => { const rl=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const name=b.receptor_name||rl.name||''; const rut=b.receptor_rut||rl.rut||''; return {name,rut} }
   const list = tab==='pagadas'?pagadas:porCobrar, tot = tab==='pagadas'?pagTot:pcTot
+  // Pagadas + Por cobrar = Emitido (cobrado + saldo = monto de cada factura). Redondeo que cuadra; Pagadas fija (también se ve en el Inicio).
+  const [pagV,pcV]=redondearPartes([pagTot,pcTot],emTot>=1e6?1e5:1e4,[0])
   const segBtn=(k,lbl,val,n,t)=>(
-    <button onClick={()=>setTab(k)} style={{flex:1,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`1px solid ${tab===k?t.bd:C.border}`,background:tab===k?t.bg:'#fff'}}>
+    <button onClick={()=>setTab(k)} style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`1px solid ${tab===k?t.bd:C.border}`,background:tab===k?t.bg:'#fff'}}>
       <div style={{fontSize:12,fontWeight:700,color:tab===k?t.fg:C.muted}}>{lbl}</div>
-      <div style={{fontSize:17,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtShort(val)}</div>
+      <div style={{fontSize:16,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',marginTop:1,whiteSpace:'nowrap'}}>{fmtShort(val)}</div>
       <div style={{fontSize:9.5,color:C.muted}}>{n} factura{n!==1?'s':''}</div>
     </button>)
+  const opS={alignSelf:'center',fontSize:15,fontWeight:800,color:C.muted,flexShrink:0}
   return (
     <div>
       <div style={{padding:'16px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}><span style={{fontSize:17}}><Gl n='chevL'/></span> Volver</span>
           <div style={{minWidth:0}}><span style={{fontSize:16,fontWeight:800,color:C.accent}}>Facturas de {mesLbl}</span><span style={{fontSize:11,color:C.muted,fontWeight:600}}> · emitidas este mes</span></div>
-          <span style={{marginLeft:'auto',fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>emitido {fmtShort(emTot)}</span>
         </div>
       </div>
       <div style={{maxWidth:760,margin:'0 auto',padding:'14px 16px 24px'}}>
-        <div style={{display:'flex',gap:8,marginBottom:14}}>
-          {segBtn('porcobrar','Por cobrar',pcTot,porCobrar.length,{fg:C.soonText,bg:C.soonBg,bd:'#EAD9A8'})}
-          {segBtn('pagadas','Pagadas',pagTot,pagadas.length,{fg:C.greenText,bg:C.greenBg,bd:'#BFE0CF'})}
+        <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'stretch'}}>
+          {segBtn('pagadas','Pagadas',pagV,pagadas.length,{fg:C.greenText,bg:C.greenBg,bd:'#BFE0CF'})}
+          <span style={opS}>+</span>
+          {segBtn('porcobrar','Por cobrar',pcV,porCobrar.length,{fg:C.soonText,bg:C.soonBg,bd:'#EAD9A8'})}
+          <span style={opS}>=</span>
+          <div style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',border:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Emitido</div>
+            <div style={{fontSize:16,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:1,whiteSpace:'nowrap'}}>{fmtShort(emTot)}</div>
+            <div style={{fontSize:9.5,color:C.muted}}>{emFac.length} factura{emFac.length!==1?'s':''}</div>
+          </div>
         </div>
         <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.tileBg}}>
           {list.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'34px 0'}}>Sin facturas {tab==='pagadas'?'pagadas':'por cobrar'} este mes.</div>}
@@ -3921,9 +3931,10 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
             ['= Ingresos', fmtUFk(resAnio.verUF.ing), pe(resAnio.ing)],
             ['− Costos de operación', fmtUFk(resAnio.verUF.cos), pe(resAnio.cos)],
             ['− Comisiones pagadas', fmtUFk(resAnio.verUF.com), pe(resAnio.com)] ] },
-        { t:'Cobranza', pct:cobPct, uf:uf(iv.totalUF), clp:pe(ingYTD), lines:[
-            ['Meta de cobranza', fmtUFk(metaCobranza/ufR), pe(metaCobranza)],
-            ['Falta para la meta', fmtUFk(Math.max(0,metaCobranza-ingYTD)/ufR), pe(Math.max(0,metaCobranza-ingYTD))] ], bar:cobPct },
+        // Meta de cobranza (pesos) en UF con la UF promedio de lo cobrado → Cobrado − Meta = Sobre (o Meta − Cobrado = Falta) cuadra en UF.
+        { t:'Cobranza', pct:cobPct, uf:uf(iv.totalUF), clp:pe(ingYTD), lines:(()=>{ const mU=ingYTD>0&&iv.totalUF>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, sobre=ingYTD>=metaCobranza
+            const [a,b]=sobre?redondearPartes([mU,iv.totalUF-mU],1,[]):redondearPartes([iv.totalUF,mU-iv.totalUF],1,[0])
+            return [['Meta de cobranza', fmtUFk(sobre?a:a+b), pe(metaCobranza)], [sobre?'Sobre la meta':'Falta para la meta', fmtUFk(b), pe(Math.abs(ingYTD-metaCobranza))]] })(), bar:cobPct },
       ]
       const S=2, W=470, P=16, HDR=62, BAND=30, GAP=10, FOOT=30, LH=27
       const cardH = s => 14 + 42 + (s.lines.length*LH) + 10 + (s.bar!=null?16:0)
@@ -3986,7 +3997,9 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     const factCard=card('Facturado', V.fac, resAnio.fac, `${pct(resAnio.fac,m.bruto)}% de lo vendido`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoEmitido.total>0?row('Total emitido (con terceros y reembolsos)',facturadoEmitido.totalUF,facturadoEmitido.total):''))
     const cobCard=card('Cobrado propio', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)}% de la meta`, row('Comisiones pagadas',comU,comisYTD,true)+row('+ Comisiones percibidas',percU,percYTD)+row('Ingreso real',(iv.totalUF||0)-comU+percU,ingReal)+row('Total a caja',iv.totalCajaUF||0,iv.totalCaja||0)+`<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Según año de la venta</td></tr>`+yrsCob)
     const margCard=card(resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', V.res, resAnio.res, (resAnio.pct!=null?`${pct1(resAnio.pct)}% sobre los ingresos`:'— sobre los ingresos'), row('Facturado',V.fac,resAnio.fac)+(resAnio.sub?row('+ Subarriendo',V.sub,resAnio.sub):'')+(resAnio.rex?row('+ Comisión de externos',V.rex,resAnio.rex):'')+row('= Ingresos',V.ing,resAnio.ing)+row('Costos de operación',V.cos,resAnio.cos,true)+row('Comisiones pagadas',V.com,resAnio.com,true))
-    const cobranzaCard=card('Cobranza', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)}% de la meta`, row('Meta de cobranza',metaCobranza/ufR,metaCobranza)+row('Falta para la meta',Math.max(0,metaCobranza-ingYTD)/ufR,Math.max(0,metaCobranza-ingYTD)))
+    const _mU=ingYTD>0&&(iv.totalUF||0)>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, _sob=ingYTD>=metaCobranza
+    const [_a,_b]=_sob?redondearPartes([_mU,(iv.totalUF||0)-_mU],1,[]):redondearPartes([iv.totalUF||0,_mU-(iv.totalUF||0)],1,[0])
+    const cobranzaCard=card('Cobranza', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)}% de la meta`, row('Meta de cobranza',_sob?_a:_a+_b,metaCobranza)+row(_sob?'Sobre la meta':'Falta para la meta',_b,Math.abs(ingYTD-metaCobranza)))
     const dias=new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'})
     const hhmm=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})
     const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Resultado del año ${selYear} — ${BRAND.nombre}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:#3D3D3D;background:#fff;font-size:12px}.page{max-width:760px;margin:0 auto}@page{size:letter portrait;margin:14mm}@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center'><img src='${location.origin}${BRAND.logo.blanco}' alt='${BRAND.nombre}' style='height:26px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:800;letter-spacing:.3px'>RESULTADO DEL AÑO</div><div style='font-size:10px;color:#9FC4DD;margin-top:2px'>Ejercicio ${selYear}</div></div></div><div style='background:#E6F1FB;color:#185FA5;padding:8px 22px;display:flex;justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:.3px'><span>CORTE AL ${dias.toUpperCase()}</span><span>${hhmm} HRS</span></div><div style='padding:18px 22px'><div class='two'>${ventasCard}${factCard}</div>${cobCard}${margCard}${cobranzaCard}<div style='margin-top:8px;padding-top:10px;border-top:1px solid ${GRAY};font-size:9px;color:${AZ3};font-weight:700;letter-spacing:.3px'>DOCUMENTO INTERNO · ${BRAND.nombre} · ${BRAND.dominio||''}</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
@@ -4089,9 +4102,9 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
 
   const fuRes = useFuentesResultado()
   // Resultado real del año en curso (misma fuente que Oficina / Estado de resultados) para las alertas de costos: no el presupuesto.
-  const resYTDReal = useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients}, o={ing:0,cos:0,com:0,res:0}
-    for(let i=1;i<=_mNow;i++){ const r=resultadoMes(fuRes,deps,`${currentYear}-${String(i).padStart(2,'0')}`); o.ing+=r.ing; o.cos+=r.cos; o.com+=r.com; o.res+=r.res }
-    return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,currentYear,_mNow])
+  const resYTDReal = useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients,ufd:ufDias,ufFb:ufRef}, o={ing:0,cos:0,com:0,res:0,ingUF:0,cosUF:0,comUF:0}
+    for(let i=1;i<=_mNow;i++){ const r=resultadoMes(fuRes,deps,`${currentYear}-${String(i).padStart(2,'0')}`); o.ing+=r.ing; o.cos+=r.cos; o.com+=r.com; o.res+=r.res; o.ingUF+=r.ingUF; o.cosUF+=r.cosUF; o.comUF+=r.comUF }
+    return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,currentYear,_mNow,ufDias,ufRef])
   // Prioridades financieras (alertas del dueño) — se computa aquí para usar el conteo en la tarjeta de Accesos directos y reusar en la lista. De datos que ya existen.
   const prioridades = (()=>{
     const hoy=new Date().toISOString().slice(0,10)
@@ -4104,19 +4117,20 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     const cxpN=comisSaldo.provsPorPagar.size, cxpDias=comisSaldo.porPagarDesde?_diasDesde(comisSaldo.porPagarDesde):null
     const _pd=new Date(); _pd.setDate(1); _pd.setMonth(_pd.getMonth()-1); const prevYm=_pd.toISOString().slice(0,7)
     const _pdLbl=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+prevYm.slice(5,7)-1]
-    const entraPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm)).reduce((s,a)=>s+(Number(a.monto)||0),0)
-    const cuestaPrev=resultadoMes(fuRes,{billing,terceros,costosOfiRows,expenses,clients},prevYm).cos   // costo REAL del mes (banco + planilla + gastos varios)
+    const abPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm))
+    const entraPrev=abPrev.reduce((s,a)=>s+(Number(a.monto)||0),0), entraPrevUF=abPrev.reduce((s,a)=>s+(Number(a.monto)||0)/ufDelDia(ufDias,a.fecha,ufRef),0)
+    const rPrev=resultadoMes(fuRes,{billing,terceros,costosOfiRows,expenses,clients,ufd:ufDias,ufFb:ufRef},prevYm), cuestaPrev=rPrev.cos   // costo REAL del mes (banco + planilla + gastos varios)
     const cnA=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'cliente'
     const _wk=(()=>{ const d=new Date(); const m=new Date(d); m.setDate(d.getDate()-((d.getDay()+6)%7)); return m.toLocaleDateString('en-CA') })()
     const raw=[
       vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>go('cobranza')},
-      (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${fmtMon(entraPrev)} · costó ${fmtMon(cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
+      (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${vMon(entraPrevUF,entraPrev)} · costó ${vMon(rPrev.cosUF,cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
       progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
       cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}${cxpDias!=null?` · la más antigua cobrada hace ${nDias(cxpDias)}`:''}${comisSaldo.porDevengar>0?` · sujeto a cobro ${fmtShort(comisSaldo.porDevengar)}`:''}`,goLbl:'Ver',go:()=>navTo?navTo({tab:'proveedores'}):go('billing')},
       margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>go('repricing')},
       (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>go('horas')},
       porIdent>0 && {key:'identificar',sev:'b',icon:'receipt',monto:porIdent,t:`${fmtMon(porIdent)} por identificar`,s:'abonos en el banco sin conciliar',goLbl:'Conciliar',go:()=>onAcceso&&onAcceso('conciliacion')},
-      (resYTDReal.ing>0 && resYTDReal.res<0) && {key:'estructura',sev:'a',icon:'wallet',monto:-resYTDReal.res,t:'Aún no cubres los costos del año',s:`ingresos ${fmtMon(resYTDReal.ing)} < costos ${fmtMon(resYTDReal.cos+resYTDReal.com)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
+      (resYTDReal.ing>0 && resYTDReal.res<0) && {key:'estructura',sev:'a',icon:'wallet',monto:-resYTDReal.res,t:'Aún no cubres los costos del año',s:`ingresos ${vMon(resYTDReal.ingUF,resYTDReal.ing)} < costos ${vMon(resYTDReal.cosUF+resYTDReal.comUF,resYTDReal.cos+resYTDReal.com)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
     ].filter(Boolean)
     const off=(alertOff&&typeof alertOff==='object')?alertOff:{}
     return raw.filter(a=> off[a.key]==null || (a.monto||0) > off[a.key]*1.2 )
@@ -9112,9 +9126,15 @@ function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terceros=[]
   const neg=n=>Math.abs(Number(n)||0)<1?'$0':'−'+fmtMill(Math.abs(Number(n)||0))
   const esHoy=yr===curY
   const disp=banco?banco.saldo-reserva-porPagar:null
-  const ln=(l,v,{tot,menos}={})=><div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderTop:tot?`2px solid ${C.border}`:`1px solid ${C.border}`,fontSize:12.5}}>
+  // Cascada (18-10): signo en columna, «=» en los totales y cifras redondeadas a $0,1M que SUMAN el total visible
+  // (Disponible y Caja generada / Sin retirar fijos: son las cifras que se usan para decidir).
+  const [dispV,resV,ppV]=banco?redondearPartes([disp,reserva,porPagar],1e5,[0]):[0,0,0]
+  const [genV,cosV,comV,ppmV]=redondearPartes([caja.gen,caja.cos,caja.com,caja.ppm],1e5,[0])
+  const [sinV,retV]=redondearPartes([caja.sin,totalRet],1e5,[0])
+  const ln=(sg,l,v,{tot,menos}={})=><div style={{display:'grid',gridTemplateColumns:'14px minmax(0,1fr) auto',columnGap:7,alignItems:'center',padding:'7px 0',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,fontSize:12.5}}>
+    <span style={{textAlign:'center',fontSize:13,fontWeight:700,color:tot?C.accent:C.muted}}>{sg}</span>
     <span style={{color:tot?C.accent:C.text,fontWeight:tot?800:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{l}</span>
-    <span style={{marginLeft:'auto',fontWeight:tot?800:700,color:tot?C.accent:(menos?C.muted:C.text),fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
+    <span style={{fontWeight:tot?800:700,color:tot?C.accent:(menos?(v==='$0'?C.done:C.overdueText):C.text),fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
   const colH=(t,sub)=><div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}}><span style={{...SEC_LBL,whiteSpace:'nowrap'}}>{t}</span><span style={{marginLeft:'auto',fontSize:11,color:C.done,whiteSpace:'nowrap'}}>{sub}</span></div>
   const colSt={border:`1px solid ${C.border}`,borderRadius:14,padding:'13px 14px 9px',minWidth:0}
   const resLbl=editRes
@@ -9131,27 +9151,26 @@ function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terceros=[]
       {esHoy&&<div style={{...colSt,background:C.bgSoft}}>
         {colH('En el banco hoy',banco?`${isDesktop?'cuenta honorarios · ':''}${fmtFechaDMY(banco.al)}`:'')}
         {banco ? <>
-          {ln('Saldo en la cuenta',fM(banco.saldo))}
-          {ln('− Reserva',neg(reserva),{menos:true})}
-          {ln(isDesktop?'− Comisiones por pagar (ya cobradas)':'− Comisiones por pagar',neg(porPagar),{menos:true})}
+          {ln('','Saldo en la cuenta',fM(dispV+resV+ppV))}
+          {ln('−','Reserva',fM(resV),{menos:true})}
+          {ln('−',isDesktop?'Comisiones por pagar (ya cobradas)':'Comisiones por pagar',fM(ppV),{menos:true})}
           <div style={{display:'flex',alignItems:'flex-end',gap:10,marginTop:6,padding:'12px',borderRadius:12,background:disp>=0?C.greenBg:C.overdueBg}}>
+            <span style={{fontSize:14,fontWeight:800,color:disp>=0?C.greenText:C.overdueText,alignSelf:'center',width:14,textAlign:'center',flexShrink:0}}>=</span>
             <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:disp>=0?C.greenText:C.overdueText,whiteSpace:'nowrap'}}>{disp>=0?(isDesktop?'Disponible para retirar':'Disponible'):'Bajo la reserva'}
               {disp>0&&nSocios>1&&<span style={{display:'block',fontSize:11,fontWeight:600,textTransform:'none',letterSpacing:0,marginTop:2,opacity:.85}}>{fmtMill(disp/nSocios)} por socio</span>}</span>
-            <span style={{marginLeft:'auto',fontSize:isDesktop?26:22,fontWeight:800,letterSpacing:-.6,color:disp>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fM(disp)}</span>
+            <span style={{marginLeft:'auto',fontSize:isDesktop?26:22,fontWeight:800,letterSpacing:-.6,color:disp>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fM(dispV)}</span>
           </div></>
           : <div style={{fontSize:12,color:C.muted,padding:'8px 0 6px'}}>Falta una cartola con saldo de la cuenta de honorarios.</div>}
       </div>}
       <div style={colSt}>
         {colH('Caja del año',perLbl)}
-        {isDesktop&&<>
-          {ln('Cobrado',fM(caja.cob))}
-          {ln('− Costos reales',neg(caja.cos),{menos:true})}
-          {ln('− Comisiones pagadas',neg(caja.com),{menos:true})}
-          {ln('− PPM pagado',neg(caja.ppm),{menos:true})}
-        </>}
-        {ln('Caja generada',fM(caja.gen),{tot:isDesktop})}
-        {ln('− Retirado',neg(totalRet),{menos:true})}
-        {ln('Sin retirar del año',fM(caja.sin),{tot:true})}
+        {ln('','Cobrado',fM(genV+cosV+comV+ppmV))}
+        {ln('−','Costos reales',fM(cosV),{menos:true})}
+        {ln('−','Comisiones pagadas',fM(comV),{menos:true})}
+        {ln('−','PPM pagado',fM(ppmV),{menos:true})}
+        {ln('=','Caja generada',fM(genV),{tot:true})}
+        {ln('−','Retirado',fM(retV),{menos:true})}
+        {ln('=','Sin retirar del año',fM(sinV),{tot:true})}
       </div>
     </div>
   </div>)
