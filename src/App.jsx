@@ -39145,7 +39145,7 @@ export default function App() {
   // (c) aprende learnings 'cliente_folder' (nombre normalizado → client_id) para que el sync Drive→app NUNCA recree un duplicado.
   const ensureClientDriveFolder=useCallback(async(cli,{silent=false}={})=>{
     try{
-      if(!cli || cli.status!=='Activo' || cli.drive_folder_id || cli.is_occasional || cli.is_internal) return
+      if(!cli || cli.status!=='Activo' || cli.drive_folder_id || cli.is_occasional || cli.is_internal || cli.is_colaborador) return   // colaborador (p. ej. BDA) no es cliente: sin carpeta de cliente
       const nm=(cli.name||'').trim(); if(!nm) return
       const res=await driveCall({action:'createFolder', name:nm})
       // Carpeta MUY parecida ya en Drive → no creo otra; aviso para que el usuario la revise/ajuste manualmente (evita carpetas duplicadas).
@@ -39175,7 +39175,7 @@ export default function App() {
       // Venta Activa → su cliente tiene carpeta en Drive. Cubre los clientes creados desde el formulario rápido de la venta
       // (no pasan por el editor de clientes). Se lee el cliente de la BD porque puede ser recién creado; sin alertas aquí.
       if(!DEMO && data.status==='Activo' && data.client_id && !(clients.find(c=>String(c.id)===String(data.client_id))?.drive_folder_id)){
-        supabase.from('clients').select('id,name,status,drive_folder_id,is_occasional,is_internal').eq('id',data.client_id).maybeSingle()
+        supabase.from('clients').select('id,name,status,drive_folder_id,is_occasional,is_internal,is_colaborador').eq('id',data.client_id).maybeSingle()
           .then(({data:cli})=>{ if(cli) ensureClientDriveFolder(cli,{silent:true}) },()=>{})
       }
       // Insertar cuotas (función reutilizable)
