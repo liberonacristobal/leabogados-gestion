@@ -130,7 +130,8 @@ serve(async (req) => {
 
     // ── HTML helpers (marca LIBERONA ESCALA)
     const A = "#003C50", MUT = "#537281", DONE = "#99ABB4", RED = "#B5433F", AMB = "#9A6B12", GRN = "#177A5A";
-    const fmtFecha = (d: string) => { try { return new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" }); } catch { return String(d); } };
+    // Fecha canónica de la app: dd-mm-aaaa (igual que fmtFechaDMY).
+    const fmtFecha = (d: string) => { const m = String(d || "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(d || ""); };
     // Íconos SVG line (sobrios). En Mail de iPhone/Apple Mail se ven; en clientes que bloquean SVG, la fila queda igual (solo sin ícono).
     const svgIco = (stroke: string, paths: string) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;">${paths}</svg>`;
     const ICO_TAREAS = `<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>`;

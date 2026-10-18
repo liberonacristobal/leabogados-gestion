@@ -86,7 +86,7 @@ serve(async (req) => {
     const hoyCL = new Date().toLocaleDateString("en-CA",{ timeZone:"America/Santiago" });
     const t0 = Date.parse(hoyCL);
     const diasDe = (iso:string)=> iso ? Math.round((t0 - Date.parse(String(iso).slice(0,10))) / 86400000) : 0;
-    const fDia = (iso:string)=>{ const d=new Date(String(iso).slice(0,10)+"T00:00:00"); return `${d.getUTCDate()} ${MES[d.getUTCMonth()]}`; };
+    const fDia = (iso:string)=>{ const m = String(iso || "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso || ""); };   // dd-mm-aaaa (fmtFechaDMY)
     const mesAno = new Date(hoyCL+"T00:00:00Z").toLocaleDateString("es-CL",{ month:"long", year:"numeric", timeZone:"UTC" });
 
     // Saldo por cliente (fgCliente): saldo = fondos - gastos que descuentan.
