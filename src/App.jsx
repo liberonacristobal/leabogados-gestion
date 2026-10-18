@@ -1600,7 +1600,7 @@ function ClientStatusTabs({value,onChange,activeN,endedN,prospectoN}){
   )
 }
 
-function ClientsViewLimited({onAsociarTrabajo=null,clients,expenses,tasks,clientEntities,rendiciones,sales=[],billing=[],anticipos=[],currentUserName,onEdit,onAdd,onAddTask,onQuickTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onNuevoAnticipo,onConciliar,onOpenSale,onAjuste,onAssignSeries,onStatusChange,onEditTask,onEditExpense,onSaveFields,onImportDrive}) {
+function ClientsViewLimited({openFichaId=null,onOpenedFicha=null,onAsociarTrabajo=null,clients,expenses,tasks,clientEntities,rendiciones,sales=[],billing=[],anticipos=[],currentUserName,onEdit,onAdd,onAddTask,onQuickTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onNuevoAnticipo,onConciliar,onOpenSale,onAjuste,onAssignSeries,onStatusChange,onEditTask,onEditExpense,onSaveFields,onImportDrive}) {
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const isDesktop = useIsDesktop()
@@ -1609,6 +1609,8 @@ function ClientsViewLimited({onAsociarTrabajo=null,clients,expenses,tasks,client
   const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
   const [sFilter,setSFilter] = useState('Activo')
   const [ftab,setFtab] = useState('resumen')
+  // Salto desde otra vista (tocar el nombre del cliente en Gastos/Tareas): abre su ficha. Los limited ven la ficha sin honorarios (FichaTabs role limited).
+  useEffect(()=>{ if(openFichaId){ const c=clients.find(x=>String(x.id)===String(openFichaId)); if(c){ setFtab('resumen'); setSelected(c) } onOpenedFicha&&onOpenedFicha() } },[openFichaId])
 
   const activeN=clients.filter(c=>!c.is_internal&&(c.status||'Activo')==='Activo').length
   const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
@@ -2216,7 +2218,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
         const dest = (enviarA||'').trim() || adminEmails.join(',')
         const asunto = 'Liquidación caja chica — ' + me + ' — ' + periodo
         const lineas = marcados.map(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; return '• '+fmtFechaDMY(e.date)+' · '+(e.concept||'—')+' · '+cn+' · '+(e.category||'Otro')+' · $'+(e.amount||0).toLocaleString('es-CL') }).join('\n')
-        const texto = 'Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+me+'\nPeríodo: '+periodo+'\nN° de gastos: '+marcados.length+'\nFondo recibido: '+fmtCLP(fondoTot)+'\nGastado: '+fmtCLP(gastadoTot)+'\n'+(cubierto>0?'Cubierto por '+me+' — a reembolsar: '+fmtCLP(cubierto):'Saldo de caja: '+fmtCLP(saldoCaja))+'\n\nDetalle:\n'+lineas+'\n\nTOTAL: $'+totalReal.toLocaleString('es-CL')+'\n\nQuedo a disposición para cualquier consulta.'
+        const texto = 'Estimados,\n\nEspero que estén muy bien. Adjunto la liquidación de caja chica.\n\nResponsable: '+me+'\nPeríodo: '+periodo+'\nN° de gastos: '+marcados.length+'\nFondo recibido: '+fmtCLP(fondoTot)+'\nGastado: '+fmtCLP(gastadoTot)+'\n'+(cubierto>0?'Cubierto por '+me+' — a reembolsar: '+fmtCLP(cubierto):'Saldo de caja: '+fmtCLP(saldoCaja))+'\n\nDetalle:\n'+lineas+'\n\nTOTAL: $'+totalReal.toLocaleString('es-CL')+'\n\nQuedo a disposición para cualquier consulta.'
         // Mismo flujo que la rendición al cliente: Gmail API con PDF adjunto + cuerpo HTML; si no hay token, fallback a mailto + PDF imprimible.
         let sent=false
         // HTML + PDF se arman una sola vez (no dependen del token), para servir tanto al envío
@@ -2228,7 +2230,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
           const rows=gs.map(e=>`<tr><td style="padding:4px 0;font-size:12px;color:#3D3D3D">${fmtFechaDMY(e.date)} · ${esc((e.concept||'—'))}</td><td style="padding:4px 0;font-size:12px;color:#E24B4A;text-align:right;font-weight:bold;white-space:nowrap">-$${(e.amount||0).toLocaleString('es-CL')}</td></tr>`).join('')
           return `<div style="margin-top:14px"><div style="font-size:13px;font-weight:bold;color:#003C50;border-bottom:1px solid #003C50;padding-bottom:3px">${esc(cn)} — $${tot.toLocaleString('es-CL')}</div><table style="width:100%;border-collapse:collapse">${rows}</table></div>`
         }).join('')
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Adjunto la liquidación de caja chica de <b>${esc(me)}</b> — ${esc(periodo)}.</div><div style="background:#f5f5f5;border-radius:8px;padding:16px"><div style="font-size:13px;color:#666666">N° de gastos: <b style="color:#1a1a1a">${marcados.length}</b></div><table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;color:#3D3D3D"><tr><td style="padding:3px 0">Fondo recibido</td><td style="padding:3px 0;text-align:right">$${fondoTot.toLocaleString('es-CL')}</td></tr><tr><td style="padding:3px 0">Gastado</td><td style="padding:3px 0;text-align:right;color:#E24B4A">-$${gastadoTot.toLocaleString('es-CL')}</td></tr>${cubierto>0?`<tr><td style="padding:8px 0 3px;font-weight:bold;border-top:1.5px solid #537281">Cubierto por ${esc(me)} — a reembolsar</td><td style="padding:8px 0 3px;text-align:right;font-weight:bold;color:#A32D2D;border-top:1.5px solid #537281">$${cubierto.toLocaleString('es-CL')}</td></tr>`:`<tr><td style="padding:8px 0 3px;font-weight:bold;border-top:1.5px solid #537281">Saldo de caja</td><td style="padding:8px 0 3px;text-align:right;font-weight:bold;color:#0F6E56;border-top:1.5px solid #537281">$${saldoCaja.toLocaleString('es-CL')}</td></tr>`}</table>${filasHtml}<table style="width:100%;border-collapse:collapse;border-top:1.5px solid #537281;margin-top:14px"><tr><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#1a1a1a">TOTAL</td><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#E24B4A;text-align:right">-$${totalReal.toLocaleString('es-CL')}</td></tr></table></div><div style="font-size:12px;color:#999999;margin-top:16px">Se adjunta el PDF con el detalle por cliente.</div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee"><div style="font-size:11px;color:#999999">${BRAND.dominio} · ${BRAND.nombre}</div></div></div></body></html>`
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Espero que estén muy bien. Adjunto la liquidación de caja chica de <b>${esc(me)}</b> — ${esc(periodo)}.</div><div style="background:#f5f5f5;border-radius:8px;padding:16px"><div style="font-size:13px;color:#666666">N° de gastos: <b style="color:#1a1a1a">${marcados.length}</b></div><table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;color:#3D3D3D"><tr><td style="padding:3px 0">Fondo recibido</td><td style="padding:3px 0;text-align:right">$${fondoTot.toLocaleString('es-CL')}</td></tr><tr><td style="padding:3px 0">Gastado</td><td style="padding:3px 0;text-align:right;color:#E24B4A">-$${gastadoTot.toLocaleString('es-CL')}</td></tr>${cubierto>0?`<tr><td style="padding:8px 0 3px;font-weight:bold;border-top:1.5px solid #537281">Cubierto por ${esc(me)} — a reembolsar</td><td style="padding:8px 0 3px;text-align:right;font-weight:bold;color:#A32D2D;border-top:1.5px solid #537281">$${cubierto.toLocaleString('es-CL')}</td></tr>`:`<tr><td style="padding:8px 0 3px;font-weight:bold;border-top:1.5px solid #537281">Saldo de caja</td><td style="padding:8px 0 3px;text-align:right;font-weight:bold;color:#0F6E56;border-top:1.5px solid #537281">$${saldoCaja.toLocaleString('es-CL')}</td></tr>`}</table>${filasHtml}<table style="width:100%;border-collapse:collapse;border-top:1.5px solid #537281;margin-top:14px"><tr><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#1a1a1a">TOTAL</td><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#E24B4A;text-align:right">-$${totalReal.toLocaleString('es-CL')}</td></tr></table></div><div style="font-size:12px;color:#999999;margin-top:16px">Se adjunta el PDF con el detalle por cliente.</div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee"><div style="font-size:11px;color:#999999">${BRAND.dominio} · ${BRAND.nombre}</div></div></div></body></html>`
         const toAll = (cc||'').trim() ? dest+','+cc.trim() : dest
         const pdfName = `Liquidacion ${me} ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'
         let pdf=null; try{ pdf = await liquidacionPdfBase64({me, periodo, gastos:marcados, clients, resumen:{fondo:fondoTot, gastado:gastadoTot, saldo:saldoCaja}}) }catch(_){}
@@ -2700,7 +2702,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
                       }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:C.bgSoft,color:C.accent,fontSize:11,fontWeight:500,cursor:'pointer'}}>PDF</button>
                       <button onClick={()=>{
                         const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
-                        const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
+                        const b2=encodeURIComponent('Estimados,\n\nEspero que estén muy bien. Adjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
                         const mailLink=document.createElement('a'); mailLink.href='mailto:'+adminEmails.join(',')+'?subject='+a2+'&body='+b2; mailLink.click()
                       }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:C.bgSoft,color:C.muted,fontSize:11,fontWeight:500,cursor:'pointer'}}>Correo</button>
                       <button onClick={async()=>{
@@ -6712,6 +6714,10 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       saveF.proposal_amount_clp = _propAmountCLP
       saveF.activated_at = new Date().toISOString()
       saveF.status = 'Activo'
+    } else if(!sale?.id && saveF.status==='Activo' && !saveF.activated_at && !esSub) {
+      // Venta que nace Activa sin pasar por Propuesta: igual es una venta ganada → sella activación y monto para el embudo de conversión.
+      saveF.activated_at = new Date().toISOString()
+      if(saveF.proposal_amount_uf==null && saveF.proposal_amount_clp==null){ saveF.proposal_amount_uf = parseFloat(saveF.amount_uf)>0?parseFloat(saveF.amount_uf):null; saveF.proposal_amount_clp = saveF.proposal_amount_uf?null:(parseFloat(saveF.amount_clp)>0?Math.round(parseFloat(saveF.amount_clp)):null) }
     }
     // GUARD porcentaje: los tramos deben sumar 100% (si no, la venta se sub-facturaría permanentemente).
     if(cobroType==='porcentaje'){ const sp=(tramos||[]).reduce((a,t)=>a+(parseInt(t.pct)||0),0); if(sp!==100){ appAlert(`Los tramos "por porcentaje" deben sumar 100% (hoy suman ${sp}%).`); return } }
@@ -10260,7 +10266,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
-function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], terceros=[], onOpenMov, onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario, onGuardarClientRut}){
+function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], terceros=[], onOpenMov, onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario, onGuardarClientRut, onCubrirCuotas}){
   const [ptBusy,setPtBusy]=useState(null)        // sale_id en proceso de "pasar a Terminado"
   const [ptDone,setPtDone]=useState(()=>new Set()) // ventas ya pasadas en esta sesión
   const [ahBusy,setAhBusy]=useState(null)        // sale_id en proceso de "actualizar honorario"
@@ -10389,6 +10395,20 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       return cv.usado+cv.prog.reduce((a,x)=>a+x.uu,0) < cv.plan*0.97 })
   },[saludRows,sales,billing,ufMapFechas])
   const honorarioDesc=saludRows.filter(v=>v.honorario_descuadrado)
+  // Pago ya recibido (anticipo disponible, de UNA venta) que calza con sus cuotas programadas vencidas o del próximo mes
+  // (suma de las más antiguas ±2% o $1.000 = variación UF): esas cuotas ya están pagadas → «Cubrir» las deja Anticipadas. Caso Varas/Donoso/Cordomi.
+  const [cubiertasRD,setCubiertasRD]=useState(()=>new Set())
+  const anticipoCubre=useMemo(()=>{
+    const lim=new Date(); lim.setDate(lim.getDate()+31); const limISO=lim.toISOString().slice(0,10)
+    const progBySale={}; (billing||[]).forEach(b=>{ if(!b.deleted_at&&b.sale_id&&b.status==='Programada'&&!b.prepaid_anticipo_id&&String(b.due||'')<=limISO) (progBySale[String(b.sale_id)]=progBySale[String(b.sale_id)]||[]).push(b) })
+    const out=[]
+    ;(anticipos||[]).forEach(a=>{ if(a.estado!=='disponible'||!a.sale_id||cubiertasRD.has(String(a.id))) return; const m=Number(a.monto)||0; if(!(m>0)) return
+      const cs=(progBySale[String(a.sale_id)]||[]).sort((x,y)=>String(x.due||'').localeCompare(String(y.due||'')))
+      let sum=0; const sel=[]
+      for(const c of cs){ sum+=Number(c.amount)||0; sel.push(c); if(Math.abs(sum-m)<=Math.max(1000,m*0.02)){ out.push({a,cuotas:[...sel],sum}); return } if(sum>m*1.02) return }
+    })
+    return out
+  },[anticipos,billing,cubiertasRD])
   // Ventas COBRADAS en Borrador/Propuesta: tienen facturas emitidas/pagadas pero su estado las deja FUERA de "Vendido" (que cuenta solo Activo+Terminado). Trabajo real invisible → candidato a pasar a Terminado. Client-side desde sales+billing.
   const ventasBorradorCobrado=useMemo(()=>{
     const bySale={}; (billing||[]).forEach(b=>{ if(b.sale_id)(bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
@@ -10427,7 +10447,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     })
     return out.sort((a,b)=>b.nFact-a.nFact)
   },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
-  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
+  const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9.5,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -10528,6 +10548,15 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
           <button onClick={()=>onResolverDupAnticipo&&onResolverDupAnticipo(manual.id,true)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Es duplicado · dejar el del banco</button>
           <button onClick={()=>onResolverDupAnticipo&&onResolverDupAnticipo(manual.id,false)} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Son distintos</button>
         </div>
+      </div>)}
+    </div>}
+    {anticipoCubre.length>0&&<div style={secBox}>{sh('Pago recibido que cubre cuotas',C.greenText,anticipoCubre.length)}
+      <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>el cliente ya pagó (anticipo de la misma venta) y la cuota sigue por facturar · la diferencia es variación UF</div>
+      {anticipoCubre.map(({a,cuotas,sum})=><div key={a.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(a.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(a.client_id)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2}}>pago del {fmtFechaDMY(a.fecha)} · {cuotas.length} cuota{cuotas.length!==1?'s':''} desde {fmtFechaDMY(cuotas[0].due)}</div></div>
+          {amt(fmt(Number(a.monto)||0),`cuotas ${fmt(sum)}`,C.greenText)}</div>
+        {onCubrirCuotas&&<button onClick={async()=>{ await onCubrirCuotas(a.id,cuotas.map(c=>c.id)); setCubiertasRD(p=>new Set([...p,String(a.id)])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir {cuotas.length>1?`las ${cuotas.length} cuotas`:'la cuota'}</button>}
       </div>)}
     </div>}
     {cuotasSinGen.length>0&&<div style={secBox}>{sh('Cuotas sin generar',C.azulInfo,cuotasSinGen.length)}
@@ -18455,6 +18484,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   const [rendEdit,setRendEdit] = useState(null)   // rendición en edición (abre RendicionModal en modo edición)
   const [showHistorial,setShowHistorial] = useState(false)
   const [histTab,setHistTab] = useState('clientes')   // historial: 'clientes' (rendiciones) | 'notaria' (liquidaciones)
+  const [histSinEnv,setHistSinEnv] = useState(false)   // historial filtrado a rendiciones sin enviar (desde la tarjeta «Sin enviar»)
   const [histOrden,setHistOrden] = useState('nuevo')   // orden por fecha: 'nuevo' (más nuevo primero) | 'antiguo'
   const [emailRend,setEmailRend] = useState(null)
   const [devEmailRend,setDevEmailRend] = useState(null)   // reenviar/enviar el correo de devolución de una rendición
@@ -19512,12 +19542,12 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     </div>) }
   const gastosClasificar = (expenses||[]).filter(e=> e.type==='gasto' && e.bulk_import_id && e.client_id && !e.personal_de && !e.created_by && !esOficina(e.client_id) && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && !e.deleted_at)
   const isDesktop = useIsDesktop()   // Fase 3: desktop = 2-panel (lista de clientes izq + detalle/paneles der); movil = columna
-  return { marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen }
+  return { histSinEnv, setHistSinEnv, marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen }
 }
 
 const ESTADOS_G=[['vigentes','Vigentes'],['inactivos','Inactivos'],['incobrables','Incobrables'],['todos','Todos']]
 function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMovBanco,expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,onMoverAOficina,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened,openGastosOfi,onGastosOfiOpened,costosOfiMes=0,onOpenCostosOfi,onIrConciliacion,bulkImports=[],onUndoImport,navTo,onNavDone,onSolicitarFondos}) {
-  const { marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
+  const { histSinEnv, setHistSinEnv, marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
   const [orfPersona,setOrfPersona] = useState(null)   // gasto sin cliente → selector "Personal de" abierto (id)
   const [showMov,setShowMov] = useState(false)   // Revisar › Movilización
   const [sinDetTodos,setSinDetTodos] = useState(false)   // Revisar › Sin detalle: ver todos
@@ -21170,7 +21200,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               {/* Foto: protagonista "Rendido en el año" + alertas de acción anidadas (canon de la foto). Cero recálculo: sale de rendiciones/rendirPend/notaPendTotal. */}
               {(()=>{
                 const yr = hAnio || String(new Date().getFullYear())
-                const tile=(lbl,val,bg,col)=><div style={{flex:1,background:bg,borderRadius:10,padding:'8px 10px'}}><div style={{fontSize:9,color:col,textTransform:'uppercase',letterSpacing:.4}}>{lbl}</div><div style={{fontSize:14,fontWeight:700,color:col,marginTop:2,whiteSpace:'nowrap'}}>{val}</div></div>
+                const tile=(lbl,val,bg,col,onClick)=><div onClick={onClick} style={{flex:1,background:bg,borderRadius:10,padding:'8px 10px',cursor:onClick?'pointer':'default'}}><div style={{fontSize:9,color:col,textTransform:'uppercase',letterSpacing:.4}}>{lbl}</div><div style={{fontSize:14,fontWeight:700,color:col,marginTop:2,whiteSpace:'nowrap'}}>{val}</div></div>
                 if(histTab==='clientes'){
                   const act=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&!r.anulada_at)
                   const yrR=act.filter(r=>(r.created_at||'').slice(0,4)===yr)
@@ -21181,8 +21211,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                     <div style={{...SEC_LBL}}>Rendido en {yr}</div>
                     <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:25,fontWeight:800,color:C.greenText,letterSpacing:-.5}}>{fmt(montoYr)}</span><span style={{fontSize:12,color:C.muted}}>· {yrR.length} rendicion{yrR.length!==1?'es':''}</span></div>
                     {(prN>0||sinEnv>0)&&<div style={{display:'flex',gap:8,marginTop:12}}>
-                      {prN>0&&tile('Por rendir · +30d',`${prN} cliente${prN!==1?'s':''} · ${fmt(prMonto)}`,C.overdueBg,C.overdueText)}
-                      {sinEnv>0&&tile('Sin enviar',`${sinEnv} rendicion${sinEnv!==1?'es':''}`,C.soonBg,C.soonText)}
+                      {prN>0&&tile('Por rendir · +30d',`${prN} cliente${prN!==1?'s':''} · ${fmt(prMonto)}`,C.overdueBg,C.overdueText,()=>{setShowHistorial(false);setQ('');setShowRendiciones(true);setRendSub('rendir')})}
+                      {sinEnv>0&&tile('Sin enviar',`${sinEnv} rendicion${sinEnv!==1?'es':''}`,C.soonBg,C.soonText,()=>setHistSinEnv(v=>!v))}
                     </div>}
                   </div>
                 }
@@ -21223,10 +21253,12 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 const mesHdr=(g)=><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',margin:'8px 2px 6px'}}><span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>{mesLbl(g.k)}</span><span style={{fontSize:11,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)} · {g.items.length}</span></div>
                 const cardWrap=children=><div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'2px 13px',marginBottom:2}}>{children}</div>
                 if(histTab==='clientes'){
-                  const rends=(rendiciones||[]).filter(r=>{ if(r.tipo!=='cliente') return false; if(!okFecha(r)) return false; if(q){ const cl=clients.find(x=>x.id===r.client_id); if(!(cl?.name||'').toLowerCase().includes(q)) return false } return true }).sort(ord)
-                  if(!rends.length) return <div style={{color:C.muted,textAlign:'center',padding:24,fontSize:12}}>Sin rendiciones</div>
+                  const rends=(rendiciones||[]).filter(r=>{ if(r.tipo!=='cliente') return false; if(histSinEnv&&(r.sent_at||r.anulada_at)) return false; if(!okFecha(r)) return false; if(q){ const cl=clients.find(x=>x.id===r.client_id); if(!(cl?.name||'').toLowerCase().includes(q)) return false } return true }).sort(ord)
+                  const chipSinEnv=histSinEnv&&<div style={{display:'flex',justifyContent:'flex-start',margin:'2px 2px 8px'}}><button onClick={()=>setHistSinEnv(false)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:C.soonBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Solo sin enviar · quitar</button></div>
+                  if(!rends.length) return <>{chipSinEnv}<div style={{color:C.muted,textAlign:'center',padding:24,fontSize:12}}>Sin rendiciones</div></>
                   const activas=rends.filter(r=>!r.anulada_at), anuladas=rends.filter(r=>r.anulada_at)
                   return (<>
+                    {chipSinEnv}
                     {agrupar(activas).map(g=><div key={g.k}>{mesHdr(g)}{cardWrap(g.items.map(r=>renderRendRow(r,true,true)))}</div>)}
                     {activas.length===0&&<div style={{color:C.muted,textAlign:'center',padding:'14px 0',fontSize:12}}>Sin rendiciones activas</div>}
                     {anuladas.length>0&&<details style={{marginTop:6}}>
@@ -24539,8 +24571,8 @@ const DATOS_PAGO_HTML = cuentaHtml('Datos para el pago (transferencia)', CUENTA_
 // Acuse de pago: confirma al cliente que recibimos el pago de una factura (al conciliar el abono). Formato oficina, vía la cuenta del estudio.
 async function acusePagoEmail(to, {folio, monto, fecha}){
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-  const texto=`Estimados,\n\nConfirmamos la recepción del pago de ${folio} por ${monto}${fecha?`, con fecha ${fecha}`:''}. Agradecemos su pago.\n\nSaludos cordiales,\n${BRAND.nombre}`
-  const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Confirmamos la recepción del pago de <b>${esc(folio)}</b> por <b>${esc(monto)}</b>${fecha?`, con fecha <b>${esc(fecha)}</b>`:''}. Agradecemos su pago.<br><br>Saludos cordiales,<br><b>${BRAND.nombre}</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio}</div></div>`
+  const texto=`Estimados,\n\nEspero que estén muy bien. Confirmamos la recepción del pago de ${folio} por ${monto}${fecha?`, con fecha ${fecha}`:''}. Agradecemos su pago.\n\nSaludos cordiales,\n${BRAND.nombre}`
+  const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Espero que estén muy bien. Confirmamos la recepción del pago de <b>${esc(folio)}</b> por <b>${esc(monto)}</b>${fecha?`, con fecha <b>${esc(fecha)}</b>`:''}. Agradecemos su pago.<br><br>Saludos cordiales,<br><b>${BRAND.nombre}</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio}</div></div>`
   return enviarComoUsuario({to, subject:`Confirmación de pago — ${folio}`, html, text:texto})
 }
 // Envío de una factura por correo. Reusa el motor de la rendición (driveToken + sendGmailWithPdf + firma).
@@ -35485,11 +35517,27 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); appAlert('Error al registrar devolución: '+e.message) }
     setBusy(null)
   }
+  // Factura emitida y pendiente del MISMO cliente por el mismo monto (±1% o $1.000): si existe UNA, ese pago es esa factura,
+  // no un anticipo suelto (caso Dante F486 / Gabriela F398). Devuelve la factura o null.
+  const facturaMismoMonto = (mov, monto)=>{
+    if(!mov?.cliente_id || !(monto>0)) return null
+    const c=(billing||[]).filter(b=>!b.deleted_at&&String(b.client_id)===String(mov.cliente_id)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&!['reembolso','nota_credito','subarriendo'].includes(b.billing_type||'')&&Math.abs(saldoFactura(b)-monto)<=Math.max(1000,monto*0.01))
+    return c.length===1?c[0]:null
+  }
+  const ofrecerFacturaAntesDeAnticipo = async(mov, monto)=>{
+    const f=facturaMismoMonto(mov, monto); if(!f) return false
+    const fx=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
+    const ok=await appConfirm(`${cmap[mov.cliente_id]||'Este cliente'} tiene la Factura N° ${folioN(f.invoice_no)||'—'} pendiente por ${fx(saldoFactura(f))}${f.issued_at?` (emitida el ${fmtFechaDMY(f.issued_at)})`:''}, el mismo monto de este pago${mov.fecha?` del ${fmtFechaDMY(mov.fecha)}`:''}.\n\nAceptar = conciliar el pago a esa factura (queda PAGADA y enlazada al banco).\nCancelar = dejarlo igual como anticipo.`)
+    if(!ok) return false
+    await reconciliar(mov, f, 'sugerida')
+    return true
+  }
   // Deja el resto del abono como saldo a favor del cliente (anticipo disponible, reutiliza la feature Anticipos).
   const saldoAFavor = async(mov)=>{
     if(busy) return
     if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ appAlert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
     const resto = (mov.monto||0) - (mov.monto_conciliado||0)
+    if(await ofrecerFacturaAntesDeAnticipo(mov, resto)) return
     // Compuerta anti-duplicado (espeja la de fondos, #4): si el cliente ya tiene un anticipo del mismo monto SIN respaldo
     // bancario (cargado a mano), ofrecer VINCULARLO a esta transferencia en vez de crear otro. Evita el doble de Gabriela.
     const _dup = anticipoExistente(mov, resto)
@@ -35521,6 +35569,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ appAlert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
     const resto = (mov.monto||0) - (mov.monto_conciliado||0)
     const adel = Math.max(0, Math.min(adelMonto||0, resto)); const fond = resto - adel
+    if(fond<=0 && await ofrecerFacturaAntesDeAnticipo(mov, adel)) return
     setBusy(mov.id)
     let ant=null, fondo=null; const crs=[]
     try{
@@ -35935,18 +35984,17 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     return { mes:mesAbbr(rows[0].date), monto:rows[0].amount||0 }
   }
   // Gasto Cliente = SOLO CONTROL: marca cliente_id + categoría 'Cliente' en el movimiento, sin crear gasto ni tocar fondos.
+  // «Gasto Cliente»: el cargo fue por cuenta de un cliente → se registra el GASTO en su ficha (consume su fondo o queda como deuda)
+  // y se concilia, con el mismo camino que «Gasto por cuenta del cliente» (gastoPorCuentaCliente). Antes solo etiquetaba el cargo.
   const marcarCargoCliente = async(m, clientId) => {
     if(busy) return
     if(!clientId){ appAlert('Elige el cliente.'); return }
-    setBusy(m.id)
-    try{
-      const { error } = await supabase.from('cartola_movimientos').update({ cliente_id:clientId, categoria:'Cliente' }).eq('id',m.id)
-      if(error) throw error
-      setMovs(p=>p.map(x=>x.id===m.id?{...x,cliente_id:clientId,categoria:'Cliente'}:x))
-      const gk=glosaKey(m.descripcion); if(gk){ learnPut('cargo_cliente',gk,clientId,{control:true}); setCargoCliLearn(p=>({...p,[gk]:String(clientId)})) }
-      setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''}))
-    }catch(e){ appAlert('Error: '+e.message) }
-    setBusy(null)
+    const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(clientId))
+    const gl=String(m.descripcion||'')
+    const cat=/notar/i.test(gl)?'Notaria':/conservador|\bcbr\b/i.test(gl)?'CBR':/registro civil/i.test(gl)?'Registro Civil':'Otro'
+    await gastoPorCuentaCliente(m, clientId, ents.length===1?ents[0].id:null, ('Gasto por cuenta del cliente · '+gl).slice(0,200), cat)
+    try{ await supabase.from('cartola_movimientos').update({ categoria:'Cliente' }).eq('id',m.id); setMovs(p=>p.map(x=>x.id===m.id?{...x,categoria:'Cliente'}:x)) }catch(_){}
+    setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''}))
   }
   const quitarCargoCliente = async(m) => {
     if(busy) return
@@ -36373,10 +36421,10 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
         <button disabled={busy===m.id} onClick={()=>registrarCostoTerceros(m,venta,st.nat,st.billId)} style={{marginTop:10,width:'100%',padding:'10px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:busy===m.id?'default':'pointer',opacity:busy===m.id?.6:1}}>{busy===m.id?'Registrando…':`Registrar costo de ${fmtM(montoT)}`}</button>
       </div>
     }
-    // FAMILIA CLIENTE — buscador (solo control)
+    // FAMILIA CLIENTE — buscador (crea el gasto del cliente)
     if(fam==='cliente') return <div style={{marginTop:6}} onClick={stop}>
       {backHd('Gasto Cliente',()=>setCcFam(p=>({...p,[m.id]:undefined})))}
-      <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Marca de qué cliente fue — queda registrado, sin descuento de fondo.</div>
+      <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Elige el cliente: se registra como gasto en su ficha y descuenta de su fondo.</div>
       <AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>marcarCargoCliente(m,cid)} label='Buscar cliente' placeholder='Buscar cliente o RUT…'/>
     </div>
     // FAMILIA OFICINA · 3er nivel (subcategoría de la categoría en drill)
@@ -39812,14 +39860,16 @@ export default function App() {
       if(error)throw error
       if(!data){ setModal(null); setSaving(false); return }   // guarda defensiva: sin fila → no toca tasks (evita null.id en el updater)
       setTasks(p=>p.some(x=>x.id===data.id)?p.map(x=>x.id===data.id?data:x):[data,...p])
-      // Alerta email solo en tarea NUEVA con quien asignado (incluye borrador finalizado)
-      if(esNueva && data.who){
-        const client=clients.find(c=>c.id===data.client_id)
-        fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
+      // Alerta email solo en tarea NUEVA: un aviso POR responsable (who + assignees). notify-task busca el correo de UN nombre;
+      // mandar «Martín, Martina» junto no calza con ninguno y el aviso se perdía en silencio.
+      const destNueva=esNueva?[...new Set([data.who,...(Array.isArray(data.assignees)?data.assignees:[])].filter(Boolean))]:[]
+      if(destNueva.length){
+        const client=clients.find(c=>c.id===data.client_id), tok=await tokenSesion()
+        destNueva.forEach(nombre=>fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
           method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+(await tokenSesion()),'apikey':supabase.supabaseKey},
-          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.name||'la oficina'})
-        }).catch(()=>{})
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok,'apikey':supabase.supabaseKey},
+          body:JSON.stringify({task:{...data,client_name:client?.name||'',who:nombre},assignedBy:user?.name||'la oficina'})
+        }).catch(()=>{}))
       }
       // Aviso al ASIGNADOR cuando la tarea se marca Terminada (solo en la transición) y la asignó otra persona.
       if(!esNueva && data.status==='Terminado' && prevTask && prevTask.status!=='Terminado' && data.assigned_by && data.assigned_by!==user?.name){
@@ -39874,12 +39924,13 @@ export default function App() {
       const{data,error}=await supabase.from('tasks').update(patch).eq('id',taskObj.id).select().single()
       if(error)throw error
       setTasks(p=>p.map(x=>x.id===data.id?data:x))
-      const client=clients.find(c=>c.id===data.client_id)
-      fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
+      const client=clients.find(c=>c.id===data.client_id), tok=await tokenSesion()
+      // Un aviso por delegado (antes se mandaba «A, B» como un solo nombre y no llegaba a nadie).
+      ;[...new Set((to||[]).filter(Boolean))].forEach(nombre=>fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+(await tokenSesion()),'apikey':supabase.supabaseKey},
-        body:JSON.stringify({task:{...data,client_name:client?.name||'',who:(to||[]).join(', ')},assignedBy:user?.name||'la oficina'})
-      }).catch(()=>{})
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok,'apikey':supabase.supabaseKey},
+        body:JSON.stringify({task:{...data,client_name:client?.name||'',who:nombre},assignedBy:user?.name||'la oficina'})
+      }).catch(()=>{}))
       // Además, avisar a quien ASIGNÓ la tarea que fue delegada (si la asignó otra persona).
       if(data.assigned_by && data.assigned_by!==user?.name){
         fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
@@ -40209,12 +40260,22 @@ export default function App() {
 
   // Cubrir cuotas programadas con un anticipo: esas cuotas pasan a 'Anticipada' (salen del flujo de caja
   // y de "por facturar" porque su plata ya entró como anticipo). El anticipo queda 'consumido'.
+  const handleConciliarTerceros=useCallback(async(billingId)=>{
+    try{
+      const ids=(terceros||[]).filter(t=>String(t.billing_id)===String(billingId)&&t.estado==='pendiente').map(t=>t.id)
+      if(!ids.length) return
+      const {error}=await supabase.from('terceros_pagos').update({estado:'por_pagar'}).in('id',ids)
+      if(error)throw error
+      setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,estado:'por_pagar'}:t))
+    }catch(e){appAlert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
+  },[terceros])
   const handleCubrirCuotas=useCallback(async(anticipoId,cuotaIds)=>{
     if(!cuotaIds?.length) return
     try{
       const ant=(anticipos||[]).find(a=>String(a.id)===String(anticipoId))
       const coveredSum=(billing||[]).filter(b=>cuotaIds.includes(b.id)).reduce((s,b)=>s+(b.amount||0),0)
-      const leftover=ant?Math.max(0,(ant.monto||0)-coveredSum):0
+      const leftoverRaw=ant?Math.max(0,(ant.monto||0)-coveredSum):0
+      const leftover=leftoverRaw<=Math.max(1000,coveredSum*0.02)?0:leftoverRaw   // diferencia por variación UF: no deja un «saldo» de pesos sueltos
       const {error}=await supabase.from('billing').update({status:'Anticipada',prepaid_anticipo_id:anticipoId,updated_at:new Date().toISOString()}).in('id',cuotaIds)
       if(error)throw error
       // El anticipo queda consumido por lo que efectivamente cubrió; si sobró, ese saldo se separa como anticipo disponible (no se pierde).
@@ -40228,8 +40289,10 @@ export default function App() {
       }
       setBilling(p=>p.map(b=>cuotaIds.includes(b.id)?{...b,status:'Anticipada',prepaid_anticipo_id:anticipoId}:b))
       setAnticipos(p=>{ let n=p.map(a=>a.id===anticipoId?{...a,estado:'consumido',monto:nuevoMonto}:a); if(saldoRow) n=[saldoRow,...n]; return n })
+      // El cliente YA pagó esas cuotas (con el anticipo): sus comisiones pasan pendiente→por_pagar, igual que al quedar pagada por banco.
+      for(const id of cuotaIds) await handleConciliarTerceros(id)
     }catch(e){appAlert('Error: '+e.message)}
-  },[anticipos,billing])
+  },[anticipos,billing,handleConciliarTerceros])
   // Deshacer: las cuotas vuelven a 'Programada' y el anticipo a 'disponible'.
   const handleDescubrirCuotas=useCallback(async(anticipoId)=>{
     try{
@@ -40237,10 +40300,14 @@ export default function App() {
       if(error)throw error
       const {error:ae}=await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).eq('id',anticipoId)
       if(ae)throw ae
+      // Deshacer también la comisión: lo que pasó a por_pagar por esta cobertura vuelve a pendiente (lo ya PAGADO no se toca).
+      const cuotaIdsU=(billing||[]).filter(b=>String(b.prepaid_anticipo_id)===String(anticipoId)).map(b=>String(b.id))
+      const tIds=(terceros||[]).filter(t=>cuotaIdsU.includes(String(t.billing_id))&&t.estado==='por_pagar').map(t=>t.id)
+      if(tIds.length){ await supabase.from('terceros_pagos').update({estado:'pendiente'}).in('id',tIds); setTerceros(p=>p.map(t=>tIds.includes(t.id)?{...t,estado:'pendiente'}:t)) }
       setBilling(p=>p.map(b=>String(b.prepaid_anticipo_id)===String(anticipoId)?{...b,status:'Programada',prepaid_anticipo_id:null}:b))
       setAnticipos(p=>p.map(a=>a.id===anticipoId?{...a,estado:'disponible',billing_id:null}:a))
     }catch(e){appAlert('Error: '+e.message)}
-  },[])
+  },[billing,terceros])
 
   // Deshacer un anticipo CONSUMIDO contra una factura (no cuotas): vuelve a 'disponible' y, si ninguna otra anticipo cubre esa factura, la factura vuelve a Pendiente.
   const handleDeshacerConsumoAnticipo=useCallback(async(a)=>{
@@ -40331,15 +40398,6 @@ export default function App() {
 
   // Conciliación: al cobrar la factura ancla, las cuentas por pagar de esa factura pasan
   // de 'pendiente' (cliente no ha pagado) a 'por_pagar' (ya tienes el fee, falta transferir al proveedor).
-  const handleConciliarTerceros=useCallback(async(billingId)=>{
-    try{
-      const ids=(terceros||[]).filter(t=>String(t.billing_id)===String(billingId)&&t.estado==='pendiente').map(t=>t.id)
-      if(!ids.length) return
-      const {error}=await supabase.from('terceros_pagos').update({estado:'por_pagar'}).in('id',ids)
-      if(error)throw error
-      setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,estado:'por_pagar'}:t))
-    }catch(e){appAlert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
-  },[terceros])
 
   // Resuelve un grupo de duplicados: conserva uno (y le limpia el folio "Factura ") y elimina los demás (soft-delete con deshacer).
   const handleResolveDup=useCallback(async(keepId,dropIds,opts={})=>{
@@ -41081,7 +41139,7 @@ export default function App() {
         {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} terceros={terceros} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='redaccion'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Redactar con IA' onBack={()=>setModal(null)} maxW={1120}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='plazos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Plazos y obligaciones' onBack={()=>setModal(null)} maxW={1120}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)}/></FlujoPagina>}
-        {tab==='flujo'&&pagina?.type==='revisionDatos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisión de datos' onBack={()=>setModal(null)} maxW={1120}><RevisionDatosModal billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} terceros={terceros} onOpenMov={handleOpenConciliacion} onResolverDupAnticipo={rdLog('revision.resolverDupAnticipo',handleResolverDupAnticipo)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={rdLog('revision.guardarClientRut',async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) })} onPasarTerminado={rdLog('revision.pasarTerminado',async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) })} onActualizarHonorario={rdLog('revision.actualizarHonorario',async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) })} onFixVencimiento={rdLog('revision.fixVencimiento',async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) })} onResolverCuotaTramo={rdLog('revision.resolverCuotaTramo',async(s,mode,exceso)=>{
+        {tab==='flujo'&&pagina?.type==='revisionDatos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisión de datos' onBack={()=>setModal(null)} maxW={1120}><RevisionDatosModal onCubrirCuotas={handleCubrirCuotas} billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} terceros={terceros} onOpenMov={handleOpenConciliacion} onResolverDupAnticipo={rdLog('revision.resolverDupAnticipo',handleResolverDupAnticipo)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={rdLog('revision.guardarClientRut',async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) })} onPasarTerminado={rdLog('revision.pasarTerminado',async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) })} onActualizarHonorario={rdLog('revision.actualizarHonorario',async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) })} onFixVencimiento={rdLog('revision.fixVencimiento',async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) })} onResolverCuotaTramo={rdLog('revision.resolverCuotaTramo',async(s,mode,exceso)=>{
           if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
           // reducir: bajar las cuotas Programadas por el exceso (mayor primero); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
           const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>montoFactura(b)-montoFactura(a))
@@ -41149,7 +41207,7 @@ export default function App() {
             </div>}
             {tab==='expenses'&&<ExpensesView onOpenMovBanco={id=>navTo({tab:'conciliacion',conc:id})} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} onRevisionCajaChica={()=>navTo({tab:'conciliacion',ccRev:true})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView isAdmin={userRole==='admin'} expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
-            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited onAsociarTrabajo={handleAsociarTrabajo} clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields}/>}
+            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} onAsociarTrabajo={handleAsociarTrabajo} clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView onAsociarTrabajo={handleAsociarTrabajo} clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
           </ViewErrorBoundary></div>
         )}
