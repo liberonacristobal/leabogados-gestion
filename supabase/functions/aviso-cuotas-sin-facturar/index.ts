@@ -17,7 +17,7 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") || Deno.env.get("ALERTA_CARTOLA_
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const toAscii = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "");
+const toAscii = (s: string) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "");
 const qpSafe = (h: string) => String(h || "").replace(/[ \t]+$/gm, "");
 const esc = (s: string) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
@@ -28,7 +28,7 @@ const fmtRut = (r: string) => { const c = nr(r); if (c.length < 2) return String
 const cuotaN = (c: string) => { const m = String(c || "").match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m ? { n: +m[1], tot: +m[2] } : null; };
 const _MES: Record<string, number> = { enero: 1, ene: 1, febrero: 2, feb: 2, marzo: 3, mar: 3, abril: 4, abr: 4, mayo: 5, may: 5, junio: 6, jun: 6, julio: 7, jul: 7, agosto: 8, ago: 8, septiembre: 9, sept: 9, sep: 9, octubre: 10, oct: 10, noviembre: 11, nov: 11, diciembre: 12, dic: 12 };
 function concPeriodo(c: string): string | null {
-  const s = String(c || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const s = String(c || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   let m = s.match(/\b(20\d{2})[-/](0?[1-9]|1[0-2])\b/); if (m) return `${m[1]}-${String(+m[2]).padStart(2, "0")}`;
   m = s.match(/\b(0?[1-9]|1[0-2])[-/](20\d{2})\b/); if (m) return `${m[2]}-${String(+m[1]).padStart(2, "0")}`;
   const ym = s.match(/\b(20\d{2})\b/);
