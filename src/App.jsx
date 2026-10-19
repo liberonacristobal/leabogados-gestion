@@ -2999,7 +2999,8 @@ function ProyeccionDetalle({F, clients=[], sales=[], isDesktop=false, onOpenFluj
   const saleById=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s) m[String(s.id)]=s }); return m },[sales])
   const cliById=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c }); return m },[clients])
   const anioDe=b=>(b.sale_id&&saleById[String(b.sale_id)]?.year)||b.sale_year||null
-  const respDe=b=>(b.sale_id&&saleById[String(b.sale_id)]?.responsible)||cliById[String(b.client_id)]?.abogado_responsable||'Sin abogado'
+  // El subarriendo no es de ningún socio (regla 18-10): va a «Oficina», nunca al abogado del cliente.
+  const respDe=b=>b.billing_type==='subarriendo'?'Oficina':((b.sale_id&&saleById[String(b.sale_id)]?.responsible)||cliById[String(b.client_id)]?.abogado_responsable||'Sin abogado')
   const anios=useMemo(()=>[...new Set(P.items.map(x=>anioDe(x.b)).filter(Boolean))].sort((a,b)=>b-a),[P,saleById])
   const items=useMemo(()=>anio==='todos'?P.items:P.items.filter(x=>String(anioDe(x.b))===String(anio)),[P,anio,saleById])
   const sum=a=>a.reduce((s,x)=>s+x.m,0)
@@ -12546,67 +12547,133 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
 }
 
 // ─── POR SOCIO ──────────────────────────────────────────────────────────────
-// Facturado (emitidas por issued_at × montoFactura) vs. lo que ENTRÓ A CAJA (misma base que Inicio:
-// conciliacion.monto_aplicado por la fecha del depósito), separado por socio (respDe: venta→responsible,
-// si no cliente→abogado_responsable). Neto = bruto − comisiones a terceros (facturado: devengadas de esas
-// facturas por billing_id; caja: pagadas ese mes por pagado_at). Mes con flechas + acumulado YTD. Solo admin.
-function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],onClose}){
-  const [ic,setIc]=useState([]); const [ia,setIa]=useState([])   // conciliacion (factura/anticipo) + cartola abonos
+// Aritmética desarrollada por socio (render 9EM8kAk19ysQFM8ruqtdU7, aprobado 18-10-2026), conceptos en filas y socios en columnas:
+//   Facturado   = Facturas emitidas − Reembolsos de gastos − Parte del externo + Subarriendo − Comisiones a colaboradores (− NC)
+//   Entró a caja = Cobrado de facturas + Pagos sin factura − Reembolsos − Parte del externo + Subarriendo − Comisiones pagadas = Ingreso real
+// Solo DTE emitidos (las cuotas sin folio no cuentan aunque tengan issued_at). Caja = conciliacion.monto_aplicado por la fecha del
+// depósito (misma base que Inicio). Socio de cada fila: learnings 'socio_factura' (decisión guardada) → subarriendo = Oficina (no es de
+// nadie) → venta.responsible → cliente.abogado_responsable; lo que no es de un socio va a «Oficina». Reembolso dentro de una factura de
+// honorarios = fondos ligados a ella (expenses.invoice_id). Parte del externo en caja = proporción del abono (igual que Inicio: percibidas).
+function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],expenses=[],onClose,onOpenClientFicha,onIrBanco,onIrBilling,onIrCobranza,onIrProveedores,onIrSubarriendo}){
+  const isDesk=useIsDesktop()
+  const [ic,setIc]=useState([]); const [ia,setIa]=useState([]); const [ov,setOv]=useState({})
   useEffect(()=>{
     if(DEMO){ setIc((demoData.conciliacion||[]).filter(c=>['factura','anticipo'].includes(c.tipo_destino))); setIa((demoData.cartola_movimientos||[]).filter(m=>m.tipo==='abono'&&!m.es_interno)); return }
     supabase.from('conciliacion').select('movimiento_id,factura_id,anticipo_id,tipo_destino,monto_aplicado').in('tipo_destino',['factura','anticipo']).then(({data})=>setIc(data||[]),()=>{})
-    supabase.from('cartola_movimientos').select('id,fecha,monto,cliente_id').eq('tipo','abono').neq('es_interno',true).then(({data})=>setIa(data||[]),()=>{})
+    supabase.from('cartola_movimientos').select('id,fecha,monto,cliente_id,categoria,nombre_contraparte').eq('tipo','abono').neq('es_interno',true).then(({data})=>setIa(data||[]),()=>{})
+    supabase.from('learnings').select('key,value').eq('kind','socio_factura').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.value) m[String(r.key)]=r.value }); setOv(m) },()=>{})
   },[])
-  const SOCIOS=ADMIN_NAMES
-  const respBySale=useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
-  const respByClient=useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id),c.abogado_responsable||null])),[clients])
+  const SOCIOS=ADMIN_NAMES, COLS=SOCIOS.concat(['Oficina'])
+  const col=s=>SOCIOS.includes(s)?s:'Oficina'
+  const tinta={['Cristóbal']:C.accent,['Erasmo']:C.tealText,['Oficina']:C.muted}
+  const saleById=useMemo(()=>{const m={};(sales||[]).forEach(s=>{ if(s) m[String(s.id)]=s });return m},[sales])
+  const cliById=useMemo(()=>{const m={};(clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c });return m},[clients])
   const billById=useMemo(()=>{const m={};(billing||[]).forEach(b=>m[String(b.id)]=b);return m},[billing])
   const antById=useMemo(()=>{const m={};(anticipos||[]).forEach(a=>m[String(a.id)]=a);return m},[anticipos])
-  const aboById=useMemo(()=>{const m={};ia.forEach(x=>m[String(x.id)]=x);return m},[ia])
-  const respBill=b=>(b&&b.sale_id&&respBySale[String(b.sale_id)])||(b&&respByClient[String(b.client_id)])||null
-  const respAnt=a=>(a&&a.sale_id&&respBySale[String(a.sale_id)])||(a&&respByClient[String(a.client_id)])||null
+  const movById=useMemo(()=>{const m={};ia.forEach(x=>m[String(x.id)]=x);return m},[ia])
+  const resp=x=>(x&&x.sale_id&&saleById[String(x.sale_id)]?.responsible)||(x&&cliById[String(x.client_id)]?.abogado_responsable)||null
+  const socioB=b=>col((b&&ov[String(b.id)])||(b&&b.billing_type==='subarriendo'?'Oficina':null)||resp(b))
+  const ext=useMemo(()=>{ const m={}; (terceros||[]).forEach(t=>{ if(t&&t.comision_pct!=null&&t.billing_id){ const e=(m[String(t.billing_id)]=m[String(t.billing_id)]||{com:0,mto:0}); e.com+=Number(t.comision_monto)||0; e.mto+=Number(t.monto)||0 } }); return m },[terceros])
+  const fondoEn=useMemo(()=>{ const m={}; (expenses||[]).forEach(e=>{ if(e&&!e.deleted_at&&e.type==='fondo'&&e.invoice_id) m[String(e.invoice_id)]=(m[String(e.invoice_id)]||0)+(Number(e.amount)||0) }); return m },[expenses])
+  const cn=cid=>cliById[String(cid)]?.name||'Sin cliente'
+  const fN=no=>no?`F${folioN(no)}`:''
   const _now=new Date(); const curYM=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`
   const [ym,setYm]=useState(curYM)
-  const shift=n=>{ const [y,mo]=ym.split('-').map(Number); const d=new Date(y,mo-1+n,1); const nym=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; if(nym<=curYM) setYm(nym) }
-  const blank=()=>{ const o={}; SOCIOS.concat(['Otros']).forEach(s=>o[s]={facB:0,facCom:0,cajaB:0,cajaCom:0}); return o }
-  const bk=(acc,r)=>acc[SOCIOS.includes(r)?r:'Otros']
-  const addMes=(acc,mk)=>{
-    (billing||[]).forEach(b=>{ if(!esFacturada(b))return; if(String(b.issued_at||'').slice(0,7)!==mk)return; bk(acc,respBill(b)).facB+=montoFactura(b) })
-    ;(terceros||[]).forEach(t=>{ const b=t.billing_id&&billById[String(t.billing_id)]; if(!b||!esFacturada(b))return; if(String(b.issued_at||'').slice(0,7)!==mk)return; bk(acc,respBill(b)).facCom+=Number(t.monto)||0 })
-    ic.forEach(c=>{ const m=aboById[String(c.movimiento_id)]; if(!m)return; if(String(m.fecha||'').slice(0,7)!==mk)return; const monto=Number(c.monto_aplicado)||0; if(monto<=0)return; let r=null; if(c.tipo_destino==='factura') r=respBill(billById[String(c.factura_id)]); else r=respAnt(antById[String(c.anticipo_id)]); bk(acc,r).cajaB+=monto })
-    ;(terceros||[]).forEach(t=>{ if(t.estado!=='pagado')return; if(String(t.pagado_at||'').slice(0,7)!==mk)return; const b=t.billing_id&&billById[String(t.billing_id)]; const r=b?respBill(b):((t.sale_id&&respBySale[String(t.sale_id)])||null); bk(acc,r).cajaCom+=Number(t.monto)||0 })
+  const [open,setOpen]=useState(null)   // {p:'mes'|'ytd', k:fila, s:socio|'all'}
+  const shift=n=>{ const [y,mo]=ym.split('-').map(Number); const d=new Date(y,mo-1+n,1); const nym=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; if(nym<=curYM){ setYm(nym); setOpen(null) } }
+  // Una pasada por período: cada fila guarda sus partidas (para abrirlas) y la suma sale de ellas (fuente única).
+  const calc=enPer=>{
+    const acc={}; COLS.forEach(c=>{ acc[c]={} })
+    const put=(c,k,it)=>{ if(!(Math.abs(it.m)>=1)) return; (acc[c][k]=acc[c][k]||[]).push(it) }
+    ;(billing||[]).forEach(b=>{ if(!b||b.deleted_at||!b.invoice_no||['Anulada','Programada'].includes(b.status)||!enPer(b.issued_at)) return
+      const c=socioB(b), mf=montoFactura(b), base={fecha:b.issued_at,cid:b.client_id,doc:fN(b.invoice_no),go:'ficha'}
+      if(b.billing_type==='subarriendo'){ put('Oficina','f_sub',{...base,m:mf,det:'subarriendo',go:'sub'}); return }
+      if(b.billing_type==='nota_credito'){ put(c,'f_nc',{...base,m:mf,det:'nota de crédito'}); return }
+      put(c,'f_emit',{...base,m:mf,det:b.concept||''})
+      if(b.billing_type==='reembolso') put(c,'f_reemb',{...base,m:mf,det:b.concept||'reembolso'})
+      else if(fondoEn[String(b.id)]) put(c,'f_reemb',{...base,m:Math.min(mf,fondoEn[String(b.id)]),det:'gasto dentro de honorarios'})
+      const x=ext[String(b.id)]; if(x&&x.mto) put(c,'f_ext',{...base,m:x.mto,det:'parte del externo',go:'prov'})
+      ;(terceros||[]).forEach(t=>{ if(t&&t.comision_pct==null&&String(t.billing_id||'')===String(b.id)) put(c,'f_com',{...base,m:Number(t.monto)||0,det:t.proveedor||'Colaborador',go:'prov'}) })
+    })
+    ic.forEach(cc=>{ const m=movById[String(cc.movimiento_id)]; if(!m||!enPer(m.fecha)) return; const monto=Number(cc.monto_aplicado)||0; if(monto<=0) return
+      const base={fecha:m.fecha,mov:m.id,go:'banco'}
+      if(cc.tipo_destino==='factura'){ const b=billById[String(cc.factura_id)]
+        const it={...base,cid:b?.client_id||m.cliente_id,doc:fN(b?.invoice_no),det:b?.concept||''}
+        if((b&&b.billing_type==='subarriendo')||m.categoria==='Subarriendo'){ put('Oficina','c_sub',{...it,m:monto,det:'subarriendo'}); return }
+        const c=b?socioB(b):'Oficina'
+        put(c,'c_fac',{...it,m:monto})
+        if(b&&b.billing_type==='reembolso') put(c,'c_reemb',{...it,m:monto})
+        else if(b&&fondoEn[String(b.id)]){ const mf=montoFactura(b)||monto; put(c,'c_reemb',{...it,m:monto*Math.min(1,fondoEn[String(b.id)]/mf),det:'gasto dentro de honorarios'}) }
+        const x=b&&ext[String(b.id)]; if(x&&(x.com+x.mto)>0) put(c,'c_ext',{...it,m:monto*x.mto/(x.com+x.mto),det:'parte del externo'})
+      } else { const a=antById[String(cc.anticipo_id)]
+        const it={...base,cid:a?.client_id||m.cliente_id,doc:'',det:a?.nota||'pago sin factura'}
+        if(m.categoria==='Subarriendo'){ put('Oficina','c_sub',{...it,m:monto,det:'subarriendo sin factura'}); return }
+        put(a?col((a.sale_id&&saleById[String(a.sale_id)]?.responsible)||cliById[String(a.client_id)]?.abogado_responsable):'Oficina','c_ant',{...it,m:monto})
+      }
+    })
+    ;(terceros||[]).forEach(t=>{ if(!t||t.estado!=='pagado'||t.comision_pct!=null||!enPer(t.pagado_at)) return
+      const b=t.billing_id&&billById[String(t.billing_id)]
+      const c=b?socioB(b):col((t.sale_id&&saleById[String(t.sale_id)]?.responsible)||null)
+      put(c,'c_com',{fecha:t.pagado_at,cid:b?.client_id||null,doc:fN(b?.invoice_no),det:t.proveedor||'Colaborador',m:Number(t.monto)||0,go:'prov'}) })
     return acc
   }
-  const mesAcc=useMemo(()=>addMes(blank(),ym),[ym,billing,terceros,ic,ia,billById,antById,aboById,respBySale,respByClient])   // eslint-disable-line
-  const ytdAcc=useMemo(()=>{ const [y,mo]=ym.split('-').map(Number); const acc=blank(); for(let i=1;i<=mo;i++){ addMes(acc,`${y}-${String(i).padStart(2,'0')}`) } return acc },[ym,billing,terceros,ic,ia,billById,antById,aboById,respBySale,respByClient])   // eslint-disable-line
-  const MN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-  const [y,mo]=ym.split('-').map(Number); const mesLbl=`${MN[mo-1].charAt(0).toUpperCase()+MN[mo-1].slice(1)} ${y}`
-  const col={['Cristóbal']:C.accent,['Erasmo']:C.tealText,['Otros']:C.grisText}
-  const totMes=SOCIOS.concat(['Otros']).reduce((o,s)=>{o.fac+=mesAcc[s].facB;o.caja+=mesAcc[s].cajaB;return o},{fac:0,caja:0})
+  const [y,mo]=ym.split('-').map(Number)
+  const mesAcc=useMemo(()=>calc(d=>String(d||'').slice(0,7)===ym),[ym,billing,terceros,ic,ia,ov,fondoEn,saleById,cliById,billById,antById,movById])   // eslint-disable-line
+  const ytdAcc=useMemo(()=>calc(d=>{ const s=String(d||'').slice(0,7); return s>=`${y}-01`&&s<=ym }),[ym,billing,terceros,ic,ia,ov,fondoEn,saleById,cliById,billById,antById,movById])   // eslint-disable-line
+  const sumK=(acc,c,k)=>(acc[c][k]||[]).reduce((a,x)=>a+x.m,0)
+  const FILAS={f:[['f_emit','','Facturas emitidas','Emitidas',1],['f_reemb','−','Reembolsos de gastos','Reembolsos',-1],['f_ext','−','Parte del externo','Externo',-1],['f_nc','−','Notas de crédito','Notas de crédito',-1],['f_sub','+','Subarriendo','Subarriendo',1],['f_com','−','Comisiones a colaboradores','Comisiones',-1]],
+               c:[['c_fac','','Cobrado de facturas','De facturas',1],['c_ant','+','Pagos sin factura','Sin factura',1],['c_reemb','−','Reembolsos de gastos','Reembolsos',-1],['c_ext','−','Parte del externo','Externo',-1],['c_sub','+','Subarriendo','Subarriendo',1],['c_com','−','Comisiones pagadas','Comisiones',-1]]}
+  // Cifras a $0,1M que cuadran: cada columna redondea su neto normal y sus filas se ajustan a él (redondearPartes).
+  const cuadro=acc=>{ const o={}; ['f','c'].forEach(sec=>{ o[sec]={}; COLS.forEach(c=>{ const raw=FILAS[sec].map(([k,,,,sg])=>sg*sumK(acc,c,k)), neto=raw.reduce((a,x)=>a+x,0), paso=1e5
+      const r=redondearPartes(raw,paso); o[sec][c]={filas:r.map(Math.abs),raw,neto:r.reduce((a,x)=>a+x,0),netoExacto:neto} }) }); return o }
+  const fmtV=v=>Math.abs(v)<1?null:fmtMillLR(v)
+  const irA=it=>{ if(it.go==='banco'&&it.mov&&onIrBanco) return onIrBanco(it.mov); if(it.go==='prov'&&onIrProveedores) return onIrProveedores(); if(it.go==='sub'&&onIrSubarriendo) return onIrSubarriendo(); if(it.cid&&onOpenClientFicha) return onOpenClientFicha(it.cid) }
+  const [verTodo,setVerTodo]=useState(false)
+  const th={fontSize:isDesk?10:9,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',padding:isDesk?'8px 10px':'8px 5px',textAlign:'right',whiteSpace:'nowrap',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}
+  const td={padding:isDesk?'8px 10px':'8px 5px',borderTop:`1px solid ${C.border}`,fontSize:isDesk?12.5:11.5,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums'}
+  const sgn={display:'inline-block',width:isDesk?13:10,textAlign:'center',fontWeight:700,color:C.muted}
+  const Tabla=({p,acc})=>{ const Q=cuadro(acc)
+    const fila=(sec,[k,sg,lg,sh],i)=>{ if(COLS.every(c=>Math.abs(Q[sec][c].raw[i])<1)) return null
+      const isOpen=open&&open.p===p&&open.k===k
+      const tg=s=>()=>{ setVerTodo(false); setOpen(o=>(o&&o.p===p&&o.k===k&&o.s===s)?null:{p,k,s}) }
+      const items=isOpen?(open.s==='all'?COLS.flatMap(c=>(acc[c][k]||[]).map(x=>({...x,soc:c}))):(acc[open.s][k]||[]).map(x=>({...x,soc:open.s}))).sort((a,b)=>b.m-a.m):[]
+      const tot=items.reduce((a,x)=>a+x.m,0), shown=verTodo?items:items.slice(0,8)
+      return <Fragment key={k}>
+        <tr><td onClick={tg('all')} style={{...td,textAlign:'left',color:C.muted,fontWeight:600,cursor:'pointer'}}><span style={sgn}>{sg}</span>{isDesk?lg:sh}<span style={{marginLeft:4,display:'inline-block',color:C.textSoft}}><ChevAb open={isOpen&&open.s==='all'}/></span></td>
+          {COLS.map((c,ci)=>{ const v=fmtV(Q[sec][c].filas[i]), sel=isOpen&&open.s===c; return <td key={c} onClick={v?tg(c):undefined} style={{...td,fontWeight:700,color:v?C.text:C.done,cursor:v?'pointer':'default',background:sel?C.azulBg:undefined}}>{v||'—'}</td> })}</tr>
+        {isOpen&&items.length>0&&<tr><td colSpan={4} style={{padding:0,background:C.bgSoft}}>
+          <div style={{display:'flex',justifyContent:'space-between',padding:'7px 12px',...SEC_LBL,fontWeight:800}}><span>{open.s==='all'?lg:`${open.s} · ${lg}`} · {items.length}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(Math.round(tot))}</span></div>
+          {shown.map((x,j)=><div key={j} onClick={()=>irA(x)} className='er-c' style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>
+            {diaGrande(String(x.fecha||'').slice(0,10))}
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}>{cn(x.cid)}</div><div style={{fontSize:10.5,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[x.doc,open.s==='all'?x.soc:null,isDesk?x.det:(x.doc?null:x.det)].filter(Boolean).join(' · ')}</div></div>
+            <span style={{fontSize:12.5,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Math.round(x.m))}</span><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>)}
+          {items.length>8&&<div onClick={()=>setVerTodo(v=>!v)} style={{textAlign:'center',padding:8,fontSize:11.5,fontWeight:700,color:C.azulInfo,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>{verTodo?'Ver menos':`Ver las ${items.length}`}</div>}
+        </td></tr>}
+      </Fragment> }
+    const res=(lab,sec,go)=><tr onClick={go} style={{cursor:go?'pointer':'default'}}><td style={{...td,textAlign:'left',fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}><span style={{...sgn,color:C.accent}}>=</span>{lab}{go&&<span style={{marginLeft:4,color:C.textSoft}}><Gl n='chevron'/></span>}</td>
+      {COLS.map(c=>{ const v=fmtV(Q[sec][c].neto); return <td key={c} style={{...td,fontWeight:800,fontSize:isDesk?14:12.5,color:v?(Q[sec][c].neto<0?C.overdueText:C.accent):C.done,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>{v?(Q[sec][c].neto<0?'−':'')+v.replace('−',''):'—'}</td> })}</tr>
+    const cap=t=><tr><td colSpan={4} style={{padding:isDesk?'11px 10px 5px':'11px 5px 5px',...SEC_LBL,fontWeight:800,borderTop:`1px solid ${C.border}`}}>{t}</td></tr>
+    return <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
+      <colgroup><col style={{width:isDesk?'40%':'34%'}}/>{COLS.map(c=><col key={c} style={{width:isDesk?'20%':'22%'}}/>)}</colgroup>
+      <thead><tr><th style={{...th,textAlign:'left'}}/>{COLS.map(c=><th key={c} style={{...th,color:tinta[c]}}>{isDesk&&c!=='Oficina'&&<span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:tinta[c],marginRight:5,verticalAlign:'middle'}}/>}{c}</th>)}</tr></thead>
+      <tbody>
+        {cap('Facturado')}{FILAS.f.map((f,i)=>fila('f',f,i))}{res(isDesk?'Facturado neto':'Neto','f',onIrBilling)}
+        {cap('Entró a caja')}{FILAS.c.map((f,i)=>fila('c',f,i))}{res('Ingreso real','c',onIrCobranza)}
+      </tbody></table> }
+  const totDe=acc=>{ const Q=cuadro(acc); return {f:COLS.reduce((a,c)=>a+Q.f[c].neto,0), c:COLS.reduce((a,c)=>a+Q.c[c].neto,0)} }
+  const MN=MES_L
+  const mesLbl=`${MN[mo-1].charAt(0).toUpperCase()+MN[mo-1].slice(1)} ${y}`
   const exportar=()=>{ try{
-    const rows=[['Socio','Mes','Facturado bruto','Facturado neto','Caja bruto','Caja neto']]
-    const push=(acc,lbl)=>SOCIOS.concat(['Otros']).forEach(s=>{ const a=acc[s]; if(a.facB||a.cajaB) rows.push([s,lbl,a.facB,a.facB-a.facCom,a.cajaB,a.cajaB-a.cajaCom]) })
-    push(mesAcc,mesLbl); push(ytdAcc,`YTD ${y}`)
+    const rows=[['Período','Socio','Concepto','Monto']]
+    const push=(acc,lbl)=>COLS.forEach(c=>['f','c'].forEach(sec=>{ FILAS[sec].forEach(([k,,lg,,sg])=>{ const v=sumK(acc,c,k); if(Math.abs(v)>=1) rows.push([lbl,c,`${sec==='f'?'Facturado':'Caja'} · ${lg}`,Math.round(sg*v)]) })
+      const neto=FILAS[sec].reduce((a,[k,,,,sg])=>a+sg*sumK(acc,c,k),0); rows.push([lbl,c,sec==='f'?'= Facturado neto':'= Ingreso real',Math.round(neto)]) }))
+    push(mesAcc,mesLbl); push(ytdAcc,`Acumulado ${y}`)
     const csv=rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\n')
     const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`por_socio_${ym}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
   }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
-  const otrosHay = !!(mesAcc['Otros'].facB||mesAcc['Otros'].cajaB||ytdAcc['Otros'].facB||ytdAcc['Otros'].cajaB)
-  const Panel=({s,acc})=>{ const a=acc[s]; return (
-    <div style={{padding:'14px 16px',flex:1,minWidth:0}}>
-      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:11}}><span style={{width:10,height:10,borderRadius:'50%',background:col[s],flexShrink:0}}/><span style={{fontSize:13,fontWeight:700,color:col[s]}}>{s}</span></div>
-      <div style={{marginBottom:11}}>
-        <div style={{...SEC_LBL,marginBottom:3}}>Facturado</div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6}}><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>bruto</span><span style={{fontSize:14,fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(a.facB)}</span></div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6,marginTop:2}}><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>neto</span><span style={{fontSize:12,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(a.facB-a.facCom)}</span></div>
-      </div>
-      <div>
-        <div style={{...SEC_LBL,marginBottom:3}}>Entró a caja</div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6}}><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>bruto</span><span style={{fontSize:14,fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(a.cajaB)}</span></div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:6,marginTop:2}}><span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>neto</span><span style={{fontSize:12,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(a.cajaB-a.cajaCom)}</span></div>
-      </div>
-    </div>
-  )}
-  // Página (antes modal): misma forma; en escritorio los dos socios lado a lado (fila), en móvil apilados (flexWrap).
+  const tM=totDe(mesAcc), tY=totDe(ytdAcc)
+  const hdr=(k,extra,t,der)=><div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'9px 12px':'9px 8px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>{k}</span>{extra}<span style={{marginLeft:'auto',fontSize:isDesk?11:10.5,color:C.muted,whiteSpace:'nowrap'}}>neto <b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMillLR(t.f)}</b> · caja <b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMillLR(t.c)}</b></span>{der}</div>
+  const card={border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',background:C.card}
   return (
     <Modal fullscreen fsMaxWidth={760} title='Por socio' onClose={onClose}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:14,margin:'2px 0 14px'}}>
@@ -12614,24 +12681,8 @@ function PorSocioModal({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
         <div style={{textAlign:'center',minWidth:170}}><div style={{fontSize:17,fontWeight:700,color:C.text}}>{mesLbl}</div><div style={{fontSize:10,color:C.muted}}>{ym===curYM?'mes en curso':' '}</div></div>
         <button disabled={ym===curYM} onClick={()=>shift(1)} style={{width:34,height:34,borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,cursor:ym===curYM?'default':'pointer',fontSize:16,opacity:ym===curYM?.35:1}}><Gl n='chevron'/></button>
       </div>
-      <div style={{border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:12}}>
-        <div style={{display:'flex',alignItems:'baseline',gap:8,padding:'9px 16px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft}}><span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.muted}}>El mes</span><span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>facturado <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(totMes.fac)}</b> · caja <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(totMes.caja)}</b></span></div>
-        <div style={{display:'flex',flexWrap:'wrap'}}>
-          <Panel s='Cristóbal' acc={mesAcc}/>
-          <div style={{width:1,background:C.border,alignSelf:'stretch'}}/>
-          <Panel s='Erasmo' acc={mesAcc}/>
-        </div>
-        {otrosHay&&<div style={{display:'flex',justifyContent:'space-between',gap:8,padding:'8px 16px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted}}><span>Otros / sin socio</span><span style={{fontVariantNumeric:'tabular-nums'}}>facturado {fmt(mesAcc['Otros'].facB)} · caja {fmt(mesAcc['Otros'].cajaB)}</span></div>}
-      </div>
-      <div style={{border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 16px',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.accent}}>Acumulado {y}</span><span style={{fontSize:10,color:C.muted}}>enero – {MN[mo-1]}</span><button onClick={exportar} style={{marginLeft:'auto',fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>Exportar ↓</button></div>
-        <div style={{display:'flex',flexWrap:'wrap'}}>
-          <Panel s='Cristóbal' acc={ytdAcc}/>
-          <div style={{width:1,background:C.border,alignSelf:'stretch'}}/>
-          <Panel s='Erasmo' acc={ytdAcc}/>
-        </div>
-      </div>
-      <div style={{fontSize:10,color:C.muted,marginTop:11,lineHeight:1.5}}>Facturado = emitido (DTE) · Entró a caja = conciliado en banco · Neto = menos comisiones.</div>
+      <div style={{...card,marginBottom:12}}>{hdr('El mes',null,tM)}{Tabla({p:'mes',acc:mesAcc})}</div>
+      <div style={card}>{hdr(`Acumulado ${y}`,isDesk?<span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>enero – {MN[mo-1]}</span>:null,tY,<button onClick={exportar} style={{fontSize:10,fontWeight:600,color:C.accent,background:'transparent',border:`1px solid ${C.border}`,borderRadius:8,padding:'3px 8px',cursor:'pointer',whiteSpace:'nowrap',marginLeft:8}}>{isDesk?'Exportar ↓':'↓'}</button>)}{Tabla({p:'ytd',acc:ytdAcc})}</div>
     </Modal>
   )
 }
@@ -41309,7 +41360,7 @@ export default function App() {
         {/* 'revisionDatos' ya NO es modal: página 'flujo'. */}
         {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos de la oficina' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
         {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
-        {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} onClose={()=>setModal(null)}/>}
+        {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} expenses={expenses} onClose={()=>setModal(null)} onOpenClientFicha={id=>{setModal(null);handleOpenClientFicha(id)}} onIrBanco={mid=>{setModal(null);navTo({tab:'conciliacion',conc:mid})}} onIrBilling={()=>{setModal(null);navTo({tab:'billing'})}} onIrCobranza={()=>{setModal(null);navTo({tab:'cobranza'})}} onIrProveedores={()=>{setModal(null);navTo({tab:'proveedores'})}} onIrSubarriendo={()=>{setModal(null);navTo({tab:'subarriendo'})}}/>}
         {/* 'report' ya NO es modal: página 'flujo'. */}
         {/* 'task' / 'taskPreview' / 'cierreTarea' ya NO son modales: viven en la página navegable 'tarea' (TareaPage, ver render de tabs). setModal los redirige. */}
         {/* "Editar/Nuevo cliente" ya NO es modal: es la página navegable editCliente (ver render arriba). */}
