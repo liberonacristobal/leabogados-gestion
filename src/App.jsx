@@ -9479,7 +9479,7 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
           {kt('pb','file',C.card,C.accent,'Presupuesto',fmtMill(bud),`costos ${per}`)}
           {kt('pr','wallet',C.azulBg,C.accent,'Real',fmtMill(real),'banco + planilla')}
           {kt('pd','alert',sobre?C.ambarBg:C.greenBg,sobre?C.soonText:C.greenText,'Desvío',dTxt(dv),`${pct.toFixed(1).replace('.',',')} % ${sobre?'sobre':'bajo'} ppto.`)}
-          {kt('pp','chart',C.tealBg,C.tealText,'Proyección',fmtMill(proy),`ppto. ${fmtMill(budAnio)}`)}
+          {kt('pp','chart',C.tealBg,C.tealText,'Costo proyectado',fmtMill(proy),`ppto. ${fmtMill(budAnio)}`)}
         </div>
         {secT('Mes a mes')}
         <div style={card2}>{head('Mes')}{ordM.flatMap(mesFilas)}
