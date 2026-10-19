@@ -150,6 +150,17 @@ La falla recurrente (día entero 2026-10-01): tomé un número derivado —una v
 
 Refuerza con dientes "cuestionar el propio análisis" y "nunca de memoria". Mnemotecnia: **filas, no cuentas · ciclo, no foto · esperable, no defecto · prueba, no corazonada.**
 
+## REGLA DE ORO: coherencia de datos entre vistas (una cifra, una fuente, un dueño)
+
+Prioridad #1 del usuario: **la misma cifra se ve igual entre por donde se entre** (Inicio, Oficina, Facturación, Por socio, Inteligencia, ficha, correos, exportaciones). Reforzada 2026-10-19 al alinear Por socio e Inteligencia.
+
+- **Un solo cálculo por concepto, en un helper de módulo.** Ninguna vista re-arma una cifra que ya existe: la lee del helper (`ventaCLP`/`metricasAnio`, `montoFactura`/`saldoBill`, `fgCliente`, `flujoCajaProyectado`/`proyeccionCobranza`, `resultadoMes`, `saldoComisiones`, y el cálculo por socio). Si dos vistas muestran "lo mismo", es la misma función.
+- **Un solo dueño por partida (atribución por socio única).** Toda vista que reparte por socio/abogado usa la MISMA regla: decisión guardada (`learnings` `socio_factura`) → subarriendo = «Sin socio»/Oficina (no es de nadie) → `venta.responsible` → `cliente.abogado_responsable`; lo que no es de un socio va a «Sin socio». Comisiones que nos paga BDA = del socio dueño del cliente subyacente. Nunca otra regla en otra vista.
+- **Mismo plano, misma cifra.** Facturado = DTE emitidos con folio (las cuotas sin folio no cuentan aunque tengan `issued_at`); caja = `conciliacion.monto_aplicado` por fecha del depósito (como Inicio), nunca `paid_at` de la factura; reembolsos de gastos (facturas tipo reembolso y fondos ligados a una factura) se restan, no son ingreso; la parte del externo se resta; comisiones pagadas = `terceros` sin `comision_pct`. UF siempre del día de cada movimiento.
+- **Las partes suman el total, siempre.** Socios + Sin socio = Oficina; meses = año; filas de una cascada = su neto (redondeo con `redondearPartes`). Si una vista muestra un total, debe poder abrirse en partidas reales que lo sumen al peso.
+- **Diferencias estructurales se rotulan, no se esconden.** Si dos cifras miden planos distintos (devengado vs caja, emitido vs cobrado), cada una dice su plano en una línea; no se presentan como "la misma" ni como error.
+- **Al cambiar una cifra o una regla:** buscar TODAS las vistas, correos y exports que la muestran y dejarlas en el mismo helper en el mismo commit; verificar con datos reales que coinciden (consulta o arnés con las funciones de la app).
+
 ## REGLA DE ORO: sin franjas de color a la izquierda ("no parecer IA")
 
 Nunca usar líneas o franjas de color a la izquierda para marcar estado: ni `borderLeft` de color, ni `boxShadow: inset Npx 0 0`, ni divs-franja verticales. Aplica a la app Y a todo render, mockup o propuesta. El estado se lee por el color de la cifra o del texto, un punto tenue o el chip del canon. Las etiquetas/títulos de sección y de KPI van en `C.accent` (visibles por jerarquía), no en gris claro.
