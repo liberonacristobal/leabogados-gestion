@@ -1654,7 +1654,7 @@ function ClientsViewLimited({openFichaId=null,onOpenedFicha=null,onAsociarTrabaj
 
   const Ficha = ({cl}) => {
     // El limited ve la ficha completa (Financiero + Estado de cuenta) solo en los clientes de los que es responsable.
-    const esResp = !!currentUserName && _normTxt(cl.abogado_responsable)===_normTxt(currentUserName)
+    const esResp = !!currentUserName && (sales||[]).some(s=>s&&String(s.client_id)===String(cl.id))   // sales ya llega filtrado a SUS ventas
     const effTab = (esResp||ftab==='resumen'||ftab==='contacto') ? ftab : 'resumen'
     const clientBilling = (billing||[]).filter(b=>b.client_id===cl.id)
     const clientExpenses = expenses.filter(e=>e.client_id===cl.id).sort((a,b)=>b.date>a.date?1:-1)
@@ -38614,7 +38614,7 @@ export default function App() {
   const [userRole,setUserRole]=useState(null)   // vista actual: 'admin' | 'limited' | null (admin puede previsualizar 'limited')
   const [actualRole,setActualRole]=useState(null) // rol REAL e inmutable de la DB — fuente de verdad para permisos
   const [clients,setClients]=useState([])
-  const [sales,setSales]=useState([])
+  const [salesAll,setSales]=useState([])
   const [proyectosCartera,setProyectosCartera]=useState([])
   const [proyEquipo,setProyEquipo]=useState([])          // proyecto_equipo: {proyecto_id, miembro, rol} — quién trabaja en cada proyecto
   const [proySeguidores,setProySeguidores]=useState([])  // proyecto_seguidores: {proyecto_id, miembro} — opt-in "lo sigo en mis proyectos"
@@ -38622,22 +38622,37 @@ export default function App() {
   const [proyHitos,setProyHitos]=useState(DEMO?(demoData.proyecto_hitos||[]):[])            // proyecto_hitos: {id, proyecto_id, titulo, fecha, hecho, plazo, orden, responsable}
   const [pmoSug,setPmoSug]=useState([])                  // pmo_sugerencias: propuestas del Agente PMO (gasto/correo→hito) con compuerta
   const [pmoOps,setPmoOps]=useState(DEMO?(demoData.pmo_operaciones||[]):[])   // pmo_operaciones: biblioteca configurable de pasos por tipo de operación
-  const [billing,setBilling]=useState([])
+  const [billingAll,setBilling]=useState([])
   // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
   const vencFlipDone=useRef(false)
-  useEffect(()=>{ if(vencFlipDone.current||!billing.length) return; vencFlipDone.current=true
-    const ids=billing.filter(b=>b.status==='Pendiente'&&esVencidaB(b)&&b.billing_type!=='reembolso'&&!b.deleted_at).map(b=>b.id)
+  useEffect(()=>{ if(vencFlipDone.current||!billingAll.length) return; vencFlipDone.current=true
+    const ids=billingAll.filter(b=>b.status==='Pendiente'&&esVencidaB(b)&&b.billing_type!=='reembolso'&&!b.deleted_at).map(b=>b.id)
     if(!ids.length) return
     supabase.from('billing').update({status:'Vencido'}).in('id',ids).then(({error})=>{ if(!error) setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,status:'Vencido'}:b)) })
-  },[billing])
+  },[billingAll])
   const [expenses,setExpenses]=useState([])
   const [tasks,setTasks]=useState([])
   const [tareasOpen,setTareasOpen]=useState(false)   // sheet de tareas (Hoy + equipo) abierto desde el botón del header
-  const [anticipos,setAnticipos]=useState([])
+  const [anticiposAll,setAnticipos]=useState([])
   const [conciliacion,setConciliacion]=useState([])   // filas conciliacion (respaldo bancario de facturas) — fuente del badge
   const [cartolaHasta,setCartolaHasta]=useState(null) // última fecha de cartola cargada (umbral pendiente vs sin conciliación)
   const [proveedores,setProveedores]=useState([])
-  const [terceros,setTerceros]=useState([])   // terceros_pagos (cuentas por pagar)
+  const [tercerosAll,setTerceros]=useState([])   // terceros_pagos (cuentas por pagar)
+  // HONORARIOS SOLO PARA QUIEN CORRESPONDE: el usuario limitado no ve honorarios (ventas, facturas, anticipos, comisiones),
+  // salvo los de las ventas donde ÉL es el responsable (venta.responsible → abogado del cliente). Hoy eso deja ver a Martín
+  // los suyos y a nadie más. Se filtra aquí, una vez, para que ninguna vista, buscador ni página los reciba. Las facturas de
+  // reembolso de gastos sí llegan (son gastos, no honorarios). Los setters siguen operando sobre el estado completo.
+  const _limHon = userRole==='limited'
+  const _honVis = useMemo(()=>{ if(!_limHon) return null
+    const yo=_normTxt(user?.name||''), abo={}; (clients||[]).forEach(c=>{ if(c) abo[String(c.id)]=_normTxt(c.abogado_responsable||'') })
+    const sIds=new Set((salesAll||[]).filter(x=>x&&yo&&_normTxt(x.responsible||abo[String(x.client_id)]||'')===yo).map(x=>String(x.id)))
+    const delCli=cid=>!!yo&&abo[String(cid)]===yo
+    const bIds=new Set((billingAll||[]).filter(b=>b&&(b.billing_type==='reembolso'||(b.sale_id?sIds.has(String(b.sale_id)):delCli(b.client_id)))).map(b=>String(b.id)))
+    return {sIds,bIds,delCli} },[_limHon,user?.name,clients,salesAll,billingAll])
+  const sales = useMemo(()=>_honVis?(salesAll||[]).filter(x=>x&&_honVis.sIds.has(String(x.id))):salesAll,[_honVis,salesAll])
+  const billing = useMemo(()=>_honVis?(billingAll||[]).filter(b=>b&&_honVis.bIds.has(String(b.id))):billingAll,[_honVis,billingAll])
+  const anticipos = useMemo(()=>_honVis?(anticiposAll||[]).filter(a=>a&&(a.sale_id?_honVis.sIds.has(String(a.sale_id)):_honVis.delCli(a.client_id))):anticiposAll,[_honVis,anticiposAll])
+  const terceros = useMemo(()=>_honVis?(tercerosAll||[]).filter(t=>t&&(t.sale_id?_honVis.sIds.has(String(t.sale_id)):(t.billing_id?_honVis.bIds.has(String(t.billing_id)):false))):tercerosAll,[_honVis,tercerosAll])
   const [bulkImports,setBulkImports]=useState([])   // lotes de carga masiva (para deshacer)
   const [importAliases,setImportAliases]=useState([])   // memoria nombre-crudo → cliente (carga masiva aprende)
   const [expenseAudit,setExpenseAudit]=useState([])   // trazabilidad: log de reasignaciones de gastos
