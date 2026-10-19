@@ -8211,10 +8211,10 @@ function ModulosModal({ onChange }){
 // pertenece a cada rol vive en Gestión de usuarios; el acceso por rol se define por la app (data-driven a futuro).
 const ROLES_DEF = [
   { id:'admin', label:'Administrador', desc:'Acceso completo' },
-  { id:'limited', label:'Abogado', desc:'Equipo · trabajo diario' },
+  { id:'limited', label:'Abogado', desc:'Equipo · solo sus honorarios' },
 ]
 // Qué ve un rol, en una línea, desde la misma fuente que la navegación (VIEWS_PALETTE).
-const rolVe = id => id==='admin' ? 'Todo, incluidos ajustes y sistema' : [...(VIEWS_PALETTE[id]||[]).map(([,l])=>l),'sus honorarios'].join(' · ')
+const rolVe = id => id==='admin' ? 'Todo, incluidos ajustes y sistema' : (VIEWS_PALETTE[id]||[]).map(([,l])=>l).join(' · ')
 const CAP_ROWS = [
   ['dashboard','Inicio'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],
   ['clients','Clientes'],['expenses','Gastos'],['cajachica','Caja chica'],
@@ -38484,7 +38484,7 @@ const TAB_LABELS = {tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver'
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
   admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['miCarga','Mi carga']],
-  limited:[['tasks','Tareas'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
+  limited:[['tasks','Tareas'],['cartera','Mi cartera'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
