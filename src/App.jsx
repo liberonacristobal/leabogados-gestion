@@ -3723,6 +3723,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   const [resSeeAll,setResSeeAll] = useState({})                          // {`${tile}-${y}`:true} → ver TODOS los cobros de ese año (si no, tope 6)
   const [resComis,setResComis] = useState(false)                        // expandir la lista de comisiones pagadas dentro del panel
   const [resPerc,setResPerc] = useState(false)                          // expandir la lista de comisiones percibidas (Cobrado)
+  const [resRex,setResRex] = useState(false)                            // expandir «Comisión de externos» (Margen): cobrada / por cobrar
+  const [resRexL,setResRexL] = useState('pend')                         // lista abierta dentro de Comisión de externos: 'cob' | 'pend' | null
   const [resFTer,setResFTer] = useState(false)                          // expandir el desglose del total emitido (Facturado)
   const [resCaja,setResCaja] = useState(false)                          // expandir el desglose del total a caja (Cobrado)
   const isDeskRes = useIsDesktop()                                      // paneles del resultado: columnas de la grilla y % largo («45% de lo vendido») solo en escritorio
@@ -3987,13 +3989,22 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   // MARGEN del año = el MISMO resultado del Estado de resultados / Oficina / Resultado del año (devengado): Σ resultadoMes del año elegido.
   const resAnio = useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients,ufd:ufDias,ufFb:ufRef}, ult=selYear===currentYear?_mNow:12
     const K=['fac','sub','rex','ing','cos','com','res'], o={}; K.forEach(k=>{ o[k]=0; o[k+'UF']=0 })
-    for(let i=1;i<=ult;i++){ const r=resultadoMes(fuRes,deps,`${selYear}-${String(i).padStart(2,'0')}`); K.forEach(k=>{ o[k]+=r[k]; o[k+'UF']+=r[k+'UF'] }) }
+    o.rexItems=[]
+    for(let i=1;i<=ult;i++){ const r=resultadoMes(fuRes,deps,`${selYear}-${String(i).padStart(2,'0')}`); K.forEach(k=>{ o[k]+=r[k]; o[k+'UF']+=r[k+'UF'] }); o.rexItems.push(...(r.rexItems||[])) }
     o.pct=margenPct(o.res,o.ing)
     // Cifras para MOSTRAR la cascada: redondeadas de modo que las partes sumen el total (UF enteras; pesos a $0,1M como fmtMill).
     const cuadra=(paso,sf)=>{ const ing=Math.round(o['ing'+sf]/paso)*paso, [fac,sub,rex]=redondearPartes([o['fac'+sf],o['sub'+sf],o['rex'+sf]],paso,[0]), [res,cos,com]=redondearPartes([o['res'+sf],o['cos'+sf],o['com'+sf]],paso,[0]); return {fac,sub,rex,ing,cos,com,res} }
     o.verUF=cuadra(1,'UF'); o.verCLP=cuadra(1e5,'')
     return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow,ufDias,ufRef])
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
+  // Comisión de externos del año (facturado) partida en lo ya cobrado y lo por cobrar: misma comisión que «Comisiones percibidas»
+  // (cobrado), medida al facturar. Cobrada = lo conciliado de la factura × comisión ÷ (comisión + parte del externo), la misma
+  // fórmula de «Comisiones percibidas», con tope en la comisión facturada.
+  const rexDet = useMemo(()=>{ const cobF={}; (ingConc||[]).forEach(c=>{ if(c&&c.tipo_destino==='factura'&&c.factura_id) cobF[String(c.factura_id)]=(cobF[String(c.factura_id)]||0)+(Number(c.monto_aplicado)||0) })
+    const it=(resAnio.rexItems||[]).map(({t,b})=>{ const com=Number(t.comision_monto)||0, base=com+(Number(t.monto)||0), c=base>0?Math.min(com,(cobF[String(b.id)]||0)*com/base):0; return {b,com,cob:c,pend:com-c} })
+    const cob=it.filter(x=>x.cob>=1).sort((a,b)=>String(b.b.paid_at||b.b.issued_at||'').localeCompare(String(a.b.paid_at||a.b.issued_at||''))), pend=it.filter(x=>x.pend>=1).sort((a,b)=>String(b.b.issued_at||'').localeCompare(String(a.b.issued_at||'')))
+    return {cob, pend, tot:it.reduce((a,x)=>a+x.com,0), tCob:cob.reduce((a,x)=>a+x.cob,0), tPend:pend.reduce((a,x)=>a+x.pend,0), nVenc:pend.filter(x=>x.b.status==='Vencido').length}
+  },[resAnio,ingConc])
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
   const flujoCaja = useFlujoCaja({billing,terceros,costosOfiRows,anticipos,expenses,clients,sales,fantasmaIds})   // misma fuente que la página Flujo de caja y Oficina
   const flujoNeto8 = flujoCaja.fin
@@ -4197,7 +4208,11 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
               const percItems=(ingresosPorAnioVenta.percList||[]).slice().sort((a,b)=>String(b.paid_at||'').localeCompare(String(a.paid_at||'')))
               const percChip=filaG('pc',e=>{e.stopPropagation();setResPerc(v=>!v)},<span style={rowL}>Comisiones percibidas</span>,null,`+ ${vMon(percYTDUF,percYTD)}`,vPos,resPerc)
               const subFila=(k,cid,txt,val,col,onClick)=>(<div key={k} onClick={onClick} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 13px 6px 24px',fontSize:11,background:C.bgSoft,borderTop:`1px solid ${C.border}`,cursor:onClick?'pointer':'default'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{txt}</span><span style={{fontWeight:700,color:col,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{val}</span></div>)
-              const percList = resPerc && percItems.map(it=>{ const mes=it.paid_at?mesCorto(it.paid_at+'T12:00'):''; return subFila(it.id,it.client_id,`${cn(it.client_id)}${it.folio?` · N° ${folioN(it.folio)||it.folio}`:''}${mes?` · ${mes}`:''}`,'+ '+fmtMonD(it._cobrado,it.paid_at),C.greenText,()=>it.client_id&&onOpenClientFicha&&onOpenClientFicha(it.client_id)) })
+              const rxIt=(k,cid,fecha,folio,extra,val,col)=>(<div key={k} onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{display:'flex',alignItems:'center',gap:10,padding:isDeskRes?'7px 14px 7px 30px':'7px 14px 7px 22px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,cursor:'pointer'}}>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}>{cn(cid)}</div><div style={{fontSize:10.5,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap'}}>{fecha?fmtFechaDMY(fecha):'—'}{folio?` · F${folioN(folio)||folio}`:''}{extra?` · ${extra}`:''}</div></div>
+                <span style={{fontSize:12,fontWeight:800,color:col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Math.round(val))}</span></div>)
+              const percList = resPerc && <>{percItems.map(it=>rxIt(it.id,it.client_id,it.paid_at,it.folio,null,it._cobrado,C.greenText))}
+                {rexDet.tot>=1&&<div onClick={e=>{e.stopPropagation(); setResRex(true); setResRexL('pend'); setResDrill({tile:'marg',year:null})}} style={{display:'flex',justifyContent:'space-between',gap:10,padding:isDeskRes?'8px 14px 8px 30px':'8px 14px 8px 22px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:11.5,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>de {fmt(Math.round(rexDet.tot))} facturada · {rexDet.tPend>=1?`${fmt(Math.round(rexDet.tPend))} por cobrar`:'toda cobrada'}</span><Gl n='chevron'/></div>}</>
               const comisList = resComis && comisPagos.slice(0,30).map((x,i)=>{ const mes=x.pagado_at?mesCorto(x.pagado_at+'T12:00'):''; return (
                 <div key={x.id||i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 13px 6px 24px',fontSize:11,background:C.bgSoft,borderTop:`1px solid ${C.border}`}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{x.proveedor||'Colaborador'}{mes?` · ${mes}`:''}</span><span style={{fontWeight:700,color:C.overdueText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtMonD(Number(x.monto)||0,x.pagado_at)}</span></div>) })
 
@@ -4238,7 +4253,13 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
                   <div style={{padding:'12px 14px 6px',...SEC_LBL,fontWeight:800,color:C.accent}}>Resultado del ejercicio {selYear}</div>
                   {lin('','Facturado',mRes('fac'),null,()=>setResDrill({tile:'fact',year:null}))}
                   {resAnio.sub!==0&&lin('+','Subarriendo',mRes('sub'),null,()=>go('subarriendo'))}
-                  {resAnio.rex!==0&&lin('+','Comisión de externos',mRes('rex'),null,()=>go('proveedores'))}
+                  {resAnio.rex!==0&&cxR({k:'rex',sg:'+',label:'Comisión de externos',val:mRes('rex'),onClick:()=>setResRex(v=>!v),open:resRex})}
+                  {resAnio.rex!==0&&resRex&&<>
+                    {rexDet.tCob>=1&&cxR({k:'rexc',label:'Cobrada · '+rexDet.cob.length+(rexDet.cob.length===1?' factura':' facturas'),val:fmt(Math.round(rexDet.tCob)),kind:'sub',onClick:()=>setResRexL(l=>l==='cob'?null:'cob'),open:resRexL==='cob'})}
+                    {resRexL==='cob'&&rexDet.cob.map(x=>rxIt('rc'+x.b.id,x.b.client_id,x.b.paid_at||x.b.issued_at,x.b.invoice_no,null,x.cob,C.greenText))}
+                    {rexDet.tPend>=1&&cxR({k:'rexp',label:'Por cobrar · '+rexDet.pend.length+(isDeskRes?(rexDet.pend.length===1?' factura':' facturas'):''),pill:rexDet.nVenc>0&&<span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',color:C.overdueText,background:C.overdueBg}}>{rexDet.nVenc} vencida{rexDet.nVenc!==1?'s':''}</span>,val:fmt(Math.round(rexDet.tPend)),kind:'sub',onClick:()=>setResRexL(l=>l==='pend'?null:'pend'),open:resRexL==='pend'})}
+                    {resRexL==='pend'&&rexDet.pend.map(x=>rxIt('rp'+x.b.id,x.b.client_id,x.b.issued_at,x.b.invoice_no,x.b.status==='Vencido'?'vencida':'por vencer',x.pend,C.accent))}
+                  </>}
                   {lin('=','Ingresos',mRes('ing'),'tot',onOpenEstadoResultados||null)}
                   {lin('−','Costos de operación',mRes('cos'),'neg',()=>go('presupuestoOficina'),verL)}
                   {resAnio.com!==0&&lin('−','Comisiones pagadas',mRes('com'),'neg',()=>go('proveedores'))}
