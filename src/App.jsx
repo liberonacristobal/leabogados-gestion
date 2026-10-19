@@ -14905,17 +14905,14 @@ const reajusteBHEPago = (t, fecha) => { if(t?.liquido==null||t?.bhe_id||!(Number
   const liq=Number(t.liquido)||0, bruto=Math.round(liq/(1-tasaBHE(fecha))); return bruto!==Number(t.monto) ? {monto:bruto, retencion:bruto-liq} : null }
 // Retención de boleta ↔ F29: va en el F29 del MES DE LA BOLETA (período P, cód. 151) y se paga en P+1 con el PPM
 // (gasto 'Impuestos y patentes › PPM', concepto "IVA/PPM MM-AAAA"). Pagada = existe ese pago, sin marcar nada a mano.
-// Si el concepto del pago dice que dejó fuera retenciones de esta persona ("sin retenciones BHE … Delpino"), no cuenta como pagada.
+// La fuente de verdad es el cód. 151 del F29 (SII); no se infiere nada del texto del concepto (falso positivo Delpino 09-2025).
 const periodoF29 = e => { const m=String(e?.concept||'').match(/(\d{2})-(\d{4})/); if(m) return `${m[2]}-${m[1]}`
   const d=String(e?.date||'').slice(0,7); if(!/^\d{4}-\d{2}$/.test(d)) return ''; const [y,mm]=d.split('-').map(Number), x=new Date(y,mm-2,1); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}` }
 const f29BHE = (fecha, expenses, nombre) => { const per=String(fecha||'').slice(0,7); if(!/^\d{4}-\d{2}$/.test(per)) return null
   const lbl=`${per.slice(5,7)}-${per.slice(0,4)}`, hoyP=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}).slice(0,7)
   const pago=(expenses||[]).find(e=>!e.deleted_at&&e.category==='Impuestos y patentes'&&e.subcategory==='PPM'&&periodoF29(e)===per)
-  const pals=String(nombre||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().split(/\s+/).filter(w=>w.length>=4)
-  const cpt=String(pago?.concept||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
-  const excluida=!!pago&&/sin retenci/.test(cpt)&&pals.some(w=>cpt.includes(w))
-  const estado=pago&&!excluida?'pagada':excluida?'excluida':per>=hoyP?'ira':'por_pagar'
-  const txt={pagada:`Pagada en el F29 ${lbl} · ${fmtFechaDMY(pago?.date)}`, excluida:`No incluida en el F29 ${lbl}`, ira:`Irá en el F29 ${lbl}`, por_pagar:`F29 ${lbl} sin pago registrado`}[estado]
+  const estado=pago?'pagada':per>=hoyP?'ira':'por_pagar'
+  const txt={pagada:`Pagada en el F29 ${lbl} · ${fmtFechaDMY(pago?.date)}`, ira:`Irá en el F29 ${lbl}`, por_pagar:`F29 ${lbl} sin pago registrado`}[estado]
   return {per, lbl, estado, pago:estado==='pagada'?pago:null, txt} }
 const costoComision = (prov, m, tipo, fecha) => { if(!esBoletaProv(prov)||!(m>0)) return {monto:m}
   const t=tasaBHE(fecha)
