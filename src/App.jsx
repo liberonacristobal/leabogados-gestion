@@ -8213,6 +8213,8 @@ const ROLES_DEF = [
   { id:'admin', label:'Administrador', desc:'Acceso completo' },
   { id:'limited', label:'Abogado', desc:'Equipo · trabajo diario' },
 ]
+// Qué ve un rol, en una línea, desde la misma fuente que la navegación (VIEWS_PALETTE).
+const rolVe = id => id==='admin' ? 'Todo, incluidos ajustes y sistema' : [...(VIEWS_PALETTE[id]||[]).map(([,l])=>l),'sus honorarios'].join(' · ')
 const CAP_ROWS = [
   ['dashboard','Inicio'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],
   ['clients','Clientes'],['expenses','Gastos'],['cajachica','Caja chica'],
@@ -19778,6 +19780,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const revOfiItems = useMemo(()=>{ const adm=new Set(miembrosRev.admins.map(m=>m.nombre).filter(Boolean))
     return (expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&e.client_id&&e.created_by&&!/@|^audit/i.test(e.created_by)&&!adm.has(e.created_by)&&(!e.revision_estado||e.revision_estado==='nose')&&(()=>{ const c=(clients||[]).find(x=>String(x.id)===String(e.client_id)); return !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')) })())
   },[expenses,clients,miembrosRev])
+  // Movilización: el revisor ve la del equipo (sin los admins), solo lectura en lo ajeno; el resto, solo la suya.
+  const movPersona = (isAdmin||soyRevisor) ? null : currentUserName
+  const movExcluir = (!isAdmin&&soyRevisor) ? miembrosRev.admins.map(m=>m.nombre).filter(Boolean) : null
   const revOfiVis = (isAdmin||soyRevisor) ? revOfiItems : revOfiItems.filter(e=>e.created_by===currentUserName)   // limited: solo lo que cargó
   useEffect(()=>{ try{ sessionStorage.removeItem(_GASTOS_VOLVER) }catch(_){} },[])
   useEffect(()=>{ if(openGastosOfi){ setSelectedClient(null); setHubOpen(false); setShowGastosOficina(true); onGastosOfiOpened&&onGastosOfiOpened() } },[openGastosOfi])   // gatillo desde el módulo Oficina → vista "Gastos oficina" (Varios y personales)
@@ -21684,9 +21689,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       </div>}
     </FlujoPagina>)
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
-  if(showRevisar&&showMov){ const pg=<MovilizacionView expenses={expenses} clients={clients} persona={isAdmin?null:currentUserName} isAdmin={isAdmin} origen='Revisar' onBack={()=>setShowMov(false)} onEdit={onEdit}/>
+  if(showRevisar&&showMov){ const pg=<MovilizacionView expenses={expenses} clients={clients} persona={movPersona} isAdmin={isAdmin||soyRevisor} excluir={movExcluir} puedeEditar={isAdmin?null:(e=>e._p===currentUserName)} origen='Revisar' onBack={()=>setShowMov(false)} onEdit={onEdit}/>
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
-  if(showRevisar&&revisarRes&&!showOrphans){ const r=revisarRes; const nT=4; const _mv=movilizacionDatos(expenses,clients,{persona:isAdmin?null:currentUserName, anio:String(new Date().getFullYear())}); const _mvMes=_mv.meses[0]; const pg=(
+  if(showRevisar&&revisarRes&&!showOrphans){ const r=revisarRes; const nT=4; const _mv=movilizacionDatos(expenses,clients,{persona:movPersona, excluir:movExcluir, anio:String(new Date().getFullYear())}); const _mvMes=_mv.meses[0]; const pg=(
     <FlujoPagina origen='Gastos' titulo='Revisar' onBack={()=>setShowRevisar(false)} maxW={isDesktop&&nT>=3?1000:760}>
       <div style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${Math.max(nT,2)},minmax(0,1fr))`:(nT===2||nT===4?'1fr 1fr':'1fr'),gap:isDesktop?12:8}}>
         <HubTile ic='wallet' bg={C.greenBg} col={C.greenText} t='Caja chica' s={r.caja.s} sM={r.caja.sM} sCol={r.caja.col} onClick={()=>isAdmin?setRevCaja(true):(onIrCajaChica&&onIrCajaChica())}/>
@@ -26568,9 +26573,9 @@ function PaginaSobre({origen,titulo,ctx,onBack,maxW=640,children}){
 const _NOM_MAIL = {cl:'Cristóbal',ee:'Erasmo',mc:'Martín',mp:'Martina',rd:'Rodrigo'}
 const nombreCargador = s => { const v=String(s||'').trim(); if(!v) return 'Sin registro'; if(v.includes('@')) return _NOM_MAIL[v.split('@')[0]]||v; return v }
 const MovIcon = ({s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M5 17h14l-1.5-6h-11z'/><circle cx='8' cy='18' r='1.6'/><circle cx='16' cy='18' r='1.6'/><path d='M7 11l1.5-4h7l1.5 4'/></svg>
-function movilizacionDatos(expenses, clients, {persona=null, anio=null}={}){
+function movilizacionDatos(expenses, clients, {persona=null, anio=null, excluir=null}={}){
   const ofi=new Set((clients||[]).filter(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')).map(c=>String(c.id)))
-  const movs=(expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&e.category==='Movilización'&&(!anio||String(e.date||'').slice(0,4)===String(anio))&&(!persona||nombreCargador(e.created_by)===persona))
+  const movs=(expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&e.category==='Movilización'&&(!anio||String(e.date||'').slice(0,4)===String(anio))&&(!persona||nombreCargador(e.created_by)===persona)&&!(excluir&&excluir.includes(nombreCargador(e.created_by))))
     .map(e=>({...e, _p:nombreCargador(e.created_by), _cargo:e.personal_de?'per':(e.client_id&&ofi.has(String(e.client_id))?'ofi':(e.client_id?'cli':'ofi')), _sin:e.revision_estado==='consultar'}))
     .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
   const dup=new Set(); movs.forEach((a,i)=>movs.slice(i+1).forEach(b=>{ if(a._p===b._p&&a.date&&a.date===b.date&&Math.abs((a.amount||0)-(b.amount||0))<=200&&String(a.client_id)===String(b.client_id)){ dup.add(a.id); dup.add(b.id) } }))
@@ -26580,14 +26585,16 @@ function movilizacionDatos(expenses, clients, {persona=null, anio=null}={}){
   const porPersona={}; movs.forEach(e=>{ (porPersona[e._p]=porPersona[e._p]||[]).push(e) })
   return {movs, tot:agr(movs), sinMotivo:movs.filter(e=>e._sin), duplicados:movs.filter(e=>dup.has(e.id)), meses:Object.keys(porMes).sort().reverse().map(k=>({k, movs:porMes[k], ...agr(porMes[k])})), personas:Object.keys(porPersona).map(k=>({k, movs:porPersona[k], ...agr(porPersona[k])})).sort((a,b)=>b.tot-a.tot)}
 }
-function MovilizacionView({expenses, clients, persona=null, isAdmin=false, onBack, origen='Volver', onEdit}){
+// excluir: revisor no admin (miembros.revisa_gastos) ve al equipo sin los admins; puedeEditar: lo ajeno queda solo lectura.
+function MovilizacionView({expenses, clients, persona=null, isAdmin=false, excluir=null, puedeEditar=null, onBack, origen='Volver', onEdit}){
   const isDesktop=useIsDesktop()
   const anios=[...new Set((expenses||[]).filter(e=>e.category==='Movilización'&&e.date).map(e=>String(e.date).slice(0,4)))].sort().reverse()
   const [anio,setAnio]=useState(anios[0]||String(new Date().getFullYear()))
   const [per,setPer]=useState(persona)
   const [abierto,setAbierto]=useState(null)   // mes desplegado | 'sin' | 'dup'
-  const d=movilizacionDatos(expenses, clients, {persona:per, anio})
-  const todos=isAdmin&&!persona ? movilizacionDatos(expenses, clients, {anio}).personas.map(x=>x.k) : []
+  const d=movilizacionDatos(expenses, clients, {persona:per, anio, excluir})
+  const todos=isAdmin&&!persona ? movilizacionDatos(expenses, clients, {anio, excluir}).personas.map(x=>x.k) : []
+  const editable=e=>!!onEdit&&(!puedeEditar||puedeEditar(e))
   const cliN=id=>(clients||[]).find(c=>String(c.id)===String(id))?.name
   const card={background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
   const num={fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}
@@ -26599,7 +26606,7 @@ function MovilizacionView({expenses, clients, persona=null, isAdmin=false, onBac
     ws['!cols']=[{wch:11},{wch:12},{wch:13},{wch:60},{wch:26},{wch:28},{wch:11},{wch:11},{wch:16}]
     Object.keys(ws).forEach(k=>{ if(/^H\d+$/.test(k)&&typeof ws[k].v==='number'){ ws[k].z='"$"#,##0' } })
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movilización'); XLSX.writeFile(wb,`Movilizacion ${anio}${per?` ${per}`:''}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
-  const fila=e=>(<div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,cursor:onEdit?'pointer':'default'}}>
+  const fila=e=>(<div key={e.id} onClick={()=>editable(e)&&onEdit(e)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,cursor:editable(e)?'pointer':'default'}}>
     {diaGrande(e.date)}
     <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
       <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[!per&&e._p, e.subcategory, e._cargo==='cli'?cliN(e.client_id):(e._cargo==='per'?'Personal':'Oficina')].filter(Boolean).join(' · ')}{e._sin&&<b style={{color:C.soonText}}> · falta el motivo</b>}</div></div>
@@ -29322,7 +29329,7 @@ function UsersView({onClose}) {
                 <tr key={u.id}>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,fontWeight:600,color:C.text}}>{u.name}</td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,color:C.muted}}>{u.email}</td>
-                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}><select value={u.role} onChange={e=>saveRole(u.id,e.target.value)} style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12}}><option value='admin'>Admin</option><option value='limited'>Limitado</option></select></td>
+                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}><select value={u.role} onChange={e=>saveRole(u.id,e.target.value)} style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12}}>{ROLES_DEF.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}</select></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right'}}><button onClick={()=>removeUser(u.id)} title='Quitar' style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16}}><Gl n='x'/></button></td>
                 </tr>))}</tbody>
             </table></div>
@@ -29336,8 +29343,7 @@ function UsersView({onClose}) {
                 </div>
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
                   <select value={u.role} onChange={e=>saveRole(u.id,e.target.value)} style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12}}>
-                    <option value='admin'>Admin</option>
-                    <option value='limited'>Limitado</option>
+                    {ROLES_DEF.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
                   </select>
                   <button onClick={()=>removeUser(u.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16}}><Gl n='x'/></button>
                 </div>
@@ -29350,10 +29356,11 @@ function UsersView({onClose}) {
             <Fld label='Nombre'><Inp value={newName} onChange={e=>setNewName(e.target.value)} placeholder='Nombre completo'/></Fld>
             <Fld label='Rol'>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                {[['admin','Admin (acceso completo)'],['limited','Limitado (solo tareas y gastos)']].map(([v,l])=>(
-                  <button key={v} onClick={()=>setNewRole(v)} style={{padding:'8px',borderRadius:8,border:`2px solid ${newRole===v?C.accent:C.border}`,background:newRole===v?C.azulBg:'transparent',color:newRole===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+                {ROLES_DEF.map(({id:v,label:l})=>(
+                  <button key={v} onClick={()=>setNewRole(v)} style={{padding:'8px',borderRadius:8,border:`2px solid ${newRole===v?C.accent:C.border}`,background:newRole===v?C.azulBg:'transparent',color:newRole===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
                 ))}
               </div>
+              <div style={{fontSize:11,color:C.muted,marginTop:6}}>{rolVe(newRole)}</div>
             </Fld>
             <button disabled={saving||!newEmail.trim()} onClick={addUser} style={{width:'100%',padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginTop:8,opacity:!newEmail.trim()?.6:1}}>
               {saving?'Guardando...':'Agregar usuario'}
