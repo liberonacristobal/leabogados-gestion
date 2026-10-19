@@ -1239,6 +1239,21 @@ function fgCliente(expenses, clientId){
   return {fondos, gastos, saldo:fondos-gastos}
 }
 const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
+// Solicitud de fondos ↔ depósito (FUENTE ÚNICA: Solicitar fondos y Rendir a cliente). Depósito = fondo del cliente con fecha ≥ la
+// solicitud (si la solicitud trae monto, el más parecido ±2%). Una solicitud ya cerrada (recibido_at) no se vuelve a evaluar.
+function depositoDeSolicitud(r, expenses){
+  const desde=String(r?.enviada_at||'').slice(0,10)
+  const fs=(expenses||[]).filter(e=>e.type==='fondo'&&!e.deleted_at&&String(e.client_id)===String(r?.client_id)&&String(e.date||e.created_at||'').slice(0,10)>=desde)
+  if(!fs.length) return null
+  if(r.monto>0){ const m=fs.find(e=>Math.abs((e.amount||0)-r.monto)<=Math.max(1000,r.monto*0.02)); if(m) return m }
+  return fs.sort((a,b)=>String(a.date||a.created_at).localeCompare(String(b.date||b.created_at)))[0]
+}
+function estadoSolicitud(r, expenses){
+  if(r?.recibido_at) return {k:'rec',dep:null,dias:0}
+  const dep=depositoDeSolicitud(r,expenses); if(dep) return {k:'rec',dep,dias:0}
+  const dias=Math.max(0,Math.floor((Date.now()-new Date(r?.enviada_at||Date.now()).getTime())/86400000))
+  return {k:dias>=7?'sin':'env',dias}
+}
 // Check mínimo en SVG (marcas sutiles: sello de OT pagada, rendido). Nunca el carácter ✓.
 const CheckMini = ({s=9,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||'currentColor'} strokeWidth='3.2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}} aria-hidden='true'><polyline points='20 6 9 17 4 12'/></svg>
 // OT de notaría con su sello (sutil): check verde chico si ya se le pagó a la notaría; sin sello = por pagar. Una sola marca para la ficha de Gastos y la de Clientes.
@@ -16051,6 +16066,10 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const [atencionEmail, setAtencionEmail] = useState(editRend?.dirigido_email||'')
   const [showSub, setShowSub] = useState(!!(editRend&&editRend.subproject))
   const [showFiltroFecha, setShowFiltroFecha] = useState(false)
+  // «Ya la rendí por fuera»: registra una rendición hecha por correo o Drive (no envía nada) para que esos gastos dejen de figurar por rendir.
+  const [extOpen,setExtOpen] = useState(false)
+  const [extFecha,setExtFecha] = useState(()=>isoLocal(Date.now()))
+  const [extLink,setExtLink] = useState('')
 
   // Movimientos del cliente, acotados a la(s) razón(es) social(es) seleccionada(s).
   // Con 1 RS todo pertenece a esa RS (incl. sin entity_id); sin selección/sin RS, todos.
@@ -16231,6 +16250,36 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     setSaving(false)
   }
 
+  // Rendición hecha FUERA de la app (correo/Drive): queda como rendición del cliente con su fecha real (estado_envio 'externa'),
+  // correlativo y gastos ligados, para que el «saldo anterior» de la próxima cuadre. Sin correo ni cobro. Se deshace con «Reabrir».
+  const handleExterna = async() => {
+    if(!gastosSel.length||faltaProyR||!extFecha) return
+    setSaving(true)
+    try {
+      const renderId = crypto.randomUUID()
+      const enviadaAt = new Date(extFecha+'T12:00:00').toISOString()
+      const _fs = gastosSel.map(e=>e.date).filter(Boolean).sort()
+      const periodoSel = _fs.length ? `${fmtFechaDMY(_fs[0])} – ${fmtFechaDMY(_fs[_fs.length-1])}` : fmtFechaDMY(extFecha)
+      const {data:mx}=await supabase.from('rendiciones').select('correlativo').eq('client_id',client.id).not('correlativo','is',null).order('correlativo',{ascending:false}).limit(1).maybeSingle()
+      const corr=((mx&&mx.correlativo)||0)+1
+      const row={id:renderId,user_name:currentUserName||'admin',client_id:client.id,periodo:periodoSel,total:totalSel,n_gastos:gastosSel.length,n_clientes:1,tipo:'cliente',
+        entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null,
+        created_at:enviadaAt,sent_at:enviadaAt,correlativo:corr,estado_envio:'externa',comprobante_url:(extLink||'').trim()||null}
+      const {error:rErr}=await supabase.from('rendiciones').insert(row)
+      if(rErr) throw new Error('No se pudo registrar la rendición: '+rErr.message)
+      let falla=0
+      for(const e of gastosSel){ const {error}=await supabase.from('expenses').update({client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}).eq('id',e.id); if(error) falla++ }
+      if(falla>0) appAlert(`Atención: ${falla} de ${gastosSel.length} gasto(s) no quedaron marcados como rendidos.`)
+      if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}:e))
+      if(setRendiciones) setRendiciones(p=>[row,...(p||[])])
+      logActividad('rendicion.externa_registrada',{tabla:'rendiciones',id:renderId,detalle:{cliente:client.name,title:`Rendición N° ${corr} hecha fuera de la app (${fmtFechaDMY(extFecha)})`,monto:Math.round(totalSel),n_gastos:gastosSel.length}})
+      setSelected(new Set()); setExtOpen(false); setExtLink('')
+      appAlert(`Rendición N° ${corr} registrada como hecha fuera de la app (${gastosSel.length} gasto${gastosSel.length!==1?'s':''}, ${fmt(totalSel)}). No se envió nada.`)
+      onClose&&onClose()
+    } catch(e) { appAlert('Error: '+e.message) }
+    setSaving(false)
+  }
+
   // EDITAR en sitio: actualiza la MISMA rendición (mismo id/correlativo/fecha), agrega/quita gastos, re-marca y ajusta el reembolso. No la anula ni crea otra.
   const handleGuardarEdicion = async() => {
     if(!esEdicion || !gastosSel.length || faltaProyR) return
@@ -16401,6 +16450,15 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         </button>
         </>)}
       </div>
+      {!esEdicion&&(extOpen
+        ? <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:8,padding:'8px 10px',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10}}>
+            <span style={{fontSize:12,color:C.muted}}>Rendida por fuera el</span>
+            <input type='date' value={extFecha} onChange={e=>setExtFecha(e.target.value)} style={{fontSize:12,padding:'5px 7px',border:`1px solid ${C.border}`,borderRadius:7,color:C.text}}/>
+            <input value={extLink} onChange={e=>setExtLink(e.target.value)} placeholder='Enlace al correo (opcional)' style={{flex:'1 1 160px',minWidth:0,fontSize:12,padding:'5px 8px',border:`1px solid ${C.border}`,borderRadius:7,color:C.text}}/>
+            <button disabled={!puedeRendir||saving||!extFecha} onClick={handleExterna} style={{fontSize:12,fontWeight:700,padding:'6px 12px',borderRadius:8,border:'none',background:puedeRendir?C.accent:C.done,color:'#fff',cursor:puedeRendir?'pointer':'not-allowed'}}>{saving?'…':'Registrar'}</button>
+            <button onClick={()=>setExtOpen(false)} style={{fontSize:12,background:'none',border:'none',color:C.textSoft,cursor:'pointer'}}>Cancelar</button>
+          </div>
+        : <button onClick={()=>setExtOpen(true)} disabled={!puedeRendir} style={{marginTop:8,background:'none',border:'none',padding:0,color:puedeRendir?C.accent:C.done,fontSize:12,fontWeight:600,cursor:puedeRendir?'pointer':'not-allowed'}}>Ya la rendí por fuera de la app</button>)}
   </>)
 
   // Desktop: maestro-detalle (lista | documento). Móvil: apilado en el orden de hoy. Misma JSX, dos arreglos.
@@ -19533,10 +19591,177 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
 }
 
 const ESTADOS_G=[['vigentes','Vigentes'],['inactivos','Inactivos'],['incobrables','Incobrables'],['todos','Todos']]
+// ── Rendir a cliente: la lista se ordena por lo que hay que hacer con cada cliente (no por nombre) ──
+// Grupos: rendir y pedir (queda en contra) · rendir a favor · rendir en cero · rendición armada sin enviar · esperando depósito
+// (todo rendido y en contra: pedir o seguir la solicitud). Lo al día queda fuera. Terminados con pendientes van aparte (cierre).
+// Fuentes únicas: gastosPorRendirCli (sin los de $0), saldoCliente, rendiciones (sent_at), fund_requests + estadoSolicitud.
+let _rendirUlt = null   // último cliente abierto desde la lista → al volver se ofrece el siguiente del mismo grupo
+const _RENDIR_G = [
+  {k:'pedir', t:'Rendir y pedir', ic:'tCobrar', bg:C.overdueBg, col:C.overdueText, btn:'Rendir y pedir'},
+  {k:'favor', t:'A favor', ic:'tFavor', bg:C.greenBg, col:C.greenText, btn:'Rendir'},
+  {k:'cero',  t:'En cero', ic:'tCero', bg:C.azulBg, col:C.accent, btn:'Rendir'},
+  {k:'env',   t:'Por enviar', ic:'mail', bg:C.soonBg, col:C.soonText, btn:'Enviar'},
+  {k:'dep',   t:'Esperando', ic:'tEspera', bg:C.soonBg, col:C.soonText, btn:'Pedir'},
+]
+function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendiciones=[], clientEntities=[], sales=[], currentUserName, isAdmin, onRendir, onEnviarRend, onSolicitar, onOpenMovBanco, onOpenClientFicha}){
+  const D=useIsDesktop()
+  const prefKey=`fd_rendir_${currentUserName||'x'}`
+  const pref=(()=>{ try{ return JSON.parse(localStorage.getItem(prefKey)||'null')||{} }catch(_){ return {} } })()
+  const [g,setG]=useState(grupoInicial||pref.g||'pedir')
+  const [abg,setAbg]=useState(pref.abg||null)
+  const [ord,setOrd]=useState(pref.ord||'ant')
+  const [q,setQ]=useState('')
+  const [verTerm,setVerTerm]=useState(false)
+  const [reqs,setReqs]=useState([])
+  const [ult,setUlt]=useState(_rendirUlt)
+  useEffect(()=>{ try{ localStorage.setItem(prefKey,JSON.stringify({g,abg,ord})) }catch(_){} },[g,abg,ord])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{ if(DEMO) return; let on=true
+    supabase.from('fund_requests').select('*').order('enviada_at',{ascending:false}).limit(500).then(({data})=>{ if(on) setReqs(data||[]) },()=>{})
+    return ()=>{ on=false } },[])
+  // Responsable de cada cliente (ficha; si no, la venta más reciente) — misma regla que «Pedir fondos a los abogados».
+  const respDe=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
+  const esOfi=c=>!!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))
+  const filas=useMemo(()=>{
+    const conMov=new Set((expenses||[]).filter(e=>!e.deleted_at&&e.client_id).map(e=>String(e.client_id)))
+    const rendCli=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&!r.anulada_at)
+    return (clients||[]).filter(c=>conMov.has(String(c.id))&&!esOfi(c)).map(c=>{
+      const pr=gastosPorRendirCli(expenses,c.id).filter(e=>(Number(e.amount)||0)!==0)
+      const n=pr.length, m=pr.reduce((a,e)=>a+(Number(e.amount)||0),0)
+      const fechas=pr.map(e=>e.date).filter(Boolean).sort()
+      const sinFecha=pr.filter(e=>!e.date).length
+      const nRS=new Set(pr.map(e=>e.entity_id).filter(Boolean)).size
+      const s=saldoCliente(expenses,c.id)
+      const armada=rendCli.filter(r=>String(r.client_id)===String(c.id)&&!r.sent_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0]||null
+      const ultEnv=rendCli.filter(r=>String(r.client_id)===String(c.id)&&r.sent_at).sort((a,b)=>String(b.sent_at).localeCompare(String(a.sent_at)))[0]||null
+      const req=(reqs||[]).filter(r=>String(r.client_id)===String(c.id)).sort((a,b)=>String(b.enviada_at).localeCompare(String(a.enviada_at)))[0]||null
+      const reqSt=req?estadoSolicitud(req,expenses):null
+      const pedido=req&&reqSt&&reqSt.k!=='rec'?{req,dias:reqSt.dias,vencido:reqSt.k==='sin'}:null
+      const grp = armada?'env' : n>0&&s<=-1000?'pedir' : n>0&&s>=1000?'favor' : n>0?'cero' : s<=-1000?'dep' : 'aldia'
+      return {c, n, m, desde:fechas[0]||null, sinFecha, nRS, s, armada, ultEnv, pedido, grp, term:c.status==='Terminado', abg:respDe[String(c.id)]||'Sin abogado'}
+    })
+  },[clients,expenses,rendiciones,reqs,respDe])
+  // Depósito recibido → cierra sola la solicitud (recibido_at + movimiento del banco), con su rastro en la bitácora.
+  useEffect(()=>{ if(DEMO||!reqs.length) return
+    const abiertas=reqs.filter(r=>!r.recibido_at).map(r=>({r,st:estadoSolicitud(r,expenses)})).filter(x=>x.st.k==='rec'&&x.st.dep)
+    if(!abiertas.length) return
+    ;(async()=>{ for(const {r,st} of abiertas){ let mov=null
+        try{ const {data}=await supabase.from('conciliacion').select('movimiento_id').eq('gasto_id',st.dep.id).limit(1).maybeSingle(); mov=data?.movimiento_id||null }catch(_){}
+        const recAt=new Date(String(st.dep.date||st.dep.created_at).slice(0,10)+'T12:00:00').toISOString()
+        const {error}=await supabase.from('fund_requests').update({recibido_at:recAt,movimiento_id:mov,estado:'recibida'}).eq('id',r.id).is('recibido_at',null)
+        if(!error){ setReqs(p=>p.map(x=>x.id===r.id?{...x,recibido_at:recAt,movimiento_id:mov,estado:'recibida'}:x)); const cl=(clients||[]).find(c=>String(c.id)===String(r.client_id))
+          logActividad('fondos.deposito_recibido',{tabla:'fund_requests',id:r.id,detalle:{cliente:cl?.name,title:`Depósito recibido ${fmtFechaDMY(st.dep.date)}`,monto:Math.round(st.dep.amount||0)}}) } } })()
+  },[reqs,expenses])   // eslint-disable-line react-hooks/exhaustive-deps
+  const vivos=filas.filter(f=>!f.term)
+  const term=filas.filter(f=>f.term&&(f.n>0||Math.abs(f.s)>=1000||f.armada))
+  const abgDef = abg || (!isAdmin && vivos.some(f=>f.abg===currentUserName) ? currentUserName : 'Todos')
+  const base = verTerm ? term : vivos.filter(f=>f.grp===g)
+  const abgs=['Todos',...[...new Set(vivos.map(f=>f.abg))].filter(a=>a!=='Sin abogado').sort((a,b)=>a.localeCompare(b,'es')),...(vivos.some(f=>f.abg==='Sin abogado')?['Sin abogado']:[])]
+  const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  let rows=base.filter(f=>(abgDef==='Todos'||f.abg===abgDef)&&(!q.trim()||nrm(f.c.name).includes(nrm(q.trim()))))
+  rows=[...rows].sort((a,b)=> ord==='monto' ? (b.m-a.m)||(a.s-b.s) : ord==='az' ? (a.c.name||'').localeCompare(b.c.name||'','es')
+    : ord==='rec' ? String(b.desde||'').localeCompare(String(a.desde||'')) : String(a.desde||'9999').localeCompare(String(b.desde||'9999')))
+  const G=_RENDIR_G.find(x=>x.k===g)
+  const accion=f=>{ _rendirUlt={id:f.c.id,g:verTerm?'term':g}
+    if(f.armada) return onEnviarRend&&onEnviarRend(f.armada)
+    if(f.n>0) return onRendir&&onRendir(f.c)
+    return onSolicitar&&onSolicitar(f.c,Math.round(Math.abs(Math.min(0,f.s))),f.abg!=='Sin abogado'?f.abg:null) }
+  const btnTxt=f=> f.armada?'Enviar' : f.n>0?(f.s<=-1000?'Rendir y pedir':'Rendir') : f.pedido?'Volver a pedir':`Pedir ${fmt(Math.abs(f.s))}`
+  const tras=f=> f.s<=-1000?<span style={{color:C.overdueText,fontWeight:600}}>falta {fmt(Math.abs(f.s))}</span> : f.s>=1000?<span style={{color:C.greenText,fontWeight:600}}>a favor {fmt(f.s)}</span> : <span style={{color:C.textSoft}}>queda en $0</span>
+  const diasDe=iso=>iso?Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/86400000)):0
+  const chips=f=>{ const out=[]
+    if(f.armada) out.push({t:`armada hace ${diasDe(f.armada.created_at)} d`,c:C.soonText,bg:C.soonBg})
+    if(f.pedido) out.push({t:`pedido ${fmtFechaDMY(isoLocal(f.pedido.req.enviada_at))} · ${f.pedido.dias} d`,c:f.pedido.vencido?C.overdueText:C.soonText,bg:f.pedido.vencido?C.overdueBg:C.soonBg})
+    if(f.sinFecha) out.push({t:`${f.sinFecha} sin fecha`,c:C.textSoft,bg:C.bgSoft})
+    if(f.nRS>1) out.push({t:`${f.nRS} razones sociales`,c:C.accent,bg:C.azulBg})
+    return out }
+  const chipEl=(x,i)=><span key={i} style={{fontSize:10,fontWeight:600,color:x.c,background:x.bg,borderRadius:6,padding:'1px 6px',whiteSpace:'nowrap'}}>{x.t}</span>
+  const subTxt=f=> f.n>0 ? `${f.n} gasto${f.n!==1?'s':''}${f.desde?` · desde ${fmtFechaDMY(f.desde)}`:''}` : f.armada ? `rendición ${fmt(f.armada.total||0)} armada ${fmtFechaDMY(isoLocal(f.armada.created_at))}` : f.ultEnv ? `rendido ${fmtFechaDMY(isoLocal(f.ultEnv.sent_at))}` : 'sin gastos por rendir'
+  const tileSub=k=>{ const a=vivos.filter(f=>f.grp===k); const sum=k==='pedir'||k==='dep'?a.reduce((s,f)=>s+Math.max(0,-f.s),0):a.reduce((s,f)=>s+f.m,0)
+    return k==='env'?`${a.length} sin enviar`:k==='pedir'||k==='dep'?`${a.length} · falta ${fmtMill(sum)}`:`${a.length} · ${fmtMill(sum)}` }
+  const exportar=async()=>{ try{ const XLSX=await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+    const head=['Cliente','Abogado','Grupo','Gastos por rendir','Desde','Por rendir','Saldo','Seguimiento']
+    const gl=k=>(_RENDIR_G.find(x=>x.k===k)||{}).t||'Al día'
+    const data=rows.map(f=>[f.c.name,f.abg,verTerm?'Terminado':gl(f.grp),f.n,f.desde?fmtFechaDMY(f.desde):'',Math.round(f.m),Math.round(f.s),f.pedido?`Pedido ${fmtFechaDMY(isoLocal(f.pedido.req.enviada_at))} (${f.pedido.dias} d)`:f.armada?'Armada sin enviar':''])
+    const ws=XLSX.utils.aoa_to_sheet([head,...data]); ws['!cols']=[{wch:30},{wch:12},{wch:24},{wch:10},{wch:12},{wch:14},{wch:14},{wch:26}]
+    for(let r=1;r<=data.length;r++){ [5,6].forEach(cc=>{ const cell=ws[XLSX.utils.encode_cell({r,c:cc})]; if(cell&&cell.t==='n') cell.z='#,##0' }) }
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Rendir a cliente'); XLSX.writeFile(wb,`Rendir_a_cliente_${isoLocal(Date.now())}.xlsx`)
+  }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+  const sig = ult && !verTerm ? rows.find(f=>String(f.c.id)!==String(ult.id)) : null
+  const ultCli = ult ? (clients||[]).find(c=>String(c.id)===String(ult.id)) : null
+  const aldia=vivos.filter(f=>f.grp==='aldia').length
+  const sel={fontSize:12,color:C.accent,fontWeight:600,border:`1px solid ${C.border}`,background:C.surface,borderRadius:9,padding:'6px 9px'}
+  const pillBtn=(a)=>{ const pc=a==='Todos'||a==='Sin abogado'?{bg:C.bgSoft,color:C.accent}:personChip(a); const n=(verTerm?term:base).filter(f=>a==='Todos'||f.abg===a).length
+    return <button key={a} onClick={()=>setAbg(a)} style={pillPersonaSty(pc,abgDef===a)}>{a} {n}</button> }
+  return (<div>
+    {!verTerm&&<div style={D?{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:10,marginBottom:12}:{display:'flex',gap:8,overflowX:'auto',margin:'0 -2px 12px',padding:'0 2px 2px'}}>
+      {_RENDIR_G.map(x=>{ const on=g===x.k; return (
+        <div key={x.k} onClick={()=>setG(x.k)} style={{...(D?{minWidth:0}:{flex:'0 0 140px'}),cursor:'pointer',background:C.surface,border:`1px solid ${on?C.accent:C.border}`,boxShadow:on?`0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:'10px 11px',display:'flex',alignItems:'center',gap:9}}>
+          <span style={{width:30,height:30,borderRadius:9,background:x.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={x.ic} s={15} c={x.col}/></span>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:on?C.accent:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.t}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontVariantNumeric:'tabular-nums'}}>{tileSub(x.k)}</div>
+          </div>
+        </div>)})}
+    </div>}
+    {term.length>0&&<div onClick={()=>setVerTerm(v=>!v)} style={{display:'flex',alignItems:'center',gap:9,background:verTerm?C.azulBg:C.soonBg,color:verTerm?C.accent:C.soonText,borderRadius:10,padding:'9px 12px',marginBottom:12,fontSize:12.5,cursor:'pointer'}}>
+      <SIcon n={verTerm?'chevron':'alert'} s={15} c={verTerm?C.accent:C.soonText}/>
+      <span style={{flex:1,minWidth:0}}>{verTerm?'Volver a los clientes activos':<><b>{term.length} cliente{term.length!==1?'s':''} terminado{term.length!==1?'s':''}</b> con gastos o saldo pendiente</>}</span>
+      {!verTerm&&<b style={{whiteSpace:'nowrap'}}>Revisar →</b>}
+    </div>}
+    {sig&&ultCli&&<div style={{display:'flex',alignItems:'center',gap:9,background:C.greenBg,borderRadius:10,padding:'8px 12px',marginBottom:10,fontSize:12.5,color:C.greenText}}>
+      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Siguiente: <b>{sig.c.name}</b></span>
+      <button onClick={()=>accion(sig)} style={{fontSize:12,fontWeight:700,border:'none',borderRadius:8,padding:'5px 11px',background:C.accent,color:'#fff',cursor:'pointer',whiteSpace:'nowrap'}}>{D?`${btnTxt(sig)} →`:'Ir →'}</button>
+      <button onClick={()=>{_rendirUlt=null;setUlt(null)}} aria-label='Cerrar' style={{display:'inline-flex',background:'none',border:'none',padding:2,cursor:'pointer'}}><SIcon n='x' s={14} c={C.textSoft}/></button>
+    </div>}
+    <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center',marginBottom:10}}>
+      <div style={{flex:D?'1 1 220px':'1 1 100%',display:'flex',alignItems:'center',gap:8,background:'#F1F4F6',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 11px',minWidth:0}}>
+        <SIcon n='search' s={15} c={C.muted}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%'}}/></div>
+      <div style={{display:'flex',gap:6,flexWrap:D?'wrap':'nowrap',overflowX:D?'visible':'auto',minWidth:0,flex:D?'0 1 auto':'1 1 auto'}}>{abgs.map(pillBtn)}</div>
+      <select value={ord} onChange={e=>setOrd(e.target.value)} style={sel}><option value='ant'>Más antiguo primero</option><option value='rec'>Más reciente primero</option><option value='monto'>Mayor monto</option><option value='az'>A–Z</option></select>
+      {D&&<button onClick={exportar} style={{...sel,display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/>Excel</button>}
+    </div>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+      {D ? (<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr>{['Cliente','Abogado','Gastos','Desde','Por rendir','Saldo',''].map((h,i)=><th key={i} style={{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i>=4?'right':(i===2?'right':'left'),padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+        <tbody>{rows.map((f,i)=>{ const pc=personChip(f.abg); const ch=chips(f); return (
+          <tr key={f.c.id} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
+            <td style={{padding:'10px 12px',minWidth:0}}><span onClick={()=>onOpenClientFicha&&onOpenClientFicha(f.c.id)} style={{...NOMBRE_CLI,cursor:'pointer'}}>{f.c.name}</span>{ch.length>0&&<span style={{display:'inline-flex',gap:5,marginLeft:8,verticalAlign:1,flexWrap:'wrap'}}>{ch.map(chipEl)}</span>}</td>
+            <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><span style={{fontSize:10.5,fontWeight:600,borderRadius:20,padding:'2px 9px',background:pc.bg,color:pc.color}}>{f.abg}</span></td>
+            <td style={{padding:'10px 12px',textAlign:'right',fontSize:13,fontVariantNumeric:'tabular-nums'}}>{f.n||'—'}</td>
+            <td style={{padding:'10px 12px',fontSize:13,whiteSpace:'nowrap',color:C.text}}>{f.n?(f.desde?fmtFechaDMY(f.desde):'sin fecha'):(f.ultEnv?<span style={{color:C.textSoft}}>rendido {fmtFechaDMY(isoLocal(f.ultEnv.sent_at))}</span>:'—')}</td>
+            <td style={{padding:'10px 12px',textAlign:'right',fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{f.n?fmt(f.m):(f.armada?fmt(f.armada.total||0):'—')}</td>
+            <td style={{padding:'10px 12px',textAlign:'right',fontSize:13,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{tras(f)}</td>
+            <td style={{padding:'8px 12px',textAlign:'right',whiteSpace:'nowrap'}}>
+              {f.pedido?.req?.movimiento_id&&onOpenMovBanco&&<span onClick={()=>onOpenMovBanco(f.pedido.req.movimiento_id)} style={{fontSize:11,color:C.azulInfo,marginRight:8,cursor:'pointer'}}>Banco</span>}
+              <button onClick={()=>accion(f)} style={{fontSize:12,fontWeight:700,border:'none',borderRadius:9,padding:'6px 12px',cursor:'pointer',background:(f.n>0&&f.s<=-1000)||(!f.n&&!f.armada&&!f.pedido)?C.accent:C.azulBg,color:(f.n>0&&f.s<=-1000)||(!f.n&&!f.armada&&!f.pedido)?'#fff':C.accent}}>{btnTxt(f)}</button></td>
+          </tr>)})}</tbody></table></div>)
+      : rows.map((f,i)=>{ const ch=chips(f); return (
+          <div key={f.c.id} onClick={()=>accion(f)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.c.id)}} style={{...NOMBRE_CLI,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.c.name}</div>
+              <div style={{fontSize:11.5,color:C.textSoft,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{subTxt(f)}</div>
+              {ch.length>0&&<div style={{display:'flex',gap:5,marginTop:4,flexWrap:'wrap'}}>{ch.map(chipEl)}</div>}
+            </div>
+            <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
+              <div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{f.n?fmt(f.m):(f.armada?fmt(f.armada.total||0):'—')}</div>
+              <div style={{fontSize:11.5,marginTop:2}}>{tras(f)}</div>
+            </div>
+            <span style={{color:C.textSoft}}><Gl n='chevron'/></span>
+          </div>)})}
+      {rows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13}}>{q||abgDef!=='Todos'?'Nada calza con el filtro.':'Nada en este grupo.'}</div>}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,color:C.textSoft}}>
+        <span><b style={{color:C.text}}>{rows.length}</b> cliente{rows.length!==1?'s':''} · por rendir <b style={{color:C.text}}>{fmt(rows.reduce((a,f)=>a+f.m,0))}</b></span>
+        <span>{verTerm?'Terminados':`${aldia} al día, ocultos`}</span>
+      </div>
+    </div>
+  </div>)
+}
+
 function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMovBanco,expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,onMoverAOficina,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened,openGastosOfi,onGastosOfiOpened,costosOfiMes=0,onOpenCostosOfi,onIrConciliacion,bulkImports=[],onUndoImport,navTo,onNavDone,onSolicitarFondos}) {
   const { histSinEnv, setHistSinEnv, marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
   const [orfPersona,setOrfPersona] = useState(null)   // gasto sin cliente → selector "Personal de" abierto (id)
   const [showMov,setShowMov] = useState(false)   // Revisar › Movilización
+  const [rendGrupo,setRendGrupo] = useState(null)   // Rendiciones › Rendir a cliente: grupo con que abre (tarjeta «Esperando depósito» → 'dep')
   const [sinDetTodos,setSinDetTodos] = useState(false)   // Revisar › Sin detalle: ver todos
   // Hub de Gastos: cara de entrada (hero Por cobrar/A favor + 6 tarjetas). Al tocar una tarjeta se navega a la vista existente. Presentación pura — no toca cifras.
   const [hubOpen,setHubOpen] = useState(()=>{ const vm=viewMemLeer('gastos'); return vm ? vm.hubOpen : !gastosVolverLeer() })
@@ -19991,7 +20216,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,...(isDesktop&&selectedClient?{minWidth:0,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}:{})}}>
-                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial de rendiciones':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?'Rendiciones':showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Historial de pagos':notaTab==='pend'?'Pagar':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Recordatorios':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
+                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial de rendiciones':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?(rendSub==='rendir'?'Rendir a cliente':rendSub==='pend'?'Pendientes':'Rendiciones'):showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Historial de pagos':notaTab==='pend'?'Pagar':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Recordatorios':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ver ficha <Gl n='chevron'/></span>}
                 {selectedClient&&!esOficina(selectedClient.id)&&(()=>{
@@ -20326,18 +20551,9 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const iconSq=(ic,bg,col)=><span style={{width:34,height:34,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:10}}><SIcon n={ic} s={18} c={col}/></span>
         const wrap=ch=><div style={{padding:isDesktop?'4px 22px 100px':'4px 12px 100px',...(isDesktop?{maxWidth:760,margin:'0 auto'}:{})}}>{ch}</div>
         if(rendSub==='rendir'){
-          const q2=q.trim().toLowerCase(); const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
-          const lista=(clientsWithMovs||[]).filter(c=>c.status!=='Terminado'&&!esOficina(c.id)).filter(c=>!q2||nrm(c.name).includes(nrm(q2))).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))
-          return wrap(<>
-            <div style={{display:'flex',alignItems:'center',gap:8,background:'#F1F4F6',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:11}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg><input value={q} onChange={e=>setQ(e.target.value)} autoFocus placeholder='Buscar cliente para rendir…' style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%'}}/></div>
-            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{lista.slice(0,60).map((c,i)=>{ const por=gastosPorRendir(c.id); const n=por.length, mon=por.reduce((a,e)=>a+(e.amount||0),0); return (
-              <div key={c.id} onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(c)}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
-                <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI}}>{c.name}</div></div>
-                {n>0?<span style={{fontSize:11,fontWeight:600,color:C.soonText,flexShrink:0}}>{n} por rendir · {fmt(mon)}</span>:<span style={{fontSize:11,color:C.textSoft,flexShrink:0}}>al día</span>}
-                <span style={{color:C.textSoft,marginLeft:4}}><Gl n='chevron'/></span>
-              </div>
-            )})}{lista.length===0&&<div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13}}>Sin clientes.</div>}</div>
-          </>)
+          return <div style={{padding:isDesktop?'4px 22px 100px':'4px 12px 100px',...(isDesktop?{maxWidth:1180,margin:'0 auto'}:{})}}><RendirClientesPage grupoInicial={rendGrupo} clients={clients} expenses={expenses} rendiciones={rendiciones} clientEntities={clientEntities} sales={sales} currentUserName={currentUserName} isAdmin={isAdmin}
+            onRendir={c=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(c)}} onEnviarRend={r=>setEmailRend(r)}
+            onSolicitar={(c,monto,resp)=>onSolicitarFondos&&onSolicitarFondos(c,null,monto||null,resp||null)} onOpenMovBanco={onOpenMovBanco} onOpenClientFicha={onOpenClientFicha}/></div>
         }
         if(rendSub==='pend'){
           return wrap(<>
@@ -20361,8 +20577,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         }
         return wrap(
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:isDesktop?12:8}}>
-            <HubTile ic='receipt' bg={C.azulBg} col={C.accent} t='Rendir a cliente' s='buscar y rendir gastos' sM='rendir gastos' onClick={()=>{setQ('');setRendSub('rendir')}}/>
-            <HubTile ic='alert' bg={pend90.length?C.soonBg:C.azulBg} col={pend90.length?C.soonText:C.accent} t='Pendientes' s={pend90.length?`${pend90.length} cliente${pend90.length!==1?'s':''} · +90 días`:'al día'} sM={pend90.length?`${pend90.length} con +90 días`:'al día'} sCol={pend90.length?C.soonText:undefined} onClick={()=>setRendSub('pend')}/>
+            <HubTile ic='receipt' bg={C.azulBg} col={C.accent} t='Rendir a cliente' s='rendir, pedir y enviar' sM='rendir y pedir' onClick={()=>{setQ('');setRendGrupo(null);setRendSub('rendir')}}/>
+            <HubTile ic='tEspera' bg={C.soonBg} col={C.soonText} t='Esperando pago' s='fondos pedidos y su seguimiento' sM='fondos pedidos' onClick={()=>{setQ('');setRendGrupo('dep');setRendSub('rendir')}}/>
             <HubTile ic='clock' bg={C.azulBg} col={C.accent} t='Historial' s='rendiciones enviadas' sM='enviadas' onClick={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}}/>
             <HubTile ic='mail' bg={C.soonBg} col={C.soonText} t='Solicitar fondos' s='pedir provisión' onClick={()=>onSolicitarFondos&&onSolicitarFondos()}/>
           </div>
@@ -25079,8 +25295,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
   useEffect(()=>{ if(tab==='historial'&&reqs===null) cargarReqs() },[tab])   // eslint-disable-line
   const cnReq=id=>clients.find(c=>String(c.id)===String(id))?.name||'Cliente'
   // Depósito recibido = fondo del cliente (expenses type='fondo') con fecha >= la solicitud (monto aproximado si viene). Nada sin rastro.
-  const depositoDe=(r)=>{ const fs=(expenses||[]).filter(e=>e.type==='fondo'&&!e.deleted_at&&String(e.client_id)===String(r.client_id)&&String(e.date||e.created_at||'').slice(0,10)>=String(r.enviada_at||'').slice(0,10)); if(!fs.length) return null; if(r.monto>0){ const m=fs.find(e=>Math.abs((e.amount||0)-r.monto)<=Math.max(1000,r.monto*0.02)); if(m) return m } return fs.sort((a,b)=>String(a.date||a.created_at).localeCompare(String(b.date||b.created_at)))[0] }
-  const reqEstado=(r)=>{ const dep=depositoDe(r); if(dep) return {k:'rec',dep,dias:0}; const dias=Math.floor((Date.now()-new Date(r.enviada_at).getTime())/86400000); return {k:dias>=7?'sin':'env',dias} }
+  const reqEstado=(r)=>{ const st=estadoSolicitud(r,expenses); return st.k==='rec'&&!st.dep ? {...st,dep:depositoDeSolicitud(r,expenses)} : st }
   const volverAPedir=(r)=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); if(c) pickClient(c); if(r.monto) setMonto(String(r.monto)); setTab('nueva') }
   const persona=esPersona(client?.name)
   const genMsg=()=>`Espero que ${persona?'estés':'estén'} muy bien. ${proyecto?`En el marco del encargo ${proyecto}, solicitamos`:'Solicitamos'} la provisión de un fondo por rendir${monto?` por ${fmtN(+monto||0)}`:''}, destinado a gastos notariales, inscripciones y otros trámites asociados, el cual será debidamente rendido.\n\nPuede transferir a la cuenta que se indica a continuación. Quedamos atentos a su confirmación.`
@@ -25115,7 +25330,8 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
         try{ const ya=new Set(contacts.map(c=>(c.email||'').toLowerCase())); const nuevos=[...new Set([para.trim(),...cc].map(e=>String(e).trim().toLowerCase()).filter(e=>e&&e.includes('@')&&!ya.has(e)))]; if(nuevos.length) await supabase.from('contacts').insert(nuevos.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))) }catch(_){}
       }
       // Registro permanente de la solicitud (historial + cruce con el depósito): nada sin rastro.
-      try{ await supabase.from('fund_requests').insert({ client_id:client?.id||null, sale_id:sale?.id||null, monto:+monto||0, asunto, para:para.trim(), cc:cc.join(','), enviada_por:user?.name||null, n_adjuntos:extras.length }) }catch(_){}
+      try{ const {error:frErr}=await supabase.from('fund_requests').insert({ client_id:client?.id||null, sale_id:sale?.id||null, monto:+monto||0, asunto, para:para.trim(), cc:cc.join(','), enviada_por:user?.name||null, n_adjuntos:extras.length })
+        if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:client?.id,detalle:{cliente:client?.name,title:'Solicitud de fondos enviada',monto:+monto||0}}) }catch(_){}
       appAlert('Solicitud de fondos enviada al cliente'+(cc.length?' (con copia al abogado responsable).':'.')); onClose()
     }catch(e){ appAlert('Error al enviar: '+(e.message||e)) }
     setSending(false)
@@ -25137,7 +25353,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
       const grupos=Object.entries(byCli).sort((a,b)=>String(b[1][0].enviada_at||'').localeCompare(String(a[1][0].enviada_at||'')))
       return (<div>
         <div style={{fontSize:11,color:C.muted,marginBottom:10}}>{reqs.length} solicitud{reqs.length!==1?'es':''} · {reqs.filter(r=>reqEstado(r).k==='rec').length} con fondo recibido{sinResp>0&&<> · <b style={{color:C.overdueText}}>{sinResp} sin depósito +7 días</b></>}</div>
-        {grupos.map(([cid,rs])=>{ const tot=rs.reduce((a,r)=>a+(r.monto||0),0); const rec=rs.reduce((a,r)=>a+(reqEstado(r).k==='rec'?(depositoDe(r)?.amount||r.monto||0):0),0); return (
+        {grupos.map(([cid,rs])=>{ const tot=rs.reduce((a,r)=>a+(r.monto||0),0); const rec=rs.reduce((a,r)=>a+(reqEstado(r).k==='rec'?(depositoDeSolicitud(r,expenses)?.amount||r.monto||0):0),0); return (
           <div key={cid} style={{marginBottom:12}}>
             <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',background:C.accent,borderRadius:10}}><span style={{flex:1,minWidth:0,fontSize:13,fontWeight:800,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cnReq(cid)}</span><span style={{fontSize:11,color:'#AEC4CE',fontWeight:600,flexShrink:0}}>pedido {fmt(tot)}{rec>0?` · recibido ${fmt(rec)}`:''}</span></div>
             {rs.map(r=>{ const est=reqEstado(r); const dd=r.enviada_at?new Date(r.enviada_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?mesCorto(dd):''; return (
@@ -25408,7 +25624,12 @@ Saludos cordiales,`
       try{ if((para||'').trim()){ await supabase.from('learnings').delete().eq('kind','rendicion_para').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_para',key:String(r.client_id),value:para.trim(),meta:{}}) } }catch(_){}
       try{ if(r.client_id && !adic.on) await setLearningKV('rendicion_msg', keyR(lang), _tokR(body,lang)) }catch(_){}
       // Fondos adicionales pedidos en la rendición: quedan en el historial de solicitudes (cruce con el depósito, avisos).
-      if(adic.on && (parseInt(adic.monto)||0)>0){ try{ await supabase.from('fund_requests').insert({ client_id:r.client_id||null, sale_id:null, monto:parseInt(adic.monto)||0, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, n_adjuntos:1 }) }catch(_){} }   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
+      // Lo que la rendición le pide transferir queda como solicitud de fondos (seguimiento hasta el depósito): saldo a su cargo + fondos
+      // adicionales; con saldo a favor, solo lo adicional que exceda ese saldo. Se cierra sola cuando entra el depósito (Rendir a cliente).
+      { const _Y=adic.on?Math.max(0,parseInt(adic.monto)||0):0, _sal=Math.abs(saldoCliente)
+        const pedido=Math.round(saldoCliente<0 ? _sal+_Y : (saldoCliente>0 ? Math.max(0,_Y-_sal) : _Y))
+        if(pedido>0){ try{ const {error:frErr}=await supabase.from('fund_requests').insert({ client_id:r.client_id||null, sale_id:null, monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, n_adjuntos:1 })
+          if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:r.client_id,detalle:{cliente:client?.name,title:`Pedido en la rendición${corr?` N° ${corr}`:''}`,monto:pedido}}) }catch(_){} } }   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
       try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
       appAlert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
       onClose()
