@@ -872,16 +872,18 @@ const NOTA_DIRIGIDO='Silvana y Mildred'   // contactos en la notaría (saludo de
 // `mensaje` = borrador EDITABLE (prosa completa: saludo + intro + a nombre de quién van las boletas + cierre).
 // El detalle de OT + total se anexa solo (es el dato, no editable). Así ambos flujos quedan en sync.
 function notaDefaultMsg(periodo, rs, rut){
-  return `Estimados,\n\nEspero que estén muy bien. Adjuntamos la liquidación de las órdenes de trabajo (OT) que estamos pagando correspondientes a ${periodo}, junto con el comprobante de la transferencia por el total (detalle a continuación).\n\nLas boletas correspondientes deben emitirse a nombre de ${rs}, RUT ${rut}.\n\nQuedamos atentos a cualquier observación.\nSaludos cordiales,\n${BRAND.nombre}`
+  return `Estimados,\n\nEspero que estén muy bien. Adjuntamos el comprobante de la transferencia y el listado de las órdenes de trabajo (OT) que estamos pagando, correspondientes a ${periodo}, para que puedan eliminarlas de nuestra deuda. El mismo detalle va a continuación.\n\nLas boletas correspondientes deben emitirse a nombre de ${rs}, RUT ${rut}.\n\nQuedamos atentos a cualquier observación.\nSaludos cordiales,\n${BRAND.nombre}`
 }
+// Correos a la notaría sin guiones largos (pedido del usuario 19-10-2026): la glosa «X — Y» va como «X · Y».
+const sinRaya = s => String(s||'').replace(/\s*[—–]\s*/g,' · ').replace(/^ · | · $/g,'')
 function notaEmailHtml(mensaje, gs, total, clients){
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const prosa=esc(mensaje).replace(/\n/g,'<br>')
-  const filas=(gs||[]).map(e=>{ const cn=(clients||[]).find(c=>c.id===e.client_id)?.name||'Sin cliente'; return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
+  const filas=(gs||[]).map(e=>{ const cn=(clients||[]).find(c=>c.id===e.client_id)?.name||'Sin cliente'; return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'s/OT')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(sinRaya(e.concept))} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:14px;color:#3D3D3D;margin:0 0 16px;line-height:1.6">${prosa}</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">Total transferido</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${(total||0).toLocaleString('es-CL')}</td></tr></table></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">${BRAND.dominio} · ${BRAND.nombre}</div></div></body></html>`
 }
 function notaEmailText(mensaje, gs, total){
-  return String(mensaje||'')+'\n\nDETALLE:\n'+(gs||[]).map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTotal transferido: $'+(total||0).toLocaleString('es-CL')
+  return String(mensaje||'')+'\n\nDETALLE:\n'+(gs||[]).map(e=>`• ${e.ot_number||'s/OT'} · ${sinRaya(e.concept)} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTotal transferido: $'+(total||0).toLocaleString('es-CL')
 }
 // Razón social a mostrar en encabezados: si se pasa entityId se usa esa RS; con 1 RS, esa; si hay varias o ninguna,
 // el nombre del cliente (con conteo de RS si aplica). Devuelve {name, rut, multi}.
@@ -18886,7 +18888,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const p=`\n\nAdemás, en su estado de cuenta aparece${pl?'n las siguientes OT, que no corresponden':' la siguiente OT, que no corresponde'} a trabajos de nuestra oficina, por lo que no ${pl?'las':'la'} incluimos en este pago. Les agradeceremos revisar${pl?'las':'la'}:\n${lista}`
       setNotaMsg(m=>{ if(String(m||'').includes('no corresponde')) return m; const i=String(m||'').indexOf('\n\nQuedamos atentos'); return i>=0?m.slice(0,i)+p+m.slice(i):String(m||'')+p })
     }).catch(()=>{})
-    setNotaSubject(`Liquidación de gastos y comprobante de transferencia — ${BRAND.nombre} — ${periodo}`)
+    setNotaSubject(`Liquidación de gastos y comprobante de transferencia · ${BRAND.nombre} · ${periodo}`)
     setNotaOrigen(showHistorial?'historial':null); setShowHistorial(false)   // si venía de Historial, el título y el 'volver' lo saben
     setNotaSend(r); setShowNotaria(true); setNotaTab('enviar')
   }
@@ -18916,7 +18918,10 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const esNotaPend=e=>e.category==='Notaria'&&/\d/.test(String(e.ot_number||''))&&!e.notaria_render_id&&!e.notaria_liquidado_at   // lo que se liquida ahora a la notaría (no se reserva)
     const resItems=g.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at&&!esNotaPend(e))
     const reservado=resItems.reduce((a,e)=>a+(e.amount||0),0)
-    return { fondo, pagado, reservado, resItems, disp: Math.max(0, fondo-pagado-reservado) }
+    // Parte del fondo que no es plata del cliente: el ajuste «Incobrable · asumido por la oficina» (castigo ya decidido).
+    const asumido=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo'&&e.category==='Ajuste'&&/incobrable/i.test(e.concept||'')&&cuentaEnSaldo(e)).reduce((a,e)=>a+(e.amount||0),0)
+    const disp=Math.max(0, fondo-pagado-reservado)
+    return { fondo, pagado, reservado, resItems, disp, asumido: Math.min(asumido, disp) }
   }
   // Mismo criterio que dispCliente, sobre el libro personal (personal_de sin cliente): p. ej. el fondo por rendir que un tercero dejó para un socio.
   // Cuenta personal: un fondo con gastos ligados (reembolso_fondo_id, p. ej. el que deja un tercero para un socio) cubre SOLO esos gastos;
@@ -19086,13 +19091,13 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const mensaje=(notaMsg||'').trim()||notaDefaultMsg(periodo, notaBolRS||BRAND.nombreLegal, notaBolRUT||BRAND.rut)
       const html=notaEmailHtml(mensaje, gs, total, clients)
       const texto=notaEmailText(mensaje, gs, total)
-      const subjectNota=(notaSubject||'').trim()||`Liquidación de gastos y comprobante de transferencia — ${BRAND.nombre} — ${periodo}`
+      const subjectNota=(notaSubject||'').trim()||`Liquidación de gastos y comprobante de transferencia · ${BRAND.nombre} · ${periodo}`
       // Aprende la razón social de las boletas por cliente (si toda la liquidación es de un solo cliente y no es el estudio).
       try{ const cids=[...new Set(gs.map(e=>e.client_id).filter(Boolean))]; if(cids.length===1 && notaBolRS && notaBolRS!==BRAND.nombreLegal){ await supabase.from('learnings').delete().eq('kind','notaria_boletas').eq('key',String(cids[0])); await supabase.from('learnings').insert({kind:'notaria_boletas',key:String(cids[0]),value:JSON.stringify({rs:notaBolRS,rut:notaBolRUT}),meta:{}}) } }catch(_){}
       const fechaLiq=fmtFechaDMY(r.created_at)
       // Detalle a la notaría = Excel formateado. Si por algo falla, cae a PDF para no quedar sin detalle.
-      let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs,clients,titulo:`Liquidación ${BRAND.notaria} al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
-      let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:BRAND.nombre,periodo,gastos:gs,clients,titulo:'Liquidación de gastos — Notaría'}) }catch(_){} }
+      let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:`Liquidación ${BRAND.notaria} al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
+      let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:BRAND.nombre,periodo,gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:'Liquidación de gastos · Notaría'}) }catch(_){} }
       const ext = compMime.includes('pdf')?'pdf':(compMime.includes('png')?'png':(compMime.includes('jpeg')||compMime.includes('jpg')?'jpg':'dat'))
       const adjuntos=[]
       if(xls) adjuntos.push({base64:xls, name:`Liquidacion ${BRAND.notaria.normalize('NFD').replace(/[\u0300-\u036f]/g,'')} al ${fechaLiq}.xlsx`, mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
@@ -19125,9 +19130,9 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const mensaje=notaDefaultMsg(periodo, BRAND.nombreLegal, BRAND.rut)   // reenvío usa el borrador por defecto (mismo builder que enviar)
       const html=notaEmailHtml(mensaje, gs, total, clients)
       const texto=notaEmailText(mensaje, gs, total)
-      const subjectNota=`Liquidación de gastos y comprobante de transferencia — ${BRAND.nombre} — ${periodo}`
-      let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs,clients,titulo:`Liquidación ${BRAND.notaria} al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
-      let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:BRAND.nombre,periodo,gastos:gs,clients,titulo:'Liquidación de gastos — Notaría'}) }catch(_){} }
+      const subjectNota=`Liquidación de gastos y comprobante de transferencia · ${BRAND.nombre} · ${periodo}`
+      let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:`Liquidación ${BRAND.notaria} al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
+      let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:BRAND.nombre,periodo,gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:'Liquidación de gastos · Notaría'}) }catch(_){} }
       const adjuntos=[]
       if(xls) adjuntos.push({base64:xls, name:`Liquidacion ${BRAND.notaria.normalize('NFD').replace(/[\u0300-\u036f]/g,'')} al ${fechaLiq}.xlsx`, mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
       else if(pdf) adjuntos.push({base64:pdf, name:`Liquidacion ${BRAND.notaria.normalize('NFD').replace(/[\u0300-\u036f]/g,'')} al ${fechaLiq}.pdf`, mime:'application/pdf'})
@@ -19300,7 +19305,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
                 : (!isFondo||(e.personal_de&&!e.client_id))&&e.no_descuenta_saldo&&!e.incobrable_at&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.grisText,fontWeight:700,whiteSpace:'nowrap'}}>{e.personal_de&&!e.client_id?'Fuera de la cuenta':'Gasto histórico'}</span>)}
               {e.incobrable_at&&(isAdmin&&!isFondo
                 ? <button onClick={ev=>{ev.stopPropagation();marcarEstado(e,null)}} title={`Incobrable desde ${fmtFechaDMY(e.incobrable_at)} · tocar para deshacer`} style={{fontSize:10.5,padding:0,background:'none',color:C.textSoft,fontWeight:500,border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Incobrable · asumido por la oficina <span style={{fontSize:10,lineHeight:1,opacity:.7}}><Gl n='x'/></span></button>
-                : <span style={{fontSize:10.5,color:C.textSoft,fontWeight:500,whiteSpace:'nowrap'}}>Incobrable · asumido por la oficina</span>)}
+                : <span style={{fontSize:10.5,color:C.textSoft,fontWeight:500,whiteSpace:'nowrap'}}>Incobrable · a cargo de la oficina</span>)}
               {e.personal_de&&!opts.sinPersonal&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:11,fontWeight:700,color:C.muted}}>Personal · <b style={{color:pc.color,fontWeight:700}}>{e.personal_de}</b></span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
@@ -19408,7 +19413,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
                     </div>
                     {!e.incobrable_at&&<div onClick={()=>{marcarEstado(e,'incobrable');setEstadoFor(null)}} style={{padding:'8px 11px',borderTop:`0.5px solid ${C.azulBg}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
                       <span style={{color:C.grisText,display:'inline-flex'}}>{icoBaja()}</span>
-                      <div><div style={{fontSize:12,color:C.grisText,fontWeight:600}}>Incobrable</div><div style={{fontSize:10,color:C.muted}}>Lo asume la oficina</div></div>
+                      <div><div style={{fontSize:12,color:C.grisText,fontWeight:600}}>Incobrable</div><div style={{fontSize:10,color:C.muted}}>A cargo de la oficina</div></div>
                     </div>}
                   </div>
                 </>}
@@ -20112,16 +20117,16 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               // Cuenta de castigos (solo orden, no afecta retiros): lo que la oficina asumió de cada cliente, a nombre del abogado responsable.
               // Fuente única: gastos marcados Incobrable + ajustes «Incobrable · asumido por la oficina».
               const em2n=Object.fromEntries([...miembrosRev.admins,...miembrosRev.revisores].filter(m=>m.email).map(m=>[String(m.email).toLowerCase(),m.nombre]))
-              const castigos = estadoG==='incobrables' ? (expenses||[]).filter(e=>!e.deleted_at&&e.client_id&&((e.type==='gasto'&&e.incobrable_at)||(e.type==='fondo'&&e.category==='Ajuste'&&/incobrable/i.test(e.concept||'')))).map(e=>{ const by=String(e.incobrable_by||e.created_by||''); return {e, socio:respByClienteFull[String(e.client_id)]||'Sin abogado', fecha:String(e.incobrable_at||e.date||'').slice(0,10), monto:Number(e.amount)||0, quien:em2n[by.toLowerCase()]||(by.includes('@')?by.split('@')[0]:by)||'—'} }).sort((a,b)=>b.fecha.localeCompare(a.fecha)) : []
+              const castigos = estadoG==='incobrables' ? (expenses||[]).filter(e=>!e.deleted_at&&e.client_id&&((e.type==='gasto'&&e.incobrable_at)||(e.type==='fondo'&&e.category==='Ajuste'&&/incobrable/i.test(e.concept||'')))).map(e=>{ const by=String(e.incobrable_by||e.created_by||''); return {e, socio:respByClienteFull[String(e.client_id)]||'Sin abogado', fecha:String(e.incobrable_at||e.date||'').slice(0,10), fGasto:String(e.date||'').slice(0,10), monto:Number(e.amount)||0, quien:em2n[by.toLowerCase()]||(by.includes('@')?by.split('@')[0]:by)||'—'} }).sort((a,b)=>b.fGasto.localeCompare(a.fGasto)||b.fecha.localeCompare(a.fecha)) : []   // afuera manda la fecha del gasto; la del castigo va en la línea de abajo
               const castPorSocio = Object.entries(castigos.reduce((m,x)=>{ const o=(m[x.socio]=m[x.socio]||{tot:0,cli:new Set(),n:0}); o.tot+=x.monto; o.cli.add(String(x.e.client_id)); o.n++; return m },{})).sort((a,b)=>b[1].tot-a[1].tot)
               const castVis = castSocio ? castigos.filter(x=>x.socio===castSocio) : castigos
               const castTot = castVis.reduce((a,x)=>a+x.monto,0)
-              const exportCast = ()=>{ const esc=v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`; const H=['Fecha','Socio','Cliente','Gasto','Monto','Marcó']
-                const lines=castVis.map(x=>[fmtFechaDMY(x.fecha),x.socio,(clients||[]).find(c=>String(c.id)===String(x.e.client_id))?.name||'',x.e.concept||'',Math.round(x.monto),x.quien].map(esc).join(';'))
+              const exportCast = ()=>{ const esc=v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`; const H=['Fecha gasto','Fecha castigo','Socio','Cliente','Gasto','Monto','Castigó']
+                const lines=castVis.map(x=>[x.fGasto?fmtFechaDMY(x.fGasto):'',fmtFechaDMY(x.fecha),x.socio,(clients||[]).find(c=>String(c.id)===String(x.e.client_id))?.name||'',x.e.concept||'',Math.round(x.monto),x.quien].map(esc).join(';'))
                 const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+[H.map(esc).join(';'),...lines].join('\n')],{type:'text/csv;charset=utf-8'})); a.download=`castigos${castSocio?'_'+castSocio:''}.csv`; document.body.appendChild(a); a.click(); a.remove() }
               const castBlock = castigos.length>0&&(
                 <div style={{marginBottom:12}}>
-                  <div style={{...SEC_LBL,margin:'0 2px 6px'}}>Castigos · asume la oficina</div>
+                  <div style={{...SEC_LBL,margin:'0 2px 6px'}}>Castigos · a cargo de la oficina</div>
                   <div style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${Math.max(castPorSocio.length,2)},minmax(0,1fr))`:(castPorSocio.length===2?'1fr 1fr':'1fr'),gap:8,marginBottom:8}}>
                     {castPorSocio.map(([soc,o])=>{ const on=castSocio===soc; return <HubTile key={soc} ic='user' bg={personChip(soc).bg||C.azulBg} col={personChip(soc).color||C.accent} t={soc} s={`${fmt(o.tot)} · ${o.cli.size} cliente${o.cli.size!==1?'s':''}`} cardBg={on?C.selBg:undefined} cardBd={on?C.accent:undefined} onClick={()=>setCastSocio(on?null:soc)}/> })}
                   </div>
@@ -20133,10 +20138,10 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                     </div>
                     {castVis.map(x=>{ const cn=(clients||[]).find(c=>String(c.id)===String(x.e.client_id))?.name||'—'; return (
                       <div key={x.e.id} onClick={()=>x.e.type==='gasto'&&onEdit&&onEdit(x.e)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.track}`,cursor:x.e.type==='gasto'&&onEdit?'pointer':'default'}}>
-                        {diaGrande(x.fecha)}
+                        {diaGrande(x.fGasto)}
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:13.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span onClick={ev=>{ if(onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(x.e.client_id) } }}>{cn}</span></div>
-                          <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{!castSocio&&<b style={{fontWeight:700,color:personChip(x.socio).color||C.muted}}>{x.socio} · </b>}{x.e.type==='fondo'?'Ajuste asumido':(x.e.category||'—')}{isDesktop?` · ${x.e.type==='fondo'?'':(x.e.concept||'')}${x.e.type==='fondo'?'':' · '}marcó ${x.quien}`:''}</div>
+                          <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{!castSocio&&<b style={{fontWeight:700,color:personChip(x.socio).color||C.muted}}>{x.socio} · </b>}{isDesktop?<>{x.e.type==='fondo'?'Ajuste':(x.e.category||'—')} · </>:null}castigo {fmtFechaDMY(x.fecha)}{isDesktop&&x.e.type!=='fondo'&&x.e.concept?` · ${x.e.concept}`:''}</div>
                         </div>
                         <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?96:0,textAlign:'right'}}>{fmt(x.monto)}</span>
                       </div>) })}
@@ -21039,7 +21044,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <button onClick={()=>{ setSelNota(new Set(pagables.map(e=>e.id))); setNotaConfirm(false); setDeudaEstF('sel'); setNotaCliOpen(new Set(pagables.map(e=>e.incobrable_at?'__asume__':e.client_id?String(e.client_id):e.personal_de?'p:'+e.personal_de:'__sinasignar__'))) }} title={`${pagables.length} OT: lo que cubre el fondo de cada cliente o persona, más lo de la oficina y lo que asume`} style={{width:'100%',minHeight:38,marginTop:10,borderRadius:9,border:`1px solid ${C.greenText}`,background:C.greenBg,color:C.greenText,fontSize:12.5,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'0 12px'}}>
             <span style={{whiteSpace:'nowrap'}}>Seleccionar con fondos</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(pagablesT)}</span>
           </button>)
-        const partes=[['con','Con saldo',conFondoT,C.greenText,`${nCon} con fondo para pagar`],['adel','Adelanta oficina',adelantoT,C.soonText,`${nAdel} cliente${nAdel!==1?'s':''} · pedir fondos`],...(sinFondoT>0?[['pers','Personal sin saldo',sinFondoT,C.muted,perSin.join(' · ')||'sin cliente asignado']]:[]),...(asumeT>0?[['asume','Asume la oficina',asumeT,C.grisText,`${notaGroups.asume.length} OT incobrable${notaGroups.asume.length!==1?'s':''}`]]:[])]
+        const partes=[['con','Con saldo',conFondoT,C.greenText,`${nCon} con fondo para pagar`],['adel','Adelanta oficina',adelantoT,C.soonText,`${nAdel} cliente${nAdel!==1?'s':''} · pedir fondos`],...(sinFondoT>0?[['pers','Personal sin saldo',sinFondoT,C.muted,perSin.join(' · ')||'sin cliente asignado']]:[]),...(asumeT>0?[['asume','A cargo de la oficina',asumeT,C.grisText,`${notaGroups.asume.length} OT incobrable${notaGroups.asume.length!==1?'s':''}`]]:[])]
         const hero = (
           <div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,padding:'12px 14px'}}>
             <div style={{...lblK,color:C.accent}}>Pendiente a notaría</div>
@@ -21066,7 +21071,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,marginTop:2}}><span style={{fontSize:13,fontWeight:700,color:adelanto>0?C.overdueText:C.accent}}>{selNota.size} OT</span><span style={{fontSize:16,fontWeight:800,color:adelanto>0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(notaTotal)}</span></div>
             {ln('Con saldo',fmt(conFondo),C.greenText)}
             {ln('Adelanto',fmt(adelanto),adelanto>0?C.overdueText:null)}
-            {asumeSel>0&&ln('Asume la oficina',fmt(asumeSel))}
+            {asumeSel>0&&ln('A cargo de la oficina',fmt(asumeSel))}
             {abgs.length>0&&<div style={{borderTop:'0.5px solid rgba(83,114,129,.25)',marginTop:6,paddingTop:6}}>
               <div style={{...lblK,marginBottom:2}}>Por responsable</div>
               {abgs.map(([resp,o])=><Fragment key={resp}>{ln(/^(Personal|Oficina|Sin )/.test(resp)?resp:String(resp).split(' ')[0],fmt(o.con+o.ade))}{o.ade>0&&<div style={{fontSize:10.5,color:C.overdueText,textAlign:'right',marginTop:-2}}>adelanto {fmt(o.ade)}</div>}</Fragment>)}
@@ -21119,7 +21124,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
               {derecha}
             </div>
         const clientCard=(cid,gsAll)=>{
-          const {fondo:fondosC, reservado:reservadoC, disp, oficina:esOf}=dispCliente(cid)
+          const {fondo:fondosC, reservado:reservadoC, disp, asumido, oficina:esOf}=dispCliente(cid)
           const aPagar=gsAll.reduce((a,e)=>a+(e.amount||0),0)
           const exc=excepNota.has(cid)
           const cn=cliName(cid)
@@ -21132,7 +21137,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n}),
               nombreOT(onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(cid)}} style={{cursor:'pointer'}}>{cn}</span>:cn, qq?`${gs.length} de ${gsAll.length}`:gsAll.length),
-              esOf?<>Oficina · gasto propio</>:<>Disponible <b style={{color:disp>0?C.text:C.overdueText,fontWeight:600}}>{fmt(disp)}</b></>,   // lo que tiene para pagar estas OT (fondo − lo ya gastado); la ficha muestra el saldo después de pagarlas
+              esOf?<>Oficina · gasto propio</>:<>Disponible <b style={{color:disp>0?C.text:C.overdueText,fontWeight:600}}>{fmt(disp)}</b>{asumido>0&&<> · {fmt(asumido)} de la oficina</>}</>,   // lo que tiene para pagar estas OT (fondo − lo ya gastado); la ficha muestra el saldo después de pagarlas
               esOf?colD('Oficina','gasto propio',C.muted):colSaldo(disp,deficit>0?null:disp-aPagar),
               montoEst(aPagar,esOf?null:est))}
             {open&&<div>
@@ -21191,7 +21196,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const asumeBlock=!notaResp&&asGs.length>0&&(!deudaEstF||deudaEstF==='asume'||(deudaEstF==='sel'&&asGs.some(x=>selNota.has(x.id))))&&(()=>{ const k='__asume__'; const open=!!qq||notaCliOpen.has(k); return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             {filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
-              nombreOT('Asume la oficina',notaGroups.asume.length),
+              nombreOT('A cargo de la oficina',notaGroups.asume.length),
               <>Incobrables · no se cobran al cliente</>,
               colD('Paga','la oficina',C.muted),
               montoEst(asumeT,null))}
@@ -26790,7 +26795,10 @@ function DetalleGasto({e, expenses, clientEntities, sales, onEditar, onConsulta}
         {fila('Proyecto', venta?.title||e.project||'Sin proyecto', venta||e.project?null:C.soonText)}
         {fila('Razón social', rs?rsDisplay(rs.name):'Sin razón social', rs?null:C.soonText)}
         {e.requirente&&fila('Requirente', e.requirente)}
-        {e.no_descuenta_saldo&&fila('Saldo', 'No descuenta el saldo (histórico)', C.muted)}
+        {e.incobrable_at ? <>
+            {fila('Castigo', [fmtFechaDMY(String(e.incobrable_at).slice(0,10)), nombreCargador(e.incobrable_by)!=='Sin registro'?nombreCargador(e.incobrable_by):null, 'a cargo de la oficina'].filter(Boolean).join(' · '))}
+            {e.category==='Notaria'&&/\d/.test(String(e.ot_number||''))&&fila('Pago de la OT', e.notaria_liquidado_at?`La pagó la oficina el ${fmtFechaDMY(String(e.notaria_liquidado_at).slice(0,10))}`:'La paga la oficina en la próxima liquidación', e.notaria_liquidado_at?null:C.muted)}
+          </> : e.no_descuenta_saldo&&fila('Saldo', 'No descuenta el saldo (histórico)', C.muted)}
         {e.notas&&fila('Notas', e.notas, C.muted)}
         {onConsulta&&<><span style={{color:C.textSoft,alignSelf:'center'}}>Consulta</span><span style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>{e.revision_estado==='consultar'
           ? <><span style={{color:C.soonText,fontWeight:600}}>Con {e.revisado_por||'el equipo'}</span><button type='button' onClick={()=>onConsulta(null)} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.azulBg,borderRadius:20,padding:'3px 10px',border:'none',cursor:'pointer',fontFamily:'inherit'}}>Resuelta</button></>
