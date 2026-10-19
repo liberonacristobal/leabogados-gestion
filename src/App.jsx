@@ -2969,265 +2969,88 @@ const WHO_LIST = ['Cristóbal','Martín','Martina','Erasmo']
 const META_UF = 9800
 const META_CLP = 400000000
 
-function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[], embedded=false, onOpenClientFicha}) {
-  const [horizon,setHorizon] = useState(6)
-  const [cfVista,setCfVista] = useState('flujo')   // 'flujo' (3M/6M/12M) | 'dic' (proyección al 31-dic, inline)
-  const [activePoint,setActivePoint] = useState(null)
-  const [respF,setRespF] = useState('todos')
-  const [projOpen,setProjOpen] = useState(false)
-  const [projResp,setProjResp] = useState(null)   // abogado seleccionado en el panel de proyección (null=todos)
-  const [projYear,setProjYear] = useState(String(new Date().getFullYear()))   // año de venta por default = año actual
-  const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
-  const respByClient = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id),c.abogado_responsable||null])),[clients])
-  const respBySale = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
-  const respDe = b => (b.sale_id&&respBySale[String(b.sale_id)])||respByClient[String(b.client_id)]||null
-  const respList = useMemo(()=>{ const s=new Set(); (billing||[]).forEach(b=>{ const r=respDe(b); if(r) s.add(r) }); return [...s].sort((a,b)=>a.localeCompare(b,'es')) },[billing,respBySale,respByClient])
-  const okResp = b => respF==='todos' || respDe(b)===respF
-  const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due&&b.billing_type!=='reembolso'&&okResp(b))
-  const programadas = billing.filter(b=>b.status==='Programada'&&b.due&&b.billing_type!=='reembolso'&&okResp(b))
-  const pagadas = billing.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.paid_at&&okResp(b))
+// Flecha de las filas desplegables (Inicio y Proyección).
+const ChevAb = ({open}) => <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0}}><path d='M2 3.5 L5 6.5 L8 3.5' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/></svg>
+// Fila de CASCADA (regla «aperturas aritméticas»): signo | etiqueta | píldora | flecha | cifra. Se lee como suma.
+// kind: neg (resta, rojo) · tot (subtotal) · res/resNeg (resultado) · sub (detalle chico). tenue: cifra en gris (lo que queda aparte del total).
+function CxRow({sg='',label,extra,pill,val,kind,onClick,open,isDesk,tenue}){
+  const tot=kind==='tot', res=kind==='res'||kind==='resNeg', sub=kind==='sub', fuerte=tot||res
+  return (<div onClick={onClick} style={{display:'grid',gridTemplateColumns:isDesk?'16px minmax(0,1fr) auto 10px auto':'14px minmax(0,1fr) auto 10px auto',columnGap:6,alignItems:'center',padding:res?'12px 14px':sub?'7px 14px':'9px 14px',borderTop:fuerte?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,background:res?'#EDF1F4':sub?C.bgSoft:undefined,cursor:onClick?'pointer':'default'}}>
+    <span style={{fontSize:14,fontWeight:700,color:fuerte?C.accent:C.muted,textAlign:'center'}}>{sg}</span>
+    <span style={{fontSize:sub?11.5:13,color:fuerte?C.accent:C.muted,fontWeight:fuerte?800:600,display:'flex',alignItems:'baseline',gap:6,minWidth:0,whiteSpace:'nowrap',overflow:'hidden'}}>{label}{extra}</span>
+    <span style={{justifySelf:'end'}}>{pill||null}</span>
+    <span style={{color:C.textSoft,display:'flex',justifyContent:'center'}}>{open!=null&&<ChevAb open={open}/>}</span>
+    <span style={{fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',justifySelf:'end',color:(kind==='neg'||kind==='resNeg')?C.overdueText:(tenue&&!fuerte)?C.textSoft:C.accent,fontSize:res?20:tot?15:sub?11.5:13,letterSpacing:res?'-.4px':undefined}}>{val}</span>
+  </div>) }
 
-  const pastN = horizon<=3?2:horizon<=6?3:6   // meses pasados (cobrado real) que se muestran a la izquierda de Hoy
-  const months = useMemo(()=>{
-    const result = []
-    const now = new Date()
-    for(let i=-pastN;i<horizon;i++){
-      const d = new Date(now.getFullYear(), now.getMonth()+i, 1)
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
-      const label = mesCorto(d)
-      const labelFull = mesTitulo(d)
-      if(i<0){
-        const cobrado = billing.filter(b=>b.billing_type!=='reembolso'&&okResp(b)&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').startsWith(key)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única)
-        result.push({key,label,labelFull,past:true,cobrado,emitido:0,programado:0,overdue:0,total:cobrado})
-      } else {
-        const emitidoMes = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+saldoBill(b),0)
-        const overdue = i===0 ? pending.filter(b=>b.due<key.slice(0,7)+'-01').reduce((a,b)=>a+saldoBill(b),0) : 0
-        const emitido = emitidoMes+overdue
-        const programado = programadas.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+saldoBill(b),0)
-        result.push({key,label,labelFull,past:false,cobrado:0,emitido,programado,overdue,total:emitido+programado})
-      }
-    }
-    return result
-  },[billing,horizon,pastN,respF])
+// Proyección de cobranza al 31-12 (Inicio): el MISMO cálculo del Flujo de caja (flujoCajaProyectado.cobros: plazo de pago real de
+// cada cliente, sin morosas ni cuotas atrasadas, anticipos descontados), solo que hasta fin de año. Sus primeras 8 semanas son
+// exactamente la Cobranza del Flujo; lo moroso y lo atrasado sin emitir quedan aparte (Trabajo impago), como en el Flujo.
+function proyeccionCobranza(F, hoy=new Date()){
+  const fin=new Date(hoy.getFullYear(),11,31,23,59,59).getTime()
+  const items=(F?.cobros||[]).filter(x=>x.t<=fin)
+  return {items, total:items.reduce((a,x)=>a+x.m,0), anio:hoy.getFullYear(), fin}
+}
 
-  const firstFut = pastN   // índice del mes actual (i=0) dentro de months
-  const future = months.filter(m=>!m.past)
-  const maxVal = Math.max(...months.map(m=>m.total),1)
-  const totalHorizon = future.reduce((a,m)=>a+m.total,0)
-  const totalEmitido = future.reduce((a,m)=>a+m.emitido,0)
-  const totalProgramado = future.reduce((a,m)=>a+m.programado,0)
-  const fmtKpi = clp => moneda==='UF' ? (ufRef>0?fmtUFk(clp/ufRef):'—') : fmtShort(clp)
-  const hLbl = horizon===3?'3M':horizon===6?'6M':'12M'
-
-  // ── Proyección al 31-dic (panel B): por cobrar (Pendiente/Vencido) + programadas con vencimiento hasta fin de año; por abogado y por año de venta ──
-  const anoCurr = new Date().getFullYear()
-  const finAno = `${anoCurr}-12-31`
-  const saleYearById = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.year||null])),[sales])
-  const ventaYearDe = b => (b.sale_id&&saleYearById[String(b.sale_id)]) || b.sale_year || null
-  const baseProj = useMemo(()=> (billing||[]).filter(b=> b.billing_type!=='reembolso' && b.due && b.due<=finAno && (['Pendiente','Vencido'].includes(b.status)||b.status==='Programada')), [billing,finAno])
-  const projTotalAll = useMemo(()=> baseProj.reduce((a,b)=>a+saldoBill(b),0), [baseProj])
-  const projYearsDisp = useMemo(()=>[...new Set(baseProj.map(ventaYearDe).filter(Boolean))].sort((a,b)=>b-a), [baseProj,saleYearById])
-  const projFilt = useMemo(()=> baseProj.filter(b=> projYear==='todos'||String(ventaYearDe(b))===String(projYear)), [baseProj,projYear,saleYearById])
-  const projTotalFiltAll = useMemo(()=> projFilt.reduce((a,b)=>a+saldoBill(b),0), [projFilt])
-  const projPorAbogado = useMemo(()=>{ const m={}; projFilt.forEach(b=>{ const r=respDe(b)||'Sin abogado'; m[r]=(m[r]||0)+saldoBill(b) }); return Object.entries(m).map(([r,v])=>({r,v})).sort((a,b)=>b.v-a.v) }, [projFilt,respBySale,respByClient])
-  const projTotalFilt = useMemo(()=> projFilt.filter(b=>!projResp||respDe(b)===projResp).reduce((a,b)=>a+saldoBill(b),0), [projFilt,projResp,respBySale,respByClient])
-  const projFacturas = useMemo(()=> projResp ? projFilt.filter(b=>respDe(b)===projResp).sort((a,b)=>(a.due||'').localeCompare(b.due||'')) : [], [projFilt,projResp,respBySale,respByClient])
-
-  // Geometría del gráfico
-  const W=470, padX=24, padTop=14, baseY=92, n=months.length
-  const xAt = i => n>1 ? padX + i*(W-2*padX)/(n-1) : W/2
-  const yAt = m => baseY - (m.total/maxVal)*(baseY-padTop)
-  const pastPath = months.slice(0,firstFut+1).map((m,i)=>`${i?'L':'M'}${xAt(i).toFixed(1)},${yAt(m).toFixed(1)}`).join(' ')
-  const futPath = months.slice(firstFut).map((m,i)=>`${i?'L':'M'}${xAt(firstFut+i).toFixed(1)},${yAt(m).toFixed(1)}`).join(' ')
-  const futArea = `${futPath} L${xAt(n-1).toFixed(1)},${baseY} L${xAt(firstFut).toFixed(1)},${baseY} Z`
-  const xHoy = xAt(firstFut)
-  const showLbl = i => horizon<=6 || i%2===0 || i===firstFut
-
-  // Detalle del mes activo: facturas/cuotas que componen ese punto
-  const activeDet = useMemo(()=>{
-    if(activePoint==null) return null
-    const m=months[activePoint]; if(!m) return null
-    let items=[]
-    if(m.past){
-      items = pagadas.filter(b=>b.paid_at?.startsWith(m.key)).map(b=>({b,tag:'Cobrado',col:C.normal}))
-    } else {
-      const over = activePoint===firstFut ? pending.filter(b=>b.due<m.key.slice(0,7)+'-01') : []
-      const emit = pending.filter(b=>b.due?.startsWith(m.key))
-      const prog = programadas.filter(b=>b.due?.startsWith(m.key))
-      items = [...over,...emit].map(b=>({b,tag:b.status==='Vencido'?'Vencido':'Emitido',col:estadoCobro(b).color}))
-        .concat(prog.map(b=>({b,tag:'Programado',col:C.muted})))
-    }
-    items.sort((a,b)=>(b.b.amount||0)-(a.b.amount||0))
-    return {m, items}
-  },[activePoint,months])
-
-  const tcell = {borderRadius:10,padding:'10px 12px',background:C.bgSoft,minWidth:0}
-  const tlabel = {fontSize:9,fontWeight:600,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
-  return (
-    <div style={{padding:embedded?0:'16px 20px 0'}}>
-      {!embedded&&<div style={{...SEC_LBL,marginBottom:8}}>Proyección flujo de caja</div>}
-      <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
-
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-          <div>
-            <span style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{cfVista==='dic'?fmtKpi(projTotalFilt):fmtKpi(totalHorizon)}</span>
-            <div style={{...SEC_LBL,marginTop:3}}>{cfVista==='dic'?'Al 31 dic':'Por cobrar'}</div>
-          </div>
-          <div style={{display:'flex',gap:4,flexShrink:0}}>
-            {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>{ const on=cfVista==='flujo'&&horizon===v; return (
-              <button key={v} onClick={()=>{setHorizon(v);setCfVista('flujo');setActivePoint(null)}} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
-            )})}
-            <button onClick={()=>setCfVista('dic')} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${cfVista==='dic'?C.accent:C.border}`,background:cfVista==='dic'?C.azulBg:'transparent',color:cfVista==='dic'?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>31 dic</button>
-          </div>
-        </div>
-        {cfVista==='dic' ? (
-          <div style={{marginTop:11}}>
-            {projYearsDisp.length>1&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
-              <select value={projYear} onChange={e=>{setProjYear(e.target.value);setProjResp(null)}} style={{fontSize:11,padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>
-                <option value='todos'>Año venta: todos</option>
-                {projYearsDisp.map(y=><option key={y} value={y}>Año venta {y}</option>)}
-              </select>
-            </div>}
-            {projPorAbogado.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin montos por cobrar al 31 dic.</div>}
-            {(()=>{ const tot=projPorAbogado.reduce((a,x)=>a+(x.v||0),0); return projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
-              <div key={r} onClick={()=>setProjResp(on?null:r)} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 2px',cursor:'pointer',opacity:projResp&&!on?.4:1}}>
-                <span style={{width:8,height:8,borderRadius:'50%',background:pc.color||C.muted,flexShrink:0}}/><span style={{width:64,flexShrink:0,fontSize:12,color:on?(pc.color||C.accent):C.text,fontWeight:on?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
-                <span style={{flex:1}}/><span style={{fontSize:11,fontWeight:700,color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{tot>0?Math.round(v/tot*100):0}%</span>
-                <span style={{width:62,flexShrink:0,textAlign:'right',fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(v)}</span>
-              </div>
-            )})})()}
-            {projResp&&<div style={{marginTop:11,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
-              <div style={{...SEC_LBL,marginBottom:6}}>Sus facturas · hasta 31 dic</div>
-              {projFacturas.length===0&&<div style={{fontSize:12,color:C.muted}}>Sin facturas.</div>}
-              {projFacturas.map(b=>(
-                <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{minWidth:0}}>
-                    <div onClick={b.client_id?(ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(b.client_id)}):undefined} style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b.client_id?'pointer':'default'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
-                    <div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)} · `:''}{b.concept||'—'}</div>
-                  </div>
-                  <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:9,fontWeight:600,color:estadoCobro(b).text}}>{b.status==='Programada'?'programada':b.status==='Vencido'?'vencida':'por cobrar'}</div>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(saldoBill(b))}</div>
-                  </div>
-                </div>
-              ))}
-            </div>}
-          </div>
-        ) : (<>
-        {(()=>{ const t=totalHorizon||1; const pe=Math.max(0,Math.min(100,Math.round(totalEmitido/t*100))); return (<>
-          <div style={{display:'flex',height:8.5,borderRadius:6,overflow:'hidden',margin:'9px 0 6px',background:C.bgSoft}}>
-            {totalEmitido>0&&<div style={{width:`${pe}%`,background:C.normal}}/>}
-            {totalProgramado>0&&<div style={{width:`${100-pe}%`,background:C.done}}/>}
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,flexWrap:'wrap',gap:4,marginBottom:8}}>
-            <span style={{color:C.greenText}}>● Por cobrar <b>{fmtKpi(totalEmitido)}</b></span>
-            <span style={{color:C.muted}}>● Programado <b>{fmtKpi(totalProgramado)}</b></span>
-          </div>
-        </>)})()}
-
-        <svg viewBox={`0 0 ${W} 120`} width="100%" style={{display:'block',marginTop:4}}>
-          <defs>
-            <linearGradient id="cfArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#003C50" stopOpacity="0.20"/>
-              <stop offset="100%" stopColor="#003C50" stopOpacity="0.02"/>
-            </linearGradient>
-          </defs>
-          <line x1={xHoy} y1="10" x2={xHoy} y2={baseY} stroke="#99ABB4" strokeWidth="1" strokeDasharray="3 3"/>
-          <text x={xHoy+4} y="16" fontSize="9" fill="#99ABB4" fontWeight="600">Hoy</text>
-          <path d={futArea} fill="url(#cfArea)"/>
-          <path d={pastPath} fill="none" stroke="#99ABB4" strokeWidth="2" strokeLinejoin="round"/>
-          <path d={futPath} fill="none" stroke="#003C50" strokeWidth="2" strokeLinejoin="round"/>
-          {months.map((m,i)=>(
-            <g key={m.key} onClick={()=>setActivePoint(p=>p===i?null:i)} style={{cursor:'pointer'}}>
-              <rect x={xAt(i)-14} y="8" width="28" height={baseY} fill="transparent"/>
-              <circle cx={xAt(i)} cy={yAt(m)} r={activePoint===i?5.5:4} fill={m.past?C.done:(m.emitido>0?C.accent:C.muted)} stroke="#fff" strokeWidth={activePoint===i?1.5:0}/>
-            </g>
-          ))}
-          {months.map((m,i)=>(showLbl(i)?(
-            <text key={m.key} x={xAt(i)} y={baseY+22} fontSize="9" fill={activePoint===i||i===firstFut?C.accent:C.done} fontWeight={activePoint===i||i===firstFut?600:400} textAnchor="middle">{m.label}</text>
-          ):null))}
-          {activePoint!=null&&(()=>{
-            const m=months[activePoint], x=xAt(activePoint), y=yAt(m)
-            const txt=fmt(m.total), w=txt.length*6.2+14
-            const bx=Math.max(2,Math.min(W-w-2,x-w/2)), by=Math.max(2,y-26)
-            return <g pointerEvents="none"><rect x={bx} y={by} width={w} height="18" rx="4" fill="#003C50"/><text x={bx+w/2} y={by+12.5} fontSize="10" fontWeight="600" fill="#fff" textAnchor="middle">{txt}</text></g>
-          })()}
-        </svg>
-
-        {activeDet&&(
-          <div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-              <span style={{fontSize:11,fontWeight:600,color:C.text}}>{activeDet.m.labelFull}{activeDet.m.past?' · cobrado':''}</span>
-              <span style={{fontSize:13,fontWeight:600,color:activeDet.m.past?C.normal:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(activeDet.m.total)}</span>
-            </div>
-            {activeDet.items.length===0&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin movimientos este mes.</div>}
-            <div style={{maxHeight:240,overflowY:'auto'}}>
-              {activeDet.items.map(({b,tag,col})=>(
-                <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{minWidth:0}}>
-                    <div onClick={b.client_id?(ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(b.client_id)}):undefined} style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b.client_id?'pointer':'default'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
-                    <div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                    <span style={{fontSize:9,fontWeight:600,color:col,whiteSpace:'nowrap'}}>{tag}</span>
-                    <span style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        </>)}
-      </div>
-
-      {false&&projOpen&&(
-        <div onClick={()=>setProjOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:440,background:'#fff',borderRadius:18,maxHeight:'86vh',overflowY:'auto',padding:'16px 18px 22px',boxShadow:'0 12px 40px rgba(0,0,0,.18)'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8}}>
-              <span style={{fontSize:15,color:C.text}}>Proyección de ingresos{projResp?` · ${projResp}`:''}</span>
-              {projResp
-                ? <span onClick={()=>setProjResp(null)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>Quitar filtro</span>
-                : <span onClick={()=>setProjOpen(false)} style={{fontSize:20,color:C.muted,cursor:'pointer',lineHeight:1}}><Gl n='x'/></span>}
-            </div>
-            <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmt(projTotalFilt)}</div>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:12}}>
-              <span style={{fontSize:11,color:C.muted}}>por cobrar + programadas · al 31 dic {anoCurr}{projResp?` · de ${fmt(projTotalFiltAll)} total`:''}</span>
-              {projYearsDisp.length>1&&<select value={projYear} onChange={e=>{setProjYear(e.target.value);setProjResp(null)}} style={{fontSize:11,padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>
-                <option value='todos'>Año venta: todos</option>
-                {projYearsDisp.map(y=><option key={y} value={y}>Año venta {y}</option>)}
-              </select>}
-            </div>
-            <div style={{display:'flex',flexDirection:'column',gap:3}}>
-              {projPorAbogado.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin montos por cobrar al 31 dic.</div>}
-              {(()=>{ const tot=projPorAbogado.reduce((a,x)=>a+(x.v||0),0); return projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
-                <div key={r} onClick={()=>setProjResp(on?null:r)} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 2px',cursor:'pointer',opacity:projResp&&!on?.4:1}}>
-                  <span style={{width:8,height:8,borderRadius:'50%',background:pc.color||C.muted,flexShrink:0}}/><span style={{width:64,flexShrink:0,fontSize:12,color:on?(pc.color||C.accent):C.text,fontWeight:on?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
-                  <span style={{flex:1}}/><span style={{fontSize:11,fontWeight:700,color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{tot>0?Math.round(v/tot*100):0}%</span>
-                  <span style={{width:62,flexShrink:0,textAlign:'right',fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(v)}</span>
-                </div>
-              )})})()}
-            </div>
-            {projResp&&<div style={{marginTop:13,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
-              <div style={{...SEC_LBL,marginBottom:6}}>Sus facturas · hasta 31 dic</div>
-              {projFacturas.length===0&&<div style={{fontSize:12,color:C.muted}}>Sin facturas.</div>}
-              {projFacturas.map(b=>(
-                <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{minWidth:0}}>
-                    <div onClick={b.client_id?(ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(b.client_id)}):undefined} style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b.client_id?'pointer':'default'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
-                    <div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)} · `:''}{b.concept||'—'}</div>
-                  </div>
-                  <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:9,fontWeight:600,color:estadoCobro(b).text}}>{b.status==='Programada'?'programada':b.status==='Vencido'?'vencida':'por cobrar'}</div>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(saldoBill(b))}</div>
-                  </div>
-                </div>
-              ))}
-            </div>}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+function ProyeccionDetalle({F, clients=[], sales=[], isDesktop=false, onOpenFlujoCaja, onOpenClientFicha}){
+  const [anio,setAnio]=useState('todos')
+  const [open,setOpen]=useState(null)
+  const P=useMemo(()=>proyeccionCobranza(F),[F])
+  const saleById=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s) m[String(s.id)]=s }); return m },[sales])
+  const cliById=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c }); return m },[clients])
+  const anioDe=b=>(b.sale_id&&saleById[String(b.sale_id)]?.year)||b.sale_year||null
+  const respDe=b=>(b.sale_id&&saleById[String(b.sale_id)]?.responsible)||cliById[String(b.client_id)]?.abogado_responsable||'Sin abogado'
+  const anios=useMemo(()=>[...new Set(P.items.map(x=>anioDe(x.b)).filter(Boolean))].sort((a,b)=>b-a),[P,saleById])
+  const items=useMemo(()=>anio==='todos'?P.items:P.items.filter(x=>String(anioDe(x.b))===String(anio)),[P,anio,saleById])
+  const sum=a=>a.reduce((s,x)=>s+x.m,0)
+  const tot=sum(items), paso=tot>=1e6?1e5:1e4
+  const emit=items.filter(x=>x.k==='emit'), prog=items.filter(x=>x.k==='prog')
+  const [eV,pV]=redondearPartes([sum(emit),sum(prog)],paso)
+  const isoDe=t=>{ const d=new Date(t); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+  const meses=useMemo(()=>{ const m={}; items.forEach(x=>{ const k=isoDe(x.t).slice(0,7); (m[k]=m[k]||[]).push(x) }); return Object.entries(m).sort(([a],[b])=>a.localeCompare(b)) },[items])
+  const mesV=redondearPartes(meses.map(([,a])=>sum(a)),paso)
+  const abog=useMemo(()=>{ const m={}; items.forEach(x=>{ const r=respDe(x.b); (m[r]=m[r]||[]).push(x) }); return Object.entries(m).map(([r,a])=>({r,a,v:sum(a)})).sort((x,y)=>y.v-x.v) },[items,saleById,cliById])
+  const abV=redondearPartes(abog.map(x=>x.v),paso), abP=tot>0?redondearPartes(abog.map(x=>x.v/tot*100),1):abog.map(()=>0)
+  // 8 semanas = la Cobranza del Flujo (F.E, misma cifra). Solo si esas 8 semanas terminan antes del 31-12 (si no, superarían el total).
+  const w8fin=F?.weeks?.length?new Date(F.weeks[F.weeks.length-1].ini+'T12:00:00').getTime()+6*86400000:null
+  const ver8=anio==='todos'&&w8fin!=null&&w8fin<=P.fin&&F.E>0
+  const tiPaso=(F?.duda?.monto||0)+(F?.sinEmitir?.monto||0)>=1e6?1e5:1e4
+  const [morV,pfV]=redondearPartes([F?.duda?.monto||0,F?.sinEmitir?.monto||0],tiPaso,[0])   // igual que la página del Flujo
+  const tog=k=>()=>setOpen(o=>o===k?null:k)
+  const pill=(t,tone)=><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',background:tone==='g'?C.greenBg:C.azulBg,color:tone==='g'?C.greenText:C.azulInfo}}>{t}</span>
+  const cap=(t,line,der)=><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'12px 14px 6px',...SEC_LBL,fontWeight:800,borderTop:line?`1px solid ${C.border}`:undefined}}><span>{t}</span>{der}</div>
+  const lista=(k,arr)=>open===k&&[...arr].sort((a,b)=>a.t-b.t).map(x=>{ const b=x.b, cid=b.client_id; return (
+    <div key={k+String(b.id)} onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,cursor:cid?'pointer':'default'}}>
+      {diaGrande(isoDe(x.t))}
+      <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI,fontSize:13}}>{cliById[String(cid)]?.name||'Sin cliente'}</div><div style={{fontSize:10.5,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'Cuota por emitir')}</div></div>
+      <span style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Math.round(x.m))}</span>
+    </div>) })
+  const sel=anios.length>1&&<select value={anio} onClick={e=>e.stopPropagation()} onChange={e=>{setAnio(e.target.value);setOpen(null)}} style={{fontSize:11,fontWeight:600,padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',textTransform:'none',letterSpacing:0}}>
+    <option value='todos'>Año venta: todos</option>{anios.map(y=><option key={y} value={y}>Año venta {y}</option>)}</select>
+  const d=isDesktop
+  return (<div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,overflow:'hidden'}}>
+    {cap(`Proyección al ${fmtFechaDMY(`${P.anio}-12-31`)}`,false,sel)}
+    {tot<=0&&<div style={{padding:'4px 14px 14px',fontSize:12,color:C.muted}}>Sin cobros esperados hasta el 31-12.</div>}
+    {tot>0&&<>
+      <CxRow isDesk={d} label='Facturas emitidas al día' pill={emit.length?pill(d?`${emit.length} factura${emit.length!==1?'s':''}`:emit.length):null} val={fmtMillLR(eV)} open={emit.length?open==='emit':null} onClick={emit.length?tog('emit'):undefined}/>
+      {lista('emit',emit)}
+      <CxRow isDesk={d} sg='+' label='Cuotas por emitir' pill={prog.length?pill(d?`${prog.length} cuota${prog.length!==1?'s':''}`:prog.length):null} val={fmtMillLR(pV)} open={prog.length?open==='prog':null} onClick={prog.length?tog('prog'):undefined}/>
+      {lista('prog',prog)}
+      <CxRow isDesk={d} sg='=' kind='res' label={`Proyección al 31-12`} val={fmtMillLR(eV+pV)}/>
+      {cap('Cuándo entra',true)}
+      {meses.map(([ym,a],i)=><Fragment key={ym}><CxRow isDesk={d} kind='sub' label={mesTitulo(new Date(ym+'-15T12:00:00')).split(' ')[0]} val={fmtMillLR(mesV[i])} open={open==='m'+ym} onClick={tog('m'+ym)}/>{lista('m'+ym,a)}</Fragment>)}
+      {ver8&&<CxRow isDesk={d} label='Próximas 8 semanas' pill={pill(d?'igual al Flujo':'Flujo','g')} val={fmtMillLR(F.E)} open={onOpenFlujoCaja?false:null} onClick={onOpenFlujoCaja}/>}
+      {abog.length>0&&cap('Por abogado',true)}
+      {abog.map((x,i)=>{ const pc=personChip(x.r); return <Fragment key={x.r}><CxRow isDesk={d} kind='sub' sg={<span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:pc.color||C.muted}}/>} label={x.r} pill={pill(`${abP[i]}%`)} val={fmtMillLR(abV[i])} open={open==='a'+x.r} onClick={tog('a'+x.r)}/>{lista('a'+x.r,x.a)}</Fragment> })}
+    </>}
+    {anio==='todos'&&(morV+pfV)>0&&<>
+      {cap('Aparte · trabajo impago',true)}
+      <CxRow isDesk={d} tenue label='Cartera morosa' pill={F.duda.n?pill(d?`${F.duda.n} factura${F.duda.n!==1?'s':''}`:F.duda.n):null} val={fmtMillLR(morV)} open={onOpenFlujoCaja?false:null} onClick={onOpenFlujoCaja}/>
+      <CxRow isDesk={d} tenue sg='+' label='Por facturar atrasado' pill={F.sinEmitir.n?pill(d?`${F.sinEmitir.n} cuota${F.sinEmitir.n!==1?'s':''}`:F.sinEmitir.n):null} val={fmtMillLR(pfV)} open={onOpenFlujoCaja?false:null} onClick={onOpenFlujoCaja}/>
+      <CxRow isDesk={d} tenue sg='=' kind='tot' label='Trabajo impago' val={fmtMillLR(morV+pfV)}/>
+    </>}
+    {onOpenFlujoCaja&&<div onClick={onOpenFlujoCaja} style={{display:'flex',justifyContent:'center',alignItems:'center',gap:4,padding:'10px 14px',borderTop:`1px solid ${C.border}`,color:C.azulInfo,fontWeight:700,fontSize:12,cursor:'pointer'}}>Ver todo en Flujo de caja <Gl n='chevron'/></div>}
+  </div>)
 }
 
 
@@ -4023,10 +3846,8 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
   // Vencido = TODO lo vencido (porCobrarBills + esVencidaB), lo mismo que muestra Cobranza; el aging +60 queda solo para su gráfico.
   const vencidoBills = useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&!['reembolso','nota_credito'].includes(b.billing_type)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&esVencidaB(b)),[billing])
   const vencidoTot = vencidoBills.reduce((a,b)=>a+saldoBill(b),0)
-  // Proyección de ingresos (cifra del tile): por cobrar + programadas con vencimiento hasta fin de año. Mirror de CashflowProjection.baseProj/projTotalAll.
-  // Proyección: excluye programadas fantasma (ya emitidas, alta confianza) para no contar dos veces la cuota y su factura gemela.
+  // Programadas fantasma (ya emitidas, alta confianza) fuera, para no contar dos veces la cuota y su factura gemela.
   const billingProj = useMemo(()=> (fantasmaIds&&fantasmaIds.size) ? (billing||[]).filter(b=> !fantasmaIds.has(String(b.id))) : (billing||[]), [billing,fantasmaIds])
-  const proyIngresosDash = useMemo(()=>{ const finA=`${new Date().getFullYear()}-12-31`; return (billingProj||[]).filter(b=> b && !b.deleted_at && b.billing_type!=='reembolso' && b.due && b.due<=finA && (['Pendiente','Vencido'].includes(b.status)||b.status==='Programada')).reduce((a,b)=>a+saldoBill(b),0) },[billingProj])
   // Cuentas por pagar (cifra del tile): deuda a proveedores no pagada (por_pagar + pendiente), excluye facturas anuladas. Mismo criterio que el detalle.
   // Comisiones por pagar (fuente única saldoComisiones: el cliente ya pagó esa cuota; lo que aún no paga va como 'sujeto a cobro').
   const comisSaldo = useMemo(()=>saldoComisiones(terceros,billing),[terceros,billing])
@@ -4169,7 +3990,9 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow,ufDias,ufRef])
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
-  const flujoNeto8 = useFlujoCaja({billing,terceros,costosOfiRows,anticipos,expenses,clients,sales,fantasmaIds}).fin   // misma fuente que la página Flujo de caja y Oficina
+  const flujoCaja = useFlujoCaja({billing,terceros,costosOfiRows,anticipos,expenses,clients,sales,fantasmaIds})   // misma fuente que la página Flujo de caja y Oficina
+  const flujoNeto8 = flujoCaja.fin
+  const proyCobranza = useMemo(()=>proyeccionCobranza(flujoCaja).total,[flujoCaja])   // Proyección al 31-12 = el mismo cálculo del Flujo, hasta fin de año
   const vencMes = vencidoTot
   // Mi trabajo (operativo del usuario)
   const _miIniT = INICIALES_RESP[user?.name]||null
@@ -4359,15 +4182,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
               </div>)
               // CASCADA (18-10, regla «aperturas aritméticas»): signo | etiqueta | píldora | flecha | cifra. Se lee como suma; las partes
               // visibles suman el total (cuadra → redondearPartes). kind: neg (resta, rojo) · tot (subtotal) · res (resultado) · sub (detalle chico).
-              const GX=isDeskRes?'16px minmax(0,1fr) auto 10px auto':'14px minmax(0,1fr) auto 10px auto'
-              const cxR=({k,sg='',label,extra,pill,val,kind,onClick,open})=>{ const tot=kind==='tot', res=kind==='res'||kind==='resNeg', sub=kind==='sub', fuerte=tot||res
-                return (<div key={k||String(label)} onClick={onClick} style={{display:'grid',gridTemplateColumns:GX,columnGap:6,alignItems:'center',padding:res?'12px 14px':sub?'7px 14px':'9px 14px',borderTop:fuerte?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,background:res?'#EDF1F4':sub?C.bgSoft:undefined,cursor:onClick?'pointer':'default'}}>
-                  <span style={{fontSize:14,fontWeight:700,color:fuerte?C.accent:C.muted,textAlign:'center'}}>{sg}</span>
-                  <span style={{...rowL,fontSize:sub?11.5:13,color:fuerte?C.accent:C.muted,fontWeight:fuerte?800:600,display:'flex',alignItems:'baseline',gap:6,minWidth:0,whiteSpace:'nowrap',overflow:'hidden'}}>{label}{extra}</span>
-                  <span style={{justifySelf:'end'}}>{pill||null}</span>
-                  <span style={{color:C.textSoft,display:'flex',justifyContent:'center'}}>{open!=null&&<Chev open={open}/>}</span>
-                  <span style={{...rowV,whiteSpace:'nowrap',justifySelf:'end',color:(kind==='neg'||kind==='resNeg')?C.overdueText:C.accent,fontSize:res?20:tot?15:sub?11.5:13,letterSpacing:res?'-.4px':undefined}}>{val}</span>
-                </div>) }
+              const cxR=({k,...p})=><CxRow key={k||String(p.label)} isDesk={isDeskRes} {...p}/>
               const capR=(txt,line)=>(<div style={{padding:'12px 14px 6px',...SEC_LBL,fontWeight:800,color:C.accent,borderTop:line?`1px solid ${C.border}`:undefined}}>{txt}</div>)
               const pctX=(p,suf)=>p!=null&&<span style={{fontSize:11,fontWeight:500,color:C.muted,marginLeft:2}}><b style={{color:C.accent,fontWeight:800}}>{p}%</b>{isDeskRes?` ${suf}`:''}</span>   // en el teléfono solo el % (la tarjeta ya dice de qué)
               // Cifras de una cascada en la moneda del panel. pares=[[uf,clp],…] (con signo) → sumas que cuadran; fijos = índices que también se ven en otra tarjeta.
@@ -4608,7 +4423,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
             {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'file',{fg:C.accent,bg:C.azulBg},emFacTot>0?`${emPct}% pagado`:'sin emitir aún',()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
             {kTile('flujo','Flujo de caja',(flujoNeto8>0?'+':'')+fmtShort(flujoNeto8),flujoNeto8>=0?C.greenText:C.overdueText,'exchange',flujoNeto8>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},'neto · 8 semanas',onOpenFlujoCaja)}
             {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}</span>:'del año',()=>go('cobranza'))}
-            {kTile('proyeccion','Proyección',fmtShort(proyIngresosDash),C.accent,'clock',{fg:C.accent,bg:C.azulBg},`${isDeskRes?'ingresos ':''}al ${fmtFechaDMY(`${new Date().getFullYear()}-12-31`)}`)}
+            {kTile('proyeccion','Proyección',fmtShort(proyCobranza),C.accent,'clock',{fg:C.accent,bg:C.azulBg},`${isDeskRes?'cobranza ':''}al ${fmtFechaDMY(`${new Date().getFullYear()}-12-31`)}`)}
             {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.totalTodo, porPagar=cxpTotDash
               // La cifra grande es lo accionable (por pagar, saldo vivo), igual que «Comisiones por pagar» en Oficina; lo pagado del año va debajo.
               const val=porPagar>0?fmtShort(porPagar):'Al día'
@@ -4717,7 +4532,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
       </div>)}
       {kOpen('proyeccion')&&(
       <div style={{padding:'10px 20px 0'}}>
-        <CashflowProjection embedded billing={billingProj} moneda={dashMoneda} ufRef={ufRef} clients={clients} sales={sales} onOpenClientFicha={onOpenClientFicha}/>
+        <ProyeccionDetalle F={flujoCaja} clients={clients} sales={sales} isDesktop={isDeskRes} onOpenFlujoCaja={onOpenFlujoCaja} onOpenClientFicha={onOpenClientFicha}/>
       </div>)}
 
       {/* Comisiones + Oficina ahora viven en la grilla única de Indicadores (arriba). Aquí solo su detalle desplegable. */}
@@ -5715,7 +5530,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[],onEdi
   const ufState = useUF()
   const ufHoy = ufState.uf
   const ufRef = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
-  // Atribución de abogado (FUENTE ÚNICA, igual que Inteligencia/CashflowProjection.respDe): la venta manda; si no tiene, el abogado del cliente. Toda venta debería tener responsible (se exige al guardar), este fallback es el blindaje.
+  // Atribución de abogado (FUENTE ÚNICA, igual que Inteligencia/ProyeccionDetalle.respDe): la venta manda; si no tiene, el abogado del cliente. Toda venta debería tener responsible (se exige al guardar), este fallback es el blindaje.
   const abogDeCliente = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id), c.abogado_responsable||null])),[clients])
   const respVenta = s => s.responsible || abogDeCliente[String(s.client_id)] || 'Sin abogado'
   const porHoras = s => s.cobro_type==='hora'   // se cobra por horas: sin monto fijo es lo esperable (no '0')
@@ -10138,6 +9953,7 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
   const weeks=Array.from({length:semanas},(_,i)=>{ const ws=new Date(monT+i*7*DAY); return {ini:`${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,'0')}-${String(ws.getDate()).padStart(2,'0')}`,entra:0,com:0} })
   const cli={}; const C_=c=>{ const k=String(c||''); return cli[k]||(cli[k]={cid:k,entra:0,duda:0,sin:0,com:0,comFuera:0,antic:0,nVenc:0,ritmo:ritmo(k),hist:histDe[k]||0}) }
   const st={}; const duda={n:0,monto:0,cli:new Set()}, sinE={n:0,monto:0,previas:0}
+  const cobros=[]   // cada cobro esperado con su fecha (t), también los que caen después de las 8 semanas → Proyección al 31-12
   // Pagos ya recibidos sin factura (anticipo disponible): esa plata ya entró, así que rebaja las cuotas programadas más antiguas
   // de su venta (o del cliente, si el anticipo no tiene venta). Solo falta emitir la factura. El subarriendo es mensual: un pago sin factura
   // cubre solo la cuota de ESE mes (pago entre 15 días antes y 20 días después de su vencimiento), nunca la de otro mes.
@@ -10159,11 +9975,11 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
       const base=tD(b.issued_at)??tD(b.due); if(base==null) return
       const esp=base+c.ritmo*DAY
       if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
-      const w=wIdx(Math.max(esp,hoyT)); st[b.id]={w,m,cid:c.cid}; if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
+      const w=wIdx(Math.max(esp,hoyT)); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:Math.max(esp,hoyT),m,k:'emit'}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
     if(b.status==='Programada'&&!b.invoice_no){ if(fueraProg(b)) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0)-(cubV.get(String(b.id))?.m||0); if(cubierto[b.id]) c.antic+=cubierto[b.id]; if(!(m>=1)){ if(cubierto[b.id]) st[b.id]={pagadaAnt:true,cid:c.cid}; return }
       const due=b.due||b.issued_at; const dYm=String(due||'').slice(0,7)
       if(!dYm||dYm<curYm){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
-      const w=wIdx(Math.max(tD(due)??hoyT,hoyT)+c.ritmo*DAY); st[b.id]={w,m,cid:c.cid}; if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
+      const tE=Math.max(tD(due)??hoyT,hoyT)+c.ritmo*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog'}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
   })
   const bById={}; vivas.forEach(b=>{ bById[String(b.id)]=b })
   const porVenta={}; vivas.forEach(b=>{ if(b.sale_id&&st[b.id]) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
@@ -10190,7 +10006,7 @@ function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], antici
   const E=weeks.reduce((a,w)=>a+w.entra,0), Cm=weeks.reduce((a,w)=>a+w.com,0), O=weeks.reduce((a,w)=>a+w.of,0)
   const sinCuotaTot=sinCuota.reduce((a,x)=>a+x.monto,0)
   const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
-  return {weeks,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
+  return {weeks,cobros,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
 }
 function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[], expenses=[], clients=[], sales=[], isDesktop=false, onOpenClientFicha, onOpenCostos }){
   const F=useFlujoCaja({billing,terceros,costosOfiRows,anticipos,expenses,clients,sales})
@@ -10217,6 +10033,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
     }catch(e){ appAlert('No se pudo generar el Excel: '+(e.message||e)) } }
   // Molde Oficina (2026-10-17): 4 tarjetas de color (resultado) + «Composición» en tarjetas chicas (sus partes), cada una abre su lista.
   const sfTot=F.duda.monto+F.sinEmitir.monto
+  const [morV,pfV]=redondearPartes([F.duda.monto,F.sinEmitir.monto],sfTot>=1e6?1e5:1e4,[0])   // las dos partes suman la tarjeta Trabajo impago; la morosa redondea normal, el ajuste va a Por facturar
   const kLbl={fontSize:isDesktop?10.5:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
   const tog=f=>()=>{ setFil(v=>v===f?'todos':f); irA(cliRef) }
   const kt=(key,ic,[bg,fg],lab,val,sub,f)=>{ const blanco=bg===C.card, on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'flex-start',minWidth:0,cursor:go?'pointer':'default',outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
@@ -10233,14 +10050,14 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
       {kt('fin','chart',F.fin>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText],'Flujo neto',`${F.fin>=0?'+':''}${fM(F.fin)}`,isDesktop?'proyectado · 8 semanas':'8 semanas',()=>irA(semRef))}
       {kt('ent','tEntra',[C.azulBg,C.accent],'Cobranza',`+${fM(F.E)}`,isDesktop?'facturas emitidas':'emitidas','ent')}
       {kt('sal','wallet',[C.soonBg,C.soonText],'Egresos',F.O+F.C?`−${fM(F.O+F.C)}`:'$0',isDesktop?'operación + comisiones':'8 semanas',()=>irA(semRef))}
-      {kt('imp','tEspera',[C.card,C.accent],'Trabajo impago',fM(sfTot),isDesktop?`${nF} morosa${nF!==1?'s':''} · ${nC} cuota${nC!==1?'s':''}`:`${nF} fact. · ${nC} cuota${nC!==1?'s':''}`,'imp')}
+      {kt('imp','tEspera',[C.card,C.accent],'Trabajo impago',fM(morV+pfV),isDesktop?`${nF} morosa${nF!==1?'s':''} · ${nC} cuota${nC!==1?'s':''}`:`${nF} fact. · ${nC} cuota${nC!==1?'s':''}`,'imp')}
     </div>
     {secL('Composición')}
     <div style={grid4}>
       {st('op','users',C.overdueBg,C.overdueText,isDesktop?'Gastos de operación':'Operación',F.O?`−${fM(F.O)}`:'$0',onOpenCostos?()=>onOpenCostos(F.costoReal):undefined)}
       {st('com','exchange',C.soonBg,C.soonText,isDesktop?'Comisiones por pagar':'Comisiones',F.C?`−${fM(F.C)}`:'$0','com')}
-      {st('mor','alert',C.overdueBg,C.overdueText,isDesktop?'Cartera morosa':'Morosa',fM(F.duda.monto),'mor')}
-      {st('pf','tSinFac',C.azulBg,C.azulInfo,isDesktop?'Por facturar atrasado':'Por facturar',fM(F.sinEmitir.monto),'pf')}
+      {st('mor','alert',C.overdueBg,C.overdueText,isDesktop?'Cartera morosa':'Morosa',fM(morV),'mor')}
+      {st('pf','tSinFac',C.azulBg,C.azulInfo,isDesktop?'Por facturar atrasado':'Por facturar',fM(pfV),'pf')}
     </div>
     {F.sinCuota.length>0&&<div style={{marginTop:8}}>{aviso(C.soonBg,C.soonText,`Comisión sin cuota · ${F.sinCuota.length}`,[...new Set(F.sinCuota.map(x=>x.prov))].slice(0,2).join(', ')+' · asígnale la cuota para proyectarla',fM(F.sinCuotaTot))}</div>}
   </div>
@@ -12222,7 +12039,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const [anioLearned,setAnioLearned] = useState({})   // client_id → año aprendido (sugerencia)
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','venta_anio_cliente').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=Number(r.value) }); setAnioLearned(m) },()=>{}) },[])
   const saleYrById = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(s.year!=null) m[String(s.id)]=s.year }); return m },[sales])
-  // Año de venta ESTRICTO (single source, igual que Inicio/CashflowProjection): venta enlazada (sale_id→sales.year) o año a mano (sale_year); NADA de respaldo por issued_at (eso enmascaraba facturas sin enlazar y desalineaba Inicio vs Facturación).
+  // Año de venta ESTRICTO (single source, igual que Inicio/ProyeccionDetalle): venta enlazada (sale_id→sales.year) o año a mano (sale_year); NADA de respaldo por issued_at (eso enmascaraba facturas sin enlazar y desalineaba Inicio vs Facturación).
   const anioVentaDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:null)
   const sinAnio = useMemo(()=> bb.filter(b=>b.status==='Pagado'&&anioVentaDe(b)==null).sort((a,b)=>new Date(b.paid_at||0)-new Date(a.paid_at||0)),[bb,saleYrById])
   const yearBtns = useMemo(()=>{ const ys=sales.map(s=>s.year).filter(Boolean); return [...new Set([currentYear,currentYear-1,currentYear-2,currentYear-3,...ys])].sort((a,b)=>b-a).slice(0,6) },[sales])
