@@ -266,18 +266,18 @@ serve(async (req) => {
 
       <div style="background:#f5f5f5; border-radius:8px; padding:16px;">
         <div style="font-size:15px; font-weight:bold; color:#1a1a1a; margin-bottom:${nota ? "12px" : "10px"};">${esc(titulo)}</div>
-        ${nota ? `<div style="border-left:2px solid #cccccc; padding:2px 0 2px 12px; margin:0 0 12px; color:#777777; font-style:italic; font-size:13px;">"${esc(nota)}"</div>` : ""}
+        ${nota ? `<div style="margin:0 0 12px; color:#777777; font-style:italic; font-size:13px;">«${esc(nota)}»</div>` : ""}
         <table style="width:100%; border-collapse:collapse;">
           ${clienteName ? `<tr><td style="${rowLabel}">Cliente</td><td style="${rowVal}">${esc(clienteName)}</td></tr>` : ""}
           ${project ? `<tr><td style="${rowLabel}">Proyecto</td><td style="${rowVal}">${esc(project)}</td></tr>` : ""}
           ${due ? `<tr><td style="${rowLabel}">Vence</td><td style="padding:6px 0;"><span style="display:inline-block; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:bold; background:${dueUrgent ? "#FCEBEB" : "#eeeeee"}; color:${dueUrgent ? "#A32D2D" : "#555555"};">${due}</span></td></tr>` : ""}
         </table>
       </div>
-      ${motivoDeleg ? `<div style="background:#FDF6E7; border-left:3px solid #E0A93B; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
+      ${motivoDeleg ? `<div style="background:#FDF6E7; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
         <div style="font-size:11px; font-weight:bold; color:#854F0B; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Motivo de la delegación</div>
         <div style="font-size:13px; color:#1a1a1a; line-height:1.55; white-space:pre-wrap;">${esc(motivoDeleg)}</div>
       </div>` : ""}
-      ${gestion ? `<div style="background:#E1F5EE; border-left:3px solid #1D9E75; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
+      ${gestion ? `<div style="background:#E1F5EE; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
         <div style="font-size:11px; font-weight:bold; color:#0F6E56; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Gestión realizada${estadoCierre ? ` <span style="display:inline-block; background:${/complet/i.test(estadoCierre) ? "#1D9E75" : "#E0A93B"}; color:#ffffff; border-radius:20px; padding:1px 8px; font-size:9px; letter-spacing:0.3px; vertical-align:1px;">${esc(estadoCierre)}</span>` : ""}</div>
         <div style="font-size:13px; color:#1a1a1a; line-height:1.55; white-space:pre-wrap;">${esc(gestion)}</div>
         ${attCount ? `<div style="font-size:12px; color:#0F6E56; margin-top:8px;">${attCount} documento${attCount > 1 ? "s" : ""} adjunto${attCount > 1 ? "s" : ""}</div>` : ""}

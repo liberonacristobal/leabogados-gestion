@@ -188,7 +188,7 @@ serve(async (req) => {
     const HAIR="#E4E8EB", INK="#3D3D3D", MUT="#537281", FAINT="#99ABB4", NV="#003C50";
     const GRN="#0F6E56", GRNBG="#E1F5EE", AMB="#854F0B", AMBBG="#FFF8E1";
     let secN = 0;   // numeración correlativa de las secciones que sí aparecen
-    const sec = (_n:string,label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${++secN} · ${label}</span></div>`;
+    const sec = (_n:string,label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${++secN} · ${label}</span></div>`;
     const cta = (txt:string,color:string,url:string="https://gestion.leabogados.cl")=> `<div style="margin-top:12px;"><a href="${url}" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${txt} &rarr;</a></div>`;
 
     const cobrosHtml = (arr:any[]) => {
