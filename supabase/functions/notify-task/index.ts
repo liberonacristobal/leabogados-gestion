@@ -110,7 +110,7 @@ type MailAttachment = { base64: string; name?: string; mime?: string };
 // Solución: encabezados SOLO en ASCII (tildes fuera, guiones largos → "-"). El cuerpo conserva las tildes.
 const toAscii = (s: string) =>
   String(s || "")
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[–—]/g, "-")
     .replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/[^\x20-\x7E]/g, "");

@@ -13,7 +13,7 @@ const EMAIL:  Record<string,string> = { CL:"cl@leabogados.cl", EE:"ee@leabogados
 const INI_DE_EMAIL: Record<string,string> = { "cl@leabogados.cl":"CL","ee@leabogados.cl":"EE","mc@leabogados.cl":"MC","mp@leabogados.cl":"MP","rd@leabogados.cl":"RD" };
 
 // Encabezados solo ASCII (denomailer rompe tildes en el subject). Quitar =20 de fin de línea.
-const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
+const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
 const qpSafe = (h:string) => String(h||"").replace(/[ \t]+$/gm,"");
 const esc = (s:string) => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 const fmt = (n:number) => new Intl.NumberFormat("es-CL",{style:"currency",currency:"CLP",maximumFractionDigits:0}).format(n||0);
@@ -153,7 +153,7 @@ serve(async (req) => {
     const HAIR="#EAEEF0", INK="#1F2A30", MUT="#66787F", FAINT="#9DAEB4", NV="#003C50";
     const GRN="#147D5C", RED="#C0403E", AMB="#9A6410", GRNBG="#E8F4EE", REDBG="#FBECEB", AMBBG="#FAF0DA";
     const bt=(first:boolean)=> first?"":`border-top:1px solid ${HAIR};`;
-    // Encabezado de sección: tick de color + label en mayúscula + subrayado fino.
+    // Encabezado de sección: label de color en mayúscula + subrayado fino (sin franja ni tick a la izquierda).
     const sec = (label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${label}</span></div>`;
     const tbl = (rows:string)=> `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`;
     const gap = (h:number)=> `<div style="height:${h}px;line-height:${h}px;font-size:1px;">&nbsp;</div>`;
