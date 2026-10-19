@@ -154,7 +154,7 @@ serve(async (req) => {
     const GRN="#147D5C", RED="#C0403E", AMB="#9A6410", GRNBG="#E8F4EE", REDBG="#FBECEB", AMBBG="#FAF0DA";
     const bt=(first:boolean)=> first?"":`border-top:1px solid ${HAIR};`;
     // Encabezado de sección: tick de color + label en mayúscula + subrayado fino.
-    const sec = (label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${label}</span></div>`;
+    const sec = (label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${label}</span></div>`;
     const tbl = (rows:string)=> `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`;
     const gap = (h:number)=> `<div style="height:${h}px;line-height:${h}px;font-size:1px;">&nbsp;</div>`;
     const mas = (n:number)=> n>0 ? `<div style="font-size:12px;color:${FAINT};margin-top:11px;">y ${n} tarea${n!==1?"s":""} más adelante</div>` : "";
@@ -186,7 +186,7 @@ serve(async (req) => {
 
     // "Para revisar": los proyectos detenidos como una sola línea (no un muro de nombres).
     const revisarHtml = (dg:any) => dg.detenidos.length
-      ? sec("Para revisar",AMB) + `<div style="background:#F5F7F8;border-left:3px solid ${AMB};border-radius:0 10px 10px 0;padding:13px 15px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:13px;color:${INK};line-height:1.4;"><b style="color:${AMB};font-weight:700;">${dg.detenidos.length} proyecto${dg.detenidos.length!==1?"s":""}</b> sin mover hace más de 3 semanas</td><td align="right" valign="top" style="white-space:nowrap;padding-left:10px;"><a href="https://gestion.leabogados.cl" style="font-size:12px;font-weight:700;color:${NV};text-decoration:none;">Abrir &rarr;</a></td></tr></table></div>` + gap(26)
+      ? sec("Para revisar",AMB) + `<div style="background:${AMBBG};border-radius:10px;padding:13px 15px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:13px;color:${INK};line-height:1.4;"><b style="color:${AMB};font-weight:700;">${dg.detenidos.length} proyecto${dg.detenidos.length!==1?"s":""}</b> sin mover hace más de 3 semanas</td><td align="right" valign="top" style="white-space:nowrap;padding-left:10px;"><a href="https://gestion.leabogados.cl" style="font-size:12px;font-weight:700;color:${NV};text-decoration:none;">Abrir &rarr;</a></td></tr></table></div>` + gap(26)
       : "";
 
     const armarHtml = (ini:string, dg:any, nSem:number, equipoBloque:string) => {

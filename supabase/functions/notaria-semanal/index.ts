@@ -124,7 +124,7 @@ serve(async (req) => {
     const HAIR="#EAEEF0", INK="#1F2A30", MUT="#66787F", FAINT="#9DAEB4", NV="#003C50";
     const GRN="#147D5C", GRNBG="#E7F5EE", RED="#C0403E", REDBG="#FBECEB", AMB="#9A6410", AMBBG="#FAF0DA", SOFT="#F5F7F8";
     const gap=(h:number)=>`<div style="height:${h}px;line-height:${h}px;font-size:1px;">&nbsp;</div>`;
-    const sec=(label:string,color:string)=>`<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 12px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${label}</span></div>`;
+    const sec=(label:string,color:string)=>`<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 12px;"><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${label}</span></div>`;
     const agingCol=(d:number)=> d>=90?RED:d>=60?AMB:MUT;
 
     // Fila de OT con bloque de fecha día-grande a la izquierda.

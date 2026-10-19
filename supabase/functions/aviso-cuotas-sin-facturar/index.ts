@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
 
   // ── Shell estándar de la app (cartera-semanal) · formato B: tabla compacta con RS+RUT + deep-link por cliente ──
   const NV = "#003C50", HAIR = "#EAEEF0", INK = "#1F2A30", MUT = "#66787F", FAINT = "#9DAEB4", RED = "#C0403E", AMB = "#9A6410", REDBG = "#FBECEB", AMBBG = "#FAF0DA";
-  const sec = (label: string, color: string) => `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 8px;"><span style="display:inline-block;width:3px;height:11px;background:${color};border-radius:2px;vertical-align:middle;margin-right:8px;"></span><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${esc(label)}</span></div>`;
+  const sec = (label: string, color: string) => `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 8px;"><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${esc(label)}</span></div>`;
   const gap = (h: number) => `<div style="height:${h}px;line-height:${h}px;font-size:1px;">&nbsp;</div>`;
   const secciones = Object.entries(byCli).map(([cli, items]) => {
     const cid = items[0]?.clientId || "";
