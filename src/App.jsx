@@ -14994,6 +14994,88 @@ const _diasEntre = (a,b) => { const x=String(a||'').slice(0,10), y=String(b||'')
 // ── PROVEEDORES (página, tab 'proveedores'): SOLO a quienes les pagas comisión o que te pagan comisiones. El subarriendo y los servicios
 // de oficina no van aquí. Lenguaje aprobado (2026-10-14): Comisiones · Pagada · Por pagar (el cliente ya pagó) · Sujeto a cobro (el cliente aún no paga) · Anticipo · Comisiones por cobrar (lo que te pagan). Las comisiones se
 // siguen POR TRABAJO (la venta; o "Facturas a {cliente}" cuando no hay venta) y POR CUOTA: vence · cliente pagó (fecha del banco) · le pagaste.
+// Correo de la boleta de honorarios a la oficina (miembro del equipo con comisiones): sale desde su cuenta, con la boleta adjunta,
+// el detalle de lo que cobra, bruto/retención/líquido y sus datos de pago DENTRO del recuadro. Va a los administradores (miembros).
+// Mismo formato de marca que los demás correos de la app (franja con logo, recuadro de datos, firma).
+function correoMarcaHtml(text, titulo, firma, useCid=false){
+  const A='#003C50',A4='#E4E8EB',MUTED='#537281',BG='#F7F9FA'
+  const logoW=useCid?'cid:lealogow':`${location.origin}${BRAND.logo.blanco}`, logoC=useCid?'cid:lealogoc':`${location.origin}${BRAND.logo.color}`
+  const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  let out='', box=[]
+  const flush=()=>{ if(box.length){ out+=`<div style="background-color:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.lastIndexOf(': '); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+2).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
+  String(text).split('\n').forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()?`<p style="margin:0 0 10px">${esc(l)}</p>`:'' } }); flush()
+  return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${A}" style="background-color:${A};padding:18px 24px"><table width="100%"><tbody><tr><td style="vertical-align:middle"><img src="${logoW}" alt="${BRAND.nombre}" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${esc(titulo)}</td></tr></tbody></table></td></tr></tbody></table><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma,logoC,'es')}</div></div>`
+}
+function CorreoBoletaPage({prov, bm, lineas=[], user, onBack, onSent}){
+  const isDesktop = useIsDesktop()
+  const myEmail = String(user?.email||'').toLowerCase()
+  const [para,setPara] = useState('')
+  const [firma,setFirma] = useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
+  const [sending,setSending] = useState(false)
+  const [verPrev,setVerPrev] = useState(false)   // celular: vista previa del correo bajo demanda
+  const uno = lineas.length===1
+  const datos = String(prov?.datos_pago||'').split(/\n+/).map(x=>x.trim()).filter(Boolean)
+  const asunto = `Comisiones por pagar · Boleta N° ${bm.folio} · ${fmt(bm.liq)}`
+  const base = ['Estimados:','','Espero que estén muy bien.','',
+    `Adjunto mi boleta de honorarios N° ${bm.folio} por ${uno?'la comisión del trabajo que el cliente ya pagó':'las comisiones de los trabajos que los clientes ya pagaron'}:`,'',
+    ...lineas.map(l=>`  ${l.txt}${l.pago?` (pagó el ${fmtFechaDMY(l.pago)})`:''}: ${fmt(l.monto)}`),'',
+    `  Boleta N° ${bm.folio} · ${fmtFechaDMY(bm.fecha)} · bruto: ${fmt(bm.bruto)}`,
+    `  Retención ${pctBHE(tasaBHE(bm.fecha))}: ${fmt(bm.ret)}`,
+    `  Líquido a transferir: ${fmt(bm.liq)}`,'',
+    `Les pido transferir ${fmt(bm.liq)} a la cuenta de:`,'',
+    `  ${prov?.razon_social||prov?.nombre||firma.nombre||''}`,
+    ...(prov?.rut?[`  RUT: ${fmtRutCL(prov.rut)}`]:[]),
+    ...datos.map(x=>`  ${x}`),'',
+    'Saludos,'].join('\n')
+  const [body,setBody] = useState(base)
+  useEffect(()=>{ let on=true
+    cargarAdminsEstudio().then(a=>{ if(on){ const ems=(a||[]).map(x=>x.email).filter(e=>e&&e!==myEmail); setPara(p=>p||ems.join(', ')) } })
+    if(!DEMO&&myEmail) supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(on&&data?.value){ try{ setFirma(f=>({...f,...JSON.parse(data.value)})) }catch(_){} } },()=>{})
+    if(!DEMO&&bm.bheId) supabase.from('learnings').select('value').eq('kind','correo_boleta').eq('key',String(bm.bheId)).maybeSingle().then(({data})=>{ if(on&&data?.value) setBody(String(data.value)) },()=>{})
+    return ()=>{ on=false } },[])
+  const adjunto = async () => {
+    const aB64 = blob => new Promise((res,rej)=>{ const fr=new FileReader(); fr.onloadend=()=>res(String(fr.result||'').split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(blob) })
+    const nombre = `bhe_${_nRut(prov?.rut).slice(0,-1)}-${bm.folio}.pdf`
+    if(bm.file) return {base64:await aB64(bm.file), name:nombre, mime:'application/pdf'}
+    if(bm.storage_path&&!DEMO){ const {data}=await supabase.storage.from('documentos').download(bm.storage_path); if(data) return {base64:await aB64(data), name:nombre, mime:'application/pdf'} }
+    return null }
+  const guardarBorrador = async () => { if(!DEMO&&bm.bheId){ try{ await setLearningKV('correo_boleta',String(bm.bheId),body) }catch(_){} } appAlert('Borrador guardado.') }
+  const enviar = async () => {
+    if(!para.trim()){ appAlert('Falta a quién enviarlo (Para).'); return }
+    setSending(true)
+    try{
+      const a = await adjunto()
+      if(!a && !(await appConfirm('No encontré el PDF de la boleta para adjuntarlo. ¿Enviar igual?'))){ setSending(false); return }
+      const r = DEMO ? 'demo' : await enviarComoUsuario({to:para.trim(), subject:asunto, html:correoMarcaHtml(body,`Boleta N° ${bm.folio}`,firma,false), text:body, attachments:a?[a]:null})
+      setSending(false)
+      if(!r) return
+      onSent&&onSent(r)
+    }catch(e){ setSending(false); appAlert('No se pudo enviar: '+(e.message||e)) }
+  }
+  const inp = {width:'100%',border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'8px 10px',color:C.text,background:C.card,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
+  return (<div>
+    <PageHeader origen='Mis comisiones' onBack={onBack} titulo='Avisar a la oficina' ctx={isDesktop?`Boleta N° ${bm.folio} · ${fmt(bm.liq)}`:null}/>
+    <div style={{padding:isDesktop?'14px 24px 40px':'12px 14px 40px',maxWidth:900,margin:'0 auto',display:'flex',flexDirection:'column',gap:10}}>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px',display:'grid',gridTemplateColumns:'64px 1fr',gap:'8px 10px',alignItems:'center',fontSize:12.5}}>
+        <span style={{color:C.muted}}>Para</span><input value={para} onChange={e=>setPara(e.target.value)} style={inp}/>
+        <span style={{color:C.muted}}>Asunto</span><span style={{fontWeight:600,minWidth:0,...(isDesktop?{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}:{})}}>{asunto}</span>
+        <span style={{color:C.muted}}>Adjunto</span><span style={{color:C.text}}>{bm.file||bm.storage_path?`bhe_${_nRut(prov?.rut).slice(0,-1)}-${bm.folio}.pdf`:'sin PDF'}</span>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) minmax(0,1fr)':'1fr',gap:10,alignItems:'start'}}>
+        <div style={{display:'flex',flexDirection:'column',gap:6,minWidth:0}}>
+          <textarea value={body} onChange={e=>setBody(e.target.value)} rows={isDesktop?24:18} style={{...inp,lineHeight:1.55,resize:'vertical'}}/>
+          <div style={{fontSize:11,color:C.textSoft}}>{isDesktop?'Las líneas con sangría van dentro del recuadro de datos. La firma se agrega sola.':'Con sangría va en el recuadro. La firma va sola.'}</div>
+          {!isDesktop&&<span onClick={()=>setVerPrev(v=>!v)} style={{fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}>{verPrev?'Ocultar vista previa':'Ver cómo llega el correo'} <Gl n={verPrev?'chevU':'chevD'}/></span>}
+        </div>
+        {(isDesktop||verPrev)&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:10,minWidth:0,overflow:'hidden'}} dangerouslySetInnerHTML={{__html:correoMarcaHtml(body,`Boleta N° ${bm.folio}`,firma,false)}}/>}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:isDesktop?'auto auto':'1fr 1fr',justifyContent:isDesktop?'end':'stretch',gap:8}}>
+        <ActBtn variant='ghost' size='lg' onClick={guardarBorrador}>Guardar borrador</ActBtn>
+        <ActBtn variant='primary' size='lg' disabled={sending} onClick={enviar}>{sending?'Enviando…':'Enviar'}</ActBtn>
+      </div>
+    </div>
+  </div>)
+}
 function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anticipos=[],expenses=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado,soloProvId=null}) {
   const isDesktop = useIsDesktop()
   // soloProvId: «Mis comisiones» del miembro del equipo — su propia ficha, solo lectura (sin editar, enlazar, pagar ni banco).
@@ -15022,6 +15104,8 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const [completarCola,setCompletarCola] = useState([])   // "Completar datos de pago": recorre los que faltan uno tras otro
   const [selEnl,setSelEnl] = useState(null)
   const [bol,setBol] = useState(null)                      // página Registrar boleta/factura: {ids:Set, numero, fecha, monto}
+  const [bolMail,setBolMail] = useState(null)              // ro: boleta recién guardada → página del correo a la oficina
+  const [leyendoBol,setLeyendoBol] = useState(false)       // lectura del PDF de la boleta con IA (N°, fecha, bruto)
   const [enlP,setEnlP] = useState(null)                    // enlace a mano abierto: {mid} un pago · {tid} una comisión pagada · {did} una factura del SII
   const [enlSel,setEnlSel] = useState(()=>new Set())
   const [marcas,setMarcas] = useState({})                  // pagos marcados "trabajo por identificar" (learnings pago_prov_por_identificar: key = movimiento)
@@ -15371,8 +15455,22 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
 
   // ── REGISTRAR BOLETA O FACTURA (página): el proveedor manda su boleta (Martín) o factura; se guarda contra las comisiones que cubre
   // (terceros_pagos.factura_numero/factura_fecha + el archivo) para que al pagar ya esté y la ficha muestre qué boleta respalda cada cuota.
+  // Lee la boleta de honorarios del SII (PDF) con IA y completa N°, fecha y bruto si están vacíos. Si falla, se escriben a mano.
+  const leerBoletaPdf = async file => { if(DEMO) return; setLeyendoBol(true)
+    try{ const b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onloadend=()=>res(String(fr.result||'').split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(file) })
+      const j=await claudeCall({model:'claude-opus-4-8',max_tokens:200,messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:'Es una boleta de honorarios electrónica del SII de Chile. Responde SOLO un JSON {"folio":número,"fecha":"AAAA-MM-DD","bruto":número entero en pesos (Total Honorarios)}. Si un dato no está, null.'}]}]})
+      const t=String(j?.content?.[0]?.text||''), m=t.match(/\{[\s\S]*\}/); const o=m?JSON.parse(m[0]):null
+      if(o){ const fe=/^\d{4}-\d\d-\d\d$/.test(String(o.fecha||''))?o.fecha:null, br=Math.round(Number(o.bruto)||0)||null, fo=parseInt(o.folio)||null
+        setBol(p=>p?({...p, numero:p.numero||(fo?String(fo):''), fecha:fe||p.fecha, monto:p.monto||(br?String(br):''), leida:{folio:fo,fecha:fe,bruto:br}}):p) }
+    }catch(_){ } setLeyendoBol(false) }
+  if(view==='correoBol'&&sel&&bolMail&&ro){
+    const lineas=bolMail.ids.map(id=>terceros.find(t=>t.id===id)).filter(Boolean).map(t=>{ const b=facDe(t), w=trabajoDe(t), c=cliDe(t)
+      return {txt:`${c?.name||'Sin cliente'} · ${b?.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b?.concept||w.titulo||'Comisión')}`, pago:pagoCli(t)?.fecha||null, monto:pagarT(t)} })
+    return <CorreoBoletaPage prov={sel} bm={bolMail} lineas={lineas} user={user} onBack={()=>{setBolMail(null);setView('ficha')}}
+      onSent={r=>{ logActividad(`proveedores.${sel.id}.boleta_enviada`,{tabla:'terceros_pagos',id:bolMail.ids[0],detalle:{title:`Boleta N° ${bolMail.folio} enviada a la oficina`,monto:bolMail.liq}}); if(!DEMO&&bolMail.bheId) setLearningKV('boleta_enviada',String(bolMail.bheId),new Date().toISOString()).catch(()=>{})
+        appAlert(r==='oficina'?'Enviado desde la cuenta de oficina, con la boleta adjunta.':'Enviado. La oficina recibió tu boleta.'); setBolMail(null); setView('ficha') }}/> }
   if(view==='boleta'&&sel&&bol){
-    const ts=tercDe(sel.id).filter(t=>est(t)!=='pagada').sort((a,b)=>(est(a)==='por_pagar'?0:1)-(est(b)==='por_pagar'?0:1))
+    const ts=tercDe(sel.id).filter(t=>est(t)!=='pagada'&&(!ro||(est(t)==='por_pagar'&&!t.factura_numero))).sort((a,b)=>(est(a)==='por_pagar'?0:1)-(est(b)==='por_pagar'?0:1))
     const elegidas=ts.filter(t=>bol.ids.has(t.id)), total=sumM(elegidas), monto=parseInt(String(bol.monto).replace(/\D/g,''))||0
     const toggle=id=>setBol(p=>{ const n=new Set(p.ids); n.has(id)?n.delete(id):n.add(id); return {...p,ids:n} })
     const inp={width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:C.card,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
@@ -15401,7 +15499,10 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       if(!DEMO){ for(const id of ids){ const {error}=await supabase.from('terceros_pagos').update(porId[id]||patch).eq('id',id); if(error){ setBusy(null); appAlert('No se pudo guardar: '+error.message); return } } }
       setTerceros&&setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,...(porId[t.id]||patch)}:t))
       logActividad(`proveedores.${sel.id}.boleta`,{tabla:'terceros_pagos',id:ids[0],detalle:{title:`N° ${patch.factura_numero} · ${ids.length} ${ids.length===1?'comisión':'comisiones'}`,monto:monto||total}})
-      setBusy(null); appAlert(`Quedó guardada la boleta N° ${patch.factura_numero} en ${ids.length===1?'1 comisión':ids.length+' comisiones'}.`); setBol(null); setView('ficha') }
+      setBusy(null)
+      if(ro){ const sp=conBol?`bhe/${_nRut(sel.rut).slice(0,-1)}/BHE_${_nRut(sel.rut).slice(0,-1)}_N${String(parseInt(String(bol.numero).replace(/\D/g,''))||0).padStart(4,'0')}.pdf`:null
+        setBolMail({folio:patch.factura_numero, fecha:bol.fecha, bruto:monto, ret:retB, liq:liqB, ids, file:bol.file||null, storage_path:bol.file?sp:null, bheId:porId[ids[0]]?.bhe_id||null}); setBol(null); setView('correoBol'); return }
+      appAlert(`Quedó guardada la boleta N° ${patch.factura_numero} en ${ids.length===1?'1 comisión':ids.length+' comisiones'}.`); setBol(null); setView('ficha') }
     const lista = <div style={{...card,overflow:'hidden'}}>
       <div style={{...kLbl,padding:'10px 14px 6px'}}>¿Qué comisiones cubre?</div>
       {ts.length===0&&<div style={{padding:'12px 14px',fontSize:12.5,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>No tiene comisiones sin pagar.</div>}
@@ -15421,15 +15522,15 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
             <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Retención {pctBHE(tasaB)} · va al F29{f29BHE(bol.fecha)?` ${f29BHE(bol.fecha).lbl}`:''}</span><span style={num}>{fmt(retB)}</span></div>
             <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Líquido a transferir</span><b style={num}>{fmt(liqB)}</b></div></div>}
           {dif!=null&&<div style={{fontSize:11.5,marginTop:5,color:Math.abs(dif)<=1?C.greenText:C.soonText,fontWeight:600}}>{Math.abs(dif)<=1?'Cuadra con las comisiones elegidas':conBol?`El líquido es ${fmt(Math.abs(dif))} ${dif>0?'más':'menos'} que lo que se le debe por las comisiones elegidas (${fmt(sumPag)})`:`${dif>0?'La boleta es':'Las comisiones son'} ${fmt(Math.abs(dif))} más${dif>0?'':' que la boleta'}`}</div>}</div>
-        {conBol&&<div><div style={{...kLbl,marginBottom:4}}>PDF de la boleta</div><input type='file' accept='application/pdf' onChange={e=>setBol(p=>({...p,file:e.target.files?.[0]||null}))} style={{fontSize:12}}/>
-          <div style={{fontSize:11,color:C.textSoft,marginTop:3}}>Se guarda con la boleta y se descarga desde cada comisión.</div></div>}
+        {conBol&&<div><div style={{...kLbl,marginBottom:4}}>PDF de la boleta</div><input type='file' accept='application/pdf' onChange={e=>{ const fl=e.target.files?.[0]||null; setBol(p=>({...p,file:fl,leida:null})); if(fl) leerBoletaPdf(fl) }} style={{fontSize:12}}/>
+          <div style={{fontSize:11,color:leyendoBol?C.muted:bol.leida?C.greenText:C.textSoft,fontWeight:bol.leida?600:400,marginTop:3}}>{leyendoBol?'Leyendo la boleta…':bol.leida?`Leída: N° ${bol.leida.folio||'—'} · ${bol.leida.fecha?fmtFechaDMY(bol.leida.fecha):'—'} · bruto ${bol.leida.bruto?fmt(bol.leida.bruto):'—'}`:'La app lee el N°, la fecha y el bruto. Se guarda con la boleta y se descarga desde cada comisión.'}</div></div>}
         {user&&elegidas[0]&&!conBol&&<div><div style={{...kLbl,marginBottom:4}}>Archivo de la boleta</div><Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={elegidas[0].id} folderKind='facturas' namePrefix={`boleta_${tituloProv(sel)}`} user={user} inline/></div>}
       </div>
-      <ActBtn variant='primary' size='lg' full disabled={!bol.numero.trim()||!elegidas.length||busy==='bol'} onClick={guardar}>{busy==='bol'?'Guardando…':'Guardar'}</ActBtn>
-      <div style={{fontSize:11.5,color:C.muted}}>Al pagar, la boleta ya viene escrita. No cambia el estado de las comisiones.</div>
+      <ActBtn variant='primary' size='lg' full disabled={!bol.numero.trim()||!elegidas.length||busy==='bol'} onClick={guardar}>{busy==='bol'?'Guardando…':ro?'Guardar y seguir al correo →':'Guardar'}</ActBtn>
+      {!ro&&<div style={{fontSize:11.5,color:C.muted}}>Al pagar, la boleta ya viene escrita. No cambia el estado de las comisiones.</div>}
     </div>
     return (<div>
-      <PageHeader origen={tituloProv(sel)} onBack={()=>{setBol(null);setView('ficha')}} titulo='Registrar boleta o factura' ctx={isDesktop?(elegidas.length?`${elegidas.length} ${elegidas.length===1?'comisión':'comisiones'} · ${fmt(total)}`:null):null}/>
+      <PageHeader origen={ro?'Mis comisiones':tituloProv(sel)} onBack={()=>{setBol(null);setView('ficha')}} titulo={ro?'Cargar mi boleta':'Registrar boleta o factura'} ctx={isDesktop?(elegidas.length?`${elegidas.length} ${elegidas.length===1?'comisión':'comisiones'} · ${fmt(total)}`:null):null}/>
       {wrap(isDesktop ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.3fr) minmax(0,1fr)',gap:14,alignItems:'start'}}>{lista}{form}</div> : <>{form}{lista}</>)}
     </div>)
   }
@@ -15604,7 +15705,11 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       {accItems.length>0&&<>{secLbl('Acciones')}{accItems.map((x,i)=><div key={x.k} onClick={x.on} className='pv-c' style={{padding:'9px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}><div style={{fontSize:12.5,fontWeight:600}}>{x.t}</div><div style={{fontSize:11,color:C.muted}}>{x.s}</div></div>)}</>}
     </div> : null
     const btnBoleta = <ActBtn variant='ghost' size='lg' onClick={()=>abrirBoleta(sel)}>Registrar factura de {tituloProv(sel).split(' ')[0]}</ActBtn>
-    const acciones = ro ? null : <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{revPill}</div>
+    const listasCobro = ro ? tPP.filter(t=>!t.factura_numero) : []
+    const acciones = ro ? (listasCobro.length ? <div className='pv-c' onClick={()=>abrirBoleta(sel)} style={{...card,display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:C.avisoBg,border:`1px solid ${C.avisoLine}`,cursor:'pointer'}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.avisoText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?(listasCobro.length===1?'1 comisión lista para cobrar':`${listasCobro.length} comisiones listas para cobrar`):`${listasCobro.length} lista${listasCobro.length!==1?'s':''} para cobrar`}</div><div style={{fontSize:11.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isDesktop?'el cliente ya pagó · ':''}líquido a recibir {fmt(listasCobro.reduce((a,t)=>a+saldoPag(t),0))}</div></div>
+        <ActBtn variant='primary'>{isDesktop?'Cargar mi boleta':'Cargar boleta'}</ActBtn></div> : null)
+      : <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{revPill}</div>
     // Por cliente: la bolsa separada por cliente; tocar filtra las comisiones, el nombre abre su ficha.
     const porClienteCard = porCliente.length>0 ? <div style={{...card,overflow:'hidden'}}>
       {band('Por cliente',cliF?link('Ver todos',()=>setCliF(null),C.accent):null)}
@@ -15701,7 +15806,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
         {diaGrande(d.fecha_emision)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tit}</div><div style={{fontSize:11,color:C.muted}}>{subT}</div></div>
         <span style={{fontSize:13,fontWeight:700,color:nc?C.muted:C.text,...num}}>{nc?'−':''}{fmt(Math.abs(Number(d.monto)||0))}</span></div>{enlP?.did===d.id&&panelEnlace()}</Fragment> }
     const docsCard = docsY.length ? <div style={{...card,overflow:'hidden'}}>{band(`Facturas de ${tituloProv(sel)} en el SII · ${yr}`,ordTog(ordP,setOrdP))}{docsY.map(filaDoc)}</div> : null
-    const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
+    const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['boleta_enviada','Envió su boleta a la oficina'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
     const bita = <BitacoraLista prefijo={`proveedores.${sel.id}.`} etiquetas={ETQ} limite={15} vacio='Aquí queda cada pago, enlace o cambio: quién y cuándo.'/>
     const btnExcel = <span onClick={exportCuotas} title='Descargar Excel' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/></span>
     // Datos del proveedor siempre a la vista (copiables); Editar al extremo.
@@ -15741,7 +15846,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       ? <div style={{display:'grid',gridTemplateColumns:`repeat(${secs.length},minmax(0,1fr))`,gap:8}}>{secs.map(mini)}</div>
       : <div style={{...card,overflow:'hidden'}}>{secs.map((x,i)=><Fragment key={x.k}>{i===0?<div style={{marginTop:-1}}>{mini(x)}</div>:mini(x)}{secAb===x.k&&<div style={{padding:'0 0 8px'}}>{x.el}</div>}</Fragment>)}</div>
     return (<div>{css}
-      <PageHeader origen={ro?origen:'Proveedores'} onBack={ro?onBack:()=>setView('list')} titulo={ro?'Mis comisiones':tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
+      <PageHeader origen={ro?origen:'Proveedores'} onBack={ro?onBack:()=>setView('list')} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
       {wrap(isDesktop ? <>
         {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}
         <div style={{display:'grid',gridTemplateColumns:conBolF?'minmax(0,1fr) minmax(0,2.8fr)':'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
@@ -15827,7 +15932,9 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       </div>
       <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}><ActBtn variant='ghost' onClick={()=>abrirFicha(r.p.id)}>Ver ficha <Gl n='chevron'/></ActBtn></div>
     </div> }
-  const subProv = r => [r.equipo?'Equipo':(r.p.razon_social||r.p.rut||null), r.nCli?(r.nCli===1&&r.clis[0]?r.clis[0]:`${r.nCli} clientes`):null].filter(Boolean).join(' · ')
+  const bolRecibida = p => { const ts=tercDe(p.id).filter(t=>est(t)==='por_pagar'&&t.bhe_id); if(!ts.length) return null; const fol=[...new Set(ts.map(t=>bheDe(t)?.folio).filter(Boolean))]
+    return `Boleta${fol.length>1?'s':''} N° ${fol.join(', ')||'—'} recibida · transferir ${fmt(ts.reduce((a,t)=>a+saldoPag(t),0))}` }
+  const subProv = r => bolRecibida(r.p) || [r.equipo?'Equipo':(r.p.razon_social||r.p.rut||null), r.nCli?(r.nCli===1&&r.clis[0]?r.clis[0]:`${r.nCli} clientes`):null].filter(Boolean).join(' · ')
   const filaProv = r => { const open=expP===r.p.id, cv=v=>v?fmtMill(v):dash
     return <div key={r.p.id} onClick={()=>setExpP(open?null:r.p.id)} className='pv-c' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5,cursor:'pointer',background:open?C.bgSoft:'transparent'}}>
       <div style={{minWidth:0}}>{celda(<span style={{fontSize:13,fontWeight:700,color:C.accent}}>{tituloProv(r.p)}</span>,()=>abrirFicha(r.p.id))}<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subProv(r)}</div></div>
@@ -33334,7 +33441,7 @@ function MiCarteraView({ proyectos=[], setProyectos, clients=[], tasks=[], curre
       </div>
       {(onMisComisiones||onPorCobrar)&&<div style={{display:'grid',gridTemplateColumns:(onMisComisiones&&onPorCobrar)?'1fr 1fr':'1fr',gap:isDesktop?10:8,marginBottom:14}}>
         {onMisComisiones&&resumenCom&&<HubTile ic='tPct' col={C.soonText} bg={C.soonBg} t={isDesktop?'Mis comisiones':'Comisiones'} onClick={onMisComisiones}
-          s={`${fmtShort(resumenCom.porDevengar)} sujeto a cobro · ${resumenCom.porPagar>0?fmtShort(resumenCom.porPagar)+' por pagar':'nada por pagar'}`}
+          s={resumenCom.porPagar>0?`${fmtShort(resumenCom.porPagar)} por pagar · ${fmtShort(resumenCom.porDevengar)} sujeto a cobro`:`${fmtShort(resumenCom.porDevengar)} sujeto a cobro · nada por pagar`}
           sM={resumenCom.porPagar>0?`${fmtShort(resumenCom.porPagar)} por pagar`:`${fmtShort(resumenCom.porDevengar)} sujeto a cobro`}/>}
         {onPorCobrar&&resumenCobro&&<HubTile ic='file' col={C.accent} bg={C.azulBg} t={isDesktop?'Por cobrar a mis clientes':'Por cobrar'} onClick={onPorCobrar}
           s={`${fmtShort(resumenCobro.honor)} honorarios · ${fmtShort(resumenCobro.gastosTot)} gastos`}
@@ -39298,7 +39405,7 @@ export default function App() {
   const anticipos = useMemo(()=>_honVis?(anticiposAll||[]).filter(a=>a&&(a.sale_id?_honVis.sIds.has(String(a.sale_id)):_honVis.delCli(a.client_id))):anticiposAll,[_honVis,anticiposAll])
   const terceros = useMemo(()=>_honVis?(tercerosAll||[]).filter(t=>t&&(t.sale_id?_honVis.sIds.has(String(t.sale_id)):(t.billing_id?_honVis.bIds.has(String(t.billing_id)):false))):tercerosAll,[_honVis,tercerosAll])
   // Responsable limitado: sus comisiones (su ficha de proveedor, por RUT del miembro) y lo que le deben sus clientes — accesos en Mi cartera y ⌘K.
-  const miProv = useMemo(()=>_limHon?provDeMiembro(proveedores,user?.name):null,[_limHon,proveedores,user?.name])
+  const miProv = useMemo(()=>{ if(!_limHon) return null; let nm=user?.name; if(DEMO){ try{ nm=new URLSearchParams(window.location.search).get('prov')||nm }catch(_){} } return provDeMiembro(proveedores,nm) },[_limHon,proveedores,user?.name])   // demo: ?prov=Nombre para probar con otro proveedor
   const resumenComLim = useMemo(()=>{ if(!miProv) return null; const ts=(terceros||[]).filter(t=>String(t.proveedor_id)===String(miProv.id)); return ts.length?saldoComisiones(ts,billing):null },[miProv,terceros,billing])
   const resumenCobroLim = useMemo(()=>{ if(!_limHon) return null; const d=porCobrarMisClientes({clients,sales,billing,expenses,nombre:user?.name}); return d.clis.length?d:null },[_limHon,clients,sales,billing,expenses,user?.name])
   const vistasExtraLimitado = useMemo(()=>[...(miProv?[['misComisiones','Mis comisiones']]:[]),...(resumenCobroLim?[['porCobrarMios','Por cobrar a mis clientes']]:[])],[miProv,resumenCobroLim])
@@ -41848,7 +41955,7 @@ export default function App() {
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>navTo({tab:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const nb=await getBilling().catch(()=>null);if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} onReclasificarTercero={handleReclasificarTercero} onBuscarSII={handleBuscarSII} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} rendiciones={rendiciones} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView setTercerosRoot={setTerceros} openCajaChicaRev={ccRevFocus} sales={sales} setRendiciones={setRendiciones} onCajaChicaRevConsumed={()=>setCcRevFocus(false)} onOpenProveedor={id=>navTo({tab:'proveedores',provId:id})} onOpenFactura={b=>setModal({type:'billing',data:b})} clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
-            {tab==='misComisiones'&&userRole==='limited'&&miProv&&<ProveedoresView soloProvId={miProv.id} proveedores={[miProv]} terceros={terceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} user={user} onOpenClientFicha={handleOpenClientFicha} onBack={goBack} origen={origenLim||origenNav('Mi cartera')}/>}
+            {tab==='misComisiones'&&userRole==='limited'&&miProv&&<ProveedoresView soloProvId={miProv.id} proveedores={[miProv]} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} user={user} onOpenClientFicha={handleOpenClientFicha} onBack={goBack} origen={origenLim||origenNav('Mi cartera')}/>}
             {tab==='porCobrarMios'&&userRole==='limited'&&<PorCobrarMiosPage clients={clients} sales={sales} billing={billing} expenses={expenses} currentUserName={user?.name} onBack={goBack} origen={origenLim||origenNav('Mi cartera')} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} resumenCom={resumenComLim} resumenCobro={resumenCobroLim} onMisComisiones={miProv?()=>navTo({tab:'misComisiones'}):null} onPorCobrar={resumenCobroLim?()=>navTo({tab:'porCobrarMios'}):null} onClose={goBack} origen={origenNav('Inicio')} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
             {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onSaveOperacion={handleSaveOperacion} onDelOperacion={handleDelOperacion} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarEvidencia={handleAplicarEvidencia} onDescartarEvidencia={handleDescartarEvidencia} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
