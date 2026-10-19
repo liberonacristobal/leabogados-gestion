@@ -894,6 +894,9 @@ const rsLabel = (clientId, clients, clientEntities, entityId) => {
 }
 // Folio limpio: invoice_no a veces trae la palabra "Factura" como texto; folioN devuelve solo el número/código (para contextos con prefijo "F°").
 const folioN = no => String(no||'').replace(/^factura\s*/i,'').trim()
+// Factura con folio del SII: nunca se elimina, se anula con nota de crédito (misma regla que el trigger trg_billing_guard_folio_delete).
+const conFolioSII = b => !!String(b?.invoice_no||'').trim()
+const MSG_NO_BORRAR_FOLIO = 'Las facturas con folio del SII no se eliminan: se anulan con nota de crédito.'
 // Razón social a la que se emitió una factura (FUENTE ÚNICA, canon factura-rs-cruce-rut):
 // entity_id → cruce por receptor_rut ↔ client_entities → receptor_name del DTE → única RS del cliente.
 // Reutilizado por Facturación (ChecklistFacturacion) y Cobranza para no duplicar la lógica.
@@ -30368,12 +30371,15 @@ function PapeleraModal({clients=[],onClose,onChanged}){
     setBusy(false)
   }
   const purgar = async(tipo,row)=>{
+    if(tipo==='cobros'&&conFolioSII(row)){ appAlert(MSG_NO_BORRAR_FOLIO); return }
+    if(tipo==='ventas'){ const {data:fs}=await supabase.from('billing').select('id,invoice_no').eq('sale_id',row.id); const n=(fs||[]).filter(conFolioSII).length; if(n){ appAlert(`Esta venta tiene ${n} factura${n===1?'':'s'} con folio del SII. ${MSG_NO_BORRAR_FOLIO}`); return } }
     if(!await appConfirm('Eliminar DEFINITIVAMENTE. Esto no se puede deshacer. ¿Continuar?')) return
     setBusy(true)
     try{
-      if(tipo==='ventas'){ await supabase.from('billing').delete().eq('sale_id',row.id); await supabase.from('sales').delete().eq('id',row.id) }
-      else if(tipo==='cobros'){ await supabase.from('billing').delete().eq('id',row.id) }
-      else { await supabase.from('expenses').delete().eq('id',row.id) }
+      const ok=r=>{ if(r?.error) throw r.error }
+      if(tipo==='ventas'){ ok(await supabase.from('billing').delete().eq('sale_id',row.id)); ok(await supabase.from('sales').delete().eq('id',row.id)) }
+      else if(tipo==='cobros'){ ok(await supabase.from('billing').delete().eq('id',row.id)) }
+      else { ok(await supabase.from('expenses').delete().eq('id',row.id)) }
       await cargar()
     }catch(e){appAlert('Error: '+e.message)}
     setBusy(false)
@@ -39523,14 +39529,14 @@ export default function App() {
   const handleDeleteSale=useCallback(async(id)=>{
     try{
       // Salvaguarda: avisar si hay facturas emitidas (con folio) asociadas (caso de alto riesgo: sí confirma)
-      const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('sale_id',id)
-      const emitidas = (cuotas||[]).filter(b=>b.invoice_no)
+      const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('sale_id',id).is('deleted_at',null)
+      const emitidas = (cuotas||[]).filter(conFolioSII)
       // Gastos/fondos y comisiones no se van con la venta: quedarían colgando de una venta eliminada (la base lo bloquea, trg_guard_sale_delete)
       const [{count:nG},{count:nT}] = DEMO ? [{count:0},{count:0}] : await Promise.all([
         supabase.from('expenses').select('id',{count:'exact',head:true}).eq('sale_id',id).is('deleted_at',null),
         supabase.from('terceros_pagos').select('id',{count:'exact',head:true}).eq('sale_id',id)])
       if((nG||0)+(nT||0)>0){ appAlert(`Esta venta tiene ${[nG?`${nG} gasto${nG===1?'':'s'} o fondo${nG===1?'':'s'}`:'',nT?`${nT} comisi${nT===1?'ón':'ones'}`:''].filter(Boolean).join(' y ')}. Muévelos a otra venta antes de eliminarla.`); return }
-      if(emitidas.length>0 && !await appConfirm(`Esta venta tiene ${emitidas.length} factura(s) ya emitida(s). ¿Eliminar la venta y TODAS sus cuotas igual?`)) return
+      if(emitidas.length>0){ appAlert(`Esta venta tiene ${emitidas.length} factura${emitidas.length===1?'':'s'} con folio del SII. ${MSG_NO_BORRAR_FOLIO} Anúlalas o muévelas a otra venta antes de eliminarla.`); return }
       // Soft-delete: la venta y sus cuotas van a la papelera (restaurables), no se borran físicamente
       const now=new Date().toISOString()
       const saleRow=sales.find(x=>x.id===id)
@@ -40410,9 +40416,12 @@ export default function App() {
     try{
       const k=(billing||[]).find(b=>b.id===keepId)
       if(k&&k.invoice_no){ const cf=folioN(k.invoice_no); if(cf&&cf!==k.invoice_no){ await supabase.from('billing').update({invoice_no:cf}).eq('id',keepId); setBilling(p=>p.map(b=>b.id===keepId?{...b,invoice_no:cf}:b)) } }
+      const conF=(billing||[]).filter(b=>(dropIds||[]).includes(b.id)&&conFolioSII(b)).map(b=>b.id)
+      if(conF.length){ dropIds=dropIds.filter(id=>!conF.includes(id)); appAlert(`${conF.length} duplicado${conF.length!==1?'s':''} con folio del SII no se elimina${conF.length!==1?'n':''}: se anula${conF.length!==1?'n':''} con nota de crédito.`) }
       if(dropIds&&dropIds.length){
         const dropped=(billing||[]).filter(b=>dropIds.includes(b.id))
-        await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',dropIds)
+        const {error:eDup}=await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',dropIds)
+        if(eDup) throw eDup
         setBilling(p=>p.filter(b=>!dropIds.includes(b.id)))
         const u={msg:`${dropIds.length} duplicado${dropIds.length!==1?'s':''} eliminado${dropIds.length!==1?'s':''}`, onUndo: async()=>{ await supabase.from('billing').update({deleted_at:null}).in('id',dropIds); setBilling(p=>{ const ex=new Set(p.map(x=>x.id)); return [...dropped.filter(d=>!ex.has(d.id)),...p] }) }}
         if(opts.silent) return u
@@ -40488,15 +40497,18 @@ export default function App() {
   const handleDeleteBilling=useCallback(async(id,opts={})=>{
     try{
       const row=billing.find(x=>x.id===id)
+      if(conFolioSII(row)){ appAlert(MSG_NO_BORRAR_FOLIO); return }
+      // Conciliaciones que apuntan a esta factura: se guardan para el Undo antes de borrar.
+      let concPrev=[]
+      try{ const {data}=await supabase.from('conciliacion').select('*').eq('factura_id',id); concPrev=data||[] }catch(_){}
+      // Primero la factura: si la base la rechaza, no se toca nada más.
+      const {error:eDel}=await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',id)
+      if(eDel) throw eDel
       // Liberar anticipos consumidos contra esta factura (no dejar plata atada a una fila eliminada) — espeja a handleAnularFactura.
       const antLig=(anticipos||[]).filter(a=>a.billing_id!=null&&String(a.billing_id)===String(id))
       const antPrev=antLig.map(a=>({id:a.id,estado:a.estado,billing_id:a.billing_id}))
       if(antLig.length){ const aids=antLig.map(a=>a.id); await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).in('id',aids); setAnticipos(p=>p.map(a=>aids.includes(a.id)?{...a,estado:'disponible',billing_id:null}:a)) }
-      // Borrar conciliaciones que apuntan a esta factura (que la cartola no quede conciliada contra una fila oculta); se restauran en el Undo.
-      let concPrev=[]
-      try{ const {data}=await supabase.from('conciliacion').select('*').eq('factura_id',id); concPrev=data||[] }catch(_){}
       if(concPrev.length) await supabase.from('conciliacion').delete().eq('factura_id',id)
-      await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',id)
       setBilling(p=>p.filter(x=>x.id!==id))
       const u={msg:'Cobro eliminado', onUndo:async()=>{
         await supabase.from('billing').update({deleted_at:null}).eq('id',id)
@@ -40592,7 +40604,10 @@ export default function App() {
 
   // Eliminar una o varias cuotas (usado por "Ya emitida"); el confirm lo hace el componente
   const handleDeleteBillingBulk=useCallback(async(ids)=>{
-    const arr=Array.isArray(ids)?ids:[ids]
+    const arr0=Array.isArray(ids)?ids:[ids]
+    const conF=billing.filter(x=>arr0.includes(x.id)&&conFolioSII(x)).map(x=>x.id)
+    const arr=arr0.filter(id=>!conF.includes(id))
+    if(conF.length) appAlert(`${conF.length} con folio del SII no se eliminan: se anulan con nota de crédito.`)
     if(arr.length===0) return
     try{
       const rows=billing.filter(x=>arr.includes(x.id))
