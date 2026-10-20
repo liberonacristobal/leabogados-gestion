@@ -1248,10 +1248,15 @@ const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
 function corrSiguiente(rendiciones, clientId){ return Math.max(0, ...(rendiciones||[]).filter(r=>String(r.client_id)===String(clientId)&&r.correlativo&&!r.anulada_at).map(r=>r.correlativo||0)) + 1 }
 function depositoDeSolicitud(r, expenses){
   const desde=String(r?.enviada_at||'').slice(0,10)
-  const fs=(expenses||[]).filter(e=>e.type==='fondo'&&!e.deleted_at&&String(e.client_id)===String(r?.client_id)&&String(e.date||e.created_at||'').slice(0,10)>=desde)
+  // Solo depósitos reales (monto > 0; una devolución es un fondo negativo) y, si la solicitud es de un trabajo, del mismo trabajo o sin trabajo.
+  const fs=(expenses||[]).filter(e=>e.type==='fondo'&&!e.deleted_at&&(Number(e.amount)||0)>0&&String(e.client_id)===String(r?.client_id)&&String(e.date||e.created_at||'').slice(0,10)>=desde&&(!r?.sale_id||!e.sale_id||String(e.sale_id)===String(r.sale_id)))
+    .sort((a,b)=>String(a.date||a.created_at).localeCompare(String(b.date||b.created_at)))
   if(!fs.length) return null
-  if(r.monto>0){ const m=fs.find(e=>Math.abs((e.amount||0)-r.monto)<=Math.max(1000,r.monto*0.02)); if(m) return m }
-  return fs.sort((a,b)=>String(a.date||a.created_at).localeCompare(String(b.date||b.created_at)))[0]
+  if(!(r.monto>0)) return fs[0]
+  const m=fs.find(e=>Math.abs((e.amount||0)-r.monto)<=Math.max(1000,r.monto*0.02)); if(m) return m
+  // Pagado en partes (límite diario de transferencia): se cierra cuando lo depositado desde la solicitud cubre lo pedido. Un abono menor NO la cierra.
+  let acum=0; for(const e of fs){ acum+=Number(e.amount)||0; if(acum>=r.monto-Math.max(1000,r.monto*0.02)) return e }
+  return null
 }
 function estadoSolicitud(r, expenses){
   if(r?.recibido_at) return {k:'rec',dep:null,dias:0}
@@ -2101,7 +2106,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
   const [pickCatFor,setPickCatFor] = useState(null)  // id del gasto con selector de categoría abierto
 
   // Gastos pendientes de liquidar DEL USUARIO (tipo gasto, no rendidos, created_by = me)
-  const misPendientes = expenses.filter(e=>e.type==='gasto'&&!e.rendered_at&&!e.paid_by_client&&e.created_by===me)
+  const misPendientes = gastosPorLiquidarCaja(expenses, me)
   const pendientes = misPendientes
     .filter(e=>!fCat||e.category===fCat)
     .filter(e=>{ const q=pettyQ.trim().toLowerCase(); if(!q) return true; return (e.concept||'').toLowerCase().includes(q) || String(Math.round(e.amount||0)).includes(q.replace(/[.$\s]/g,'')) })
@@ -3490,7 +3495,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
   )
 }
 
-function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onAddTask,onEditTask,onCompleteTask,onPreviewTask,onEntregarCaja,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
+function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onAddTask,onEditTask,onCompleteTask,onPreviewTask,onEntregarCaja,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
   const go = t => navTo ? navTo({tab:t}) : setTab(t)   // salto que apila origen+scroll (navTo) para que "Volver" regrese al Inicio en su posición exacta
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   const [verTodosProy,setVerTodosProy] = useState(false)   // "Ver todos" en Mis proyectos: carga mis terminados y muestra los 3 grupos
@@ -3919,13 +3924,13 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
     const porCobrar7 = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso'&&dlb(b)!=null&&dlb(b)>=0&&dlb(b)<=7)
     const tareasVenc = (tasks||[]).filter(t=>t.status!=='Terminado'&&t.due&&String(t.due)<today)
     const cajaUsers=['Martín','Martina']
-    const cajaSinLiq = (expenses||[]).filter(e=>e.type==='gasto'&&cajaUsers.includes(e.created_by)&&!e.rendered_at&&!e.paid_by_client&&e.category!=='Notaria')
-    const rendCli = [...new Set((expenses||[]).filter(e=>e.type==='gasto'&&e.client_id&&!e.no_descuenta_saldo&&!e.client_rendered_at&&cuentaEnSaldo(e)&&e.category!=='Apertura').map(e=>e.client_id))]
+    const cajaSinLiq = cajaUsers.flatMap(u=>gastosPorLiquidarCaja(expenses,u))   // misma regla que la caja chica de cada persona
+    const _porRendir = clientesPorRendir(clients, expenses), rendCli = _porRendir.map(x=>x.c.id)   // misma cifra que la página Rendir a cliente
     const propTardias = sales.filter(s=>s.status==='Propuesta'&&s.created_at&&Math.floor((Date.now()-new Date(s.created_at))/86400000)>14)
     const sum = arr => arr.reduce((a,b)=>a+(b.amount||0),0)
     const sumSaldo = arr => arr.reduce((a,b)=>a+saldoBill(b),0)
     const cnD = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
-    const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.no_descuenta_saldo&&!e.client_rendered_at&&cuentaEnSaldo(e)&&e.category!=='Apertura').reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot,cid} }).sort((a,b)=>b.v-a.v)
+    const rcRows = _porRendir.map(x=>({name:x.c.name,val:fmtN(x.tot),v:x.tot,cid:x.c.id}))
     const en7plz = new Date(Date.now()+7*86400000).toISOString().slice(0,10)
     const plzVenc=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha<today)
     const plzProx=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha>=today&&p.fecha<=en7plz)
@@ -3943,7 +3948,7 @@ function Dashboard({proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[
         ? {sev:0,dot:C.overdue,ico:'wallet',lbl:'Caja chica en negativo',sub:`${a.persona} · la oficina le debe ${fmtN(-a.saldo)}`,amt:'−'+fmtN(-a.saldo),onNav:()=>onEntregarCaja&&onEntregarCaja(a.persona,-a.saldo),navLbl:`Entregar caja ${fmtN(-a.saldo)}`,rows:[],iaTxt:`${a.persona} tiene la caja chica en negativo por ${fmtN(-a.saldo)} (la oficina le debe)`}
         : {sev:1,dot:C.soon,ico:'wallet',lbl:'Caja chica baja',sub:`${a.persona} · quedan ${fmtN(a.saldo)} (aviso a ${fmtN(BRAND.cajaChicaUmbral)})`,amt:'',onNav:()=>onEntregarCaja&&onEntregarCaja(a.persona,null),navLbl:'Entregar caja',rows:[],iaTxt:`a ${a.persona} le quedan ${fmtN(a.saldo)} de caja chica`}),
       cajaSinLiq.length&&{sev:1,dot:C.soon,ico:'wallet',lbl:'Caja chica sin liquidar',sub:`${cajaSinLiq.length} gasto${cajaSinLiq.length!==1?'s':''}`,amt:fmtN(sum(cajaSinLiq)),go:'expenses',navLbl:`Ver los ${cajaSinLiq.length}`,rows:cajaSinLiq.slice(0,3).map(e=>({name:e.concept||'—',val:fmtN(e.amount)})),iaTxt:`${cajaSinLiq.length} gastos de caja chica sin liquidar`},
-      rendCli.length&&{sev:2,dot:C.normal,ico:'file',lbl:'Rendiciones por hacer',sub:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,amt:'',go:'expenses',navLbl:`Ver los ${rendCli.length}`,rows:rcRows.slice(0,3),iaTxt:`${rendCli.length} clientes con gastos por rendir`},
+      rendCli.length&&{sev:2,dot:C.normal,ico:'file',lbl:'Rendiciones por hacer',sub:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,amt:'',go:'expenses',onNav:onRendirClientes||undefined,navLbl:`Ver los ${rendCli.length}`,rows:rcRows.slice(0,3),iaTxt:`${rendCli.length} clientes con gastos por rendir`},
       propTardias.length&&{sev:2,dot:C.done,ico:'clock',lbl:'Propuestas tardías (+14d)',sub:`${propTardias.length} propuesta${propTardias.length!==1?'s':''}`,amt:fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0))),go:'sales',navLbl:`Ver las ${propTardias.length}`,rows:propTardias.slice(0,3).map(s=>({name:s.title||cnD(s.client_id),val:'',cid:s.client_id})),iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
       plzVenc.length&&{sev:0,dot:C.overdue,ico:'clock',lbl:'Plazos vencidos',sub:`${plzVenc.length} plazo${plzVenc.length!==1?'s':''}`,amt:'',onNav:()=>onOpenPlazos&&onOpenPlazos(),navLbl:'Ver plazos',rows:plzVenc.slice(0,3).map(p=>({name:p.titulo||'Plazo',val:fmtPlz(p.fecha),cid:p.client_id})),iaTxt:`${plzVenc.length} plazos vencidos`},
       plzProx.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Plazos esta semana',sub:`${plzProx.length} plazo${plzProx.length!==1?'s':''}`,amt:'',onNav:()=>onOpenPlazos&&onOpenPlazos(),navLbl:'Ver plazos',rows:plzProx.slice(0,3).map(p=>({name:p.titulo||'Plazo',val:fmtPlz(p.fecha),cid:p.client_id})),iaTxt:`${plzProx.length} plazos vencen esta semana`},
@@ -16501,8 +16506,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     const {error:rendErr} = await supabase.from('rendiciones').insert(fila)
     if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
     let falloMarca = 0; const marcados=[]
-    for(const e of gs){ const patch={client_rendered_at:now, client_render_id:renderId, ...(proyectoR?proyPatchT(e,proyectoR):proyPatch(e))}; const {error}=await supabase.from('expenses').update(patch).eq('id',e.id); if(error) falloMarca++; marcados.push({...e,...patch}) }
-    if(falloMarca>0) appAlert(`Atención: ${falloMarca} de ${gs.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
+    for(const e of gs){ const patch={client_rendered_at:now, client_render_id:renderId, ...(proyectoR?proyPatchT(e,proyectoR):proyPatch(e))}; const {data:upd,error}=await supabase.from('expenses').update(patch).eq('id',e.id).is('client_rendered_at',null).select('id'); if(error||(!DEMO&&!(upd||[]).length)){ falloMarca++; continue } marcados.push({...e,...patch}) }
+    if(falloMarca>0){ appAlert(`Atención: ${falloMarca} de ${gs.length} gasto(s) no se marcaron: ya estaban en otra rendición o no se pudieron guardar. Quedan fuera de esta.`); const tot2=marcados.reduce((a,e)=>a+(e.amount||0),0); await supabase.from('rendiciones').update({total:tot2,n_gastos:marcados.length}).eq('id',renderId); fila.total=tot2; fila.n_gastos=marcados.length }
     if(setExpenses) setExpenses(p=>p.map(e=>{ const m=marcados.find(x=>x.id===e.id); return m?{...e,...m}:e }))
     const rendObj = {...fila, created_at:now, correlativo:null}
     if(onRendicionComplete) onRendicionComplete(rendObj)
@@ -16548,7 +16553,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       const enviadaAt = new Date(extFecha+'T12:00:00').toISOString()
       const _fs = gastosSel.map(e=>e.date).filter(Boolean).sort()
       const periodoSel = _fs.length ? `${fmtFechaDMY(_fs[0])} – ${fmtFechaDMY(_fs[_fs.length-1])}` : fmtFechaDMY(extFecha)
-      const {data:mx}=await supabase.from('rendiciones').select('correlativo').eq('client_id',client.id).not('correlativo','is',null).order('correlativo',{ascending:false}).limit(1).maybeSingle()
+      const {data:mx}=await supabase.from('rendiciones').select('correlativo').eq('client_id',client.id).is('anulada_at',null).not('correlativo','is',null).order('correlativo',{ascending:false}).limit(1).maybeSingle()   // misma regla que corrSiguiente: las anuladas no cuentan
       const corr=((mx&&mx.correlativo)||0)+1
       const row={id:renderId,user_name:currentUserName||'admin',client_id:client.id,periodo:periodoSel,total:totalSel,n_gastos:gastosSel.length,n_clientes:1,tipo:'cliente',
         entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null,
@@ -16556,7 +16561,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       const {error:rErr}=await supabase.from('rendiciones').insert(row)
       if(rErr) throw new Error('No se pudo registrar la rendición: '+rErr.message)
       let falla=0
-      for(const e of gastosSel){ const {error}=await supabase.from('expenses').update({client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}).eq('id',e.id); if(error) falla++ }
+      for(const e of gastosSel){ const {data:upd,error}=await supabase.from('expenses').update({client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}).eq('id',e.id).is('client_rendered_at',null).select('id'); if(error||(!DEMO&&!(upd||[]).length)) falla++ }
       if(falla>0) appAlert(`Atención: ${falla} de ${gastosSel.length} gasto(s) no quedaron marcados como rendidos.`)
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}:e))
       if(setRendiciones) setRendiciones(p=>[row,...(p||[])])
@@ -16804,7 +16809,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[],onSave,onBulkImport,onConciliar,onAjustarNotaria,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional,onNavigate,dirtyRef}) {
+function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[],onSave,onBulkImport,onConciliar,onAjustarNotaria,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional,onNavigate,dirtyRef,cajaPorDefecto=''}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const isDeskCM = useIsDesktop()   // escritorio: revisión en 2 columnas y filas de notaría en grilla alineada (móvil intacto)
   // Notaría: modo SIMPLE = cola de confirmación 1×1 (sugerencia + Confirmar por fila, solo importa lo confirmado, muestra todo el documento).
@@ -16826,7 +16831,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   const [posibleDec,setPosibleDec] = useState({})             // decisión por posible duplicado: rowId → 'omitir' | 'cargar'
   const [posOpen,setPosOpen] = useState(true)                 // grupo "posibles duplicados" abierto
   const [posExp,setPosExp] = useState(null)                   // rowId del posible con la comparación expandida
-  const [cajaOwner,setCajaOwner] = useState('')               // dueño de la caja chica: estos gastos van a su caja (created_by = su NOMBRE, igual que un gasto normal)
+  const [cajaOwner,setCajaOwner] = useState(()=>notaria?'':(cajaPorDefecto||''))   // dueño de la caja chica (un miembro del equipo carga lo que pagó con SU caja; la notaría la paga la oficina): estos gastos van a su caja (created_by = su NOMBRE, igual que un gasto normal)
   // Categorías aprendidas (glosa→categoría, mismo learning que el Asistente IA): pre-rellena la carga cuando la planilla no trae categoría.
   const catLearnRef = useRef({})
   useEffect(()=>{ let on=true; supabase.from('learnings').select('key,value').eq('kind','gasto_categoria').order('updated_at',{ascending:true}).then(({data})=>{ if(!on)return; const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); catLearnRef.current=m }); return ()=>{on=false} },[])
@@ -18772,7 +18777,12 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
 // Saldo con signo canónico: −$265.000 (no '$-265.000').
 const fmtSaldoG = v => (Number(v)<0?'−':'')+fmt(Math.abs(Number(v)||0))
 // Gastos del cliente aún no rendidos: fuente única (Gastos, ficha y Cartola).
+// Caja chica por liquidar de una persona (FUENTE ÚNICA: Caja chica, Inicio y «Tu semana»): gastos que pagó con SU caja (no los que pagó el cliente o la oficina) y que aún no liquida. Incluye notaría si la pagó con su caja.
+const gastosPorLiquidarCaja = (expenses,persona) => (expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&!e.rendered_at&&!e.paid_by_client&&e.created_by===persona)
 const gastosPorRendirCli = (expenses,cid) => (expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at&&cuentaEnSaldo(e)&&e.category!=='Apertura')
+// Clientes con gastos por rendir (FUENTE ÚNICA: Inicio y página Rendir a cliente): sin la oficina, sin gastos de $0 y sin clientes terminados.
+const _esOfiCliR = c => !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))
+const clientesPorRendir = (clients,expenses) => (clients||[]).filter(c=>c&&!_esOfiCliR(c)&&c.status!=='Terminado').map(c=>{ const pr=gastosPorRendirCli(expenses,c.id).filter(e=>(Number(e.amount)||0)!==0); return {c, n:pr.length, tot:pr.reduce((a,e)=>a+(Number(e.amount)||0),0)} }).filter(x=>x.n>0).sort((a,b)=>b.tot-a.tot)
 const canonOtNN = o => { const s=String(o||'').trim().toUpperCase(); if(!s||s==='S/OT') return ''; const d=s.replace(/\D/g,''); return d?'OT-'+d:s }
 const _fechaISO = f => { if(!f) return null; if(f instanceof Date) return isNaN(f)?null:f.toISOString().slice(0,10); const t=String(f).slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(t)?t:null }
 async function registrarNoNuestras(list,{batchId=null,filename=null,por=null}={}){
@@ -19188,6 +19198,10 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const rs=BRAND.nombreLegal, rut=BRAND.rut
     setNotaBolRS(rs); setNotaBolRUT(rut)
     setNotaMsg(notaDefaultMsg(periodo, rs, rut))
+    // Boletas a nombre de: si toda la liquidación es de un cliente y la última vez se pidieron a su razón social, se propone esa.
+    const cidsB=[...new Set(gs.map(e=>e.client_id).filter(Boolean))]
+    if(!DEMO&&cidsB.length===1) supabase.from('learnings').select('value').eq('kind','notaria_boletas').eq('key',String(cidsB[0])).maybeSingle().then(({data})=>{ let v=data?.value; try{ if(typeof v==='string') v=JSON.parse(v) }catch(_){ v=null }
+      if(v&&v.rs){ setNotaBolRS(v.rs); setNotaBolRUT(v.rut||''); setNotaMsg(m=>String(m||'').includes(BRAND.nombreLegal)?notaDefaultMsg(periodo, v.rs, v.rut||''):m) } }).catch(()=>{})
     // OT que marcamos como "no nuestras" y siguen sin resolver: el correo de pago lo dice (por eso no se incluyen en la transferencia).
     if(!DEMO) supabase.from('notaria_no_nuestras').select('ot,monto,materia,estado,resolucion').then(({data})=>{
       const pend=(data||[]).filter(x=>x.estado!=='resuelta'&&x.resolucion!=='era_nuestra'); if(!pend.length) return
@@ -19340,13 +19354,17 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const renderId=crypto.randomUUID(), now=new Date().toISOString()
       const periodo=periodoNota(notaSel)
       const ot=[...new Set(notaSel.map(e=>e.ot_number).filter(Boolean))].join(', ')
+      const ids=notaSel.map(e=>e.id)
+      // Otra persona pudo liquidar alguna de estas OT mientras tanto: se revisa en la base antes de crear la liquidación.
+      if(!DEMO){ const {data:libres,error:fErr}=await supabase.from('expenses').select('id').in('id',ids).is('notaria_render_id',null); if(fErr) throw fErr
+        if((libres||[]).length!==ids.length){ appAlert(`${ids.length-(libres||[]).length} de estas OT ya están en otra liquidación (alguien las liquidó recién). Actualiza la página y vuelve a seleccionar.`); setNotaSending(false); return } }
       const row={id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null,estado_envio:'por_enviar'}
       const {error:rErr}=await supabase.from('rendiciones').insert(row)
       if(rErr) throw rErr
-      const ids=notaSel.map(e=>e.id)
-      const {error:uErr}=await supabase.from('expenses').update({notaria_render_id:renderId,notaria_liquidado_at:now}).in('id',ids)
+      // Liquidar = «en liquidación». La OT queda PAGADA recién al enviar el aviso con el comprobante, al marcarla pagada sin correo o al enlazar el cargo del banco.
+      const {error:uErr}=await supabase.from('expenses').update({notaria_render_id:renderId}).in('id',ids).is('notaria_render_id',null)
       if(uErr) throw uErr
-      setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId,notaria_liquidado_at:now}:e))
+      setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId}:e))
       if(setRendiciones) setRendiciones(p=>[{...row,created_at:now},...p])
       setSelNota(new Set()); setNotaConfirm(false)
       logActividad('notaria.liquidada',{tabla:'rendiciones',id:renderId,detalle:{title:`${ids.length} OT · ${periodo}`,monto:notaTotal}})
@@ -19365,7 +19383,8 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       const {error:rErr}=await supabase.from('rendiciones').insert(row)
       if(rErr) throw rErr
       const ids=notaSel.map(e=>e.id)
-      await supabase.from('expenses').update({notaria_render_id:renderId,notaria_liquidado_at:now}).in('id',ids)
+      const {error:uErr}=await supabase.from('expenses').update({notaria_render_id:renderId,notaria_liquidado_at:now}).in('id',ids).is('notaria_render_id',null)
+      if(uErr) throw uErr
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId,notaria_liquidado_at:now}:e))
       if(setRendiciones) setRendiciones(p=>[{...row,created_at:now},...p])
       setSelNota(new Set())
@@ -19415,8 +19434,13 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       try{ const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); if(via===null){ setNotaSending(false); return } sent=true }catch(_){ sent=false }
       if(!sent){ appAlert('No se pudo enviar el correo. Revisa la conexión o reintenta.'); setNotaSending(false); return }
       const now=new Date().toISOString()
-      await supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl}).eq('id',r.id)
-      if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl}:x))
+      const correoNota={asunto:subjectNota,cuerpo:mensaje,rs:notaBolRS||BRAND.nombreLegal,rut:notaBolRUT||BRAND.rut,para:dest}
+      const {error:sErr}=await supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl,correo:correoNota}).eq('id',r.id)
+      if(sErr) appAlert('El correo salió, pero no se pudo registrar el envío: '+sErr.message)
+      // Transferida con comprobante y avisada = pagada a la notaría.
+      await supabase.from('expenses').update({notaria_liquidado_at:now}).eq('notaria_render_id',r.id).is('notaria_liquidado_at',null)
+      setExpenses(p=>p.map(e=>String(e.notaria_render_id)===String(r.id)&&!e.notaria_liquidado_at?{...e,notaria_liquidado_at:now}:e))
+      if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl,correo:correoNota}:x))
       setNotaSend(null); setCompFile(null)
     }catch(e){appAlert('Error al enviar: '+e.message)}
     setNotaSending(false)
@@ -19435,10 +19459,11 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     try{
       const total=gs.reduce((a,e)=>a+(e.amount||0),0)
       const fechaLiq=fmtFechaDMY(r.created_at)
-      const mensaje=notaDefaultMsg(periodo, BRAND.nombreLegal, BRAND.rut)   // reenvío usa el borrador por defecto (mismo builder que enviar)
+      // Reenvía el mismo mensaje y asunto que se enviaron (con la razón social de las boletas elegida); las filas antiguas sin registro usan el borrador por defecto.
+      const mensaje=(r.correo&&r.correo.cuerpo)||notaDefaultMsg(periodo, BRAND.nombreLegal, BRAND.rut)
       const html=notaEmailHtml(mensaje, gs, total, clients)
       const texto=notaEmailText(mensaje, gs, total)
-      const subjectNota=`Liquidación de gastos y comprobante de transferencia · ${BRAND.nombre} · ${periodo}`
+      const subjectNota=(r.correo&&r.correo.asunto)||`Liquidación de gastos y comprobante de transferencia · ${BRAND.nombre} · ${periodo}`
       let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:`Liquidación ${BRAND.notaria} al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
       let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:BRAND.nombre,periodo,gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:'Liquidación de gastos · Notaría'}) }catch(_){} }
       const adjuntos=[]
@@ -19464,11 +19489,14 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const msg = est==='por_enviar'
       ? '¿Anular esta liquidación de notaría? Las OT vuelven a pendientes.'
       : `Esta liquidación ya se ${est==='pagado'?'pagó':'envió'} a la notaría. Anularla devuelve las ${r.n_gastos||''} OT a pendientes, pero no revierte el pago ni el correo. ¿Anular igual?`
-    if(!await appConfirm(msg)) return
+    if(!await appConfirm(msg+(r.movimiento_id?'\n\nEstá enlazada a un cargo del banco: el cargo vuelve a quedar por conciliar.':''))) return
     try{
+      // Si estaba enlazada a un cargo del banco, se libera: si no, el cargo seguiría conciliado contra una liquidación anulada y las OT podrían pagarse dos veces.
+      if(r.movimiento_id){ const {error:me}=await supabase.from('cartola_movimientos').update({estado:'pendiente',monto_conciliado:0,categoria:null}).eq('id',r.movimiento_id); if(me) throw me
+        const {error:le}=await supabase.from('rendiciones').update({movimiento_id:null}).eq('id',r.id); if(le) throw le }
       const {error:ue}=await supabase.from('expenses').update({notaria_render_id:null,notaria_liquidado_at:null}).eq('notaria_render_id',r.id)
       if(ue) throw ue   // si no se liberan los gastos, NO marcar anulada
-      const now=new Date().toISOString(), patch={anulada_at:now, anulada_por:currentUserName||null}
+      const now=new Date().toISOString(), patch={anulada_at:now, anulada_por:currentUserName||null, movimiento_id:null}
       const {error:re}=await supabase.from('rendiciones').update(patch).eq('id',r.id)
       if(re) throw re
       setExpenses(p=>p.map(e=>e.notaria_render_id===r.id?{...e,notaria_render_id:null,notaria_liquidado_at:null}:e))
@@ -19493,12 +19521,13 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   // Añadir gastos pendientes a una liquidación ya creada (corrección): los enlaza y suma al total/n_gastos/OT.
   const anadirGastosNota = async(r, ids) => {
     if(!ids.length) return
-    const now=new Date().toISOString(); const adds=notariaPend.filter(e=>ids.includes(e.id)); const addTot=adds.reduce((a,e)=>a+(e.amount||0),0)
+    if(notaEstado(r)!=='por_enviar'){ appAlert('Esta liquidación ya se envió o se pagó a la notaría: las OT nuevas van en una liquidación nueva.'); return }
+    const adds=notariaPend.filter(e=>ids.includes(e.id)); const addTot=adds.reduce((a,e)=>a+(e.amount||0),0)
     const newOts=[...new Set([...(r.ot_numbers?String(r.ot_numbers).split(', '):[]), ...adds.map(e=>e.ot_number).filter(Boolean)])].join(', ')
     try{
-      await supabase.from('expenses').update({notaria_render_id:r.id,notaria_liquidado_at:now}).in('id',ids)
-      await supabase.from('rendiciones').update({total:(r.total||0)+addTot, n_gastos:(r.n_gastos||0)+ids.length, ot_numbers:newOts||null}).eq('id',r.id)
-      setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:r.id,notaria_liquidado_at:now}:e))
+      const {error:e1}=await supabase.from('expenses').update({notaria_render_id:r.id}).in('id',ids).is('notaria_render_id',null); if(e1) throw e1
+      const {error:e2}=await supabase.from('rendiciones').update({total:(r.total||0)+addTot, n_gastos:(r.n_gastos||0)+ids.length, ot_numbers:newOts||null}).eq('id',r.id); if(e2) throw e2
+      setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:r.id}:e))
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,total:(x.total||0)+addTot,n_gastos:(x.n_gastos||0)+ids.length,ot_numbers:newOts||null}:x))
       setNotaLiqAdd(null); setAddSel(new Set())
     }catch(e){appAlert('Error al añadir: '+e.message)}
@@ -20308,6 +20337,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     if(navTo==='orphans') setShowOrphans(true)
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
     else if(navTo==='rendir'){ setShowRendiciones(true); setRendSub(null) }
+    else if(navTo==='rendirCli'){ setShowRendiciones(true); setQ(''); setRendGrupo(null); setRendSub('rendir') }   // Inicio › Rendiciones por hacer: directo a Rendir a cliente
     onNavDone&&onNavDone()
   },[navTo])
   // Ledger de cobros de la notaría (fuente única): cada gasto de notaría con su estado (pagada/en liquidación/por pagar) y error (sin cliente/duplicado), agrupado por carga masiva.
@@ -21352,7 +21382,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           if(qq&&!_n(`${r.periodo||''} ${r.user_name||''} ${r.ot_numbers||''} ${gsDe(r).map(e=>`${e.ot_number||''} ${cliN(e.client_id)} ${e.personal_de||''}`).join(' ')}`).includes(qq)) return false; return true }
         const dirMul = pagosOrd==='nuevo'?1:-1
         const list=[...notaLiquidaciones].filter(okF).sort((a,b)=>dirMul*String(b.created_at||'').localeCompare(String(a.created_at||'')))
-        const tot=list.reduce((a,r)=>a+(r.total||0),0)
+        const tot=list.filter(r=>notaEstado(r)!=='por_enviar').reduce((a,r)=>a+(r.total||0),0)   // pagado = enviado con comprobante o marcado pagado; lo «por enviar» aún no se transfiere
         const nPorEnv=list.filter(r=>notaEstado(r)==='por_enviar').length
         const groups=[]; const gi={}
         list.forEach(r=>{ const mk=isoLocal(r.created_at).slice(0,7)||'sin'; if(gi[mk]==null){ gi[mk]=groups.length; groups.push({mk,rows:[],tot:0}) } const g=groups[gi[mk]]; g.rows.push(r); g.tot+=(r.total||0) })
@@ -21710,7 +21740,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           if(!await appConfirm(`¿Enviar a la notaría (${dest}) el aviso de pago de ${gsS.length} OT por ${fmt(totS)} con tu comprobante, pidiendo emitir las boletas a nombre de ${notaBolRS} · ${notaBolRUT}? La oficina queda en copia.`)) return
           await enviarNotaria(notaSend); setNotaTab('pagados') }
         const guardarDespues=async()=>{ if(!await appConfirm('¿Guardar como pendiente de enviar? Todavía NO se avisa a la notaría; el correo lo mandas desde "Pagos realizados" cuando tengas el comprobante.')) return; setNotaSend(null); setNotaTab('pagados') }
-        const marcarSinCorreo=async()=>{ if(!await appConfirm('¿Marcar esta liquidación como YA PAGADA, sin enviar correo? La notaría NO recibe aviso — solo para OT que ya pagaste antes.')) return; try{ const {error}=await supabase.from('rendiciones').update({estado_envio:'pagado'}).eq('id',notaSend.id); if(error) throw error; if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===notaSend.id?{...x,estado_envio:'pagado'}:x)); logActividad('notaria.liquidacion_pagada_sin_correo',{tabla:'rendiciones',id:notaSend.id,detalle:{title:`${notaSend.n_gastos||0} OT · ${notaSend.periodo||''}`,monto:notaSend.total}}) }catch(err){ appAlert('No se pudo marcar como pagada: '+(err.message||err)); return }; setNotaSend(null); setNotaTab('pagados') }   // antes el error se tragaba en silencio y la pantalla la mostraba pagada igual
+        const marcarSinCorreo=async()=>{ if(!await appConfirm('¿Marcar esta liquidación como YA PAGADA, sin enviar correo? La notaría NO recibe aviso — solo para OT que ya pagaste antes.')) return; try{ const {error}=await supabase.from('rendiciones').update({estado_envio:'pagado'}).eq('id',notaSend.id); if(error) throw error; const hoyN=new Date().toISOString(); await supabase.from('expenses').update({notaria_liquidado_at:hoyN}).eq('notaria_render_id',notaSend.id).is('notaria_liquidado_at',null); setExpenses(p=>p.map(e=>String(e.notaria_render_id)===String(notaSend.id)&&!e.notaria_liquidado_at?{...e,notaria_liquidado_at:hoyN}:e)); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===notaSend.id?{...x,estado_envio:'pagado'}:x)); logActividad('notaria.liquidacion_pagada_sin_correo',{tabla:'rendiciones',id:notaSend.id,detalle:{title:`${notaSend.n_gastos||0} OT · ${notaSend.periodo||''}`,monto:notaSend.total}}) }catch(err){ appAlert('No se pudo marcar como pagada: '+(err.message||err)); return }; setNotaSend(null); setNotaTab('pagados') }   // antes el error se tragaba en silencio y la pantalla la mostraba pagada igual
         return (
         <div style={{padding:isDesktop?'8px 20px 70px':'6px 16px 70px',maxWidth:isDesktop?680:undefined,margin:'0 auto'}}>
           <div style={{background:C.accent,borderRadius:12,padding:'13px 16px',color:'#fff',textAlign:'center',marginBottom:14}}>
@@ -22705,7 +22735,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       // Personal: sin cliente, sin proyecto; descuenta de la caja de quien carga y queda como deuda de la persona con la oficina.
       for(const r of llenas){ const cat=catDe(r)
         try{
-          await onSave({client_id:null,personal_de:personal,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:null,project:null,subproject:null,...gastoDeFila(r),paid_by_client:false})
+          await onSave({client_id:null,personal_de:personal,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:null,project:null,subproject:null,...gastoDeFila(r),paid_by_client:false},{keep:true})
           count++
           if(pideDeQue(r)&&String(r.deQue||'').trim()) aprenderDeQue(`p:${personal}`,deQueTexto(r.deQue))
           logActividad('gastos.personal',{tabla:'expenses',detalle:{title:r.concept||cat,persona:personal,monto:parseInt(r.amount)}})
@@ -22720,7 +22750,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       const vta=r.cli?(sales||[]).find(s=>s.client_id===cli.id&&s.title===proj):null
       const ent=r.cli?(vta?.entity_id||(clientEntities||[]).find(e=>e.client_id===cli.id)?.id||null):(entityId||null)
       try {
-        await onSave({client_id:cli.id,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:ent,project:proj,subproject:!r.cli&&esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,...gastoDeFila(r),paid_by_client:cat==='Notaria'})   // lo que carga el equipo es siempre caja chica; notaría va por su liquidación
+        await onSave({client_id:cli.id,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:ent,project:proj,subproject:!r.cli&&esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,...gastoDeFila(r),paid_by_client:cat==='Notaria'},{keep:true})   // lo que carga el equipo es siempre caja chica; notaría va por su liquidación
         count++
         if(pideDeQue(r)&&String(r.deQue||'').trim()) aprenderDeQue(String(cli.id),deQueTexto(r.deQue))
         // Si se corrigió el cliente desde el aviso, la glosa queda aprendida para ese cliente.
@@ -23157,7 +23187,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       {/* Fila 1: Categoría · Monto · Fecha (categoría no aplica a fondos). Fecha = botón-calendario breve. */}
       <div style={{display:'grid',gridTemplateColumns:isFondo||!_Dmv?'minmax(0,1fr) minmax(0,1fr)':'1.05fr 1fr 0.92fr',gap:7,marginBottom:8}}>
         {!isFondo&&(<div style={{gridColumn:_Dmv?'auto':'1 / -1',minWidth:0}}>
-          <FloatFld label='Categoría' mb={0}><select value={f.category} onChange={e=>up('category',e.target.value)} style={{...fInp,cursor:'pointer'}}>{CATS_GASTO.map(o=><option key={o} value={o}>{o}</option>)}</select></FloatFld></div>
+          <FloatFld label='Categoría' mb={0}><select value={f.category} onChange={e=>up('category',e.target.value)} style={{...fInp,cursor:'pointer'}}>{(CATS_GASTO.includes(f.category)||!f.category?CATS_GASTO:[f.category,...CATS_GASTO]).map(o=><option key={o} value={o}>{o}</option>)}</select></FloatFld></div>
         )}
         <FloatFld label='Monto' mb={0}><input type='number' value={f.amount} onChange={e=>up('amount',e.target.value)} placeholder='0' style={fInp}/></FloatFld>
         <FloatFld label='Fecha' mb={0}>
@@ -23232,7 +23262,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta||detFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':detFalta?'Falta de qué es (inmueble, sociedad o persona)':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?subOtro(f.subcategory):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta||detFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':detFalta?'Falta de qué es (inmueble, sociedad o persona)':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:(f.category==='Otro'||CATS_OFICINA_ESTRUCTURAL.includes(f.category))?subOtro(f.subcategory):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -26128,6 +26158,9 @@ Saludos cordiales,`
           const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(textoFull)}`
           const win=window.open(gmailUrl,'_blank')
           if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(textoFull)}`
+          // Envío a mano: la app no sabe si el correo salió. Se registra como enviada solo cuando el usuario lo confirma; si no, queda como borrador.
+          const confirmado = await appConfirm('¿Enviaste el correo al cliente con el PDF adjunto?\n\nSi aún no, responde que no: la rendición queda como borrador (sin número) y la envías después desde Rendiciones.')
+          if(!confirmado){ setSending(false); appAlert('La rendición quedó como borrador, sin número. Cuando envíes el correo, ábrela desde Rendiciones y confírmalo.'); return }
         }
       }
       const now = new Date().toISOString()
@@ -26148,7 +26181,12 @@ Saludos cordiales,`
       // adicionales; con saldo a favor, solo lo adicional que exceda ese saldo. Se cierra sola cuando entra el depósito (Rendir a cliente).
       { const _Y=adic.on?Math.max(0,parseInt(adic.monto)||0):0, _sal=Math.abs(saldoCliente)
         const pedido=Math.round(_multi ? (_saldosM||[]).reduce((a,o)=>a+(o.saldo<0?-o.saldo:0),0)+_Y : (saldoCliente<0 ? _sal+_Y : (saldoCliente>0 ? Math.max(0,_Y-_sal) : _Y)))
-        if(pedido>0){ try{ const {error:frErr}=await supabase.from('fund_requests').insert({ client_id:r.client_id||null, sale_id:null, monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, n_adjuntos:1 })
+        if(pedido>0){ try{
+          // Reenviar no duplica el pedido: si el cliente ya tiene una solicitud abierta (sin depósito), se actualiza esa.
+          const {data:abierta}=await supabase.from('fund_requests').select('id').eq('client_id',r.client_id).is('recibido_at',null).order('enviada_at',{ascending:false}).limit(1).maybeSingle()
+          const {error:frErr}= abierta?.id
+            ? await supabase.from('fund_requests').update({ monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, enviada_at:new Date().toISOString() }).eq('id',abierta.id)
+            : await supabase.from('fund_requests').insert({ client_id:r.client_id||null, sale_id:r.sale_id||null, monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, n_adjuntos:1 })
           if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:r.client_id,detalle:{cliente:client?.name,title:`Pedido en la rendición${corr?` N° ${corr}`:''}`,monto:pedido}}) }catch(_){} } }   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
       try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
       appAlert(conAdjunto?(conNum.length>1?`Rendiciones N° ${corr} enviadas al cliente con sus PDF adjuntos.`:'Rendición enviada al cliente con el PDF adjunto.'):'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
@@ -37075,6 +37113,8 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
       if(!DEMO){
         const {error:e1}=await supabase.from('rendiciones').update({movimiento_id:m.id}).eq('id',liq.id); if(e1) throw e1
         const {error:e2}=await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:m.monto,categoria:'Notaría'}).eq('id',m.id); if(e2) throw e2
+        // El cargo del banco es la prueba del pago: las OT de la liquidación quedan pagadas con la fecha del cargo (si aún no lo estaban).
+        await supabase.from('expenses').update({notaria_liquidado_at:String(m.fecha).slice(0,10)+'T12:00:00Z'}).eq('notaria_render_id',liq.id).is('notaria_liquidado_at',null)
         if(m.rut_contraparte&&!rutsNota.has(m.rut_contraparte)) learnPut('notaria_rut', m.rut_contraparte, '1')
         logActividad('banco.notaria_enlazada',{tabla:'rendiciones',id:liq.id,detalle:{movimiento:m.id,fecha:m.fecha,pagado:m.monto,liquidacion:liq.total}})
       }
@@ -40648,10 +40688,13 @@ export default function App() {
     }catch(e){appAlert('Error: '+e.message)}
   },[])
 
-  const handleSaveExpense=useCallback(async(f)=>{
+  const handleSaveExpense=useCallback(async(f,opts={})=>{
     setSaving(true)
     try{
       const p={...f,amount:parseInt(f.amount)||0,sale_id:f.sale_id||null}
+      // Si al editar cambió el proyecto o el cliente, la venta anterior ya no corresponde: se vuelve a calzar con el proyecto nuevo.
+      if(f.id){ const prev=(expenses||[]).find(e=>String(e.id)===String(f.id)); const norm=x=>String(x||'').trim().toLowerCase()
+        if(prev&&(norm(prev.project)!==norm(p.project)||String(prev.client_id||'')!==String(p.client_id||''))){ const sv=(sales||[]).find(s=>String(s.id)===String(p.sale_id)); if(!sv||norm(sv.title)!==norm(p.project)||String(sv.client_id)!==String(p.client_id)) p.sale_id=null } }
       // Venta = proyecto: si el gasto tiene proyecto y no sale_id, lo vincula a la venta del cliente cuyo título coincide.
       // La app APRENDE la estructura: el gasto queda atado a su venta/proyecto para reportes y rendiciones.
       if(p.project && !p.sale_id){
@@ -40681,10 +40724,10 @@ export default function App() {
           await supabase.from('rendiciones').update({total:nuevoTotal}).eq('id',r.id)
           setRendiciones(prv=>prv.map(x=>x.id===r.id?{...x,total:nuevoTotal}:x)) }
       }
-      setModal(null)
-    }catch(e){appAlert('Error: '+e.message)}
+      if(!opts.keep) setModal(null)   // la tanda del formulario de gastos queda abierta («N guardados») y sigue con la próxima carga
+    }catch(e){ if(opts.keep){ setSaving(false); throw e } appAlert('Error: '+e.message) }   // en la tanda, el formulario junta los errores y avisa una vez
     setSaving(false)
-  },[user,expenses,rendiciones,sales])
+  },[user,expenses,rendiciones,sales,setModal])
 
   // Clasificación interna de un gasto importado (no toca la rendición al cliente, que es independiente):
   // {person} → entra a la caja chica de esa persona (created_by); {paidByClient:true} → pagado con fondos
@@ -42220,10 +42263,10 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard onRendirClientes={()=>{ navTo({tab:'expenses'}); setExpNav('rendirCli') }} proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
-        <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onAjustarNotaria={handleAjustarNotaria} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
+        <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onAjustarNotaria={handleAjustarNotaria} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} cajaPorDefecto={userRole==='limited'?(user?.name||''):''} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
         )})()}
         {tab==='flujo'&&pagina?.type==='solicitarFondos'&&<FlujoPagina origen={origenNav('Gastos')} titulo='Solicitar fondos' ctx={pagina.data?.client?.name||null} onBack={()=>setModal(null)} maxW={1120}><SolicitarFondosModal asPage client={pagina.data?.client} clients={clients} sale={pagina.data?.sale} montoInicial={pagina.data?.monto} responsable={pagina.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} terceros={terceros} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}

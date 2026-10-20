@@ -69,7 +69,7 @@ serve(async (req) => {
           pageAll(()=>sb.from("expenses").select("id,client_id,type,amount,concept,category,created_by,no_descuenta_saldo,client_rendered_at,rendered_at,paid_by_client,notaria_render_id,notaria_liquidado_at,ot_number,date,deleted_at,apertura_id").is("deleted_at",null).order("id")),
           sb.from("petty_cash").select("user_name,amount"),
           sb.from("tasks").select("id,client_id,title,status,due,who,assignees,delegated_to,completed_at"),
-          sb.from("rendiciones").select("user_name,tipo,estado_envio,sent_at,created_at"),
+          sb.from("rendiciones").select("user_name,tipo,estado_envio,sent_at,created_at,anulada_at"),
           sb.from("sales").select("id,client_id,responsible,status,deleted_at"),
           pageAll(()=>sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,paid_amount,issued_at,due,billing_type,deleted_at").is("deleted_at",null).order("id")),
           sb.from("terceros_pagos").select("id,proveedor_id,billing_id,estado,monto,liquido,factura_numero"),
@@ -129,7 +129,8 @@ serve(async (req) => {
       if (CAJA_USERS.includes(persona)) {
         const entregado = (petty||[]).filter((p:any)=> p.user_name===persona).reduce((s:number,p:any)=> s+(Number(p.amount)||0), 0);
         const gastado = expenses.filter((e:any)=> e.type==="gasto" && e.created_by===persona && !e.paid_by_client).reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0);
-        const porLiquidar = expenses.filter((e:any)=> e.type==="gasto" && !e.rendered_at && !e.paid_by_client && e.created_by===persona && e.category!=="Notaria");
+        // Misma regla que la app (gastosPorLiquidarCaja): lo que pagó con su caja y no ha liquidado, notaría incluida si la pagó con su caja.
+        const porLiquidar = expenses.filter((e:any)=> e.type==="gasto" && !e.rendered_at && !e.paid_by_client && e.created_by===persona);
         caja = { saldo: entregado-gastado, nLiq: porLiquidar.length, montoLiq: porLiquidar.reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0) };
       }
 
@@ -144,7 +145,8 @@ serve(async (req) => {
         // Martina maneja la notaría: ve TODAS las OT pendientes de liquidar a la notaría (no solo las que cargó ella).
         // Misma definición que la Deuda de la app (notariaPend): incluye las castigadas (no_descuenta_saldo), que igual se le deben a la notaría.
         const otPend = expenses.filter((e:any)=> e.type!=="fondo" && e.category==="Notaria" && /\d/.test(String(e.ot_number||"")) && !e.notaria_render_id && !e.notaria_liquidado_at && (Number(e.amount)||0)>1);
-        const correosSinCerrar = (rendiciones||[]).filter((r:any)=> r.tipo==="notaria" && (r.estado_envio==="por_enviar" || !r.sent_at));
+        // Liquidaciones a la notaría preparadas y aún sin enviar (no cuentan las anuladas ni las marcadas pagadas sin correo).
+        const correosSinCerrar = (rendiciones||[]).filter((r:any)=> r.tipo==="notaria" && !r.anulada_at && r.estado_envio==="por_enviar"   /* filas antiguas sin estado = pagadas (misma regla que notaEstado en la app) */);
         if (otPend.length || correosSinCerrar.length) notaria = { nOt:otPend.length, montoOt:otPend.reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0), nCorreos:correosSinCerrar.length };
       }
       // (5) Responsable de clientes: sus clientes = los de sus ventas (o abogado del cliente si la venta no tiene responsable).
