@@ -15724,32 +15724,41 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
         if(!DEMO) setLearningKV('cuadre_resp',keyR(x.k),JSON.stringify(val)).catch(()=>{})
         logActividad(`proveedores.${sel.id}.cuadre`,{tabla:'terceros_pagos',id:x.ts?.[0]?.id||null,detalle:{title:`Cuadre · ${r==='ok'?'está bien':'no es así'}${nota?': '+nota:''}`,monto:x.monto||null}}) }
       const anotar=async x=>{ const v=await appPrompt('Causa de la diferencia (la verá el proveedor)', cuadreNota[x.k]?.txt||''); if(v===null) return; const val={txt:String(v||'').trim()}; setCuadreNota(p=>({...p,[x.k]:val})); if(!DEMO) setLearningKV('cuadre_nota',x.k,JSON.stringify(val)).catch(()=>{}) }
-      const txtDe=x=> x.tipo==='banco' ? {t:`Transferencia del ${dmy(csAll.find(m=>String(m.id)===String(x.mid))?.fecha||x.ts?.[0]?.pagado_at)}`, s:`Se transfirieron ${fmt(x.aplic)} por ${x.ts.map(t=>bheDe(t)?`la boleta N° ${bheDe(t).folio}`:'una comisión').join(' y ')}, cuyo líquido era ${fmt(x.liq)}.`}
-        : x.tipo==='base' ? {t:`${x.monto>0?'Recibido de más':'Por recibir'} sobre lo que pagó el cliente`, s:`El cliente pagó ${fmt(x.cobrado)}; el ${x.pct}% es ${fmt(x.corr)} y tus comisiones suman ${fmt(x.reg)} líquido.`}
-        : {t:`Factura N° ${folioN(x.b.invoice_no)} sin comisión registrada`, s:`${glosaFactura(x.b)} · ${fmt(montoFactura(x.b))}. ¿Cambió lo acordado o falta registrar la comisión?`}
+      // Todo clickeable: cliente → ficha · trabajo → venta (socio) o ficha · boleta → PDF · transferencia → Banco (socio) o sus comisiones · factura → factura.
+      const saleDe=sid=>(sales||[]).find(x=>String(x.id)===String(sid)), cliIdDe=sid=>saleDe(sid)?.client_id
+      const irCli=sid=>{ const c=cliIdDe(sid); if(c&&onOpenClientFicha) onOpenClientFicha(c) }
+      const irVenta=sid=>{ const sv=saleDe(sid); if(!ro&&sv&&onOpenSale) onOpenSale(sv); else irCli(sid) }
+      const verComis=sid=>{ const c=cliIdDe(sid); setCliF(c?String(c):null); setCf('todas'); setNVer(30); setTimeout(()=>{ try{ document.getElementById('pv-comisiones')?.scrollIntoView({behavior:'smooth',block:'start'}) }catch(_){} },60) }
+      const lnk=(txt,on,col)=>on?<span onClick={e=>{e.stopPropagation();on()}} style={{color:col||C.accent,fontWeight:600,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.border,textUnderlineOffset:2}}>{txt}</span>:<span>{txt}</span>
+      const boletaLnk=t=>{ const bh=bheDe(t); return bh?lnk(`la boleta N° ${bh.folio}`,bh.storage_path?()=>abrirDocumento(bh.storage_path):null):'una comisión' }
+      const txtDe=x=> x.tipo==='banco' ? {t:lnk(`Transferencia del ${dmy(csAll.find(m=>String(m.id)===String(x.mid))?.fecha||x.ts?.[0]?.pagado_at)}`,(!ro&&onIrBanco)?()=>onIrBanco(x.mid):()=>verComis(x.sid),C.text),
+          s:<>Se transfirieron {fmt(x.aplic)} por {x.ts.map((t,i)=><Fragment key={t.id}>{i?' y ':''}{boletaLnk(t)}</Fragment>)}, cuyo líquido era {fmt(x.liq)}.</>}
+        : x.tipo==='base' ? {t:lnk(`${x.monto>0?'Recibido de más':'Por recibir'} sobre lo que pagó el cliente`,()=>verComis(x.sid),C.text), s:<>{lnk(`El cliente pagó ${fmt(x.cobrado)}`,()=>irCli(x.sid))}; el {x.pct}% es {fmt(x.corr)} y {lnk(`tus comisiones suman ${fmt(x.reg)} líquido`,()=>verComis(x.sid))}.</>}
+        : {t:lnk(`Factura N° ${folioN(x.b.invoice_no)} sin comisión registrada`,(!ro&&onOpenFactura)?()=>onOpenFactura(x.b):()=>irCli(x.sid),C.text), s:<>{glosaFactura(x.b)} · {fmt(montoFactura(x.b))}. ¿Cambió lo acordado o falta registrar la comisión?</>}
       const btn=(l,on)=><span onClick={on} className='pv-c' style={{fontSize:11.5,fontWeight:700,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{l}</span>
       const porCli={}; items.forEach(x=>{ const k=String(x.sid||'x'); (porCli[k]=porCli[k]||[]).push(x) })
       const totMas=items.filter(x=>x.monto>0).reduce((a,x)=>a+x.monto,0)
+      const irPend=()=>{ const x=pend[0]; if(!x) return; try{ document.getElementById('cq-'+x.k)?.scrollIntoView({behavior:'smooth',block:'center'}) }catch(_){} }
       return <div style={{...card,overflow:'hidden'}}>
-        {band(ro?'Cuadre de tus comisiones':'Cuadre de comisiones', pend.length?<span style={{fontSize:10.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap'}}>{pend.length} por confirmar</span>:items.length?<span style={{fontSize:10.5,fontWeight:700,color:C.greenText}}>respondido</span>:null)}
+        {band(ro?'Cuadre de tus comisiones':'Cuadre de comisiones', pend.length?<span onClick={irPend} style={{fontSize:10.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',cursor:'pointer'}}>{pend.length} por confirmar</span>:items.length?<span style={{fontSize:10.5,fontWeight:700,color:C.greenText}}>respondido</span>:null)}
         {items.length===0&&<div style={{padding:'10px 14px',fontSize:12.5,color:C.greenText,fontWeight:600}}>Todo cuadra con lo que pagó cada cliente.</div>}
         {Object.entries(porCli).map(([sid,xs])=><div key={sid} style={{borderTop:`1px solid ${C.bgSoft}`}}>
-          <div style={{padding:'9px 14px 2px',fontSize:13,fontWeight:700,color:C.accent}}>{cliN(sid)}{xs[0]?.sale?.title?<span style={{fontWeight:500,color:C.muted}}> · {xs[0].sale.title}</span>:null}</div>
+          <div style={{padding:'9px 14px 2px',fontSize:13,fontWeight:700,color:C.accent}}>{lnk(cliN(sid),()=>irCli(sid))}{xs[0]?.sale?.title?<span style={{fontWeight:500,color:C.muted}}> · {lnk(xs[0].sale.title,()=>irVenta(sid),C.muted)}</span>:null}</div>
           {xs.map(x=>{ const t=txtDe(x), r=cuadreResp[keyR(x.k)], n=cuadreNota[x.k]
-            return <div key={x.k} style={{display:'flex',alignItems:isDesktop?'center':'flex-start',gap:10,padding:'7px 14px 9px',flexWrap:isDesktop?'nowrap':'wrap'}}>
+            return <div key={x.k} id={'cq-'+x.k} style={{display:'flex',alignItems:isDesktop?'center':'flex-start',gap:10,padding:'7px 14px 9px',flexWrap:isDesktop?'nowrap':'wrap'}}>
               <div style={{flex:1,minWidth:isDesktop?0:'100%'}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{t.t}</div><div style={{fontSize:11,color:C.muted,lineHeight:1.45}}>{t.s}{n?.txt?<> <b style={{color:C.text}}>{n.txt}</b></>:null}</div>
                 {r&&<div style={{fontSize:11,fontWeight:600,color:r.r==='ok'?C.greenText:C.soonText,marginTop:2}}>{r.por||'Respondió'}: {r.r==='ok'?'está bien':'no es así'}{r.nota?` · ${r.nota}`:''} · {dmy(r.at)}</div>}</div>
-              {x.monto!=null&&<span style={{fontSize:13,fontWeight:800,color:C.soonText,...num,flexShrink:0}}>{x.monto>0?'+':'−'}{fmt(Math.abs(x.monto))}</span>}
+              {x.monto!=null&&<span onClick={()=>verComis(x.sid)} title='Ver las comisiones de este cliente' style={{fontSize:13,fontWeight:800,color:C.soonText,...num,flexShrink:0,cursor:'pointer'}}>{x.monto>0?'+':'−'}{fmt(Math.abs(x.monto))}</span>}
               <span style={{display:'flex',gap:6,flexShrink:0}}>{ro&&!r&&<>{btn(x.tipo==='sincom'?'Sí, cambió':'Está bien',()=>responder(x,'ok'))}{btn(x.tipo==='sincom'?'Falta registrarla':'No es así',()=>responder(x,'no'))}</>}{!ro&&x.tipo!=='banco'&&btn(n?.txt?'Editar causa':'+ Causa',()=>anotar(x))}</span>
             </div> })}
         </div>)}
         {(filas.length>0||totMas>0)&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12}}>
           {filas.length>0?<span onClick={()=>setVerFilasCuadre(v=>!v)} style={{color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{verFilasCuadre?'Ocultar el detalle':`Ver los ${filas.length} trabajos`} <Gl n={verFilasCuadre?'chevU':'chevD'}/></span>:<span/>}
-          {totMas>0&&<b style={{color:C.soonText,whiteSpace:'nowrap',...num}}>{ro?'Recibiste de más':'Pagado de más'} {fmt(totMas)}</b>}</div>}
-        {verFilasCuadre&&filas.map(f=><div key={f.sid} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliN(f.sid)}{isDesktop&&f.sale?.title?<span style={{fontWeight:500,color:C.muted}}> · {f.sale.title}</span>:null}</div>
+          {totMas>0&&<b onClick={()=>setVerFilasCuadre(true)} style={{color:C.soonText,whiteSpace:'nowrap',cursor:'pointer',...num}}>{ro?'Recibiste de más':'Pagado de más'} {fmt(totMas)}</b>}</div>}
+        {verFilasCuadre&&filas.map(f=><div key={f.sid} onClick={()=>verComis(f.sid)} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,cursor:'pointer'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lnk(cliN(f.sid),()=>irCli(f.sid))}{isDesktop&&f.sale?.title?<span style={{fontWeight:500,color:C.muted}}> · {lnk(f.sale.title,()=>irVenta(f.sid),C.muted)}</span>:null}</div>
             <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>pagó {fmt(f.cobrado)} · {f.pct}% {fmt(f.corr)} · {isDesktop?'tus comisiones ':''}{fmt(f.reg)}</div></div>
-          <span style={{fontWeight:700,color:C.muted,flexShrink:0,...num}}>{Math.abs(f.dif)<1?'$0':(f.dif>0?'+':'−')+fmt(Math.abs(f.dif))}</span></div>)}
+          <span style={{fontWeight:700,color:C.muted,flexShrink:0,...num}}>{Math.abs(f.dif)<1?'$0':(f.dif>0?'+':'−')+fmt(Math.abs(f.dif))}</span><span style={{color:C.textSoft,fontSize:11,flexShrink:0}}><Gl n='chevron'/></span></div>)}
       </div> })()
     const bolStrip = esBoletaProv(sel) ? (()=>{ const py=tPag.filter(t=>yOf(t.pagado_at||t.created_at)===yr), cto=sumM(py), liq=py.reduce((a,t)=>a+pagarT(t),0), nB=new Set(py.map(t=>t.bhe_id).filter(Boolean)).size
       const retPorPagar=py.reduce((a,t)=>{ const bh=bheDe(t), f=f29BHE(bh?.fecha||t.factura_fecha||t.pagado_at,expenses,tituloProv(sel)); return a+(f?.estado==='pagada'?0:(Number(t.monto)||0)-pagarT(t)) },0)
@@ -15841,7 +15850,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     const exportCuotas = () => exportCSV(`comisiones_${tituloProv(sel).replace(/\s+/g,'_')}.csv`,['Emitida','Cliente','Tu factura','Glosa','Cliente pagó','Factura del proveedor','Comisión','Le pagaste','Estado'],
       tsF.map(t=>{ const b=facDe(t); return [dmy(fEmi(t)),cliDe(t)?.name||'',b?.invoice_no?`N° ${folioN(b.invoice_no)}`:'',b?glosaFactura(b):'',pagoCli(t)?.fecha?dmy(pagoCli(t).fecha):'',t.factura_numero||'',Math.round(Number(t.monto)||0),t.pagado_at?dmy(t.pagado_at):'',estLbl(t)[0]] }))
     const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)
-    const comisionesCard = <div style={{...card,overflow:'hidden'}}>
+    const comisionesCard = <div id='pv-comisiones' style={{...card,overflow:'hidden'}}>
       {band(asgOpen?'Agregar comisión a una factura tuya':tituloLista,asgOpen?link('Cerrar',()=>setAsgOpen(false),C.accent):ordTog(ordC,setOrdC))}
       {asgOpen&&(()=>{ const yaAsig=new Set(ts.map(t=>String(t.billing_id))); const asignables = facQ.trim() ? billing.filter(b=>{ if(b.status==='Anulada'||b.billing_type==='reembolso'||yaAsig.has(String(b.id))) return false; const c=clients.find(x=>String(x.id)===String(b.client_id)); return _normTxt(`${c?.name||''} ${b.concept||''} ${b.invoice_no||''} ${b.receptor_name||''}`).includes(_normTxt(facQ)) }).slice(0,10) : []
         const asignar = async bid => { const m=parseInt(montos[bid])||0; if(!m||!onAsignarFacturas) return; setAsgBusy(bid); const ok=await onAsignarFacturas(sel.id,[{billing_id:bid,monto:m}]); setAsgBusy(null); if(ok){ setMontos(p=>{const n={...p};delete n[bid];return n}); const b=billing.find(x=>String(x.id)===String(bid)); logActividad(`proveedores.${sel.id}.asignar`,{tabla:'billing',id:bid,detalle:{title:b?.invoice_no?`Factura ${folioN(b.invoice_no)}`:'Factura',monto:m}}) } }
