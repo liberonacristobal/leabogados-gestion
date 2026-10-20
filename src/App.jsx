@@ -89,6 +89,11 @@ const BRAND = {
 }
 // Correo del propio equipo (dominio de la oficina): nunca se aprende como contacto de un cliente.
 const esCorreoOficina = e => String(e||'').trim().toLowerCase().endsWith('@'+String(BRAND.emailDominio||'').toLowerCase())
+// Datos de la cuenta en el correo: el titular va DENTRO del recuadro (primera línea), nunca en la frase. Si el texto (redactado
+// por la IA, editado o reutilizado de un correo anterior) dice «…a la cuenta de <titular>:», el titular pasa al recuadro.
+const cuentaEnRecuadro = txt => { const n=String(BRAND.nombreLegal||''); if(!n) return String(txt||'')
+  const esc=n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
+  return String(txt||'').replace(new RegExp(`(cuenta|account)( de| of)? ${esc}:[ \\t]*\\n([ \\t]{2,})`,'gi'), (m,a,b,ind)=>`${a}${b||''}:\n${ind}${n}\n${ind}`) }
 BRAND.logoUrl = 'https://' + BRAND.dominio         // base ABSOLUTA para logos en correos (deriva del dominio, no se cablea)
 
 // ── Multi-tenant (Fase 3): la identidad del estudio puede venir de la tabla `estudios` (DB); este BRAND es el fallback.
@@ -1408,8 +1413,8 @@ function horasReporteHtml({ razon, periodo, dirigidoA, entradas, estimadas, cons
 function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null, project=null, subproject=null, lang='es', grupos=null }){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4', TXT='#3D3D3D'
   const EN = lang==='en'
-  const T = EN ? {title:'Expense Report',outstanding:'Outstanding balance — transfer to Liberona Escala',company:'Company',rut:'Tax ID (RUT)',bank:'Bank',account:'Checking account',confEmail:'Confirmation email',fundSummary:'Fund summary',reportPrev:'Report',previous:'previous',fundsReceived:'Funds received',thisReport:'This report',availBalance:'Available balance',expPeriod:'Expenses (period)',balFavor:'Balance in your favor',balPending:'Outstanding balance',project:'Project',reportNo:'Report No.',period:'Period',issued:'Issued',attn:'Attn',date:'Date',concept:'Description',category:'Category',amount:'Amount',totalExp:'Total expenses',noFunds:'No funds recorded',fundsSection:'Funds received',footerDoc:'Expense report',printBtn:'Print / Save PDF',receiptBadge:'✓ receipt',fundDefault:'Funds received',expW:n=>`${n} expense${n!==1?'s':''}`,withReceipt:(a,b)=>`${a} of ${b} with supporting receipts (available upon request).`}
-    : {title:'Rendición de gastos',outstanding:'Saldo pendiente — transferir a Liberona Escala',company:'Razón social',rut:'RUT',bank:'Banco',account:'N° cuenta corriente',confEmail:'Email confirmación',fundSummary:'Resumen del fondo',reportPrev:'Rendición',previous:'anterior',fundsReceived:'Fondos recibidos',thisReport:'Esta rendición',availBalance:'Saldo disponible',expPeriod:'Gastos del período',balFavor:'Saldo a favor',balPending:'Saldo pendiente',project:'Proyecto',reportNo:'Rendición N°',period:'Período',issued:'Emisión',attn:'Dirigido a',date:'Fecha',concept:'Concepto',category:'Categoría',amount:'Monto',totalExp:'Total gastos',noFunds:'Sin fondos registrados',fundsSection:'Fondos recibidos',footerDoc:'Rendición de gastos',printBtn:'Imprimir / Guardar PDF',receiptBadge:'✓ respaldo',fundDefault:'Fondo recibido',expW:n=>`${n} gasto${n!==1?'s':''}`,withReceipt:(a,b)=>`${a} de ${b} con comprobante de respaldo (disponibles a solicitud).`}
+  const T = EN ? {title:'Expense Report',outstanding:`Outstanding balance — transfer to ${BRAND.nombre}`,company:'Company',rut:'Tax ID (RUT)',bank:'Bank',account:'Checking account',confEmail:'Confirmation email',fundSummary:'Fund summary',reportPrev:'Report',previous:'previous',fundsReceived:'Funds received',thisReport:'This report',availBalance:'Available balance',expPeriod:'Expenses (period)',balFavor:'Balance in your favor',balPending:'Outstanding balance',project:'Project',reportNo:'Report No.',period:'Period',issued:'Issued',attn:'Attn',date:'Date',concept:'Description',category:'Category',amount:'Amount',totalExp:'Total expenses',noFunds:'No funds recorded',fundsSection:'Funds received',footerDoc:'Expense report',printBtn:'Print / Save PDF',receiptBadge:'✓ receipt',fundDefault:'Funds received',expW:n=>`${n} expense${n!==1?'s':''}`,withReceipt:(a,b)=>`${a} of ${b} with supporting receipts (available upon request).`}
+    : {title:'Rendición de gastos',outstanding:`Saldo pendiente — transferir a ${BRAND.nombre}`,company:'Razón social',rut:'RUT',bank:'Banco',account:'N° cuenta corriente',confEmail:'Email confirmación',fundSummary:'Resumen del fondo',reportPrev:'Rendición',previous:'anterior',fundsReceived:'Fondos recibidos',thisReport:'Esta rendición',availBalance:'Saldo disponible',expPeriod:'Gastos del período',balFavor:'Saldo a favor',balPending:'Saldo pendiente',project:'Proyecto',reportNo:'Rendición N°',period:'Período',issued:'Emisión',attn:'Dirigido a',date:'Fecha',concept:'Concepto',category:'Categoría',amount:'Monto',totalExp:'Total gastos',noFunds:'Sin fondos registrados',fundsSection:'Fondos recibidos',footerDoc:'Rendición de gastos',printBtn:'Imprimir / Guardar PDF',receiptBadge:'✓ respaldo',fundDefault:'Fondo recibido',expW:n=>`${n} gasto${n!==1?'s':''}`,withReceipt:(a,b)=>`${a} de ${b} con comprobante de respaldo (disponibles a solicitud).`}
   // Saldo disponible = fondos recibidos − rendido en tandas anteriores − esta rendición.
   const saldo = totFondos - rendidoAntes - totGastos
   const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg=MUTED; if(c.includes('notar')){bg='#E6F1FB';fg=A} else if(c.includes('transp')){bg='#E1F5EE';fg=C.greenText} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${RENDCAT(cat)}</span>` }
@@ -26477,7 +26482,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     const logoW = useCid?'cid:lealogow':`${location.origin}${BRAND.logo.blanco}`
     const logoC = useCid?'cid:lealogoc':`${location.origin}${BRAND.logo.color}`
     const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    const lines = String(text).split('\n')
+    const lines = cuentaEnRecuadro(text).split('\n')
     let out='', box=[]
     const flush=()=>{ if(box.length){ out+=`<div style="background-color:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.indexOf(':'); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+1).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
     lines.forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()? `<p style="margin:0 0 10px">${esc(l)}</p>` : '' } })
@@ -26611,7 +26616,7 @@ Saludos cordiales,`
   }
   const enviar = async() => {
     if(!para.trim()){ appAlert('Falta el email del cliente.'); return }
-    const texto = body
+    const texto = cuentaEnRecuadro(body)
     const firmaTxt = firma.nombre ? [firma.nombre, firma.cargo, firma.telefono, BRAND.direccionFirma, BRAND.ciudad+' - Chile', 'www.'+BRAND.web].filter(Boolean).join('\n') : ''
     const textoFull = firmaTxt ? texto+'\n\n'+firmaTxt : texto
     const _stripD = u=>String(u||'').replace(/^data:[^,]+,/,'')
