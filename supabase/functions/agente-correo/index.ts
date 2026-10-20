@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
   const msgs: any[] = Array.isArray(body.messages) ? body.messages.slice(0, 40) : [];
   try {
     const desde60 = iso(new Date(Date.now() - 60 * 86400000));
-    const [contactos, clientes, ventas, cuentas, notaEm, abonos, ultCart, fondosReq, cargasNota, ya] = await Promise.all([
+    const [contactos, clientes, ventas, cuentas, notaEm, abonos, ultCart, fondosReq, cargasNota, ya, casillaCfg] = await Promise.all([
       rest("contacts?select=email,client_id&email=not.is.null"),
       rest("clients?select=id,name,email,abogado_responsable,is_internal"),
       rest("sales?select=client_id,responsible,created_at&responsible=not.is.null&order=created_at.desc"),
@@ -127,7 +127,10 @@ Deno.serve(async (req) => {
       rest(`fund_requests?select=client_id,monto,asunto,enviada_at&enviada_at=gte.${desde60}`),
       rest(`bulk_imports?select=created_at,resumen&created_at=gte.${desde60}&status=eq.active`),
       msgs.length ? rest(`agente_bandeja?select=gmail_id&gmail_id=in.(${msgs.map((m) => `"${String(m.id).replace(/"/g, "")}"`).join(",")})`) : Promise.resolve([]),
+      rest("learnings?kind=eq.config&key=eq.agente_casilla&select=value&order=updated_at.desc&limit=1"),
     ]);
+    // Dominio de la oficina = el de la casilla del agente (configuración, no escrito en el código).
+    const domOficina = (String(casillaCfg?.[0]?.value || "").split(/[,;\s]+/).find((e) => e.includes("@")) || "").split("@")[1]?.toLowerCase() || "";
     // Segunda revisión: los comprobantes «en espera» (depósito aún no en el banco) se vuelven a cruzar con cada cartola nueva.
     const reRev = { revisados: 0, registrados: 0, por_conciliar: 0 };
     // deno-lint-ignore no-explicit-any
@@ -146,7 +149,7 @@ Deno.serve(async (req) => {
     const vistos = new Set((ya || []).map((x: { gmail_id: string }) => x.gmail_id));
     const cliPorId = new Map((clientes || []).map((c: { id: string }) => [c.id, c]));
     const cliPorEmail = new Map<string, string>(); const cliPorDominio = new Map<string, Set<string>>();
-    const addMail = (em: string, cid: string) => { if (!em || !cid) return; const e = em.toLowerCase().trim(); cliPorEmail.set(e, cid); const d = e.split("@")[1]; if (d && !GENERICOS.test(d)) { if (!cliPorDominio.has(d)) cliPorDominio.set(d, new Set()); cliPorDominio.get(d)!.add(cid); } };
+    const addMail = (em: string, cid: string) => { if (!em || !cid) return; const e = em.toLowerCase().trim(); if (domOficina && e.endsWith("@" + domOficina)) return; cliPorEmail.set(e, cid); const d = e.split("@")[1]; if (d && !GENERICOS.test(d)) { if (!cliPorDominio.has(d)) cliPorDominio.set(d, new Set()); cliPorDominio.get(d)!.add(cid); } };
     (contactos || []).forEach((c: { email: string; client_id: string }) => addMail(c.email, c.client_id));
     (clientes || []).forEach((c: { email: string; id: string; is_internal: boolean }) => { if (!c.is_internal) String(c.email || "").split(/[,;\s]+/).forEach((e) => addMail(e, c.id)); });
     const respDe = (cid: string) => { const c = cliPorId.get(cid) as { abogado_responsable?: string } | undefined; return c?.abogado_responsable || (ventas || []).find((v: { client_id: string }) => v.client_id === cid)?.responsible || null; };
@@ -159,7 +162,7 @@ Deno.serve(async (req) => {
       const de = emailDe(m.from), dom = de.split("@")[1] || "", recibido = new Date(m.date || Date.now());
       const asunto = String(m.subject || ""), cuerpo = String(m.body || "").slice(0, 20000);
       const adj = (Array.isArray(m.attachments) ? m.attachments : []).slice(0, 6);
-      const esInterno = dom === "leabogados.cl";
+      const esInterno = !!domOficina && dom === domOficina;
       let cid: string | null = cliPorEmail.get(de) || null;
       if (!cid && dom && !GENERICOS.test(dom) && cliPorDominio.get(dom)?.size === 1) cid = [...cliPorDominio.get(dom)!][0];
       let porNombre: { id: string; name: string } | null = null;
