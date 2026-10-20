@@ -16619,6 +16619,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const [atencion, setAtencion] = useState(editRend?.dirigido_a||'')
   const [prefilled, setPrefilled] = useState(false)   // "Dirigido a" precargado de rendición anterior
   const [limpiandoIA, setLimpiandoIA] = useState(false)
+  const [editDet, setEditDet] = useState(null)   // detalle de un gasto en edición {id, v}: tocar el texto lo corrige a mano (mismo campo que «Mejorar descripciones con IA»)
   const [atencionEmail, setAtencionEmail] = useState(editRend?.dirigido_email||'')
   const [showSub, setShowSub] = useState(!!(editRend&&editRend.subproject))
   const [showFiltroFecha, setShowFiltroFecha] = useState(false)
@@ -16730,6 +16731,13 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const proyPatch = e => { const sid=proyToSale[proyecto]; return proyecto ? {...(!e.project?{project:proyecto}:{}), ...(sid&&!e.sale_id?{sale_id:sid}:{})} : {} }
 
   // IA: profesionaliza las descripciones de los gastos seleccionados (expande abreviaciones legales, corrige tildes). Guarda el resultado.
+  const guardarDetalle = async()=>{ const d=editDet; if(!d) return; setEditDet(null)
+    const e=(expenses||[]).find(x=>x.id===d.id); const v=String(d.v||'').trim(); if(!e||!v||v===(e.concept||'')) return
+    if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,concept:v}:x))
+    if(DEMO) return
+    const {error}=await supabase.from('expenses').update({concept:v}).eq('id',e.id)
+    if(error){ if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,concept:e.concept}:x)); appAlert('No se pudo guardar el detalle: '+error.message); return }
+    logActividad('gastos.detalle_editado',{tabla:'expenses',id:e.id,detalle:{cliente:client?.name,title:'Detalle del gasto corregido en la rendición',antes:e.concept||'',despues:v}}) }
   const mejorarDescripcionesIA = async()=>{
     const sel = disponibles.filter(e=>selected.has(e.id))
     if(!sel.length) return
@@ -17019,7 +17027,11 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
                 {isSel&&<span style={{color:'#fff',fontSize:10}}><Gl n='tick'/></span>}
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:500,color:C.text}}>{e.concept||'—'}</div>
+                {editDet?.id===e.id
+                  ? <input autoFocus value={editDet.v} onFocus={ev=>ev.target.select()} onClick={ev=>ev.stopPropagation()} onChange={ev=>setEditDet({id:e.id,v:ev.target.value})} onBlur={guardarDetalle}
+                      onKeyDown={ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); ev.currentTarget.blur() } else if(ev.key==='Escape'){ ev.preventDefault(); setEditDet(null) } }}
+                      style={{width:'100%',boxSizing:'border-box',fontSize:12,fontWeight:500,color:C.text,border:`1px solid ${C.accent}`,borderRadius:6,padding:'4px 6px',outline:'none',background:'#fff',fontFamily:'inherit'}}/>
+                  : <div onClick={ev=>{ ev.stopPropagation(); setEditDet({id:e.id,v:e.concept||''}) }} title='Editar el detalle' style={{fontSize:12,fontWeight:500,color:C.text,cursor:'text',textDecoration:'underline dotted',textDecorationColor:C.border,textUnderlineOffset:3}}>{e.concept||'—'}</div>}
                 <div style={{fontSize:10,color:C.muted,marginTop:1,display:'flex',gap:5,alignItems:'center'}}>
                   {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
                   {e.category&&<span style={{padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{e.category}</span>}
