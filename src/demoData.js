@@ -142,6 +142,8 @@ export const demoData = {
     { id:'b14', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 2/3',          amount:26000000, status:'Vencido',    invoice_no:'1248', issued_at:'2026-03-10', due:'2026-03-25', paid_at:'2026-04-15', paid_amount:26000000, reconciled_at:'2026-04-15', billing_type:'honorarios', monto_terceros:0 },
     // Programadas (futuro, cash flow)
     { id:'b13a1', client_id:'c3', sale_id:'s13', concept:'Asesoría laboral por hora — Cuota 1/3', amount:351000, status:'Anticipada', prepaid_anticipo_id:'ant5', invoice_no:null, issued_at:null, due:'2026-09-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b13a2', client_id:'c3', sale_id:'s13', concept:'Asesoría laboral por hora — Cuota 2/3', amount:351000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-10-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b13a3', client_id:'c3', sale_id:'s13', concept:'Asesoría laboral por hora — Cuota 3/3', amount:351000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-11-01', billing_type:'honorarios', monto_terceros:0 },
     { id:'b15', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 3/4', amount:19500000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-07-15', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b16', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 4/4', amount:19500000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-08-15', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b17', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 3/3',          amount:26000000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-09-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
@@ -284,6 +286,8 @@ export const demoData = {
     { id:'tp2', billing_id:'b10', proveedor_id:'pv2', proveedor:'María José Soto', monto:3000000, estado:'pendiente', tipo_costo:'clp', sale_id:'s6', created_at:'2026-05-28' },
     { id:'tp3', billing_id:'b5',  proveedor_id:'pv1', proveedor:'Andrés Rojas',    monto:1500000, estado:'pagado', pagado_at:'2026-05-10', movimiento_id:'movpv2', tipo_costo:'clp', comision_pct:15, comision_monto:264706, created_at:'2026-04-05' },
     { id:'tp4', billing_id:'b5',  proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:176991, liquido:150000, retencion:26991, bhe_id:'bh1', factura_numero:'12', factura_fecha:'2026-08-01', estado:'pagado', pagado_at:'2026-08-06', tipo_costo:'pct', valor:10, created_at:'2026-04-05' },
+    { id:'tp6', billing_id:'b13a2', proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:70200, liquido:59494, retencion:10706, estado:'pendiente', tipo_costo:'pct', valor:20, sale_id:'s13', created_at:'2026-09-01' },
+    { id:'tp7', billing_id:'b13a3', proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:70200, liquido:59494, retencion:10706, estado:'pendiente', tipo_costo:'pct', valor:20, sale_id:'s13', created_at:'2026-09-01' },
     { id:'tp5', billing_id:'b4',  proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:212389, liquido:180000, retencion:32389, estado:'por_pagar', tipo_costo:'pct', valor:10, created_at:'2026-03-22' },
   ],
   // Facturas que los proveedores le emiten al estudio (SII · registro de compras)
