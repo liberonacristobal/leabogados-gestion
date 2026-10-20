@@ -396,6 +396,8 @@ export const demoData = {
     { id:'conf40', movimiento_id:'movf40', tipo_destino:'factura', factura_id:'b40', anticipo_id:null, monto_aplicado:12000000, origen:'demo', marco_pago:true },
   ],
   rendiciones: [
+    { id:'rb1', tipo:'cliente', client_id:'c3', total:253065, n_gastos:3, created_at:'2026-10-19T14:00:00', user_name:'Martina', project:null },
+    { id:'rb2', tipo:'cliente', client_id:'c1', total:120000, n_gastos:2, created_at:'2026-10-20T10:00:00', user_name:'Cristóbal', project:null },
     { id:'rn0', tipo:'notaria', periodo:'agosto 2026', total:320000, n_gastos:5, ot_numbers:'48120, 48125, 48131, 48140, 48144', estado_envio:'enviada', sent_at:'2026-08-20', created_at:'2026-08-20T15:00:00', user_name:'Martina', movimiento_id:'movn0' },
     { id:'rn2', tipo:'notaria', periodo:'septiembre 2026', total:250000, n_gastos:4, ot_numbers:'48330, 48334, 48340, 48352', estado_envio:'enviada', sent_at:'2026-09-15', created_at:'2026-09-15T15:00:00', user_name:'Martina' },
     { id:'rn1', tipo:'notaria', periodo:'julio 2026', total:180000, n_gastos:3, ot_numbers:'48210, 48215, 48220', estado_envio:'enviada', sent_at:'2026-07-25', created_at:'2026-07-25', user_name:'Martina' },
