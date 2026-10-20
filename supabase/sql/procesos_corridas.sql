@@ -1,0 +1,13 @@
+-- Registro permanente de procesos automáticos (aplicado 2026-10-20 vía migraciones procesos_corridas_registro,
+-- procesos_estado_inicio_y_cadencia, procesos_catalogo_nombres).
+-- 1) public.procesos_corridas: una fila por corrida (lanzado → ok | apagado | error | sin_respuesta). Nunca se borra.
+-- 2) public.lanzar_proceso(job, url, body, params, headers, timeout_milliseconds): igual que net.http_post + anota la corrida
+--    (si anotar falla, el proceso igual se lanza).
+-- 3) public.recoger_corridas(): cada 10 min (cron 'recoger-corridas') copia la respuesta real de net._http_response
+--    (pg_net la borra a las ~6 h) y el resultado de las tareas SQL (cron.job_run_details).
+-- 4) public.procesos_estado(): estado por proceso para la app (solo miembros rol admin) y la vigilancia (service_role).
+-- 5) public.procesos_catalogo: nombre en español de cada proceso (fuente única de la app y del aviso).
+-- 6) learnings config 'procesos_registro_desde' (inicio del registro) y 'vigilancia_procesos' ('on' = enviar avisos).
+-- Las tareas cron se conectaron reemplazando `net.http_post(` por `public.lanzar_proceso(job := '<jobname>', `
+-- (reversible con el reemplazo inverso). Tarea nueva que llame a una función: usar lanzar_proceso, nunca net.http_post directo.
+-- Vigilancia: cron 'vigilancia-procesos-diario' (0 11 * * * = 08:00 Chile) → edge vigilancia-procesos.
