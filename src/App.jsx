@@ -1338,9 +1338,29 @@ function rendGruposProyecto({expenses, clientId, scopeEntId=null, gastos=[], exc
     return {...x, fondos:x.fondos.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))), totFondos, totGastos, saldo:totFondos-x.previo-totGastos, ent:entDe(x)} })
   return {grupos:todos.filter(x=>x.gastos.length), otros:todos.filter(x=>!x.gastos.length).reduce((a,x)=>a+x.saldo,0)}
 }
+// Reparto de los gastos de un cliente entre sus fondos (FUENTE ÚNICA: Rendir un fondo, mover gastos de fondo, Salud de datos).
+// Cada gasto queda en UN lugar: el fondo asignado a mano (reembolso_fondo_id) o, si no, el fondo de su mismo proyecto, el de su misma
+// razón social o el más antiguo con saldo; sin saldo en ningún fondo → «Sin fondo» (lo que falta pedir). Una devolución (fondo negativo)
+// consume como un gasto. Mismas reglas que fgCliente, así que Σ(fondo − sus gastos) − sin fondo = saldo del cliente, siempre.
+function repartoFondos(expenses, clientId){
+  const movs=(expenses||[]).filter(e=>e.client_id===clientId && cuentaEnSaldo(e))
+  const ord=(a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.created_at||'').localeCompare(String(b.created_at||''))
+  const fondos=movs.filter(e=>e.type==='fondo'&&(Number(e.amount)||0)>0).sort(ord).map(f=>({f, quedan:Number(f.amount)||0, gastos:[]}))
+  const consumos=movs.filter(e=>(e.type!=='fondo'&&!e.no_descuenta_saldo)||(e.type==='fondo'&&(Number(e.amount)||0)<0)).sort(ord)
+  const sinFondo=[], deGasto={}
+  consumos.forEach(g=>{ const m=Math.abs(Number(g.amount)||0)
+    let b=g.reembolso_fondo_id?fondos.find(x=>String(x.f.id)===String(g.reembolso_fondo_id)):null
+    if(!b){ const vivos=fondos.filter(x=>x.quedan>0), rsOk=x=>!x.f.entity_id||!g.entity_id||x.f.entity_id===g.entity_id
+      b=(g.project&&vivos.find(x=>x.f.project===g.project&&rsOk(x)))||(g.entity_id&&vivos.find(x=>x.f.entity_id===g.entity_id))||vivos.find(rsOk)||null }
+    if(b){ b.gastos.push(g); b.quedan-=m; deGasto[g.id]=b.f.id } else { sinFondo.push(g); deGasto[g.id]=null } })
+  const totSin=sinFondo.reduce((a,g)=>a+Math.abs(Number(g.amount)||0),0)
+  return {fondos, sinFondo, totSin, deGasto, saldo:fondos.reduce((a,x)=>a+x.quedan,0)-totSin}
+}
 // trabajo (= proyecto): si viene, fondos, gastos y rendiciones previas se acotan a ese proyecto (rendición por trabajo).
-function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=null, trabajo=null){
-  const movs=(expenses||[]).filter(e=>e.client_id===clientId && cuentaEnSaldo(e) && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id) && (trabajo==null || (e.project||'')===trabajo))
+// fondoId: rendición de UN fondo → el fondo y los gastos que le tocan en el reparto (repartoFondos).
+function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=null, trabajo=null, fondoId=null){
+  const _b=fondoId?repartoFondos(expenses, clientId).fondos.find(x=>String(x.f.id)===String(fondoId)):null
+  const movs=fondoId ? (_b?[_b.f,..._b.gastos]:[]) : (expenses||[]).filter(e=>e.client_id===clientId && cuentaEnSaldo(e) && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id) && (trabajo==null || (e.project||'')===trabajo))
   const fondos=movs.filter(e=>e.type==='fondo').sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
   const totFondos=fondos.reduce((a,e)=>a+(e.amount||0),0)
   const descuentan=movs.filter(e=>!(e.type==='gasto'&&e.no_descuenta_saldo))
@@ -1355,7 +1375,7 @@ function fondosSinTrabajo(expenses, clientId, scopeEntId=null){
 // Gastos de una rendición: los guardados (client_render_id) o, en la vista previa sin guardar, los que trae la rendición.
 const gastosDeRend = (r, expenses) => (r&&r._gastos) ? r._gastos : (expenses||[]).filter(e=>e.client_render_id===r?.id)
 // Fondo de una rendición guardada (misma regla que su correo y su PDF): con 2+ RS se acota a la RS de sus gastos; por trabajo, a su trabajo.
-const fondoDeRend = (r, expenses, clientEntities) => { const det=gastosDeRend(r,expenses).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))); const entId=((clientEntities||[]).filter(e=>e.client_id===r.client_id).length>1)?(det.find(e=>e.entity_id)||{}).entity_id:null; return rendicionFondo(expenses, r.client_id, entId, null, r.por_trabajo?(r.project||''):null) }
+const fondoDeRend = (r, expenses, clientEntities) => { const det=gastosDeRend(r,expenses).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))); const entId=((clientEntities||[]).filter(e=>e.client_id===r.client_id).length>1)?(det.find(e=>e.entity_id)||{}).entity_id:null; return rendicionFondo(expenses, r.client_id, entId, null, r.por_trabajo?(r.project||''):null, r.fondo_id||null) }
 // Rendiciones ANTERIORES (para el desglose "Resumen del fondo"): agrupa gastos ya rendidos por rendición,
 // excluyendo la actual. Recibe movimientos ya acotados a la RS. Devuelve [{total,fecha}] y la suma.
 function rendicionesPreviasDe(scopedMovs, excludeRenderId){
@@ -1491,7 +1511,7 @@ function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='
   const entId = _entsC.length>1 ? _gEnt : null
   const ent = _entsC.length===1 ? _entsC[0] : (_gEnt ? (clientEntities||[]).find(x=>x.id===_gEnt) : null)
   const trab = r.por_trabajo ? (r.project||'') : null
-  const {fondos, totFondos, previas, rendidoAntes} = rendicionFondo(expenses, client&&client.id, entId, r.id, trab)
+  const {fondos, totFondos, previas, rendidoAntes} = rendicionFondo(expenses, client&&client.id, entId, r.id, trab, r.fondo_id||null)
   return rendicionDocHtml({
     razon: (ent&&ent.name) || (client&&client.name) || '—',
     rut: (ent&&ent.rut) || (client&&client.rut) || '',
@@ -1504,7 +1524,7 @@ function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='
     rendidoAntes, rendicionesPrevias: previas, correlativo: r.correlativo,
     project: r.project || null, subproject: r.subproject || null,
     lang,
-    grupos: trab!=null ? null : rendGruposProyecto({expenses, clientId:client&&client.id, scopeEntId:entId, gastos, excludeRenderId:r.id, clientEntities}),
+    grupos: (trab!=null||r.fondo_id) ? null : rendGruposProyecto({expenses, clientId:client&&client.id, scopeEntId:entId, gastos, excludeRenderId:r.id, clientEntities}),
   })
 }
 
@@ -9257,10 +9277,14 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
       const faltaClaudia=allM.filter(m=>{ const r=cmBy[m]; return r && (Number(r.cotizaciones)===0||Number(r.ppm)===0||r.estimado) })
       const sldFalta=allM.filter(m=>{ const r=cmBy[m]; return !r || Number(r.sueldos)===0 })
       const pendCierre=allM.filter(m=>cierreDisponible(m)&&mesEstado(m)!=='cerrado')   // ya corresponde cerrar por fecha, pero faltan datos o está estimado
+      // Fondos de clientes: el reparto de gastos entre fondos (repartoFondos) debe sumar el saldo de la ficha (fgCliente), cliente por cliente.
+      const _cliF=[...new Set((expenses||[]).filter(e=>e.client_id).map(e=>e.client_id))]
+      const descF=_cliF.filter(cid=>Math.round(repartoFondos(expenses,cid).saldo)!==Math.round(fgCliente(expenses,cid).saldo)).map(cid=>(clients||[]).find(c=>c.id===cid)?.name||'cliente')
       const checks=[
         [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · tócalo para ver cuáles`:'todas enlazadas a una venta', sinEnl.length?{label:sinEnlOpen?'ocultar':'ver',on:()=>setSinEnlOpen(o=>!o)}:null],
         [pendCierre.length===0,'Cierre de meses',pendCierre.length?`${pendCierre.length} mes${pendCierre.length!==1?'es':''} por cerrar · faltan datos reales (completa abajo)`:`se cierran solos · ${nCerrados} cerrado${nCerrados!==1?'s':''}`, null],
         [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia', faltaClaudia.length?{label:'editar',on:()=>abrirEditor(faltaClaudia[0])}:null],
+        [descF.length===0,'Fondos de clientes',descF.length?`${descF.length} cliente${descF.length!==1?'s':''} cuyo reparto por fondo no suma su saldo: ${descF.slice(0,3).join(', ')}`:`el reparto por fondo suma el saldo de cada ficha · ${_cliF.length} clientes`],
         [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],
       ]
       return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
@@ -16667,7 +16691,12 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     const n={}; (expenses||[]).forEach(e=>{ if(e.client_id===client.id&&e.type==='gasto'&&!e.client_rendered_at&&e.entity_id) n[e.entity_id]=(n[e.entity_id]||0)+1 })
     const top=Object.keys(n).sort((a,b)=>n[b]-n[a])[0]; return top || (entsCli[0]&&entsCli[0].id) || null })
   // Proyecto y subproyecto de la rendición (el emisor elige; el proyecto FILTRA los gastos al crear; al editar es solo metadata).
-  const [proyecto,setProyecto] = useState(editRend?.project||wip0?.proyecto||'')
+  // Proyectos que se muestran (desplegable con varios a la vez; vacío = todos). `proyecto` = el único elegido, con la semántica de antes
+  // (filtra, y a los gastos sin proyecto les asigna ese al rendir).
+  const [proyF,setProyF] = useState(()=>{ const p=editRend?.project||wip0?.proyecto||''; return new Set(p?[p]:[]) })
+  const proyecto = proyF.size===1&&!proyF.has('__sin__') ? [...proyF][0] : ''
+  const setProyecto = p => setProyF(new Set(p?[p]:[]))
+  const [proyOpen,setProyOpen] = useState(false)   // desplegable de proyectos abierto
   const [subproyecto,setSubproyecto] = useState(editRend?.subproject||wip0?.subproyecto||'')
   useEffect(()=>{ if(esEdicion) return; try{ if(selected.size) localStorage.setItem(wipKey,JSON.stringify({sel:[...selected],proyecto,subproyecto,atencion,at:Date.now()})); else localStorage.removeItem(wipKey) }catch(_){} },[selected,proyecto,subproyecto,atencion])   // eslint-disable-line react-hooks/exhaustive-deps
   const headEnt = entsCli.length===1 ? entsCli[0] : (entsCli.find(e=>e.id===selEnt)||null)
@@ -16682,7 +16711,16 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     supabase.from('expense_attachments').select('expense_id').in('expense_id',ids).then(({data})=>{ if(alive) setConRespaldo(new Set((data||[]).map(r=>String(r.expense_id)))) },()=>{})
     return ()=>{alive=false}
   },[client.id,selEnt])
-  const _fondoRend = rendicionFondo(expenses, client.id, singleRS?null:selEnt)
+  // Rendir un fondo: con 2+ fondos se elige primero qué se rinde (gastos o un fondo). El reparto dice qué gastos cubrió cada fondo.
+  const repF = useMemo(()=>repartoFondos(expenses, client.id),[expenses,client.id])
+  const fondosRS = repF.fondos.filter(x=>inScope(x.f))
+  const verModoFondo = !esEdicion && !navBorr && fondosRS.length>=2
+  const [modoR,setModoR] = useState(editRend?.fondo_id?'fondo':'gastos')
+  const [fondoSel,setFondoSel] = useState(editRend?.fondo_id||null)
+  const [addSinFondo,setAddSinFondo] = useState(false)
+  const enFondo = !!fondoSel && modoR==='fondo' && (esEdicion?!!editRend?.fondo_id:verModoFondo)
+  const fondoObj = enFondo ? ((expenses||[]).find(e=>String(e.id)===String(fondoSel))||null) : null
+  const _fondoRend = rendicionFondo(expenses, client.id, singleRS?null:selEnt, null, null, enFondo?fondoSel:null)
   const fondosDisp = _fondoRend.totFondos
   const saldoActual = _fondoRend.saldo
   // Correlativo por cliente: se cuenta solo sobre las rendiciones ENVIADAS (correlativo grabado). Tentativo = max + 1.
@@ -16698,10 +16736,11 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const proyToSale = {}; ventasProy.forEach(s=>{ if(!(s.title in proyToSale)) proyToSale[s.title]=s.id })
   const proyVentas = [...new Set(ventasProy.map(s=>s.title))]
   const proyectosDisp = [...new Set([...Object.keys(proyConteo), ...proyVentas])].sort((a,b)=>(proyConteo[b]||0)-(proyConteo[a]||0))
+  const cntProy = {}; gastosPend.filter(e=>!e.no_descuenta_saldo&&!e.apertura_id&&e.category!=='Apertura').forEach(e=>{ const k=e.project||(sales||[]).find(s=>String(s.id)===String(e.sale_id))?.title||''; const c=cntProy[k]||(cntProy[k]={n:0,m:0}); c.n++; c.m+=Number(e.amount)||0; const t=cntProy.__todos||(cntProy.__todos={n:0,m:0}); t.n++; t.m+=Number(e.amount)||0 })
   const proyectoSugerido = Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])[0] || proyVentas[0] || ''
   // Default automático: SOLO un proyecto que tenga gastos disponibles; nunca un título de venta sin gastos (ocultaría todo). Si no hay, "Todos".
-  const _variosT = Object.keys(proyConteo).length>=2 && fondosSinTrabajo(expenses, client.id, singleRS?null:selEnt)===0
-  const proyectoDefault = _variosT ? '' : (Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])[0] || '')
+  // Un solo proyecto con gastos → ese (los sin proyecto lo toman al rendir); varios → «Todos», agrupados por proyecto.
+  const proyectoDefault = Object.keys(proyConteo).length===1 ? Object.keys(proyConteo)[0] : ''
   // Al cambiar de RS (o al abrir), preseleccionar solo si hay un proyecto con gastos; si no, dejar "Todos" para no esconder nada.
   useEffect(()=>{ if(esEdicion) return; setProyecto(proyectosDisp.includes(proyecto)?proyecto:(preSel?'':proyectoDefault)) }, [selEnt])   // borrador preparado: todos sus gastos de la RS, sin acotar a un trabajo
 
@@ -16709,14 +16748,21 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   // Un gasto pertenece al proyecto si tiene esa glosa de proyecto O está vinculado a su venta (sale_id).
   // Posibles duplicados del cliente (misma regla que caja chica): se comparan con todos sus gastos, también los ya rendidos.
   const dupRend = posiblesDuplicadosGastos(allMovs.filter(e=>e.type==='gasto'))
+  const keyP = e => e.project || (sales||[]).find(s=>String(s.id)===String(e.sale_id))?.title || ''
+  // Chips del gasto (proyecto y fondo): se corrigen tocándolos, sin marcar ni desmarcar el gasto.
+  const chipSty = warn => ({fontSize:9.5,fontWeight:700,color:warn?C.soonText:C.accent,background:warn?C.soonBg:C.bgSoft,border:`1px dashed ${warn?C.soonText:C.done}`,borderRadius:20,padding:'1px 6px',maxWidth:'100%',cursor:'pointer',fontFamily:'inherit'})
+  const _stop = ev => ev.stopPropagation()
   const disponibles = allMovs.filter(e=>{
     if(e.type!=='gasto') return false
     const mine = esEdicion && String(e.client_render_id)===String(editRend.id)   // gasto que YA está en esta rendición: siempre visible (pre-marcado)
     if(e.no_descuenta_saldo && !mine) return false   // gasto histórico no se rinde
     if((e.apertura_id || e.category==='Apertura') && !mine) return false   // resumido en el saldo de apertura: no se rinde
     if(e.client_rendered_at && !mine) return false   // gastos de OTRA rendición no entran
-    if(!mine){   // los filtros de proyecto/fecha solo acotan los candidatos a AGREGAR, nunca esconden los propios
+    if(!mine && enFondo){   // rendir un fondo: los gastos que le tocan en el reparto (+ los sin fondo, si se pidió agregarlos)
+      const d=repF.deGasto[e.id]; if(!(d&&String(d)===String(fondoSel)) && !(addSinFondo&&d==null)) return false }
+    else if(!mine){   // los filtros de proyecto/fecha solo acotan los candidatos a AGREGAR, nunca esconden los propios
       if(proyecto){ const sid=proyToSale[proyecto]; const ok=!e.project || (e.project||'')===proyecto || (sid && String(e.sale_id)===String(sid)); if(!ok) return false }
+      else if(proyF.size){ const k=keyP(e); if(k ? !proyF.has(k) : !proyF.has('__sin__')) return false }
       if(fDesde && e.date && e.date < fDesde) return false
       if(fHasta && e.date && e.date > fHasta) return false
     }
@@ -16746,7 +16792,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   }
 
   const toggleAll = () => {
-    if(selected.size===disponibles.length) setSelected(new Set())
+    if(gastosSel.length===disponibles.length) setSelected(new Set())
     else setSelected(new Set(disponibles.map(e=>e.id)))
   }
   const toggleOne = id => setSelected(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
@@ -16755,12 +16801,14 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
   // Rendir cuentas exige proyecto: si algún gasto marcado no lo tiene, hay que elegirlo (se le asigna al rendir, con su venta).
   const nSinProyR = gastosSel.filter(e=>!e.sale_id&&!e.project).length
-  const faltaProyR = !proyecto && nSinProyR>0
-  const puedeRendir = selected.size>0 && !faltaProyR
+  // Rendir un fondo: los gastos sin proyecto toman el del fondo; si el fondo tampoco tiene, se le asigna arriba.
+  const proyFondo = enFondo ? (fondoObj?.project||'') : ''
+  const faltaProyR = enFondo ? (nSinProyR>0 && !proyFondo) : (!proyecto && nSinProyR>0)
+  const puedeRendir = gastosSel.length>0 && !faltaProyR
   // Borrador preparado (Rendir a cliente › Borradores): abre con todos sus gastos disponibles ya marcados, una sola vez.
   const _preHecho = useRef(false)
   useEffect(()=>{ if(!preSel||esEdicion||_preHecho.current||!disponibles.length) return; _preHecho.current=true; setSelected(new Set(disponibles.map(e=>e.id))) },[preSel,disponibles.length])   // eslint-disable-line react-hooks/exhaustive-deps
-  const proyPatch = e => { const sid=proyToSale[proyecto]; return proyecto ? {...(!e.project?{project:proyecto}:{}), ...(sid&&!e.sale_id?{sale_id:sid}:{})} : {} }
+  const proyPatch = e => { const pr=enFondo?proyFondo:proyecto, sid=proyToSale[pr]; return pr ? {...(!e.project?{project:pr}:{}), ...(sid&&!e.sale_id?{sale_id:sid}:{})} : {} }
 
   // IA: profesionaliza las descripciones de los gastos seleccionados (expande abreviaciones legales, corrige tildes). Guarda el resultado.
   const guardarDetalle = async()=>{ const d=editDet; if(!d) return; setEditDet(null)
@@ -16770,6 +16818,22 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     const {error}=await supabase.from('expenses').update({concept:v}).eq('id',e.id)
     if(error){ if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,concept:e.concept}:x)); appAlert('No se pudo guardar el detalle: '+error.message); return }
     logActividad('gastos.detalle_editado',{tabla:'expenses',id:e.id,detalle:{cliente:client?.name,title:'Detalle del gasto corregido en la rendición',antes:e.concept||'',despues:v}}) }
+  // Correcciones en la misma página (quedan en el gasto o fondo y en la bitácora): proyecto de un gasto, fondo de un gasto, proyecto de un fondo.
+  const _patchMov = async(e, patch, accion, title, antes, despues) => {
+    if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
+    if(DEMO) return true
+    const {error}=await supabase.from('expenses').update(patch).eq('id',e.id)
+    if(error){ const back={}; Object.keys(patch).forEach(k=>{ back[k]=e[k]??null }); if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...back}:x)); appAlert('No se pudo guardar: '+error.message); return false }
+    logActividad(accion,{tabla:'expenses',id:e.id,detalle:{cliente:client?.name,title,antes,despues,monto:Math.round(Number(e.amount)||0)}}); return true }
+  const asignarProyGasto = (e,p) => { if((e.project||'')===(p||'')) return; const sid=p?(proyToSale[p]||null):null
+    return _patchMov(e,{project:p||null, sale_id:sid}, 'gastos.proyecto_editado', 'Proyecto del gasto corregido en la rendición', keyP(e)||'Sin proyecto', p||'Sin proyecto') }
+  const asignarProyFondo = (f,p) => { if(!f||(f.project||'')===(p||'')) return; const sid=p?(proyToSale[p]||null):null
+    return _patchMov(f,{project:p||null, sale_id:sid}, 'fondos.proyecto_asignado', 'Proyecto del fondo asignado en la rendición', f.project||'Sin proyecto', p||'Sin proyecto') }
+  const fondoTxt = f => f ? `Fondo ${fmtFechaDMY(f.date)}${f.project?` · ${f.project}`:''}` : 'Sin fondo'
+  const moverAFondo = (e,fid) => { const prev=repF.deGasto[e.id]||null; if(String(prev||'')===String(fid||'')&&String(e.reembolso_fondo_id||'')===String(fid||'')) return
+    const fA=(expenses||[]).find(x=>String(x.id)===String(prev)), fB=(expenses||[]).find(x=>String(x.id)===String(fid))
+    if(enFondo&&String(fid||'')!==String(fondoSel)) setSelected(p=>{ const n=new Set(p); n.delete(e.id); return n })
+    return _patchMov(e,{reembolso_fondo_id:fid||null}, 'gastos.fondo_movido', fid?'Gasto movido a otro fondo':'Gasto vuelve al reparto automático de fondos', fondoTxt(fA), fid?fondoTxt(fB):'Según la regla') }
   const mejorarDescripcionesIA = async()=>{
     const sel = disponibles.filter(e=>selected.has(e.id))
     if(!sel.length) return
@@ -16812,11 +16876,11 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const scopeEnt = singleRS?null:selEnt
   const fSinT = fondosSinTrabajo(expenses, client.id, scopeEnt)
   const trabajosSel = [...new Set(gastosSel.map(e=>keyT({...e,...proyPatch(e)})).filter(Boolean))]
-  const multiT = !esEdicion && trabajosSel.length>=2
+  const multiT = !esEdicion && !enFondo && trabajosSel.length>=2
   const puedeSeparar = multiT && fSinT===0
   const trabajosCli = new Set(allMovs.map(e=>e.project||'').filter(Boolean))
   // Un solo trabajo de un cliente que tiene varios: los fondos y el saldo son los de ESE trabajo (no los del cliente completo).
-  const porTrabajoUno = !esEdicion && trabajosSel.length===1 && fSinT===0 && trabajosCli.size>=2
+  const porTrabajoUno = !esEdicion && !enFondo && trabajosSel.length===1 && fSinT===0 && trabajosCli.size>=2
   const [modo,setModo] = useState('junto')   // 'junto' | 'sep1' (separadas, un correo) | 'sepN' (un correo cada una)
   useEffect(()=>{ if(DEMO) return; let on=true; supabase.from('learnings').select('value').eq('kind','rendicion_modo').eq('key',String(client.id)).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(on&&['junto','sep1','sepN'].includes(data?.value)) setModo(data.value) },()=>{}); return ()=>{on=false} },[client.id])
   const elegirModo = m => { setModo(m); if(!DEMO) setLearningKV('rendicion_modo',String(client.id),m).catch(()=>{}) }
@@ -16825,16 +16889,17 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const porT = (multiT||porTrabajoUno) ? trabajosSel.map(cifrasT) : []
   const periodoDe = gs => { const _fs=gs.map(e=>e.date).filter(Boolean).sort(); const _ma=d=>new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const _di=d=>fmtFechaDMY(d); return _fs.length ? (_ma(_fs[0])===_ma(_fs[_fs.length-1]) ? _ma(_fs[0]) : `${_di(_fs[0])} – ${_di(_fs[_fs.length-1])}`) : new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}) }
   // Una sola forma de crear la rendición (borrador, vista previa del correo, separadas): registra la fila, marca los gastos y la devuelve con sus gastos.
-  const crearRendicion = async(gs, {proyectoR, porTrabajo}) => {
+  const crearRendicion = async(gs, {proyectoR, porTrabajo, fondoId=null}) => {
     const renderId = crypto.randomUUID(), now = new Date().toISOString()
     const tot = gs.reduce((a,e)=>a+(e.amount||0),0)
     const otNums = [...new Set(gs.map(e=>e.ot_number).filter(Boolean))].join(', ')
     const fila = { id:renderId, user_name:currentUserName||'admin', client_id:client.id, periodo:periodoDe(gs), total:tot, n_gastos:gs.length, n_clientes:1, tipo:'cliente',
-      entity_id:selEnt||null, project:proyectoR||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, dirigido_email:atencionEmail||null, ot_numbers:otNums||null, por_trabajo:!!porTrabajo }
+      entity_id:selEnt||null, project:proyectoR||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, dirigido_email:atencionEmail||null, ot_numbers:otNums||null, por_trabajo:!!porTrabajo, ...(fondoId?{fondo_id:fondoId}:{}) }
     const {error:rendErr} = await supabase.from('rendiciones').insert(fila)
     if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
     let falloMarca = 0; const marcados=[]
-    for(const e of gs){ const patch={client_rendered_at:now, client_render_id:renderId, ...(proyectoR?proyPatchT(e,proyectoR):proyPatch(e))}; const {data:upd,error}=await supabase.from('expenses').update(patch).eq('id',e.id).is('client_rendered_at',null).select('id'); if(error||(!DEMO&&!(upd||[]).length)){ falloMarca++; continue } marcados.push({...e,...patch}) }
+    // Rendición de un fondo: cada gasto queda ligado a ese fondo (el reparto ya no lo mueve aunque entren fondos nuevos).
+    for(const e of gs){ const patch={client_rendered_at:now, client_render_id:renderId, ...(proyectoR?proyPatchT(e,proyectoR):proyPatch(e)), ...(fondoId?{reembolso_fondo_id:fondoId}:{})}; const {data:upd,error}=await supabase.from('expenses').update(patch).eq('id',e.id).is('client_rendered_at',null).select('id'); if(error||(!DEMO&&!(upd||[]).length)){ falloMarca++; continue } marcados.push({...e,...patch}) }
     if(!marcados.length){ await supabase.from('rendiciones').delete().eq('id',renderId); throw new Error('ningún gasto quedó en la rendición (ya estaban en otra). No se guardó nada.') }   // nunca una rendición vacía
     if(falloMarca>0){ appAlert(`Atención: ${falloMarca} de ${gs.length} gasto(s) no se marcaron: ya estaban en otra rendición o no se pudieron guardar. Quedan fuera de esta.`); const tot2=marcados.reduce((a,e)=>a+(e.amount||0),0); await supabase.from('rendiciones').update({total:tot2,n_gastos:marcados.length}).eq('id',renderId); fila.total=tot2; fila.n_gastos=marcados.length }
     if(setExpenses) setExpenses(p=>p.map(e=>{ const m=marcados.find(x=>x.id===e.id); return m?{...e,...m}:e }))
@@ -16844,8 +16909,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   }
   // Rendición(es) en vista previa: nada se registra hasta «Guardar borrador» o «Enviar» (ahí corre _crear).
   const virtuales = () => {
-    const base = {id:null, _virtual:true, client_id:client.id, tipo:'cliente', entity_id:selEnt||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, dirigido_email:atencionEmail||null, user_name:currentUserName||'admin', created_at:new Date().toISOString()}
-    if(modoEf==='junto'){ const gs=gastosSel.map(e=>({...e,...proyPatch(e)})); const pt=porTrabajoUno; return [{...base, _gastos:gs, project:proyecto||(pt?trabajosSel[0]:null)||null, por_trabajo:pt, periodo:periodoDe(gs), total:totalSel, n_gastos:gs.length, correlativo:nextCorr, _crear:()=>crearRendicion(gastosSel,{proyectoR:proyecto||(pt?trabajosSel[0]:null), porTrabajo:pt})}] }
+    const base = {id:null, _virtual:true, client_id:client.id, tipo:'cliente', entity_id:selEnt||null, fondo_id:enFondo?fondoSel:null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, dirigido_email:atencionEmail||null, user_name:currentUserName||'admin', created_at:new Date().toISOString()}
+    if(enFondo){ const gs=gastosSel.map(e=>({...e,...proyPatch(e),reembolso_fondo_id:fondoSel})); return [{...base, _gastos:gs, project:proyFondo||(trabajosSel.length===1?trabajosSel[0]:null)||null, por_trabajo:false, periodo:periodoDe(gs), total:totalSel, n_gastos:gs.length, correlativo:nextCorr, _crear:()=>crearRendicion(gastosSel,{proyectoR:null, porTrabajo:false, fondoId:fondoSel})}] }
+    if(modoEf==='junto'){ const gs=gastosSel.map(e=>({...e,...proyPatch(e)})); const pt=porTrabajoUno; return [{...base, _gastos:gs, project:proyecto||(pt||trabajosSel.length===1?trabajosSel[0]:null)||null, por_trabajo:pt, periodo:periodoDe(gs), total:totalSel, n_gastos:gs.length, correlativo:nextCorr, _crear:()=>crearRendicion(gastosSel,{proyectoR:proyecto||(pt?trabajosSel[0]:null), porTrabajo:pt})}] }
     return porT.map((o,i)=>{ const gs=o.gs.map(e=>({...e,...proyPatchT(e,o.t)})); return {...base, _gastos:gs, project:o.t, por_trabajo:true, periodo:periodoDe(gs), total:o.tg, n_gastos:gs.length, correlativo:nextCorr+i, _crear:()=>crearRendicion(o.gs,{proyectoR:o.t, porTrabajo:true})} })
   }
   const verPdfVirtual = v => { const w=window.open('','_blank'); if(!w){ appAlert('El navegador bloqueó la ventana del PDF. Permite ventanas emergentes para esta página.'); return } w.document.write(rendicionPdfHtml(v, client, expenses, clientEntities, conRespaldo)); w.document.close() }
@@ -16933,14 +16999,15 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       const patch = {total:totalSel, n_gastos:gastosSel.length, entity_id:selEnt||null, project:proyecto||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, ot_numbers:otNums||null}
       const {error:re} = await supabase.from('rendiciones').update(patch).eq('id',editRend.id)
       if(re) throw new Error('No se pudo actualizar la rendición: '+re.message)
-      for(const e of toAdd){ await supabase.from('expenses').update({client_rendered_at:now, client_render_id:editRend.id, ...proyPatch(e)}).eq('id',e.id) }
+      const _lig = editRend.fondo_id ? {reembolso_fondo_id:editRend.fondo_id} : {}
+      for(const e of toAdd){ await supabase.from('expenses').update({client_rendered_at:now, client_render_id:editRend.id, ...proyPatch(e), ..._lig}).eq('id',e.id) }
       for(const e of toRemove){ await supabase.from('expenses').update({client_rendered_at:null, client_render_id:null}).eq('id',e.id) }
       // Ajustar el cobro de reembolso vinculado (si existe y no está anulado) al nuevo total
       let reembAjust=null
       const reemb=(billing||[]).find(b=>b.billing_type==='reembolso'&&b.status!=='Anulada'&&(b.notes||'').includes('Rendición ID '+editRend.id))
       if(reemb && reemb.amount!==totalSel){ const {error:be}=await supabase.from('billing').update({amount:totalSel}).eq('id',reemb.id); if(!be) reembAjust={id:reemb.id} }
       if(setExpenses) setExpenses(p=>p.map(e=>{
-        if(toAdd.find(x=>x.id===e.id)) return {...e,client_rendered_at:now,client_render_id:editRend.id,...proyPatch(e)}
+        if(toAdd.find(x=>x.id===e.id)) return {...e,client_rendered_at:now,client_render_id:editRend.id,...proyPatch(e),..._lig}
         if(toRemove.find(x=>x.id===e.id)) return {...e,client_rendered_at:null,client_render_id:null}
         return e
       }))
@@ -16987,18 +17054,31 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         const sug = contacts.filter(c=>c.email)
         return (<>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:6}}>
-          <div style={{...flBox(!!proyecto),...(faltaProyR?{borderColor:C.overdue}:{})}}>
-            <div style={flLbl}>Proyecto{faltaProyR?' *':''}</div>
-            {proyectosDisp.length>0
-              ? <select value={proyecto} onChange={e=>{setProyecto(e.target.value);setSelected(new Set())}} style={{...flInp,appearance:'none'}}><option value=''>Todos</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}{proyConteo[p]?` (${proyConteo[p]})`:(proyToSale[p]?' · venta':'')}</option>)}</select>
-              : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder={faltaProyR?'Escribe el trabajo':'Opcional'} style={flInp}/>}
-          </div>
+          {enFondo
+            ? <div style={flBox(false)}><div style={flLbl}>Proyecto del fondo{faltaProyR?' *':''}</div><div style={{fontSize:13,color:proyFondo?C.text:C.soonText,minHeight:22,display:'flex',alignItems:'center'}}>{proyFondo||'Sin proyecto'}</div></div>
+            : proyectosDisp.length>0
+            ? <div onClick={()=>setProyOpen(v=>!v)} style={{...flBox(proyF.size>0),...(faltaProyR?{border:`0.5px solid ${C.overdue}`}:{}),position:'relative',cursor:'pointer'}}>
+                <div style={flLbl}>Proyectos{faltaProyR?' *':''}</div>
+                <div style={{fontSize:13,color:C.text,minHeight:22,display:'flex',alignItems:'center',gap:6}}><span style={{flex:1,minWidth:0}}>{proyF.size===0?'Todos':proyF.size===1?(proyF.has('__sin__')?'Sin proyecto':[...proyF][0]):`${proyF.size} proyectos`}</span><Gl n={proyOpen?'chevU':'chevD'}/></div>
+                {proyOpen&&<>
+                  <div onClick={ev=>{ev.stopPropagation();setProyOpen(false)}} style={{position:'fixed',inset:0,zIndex:29}}/>
+                  <div onClick={ev=>ev.stopPropagation()} style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:30,width:isDesktop?340:'calc(200% + 8px)',maxWidth:'calc(100vw - 32px)',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 22px rgba(0,60,80,.14)',padding:5}}>
+                    {[{k:'',t:'Todos los proyectos'},...proyectosDisp.map(p=>({k:p,t:p})),...(cntProy['']?[{k:'__sin__',t:'Sin proyecto'}]:[])].map(o=>{ const on=o.k?proyF.has(o.k):proyF.size===0, c=o.k==='__sin__'?cntProy['']:o.k?cntProy[o.k]:cntProy.__todos
+                      return <div key={o.k||'todos'} onClick={()=>{ if(!o.k){ setProyF(new Set()); return } setProyF(p=>{ const n=new Set(p); n.has(o.k)?n.delete(o.k):n.add(o.k); return n }) }} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 8px',borderRadius:7,cursor:'pointer',background:on?C.azulBg:'transparent'}}>
+                        <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on&&<SIcon n='check' s={10} c='#fff'/>}</span>
+                        <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:on?700:500,color:o.k==='__sin__'?C.soonText:C.accent}}>{o.t}</span>
+                        <span style={{fontSize:11,color:C.textSoft,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{c?`${c.n} · ${fmtN(c.m)}`:'0'}</span>
+                      </div> })}
+                  </div>
+                </>}
+              </div>
+            : <div style={{...flBox(!!proyecto),...(faltaProyR?{border:`0.5px solid ${C.overdue}`}:{})}}><div style={flLbl}>Proyecto{faltaProyR?' *':''}</div><input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder={faltaProyR?'Escribe el trabajo':'Opcional'} style={flInp}/></div>}
           <div style={flBox(false)}>
             <div style={flLbl}>Dirigido a</div>
             <input value={atencion} onChange={e=>{setAtencion(e.target.value);setAtencionEmail('');setPrefilled(false)}} placeholder='Persona (opcional)' style={flInp}/>
           </div>
         </div>
-        {proyectoSugerido&&proyecto!==proyectoSugerido&&<div style={{marginBottom:6}}><button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button></div>}
+        {!enFondo&&proyF.size===0&&nSinProyR>0&&proyectoSugerido&&<div style={{marginBottom:6}}><button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button></div>}
         {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:8}}><span style={{fontSize:9,color:C.textSoft}}>Sugeridos:</span>{sug.map(c=><button key={c.id} onClick={()=>{setAtencion(c.nombre||c.email);setAtencionEmail(c.email||'');setPrefilled(false)}} style={{fontSize:10,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:14,padding:'2px 9px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}</div>}
         {gastosPend.length===0 && <div style={{fontSize:10,color:C.soon,marginBottom:8}}>Esta razón social aún no tiene gastos por rendir{proyVentas.length>0?` (el proyecto viene de la venta)`:'. Cambia de razón social o ingresa gastos primero'}.</div>}
         {!showSub && !subproyecto && <div onClick={()=>setShowSub(true)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',marginBottom:12,width:'fit-content'}}>+ Subproyecto</div>}
@@ -17014,13 +17094,25 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const segBtn = (k,t,sub,on,dis) => <button key={k} type='button' disabled={dis} onClick={()=>elegirModo(k)} style={{flex:1,minWidth:0,border:'none',borderLeft:k!=='junto'?`1px solid ${C.border}`:'none',padding:'7px 4px',background:on?C.accent:C.surface,color:on?'#fff':(dis?C.done:C.muted),cursor:dis?'not-allowed':'pointer',fontFamily:'inherit',lineHeight:1.25}}><div style={{fontSize:11.5,fontWeight:600}}>{t}</div><div style={{fontSize:10,opacity:.85}}>{sub}</div></button>
   const bModo = multiT && (
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px',marginBottom:12}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:7}}>¿Cómo rindes los {trabajosSel.length} trabajos?</div>
-        <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-          {segBtn('junto','Todo junto','1 rendición',modoEf==='junto',false)}
-          {segBtn('sep1','Separadas','en un correo',modoEf==='sep1',!puedeSeparar)}
-          {segBtn('sepN','Separadas',isDesktop?'un correo cada una':'un correo c/u',modoEf==='sepN',!puedeSeparar)}
-        </div>
-        {!puedeSeparar&&<div style={{fontSize:11.5,color:C.soonText,marginTop:7}}>Hay {fmtN(fSinT)} en fondos sin trabajo asignado: asígnalos a un trabajo para poder separar.</div>}
+        <div style={{...SEC_LBL,marginBottom:6}}>Cómo se envía · {trabajosSel.length} proyectos</div>
+        {[['junto','Una rendición','1 PDF con todo'],['sep1','Una por proyecto',`${trabajosSel.length} PDF en un correo`],['sepN','Una por proyecto','un correo cada una']].map(([k,t,sub])=>{ const on=modo===k||(k==='junto'&&!['sep1','sepN'].includes(modo))
+          return <div key={k} onClick={()=>elegirModo(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 8px',borderRadius:8,cursor:'pointer',background:on?C.azulBg:'transparent'}}>
+            <span style={{width:15,height:15,borderRadius:'50%',border:on?`5px solid ${C.accent}`:`1.5px solid ${C.done}`,flexShrink:0,boxSizing:'border-box'}}/>
+            <span style={{fontSize:12.5,fontWeight:on?700:500,color:on?C.accent:C.text,whiteSpace:'nowrap'}}>{t}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>{sub}</span>
+          </div> })}
+        {modo!=='junto'&&!puedeSeparar&&(()=>{ const sinP=fondosRS.filter(x=>!(x.f.project||'').trim())
+          const sugDe=x=>{ const c={}; x.gastos.forEach(g=>{ const k=keyP(g); if(k) c[k]=(c[k]||0)+1 }); return Object.keys(c).sort((a,b)=>c[b]-c[a])[0]||'' }
+          return <div style={{borderTop:`1px solid ${C.track}`,marginTop:8,paddingTop:8}}>
+            <div style={{...SEC_LBL,color:C.soonText,marginBottom:4}}>Antes de separar</div>
+            <div style={{fontSize:11.5,color:C.textSoft,marginBottom:6}}>{sinP.length===1?'Este fondo no tiene proyecto: elige a cuál va.':`Estos ${sinP.length} fondos no tienen proyecto: elige a cuál va cada uno.`}</div>
+            {sinP.map(x=>{ const sg=sugDe(x); return <div key={x.f.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'4px 0',flexWrap:'wrap'}}>
+              <span style={{fontSize:12,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>Fondo {fmtFechaDMY(x.f.date)} · {fmtN(x.f.amount)}</span>
+              <span style={{display:'inline-flex',gap:6,alignItems:'center'}}>
+                {sg&&<button type='button' onClick={()=>asignarProyFondo(x.f,sg)} style={{fontSize:10.5,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>Sugerido: {sg}</button>}
+                <select value='' onChange={ev=>{ if(ev.target.value) asignarProyFondo(x.f,ev.target.value) }} style={{...chipSty(true),fontSize:11}}><option value=''>Elegir proyecto</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}</option>)}</select>
+              </span>
+            </div> })}
+          </div> })()}
         <div style={{marginTop:8}}>{porT.map((o,i)=><div key={o.t} style={{borderTop:`1px solid ${C.track}`,padding:'7px 0 3px'}}>
           <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{modoEf!=='junto'?`N° ${nextCorr+i} · `:''}{o.t}</span><span style={{fontSize:12.5,fontWeight:700,color:o.saldo<0?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{o.saldo<0?'−':'+'}{fmtN(Math.abs(o.saldo))}</span></div>
           <div style={{fontSize:11.5,color:C.textSoft,display:'flex',justifyContent:'space-between',gap:8}}><span>fondos {fmtN(o.f.totFondos)}{o.f.rendido?` · ya rendido ${fmtN(o.f.rendido)}`:''} · {o.gs.length} gasto{o.gs.length!==1?'s':''} {fmtN(o.tg)}</span>{modoEf!=='junto'&&<button type='button' onClick={()=>verPdfVirtual(virtuales()[i])} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Ver PDF</button>}</div>
@@ -17028,30 +17120,115 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       </div>
   )
   const _uno = porTrabajoUno&&porT[0]
+  // ── Qué se rinde (solo con 2+ fondos): gastos (por proyecto) o un fondo entregado (lo que cubrió).
+  const pendFondo = x => x.gastos.filter(g=>g.type==='gasto'&&!g.client_rendered_at&&inScope(g))
+  const elegirFondo = x => { setModoR('fondo'); setFondoSel(x.f.id); setAddSinFondo(false); setWipRec(false); setSelected(new Set(pendFondo(x).map(g=>g.id))) }
+  const totPendG = (cntProy.__todos||{n:0,m:0})
+  const totFondosRS = fondosRS.reduce((a,x)=>a+(Number(x.f.amount)||0),0)
+  const cardModo = (k,ic,bg,col,t,sub,der,on,onClick) => <div key={k} onClick={onClick} style={{display:'flex',alignItems:'center',gap:isDesktop?10:8,background:C.surface,border:`1px solid ${on?C.accent:C.border}`,boxShadow:on?`inset 0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:isDesktop?'11px 13px':'9px 10px',cursor:'pointer',minWidth:0}}>
+      <span style={{width:isDesktop?34:28,height:isDesktop?34:28,borderRadius:9,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={isDesktop?17:15} c={col}/></span>
+      <span style={{minWidth:0,flex:1}}><span style={{display:'block',fontSize:isDesktop?13.5:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{t}</span><span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap'}}>{isDesktop?sub:der}</span></span>
+      {isDesktop&&<span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{der}</span>}
+    </div>
+  const bElegir = verModoFondo && (
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:isDesktop?10:8,marginBottom:14}}>
+        {cardModo('g','receipt',C.azulBg,C.accent,'Rendir gastos','Marcar gastos por rendir, por proyecto',`${totPendG.n} · ${fmtN(totPendG.m)}`,!enFondo,()=>{ if(enFondo){ setModoR('gastos'); setFondoSel(null); setSelected(new Set()) } })}
+        {cardModo('f','tFavor',C.greenBg,C.greenText,'Rendir un fondo','Elegir el fondo y rendir lo que cubrió',`${fondosRS.length} · ${fmtN(totFondosRS)}`,enFondo,()=>{ if(!enFondo){ const x=fondosRS.find(y=>pendFondo(y).length)||fondosRS[fondosRS.length-1]; if(x) elegirFondo(x) } })}
+      </div>)
+  const bFondos = enFondo && (
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:6,marginBottom:12}}>
+        <div style={{...SEC_LBL,padding:'4px 6px 6px'}}>Fondos entregados</div>
+        {fondosRS.map((x,i)=>{ const on=String(x.f.id)===String(fondoSel), np=pendFondo(x).length
+          return <div key={x.f.id} onClick={()=>!on&&elegirFondo(x)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderTop:i&&!on?`1px solid ${C.track}`:'1px solid transparent',background:on?C.azulBg:'transparent',borderRadius:8,cursor:on?'default':'pointer'}}>
+            <span style={{width:15,height:15,borderRadius:'50%',border:on?`5px solid ${C.accent}`:`1.5px solid ${C.done}`,flexShrink:0,boxSizing:'border-box'}}/>
+            <span style={{flex:1,minWidth:0}}>
+              {x.f.project
+                ? <span style={{display:'block',fontSize:12.5,fontWeight:on?700:500,color:C.accent}}>{x.f.project}</span>
+                : <select value='' onClick={_stop} onChange={ev=>{ _stop(ev); if(ev.target.value) asignarProyFondo(x.f,ev.target.value) }} style={{...chipSty(true),fontSize:11}}><option value=''>Asignar proyecto</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}</option>)}</select>}
+              <span style={{display:'block',fontSize:10.5,color:C.textSoft,marginTop:1}}>{fmtFechaDMY(x.f.date)} · {np?`${np} gasto${np!==1?'s':''} por rendir`:'sin gastos por rendir'}</span>
+            </span>
+            <span style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
+              <span style={{display:'block',fontSize:13,fontWeight:700,color:C.text}}>{fmtN(x.f.amount)}</span>
+              <span style={{fontSize:10.5,color:x.quedan<0?C.overdueText:C.textSoft}}>{x.quedan<0?`excedido ${fmtN(-x.quedan)}`:`queda ${fmtN(x.quedan)}`}</span>
+            </span>
+          </div> })}
+      </div>)
+  // Cuadratura del cliente con el reparto (fuente única): Σ fondos − gastos = saldo de la ficha. Si alguna vez no calza, se avisa.
+  const _fgC = fgCliente(expenses, client.id), _cuadra = Math.round(_fgC.saldo)===Math.round(repF.saldo)
+  const bCuadra = verModoFondo && (
+      <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,color:C.textSoft,padding:'8px 12px',background:C.bgSoft,borderRadius:9,marginBottom:12,flexWrap:'wrap'}}>
+        <span style={{fontVariantNumeric:'tabular-nums'}}>Fondos <b style={{color:C.text}}>{fmtN(_fgC.fondos)}</b> − gastos <b style={{color:C.text}}>{fmtN(_fgC.gastos)}</b> = <b style={{color:C.text}}>{fmtSaldoG(_fgC.saldo)}</b></span>
+        <span style={{fontWeight:700,color:_cuadra?C.greenText:C.overdueText}}>{_cuadra?'igual a la ficha':`no cuadra con la ficha (${fmtSaldoG(repF.saldo)})`}</span>
+      </div>)
   const bKPIs = (
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px',marginBottom:12}}>
-        <div style={{...lblG,marginBottom:4}}>{_uno?`Este trabajo · ${_uno.t}`:'Esta rendición'}</div>
-        {lnR(`${selected.size} gasto${selected.size!==1?'s':''} seleccionado${selected.size!==1?'s':''}`, fmtN(totalSel), selected.size?C.text:C.muted)}
-        {lnR(_uno?'Fondos de este trabajo':'Fondos', fmtN(_uno?_uno.f.totFondos:fondosDisp))}
-        {lnR('Ya rendido', fmtN(_uno?_uno.f.rendido:_fondoRend.rendido))}
+        <div style={{...lblG,marginBottom:4}}>{enFondo?`Este fondo · ${fmtFechaDMY(fondoObj?.date)}`:_uno?`Este trabajo · ${_uno.t}`:'Esta rendición'}</div>
+        {lnR(`${gastosSel.length} gasto${gastosSel.length!==1?'s':''} seleccionado${gastosSel.length!==1?'s':''}`, fmtN(totalSel), gastosSel.length?C.text:C.muted)}
+        {lnR(enFondo?'Fondo entregado':_uno?'Fondos de este trabajo':'Fondos', fmtN(_uno?_uno.f.totFondos:fondosDisp))}
+        {lnR(enFondo?'Ya rendido de este fondo':'Ya rendido', fmtN(_uno?_uno.f.rendido:_fondoRend.rendido))}
         {(()=>{ const sal=_uno?_uno.saldo:saldoTrasRendicion; return <div style={{borderTop:`1px solid ${C.track}`,marginTop:4,paddingTop:5}}>{lnR(sal<0?'Saldo a cargo del cliente':'Saldo a favor del cliente', fmtN(Math.abs(sal)), sal<0?C.overdueText:C.greenText, true)}</div> })()}
         {_uno&&fondosDisp>_uno.f.totFondos&&<div style={{fontSize:11.5,color:C.textSoft,marginTop:4}}>Otros {fmtN(fondosDisp-_uno.f.totFondos)} en fondos del cliente están asignados a otro trabajo.</div>}
       </div>
   )
   const nDupR = disponibles.filter(e=>dupRend.has(e.id)).length
+  // Chips del gasto: su proyecto y su fondo, ambos se corrigen tocándolos (no marcan ni desmarcan el gasto).
+  const chipsG = e => { const k=keyP(e), opts=[...new Set([...(k?[k]:[]),...proyectosDisp])], dF=repF.deGasto[e.id]||''
+    return (<>
+      {(opts.length>0)&&<select value={k} onClick={_stop} onChange={ev=>{ _stop(ev); asignarProyGasto(e,ev.target.value) }} title='Proyecto del gasto' style={chipSty(!k)}>{!k&&<option value=''>Sin proyecto</option>}{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>}
+      {fondosRS.length>=2&&<select value={dF} onClick={_stop} onChange={ev=>{ _stop(ev); moverAFondo(e,ev.target.value||null) }} title='Fondo que cubre el gasto' style={chipSty(!dF)}>{!dF&&<option value=''>Sin fondo</option>}{fondosRS.map(x=><option key={x.f.id} value={x.f.id}>{`Fondo ${fmtFechaDMY(x.f.date)} · ${fmtN(x.f.amount)}`}</option>)}</select>}
+    </>) }
+  // Lista agrupada por proyecto cuando se ven varios (Todos o varios marcados); «Sin proyecto» al final.
+  const gruposL = (()=>{ if(enFondo||proyecto) return null; const m=new Map(); disponibles.forEach(e=>{ const k=keyP(e); if(!m.has(k)) m.set(k,[]); m.get(k).push(e) })
+    if(m.size<2) return null; const ordK=k=>k?(proyectosDisp.indexOf(k)<0?999:proyectosDisp.indexOf(k)):1e6
+    return [...m.entries()].sort((a,b)=>ordK(a[0])-ordK(b[0])).map(([k,gs])=>({k,gs,tot:gs.reduce((a,e)=>a+(Number(e.amount)||0),0)})) })()
+  const toggleGrupo = gr => setSelected(p=>{ const n=new Set(p), todos=gr.gs.every(e=>n.has(e.id)); gr.gs.forEach(e=>todos?n.delete(e.id):n.add(e.id)); return n })
+  const asignarTodosSin = async(gs,pr) => { for(const e of gs){ await asignarProyGasto(e,pr) } }
+  const filaG = e => {
+    const isSel=selected.has(e.id)
+    const catBg=CATS[e.category]||CATS['Otro']
+    return (
+      <div key={e.id} onClick={()=>toggleOne(e.id)}
+        style={{background:isSel?C.azulBg:'#fff',borderRadius:8,padding:'8px 10px',marginBottom:5,
+          border:`1px solid ${isSel?C.accent:C.border}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${isSel?C.accent:C.done}`,
+          background:isSel?C.accent:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          {isSel&&<span style={{color:'#fff',fontSize:10}}><Gl n='tick'/></span>}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          {editDet?.id===e.id
+            ? <input autoFocus value={editDet.v} onFocus={ev=>ev.target.select()} onClick={ev=>ev.stopPropagation()} onChange={ev=>setEditDet({id:e.id,v:ev.target.value})} onBlur={guardarDetalle}
+                onKeyDown={ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); ev.currentTarget.blur() } else if(ev.key==='Escape'){ ev.preventDefault(); setEditDet(null) } }}
+                style={{width:'100%',boxSizing:'border-box',fontSize:12,fontWeight:500,color:C.text,border:`1px solid ${C.accent}`,borderRadius:6,padding:'4px 6px',outline:'none',background:'#fff',fontFamily:'inherit'}}/>
+            : <div onClick={ev=>{ ev.stopPropagation(); setEditDet({id:e.id,v:e.concept||''}) }} title='Editar el detalle' style={{fontSize:12,fontWeight:500,color:C.text,cursor:'text',textDecoration:'underline dotted',textDecorationColor:C.border,textUnderlineOffset:3}}>{e.concept||'—'}</div>}
+          <div style={{fontSize:10,color:C.muted,marginTop:1,display:'flex',flexWrap:'wrap',gap:'3px 5px',alignItems:'center'}}>
+            {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
+            {e.category&&<span style={{padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{e.category}</span>}
+            {chipsG(e)}
+            {dupRend.has(e.id)&&(()=>{ const r=dupRend.get(e.id); return <span title={`Mismo monto y fecha que «${r.concept||'—'}»${r.client_rendered_at?' (ya rendido)':''}`} style={{padding:'2px 8px',borderRadius:20,background:C.overdueBg,color:C.overdueText,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{r.client_rendered_at?'Posible duplicado · ya rendido':'Posible duplicado'}</span> })()}
+          </div>
+        </div>
+        <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtN(e.amount)}</div>
+      </div>
+    )
+  }
   const bLista = (<>
       {!isDesktop&&nDupR>0&&<div style={{fontSize:11.5,fontWeight:700,color:C.overdueText,marginBottom:6}}>{nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</div>}
       {wipRec&&gastosSel.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,background:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>
         <span style={{flex:1,minWidth:0,fontSize:11.5,color:C.accent,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Selección recuperada · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
         <button onClick={()=>{ setSelected(new Set()); setWipRec(false) }} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Descartar</button>
       </div>}
+      {enFondo&&(()=>{ const nSin=repF.sinFondo.filter(g=>g.type==='gasto'&&!g.client_rendered_at&&inScope(g)).length
+        return <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
+          <span style={{fontSize:11,color:C.muted}}>Gastos del fondo del {fmtFechaDMY(fondoObj?.date)}</span>
+          {nSin>0&&<button onClick={()=>setAddSinFondo(v=>!v)} style={{fontSize:10.5,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>{addSinFondo?'Ocultar los sin fondo':`Agregar gastos sin fondo (${nSin})`}</button>}
+        </div> })()}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles{isDesktop&&nDupR>0&&<b style={{color:C.overdueText,fontWeight:700}}> · {nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</b>}</span>
           <button onClick={()=>setShowFiltroFecha(v=>!v)} style={{fontSize:10,color:(fDesde||fHasta)?C.accent:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Filtrar por fecha{(fDesde||fHasta)?' ·':''} {showFiltroFecha?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>
         </div>
         {disponibles.length>0&&<button onClick={toggleAll} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>
-          {selected.size===disponibles.length?'Desmarcar todo':'Seleccionar todo'}
+          {disponibles.length&&gastosSel.length===disponibles.length?'Desmarcar todo':'Seleccionar todo'}
         </button>}
       </div>
       {showFiltroFecha&&<div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
@@ -17060,40 +17237,21 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         <input type='date' value={fHasta} onChange={e=>setFHasta(e.target.value)} style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
         {(fDesde||fHasta)&&<button onClick={()=>{setFDesde('');setFHasta('')}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}><Gl n='x'/></button>}
       </div>}
-      {disponibles.length===0&&(gastosPend.length>0&&(proyecto||fDesde||fHasta)
+      {disponibles.length===0&&(gastosPend.length>0&&(proyF.size>0||fDesde||fHasta)
         ? <div style={{textAlign:'center',padding:20,fontSize:12,color:C.muted}}>
             Hay {gastosPend.length} gasto{gastosPend.length!==1?'s':''} pendiente{gastosPend.length!==1?'s':''} de rendir, pero el filtro los está ocultando.
             <button onClick={()=>{setProyecto('');setFDesde('');setFHasta('')}} style={{display:'block',margin:'8px auto 0',fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>Ver todos los proyectos</button>
           </div>
         : <div style={{color:C.muted,textAlign:'center',padding:20,fontSize:12}}>No hay gastos pendientes de rendir</div>)}
-      <div style={{maxHeight:isDesktop?'calc(100vh - 320px)':280,overflowY:'auto',marginBottom:12}}>
-        {disponibles.map(e=>{
-          const isSel=selected.has(e.id)
-          const catBg=CATS[e.category]||CATS['Otro']
-          return (
-            <div key={e.id} onClick={()=>toggleOne(e.id)}
-              style={{background:isSel?C.azulBg:'#fff',borderRadius:8,padding:'8px 10px',marginBottom:5,
-                border:`1px solid ${isSel?C.accent:C.border}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
-              <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${isSel?C.accent:C.done}`,
-                background:isSel?C.accent:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                {isSel&&<span style={{color:'#fff',fontSize:10}}><Gl n='tick'/></span>}
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                {editDet?.id===e.id
-                  ? <input autoFocus value={editDet.v} onFocus={ev=>ev.target.select()} onClick={ev=>ev.stopPropagation()} onChange={ev=>setEditDet({id:e.id,v:ev.target.value})} onBlur={guardarDetalle}
-                      onKeyDown={ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); ev.currentTarget.blur() } else if(ev.key==='Escape'){ ev.preventDefault(); setEditDet(null) } }}
-                      style={{width:'100%',boxSizing:'border-box',fontSize:12,fontWeight:500,color:C.text,border:`1px solid ${C.accent}`,borderRadius:6,padding:'4px 6px',outline:'none',background:'#fff',fontFamily:'inherit'}}/>
-                  : <div onClick={ev=>{ ev.stopPropagation(); setEditDet({id:e.id,v:e.concept||''}) }} title='Editar el detalle' style={{fontSize:12,fontWeight:500,color:C.text,cursor:'text',textDecoration:'underline dotted',textDecorationColor:C.border,textUnderlineOffset:3}}>{e.concept||'—'}</div>}
-                <div style={{fontSize:10,color:C.muted,marginTop:1,display:'flex',gap:5,alignItems:'center'}}>
-                  {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
-                  {e.category&&<span style={{padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{e.category}</span>}
-                  {dupRend.has(e.id)&&(()=>{ const r=dupRend.get(e.id); return <span title={`Mismo monto y fecha que «${r.concept||'—'}»${r.client_rendered_at?' (ya rendido)':''}`} style={{padding:'2px 8px',borderRadius:20,background:C.overdueBg,color:C.overdueText,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{r.client_rendered_at?'Posible duplicado · ya rendido':'Posible duplicado'}</span> })()}
-                </div>
-              </div>
-              <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtN(e.amount)}</div>
+      <div style={{maxHeight:isDesktop?'calc(100vh - 320px)':(gruposL?460:280),overflowY:'auto',marginBottom:12}}>
+        {gruposL ? gruposL.map(gr=>(<Fragment key={gr.k||'__sin__'}>
+            <div onClick={()=>toggleGrupo(gr)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,margin:'10px 2px 5px',cursor:'pointer'}}>
+              <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:gr.k?C.accent:C.soonText,minWidth:0}}>{gr.k||'Sin proyecto'}</span>
+              <span style={{fontSize:11.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{gr.gs.length} · {fmtN(gr.tot)}</span>
             </div>
-          )
-        })}
+            {!gr.k&&proyectoSugerido&&<button onClick={()=>asignarTodosSin(gr.gs,proyectoSugerido)} style={{fontSize:10.5,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',margin:'0 0 6px 2px'}}>Asignar {gr.gs.length===1?'a':'los '+gr.gs.length+' a'} {proyectoSugerido}</button>}
+            {gr.gs.map(filaG)}
+          </Fragment>)) : disponibles.map(filaG)}
       </div>
   </>)
   const bResumen = null
@@ -17158,15 +17316,16 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   return isDesktop ? (
     <div>
       {!esEdicion&&(bNav?<div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}><PasosRend paso={1}/>{bNav}</div>:<PasosRend paso={1}/>)}
+      {bElegir}
       <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.55fr) minmax(0,1fr)',gap:22,alignItems:'start'}}>
-        <div style={{minWidth:0}}>{bLista}</div>
-        <div style={{minWidth:0}}>{bContinuidad}{bRS}{bProyecto}{bModo}{bKPIs}{bResumen}{bIA}{bBotones}</div>
+        <div style={{minWidth:0}}>{bFondos}{bLista}</div>
+        <div style={{minWidth:0}}>{bContinuidad}{bRS}{bProyecto}{bModo}{bKPIs}{bCuadra}{bResumen}{bIA}{bBotones}</div>
       </div>
     </div>
   ) : (
     <div>
       {!esEdicion&&<PasosRend paso={1}/>}
-      {bContinuidad}{bRS}{bProyecto}{bModo}{bKPIs}{bLista}{bResumen}{bIA}{bBotones}{bNav}
+      {bElegir}{bContinuidad}{bFondos}{bRS}{bProyecto}{bKPIs}{bLista}{bModo}{bCuadra}{bResumen}{bIA}{bBotones}{bNav}
     </div>
   )
 }
@@ -20547,7 +20706,7 @@ function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], exp
       out.push({c:x.c, filas:filasG}) })
     return out })()
   const colaN = colaEnvio.reduce((a,g)=>a+g.filas.length,0)
-  const llaveFondo = (cid,r) => r ? `${cid}|${r.entity_id||''}|${r.por_trabajo?(r.project||''):''}` : `${cid}`
+  const llaveFondo = (cid,r) => r ? `${cid}|${r.entity_id||''}|${r.fondo_id?'f'+r.fondo_id:r.por_trabajo?(r.project||''):''}` : `${cid}`
   const sumaFalta = items => { const vis=new Map(); items.forEach(([k,v])=>{ if(!vis.has(k)) vis.set(k,Math.max(0,v)) }); return [...vis.values()].reduce((a,v)=>a+v,0) }
   const confirmarEnvio = () => { if(!colaEnvio.length||!onEnviarRend) return
     const items=colaEnvio.map(g=>{ const [p0,...rest]=g.filas; return {...p0.r, correlativo:p0.corr, _cliName:g.c.name, _hermanas:rest.map(f=>({...f.r,correlativo:f.corr}))} })
@@ -23684,7 +23843,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 }
 
 // ── EXPENSE EDIT FORM (editar/eliminar registro individual) ───────────────────
-function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSave,onClose,onDelete,saving,user,onAttachChange}) {
+function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSave,onRepartirFondo,onUnirFondo,onClose,onDelete,saving,user,onAttachChange}) {
   const _hoyISO = (()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro',date:expense.date||_hoyISO})
   // Movilización: medio + desde + hasta + motivo (mismo criterio que al registrar). Si la glosa ya viene armada, se precarga.
@@ -23702,6 +23861,9 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
     const notas = orig&&orig!==concept&&!/^Movilización .+–/.test(orig)&&!String(f.notas||'').includes(orig) ? [f.notas,`Glosa original: ${orig}`].filter(Boolean).join(' · ') : (f.notas||null)
     return {concept, subcategory:mv.medio||null, notas, ...(f.revision_estado==='consultar'?{revision_estado:'consulta_resuelta',revisado_at:new Date().toISOString()}:{})} }
   const [showPersonal,setShowPersonal] = useState(!!expense.personal_de)
+  const [repOpen,setRepOpen] = useState(false)   // fondo: repartir entre proyectos
+  const [partes,setPartes] = useState(()=>[{project:expense.project||'',monto:String(Math.round(Number(expense.amount)||0))},{project:'',monto:''}])
+  const [repBusy,setRepBusy] = useState(false)
   const [internoOpen,setInternoOpen] = useState(false)   // popover "Gasto interno · ¿oficina o miembro?"
   const esOficinaCli = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -23806,8 +23968,8 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           <div style={{gridColumn:'1 / -1'}}>{fi('motivo','Motivo (para qué fue)')}</div></>}
           {movFalta&&<div style={{gridColumn:'1 / -1',fontSize:11.5,color:C.overdueText,fontWeight:600}}>{mv.medio?'Completa desde, hasta y motivo para guardar':'Elige el medio para guardar'}</div>}
         </div>) })()}
-      {/* Proyecto + adjuntar en la misma línea */}
-      {!isFondo&&(
+      {/* Proyecto + adjuntar en la misma línea (también en fondos de un cliente: a qué proyecto va el fondo) */}
+      {(!isFondo||!!f.client_id)&&(
         <div style={{display:'flex',gap:8,alignItems:'stretch',marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}>
             <FloatFld label='Proyecto' mb={0}><input list='exp-edit-projects' value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Proyecto (venta del cliente)…' style={fInp}/></FloatFld>
@@ -23819,6 +23981,42 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           {expense?.id&&<div style={{display:'flex',alignItems:'center'}}><Attachments inline table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos' namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/></div>}
         </div>
       )}
+      {/* Fondo de un cliente: repartirlo entre proyectos (cada parte queda como un fondo con su proyecto; se puede deshacer). */}
+      {isFondo&&f.client_id&&expense?.id&&onRepartirFondo&&(Number(expense.amount)||0)>0&&(()=>{
+        const vivos=(expenses||[]).filter(e=>!e.deleted_at)
+        const origen=expense.fondo_origen_id?vivos.find(e=>String(e.id)===String(expense.fondo_origen_id)):null
+        const o=origen||expense, ps=[o,...vivos.filter(e=>String(e.fondo_origen_id)===String(o.id))]
+        const repInp={width:'100%',height:34,border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,fontSize:13,color:C.text,padding:'0 8px',boxSizing:'border-box',outline:'none',fontFamily:'inherit'}
+        const box={background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:8}
+        if(ps.length>1){ const tot=ps.reduce((a,e)=>a+(Number(e.amount)||0),0)
+          return <div style={box}>
+            <div style={{...SEC_LBL,marginBottom:4}}>Repartido en {ps.length} proyectos</div>
+            {ps.map(e=><div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12.5,padding:'3px 0'}}><span style={{color:String(e.id)===String(expense.id)?C.accent:C.text,fontWeight:String(e.id)===String(expense.id)?700:400}}>{e.project||'Sin proyecto'}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:600,whiteSpace:'nowrap'}}>{fmt(e.amount)}</span></div>)}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:6}}>
+              <button type='button' disabled={repBusy} onClick={async()=>{ setRepBusy(true); const ok=await onUnirFondo(o); setRepBusy(false); if(ok&&onClose) onClose() }} style={{fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',padding:0,cursor:'pointer'}}>{repBusy?'Uniendo…':'Deshacer reparto'}</button>
+              <span style={{fontSize:12.5,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>Total {fmt(tot)}</span>
+            </div>
+          </div> }
+        if(!repOpen) return <button type='button' onClick={()=>setRepOpen(true)} style={{fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',padding:0,cursor:'pointer',marginBottom:10}}>Repartir entre proyectos</button>
+        const monto=Math.round(Number(expense.amount)||0), suma=partes.reduce((a,x)=>a+(parseInt(String(x.monto).replace(/\D/g,''))||0),0), falta=monto-suma
+        const ok=partes.length>=2&&falta===0&&partes.every(x=>(x.project||'').trim()&&(parseInt(String(x.monto).replace(/\D/g,''))||0)>0)&&new Set(partes.map(x=>x.project.trim().toLowerCase())).size===partes.length
+        const setP=(i,k,v)=>setPartes(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x))
+        return <div style={box}>
+          <div style={{...SEC_LBL,marginBottom:6}}>Repartir {fmt(monto)} entre proyectos</div>
+          {partes.map((x,i)=><div key={i} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
+            <select value={x.project} onChange={e=>setP(i,'project',e.target.value)} style={{...repInp,flex:1,minWidth:0,cursor:'pointer'}}><option value=''>Proyecto…</option>{projectOpts.map(p=><option key={p} value={p}>{p}</option>)}</select>
+            <input inputMode='numeric' value={x.monto?fmt(parseInt(String(x.monto).replace(/\D/g,''))||0):''} onChange={e=>setP(i,'monto',e.target.value.replace(/\D/g,''))} placeholder='$0' style={{...repInp,width:110,flex:'none',textAlign:'right'}}/>
+            {partes.length>2&&<button type='button' onClick={()=>setPartes(p=>p.filter((_,j)=>j!==i))} aria-label='Quitar' style={{background:'none',border:'none',color:C.textSoft,cursor:'pointer',padding:4}}><Gl n='x'/></button>}
+          </div>)}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <button type='button' onClick={()=>setPartes(p=>[...p,{project:'',monto:falta>0?String(falta):''}])} style={{fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',padding:0,cursor:'pointer'}}>+ Otro proyecto</button>
+            <span style={{fontSize:12,fontWeight:600,color:falta===0?C.greenText:C.soonText,fontVariantNumeric:'tabular-nums'}}>{falta===0?'Suma el monto del fondo':falta>0?`Faltan ${fmt(falta)}`:`Sobran ${fmt(-falta)}`}</span>
+          </div>
+          <div style={{display:'flex',gap:8,marginTop:8}}>
+            <button type='button' onClick={()=>setRepOpen(false)} style={{flex:1,padding:'8px',borderRadius:9,border:`1px solid ${C.border}`,background:C.surface,color:C.muted,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+            <button type='button' disabled={!ok||repBusy} onClick={async()=>{ setRepBusy(true); const r=await onRepartirFondo(expense,partes.map(x=>({project:x.project.trim(),monto:parseInt(String(x.monto).replace(/\D/g,''))||0}))); setRepBusy(false); if(r&&onClose) onClose() }} style={{flex:2,padding:'8px',borderRadius:9,border:'none',background:ok?C.accent:C.done,color:'#fff',fontSize:12.5,fontWeight:700,cursor:ok?'pointer':'not-allowed'}}>{repBusy?'Guardando…':'Guardar reparto'}</button>
+          </div>
+        </div> })()}
       {/* Razón social (el cliente ya va en el encabezado). Reasignar cliente = acción discreta "Cambiar cliente". */}
       {!personalOn&&(
         <div>
@@ -26484,9 +26682,9 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const totFondosCli = _rs.totFondos
   const debeCliente = saldoCliente < 0
   // 2+ proyectos: el correo los nombra y explica la imputación de saldos (misma fuente que el PDF).
-  const _grp = _trab!=null ? null : rendGruposProyecto({expenses, clientId:r.client_id, scopeEntId:entId, gastos:det, excludeRenderId:r.id, clientEntities})
+  const _grp = (_trab!=null||r.fondo_id) ? null : rendGruposProyecto({expenses, clientId:r.client_id, scopeEntId:entId, gastos:det, excludeRenderId:r.id, clientEntities})
   // Saldo de cada rendición del correo (por trabajo cuando corresponde; en la vista previa se descuentan sus gastos).
-  const saldoDeR = x => { const g=gastosDeRend(x, expenses); const f=rendicionFondo(expenses, x.client_id, entId, null, x.por_trabajo?(x.project||''):null); const sg=g.reduce((a,e)=>a+(e.amount||0),0); return x._virtual ? f.saldo-sg : f.saldo }
+  const saldoDeR = x => { const g=gastosDeRend(x, expenses); const f=rendicionFondo(expenses, x.client_id, entId, null, x.por_trabajo?(x.project||''):null, x.fondo_id||null); const sg=g.reduce((a,e)=>a+(e.amount||0),0); return x._virtual ? f.saldo-sg : f.saldo }
   const _saldosM = _multi ? _todas.map(x=>({x, saldo:saldoDeR(x), trabajo:x.project||'sin trabajo', corr:x.correlativo})) : null
   const _persona = esPersona(client?.name)
   // Trato del correo: tú / usted (una persona) · ustedes (empresa o varios). Se aprende por cliente (learnings trato_cliente).
@@ -27969,7 +28167,7 @@ function DetalleGasto({e, expenses, clientEntities, sales, onEditar, onConsulta}
       {onEditar&&<button type='button' onClick={onEditar} style={{marginTop:18,height:38,padding:'0 18px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{fondo?'Editar fondo':'Editar gasto'}</button>}
     </div>)
 }
-function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendiciones,saving,user,origen,onBack,onSwitch,onSaveExpense,onSaveFondo,onDeleteExpense,onAttachChange,pettyCash=[],me,onSaveCaja,onIrGastosCliente,onConsulta}){
+function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendiciones,saving,user,origen,onBack,onSwitch,onSaveExpense,onRepartirFondo,onUnirFondo,onSaveFondo,onDeleteExpense,onAttachChange,pettyCash=[],me,onSaveCaja,onIrGastosCliente,onConsulta}){
   const isDesktop=useIsDesktop()
   const [landing,setLanding]=useState(false)   // inicio de la carga (sin cliente): usa el ancho completo en escritorio
   const tipo=pagina?.type
@@ -28008,7 +28206,7 @@ function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendicion
     : tipo==='expenseEdit'&&ver
     ? <DetalleGasto e={expense} expenses={expenses} clientEntities={clientEntities} sales={sales} onEditar={()=>setVer(false)} onConsulta={onConsulta?p=>onConsulta(expense,p):null}/>
     : tipo==='expenseEdit'
-    ? <div className='qt-body'><ExpenseEditForm expense={expense} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={onSaveExpense} onClose={onBack} onDelete={onDeleteExpense} saving={saving} user={user} onAttachChange={onAttachChange}/></div>
+    ? <div className='qt-body'><ExpenseEditForm expense={expense} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={onSaveExpense} onRepartirFondo={onRepartirFondo} onUnirFondo={onUnirFondo} onClose={onBack} onDelete={onDeleteExpense} saving={saving} user={user} onAttachChange={onAttachChange}/></div>
     : <div className='qt-body'><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={onSaveExpense} onClose={onBack} preClient={preClient} userName={user?.name} estudioId={user?.estudio_id} onIrCliente={onIrGastosCliente} onLanding={setLanding} sinCabecera/></div>
   return (
     <div>
@@ -28226,8 +28424,8 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
   const scopeEntId = entsClient.length>1 ? gEnt : null
   const ent = entsClient.length===1 ? entsClient[0] : (gEnt ? (clientEntities||[]).find(x=>x.id===gEnt) : null)
   const trab = r.por_trabajo ? (r.project||'') : null
-  const { fondos, totFondos, previas, rendidoAntes } = rendicionFondo(expenses, client&&client.id, scopeEntId, r.id, trab)
-  const grp = trab!=null ? null : rendGruposProyecto({expenses, clientId:client&&client.id, scopeEntId, gastos, excludeRenderId:r.id, clientEntities})
+  const { fondos, totFondos, previas, rendidoAntes } = rendicionFondo(expenses, client&&client.id, scopeEntId, r.id, trab, r.fondo_id||null)
+  const grp = (trab!=null||r.fondo_id) ? null : rendGruposProyecto({expenses, clientId:client&&client.id, scopeEntId, gastos, excludeRenderId:r.id, clientEntities})
   const razon = (ent&&ent.name) || (client&&client.name) || '—'
   const rut = (ent&&ent.rut) || (client&&client.rut) || ''
   const totGastos = gastos.reduce((a,e)=>a+(e.amount||0),0)
@@ -41334,6 +41532,52 @@ export default function App() {
     }catch(e){appAlert('Error: '+e.message)}
   },[])
 
+  // Repartir un fondo entre proyectos: la primera parte queda en el fondo original y cada otra parte es un fondo nuevo (fondo_origen_id),
+  // con su parte de la conciliación del banco (mismo movimiento). Las partes suman al peso el monto original. Reversible con handleUnirFondo.
+  const handleRepartirFondo=useCallback(async(f,partes)=>{
+    const tot=partes.reduce((a,x)=>a+(Math.round(Number(x.monto))||0),0)
+    if(partes.length<2||tot!==Math.round(Number(f.amount)||0)||partes.some(x=>!(x.project||'').trim()||!(Number(x.monto)>0))){ appAlert('Las partes deben tener proyecto y sumar el monto del fondo.'); return false }
+    const norm=x=>String(x||'').trim().toLowerCase()
+    const sid=pr=>(sales||[]).find(sv=>String(sv.client_id)===String(f.client_id)&&norm(sv.title)===norm(pr))?.id||null
+    try{
+      const {data:conc,error:ce}=DEMO?{data:[]}:await supabase.from('conciliacion').select('*').eq('gasto_id',f.id); if(ce) throw ce
+      if((conc||[]).length>1||((conc||[])[0]&&Math.round(Number(conc[0].monto_aplicado))!==Math.round(Number(f.amount)))){ appAlert('Este fondo está conciliado en partes con el banco. Repártelo desde Banco.'); return false }
+      const [p0,...rest]=partes, ahora=new Date().toISOString()
+      const orig={amount:Math.round(Number(p0.monto)), project:p0.project.trim(), sale_id:sid(p0.project)}
+      if(!DEMO){ const {error}=await supabase.from('expenses').update(orig).eq('id',f.id); if(error) throw error }
+      const base={client_id:f.client_id, entity_id:f.entity_id||null, type:'fondo', concept:f.concept, category:f.category||'Fondo', date:f.date, created_by:f.created_by||user?.name||null, notas:f.notas||null, estudio_id:f.estudio_id||undefined, fondo_origen_id:f.id}
+      const nuevos=[]
+      for(const x of rest){ const row={...base, amount:Math.round(Number(x.monto)), project:x.project.trim(), sale_id:sid(x.project)}
+        if(DEMO){ nuevos.push({...row,id:'demo-f-'+Date.now()+nuevos.length,created_at:ahora}); continue }
+        const {data,error}=await supabase.from('expenses').insert(row).select().single(); if(error) throw error; nuevos.push(data)
+        if(conc&&conc[0]){ const c=conc[0]; const {error:e2}=await supabase.from('conciliacion').insert({movimiento_id:c.movimiento_id, tipo_destino:c.tipo_destino, gasto_id:data.id, monto_aplicado:row.amount, origen:c.origen, created_by:user?.name||null, ...(c.estudio_id?{estudio_id:c.estudio_id}:{})}); if(e2) throw e2 } }
+      if(!DEMO&&conc&&conc[0]){ const {error:e3}=await supabase.from('conciliacion').update({monto_aplicado:orig.amount}).eq('id',conc[0].id); if(e3) throw e3 }
+      setExpenses(p=>[...p.map(e=>e.id===f.id?{...e,...orig}:e),...nuevos])
+      logActividad('fondos.repartido',{tabla:'expenses',id:f.id,detalle:{cliente:(clients||[]).find(c=>c.id===f.client_id)?.name,title:`Fondo repartido en ${partes.length} proyectos`,monto:Math.round(Number(f.amount)),antes:{amount:f.amount,project:f.project||null,sale_id:f.sale_id||null},partes:partes.map(x=>({project:x.project,monto:Math.round(Number(x.monto))})),nuevos:nuevos.map(n=>n.id)}})
+      return true
+    }catch(e){ appAlert('No se pudo repartir el fondo: '+(e.message||e)+'\n\nRevisa el fondo en Gastos antes de reintentar.'); return false }
+  },[sales,clients,user])
+  // Deshacer el reparto: el fondo original vuelve a su monto (suma de las partes), las partes se dan de baja (deleted_at) y lo ligado a ellas
+  // (gastos y rendiciones de fondo, conciliación) vuelve al original.
+  const handleUnirFondo=useCallback(async(orig)=>{
+    const partes=(expenses||[]).filter(e=>String(e.fondo_origen_id)===String(orig.id)&&!e.deleted_at); if(!partes.length) return false
+    const total=Math.round(Number(orig.amount)||0)+partes.reduce((a,e)=>a+Math.round(Number(e.amount)||0),0), ids=partes.map(e=>e.id), ahora=new Date().toISOString()
+    try{
+      if(!DEMO){
+        const {data:cP}=await supabase.from('conciliacion').select('id').in('gasto_id',ids)
+        const {data:cO}=await supabase.from('conciliacion').select('id').eq('gasto_id',orig.id)
+        if((cP||[]).length){ const {error}=await supabase.from('conciliacion').delete().in('id',cP.map(c=>c.id)); if(error) throw error }
+        if((cO||[]).length===1){ const {error}=await supabase.from('conciliacion').update({monto_aplicado:total}).eq('id',cO[0].id); if(error) throw error }
+        let r=await supabase.from('expenses').update({amount:total}).eq('id',orig.id); if(r.error) throw r.error
+        r=await supabase.from('expenses').update({deleted_at:ahora}).in('id',ids); if(r.error) throw r.error
+        r=await supabase.from('expenses').update({reembolso_fondo_id:orig.id}).in('reembolso_fondo_id',ids); if(r.error) throw r.error
+        r=await supabase.from('rendiciones').update({fondo_id:orig.id}).in('fondo_id',ids); if(r.error) throw r.error }
+      const idS=new Set(ids.map(String))
+      setExpenses(p=>p.filter(e=>!idS.has(String(e.id))).map(e=>e.id===orig.id?{...e,amount:total}:idS.has(String(e.reembolso_fondo_id))?{...e,reembolso_fondo_id:orig.id}:e))
+      logActividad('fondos.reparto_deshecho',{tabla:'expenses',id:orig.id,detalle:{cliente:(clients||[]).find(c=>c.id===orig.client_id)?.name,title:'Reparto del fondo deshecho',monto:total,partes:partes.map(e=>({id:e.id,project:e.project,monto:e.amount}))}})
+      return true
+    }catch(e){ appAlert('No se pudo deshacer el reparto: '+(e.message||e)); return false }
+  },[expenses,clients])
   const handleSaveExpense=useCallback(async(f,opts={})=>{
     setSaving(true)
     try{
@@ -42952,7 +43196,7 @@ export default function App() {
             {tab==='tarea'&&pagina&&<TareaPage pagina={pagina} tasks={tasks} clients={clients} sales={sales} clientEntities={clientEntities} user={user} saving={saving} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSaveTask={handleSaveTask} onDelegate={handleDelegateTask} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onOpenClientFicha={handleOpenClientFicha} onCierre={({estado,detalle,files})=>{ const t=pagina.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/>}
             {tab==='factura'&&pagina&&(()=>{ const b0=pagina.data; const b=(b0&&b0.id)?((billing||[]).find(x=>String(x.id)===String(b0.id))||b0):b0; const cli=b?.client_id?clients.find(c=>String(c.id)===String(b.client_id)):null
               return <FacturaPage key={b?.id||'nuevo'} b={b} cli={cli} origen={origenNav('Volver')} onBack={()=>setModal(null)} onOpenClientFicha={handleOpenClientFicha}><BillingForm bill={b} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))} pagina onVerBanco={id=>navTo({tab:'conciliacion',conc:id})}/></FacturaPage> })()}
-            {tab==='gasto'&&pagina&&<GastoPage onIrGastosCliente={cid=>{ setModal(null); setTimeout(()=>{ setTab('expenses'); setExpNav({cli:cid}) },0) }} pagina={pagina} pettyCash={pettyCash} me={user?.name} onSaveCaja={handleEntregarCaja} clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} rendiciones={rendiciones} saving={saving} user={user} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSwitch={k=>setPagina(p=>({...p,type:k}))} onSaveExpense={handleSaveExpense} onDeleteExpense={handleDeleteExpense} onConsulta={userRole==='admin'?handleConsultaExpense:null} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))} onSaveFondo={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }}/>}
+            {tab==='gasto'&&pagina&&<GastoPage onIrGastosCliente={cid=>{ setModal(null); setTimeout(()=>{ setTab('expenses'); setExpNav({cli:cid}) },0) }} pagina={pagina} pettyCash={pettyCash} me={user?.name} onSaveCaja={handleEntregarCaja} clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} rendiciones={rendiciones} saving={saving} user={user} origen={origenNav('Volver')} onBack={()=>setModal(null)} onSwitch={k=>setPagina(p=>({...p,type:k}))} onSaveExpense={handleSaveExpense} onRepartirFondo={handleRepartirFondo} onUnirFondo={handleUnirFondo} onDeleteExpense={handleDeleteExpense} onConsulta={userRole==='admin'?handleConsultaExpense:null} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))} onSaveFondo={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }}/>}
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} anticipos={anticipos} fantasmaIds={fantasmaAltaIds} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} terceros={terceros} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onAprobarPropuesta={handleAprobarPropuesta} onDevolverPropuesta={handleDevolverPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha} onIngestPropuesta={handleIngestPropuestaDrive}/>}
