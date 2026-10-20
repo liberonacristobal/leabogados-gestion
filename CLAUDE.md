@@ -161,6 +161,16 @@ Prioridad #1 del usuario: **la misma cifra se ve igual entre por donde se entre*
 - **Diferencias estructurales se rotulan, no se esconden.** Si dos cifras miden planos distintos (devengado vs caja, emitido vs cobrado), cada una dice su plano en una línea; no se presentan como "la misma" ni como error.
 - **Al cambiar una cifra o una regla:** buscar TODAS las vistas, correos y exports que la muestran y dejarlas en el mismo helper en el mismo commit; verificar con datos reales que coinciden (consulta o arnés con las funciones de la app).
 
+## REGLA DE ORO: lenguaje — revisar las reglas antes de escribir
+
+Todo lo acordado sobre lenguaje es regla de oro. Antes de escribir **cualquier** texto (etiqueta, título, botón, aviso, correo, asunto, render, propuesta), pasar por este checklist; nunca inventar lenguaje:
+1. **Vocabulario existente:** buscar en `App.jsx` y en las memorias de lenguaje el término que la app ya usa, y reusarlo. Lista de acciones = **«Pendientes»**.
+2. **Registro formal de oficina de abogados:** sustantivos y estados financieros o legales («Pago a la notaría por transferir», «Fondos por solicitar», «Borrador preparado», «Pendiente de emisión»). Se mantiene el «tú» de Chile, sin tono de chat.
+3. **No inventar términos, jerga ni pasos;** si un término no existe, proponerlo sobrio y validarlo.
+4. **Sin relleno:** una línea, sin frases explicativas ni disclaimers.
+
+Prohibido: «Lo que te toca», «Esto es lo tuyo», «un toque»/«al toque», «Cuándo te debería llegar», «atrasada» (→ vencida), «listas para cobrar» (→ por pagar), «asume/adelanta la oficina» (→ a cargo de la oficina / adelanto de la oficina), «tanda», asuntos con gancho («Tu semana en 2 minutos»), preguntas o exclamaciones como título, «listo», «ojo».
+
 ## REGLA DE ORO: sin franjas de color a la izquierda ("no parecer IA")
 
 Nunca usar líneas o franjas de color a la izquierda para marcar estado: ni `borderLeft` de color, ni `boxShadow: inset Npx 0 0`, ni divs-franja verticales. Aplica a la app Y a todo render, mockup o propuesta. El estado se lee por el color de la cifra o del texto, un punto tenue o el chip del canon. Las etiquetas/títulos de sección y de KPI van en `C.accent` (visibles por jerarquía), no en gris claro.

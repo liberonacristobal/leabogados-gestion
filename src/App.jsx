@@ -10483,7 +10483,7 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
                 <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtM(b.amount)}</span>
               </div>
               <div style={{marginTop:6,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                {sug&&<button onClick={()=>onAssign(b,sug.id)} title='Sugerido por el RUT — un toque para asignar y aprender' style={{fontSize:10,fontWeight:700,padding:'4px 10px',borderRadius:20,background:C.greenBg,color:C.greenText,border:'none',cursor:'pointer'}}><Sparkle/> ¿{sug.name}?</button>}
+                {sug&&<button onClick={()=>onAssign(b,sug.id)} title='Sugerido por el RUT: asignar y registrar la asociación' style={{fontSize:10,fontWeight:700,padding:'4px 10px',borderRadius:20,background:C.greenBg,color:C.greenText,border:'none',cursor:'pointer'}}><Sparkle/> ¿{sug.name}?</button>}
                 <div style={{flex:'1 1 160px',minWidth:0}}><AsignarClienteInline bill={b} clients={clients} onAssign={(_,cid)=>onAssign(b,cid)} label={sug?'Otro cliente':'Asignar cliente'} placeholder='Buscar cliente…'/></div>
               </div>
             </div>
@@ -17746,7 +17746,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   }
   const CAT_META = {
     falta:{t:'Falta el cliente', s:'búscalo, míralo en Drive o créalo', col:C.overdueText, bg:C.overdueBg},
-    confirma:{t:'Confirma el cliente', s:'la IA ya propuso uno · un toque', col:C.soonText, bg:C.soonBg},
+    confirma:{t:'Confirma el cliente', s:'cliente propuesto · por confirmar', col:C.soonText, bg:C.soonBg},
     proyecto:{t:'Proyecto por revisar', s:'con cliente · sin proyecto seguro · opcional', col:C.soonText, bg:C.soonBg},
     listas:{t:'Listas para cargar', s:'con cliente · agrupadas por cliente', col:C.greenText, bg:C.greenBg},
     personal:{t:'Personal · de un miembro', s:'de un abogado/miembro, no de un cliente', col:C.grisText, bg:C.bgWarm},
@@ -39265,7 +39265,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
             {revisionCC.listas.map(({petty,cargo})=> ccRow(petty,cargo,'ok'))}
           </div>}
           {revisionCC.porRevisar.length>0 && <div>
-            <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.soonText,margin:'4px 0 7px'}}>Por confirmar · un toque</div>
+            <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.soonText,margin:'4px 0 7px'}}>Por confirmar</div>
             {revisionCC.porRevisar.map(ccSugRow)}
           </div>}
           {revisionCC.cajasSinTransf.length>0 && <div>

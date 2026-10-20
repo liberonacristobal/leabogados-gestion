@@ -193,7 +193,7 @@ serve(async (req) => {
       if (!d.caja || (d.caja.nLiq===0)) return "";
       const c = d.caja;
       return `<div style="padding:16px 26px 4px;">${sec("1","Caja chica por liquidar",TEAL)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Tienes gastos de caja chica <b style="color:${INK};">sin liquidar</b>. Liquídalos para <b style="color:${INK};">reponer el fondo</b> y que la caja no se descuadre.</div>`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Gastos de caja chica <b style="color:${INK};">pendientes de liquidación</b>. La liquidación permite <b style="color:${INK};">reponer el fondo</b>.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${TEALBG};border-radius:12px;"><tr><td style="padding:14px 16px;"><div style="font-size:12.5px;color:${TEAL};font-weight:700;">${c.nLiq} gasto${c.nLiq!==1?"s":""} sin liquidar</div><div style="font-size:11px;color:${MUT};margin-top:3px;">Saldo en tu caja chica: <b style="color:${INK};">${fmt(c.saldo)}</b></div></td><td align="right" style="padding:14px 16px;white-space:nowrap;"><span style="font-size:16px;font-weight:800;color:${TEAL};">${fmt(c.montoLiq)}</span></td></tr></table>`+
         cta("Liquidar caja chica",TEAL,"cajachica")+`</div>`;
     };
@@ -204,10 +204,10 @@ serve(async (req) => {
       const tr = (x:any, venc:boolean)=> `<tr><td style="padding:10px 0;border-top:1px solid ${HAIR};"><div style="font-size:13.5px;font-weight:600;color:${INK};line-height:1.4;">${esc(x.t.title||"Tarea")}</div><div style="font-size:11px;color:${MUT};margin-top:2px;">${x.t.client_id?esc(cname(x.t.client_id))+" · ":""}${x.t.due?(venc?"venció":"vence")+" "+fDia(x.t.due):"sin fecha"}</div></td><td align="right" valign="top" style="padding:10px 0 10px 10px;border-top:1px solid ${HAIR};white-space:nowrap;">${venc?pill(x.d===-1?"ayer":`hace ${-x.d} d`,REDBG,RED):pill(x.d===0?"hoy":x.d===1?"mañana":`en ${x.d} d`,AMBBG,AMB)}</td></tr>`;
       const rows = [...d.vencidas.map((x:any)=>tr(x,true)), ...d.semana.map((x:any)=>tr(x,false))].join("");
       const nV=d.vencidas.length, nS=d.semana.length;
-      return `<div style="padding:24px 26px 4px;">${sec("2","Tus tareas de la semana",AMB)}`+
+      return `<div style="padding:24px 26px 4px;">${sec("2","Tareas de la semana",AMB)}`+
         `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">${nV?`<b style="color:${RED};">${nV} vencida${nV!==1?"s":""}</b>`:""}${nV&&nS?" · ":""}${nS?`${nS} esta semana`:""}.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
-        cta("Ver mis tareas",AMB,"tareas")+`</div>`;
+        cta("Ver tareas",AMB,"tareas")+`</div>`;
     };
 
     const notariaHtml = (d:any) => {
@@ -217,7 +217,7 @@ serve(async (req) => {
       if (n.nOt) partes.push(`<b style="color:${INK};">${n.nOt} OT sin liquidar</b> (${fmt(n.montoOt)})`);
       if (n.nCorreos) partes.push(`<b style="color:${INK};">${n.nCorreos} correo${n.nCorreos!==1?"s":""} a notaría sin cerrar</b>`);
       return `<div style="padding:24px 26px 4px;">${sec("3","Notaría",NV)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 12px;line-height:1.6;">${partes.join(" · ")}. Liquida las OT a la notaría y cierra los correos pendientes para dejar el ciclo al día.</div>`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 12px;line-height:1.6;">${partes.join(" · ")}. Pendiente la liquidación de las OT y el aviso a la notaría.</div>`+
         cta("Ver notaría",NV,"gastos")+`</div>`;
     };
 
@@ -259,10 +259,10 @@ serve(async (req) => {
   <div style="background:${NV};padding:20px 28px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div>
   <div style="padding:26px 26px 10px;">
     <div style="font-size:19px;color:${INK};font-weight:800;letter-spacing:-.3px;">Hola, ${esc(nombre)}</div>
-    <div style="font-size:12.5px;color:${MUT};margin-top:6px;line-height:1.55;"><span style="text-transform:uppercase;letter-spacing:.7px;font-size:10px;color:${FAINT};font-weight:700;">Tu semana · ${esc(rango)}</span><br>Esto es lo tuyo por cerrar esta semana. Cada tema tiene su acción abajo.</div>
+    <div style="font-size:12.5px;color:${MUT};margin-top:6px;line-height:1.55;"><span style="text-transform:uppercase;letter-spacing:.7px;font-size:10px;color:${FAINT};font-weight:700;">Resumen semanal · ${esc(rango)}</span><br>Pendientes de la semana, cada uno con su acción.</div>
   </div>
   ${cH}${pH}${fH}${mH}${tH}${nH}
-  ${!algo?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Nada pendiente esta semana. Todo al día.</div>`:`<div style="height:8px;"></div>`}
+  ${!algo?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin pendientes esta semana.</div>`:`<div style="height:8px;"></div>`}
   <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
 </div></body></html>`;
     };
@@ -281,8 +281,8 @@ serve(async (req) => {
       const nK=d.cartera?(d.cartera.bills.length+d.cartera.fondos.length+((d.cartera.com&&d.cartera.com.nListas)||0)):0;
       if (!testTo && !nC && !nT && !nN && !nK) continue;
       const html = armar(nombre, d);
-      // Asunto que invita a mirar, no castigador (sin recuento de "vencidas").
-      const subject = "Tu semana en 2 minutos";
+      // Asunto descriptivo y sobrio (regla de lenguaje: sin ganchos ni tono de chat).
+      const subject = "Resumen semanal de pendientes";
       if (!dryRun) await sendMail(to, subject, html);
       sent.push({ nombre, to, caja:nC, tareas:nT, notaria:nN, cartera:nK, ...(dryRun?{subject,html}:{}) });
     }
