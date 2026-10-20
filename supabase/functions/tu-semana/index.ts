@@ -226,23 +226,23 @@ serve(async (req) => {
       const c=d.cartera; if (!c || !c.bills.length) return "";
       const venc = c.bills.filter((x:any)=> x.vence < hoyCL);
       const rows = c.bills.slice(0,6).map((x:any)=> filaHtml(cname(x.b.client_id), `Factura N° ${esc(String(x.b.invoice_no).replace(/^factura\s*/i,""))} · ${x.vence<hoyCL?`<b style="color:${RED};">vencida desde el ${fDia(x.vence)}</b>`:`vence el ${fDia(x.vence)}`}`, fmt(x.saldo), x.vence<hoyCL?RED:INK)).join("");
-      return `<div style="padding:24px 26px 4px;">${sec(n,"Tus clientes: por cobrar",RED)}`+
+      return `<div style="padding:24px 26px 4px;">${sec(n,"Cuentas por cobrar",RED)}`+
         `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">${c.bills.length} factura${c.bills.length!==1?"s":""} por cobrar${venc.length?` · <b style="color:${RED};">${venc.length} vencida${venc.length!==1?"s":""}</b>`:""}.</div>`+
         tabla(rows)+cta("Recordar cobro",RED,"porcobrar")+`</div>`;
     };
     const fondosHtml = (d:any, n:string) => {
       const c=d.cartera; if (!c || !c.fondos.length) return "";
       const rows = c.fondos.slice(0,6).map((x:any)=> filaHtml(cname(x.cid), x.nPR?`${x.nPR} gasto${x.nPR!==1?"s":""} sin rendir · ${fmt(x.montoPR)}`:"sin gastos por rendir", x.saldo<0?"−"+fmt(-x.saldo):fmt(x.saldo), x.saldo<0?RED:INK)).join("");
-      return `<div style="padding:24px 26px 4px;">${sec(n,"Fondos por pedir y gastos por rendir",AMB)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">Rinde a tus clientes y pídeles fondos cuando el saldo quede en contra.</div>`+
-        tabla(rows)+dosBtn("Rendir","Pedir fondos",AMB,"porcobrar")+`</div>`;
+      return `<div style="padding:24px 26px 4px;">${sec(n,"Fondos por solicitar y gastos por rendir",AMB)}`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">Gastos por rendir y saldos en contra de tus clientes.</div>`+
+        tabla(rows)+dosBtn("Rendir","Solicitar fondos",AMB,"porcobrar")+`</div>`;
     };
     const comisionesHtml = (d:any, n:string) => {
       const k=d.cartera?.com; if (!k || (!k.nListas && !k.nSujeto)) return "";
       const txt = k.nListas
-        ? `<b style="color:${INK};">${k.nListas} comisi${k.nListas===1?"ón lista":"ones listas"} para cobrar</b> · líquido ${fmt(k.liqListas)}. Carga tu boleta y avisa a la oficina desde la app.`
-        : `Nada listo para cobrar todavía. Sujeto a cobro: <b style="color:${INK};">${fmt(k.montoSujeto)}</b> en ${k.nSujeto} cuota${k.nSujeto!==1?"s":""}.`;
-      return `<div style="padding:24px 26px 4px;">${sec(n,"Tus comisiones",TEAL)}<div style="font-size:12.5px;color:${MUT};margin:0;line-height:1.6;">${txt}</div>${k.nListas?cta("Cargar mi boleta",TEAL,"comisiones"):""}</div>`;
+        ? `<b style="color:${INK};">${k.nListas} comisi${k.nListas===1?"ón":"ones"} por pagar</b> · líquido ${fmt(k.liqListas)}. Registra tu boleta en la app.`
+        : `Sin comisiones por pagar. Sujeto a cobro: <b style="color:${INK};">${fmt(k.montoSujeto)}</b> en ${k.nSujeto} cuota${k.nSujeto!==1?"s":""}.`;
+      return `<div style="padding:24px 26px 4px;">${sec(n,"Comisiones",TEAL)}<div style="font-size:12.5px;color:${MUT};margin:0;line-height:1.6;">${txt}</div>${k.nListas?cta("Registrar boleta",TEAL,"comisiones"):""}</div>`;
     };
 
     const armar = (nombre:string, d:any) => {
