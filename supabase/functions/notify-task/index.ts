@@ -119,14 +119,16 @@ const toAscii = (s: string) =>
 const qpSafe = (h: string) => String(h || "").replace(/[ \t]+$/gm, "");
 async function sendMail(
   { to, cc, subject, html, text, pdfBase64, pdfName, attachments, fromName, replyTo }:
-  { to: string; cc?: string; subject: string; html?: string; text?: string; pdfBase64?: string; pdfName?: string; attachments?: MailAttachment[]; fromName?: string; replyTo?: string },
+  { to: string | string[]; cc?: string | string[]; subject: string; html?: string; text?: string; pdfBase64?: string; pdfName?: string; attachments?: MailAttachment[]; fromName?: string; replyTo?: string },
 ) {
   const client = new SMTPClient({
     connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } },
   });
   try {
-    const msg: Record<string, unknown> = { from: `${toAscii(fromName || "Liberona Escala Abogados")} <${GMAIL_USER}>`, to, subject: toAscii(subject) };
-    if (cc) msg.cc = cc;
+    // denomailer no acepta varias direcciones en un solo texto («a, b»): las descarta todas. Siempre lista.
+    const lista = (v?: string | string[]) => (Array.isArray(v) ? v : String(v || "").split(/[,;]/)).map((x) => String(x).trim()).filter(Boolean);
+    const msg: Record<string, unknown> = { from: `${toAscii(fromName || "Liberona Escala Abogados")} <${GMAIL_USER}>`, to: lista(to), subject: toAscii(subject) };
+    if (lista(cc).length) msg.cc = lista(cc);
     if (replyTo) msg.replyTo = replyTo;
     if (html) msg.html = qpSafe(html);
     msg.content = text || (html ? "Ver el contenido en formato HTML." : subject);
@@ -207,11 +209,11 @@ serve(async (req) => {
     // Remitente (para excluirlo del CC): en terminada = quien cerró (task.who).
     const fromEmailEarly = EMAILS[tipo === "delegada" ? (task.delegated_by || by) : tipo === "terminada" ? (task.who || by) : by] || "";
     let toEmail = EMAILS[recipientName] || "";
-    let ccEmail = "";
+    let ccEmail: string[] = [];
     if (esCierreConReporte) {
       // Reporte de cierre de un limited: SIEMPRE avisa a los admins (aunque el que asignó falte o sea el mismo que cerró).
       if (!toEmail) toEmail = ADMINS[0];
-      ccEmail = ADMINS.filter((e) => e !== toEmail && e !== fromEmailEarly).join(", ");
+      ccEmail = ADMINS.filter((e) => e !== toEmail && e !== fromEmailEarly);
     }
     if (!toEmail) {
       return new Response(JSON.stringify({ skipped: true, reason: `No hay email para ${recipientName}` }), { status: 200 });
@@ -305,7 +307,7 @@ serve(async (req) => {
     // "terminada" puede traer adjuntos (reporte de cierre) → sendMail (soporta adjuntos + from/replyTo).
     // El resto (nueva/delegada) sigue por sendViaSMTP, sin cambios.
     if (tipo === "terminada") {
-      await sendMail({ to: toEmail, cc: ccEmail || undefined, subject, html, fromName, replyTo: fromEmail, attachments });
+      await sendMail({ to: toEmail, cc: ccEmail.length ? ccEmail : undefined, subject, html, fromName, replyTo: fromEmail, attachments });
     } else {
       await sendViaSMTP(toEmail, subject, html, fromName, fromEmail);
     }

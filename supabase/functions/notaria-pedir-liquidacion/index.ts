@@ -117,7 +117,7 @@ ${diasSin != null ? fila("Sin cargar liquidación hace", `<b>${diasSin} día${di
 
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-    await client.send({ from: `${toAscii(nombreEstudio)} - Notaria <${GMAIL_USER}>`, to: destTo.join(", "), ...(destCc.length ? { cc: destCc.join(", ") } : {}), subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
+    await client.send({ from: `${toAscii(nombreEstudio)} - Notaria <${GMAIL_USER}>`, to: destTo, ...(destCc.length ? { cc: destCc } : {}), subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
     await client.close();
   } catch (e) { return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
   // Bitácora (y dedupe): qué se pidió, a quién, para qué fecha programada

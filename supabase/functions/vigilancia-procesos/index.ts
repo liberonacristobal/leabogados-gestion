@@ -62,15 +62,26 @@ Deno.serve(async (req) => {
     const cfg: any[] = await rest("learnings?kind=eq.config&key=eq.vigilancia_procesos&select=value&limit=1");
     const encendido = String(cfg?.[0]?.value || "").toLowerCase() === "on";
     // deno-lint-ignore no-explicit-any
-    const socios: any[] = await rest("miembros?rol=eq.admin&select=email");
-    const para = (socios || []).map((s) => String(s.email || "").trim()).filter(Boolean);
+    const socios: any[] = await rest("miembros?rol=eq.admin&select=email,rut,nombre");
+    // Solo correos del dominio de la cuenta que envía (no otros estudios ni correos personales) y uno por persona:
+    // los alias (cl@ y cristobal.liberona@) son la misma casilla y duplicaban el aviso.
+    const dom = String(GMAIL_USER || "").toLowerCase().split("@")[1] || "";
+    const porPersona = new Map<string, string>();
+    for (const s of socios || []) {
+      const e = String(s.email || "").trim().toLowerCase();
+      if (!e || !dom || !e.endsWith("@" + dom)) continue;
+      const k = String(s.rut || s.nombre || e).replace(/[^0-9kK]/g, "") || e;
+      const prev = porPersona.get(k);
+      if (!prev || e.length < prev.length) porPersona.set(k, e);
+    }
+    const para = [...porPersona.values()];
     if (dryRun || !encendido || !para.length) return json({ ...resumen, enviado: false, motivo: dryRun ? "prueba" : !encendido ? "apagado" : "sin destinatarios", nuevosDet: nuevos });
 
     const filas = nuevos.map((p) => `<tr><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#003C50;font-weight:bold">${esc(p.nombre)}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#3D3D3D">${esc(p.motivo)}${p.detalle ? `<div style="font-size:11px;color:#537281;margin-top:3px">${esc(p.detalle)}</div>` : ""}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:12px;color:#537281;white-space:nowrap;text-align:right">Última: ${esc(fechaCL(p.ultima))}<br>Última correcta: ${esc(fechaCL(p.ultima_ok))}</td></tr>`).join("");
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:20px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">Espero que estén muy bien.</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">${nuevos.length === 1 ? "Un proceso automático de la app requiere revisión:" : `${nuevos.length} procesos automáticos de la app requieren revisión:`}</p><table style="width:100%;border-collapse:collapse">${filas}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">El detalle completo está en la app, en Oficina › Procesos automáticos.</p></div></body></html>`;
     const asunto = nuevos.length === 1 ? `Proceso automático con falla: ${nuevos[0].nombre}` : `${nuevos.length} procesos automáticos con falla`;
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-    await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para.join(", "), subject: toAscii(asunto), content: nuevos.map((p) => `${p.nombre}: ${p.motivo}`).join("\n"), html: html.replace(/[ \t]+$/gm, "") });
+    await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, subject: toAscii(asunto), content: nuevos.map((p) => `${p.nombre}: ${p.motivo}`).join("\n"), html: html.replace(/[ \t]+$/gm, "") });
     await client.close();
     // Recién enviado el aviso, se marca cada falla como avisada (una fila por proceso: update o insert).
     for (const p of nuevos) {

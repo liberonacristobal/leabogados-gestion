@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
 
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-    await client.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: SOCIOS.join(", "), subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
+    await client.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: [...SOCIOS], subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
     await client.close();
     return json({ ok: true, gap: gap.length, dias: gap, ultima: lastCov, enviado: true });
   } catch (e) {

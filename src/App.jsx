@@ -1205,10 +1205,11 @@ function resumenBitacora(x){
   const o={}; ['id','folio','invoice_no','title','concept','name','client_id','monto','amount','persona','rut'].forEach(k=>{ if(x[k]!=null) o[k]=x[k] })
   return Object.keys(o).length?o:'[obj]'
 }
-async function logActividad(action, {tabla=null, id=null, detalle=null}={}){
+// completo: guarda el detalle tal cual (respaldos antes de borrar/editar); si no, solo el resumen chico.
+async function logActividad(action, {tabla=null, id=null, detalle=null, completo=false}={}){
   if(DEMO) return
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id||''))?String(id):null
-  try{ await supabase.from('activity_log').insert({ user_email:_actorBitacora, action, table_name:tabla, record_id:uuid, detail:detalle==null?null:JSON.stringify(resumenBitacora(detalle)) }) }catch(_){}
+  try{ await supabase.from('activity_log').insert({ user_email:_actorBitacora, action, table_name:tabla, record_id:uuid, detail:detalle==null?null:JSON.stringify(completo?detalle:resumenBitacora(detalle)) }) }catch(_){}
 }
 // Nombres de los miembros del estudio por email (de `miembros`, no cableados). Cacheado por sesión.
 let _nombresMiembrosCache=null, _nombresMiembrosP=null
@@ -1387,7 +1388,7 @@ function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=nul
 }
 // Fondos del cliente sin trabajo asignado: si hay, no se puede separar la rendición por trabajo sin inventar a cuál van.
 function fondosSinTrabajo(expenses, clientId, scopeEntId=null){
-  return (expenses||[]).filter(e=>e.client_id===clientId && e.type==='fondo' && cuentaEnSaldo(e) && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id) && !(e.project||'').trim()).reduce((a,e)=>a+(e.amount||0),0)
+  return (expenses||[]).filter(e=>e.client_id===clientId && e.type==='fondo' && cuentaEnSaldo(e) && (Number(e.amount)||0)>0 && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id) && !(e.project||'').trim()).reduce((a,e)=>a+(e.amount||0),0)
 }
 // Gastos de una rendición: los guardados (client_render_id) o, en la vista previa sin guardar, los que trae la rendición.
 const gastosDeRend = (r, expenses) => (r&&r._gastos) ? r._gastos : (expenses||[]).filter(e=>e.client_render_id===r?.id)
@@ -16955,12 +16956,12 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const porT = (multiT||porTrabajoUno) ? trabajosSel.map(cifrasT) : []
   const periodoDe = gs => { const _fs=gs.map(e=>e.date).filter(Boolean).sort(); const _ma=d=>new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const _di=d=>fmtFechaDMY(d); return _fs.length ? (_ma(_fs[0])===_ma(_fs[_fs.length-1]) ? _ma(_fs[0]) : `${_di(_fs[0])} – ${_di(_fs[_fs.length-1])}`) : new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}) }
   // Una sola forma de crear la rendición (borrador, vista previa del correo, separadas): registra la fila, marca los gastos y la devuelve con sus gastos.
-  const crearRendicion = async(gs, {proyectoR, porTrabajo, fondoId=null}) => {
+  const crearRendicion = async(gs, {proyectoR, porTrabajo, fondoId=null, proyFila}) => {
     const renderId = crypto.randomUUID(), now = new Date().toISOString()
     const tot = gs.reduce((a,e)=>a+(e.amount||0),0)
     const otNums = [...new Set(gs.map(e=>e.ot_number).filter(Boolean))].join(', ')
     const fila = { id:renderId, user_name:currentUserName||'admin', client_id:client.id, periodo:periodoDe(gs), total:tot, n_gastos:gs.length, n_clientes:1, tipo:'cliente',
-      entity_id:selEnt||null, project:proyectoR||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, dirigido_email:atencionEmail||null, ot_numbers:otNums||null, por_trabajo:!!porTrabajo, ...(fondoId?{fondo_id:fondoId}:{}) }
+      entity_id:selEnt||null, project:(proyFila!==undefined?proyFila:proyectoR)||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, dirigido_email:atencionEmail||null, ot_numbers:otNums||null, por_trabajo:!!porTrabajo, ...(fondoId?{fondo_id:fondoId}:{}) }
     const {error:rendErr} = await supabase.from('rendiciones').insert(fila)
     if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
     let falloMarca = 0; const marcados=[]
@@ -16976,8 +16977,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   // Rendición(es) en vista previa: nada se registra hasta «Guardar borrador» o «Enviar» (ahí corre _crear).
   const virtuales = () => {
     const base = {id:null, _virtual:true, client_id:client.id, tipo:'cliente', entity_id:selEnt||null, fondo_id:enFondo?fondoSel:null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, dirigido_email:atencionEmail||null, user_name:currentUserName||'admin', created_at:new Date().toISOString()}
-    if(enFondo){ const gs=gastosSel.map(e=>({...e,...proyPatch(e),reembolso_fondo_id:fondoSel})); return [{...base, _gastos:gs, project:proyFondo||(trabajosSel.length===1?trabajosSel[0]:null)||null, por_trabajo:false, periodo:periodoDe(gs), total:totalSel, n_gastos:gs.length, correlativo:nextCorr, _crear:()=>crearRendicion(gastosSel,{proyectoR:null, porTrabajo:false, fondoId:fondoSel})}] }
-    if(modoEf==='junto'){ const gs=gastosSel.map(e=>({...e,...proyPatch(e)})); const pt=porTrabajoUno; return [{...base, _gastos:gs, project:proyecto||(pt||trabajosSel.length===1?trabajosSel[0]:null)||null, por_trabajo:pt, periodo:periodoDe(gs), total:totalSel, n_gastos:gs.length, correlativo:nextCorr, _crear:()=>crearRendicion(gastosSel,{proyectoR:proyecto||(pt?trabajosSel[0]:null), porTrabajo:pt})}] }
+    if(enFondo){ const gs=gastosSel.map(e=>({...e,...proyPatch(e),reembolso_fondo_id:fondoSel})); const pf=proyFondo||(trabajosSel.length===1?trabajosSel[0]:null)||null; return [{...base, _gastos:gs, project:pf, por_trabajo:false, periodo:periodoDe(gs), total:totalSel, n_gastos:gs.length, correlativo:nextCorr, _crear:()=>crearRendicion(gastosSel,{proyectoR:null, porTrabajo:false, fondoId:fondoSel, proyFila:pf})}] }
+    if(modoEf==='junto'){ const gs=gastosSel.map(e=>({...e,...proyPatch(e)})); const pt=porTrabajoUno; const pj=proyecto||(pt||trabajosSel.length===1?trabajosSel[0]:null)||null; return [{...base, _gastos:gs, project:pj, por_trabajo:pt, periodo:periodoDe(gs), total:totalSel, n_gastos:gs.length, correlativo:nextCorr, _crear:()=>crearRendicion(gastosSel,{proyectoR:proyecto||(pt?trabajosSel[0]:null), porTrabajo:pt, proyFila:pj})}] }
     return porT.map((o,i)=>{ const gs=o.gs.map(e=>({...e,...proyPatchT(e,o.t)})); return {...base, _gastos:gs, project:o.t, por_trabajo:true, periodo:periodoDe(gs), total:o.tg, n_gastos:gs.length, correlativo:nextCorr+i, _crear:()=>crearRendicion(o.gs,{proyectoR:o.t, porTrabajo:true})} })
   }
   // «Una por proyecto en un correo» (sep1): el grupo queda en rendiciones.correo para que Borradores y el envío conjunto las manden en un solo correo.
@@ -17023,7 +17024,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   // a nombre de quien la armaba, para no perder el trabajo. Ir al correo o guardar/registrar no cuenta como salir.
   const _salida = useRef(false)
   const _autoBorr = useRef(null)
-  _autoBorr.current = (!esEdicion && gastosSel.length>0 && !faltaProyR && !saving) ? async()=>{
+  _autoBorr.current = (!esEdicion && gastosSel.length>0 && !faltaProyR && !saving && !(!enFondo&&multiT&&modo!=='junto'&&!puedeSeparar)) ? async()=>{
     try{ const vs=virtuales(); const hechas=[]; for(const v of vs) hechas.push(await v._crear())
       await agruparSep1(hechas)
       try{ localStorage.removeItem(wipKey) }catch(_){}
@@ -17075,10 +17076,12 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       const toRemove = (expenses||[]).filter(e=>prevIds.has(String(e.id)) && !selIds.has(String(e.id)))
       const otNums = [...new Set(gastosSel.map(e=>e.ot_number).filter(Boolean))].join(', ')
       const patch = {total:totalSel, n_gastos:gastosSel.length, entity_id:selEnt||null, project:proyecto||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, ot_numbers:otNums||null}
+      // El texto del correo guardado nombra el saldo y lo rendido de antes: se borra para que se vuelva a armar con las cifras nuevas (los destinatarios quedan).
+      if(!editRend.sent_at&&(editRend.correo?.cuerpo||editRend.correo?.asunto)){ const {asunto:_a,cuerpo:_c,...resto}=editRend.correo; patch.correo={...resto, texto_borrado_at:now} }
       const {error:re} = await supabase.from('rendiciones').update(patch).eq('id',editRend.id)
       if(re) throw new Error('No se pudo actualizar la rendición: '+re.message)
       const _lig = editRend.fondo_id ? {reembolso_fondo_id:editRend.fondo_id} : {}
-      logActividad(editRend.sent_at?'rendicion.editada':'rendicion.borrador_editado',{tabla:'rendiciones',id:editRend.id,detalle:{cliente:client.name,title:editRend.sent_at?`Rendición N° ${editRend.correlativo||'—'} editada`:'Borrador de rendición editado',monto:Math.round(totalSel),antes:{total:editRend.total,n_gastos:editRend.n_gastos},despues:{total:totalSel,n_gastos:gastosSel.length},agregados:toAdd.map(e=>({id:e.id,concepto:e.concept,monto:e.amount})),quitados:toRemove.map(e=>({id:e.id,concepto:e.concept,monto:e.amount}))}})
+      logActividad(editRend.sent_at?'rendicion.editada':'rendicion.borrador_editado',{tabla:'rendiciones',id:editRend.id,detalle:{cliente:client.name,title:editRend.sent_at?`Rendición N° ${editRend.correlativo||'—'} editada`:'Borrador de rendición editado',monto:Math.round(totalSel),antes:{total:editRend.total,n_gastos:editRend.n_gastos},despues:{total:totalSel,n_gastos:gastosSel.length},agregados:toAdd.map(e=>({id:e.id,concepto:e.concept,monto:e.amount})),quitados:toRemove.map(e=>({id:e.id,concepto:e.concept,monto:e.amount}))},completo:true})
       for(const e of toAdd){ await supabase.from('expenses').update({client_rendered_at:now, client_render_id:editRend.id, ...proyPatch(e), ..._lig}).eq('id',e.id) }
       for(const e of toRemove){ await supabase.from('expenses').update({client_rendered_at:null, client_render_id:null}).eq('id',e.id) }
       // Ajustar el cobro de reembolso vinculado (si existe y no está anulado) al nuevo total
@@ -17218,7 +17221,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:6,marginBottom:12}}>
         <div style={{...SEC_LBL,padding:'4px 6px 6px'}}>Fondos entregados</div>
         {fondosRS.map((x,i)=>{ const on=String(x.f.id)===String(fondoSel), np=pendFondo(x).length
-          return <div key={x.f.id} onClick={()=>!on&&elegirFondo(x)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderTop:i&&!on?`1px solid ${C.track}`:'1px solid transparent',background:on?C.azulBg:'transparent',borderRadius:8,cursor:on?'default':'pointer'}}>
+          return <div key={x.f.id} onClick={()=>!on&&!esEdicion&&elegirFondo(x)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderTop:i&&!on?`1px solid ${C.track}`:'1px solid transparent',background:on?C.azulBg:'transparent',borderRadius:8,cursor:on?'default':'pointer'}}>
             <span style={{width:15,height:15,borderRadius:'50%',border:on?`5px solid ${C.accent}`:`1.5px solid ${C.done}`,flexShrink:0,boxSizing:'border-box'}}/>
             <span style={{flex:1,minWidth:0}}>
               {x.f.project
@@ -17254,7 +17257,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const chipsG = e => { const k=keyP(e), opts=[...new Set([...(k?[k]:[]),...proyectosDisp])], dF=repF.deGasto[e.id]||''
     return (<>
       {(opts.length>0)&&<select value={k} onClick={_stop} onChange={ev=>{ _stop(ev); asignarProyGasto(e,ev.target.value) }} title='Proyecto del gasto' style={chipSty(!k)}>{!k&&<option value=''>Sin proyecto</option>}{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>}
-      {fondosRS.length>=2&&<select value={dF} onClick={_stop} onChange={ev=>{ _stop(ev); moverAFondo(e,ev.target.value||null) }} title='Fondo que cubre el gasto' style={chipSty(!dF)}>{!dF&&<option value=''>Sin fondo</option>}{fondosRS.map(x=><option key={x.f.id} value={x.f.id}>{`Fondo ${fmtFechaDMY(x.f.date)} · ${fmtN(x.f.amount)}`}</option>)}</select>}
+      {fondosRS.length>=2&&<select value={dF} onClick={_stop} onChange={ev=>{ _stop(ev); const v=ev.target.value; moverAFondo(e,v&&v!=='__auto'?v:null) }} title='Fondo que cubre el gasto' style={chipSty(!dF)}>{!dF?<option value=''>Sin fondo</option>:e.reembolso_fondo_id?<option value='__auto'>Reparto automático</option>:null}{fondosRS.map(x=><option key={x.f.id} value={x.f.id}>{`Fondo ${fmtFechaDMY(x.f.date)} · ${fmtN(x.f.amount)}`}</option>)}</select>}
     </>) }
   // Lista agrupada por proyecto cuando se ven varios (Todos o varios marcados); «Sin proyecto» al final.
   const gruposL = (()=>{ if(enFondo||proyecto) return null; const m=new Map(); disponibles.forEach(e=>{ const k=keyP(e); if(!m.has(k)) m.set(k,[]); m.get(k).push(e) })
@@ -17304,13 +17307,13 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles{isDesktop&&nDupR>0&&<b style={{color:C.overdueText,fontWeight:700}}> · {nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</b>}</span>
-          <button onClick={()=>setShowFiltroFecha(v=>!v)} style={{fontSize:10,color:(fDesde||fHasta)?C.accent:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Filtrar por fecha{(fDesde||fHasta)?' ·':''} {showFiltroFecha?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>
+          {!enFondo&&<button onClick={()=>setShowFiltroFecha(v=>!v)} style={{fontSize:10,color:(fDesde||fHasta)?C.accent:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Filtrar por fecha{(fDesde||fHasta)?' ·':''} {showFiltroFecha?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>}
         </div>
         {disponibles.length>0&&<button onClick={toggleAll} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>
           {disponibles.length&&gastosSel.length===disponibles.length?'Desmarcar todo':'Seleccionar todo'}
         </button>}
       </div>
-      {showFiltroFecha&&<div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+      {showFiltroFecha&&!enFondo&&<div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
         <input type='date' value={fDesde} onChange={e=>setFDesde(e.target.value)} style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
         <span style={{fontSize:11,color:C.muted}}>→</span>
         <input type='date' value={fHasta} onChange={e=>setFHasta(e.target.value)} style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
@@ -19526,7 +19529,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       if(pdf&&!r.pdf_html) patch.pdf_html=pdf
       const {error:re}=await supabase.from('rendiciones').update(patch).eq('id',r.id)
       if(re) throw re
-      logActividad('rendicion.anulada',{tabla:'rendiciones',id:r.id,detalle:{cliente:(clients||[]).find(c=>c.id===r.client_id)?.name,title:r.sent_at?`Rendición${r.correlativo?` N° ${r.correlativo}`:''} anulada`:'Borrador de rendición anulado',monto:Math.round(r.total||0),por:patch.anulada_por,gastos:(expenses||[]).filter(e=>e.client_render_id===r.id).map(e=>e.id)}})
+      logActividad('rendicion.anulada',{tabla:'rendiciones',id:r.id,detalle:{cliente:(clients||[]).find(c=>c.id===r.client_id)?.name,title:r.sent_at?`Rendición${r.correlativo?` N° ${r.correlativo}`:''} anulada`:'Borrador de rendición anulado',monto:Math.round(r.total||0),por:patch.anulada_por,gastos:(expenses||[]).filter(e=>e.client_render_id===r.id).map(e=>e.id)},completo:true})
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,...patch}:x))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
       if(reembolsos.length&&setBilling){ setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); appAlert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
@@ -19540,12 +19543,14 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     try {
       const cl=(clients||[]).find(c=>c.id===r.client_id)
       const {pdf_html:_p,...fila}=r
-      await logActividad('rendicion.borrador_eliminado',{tabla:'rendiciones',id:r.id,detalle:{cliente:cl?.name,title:'Borrador de rendición eliminado',monto:Math.round(r.total||0),fila,gastos:gs.map(e=>({id:e.id,concepto:e.concept,monto:e.amount}))}})
-      const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
-      if(ue) throw ue
-      const reembolsos=await anularReembolsoDeRendicion(r, billing)
-      const {error:de}=await supabase.from('rendiciones').delete().eq('id',r.id).is('sent_at',null)
+      await logActividad('rendicion.borrador_eliminado',{tabla:'rendiciones',id:r.id,detalle:{cliente:cl?.name,title:'Borrador de rendición eliminado',monto:Math.round(r.total||0),fila,gastos:gs.map(e=>({id:e.id,concepto:e.concept,monto:e.amount}))},completo:true})
+      // Primero la fila, y solo si sigue sin enviar: si alguien la envió entretanto, no se toca nada.
+      const {data:del,error:de}=await supabase.from('rendiciones').delete().eq('id',r.id).is('sent_at',null).select('id')
       if(de) throw de
+      if(!DEMO&&!(del||[]).length) throw new Error('el borrador ya no está disponible (pudo haberse enviado). Recarga la página.')
+      const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
+      if(ue) throw new Error('el borrador se eliminó, pero sus gastos no se liberaron: '+ue.message)
+      const reembolsos=await anularReembolsoDeRendicion(r, billing)
       if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
       if(reembolsos.length&&setBilling) setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b))
@@ -20744,7 +20749,7 @@ function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], exp
   // Abrir el correo de un borrador: si se guardó junto con otras (separadas en un correo), vuelven todas.
   const abrirCorreo = r => { const gr=r.correo?.modo==='sep1'?(r.correo.grupo||[]):[]
     // Mismo orden en que se guardó (el texto del borrador nombra N° 1, N° 2… en ese orden), se abra desde la fila que se abra.
-    const grupo=gr.map(id=>id===r.id?r:(rendiciones||[]).find(x=>x.id===id&&!x.sent_at&&!x.anulada_at)).filter(Boolean)
+    const grupo=gr.map(id=>id===r.id?r:(rendiciones||[]).find(x=>x.id===id&&!x.sent_at&&!x.anulada_at&&x.correo?.modo==='sep1'&&(x.correo.grupo||[]).includes(r.id))).filter(Boolean)
     onEnviarRend&&onEnviarRend(grupo.length>1?{...grupo[0],_hermanas:grupo.slice(1)}:r) }
   const envRows = verLista ? (verEnv?enviadas:borrItems).filter(x=>(abgDef==='Todos'||x.abg===abgDef)&&(!q.trim()||nrm(x.c.name).includes(nrm(q.trim())))) : []
   const segTxt = x => x.r.estado_envio==='externa' ? {t:'rendida por fuera',c:C.textSoft} : x.st ? (x.st.k==='rec' ? {t:`depósito ${fmtFechaDMY(String(x.req.recibido_at||x.st.dep?.date||'').slice(0,10))}`,c:C.greenText} : {t:`pedido · ${x.st.dias} d`,c:x.st.k==='sin'?C.overdueText:C.soonText}) : {t:'—',c:C.textSoft}
@@ -20799,7 +20804,7 @@ function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], exp
   // Envío conjunto: cada rendición (o grupo «separadas en un correo») con su N° tentativo y lo que pide; el N° real se fija al enviar.
   const colaEnvio = (()=>{ if(!verBorr) return []; const vistos=new Set(), cuenta={}, out=[]
     selArm.forEach(x=>{ if(vistos.has(x.r.id)) return
-      const gr=x.r.correo?.modo==='sep1'?(x.r.correo.grupo||[]).map(id=>(rendiciones||[]).find(y=>y.id===id&&!y.sent_at&&!y.anulada_at)).filter(Boolean):[]
+      const gr=x.r.correo?.modo==='sep1'?(x.r.correo.grupo||[]).map(id=>id===x.r.id?x.r:(rendiciones||[]).find(y=>y.id===id&&!y.sent_at&&!y.anulada_at&&!vistos.has(y.id)&&!excl.has(y.id)&&y.correo?.modo==='sep1'&&(y.correo.grupo||[]).includes(x.r.id))).filter(Boolean):[]
       const grupo=gr.length>1?gr:[x.r]; grupo.forEach(y=>vistos.add(y.id))
       const cid=String(x.c.id); const base=corrSiguiente(rendiciones,x.c.id)+(cuenta[cid]||0); cuenta[cid]=(cuenta[cid]||0)+grupo.length
       const filasG=grupo.map((y,i)=>({r:y, corr:base+i, pide:confEnv?Math.max(0,-fondoDeRend(y,expenses,clientEntities).saldo):0}))   // el fondo se calcula solo al confirmar
@@ -26769,7 +26774,9 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   // Varias rendiciones en un mismo correo (separadas por trabajo): r es la primera y r._hermanas las demás.
   const _todas = [r, ...((r&&r._hermanas)||[])]
   const _multi = _todas.length>1
-  const _borr = (r?.correo&&(r.correo.asunto||r.correo.cuerpo))?r.correo:null   // borrador guardado: se retoma tal cual quedó (el que solo agrupa no trae texto)
+  const _borr = (r?.correo&&(r.correo.asunto||r.correo.cuerpo||r.correo.para))?r.correo:null   // borrador guardado: se retoma (el que solo agrupa no trae nada)
+  // El texto (asunto/cuerpo) solo vale si es del mismo tipo de correo: si la hermana se eliminó, el texto que nombra dos rendiciones no sirve.
+  const _txt = _borr && ((_borr.modo==='sep1')===_multi) ? _borr : null
   const det = gastosDeRend(r, expenses).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
   const [attachSet,setAttachSet] = useState(new Set())   // gastos de esta rendición con comprobante de respaldo
   useEffect(()=>{ const ids=det.map(e=>e.id); if(!ids.length) return; let alive=true; supabase.from('expense_attachments').select('expense_id').in('expense_id',ids).then(({data})=>{ if(alive) setAttachSet(new Set((data||[]).map(x=>String(x.expense_id)))) },()=>{}); return ()=>{alive=false} },[r.id])
@@ -26835,7 +26842,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const ponerPara = em => { const e=String(em).toLowerCase(); if(para.trim()&&para.trim().toLowerCase()!==e) setCc(p=>[...new Set([...p,para.trim().toLowerCase()])].filter(x=>x!==e)); else setCc(p=>p.filter(x=>x!==e)); setPara(e) }
   const removeCc = em => setCc(prev=>prev.filter(x=>x!==em))
   const asuntoMulti = lang => lang==='en' ? `Expense Reports ${_todas.map(x=>`No. ${x.correlativo||'?'}`).join(' and ')} — ${client?.name||''}` : `Rendiciones de gastos ${_todas.map(x=>`N° ${x.correlativo||'?'}`).join(' y ')} — ${client?.name||''}`
-  const [asunto,setAsunto] = useState(_borr?.asunto || (_multi ? asuntoMulti('es') : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${r.project||client?.name||''}`))
+  const [asunto,setAsunto] = useState(_txt?.asunto || (_multi ? asuntoMulti('es') : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${r.project||client?.name||''}`))
   const [lang,setLang] = useState(_borr?.lang||r?._carry?.lang||'es')
   const [firma,setFirma] = useState(FIRMA_DEFAULTS[(user?.email||'').toLowerCase()] || {nombre:user?.name||'', cargo:'Abogado', telefono:''})
   const [showFirma,setShowFirma] = useState(false)
@@ -26923,14 +26930,14 @@ Quedamos atentos a cualquier consulta.
 
 Saludos cordiales,`
   }
-  const bodyTocadoR=useRef(!!_borr?.cuerpo); const learnedTplR=useRef({})
+  const bodyTocadoR=useRef(!!_txt?.cuerpo); const learnedTplR=useRef({})
   const _rendSign=()=> saldoCliente<0?'d':saldoCliente>0?'f':'0'   // la base se separa por signo del saldo: el cierre cambia (a cargo / a favor)
   const keyR=lg=>`${r.client_id}:${_rendSign()}:${lg}`
   // Tokeniza TODO lo variable (correlativo, proyecto, saldo, fondos, rendido) para reusar tu redacción SIN congelar cifras.
   const _rendPairs=(lg)=>[['{correlativo}', r.correlativo!=null?(lg==='en'?`No. ${r.correlativo}`:`N° ${r.correlativo}`):''],['{proyecto}', r.project||''],['{subproyecto}', r.subproject?` (${r.subproject})`:''],['{saldo}', fmtN(Math.abs(saldoCliente))],['{fondos}', fmtN(totFondosCli)],['{rendido}', fmtN(_rs.rendido)]]
   const _tokR=(t,lg)=>{ let s=String(t); for(const [tok,val] of _rendPairs(lg)){ if(val&&String(val).length>=2) s=s.split(val).join(tok) } return s }
   const _untokR=(t,lg)=>{ let s=String(t); for(const [tok,val] of _rendPairs(lg)){ s=s.split(tok).join(val) } return s }
-  const [body,setBody] = useState(()=>_borr?.cuerpo || cuerpoCorreo(_borr?.lang||'es'))
+  const [body,setBody] = useState(()=>_txt?.cuerpo || cuerpoCorreo(_borr?.lang||'es'))
   const aplicarBaseR=lg=>{ const tpl=_multi?null:learnedTplR.current[lg]; setBody(tpl?_untokR(tpl,lg):cuerpoCorreo(lg)) }
   useEffect(()=>{ setAsunto(asuntoFor(lang)); if(!bodyTocadoR.current) aplicarBaseR(lang) },[lang])
   const _tratoIni = useRef(true)
@@ -26999,7 +27006,8 @@ Saludos cordiales,`
       const ids = saved.map(x=>x.id)
       const {data:mx}=await supabase.from('rendiciones').select('correlativo').eq('client_id',r.client_id).not('id','in',`(${ids.join(',')})`).is('anulada_at',null).not('correlativo','is',null).order('correlativo',{ascending:false}).limit(1).maybeSingle()
       let libre=((mx&&mx.correlativo)||0)+1
-      const conNum = saved.map(x=>{ const c=(x.correlativo&&x.correlativo>=libre)?x.correlativo:libre; libre=c+1; return {...x, correlativo:c} })
+      const conNum = saved.map(x=>{ if(x.sent_at&&x.correlativo) return x   // reenvío: el cliente ya tiene ese N°, no se renumera
+        const c=(x.correlativo&&x.correlativo>=libre)?x.correlativo:libre; libre=c+1; return {...x, correlativo:c} })
       const nombrePdf = x => `${lang==='en'?'Expense Report':'Rendicion'}${conNum.length>1?` ${x.correlativo}`:''} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${x.project||''}`.trim()+'.pdf'
       const armarAdjuntos = async()=>{ const out=[]; for(const x of conNum){ out.push({base64:await rendicionPdfBase64(x, client, expenses, clientEntities, user, attachSet, lang), name:nombrePdf(x), mime:'application/pdf'}) } return out }
       // Envío directo con PDF adjunto vía Gmail API (si el token tiene el scope gmail.send)
@@ -27388,7 +27396,7 @@ function ClientsView({onAsociarTrabajo,clients,sales,billing,setBilling,expenses
       if(pdf&&!r.pdf_html) patch.pdf_html=pdf
       const {error:re}=await supabase.from('rendiciones').update(patch).eq('id',r.id)
       if(re) throw re
-      logActividad('rendicion.anulada',{tabla:'rendiciones',id:r.id,detalle:{cliente:(clients||[]).find(c=>c.id===r.client_id)?.name,title:r.sent_at?`Rendición${r.correlativo?` N° ${r.correlativo}`:''} anulada`:'Borrador de rendición anulado',monto:Math.round(r.total||0),por:patch.anulada_por,gastos:(expenses||[]).filter(e=>e.client_render_id===r.id).map(e=>e.id)}})
+      logActividad('rendicion.anulada',{tabla:'rendiciones',id:r.id,detalle:{cliente:(clients||[]).find(c=>c.id===r.client_id)?.name,title:r.sent_at?`Rendición${r.correlativo?` N° ${r.correlativo}`:''} anulada`:'Borrador de rendición anulado',monto:Math.round(r.total||0),por:patch.anulada_por,gastos:(expenses||[]).filter(e=>e.client_render_id===r.id).map(e=>e.id)},completo:true})
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,...patch}:x))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
       if(reembolsos.length&&setBilling){ setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); appAlert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
@@ -37780,6 +37788,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   const comisionAutoOk = (m, cid) => { if(!pagaComisiones(cid)) return false
     const bs=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&String(b.client_id)===String(cid))
     if(bs.some(b=>b.billing_type==='comision'&&['Pendiente','Vencido'].includes(b.status)&&saldoFactura(b)>TOL)) return false
+    if(bs.some(b=>esFacIngreso(b)&&['Pendiente','Vencido'].includes(b.status)&&Math.abs(saldoFactura(b)-(Number(m.monto)||0))<=TOL)) return false   // calza con una factura abierta: va a conciliar
     const sub=bs.filter(b=>b.billing_type==='subarriendo').map(b=>Number(b.amount)||0).filter(x=>x>0)
     return !sub.length || (Number(m.monto)||0) < Math.min(...sub) }
   const comisionPorFacturar = async(mov, {clientId, socio=null, origen=null, auto=false}={})=>{
@@ -37797,7 +37806,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
       if(DEMO){ fac={...row,id:'demo-com-'+mov.id}; cr={id:'demo-cc-'+mov.id,movimiento_id:mov.id,tipo_destino:'factura',factura_id:fac.id,monto_aplicado:monto,origen:auto?'auto':'manual'} }
       else {
         const ins=await supabase.from('billing').insert(row).select().single(); if(ins.error) throw ins.error; fac=ins.data
-        const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id, tipo_destino:'factura', factura_id:fac.id, monto_aplicado:monto, origen:auto?'auto':'manual'}).select().single()
+        const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id, tipo_destino:'factura', factura_id:fac.id, monto_aplicado:monto, origen:auto?'auto':'manual', marco_pago:true}).select().single()
         if(ic.error){ await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',fac.id); throw ic.error } cr=ic.data; marcaQuien(cr.id)
         const movAplic=(mov.monto_conciliado||0)+monto, estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
         const {error:me}=await supabase.from('cartola_movimientos').update({estado, monto_conciliado:movAplic, cliente_id:mov.cliente_id||clientId}).eq('id',mov.id); if(me) throw me
@@ -37894,8 +37903,8 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
           // Comisión por facturar (creada desde este depósito, aún sin folio): al deshacer se da de baja; nunca queda un cobro sin depósito.
           if(fac&&fac.billing_type==='comision'&&!fac.invoice_no&&fac.status==='Anticipada'){ const now=new Date().toISOString()
             const {error:de}=await supabase.from('billing').update({deleted_at:now,updated_at:now}).eq('id',fac.id); if(de) throw de
-            setBilling&&setBilling(p=>p.filter(b=>b.id!==fac.id)); continue }
-          if(fac){ const now=new Date().toISOString()
+            setBilling&&setBilling(p=>p.filter(b=>b.id!==fac.id)) }
+          else if(fac){ const now=new Date().toISOString()
             let patch
             if(r.marco_pago){
               // esta fila fue la que marcó la factura como pagada → revertir a Pendiente
@@ -41719,40 +41728,59 @@ export default function App() {
       if((conc||[]).length>1||((conc||[])[0]&&Math.round(Number(conc[0].monto_aplicado))!==Math.round(Number(f.amount)))){ appAlert('Este fondo está conciliado en partes con el banco. Repártelo desde Banco.'); return false }
       const [p0,...rest]=partes, ahora=new Date().toISOString()
       const orig={amount:Math.round(Number(p0.monto)), project:p0.project.trim(), sale_id:sid(p0.project)}
-      if(!DEMO){ const {error}=await supabase.from('expenses').update(orig).eq('id',f.id); if(error) throw error }
-      const base={client_id:f.client_id, entity_id:f.entity_id||null, type:'fondo', concept:f.concept, category:f.category||'Fondo', date:f.date, created_by:f.created_by||user?.name||null, notas:f.notas||null, estudio_id:f.estudio_id||undefined, fondo_origen_id:f.id}
-      const nuevos=[]
-      for(const x of rest){ const row={...base, amount:Math.round(Number(x.monto)), project:x.project.trim(), sale_id:sid(x.project)}
-        if(DEMO){ nuevos.push({...row,id:'demo-f-'+Date.now()+nuevos.length,created_at:ahora}); continue }
-        const {data,error}=await supabase.from('expenses').insert(row).select().single(); if(error) throw error; nuevos.push(data)
-        if(conc&&conc[0]){ const c=conc[0]; const {error:e2}=await supabase.from('conciliacion').insert({movimiento_id:c.movimiento_id, tipo_destino:c.tipo_destino, gasto_id:data.id, monto_aplicado:row.amount, origen:c.origen, created_by:user?.name||null, ...(c.estudio_id?{estudio_id:c.estudio_id}:{})}); if(e2) throw e2 } }
-      if(!DEMO&&conc&&conc[0]){ const {error:e3}=await supabase.from('conciliacion').update({monto_aplicado:orig.amount}).eq('id',conc[0].id); if(e3) throw e3 }
+      // Cada parte hereda lo que define al fondo (factura en la que se reembolsó, histórico fuera del saldo, subproyecto).
+      const base={client_id:f.client_id, entity_id:f.entity_id||null, type:'fondo', concept:f.concept, category:f.category||'Fondo', date:f.date, created_by:f.created_by||user?.name||null, notas:f.notas||null, estudio_id:f.estudio_id||undefined, fondo_origen_id:f.id,
+        invoice_id:f.invoice_id||null, no_descuenta_saldo:!!f.no_descuenta_saldo, subproject:f.subproject||null}
+      const nuevos=[], concNuevas=[]
+      try{
+        for(const x of rest){ const row={...base, amount:Math.round(Number(x.monto)), project:x.project.trim(), sale_id:sid(x.project)}
+          if(DEMO){ nuevos.push({...row,id:'demo-f-'+Date.now()+nuevos.length,created_at:ahora}); continue }
+          const {data,error}=await supabase.from('expenses').insert(row).select().single(); if(error) throw error; nuevos.push(data)
+          if(conc&&conc[0]){ const c=conc[0]; const {data:cn,error:e2}=await supabase.from('conciliacion').insert({movimiento_id:c.movimiento_id, tipo_destino:c.tipo_destino, gasto_id:data.id, monto_aplicado:row.amount, origen:c.origen, created_by:user?.name||null, ...(c.estudio_id?{estudio_id:c.estudio_id}:{})}).select('id').single(); if(e2) throw e2; concNuevas.push(cn.id) } }
+        // Recién con todas las partes creadas se rebaja el original (y su parte de la conciliación).
+        if(!DEMO&&conc&&conc[0]){ const {error:e3}=await supabase.from('conciliacion').update({monto_aplicado:orig.amount}).eq('id',conc[0].id); if(e3) throw e3 }
+        if(!DEMO){ const {error}=await supabase.from('expenses').update(orig).eq('id',f.id); if(error) throw error }
+      }catch(e){
+        if(!DEMO){ if(concNuevas.length) await supabase.from('conciliacion').delete().in('id',concNuevas)
+          if(nuevos.length) await supabase.from('expenses').delete().in('id',nuevos.map(n=>n.id))
+          if(conc&&conc[0]) await supabase.from('conciliacion').update({monto_aplicado:conc[0].monto_aplicado}).eq('id',conc[0].id) }
+        throw e }
       setExpenses(p=>[...p.map(e=>e.id===f.id?{...e,...orig}:e),...nuevos])
-      logActividad('fondos.repartido',{tabla:'expenses',id:f.id,detalle:{cliente:(clients||[]).find(c=>c.id===f.client_id)?.name,title:`Fondo repartido en ${partes.length} proyectos`,monto:Math.round(Number(f.amount)),antes:{amount:f.amount,project:f.project||null,sale_id:f.sale_id||null},partes:partes.map(x=>({project:x.project,monto:Math.round(Number(x.monto))})),nuevos:nuevos.map(n=>n.id)}})
+      logActividad('fondos.repartido',{tabla:'expenses',id:f.id,detalle:{cliente:(clients||[]).find(c=>c.id===f.client_id)?.name,title:`Fondo repartido en ${partes.length} proyectos`,monto:Math.round(Number(f.amount)),antes:{amount:f.amount,project:f.project||null,sale_id:f.sale_id||null},partes:partes.map(x=>({project:x.project,monto:Math.round(Number(x.monto))})),nuevos:nuevos.map(n=>n.id)},completo:true})
       return true
-    }catch(e){ appAlert('No se pudo repartir el fondo: '+(e.message||e)+'\n\nRevisa el fondo en Gastos antes de reintentar.'); return false }
+    }catch(e){ appAlert('No se pudo repartir el fondo: '+(e.message||e)+'\n\nNo quedó nada a medias: el fondo sigue como estaba.'); return false }
   },[sales,clients,user])
   // Deshacer el reparto: el fondo original vuelve a su monto (suma de las partes), las partes se dan de baja (deleted_at) y lo ligado a ellas
   // (gastos y rendiciones de fondo, conciliación) vuelve al original.
   const handleUnirFondo=useCallback(async(orig)=>{
     const partes=(expenses||[]).filter(e=>String(e.fondo_origen_id)===String(orig.id)&&!e.deleted_at); if(!partes.length) return false
     const total=Math.round(Number(orig.amount)||0)+partes.reduce((a,e)=>a+Math.round(Number(e.amount)||0),0), ids=partes.map(e=>e.id), ahora=new Date().toISOString()
+    let patchO={amount:total}
     try{
       if(!DEMO){
-        const {data:cP}=await supabase.from('conciliacion').select('id').in('gasto_id',ids)
-        const {data:cO}=await supabase.from('conciliacion').select('id').eq('gasto_id',orig.id)
-        if((cP||[]).length){ const {error}=await supabase.from('conciliacion').delete().in('id',cP.map(c=>c.id)); if(error) throw error }
-        if((cO||[]).length===1){ const {error}=await supabase.from('conciliacion').update({monto_aplicado:total}).eq('id',cO[0].id); if(error) throw error }
-        let r=await supabase.from('expenses').update({amount:total}).eq('id',orig.id); if(r.error) throw r.error
+        const {data:cP}=await supabase.from('conciliacion').select('id,movimiento_id,monto_aplicado').in('gasto_id',ids)
+        const {data:cO}=await supabase.from('conciliacion').select('id,movimiento_id,monto_aplicado').eq('gasto_id',orig.id)
+        const todas=[...(cO||[]),...(cP||[])]
+        // Mismo depósito para todo (lo normal al repartir un fondo conciliado): una sola fila por el total. Si no, cada fila pasa al original.
+        if(todas.length&&todas.every(c=>String(c.movimiento_id)===String(todas[0].movimiento_id))){
+          const keep=todas[0], suma=todas.reduce((a,c)=>a+(Number(c.monto_aplicado)||0),0)
+          let q=await supabase.from('conciliacion').update({gasto_id:orig.id, monto_aplicado:suma}).eq('id',keep.id); if(q.error) throw q.error
+          const resto=todas.slice(1).map(c=>c.id); if(resto.length){ q=await supabase.from('conciliacion').delete().in('id',resto); if(q.error) throw q.error }
+        } else if((cP||[]).length){ const {error}=await supabase.from('conciliacion').update({gasto_id:orig.id}).in('id',cP.map(c=>c.id)); if(error) throw error }
+        // Proyecto y venta de antes del reparto (guardados en la bitácora al repartir).
+        let antes=null; try{ const {data:lg}=await supabase.from('activity_log').select('detail').eq('action','fondos.repartido').eq('record_id',orig.id).order('created_at',{ascending:false}).limit(1).maybeSingle(); antes=lg?.detail?JSON.parse(lg.detail).antes||null:null }catch(_){}
+        patchO={amount:total, ...(antes&&'project' in antes?{project:antes.project, sale_id:antes.sale_id||null}:{})}
+        let r=await supabase.from('expenses').update(patchO).eq('id',orig.id); if(r.error) throw r.error
         r=await supabase.from('expenses').update({deleted_at:ahora}).in('id',ids); if(r.error) throw r.error
         r=await supabase.from('expenses').update({reembolso_fondo_id:orig.id}).in('reembolso_fondo_id',ids); if(r.error) throw r.error
         r=await supabase.from('rendiciones').update({fondo_id:orig.id}).in('fondo_id',ids); if(r.error) throw r.error }
       const idS=new Set(ids.map(String))
-      setExpenses(p=>p.filter(e=>!idS.has(String(e.id))).map(e=>e.id===orig.id?{...e,amount:total}:idS.has(String(e.reembolso_fondo_id))?{...e,reembolso_fondo_id:orig.id}:e))
+      setExpenses(p=>p.filter(e=>!idS.has(String(e.id))).map(e=>e.id===orig.id?{...e,...patchO}:idS.has(String(e.reembolso_fondo_id))?{...e,reembolso_fondo_id:orig.id}:e))
+      setRendiciones(p=>(p||[]).map(x=>idS.has(String(x.fondo_id))?{...x,fondo_id:orig.id}:x))
       logActividad('fondos.reparto_deshecho',{tabla:'expenses',id:orig.id,detalle:{cliente:(clients||[]).find(c=>c.id===orig.client_id)?.name,title:'Reparto del fondo deshecho',monto:total,partes:partes.map(e=>({id:e.id,project:e.project,monto:e.amount}))}})
       return true
     }catch(e){ appAlert('No se pudo deshacer el reparto: '+(e.message||e)); return false }
-  },[expenses,clients])
+  },[expenses,clients,setRendiciones])
   const handleSaveExpense=useCallback(async(f,opts={})=>{
     setSaving(true)
     try{

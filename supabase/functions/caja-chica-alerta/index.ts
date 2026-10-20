@@ -88,7 +88,7 @@ serve(async (req) => {
         const asunto = nuevas.length === 1 ? `Caja chica ${nuevas[0].tipo === "negativo" ? "en negativo" : "baja"} · ${nuevas[0].persona} ${nuevas[0].tipo === "negativo" ? "-" : ""}${clp(nuevas[0].saldo)}` : `Caja chica: ${nuevas.length} avisos`;
         try {
           const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-          await client.send({ from: `${toAscii(nombreEstudio)} <${GMAIL_USER}>`, to: correoA.join(", "), subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
+          await client.send({ from: `${toAscii(nombreEstudio)} <${GMAIL_USER}>`, to: correoA, subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
           await client.close();
           enviado = true;
           for (const r of inserted) await sb.from("caja_chica_alertas").update({ correo_enviado_a: correoA, correo_enviado_at: now }).eq("id", r.id);
