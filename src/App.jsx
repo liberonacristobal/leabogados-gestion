@@ -9509,7 +9509,7 @@ function BandejaView({isDesktop, onBack, origen, clients=[], user, onOpenClientF
     {rows&&<>
       <div style={{...card,padding:isDesktop?'14px 18px':'12px 14px',marginBottom:12}}>
         <div style={{...SEC_LBL}}>Correos de la oficina revisados · 30 días</div>
-        <div style={{display:'flex',alignItems:'baseline',gap:8}}><span style={{fontSize:isDesktop?28:24,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{lista.length}</span><span style={{fontSize:12,color:C.textSoft}}>cada 15 minutos</span></div>
+        <div style={{display:'flex',alignItems:'baseline',gap:8}}><span style={{fontSize:isDesktop?28:24,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{lista.length}</span><span style={{fontSize:12,color:C.textSoft}}>cada hora</span></div>
         <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,marginTop:10}}>
           {partes.map(([t,v,c,bg])=><div key={t} style={{background:bg,borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}><span style={{fontSize:11.5,fontWeight:600,color:c,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</span><span style={{fontSize:15,fontWeight:800,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>)}
         </div>

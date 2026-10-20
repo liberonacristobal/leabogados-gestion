@@ -21,7 +21,7 @@ Código: [Codigo.gs](agente-correo-script/Codigo.gs) y [appsscript.json](agente-
 3. Editor → `appsscript.json`: reemplazar todo por el contenido de `appsscript.json`. `Código.gs`: reemplazar todo por `Codigo.gs`. Guardar.
 4. Elegir la función `revisarCorreos` → **Ejecutar** → Google pide autorización: revisar que diga solo «Ver tus mensajes de correo» → Permitir.
    El registro debe mostrar `200 {"ok":true,...}` y «N correos revisados».
-5. Elegir `crearTrigger` → **Ejecutar** una vez. Queda revisando cada 15 minutos.
+5. Elegir `crearTrigger` → **Ejecutar** una vez. Queda revisando cada hora.
 6. Para una primera vuelta sin guardar nada: `PRUEBA: true`, ejecutar, revisar el registro, volver a `false`.
 
 ## Probar sin guardar
@@ -39,5 +39,5 @@ select net.http_post(url:='https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1
 - Nunca registra dos veces: cada correo una vez (`gmail_id` único); una solicitud de fondos ya existe si coincide cliente,
   monto y asunto; un depósito ya conciliado deja el correo en «Ya registrados».
 - Un correo que pide transferir a otra cuenta, o que trae una cuenta distinta de la conocida, va a «Sospechosos».
-- «En espera» (comprobante sin depósito en la cartola): cada corrida lo vuelve a cruzar con la cartola nueva.
+- «En espera» (comprobante sin depósito en la cartola): el proceso `agente-segunda-revision` (lunes a viernes 09:00 y 19:00, después de la cartola diaria de las 08:00 y de las cargas manuales de la tarde) lo vuelve a cruzar con la cartola; queda en Oficina › Procesos automáticos.
 - La página cierra sola lo resuelto por otra vía: depósito conciliado en Banco, liquidación cargada en Notaría.

@@ -59,8 +59,8 @@ function revisarCorreos() {
   Logger.log(lote.length + ' correos revisados');
 }
 
-// Correr UNA vez: deja el script revisando la casilla cada 15 minutos.
+// Correr UNA vez: deja el script revisando la casilla cada hora.
 function crearTrigger() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'revisarCorreos').forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('revisarCorreos').timeBased().everyMinutes(15).create();
+  ScriptApp.newTrigger('revisarCorreos').timeBased().everyHours(1).create();
 }
