@@ -14998,6 +14998,34 @@ const _diasEntre = (a,b) => { const x=String(a||'').slice(0,10), y=String(b||'')
 // ── PROVEEDORES (página, tab 'proveedores'): SOLO a quienes les pagas comisión o que te pagan comisiones. El subarriendo y los servicios
 // de oficina no van aquí. Lenguaje aprobado (2026-10-14): Comisiones · Pagada · Por pagar (el cliente ya pagó) · Sujeto a cobro (el cliente aún no paga) · Anticipo · Comisiones por cobrar (lo que te pagan). Las comisiones se
 // siguen POR TRABAJO (la venta; o "Facturas a {cliente}" cuando no hay venta) y POR CUOTA: vence · cliente pagó (fecha del banco) · le pagaste.
+// CUADRE DE COMISIONES (fuente única: Mis comisiones y ficha del proveedor). Solo descalces RELEVANTES: |dif| > máx($10.000, 2% de lo que
+// corresponde) — los redondeos y las diferencias por el valor de la UF de cada cuota no se muestran. Tres revisiones:
+//  · base: líquido de sus comisiones (pagadas + por pagar) vs el % pactado de lo que pagó el cliente (facturas pagadas + anticipos sin factura);
+//  · banco: lo transferido (conciliación 'tercero' del movimiento) vs el líquido de las comisiones que ese pago saldó (p. ej. se pagó el bruto);
+//  · sin comisión: factura emitida de una venta con comisión % que no tiene su comisión registrada.
+const CUADRE_UMBRAL = corr => Math.max(10000, Math.abs(corr||0)*0.02)
+function cuadreComisiones({ts=[], billing=[], anticipos=[], concs=[], sales=[]}){
+  const byId=new Map((billing||[]).map(b=>[String(b.id),b])), items=[], ok=[]
+  const vivas=(ts||[]).filter(t=>{ if(!t.billing_id) return true; const b=byId.get(String(t.billing_id)); return !!b&&b.status!=='Anulada'&&!b.deleted_at })
+  const porVenta={}; vivas.forEach(t=>{ const sid=String(t.sale_id||byId.get(String(t.billing_id))?.sale_id||''); if(sid) (porVenta[sid]=porVenta[sid]||[]).push(t) })
+  Object.entries(porVenta).forEach(([sid,tv])=>{ const sale=(sales||[]).find(x=>String(x.id)===sid); const pct=tv.map(t=>t.tipo_costo==='pct'?Number(t.valor)||0:0).find(v=>v>0)
+    if(!pct||!sale) return
+    const bs=(billing||[]).filter(b=>String(b.sale_id)===sid&&!b.deleted_at&&b.status!=='Anulada'&&!['reembolso','nota_credito'].includes(b.billing_type))
+    const cobrado=bs.filter(b=>b.status==='Pagado'&&b.invoice_no).reduce((a,b)=>a+montoFactura(b),0)+(anticipos||[]).filter(a=>String(a.sale_id)===sid&&!a.billing_id).reduce((a,x)=>a+(Number(x.monto)||0),0)
+    const corr=Math.round(cobrado*pct/100)
+    const reg=tv.filter(t=>t.estado==='pagado'||t.estado==='por_pagar'||['Pagado','Anticipada'].includes(byId.get(String(t.billing_id))?.status)).reduce((a,t)=>a+pagarT(t),0)
+    const dif=reg-corr, base={sid, sale, cobrado, corr, reg, pct}
+    if(cobrado>0&&Math.abs(dif)>CUADRE_UMBRAL(corr)) items.push({k:'base:'+sid, tipo:'base', sid, sale, monto:dif, cobrado, corr, reg, pct}); else if(cobrado>0) ok.push(base)
+    // Factura emitida sin su comisión (ni por la factura ni por una cuota de la venta).
+    bs.filter(b=>b.invoice_no&&!vivas.some(t=>String(t.billing_id)===String(b.id))&&['Pendiente','Vencido','Pagado'].includes(b.status)&&String(b.issued_at||'')>='2026-06-06').forEach(b=>items.push({k:'sincom:'+b.id, tipo:'sincom', sid, sale, b, monto:null, pct}))
+  })
+  // Banco: cada transferencia que pagó comisiones, contra el líquido de esas comisiones.
+  const movs=[...new Set(vivas.map(t=>t.movimiento_id).filter(Boolean).map(String))]
+  movs.forEach(mid=>{ const aplic=(concs||[]).filter(c=>String(c.movimiento_id)===mid&&c.tipo_destino==='tercero').reduce((a,c)=>a+(Number(c.monto_aplicado)||0),0); if(!aplic) return
+    const tm=vivas.filter(t=>String(t.movimiento_id)===mid), liq=tm.reduce((a,t)=>a+pagarT(t),0), dif=aplic-liq
+    if(Math.abs(dif)>CUADRE_UMBRAL(liq)) items.push({k:'mov:'+mid, tipo:'banco', mid, ts:tm, aplic, liq, monto:dif, sid:String(tm[0]?.sale_id||''), sale:(sales||[]).find(x=>String(x.id)===String(tm[0]?.sale_id))}) })
+  return {items, ok}
+}
 // Correo de la boleta de honorarios a la oficina (miembro del equipo con comisiones): sale desde su cuenta, con la boleta adjunta,
 // el detalle de lo que cobra, bruto/retención/líquido y sus datos de pago DENTRO del recuadro. Va a los administradores (miembros).
 // Mismo formato de marca que los demás correos de la app (franja con logo, recuadro de datos, firma).
@@ -15109,6 +15137,12 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const [selEnl,setSelEnl] = useState(null)
   const [bol,setBol] = useState(null)                      // página Registrar boleta/factura: {ids:Set, numero, fecha, monto}
   const [bolMail,setBolMail] = useState(null)              // ro: boleta recién guardada → página del correo a la oficina
+  // Cuadre: respuestas del miembro («Está bien / No es así») y causas que anota un socio (learnings cuadre_resp / cuadre_nota).
+  const [cuadreResp,setCuadreResp] = useState({}), [cuadreNota,setCuadreNota] = useState({}), [concsRo,setConcsRo] = useState([])
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('kind,key,value').in('kind',['cuadre_resp','cuadre_nota']).then(({data})=>{ const r={}, n={}; (data||[]).forEach(x=>{ try{ (x.kind==='cuadre_resp'?r:n)[x.key]=JSON.parse(x.value) }catch(_){} }); setCuadreResp(r); setCuadreNota(n) },()=>{}) },[])
+  // En «Mis comisiones» no se carga el banco: solo la conciliación de las transferencias que pagaron SUS comisiones (para el cuadre).
+  useEffect(()=>{ if(DEMO||!ro) return; const ids=[...new Set((terceros||[]).filter(t=>String(t.proveedor_id)===String(soloProvId)&&t.movimiento_id).map(t=>String(t.movimiento_id)))]; if(!ids.length) return
+    supabase.from('conciliacion').select('movimiento_id,tipo_destino,monto_aplicado').in('movimiento_id',ids).then(({data})=>setConcsRo(data||[]),()=>{}) },[ro,soloProvId,terceros])
   const [leyendoBol,setLeyendoBol] = useState(false)       // lectura del PDF de la boleta con IA (N°, fecha, bruto)
   const [enlP,setEnlP] = useState(null)                    // enlace a mano abierto: {mid} un pago · {tid} una comisión pagada · {did} una factura del SII
   const [enlSel,setEnlSel] = useState(()=>new Set())
@@ -15681,6 +15715,38 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       {tile('cob','Sujeto a cobro',alCobroTot,`${tCob.length} factura${tCob.length!==1?'s':''} sin cobrar`,'por_devengar')}
     </div>
     // Quien emite boleta: costo pagado del año separado en retención (F29) y líquido (transferido).
+    const cuadreCard = (()=>{ const {items,ok}=cuadreComisiones({ts, billing, anticipos, concs:ro?concsRo:concs, sales}); if(!items.length&&!ok.length) return null
+      const keyR=k=>`${sel.id}:${k}`, cliN=sid=>{ const sv=(sales||[]).find(x=>String(x.id)===String(sid)); return clients.find(c=>String(c.id)===String(sv?.client_id))?.name||'Sin cliente' }
+      const pend=items.filter(x=>!cuadreResp[keyR(x.k)])
+      const responder=async(x,r)=>{ let nota=''; if(r==='no'){ const v=await appPrompt('¿Qué no cuadra? (lo verá la oficina)',''); if(v===null) return; nota=String(v||'').trim() }
+        const val={r,nota:nota||null,at:new Date().toISOString(),por:user?.name||null}; setCuadreResp(p=>({...p,[keyR(x.k)]:val}))
+        if(!DEMO) setLearningKV('cuadre_resp',keyR(x.k),JSON.stringify(val)).catch(()=>{})
+        logActividad(`proveedores.${sel.id}.cuadre`,{tabla:'terceros_pagos',id:x.ts?.[0]?.id||null,detalle:{title:`Cuadre · ${r==='ok'?'está bien':'no es así'}${nota?': '+nota:''}`,monto:x.monto||null}}) }
+      const anotar=async x=>{ const v=await appPrompt('Causa de la diferencia (la verá el proveedor)', cuadreNota[x.k]?.txt||''); if(v===null) return; const val={txt:String(v||'').trim()}; setCuadreNota(p=>({...p,[x.k]:val})); if(!DEMO) setLearningKV('cuadre_nota',x.k,JSON.stringify(val)).catch(()=>{}) }
+      const txtDe=x=> x.tipo==='banco' ? {t:`Transferencia del ${dmy(csAll.find(m=>String(m.id)===String(x.mid))?.fecha||x.ts?.[0]?.pagado_at)}`, s:`Se transfirieron ${fmt(x.aplic)} por ${x.ts.map(t=>bheDe(t)?`la boleta N° ${bheDe(t).folio}`:'una comisión').join(' y ')}, cuyo líquido era ${fmt(x.liq)}.`}
+        : x.tipo==='base' ? {t:`${x.monto>0?'Recibido de más':'Por recibir'} sobre lo que pagó el cliente`, s:`El cliente pagó ${fmt(x.cobrado)}; el ${x.pct}% es ${fmt(x.corr)} y tus comisiones suman ${fmt(x.reg)} líquido.`}
+        : {t:`Factura N° ${folioN(x.b.invoice_no)} sin comisión registrada`, s:`${glosaFactura(x.b)} · ${fmt(montoFactura(x.b))}. ¿Cambió lo acordado o falta registrar la comisión?`}
+      const btn=(l,on)=><span onClick={on} className='pv-c' style={{fontSize:11.5,fontWeight:700,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{l}</span>
+      const porCli={}; items.forEach(x=>{ const k=String(x.sid||'x'); (porCli[k]=porCli[k]||[]).push(x) })
+      const okCli=[...new Set(ok.filter(o=>!items.some(x=>x.sid===o.sid)).map(o=>cliN(o.sid)))]
+      const totMas=items.filter(x=>x.monto>0).reduce((a,x)=>a+x.monto,0)
+      return <div style={{...card,overflow:'hidden'}}>
+        {band(ro?'Cuadre de tus comisiones':'Cuadre de comisiones', pend.length?<span style={{fontSize:10.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap'}}>{pend.length} por confirmar</span>:items.length?<span style={{fontSize:10.5,fontWeight:700,color:C.greenText}}>respondido</span>:null)}
+        {items.length===0&&<div style={{padding:'10px 14px',fontSize:12.5,color:C.greenText,fontWeight:600}}>Todo cuadra con lo que pagó cada cliente.</div>}
+        {Object.entries(porCli).map(([sid,xs])=><div key={sid} style={{borderTop:`1px solid ${C.bgSoft}`}}>
+          <div style={{padding:'9px 14px 2px',fontSize:13,fontWeight:700,color:C.accent}}>{cliN(sid)}{xs[0]?.sale?.title?<span style={{fontWeight:500,color:C.muted}}> · {xs[0].sale.title}</span>:null}</div>
+          {xs.map(x=>{ const t=txtDe(x), r=cuadreResp[keyR(x.k)], n=cuadreNota[x.k]
+            return <div key={x.k} style={{display:'flex',alignItems:isDesktop?'center':'flex-start',gap:10,padding:'7px 14px 9px',flexWrap:isDesktop?'nowrap':'wrap'}}>
+              <div style={{flex:1,minWidth:isDesktop?0:'100%'}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{t.t}</div><div style={{fontSize:11,color:C.muted,lineHeight:1.45}}>{t.s}{n?.txt?<> <b style={{color:C.text}}>{n.txt}</b></>:null}</div>
+                {r&&<div style={{fontSize:11,fontWeight:600,color:r.r==='ok'?C.greenText:C.soonText,marginTop:2}}>{r.por||'Respondió'}: {r.r==='ok'?'está bien':'no es así'}{r.nota?` · ${r.nota}`:''} · {dmy(r.at)}</div>}</div>
+              {x.monto!=null&&<span style={{fontSize:13,fontWeight:800,color:C.soonText,...num,flexShrink:0}}>{x.monto>0?'+':'−'}{fmt(Math.abs(x.monto))}</span>}
+              <span style={{display:'flex',gap:6,flexShrink:0}}>{ro&&!r&&<>{btn(x.tipo==='sincom'?'Sí, cambió':'Está bien',()=>responder(x,'ok'))}{btn(x.tipo==='sincom'?'Falta registrarla':'No es así',()=>responder(x,'no'))}</>}{!ro&&x.tipo!=='banco'&&btn(n?.txt?'Editar causa':'+ Causa',()=>anotar(x))}</span>
+            </div> })}
+        </div>)}
+        {(okCli.length>0||totMas>0)&&<div style={{display:'flex',justifyContent:'space-between',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12}}>
+          <span style={{color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{okCli.length?`Cuadran: ${okCli.join(', ')}`:''}</span>
+          {totMas>0&&<b style={{color:C.soonText,whiteSpace:'nowrap',...num}}>{ro?'Recibiste de más':'Pagado de más'} {fmt(totMas)}</b>}</div>}
+      </div> })()
     const bolStrip = esBoletaProv(sel) ? (()=>{ const py=tPag.filter(t=>yOf(t.pagado_at||t.created_at)===yr), cto=sumM(py), liq=py.reduce((a,t)=>a+pagarT(t),0), nB=new Set(py.map(t=>t.bhe_id).filter(Boolean)).size
       const retPorPagar=py.reduce((a,t)=>{ const bh=bheDe(t), f=f29BHE(bh?.fecha||t.factura_fecha||t.pagado_at,expenses,tituloProv(sel)); return a+(f?.estado==='pagada'?0:(Number(t.monto)||0)-pagarT(t)) },0)
       const it=(l,v,s2)=><div style={{minWidth:0}}><div style={kLbl}>{l}</div><div style={{fontSize:isDesktop?17:15,fontWeight:700,color:C.accent,...num,marginTop:2}}>{fmt(v)}</div><div style={{fontSize:11,color:C.textSoft}}>{s2}</div></div>
@@ -15852,10 +15918,10 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     return (<div>{css}
       <PageHeader origen={ro?origen:'Proveedores'} onBack={ro?onBack:()=>setView('list')} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
       {wrap(isDesktop ? <>
-        {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}
+        {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}{cuadreCard}
         <div style={{display:'grid',gridTemplateColumns:conBolF?'minmax(0,1fr) minmax(0,2.8fr)':'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
         {!ro&&minis}{!ro&&secAbierta&&secAbierta.el}
-      </> : <>{tiles}{bolStrip}{datosStrip}{acciones}{revPanel}{porClienteCard}{comisionesCard}{!ro&&minis}</>)}
+      </> : <>{tiles}{bolStrip}{datosStrip}{acciones}{revPanel}{cuadreCard}{porClienteCard}{comisionesCard}{!ro&&minis}</>)}
     </div>)
   }
 
