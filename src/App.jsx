@@ -10062,7 +10062,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   },[anticipos,conciliacion])
   // Cuotas fantasma: Programadas ya SALDADAS (emitidas) que siguen figurando por facturar — motor de conciliación (read-only, Fase 1).
   const [ufMapFechas,setUfMapFechas]=useState({})   // UF por fecha (mindicador) para el calce por monto de la señal 8
-  useEffect(()=>{ if(DEMO) return; const ds=[]; (billing||[]).forEach(b=>{ if(b.issued_at)ds.push(b.issued_at); if(b.due)ds.push(b.due) }); if(!ds.length) return; let alive=true; fetchUFFechas(ds).then(m=>{ if(alive) setUfMapFechas(m||{}) }).catch(()=>{}); return ()=>{alive=false} },[billing])
+  useEffect(()=>{ if(DEMO) return; const ds=[]; (billing||[]).forEach(b=>{ if(b.issued_at)ds.push(b.issued_at); if(b.due)ds.push(b.due) }); (anticipos||[]).forEach(a=>{ if(a.fecha)ds.push(a.fecha) }); if(!ds.length) return; let alive=true; fetchUFFechas(ds).then(m=>{ if(alive) setUfMapFechas(m||{}) }).catch(()=>{}); return ()=>{alive=false} },[billing,anticipos])
   const [fantasmaNo,setFantasmaNo]=useState(()=>new Set())   // programadas marcadas "es pendiente, no fantasma" (aprendido)
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key').eq('kind','fantasma_no').then(({data})=>{ if(data) setFantasmaNo(new Set(data.map(r=>String(r.key)))) },()=>{}) },[])
   const [cfRetiradas,setCfRetiradas]=useState(()=>new Set())   // retiradas en esta sesión (para ocultarlas al toque)
@@ -10113,14 +10113,33 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const anticipoCubre=useMemo(()=>{
     const lim=new Date(); lim.setDate(lim.getDate()+31); const limISO=lim.toISOString().slice(0,10)
     const progBySale={}; (billing||[]).forEach(b=>{ if(!b.deleted_at&&b.sale_id&&b.status==='Programada'&&!b.prepaid_anticipo_id&&String(b.due||'')<=limISO) (progBySale[String(b.sale_id)]=progBySale[String(b.sale_id)]||[]).push(b) })
-    const out=[]
-    ;(anticipos||[]).forEach(a=>{ if(a.estado!=='disponible'||!a.sale_id||cubiertasRD.has(String(a.id))) return; const m=Number(a.monto)||0; if(!(m>0)) return
-      const cs=(progBySale[String(a.sale_id)]||[]).sort((x,y)=>String(x.due||'').localeCompare(String(y.due||'')))
-      let sum=0; const sel=[]
-      for(const c of cs){ sum+=Number(c.amount)||0; sel.push(c); if(Math.abs(sum-m)<=Math.max(1000,m*0.02)){ out.push({a,cuotas:[...sel],sum}); return } if(sum>m*1.02) return }
+    // Lo más antiguo primero (FIFO): uno o varios pagos seguidos de la misma venta (hasta 6) contra las cuotas más antiguas.
+    // Así calzan las cuotas pagadas en dos transferencias (p. ej. 250.000 + 614.000 = 22 UF) y, tras un calce, sigue con los pagos y cuotas restantes.
+    const out=[], antBySale={}
+    ;(anticipos||[]).forEach(a=>{ if(a.estado!=='disponible'||!a.sale_id||cubiertasRD.has(String(a.id))||!((Number(a.monto)||0)>0)) return; (antBySale[String(a.sale_id)]=antBySale[String(a.sale_id)]||[]).push(a) })
+    // Venta en UF: se compara en UF (cada pago con la UF de su día; cada cuota con la UF del día en que se generó), así la variación de la UF no esconde el calce.
+    const ufM={...(ufFechaCache()||{}),...(ufMapFechas||{})}, ventaUF=new Set((sales||[]).filter(x=>x&&x.moneda==='UF').map(x=>String(x.id)))
+    const subarr=new Set((sales||[]).filter(x=>x&&esSubarriendo(x)).map(x=>String(x.id)))   // subarriendo: cada pago es de SU mes (lo ve el flujo), no se calza por monto
+    const enUF=(monto,iso)=>{ const u=ufDelDia(ufM,iso,null); return u>0?(Number(monto)||0)/u:null }
+    Object.entries(antBySale).forEach(([sid,as0])=>{ if(subarr.has(sid)) return
+      const as=[...as0].sort((x,y)=>String(x.fecha||'').localeCompare(String(y.fecha||'')))
+      const cs=(progBySale[sid]||[]).sort((x,y)=>String(x.due||'').localeCompare(String(y.due||'')))
+      const uf=ventaUF.has(sid)&&as.every(x=>enUF(x.monto,x.fecha)!=null)&&cs.every(c=>enUF(c.amount,c.issued_at||c.due)!=null)
+      const vA=x=>uf?enUF(x.monto,x.fecha):(Number(x.monto)||0), vC=c=>uf?enUF(c.amount,c.issued_at||c.due):(Number(c.amount)||0)
+      const tol=v=>uf?Math.max(0.1,v*0.03):Math.max(1000,v*0.02)
+      let ia=0, ic=0
+      while(ia<as.length&&ic<cs.length){
+        let hit=null, sumA=0
+        for(let i=ia;i<Math.min(as.length,ia+6)&&!hit;i++){ sumA+=vA(as[i]); let sumC=0, pesos=0
+          for(let j=ic;j<cs.length;j++){ sumC+=vC(cs[j]); pesos+=Number(cs[j].amount)||0; if(Math.abs(sumA-sumC)<=tol(sumC)){ hit={i,j,sumC:pesos}; break } if(sumC>sumA+tol(sumA)) break } }
+        if(!hit) break
+        const grupo=as.slice(ia,hit.i+1)
+        out.push({a:grupo[0],extra:grupo.slice(1),cuotas:cs.slice(ic,hit.j+1),sum:hit.sumC,pagado:grupo.reduce((t,x)=>t+(Number(x.monto)||0),0)})
+        ia=hit.i+1; ic=hit.j+1
+      }
     })
     return out
-  },[anticipos,billing,cubiertasRD])
+  },[anticipos,billing,sales,ufMapFechas,cubiertasRD])
   // Ventas COBRADAS en Borrador/Propuesta: tienen facturas emitidas/pagadas pero su estado las deja FUERA de "Vendido" (que cuenta solo Activo+Terminado). Trabajo real invisible → candidato a pasar a Terminado. Client-side desde sales+billing.
   const ventasBorradorCobrado=useMemo(()=>{
     const bySale={}; (billing||[]).forEach(b=>{ if(b.sale_id)(bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
@@ -10264,11 +10283,11 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     </div>}
     {anticipoCubre.length>0&&<div style={secBox}>{sh('Pago recibido que cubre cuotas',C.greenText,anticipoCubre.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>el cliente ya pagó (anticipo de la misma venta) y la cuota sigue por facturar · la diferencia es variación UF</div>
-      {anticipoCubre.map(({a,cuotas,sum})=><div key={a.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+      {anticipoCubre.map(({a,extra=[],cuotas,sum,pagado})=><div key={a.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(a.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(a.client_id)}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:2}}>pago del {fmtFechaDMY(a.fecha)} · {cuotas.length} cuota{cuotas.length!==1?'s':''} desde {fmtFechaDMY(cuotas[0].due)}</div></div>
-          {amt(fmt(Number(a.monto)||0),`cuotas ${fmt(sum)}`,C.greenText)}</div>
-        {onCubrirCuotas&&<button onClick={async()=>{ await onCubrirCuotas(a.id,cuotas.map(c=>c.id)); setCubiertasRD(p=>new Set([...p,String(a.id)])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir {cuotas.length>1?`las ${cuotas.length} cuotas`:'la cuota'}</button>}
+          <div style={{fontSize:11,color:C.muted,marginTop:2}}>{extra.length?`${extra.length+1} pagos desde el ${fmtFechaDMY(a.fecha)}`:`pago del ${fmtFechaDMY(a.fecha)}`} · {cuotas.length} cuota{cuotas.length!==1?'s':''} desde {fmtFechaDMY(cuotas[0].due)}</div></div>
+          {amt(fmt(pagado??(Number(a.monto)||0)),`cuotas ${fmt(sum)}`,C.greenText)}</div>
+        {onCubrirCuotas&&<button onClick={async()=>{ await onCubrirCuotas(a.id,cuotas.map(c=>c.id),extra.map(x=>x.id)); setCubiertasRD(p=>new Set([...p,String(a.id),...extra.map(x=>String(x.id))])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir {cuotas.length>1?`las ${cuotas.length} cuotas`:'la cuota'}</button>}
       </div>)}
     </div>}
     {cuotasSinGen.length>0&&<div style={secBox}>{sh('Cuotas sin generar',C.azulInfo,cuotasSinGen.length)}
@@ -41329,12 +41348,13 @@ export default function App() {
       setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,estado:'por_pagar'}:t))
     }catch(e){appAlert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
   },[terceros])
-  const handleCubrirCuotas=useCallback(async(anticipoId,cuotaIds)=>{
+  // extraIds: otros pagos que, junto al principal, pagan esas cuotas (cuota pagada en dos transferencias): quedan consumidos y ligados a la primera cuota.
+  const handleCubrirCuotas=useCallback(async(anticipoId,cuotaIds,extraIds=[])=>{
     if(!cuotaIds?.length) return
     try{
       const ant=(anticipos||[]).find(a=>String(a.id)===String(anticipoId))
       const coveredSum=(billing||[]).filter(b=>cuotaIds.includes(b.id)).reduce((s,b)=>s+(b.amount||0),0)
-      const leftoverRaw=ant?Math.max(0,(ant.monto||0)-coveredSum):0
+      const leftoverRaw=ant&&!(extraIds||[]).length?Math.max(0,(ant.monto||0)-coveredSum):0
       const leftover=leftoverRaw<=Math.max(1000,coveredSum*0.02)?0:leftoverRaw   // diferencia por variación UF: no deja un «saldo» de pesos sueltos
       const {error}=await supabase.from('billing').update({status:'Anticipada',prepaid_anticipo_id:anticipoId,updated_at:new Date().toISOString()}).in('id',cuotaIds)
       if(error)throw error
@@ -41347,8 +41367,9 @@ export default function App() {
         const {data}=await supabase.from('anticipos').insert({client_id:ant.client_id,entity_id:ant.entity_id||null,monto:leftover,fecha:ant.fecha,nota:'Saldo de anticipo',proyecto:ant.proyecto||null,sale_id:ant.sale_id||null,estado:'disponible',created_by:ant.created_by||null}).select().single()
         saldoRow=data
       }
+      if((extraIds||[]).length){ const {error:xe}=await supabase.from('anticipos').update({estado:'consumido',billing_id:cuotaIds[0]}).in('id',extraIds); if(xe)throw xe }
       setBilling(p=>p.map(b=>cuotaIds.includes(b.id)?{...b,status:'Anticipada',prepaid_anticipo_id:anticipoId}:b))
-      setAnticipos(p=>{ let n=p.map(a=>a.id===anticipoId?{...a,estado:'consumido',monto:nuevoMonto}:a); if(saldoRow) n=[saldoRow,...n]; return n })
+      setAnticipos(p=>{ const ex=new Set((extraIds||[]).map(String)); let n=p.map(a=>a.id===anticipoId?{...a,estado:'consumido',monto:nuevoMonto}:ex.has(String(a.id))?{...a,estado:'consumido',billing_id:cuotaIds[0]}:a); if(saldoRow) n=[saldoRow,...n]; return n })
       // El cliente YA pagó esas cuotas (con el anticipo): sus comisiones pasan pendiente→por_pagar, igual que al quedar pagada por banco.
       for(const id of cuotaIds) await handleConciliarTerceros(id)
     }catch(e){appAlert('Error: '+e.message)}
