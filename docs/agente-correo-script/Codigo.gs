@@ -49,8 +49,7 @@ function revisarCorreos() {
   for (let i = 0; i < lote.length; i += 10) {
     const res = UrlFetchApp.fetch(CONFIG.FUNCTION_URL, {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-      headers: { 'X-Google-Identity': ScriptApp.getIdentityToken() },
-      payload: JSON.stringify({ dryRun: CONFIG.PRUEBA, messages: lote.slice(i, i + 10) }),
+      payload: JSON.stringify({ idToken: ScriptApp.getIdentityToken(), dryRun: CONFIG.PRUEBA, messages: lote.slice(i, i + 10) }),
     });
     Logger.log(res.getResponseCode() + ' ' + res.getContentText().slice(0, CONFIG.PRUEBA ? 8000 : 400));
     if (res.getResponseCode() !== 200) return;   // no avanza la marca: la próxima corrida reintenta
