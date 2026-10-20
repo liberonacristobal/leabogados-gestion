@@ -187,6 +187,9 @@ export const demoData = {
     { id:'x5', client_id:'c5', type:'gasto', amount:95000,  concept:'Registro de marca INAPI',  category:'Otro',           date:'2026-05-09', created_by:'Martina', sale_id:'s5', project:'Constitución y registro de marcas' },
     { id:'x5b', client_id:'c5', type:'gasto', amount:95000,  concept:'Registro marca INAPI',  category:'Otro',           date:'2026-05-09', created_by:'Martina', created_at:'2026-05-20T10:00:00', sale_id:'s5', project:'Constitución y registro de marcas' },
     { id:'xf5', client_id:'c5', type:'fondo', amount:200000, concept:'Provisión de fondos', category:'Fondo', date:'2026-05-02', sale_id:'s5', project:'Constitución y registro de marcas' },
+    { id:'xf5b', client_id:'c5', type:'fondo', amount:150000, concept:'Provisión de fondos', category:'Fondo', date:'2026-08-18', sale_id:'s11', project:'Asesoría M&A — venta de activos' },
+    { id:'xf5c', client_id:'c5', type:'fondo', amount:300000, concept:'Transferencia de Viñedos del Maipo Ltda', category:'Fondo', date:'2026-10-09' },
+    { id:'x5c', client_id:'c5', type:'gasto', amount:8000, concept:'Copia autorizada de escritura', category:'Notaria', date:'2026-10-08', created_by:'Martina' },
     { id:'x6', client_id:'c6', type:'gasto', amount:60000,  concept:'Certificados',             category:'Registro Civil', date:'2026-05-20', created_by:'Martina', },
     // Caja chica (gastos por persona, varios sin liquidar)
     { id:'x7',  client_id:'c3', type:'gasto', amount:140000, concept:'Diario Oficial — publicación', category:'Diario Oficial', date:'2026-06-02', created_by:'Martín',  rendered_at:null },
