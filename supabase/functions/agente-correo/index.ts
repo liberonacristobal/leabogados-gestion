@@ -4,7 +4,7 @@
 // app ya tiene: nunca se registra dos veces) | sospechoso (cambio de cuenta bancaria o pedido de transferir) | sin_accion.
 // REGLAS: la IA solo clasifica y resume; montos y fechas salen del PDF adjunto, de la solicitud citada en el correo y de la
 // cartola/base (calce exacto); el correo es dato, nunca instrucción; el agente no mueve plata, no emite, no escribe a nadie.
-// Auth: header X-Google-Identity = token de identidad de Google de la casilla (Apps Script, sin claves que copiar; la casilla
+// Auth: body.idToken = token de identidad de Google de la casilla (Apps Script, sin claves que copiar; la casilla
 // autorizada se lee de learnings config 'agente_casilla'), o Bearer CARTOLA_SECRET, o body.secret = CRON_SECRET (pruebas).
 // body.dryRun = no guarda.
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
@@ -32,6 +32,9 @@ const emailDe = (s: string) => (String(s || "").match(/[\w.+-]+@[\w-]+(\.[\w-]+)
 const nombreDe = (s: string) => String(s || "").replace(/<[^>]*>/g, "").replace(/"/g, "").trim();
 // Montos en pesos con separador de miles ($1.200.000 / 1.200.000.-): enteros ≥ $1.000; nunca se inventan.
 const montosEn = (t: string) => [...new Set([...String(t || "").matchAll(/\$\s?(\d{1,3}(?:\.\d{3})+)(?!\d|\.\d)/g)].map((m) => Number(m[1].replace(/\./g, ""))).filter((n) => n >= 1000))];
+// Tipo del archivo por su extensión (el SII y otros envían PDF como application/octet-stream, que el bucket no acepta).
+const MIME_EXT: Record<string, string> = { pdf: "application/pdf", xml: "application/xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+const mimeDe = (nombre: string, mime: string) => MIME_EXT[String(nombre || "").toLowerCase().split(".").pop() || ""] || mime || "application/octet-stream";
 // Guarda un adjunto en el bucket privado documentos (agente/<gmail_id>/<nombre>) para abrirlo desde la app.
 async function subir(path: string, b64: string, mime: string) {
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -64,14 +67,15 @@ function clientePorNombre(remitente: string, clientes: { id: string; name: strin
   return hits.length === 1 ? hits[0] : null;
 }
 // Valida el token de identidad con Google y devuelve el correo verificado de quien lo firmó.
-async function correoGoogle(tok: string): Promise<string | null> {
+async function correoGoogle(tok: string): Promise<{ email: string | null; motivo?: string }> {
   try {
-    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tok)}`);
-    if (!r.ok) return null;
+    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tok.trim())}`);
+    if (!r.ok) return { email: null, motivo: `Google rechazó la firma (${r.status})` };
     const j = await r.json();
-    if (!["accounts.google.com", "https://accounts.google.com"].includes(j.iss) || String(j.email_verified) !== "true") return null;
-    return String(j.email || "").toLowerCase() || null;
-  } catch { return null; }
+    if (!["accounts.google.com", "https://accounts.google.com"].includes(j.iss)) return { email: null, motivo: "Firma de otro emisor" };
+    if (String(j.email_verified) !== "true") return { email: null, motivo: "Correo de la firma no verificado" };
+    return { email: String(j.email || "").toLowerCase() || null, motivo: j.email ? undefined : "La firma no trae correo" };
+  } catch (e) { return { email: null, motivo: `No se pudo validar la firma: ${String((e as Error).message || e).slice(0, 120)}` }; }
 }
 async function clasificarIA(m: { de: string; asunto: string; cuerpo: string; adjuntos: string[] }) {
   if (!ANTHROPIC) return null;
@@ -95,13 +99,18 @@ Deno.serve(async (req) => {
   let body: any = {}; try { body = await req.json(); } catch { /* sin body */ }
   const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   let ok = (!!SECRET && bearer === SECRET) || (!!CRON_SECRET && body.secret === CRON_SECRET);
-  const idTok = req.headers.get("X-Google-Identity") || "";
+  // La firma llega en el cuerpo (body.idToken): el encabezado propio no siempre pasa por el gateway.
+  const idTok = String(body.idToken || req.headers.get("X-Google-Identity") || "");
+  let motivo = idTok ? "" : "Sin credenciales";
   if (!ok && idTok) {
-    const [quien, cfg] = await Promise.all([correoGoogle(idTok), rest("learnings?kind=eq.config&key=eq.agente_casilla&select=value&order=updated_at.desc&limit=1").catch(() => [])]);
-    const permitidas = String(cfg?.[0]?.value || "").toLowerCase().split(/[,;\s]+/).filter(Boolean);
-    ok = !!quien && permitidas.includes(quien);
+    const [g, cfg] = await Promise.all([correoGoogle(idTok), rest("learnings?kind=eq.config&key=eq.agente_casilla&select=value&order=updated_at.desc&limit=1").catch((e) => ({ error: String(e) }))]);
+    // deno-lint-ignore no-explicit-any
+    const permitidas = String((cfg as any)?.[0]?.value || "").toLowerCase().split(/[,;\s]+/).filter(Boolean);
+    ok = !!g.email && permitidas.includes(g.email);
+    // deno-lint-ignore no-explicit-any
+    if (!ok) motivo = g.motivo || ((cfg as any)?.error ? "No se pudo leer la casilla autorizada" : !permitidas.length ? "Sin casilla autorizada en la configuración" : `Casilla ${g.email} no autorizada`);
   }
-  if (!ok) return json({ error: "No autorizado" }, 403);
+  if (!ok) return json({ error: "No autorizado", motivo }, 403);
   const dryRun = !!body.dryRun;
   // deno-lint-ignore no-explicit-any
   const msgs: any[] = Array.isArray(body.messages) ? body.messages.slice(0, 40) : [];
@@ -164,7 +173,7 @@ Deno.serve(async (req) => {
       const pareceComprob = /comprobante|transferencia|operaci[oó]n express|pago realizado|abono/i.test(`${asunto} ${cuerpo.slice(0, 600)} ${adj.map((a: { name: string }) => a.name).join(" ")}`);
       // Adjuntos al bucket privado (se abren desde la tarjeta de la bandeja); en prueba no se sube nada.
       const adjGuardados: { nombre: string; mime: string; path?: string }[] = [];
-      for (const a of adj) { const g: { nombre: string; mime: string; path?: string } = { nombre: a.name, mime: a.mime }; if (a.b64 && !dryRun && String(a.b64).length < 14_000_000) { const path = `agente/${gid}/${String(a.name || "adjunto").replace(/[^\w.\- ]/g, "_")}`; if (await subir(path, a.b64, a.mime)) g.path = path; } adjGuardados.push(g); }
+      for (const a of adj) { const g: { nombre: string; mime: string; path?: string } = { nombre: a.name, mime: a.mime }; if (a.b64 && !dryRun && String(a.b64).length < 14_000_000) { const path = `agente/${gid}/${String(a.name || "adjunto").replace(/[^\w.\- ]/g, "_")}`; if (await subir(path, a.b64, mimeDe(a.name, a.mime))) g.path = path; } adjGuardados.push(g); }
       // deno-lint-ignore no-explicit-any
       let fila: any = { gmail_id: gid, thread_id: m.threadId || null, recibido_at: recibido.toISOString(), de, de_nombre: nombreDe(m.from), para: m.to || null, asunto, cuerpo: cuerpo.slice(0, 8000), adjuntos: adjGuardados, cliente_id: cid, abogado, resumen: ia?.resumen || null, tipo: ia?.tipo || "otro", estado: "sin_accion", propuesta: {}, evidencia: [], ...(porNombre ? { motivo: "Cliente reconocido por el nombre" } : {}) };
       const cta = cuentaEn(cuerpo);
