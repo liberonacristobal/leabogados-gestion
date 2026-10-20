@@ -16611,12 +16611,18 @@ const PasosRend = ({paso}) => (<div style={{display:'flex',alignItems:'center',g
 function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling, asPage=false, preSel=false, navBorr=null, onRevisada=null}) {
   const esEdicion = !!editRend
   const isDesktop = useIsDesktop()
-  const [selected, setSelected] = useState(()=> editRend ? new Set((expenses||[]).filter(e=>String(e.client_render_id)===String(editRend.id)).map(e=>e.id)) : new Set())
+  // Lo que se está armando se guarda en el equipo a cada cambio: si se sale (Volver, otra pestaña, se cierra la app) se recupera al volver.
+  const wipKey = `fd_rend_wip_${client.id}`
+  const wip0 = useMemo(()=>{ if(editRend||preSel) return null; try{ const w=JSON.parse(localStorage.getItem(wipKey)||'null'); if(!w||Date.now()-(w.at||0)>14*86400000) return null
+      const pend=new Set((expenses||[]).filter(e=>e.client_id===client.id&&e.type==='gasto'&&!e.client_rendered_at&&!e.deleted_at).map(e=>String(e.id)))
+      const ids=(w.sel||[]).filter(id=>pend.has(String(id))); return ids.length?{...w,sel:ids}:null }catch(_){ return null } },[])   // eslint-disable-line react-hooks/exhaustive-deps
+  const [selected, setSelected] = useState(()=> editRend ? new Set((expenses||[]).filter(e=>String(e.client_render_id)===String(editRend.id)).map(e=>e.id)) : new Set(wip0?wip0.sel:[]))
+  const [wipRec, setWipRec] = useState(!!wip0)   // se recuperó una selección sin guardar
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
   const [fHasta, setFHasta] = useState('')
   const [contacts, setContacts] = useState([])
-  const [atencion, setAtencion] = useState(editRend?.dirigido_a||'')
+  const [atencion, setAtencion] = useState(editRend?.dirigido_a||wip0?.atencion||'')
   const [prefilled, setPrefilled] = useState(false)   // "Dirigido a" precargado de rendición anterior
   const [limpiandoIA, setLimpiandoIA] = useState(false)
   const [editDet, setEditDet] = useState(null)   // detalle de un gasto en edición {id, v}: tocar el texto lo corrige a mano (mismo campo que «Mejorar descripciones con IA»)
@@ -16638,8 +16644,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     const n={}; (expenses||[]).forEach(e=>{ if(e.client_id===client.id&&e.type==='gasto'&&!e.client_rendered_at&&e.entity_id) n[e.entity_id]=(n[e.entity_id]||0)+1 })
     const top=Object.keys(n).sort((a,b)=>n[b]-n[a])[0]; return top || (entsCli[0]&&entsCli[0].id) || null })
   // Proyecto y subproyecto de la rendición (el emisor elige; el proyecto FILTRA los gastos al crear; al editar es solo metadata).
-  const [proyecto,setProyecto] = useState(editRend?.project||'')
-  const [subproyecto,setSubproyecto] = useState(editRend?.subproject||'')
+  const [proyecto,setProyecto] = useState(editRend?.project||wip0?.proyecto||'')
+  const [subproyecto,setSubproyecto] = useState(editRend?.subproject||wip0?.subproyecto||'')
+  useEffect(()=>{ if(esEdicion) return; try{ if(selected.size) localStorage.setItem(wipKey,JSON.stringify({sel:[...selected],proyecto,subproyecto,atencion,at:Date.now()})); else localStorage.removeItem(wipKey) }catch(_){} },[selected,proyecto,subproyecto,atencion])   // eslint-disable-line react-hooks/exhaustive-deps
   const headEnt = entsCli.length===1 ? entsCli[0] : (entsCli.find(e=>e.id===selEnt)||null)
   // Multi-RS: al elegir una RS se incluyen sus gastos Y los SIN razón social (ej. notaría sin RS) — no deben quedar fuera de la rendición.
   const inScope = e => singleRS ? true : (selEnt ? (e.entity_id===selEnt || !e.entity_id) : true)
@@ -16825,6 +16832,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     if(accion==='correo'){   // paso 2: el correo, todavía sin registrar nada
       await guardarDirigido()
       if(!onEnviar) return
+      _salida.current=true   // va al correo: no es salir sin guardar
       if(modoEf==='sep1') onEnviar({...vs[0], _hermanas:vs.slice(1)})
       else if(modoEf==='sepN') onEnviar({...vs[0], _cola:vs.slice(1)})
       else onEnviar(vs[0])
@@ -16834,6 +16842,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     setSaving(true)
     try{
       const hechas=[]; for(const v of vs) hechas.push(await v._crear())
+      _salida.current=true
       await guardarDirigido()
       logActividad('rendicion.borrador_guardado',{tabla:'rendiciones',id:hechas[0]?.id,detalle:{cliente:client.name,title:`Borrador guardado${hechas.length>1?` (${hechas.length} rendiciones por trabajo)`:''}`,monto:Math.round(hechas.reduce((a,x)=>a+(x.total||0),0))}})
       setSelected(new Set())
@@ -16842,6 +16851,16 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     }catch(e){ appAlert('Error: '+e.message) }
     setSaving(false)
   }
+  // Salir con gastos marcados sin guardar (Volver, otra pestaña, siguiente cliente): queda guardada sola como borrador,
+  // a nombre de quien la armaba, para no perder el trabajo. Ir al correo o guardar/registrar no cuenta como salir.
+  const _salida = useRef(false)
+  const _autoBorr = useRef(null)
+  _autoBorr.current = (!esEdicion && gastosSel.length>0 && !faltaProyR && !saving) ? async()=>{
+    try{ const vs=virtuales(); const hechas=[]; for(const v of vs) hechas.push(await v._crear())
+      try{ localStorage.removeItem(wipKey) }catch(_){}
+      logActividad('rendicion.borrador_guardado',{tabla:'rendiciones',id:hechas[0]?.id,detalle:{cliente:client.name,title:'Borrador guardado al salir de la rendición',monto:Math.round(hechas.reduce((a,x)=>a+(x.total||0),0))}})
+    }catch(_){ /* queda la selección guardada en el equipo y se recupera al volver */ } } : null
+  useEffect(()=>()=>{ if(!_salida.current&&_autoBorr.current) _autoBorr.current() },[])   // eslint-disable-line react-hooks/exhaustive-deps
   const handleExterna = async() => {
     if(!gastosSel.length||faltaProyR||!extFecha) return
     setSaving(true)
@@ -16993,6 +17012,10 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       </div>
   )
   const bLista = (<>
+      {wipRec&&selected.size>0&&<div style={{display:'flex',alignItems:'center',gap:8,background:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>
+        <span style={{flex:1,minWidth:0,fontSize:11.5,color:C.accent,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Selección recuperada · {selected.size} gasto{selected.size!==1?'s':''}</span>
+        <button onClick={()=>{ setSelected(new Set()); setWipRec(false) }} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Descartar</button>
+      </div>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles</span>
