@@ -37345,7 +37345,14 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     setBusy(null)
   }
   const desenlazarNotaria = async(m) => {
-    const liq=liqDeMov(m); if(busy) return; setBusy(m.id)
+    const liq=liqDeMov(m); if(busy) return
+    // Con compuerta: se explica qué pasa con las OT antes de tocar nada; «Cancelar» deja todo igual.
+    const sinAviso = liq && liq.estado_envio==='por_enviar' && !liq.sent_at
+    const msgD = !liq ? '¿Quitar el enlace de este cargo del banco? El cargo queda por conciliar.'
+      : sinAviso ? `¿Quitar el enlace de este cargo del banco?\n\nLa liquidación del ${fmtFechaDMY(isoLocal(liq.created_at))} no tiene aviso enviado a la notaría: sus ${liq.n_gastos||0} OT vuelven a «por pagar» y el cargo queda por conciliar.`
+      : `¿Quitar el enlace de este cargo del banco?\n\nEl cargo queda por conciliar. Las ${liq.n_gastos||0} OT de la liquidación del ${fmtFechaDMY(isoLocal(liq.created_at))} siguen pagadas (el aviso a la notaría ya se envió).`
+    if(!await appConfirm(msgD)) return
+    setBusy(m.id)
     try{
       if(!DEMO){
         if(liq){ const {error:e1}=await supabase.from('rendiciones').update({movimiento_id:null}).eq('id',liq.id); if(e1) throw e1
