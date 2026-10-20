@@ -6,69 +6,23 @@ El agente lee los correos que llegan a la casilla de la oficina, los cruza con l
 | Pieza | Dónde |
 |---|---|
 | Tabla `agente_bandeja` (RLS `team_all`) | Supabase |
-| Edge function `agente-correo` (`verify_jwt=false`, secreto `CARTOLA_SECRET`) | `supabase/functions/agente-correo` |
+| Edge function `agente-correo` (`verify_jwt=false`; firma de Google de la casilla) | `supabase/functions/agente-correo` |
 | Página Bandeja del agente | `src/App.jsx` › `BandejaView` |
 | Script que envía los correos | Google Apps Script en la casilla de la oficina (abajo) |
 
 ## Instalar el script (una sola vez)
 
-En [script.google.com](https://script.google.com), con la sesión de la **casilla de la oficina** (la misma que recibe la
-cartola), Nuevo proyecto → pegar el código → completar `SECRET` con el mismo valor que usa el script de la cartola.
+El script tiene permiso de **solo lectura** del correo y **no usa claves**: se identifica con la firma de Google de la
+casilla, y la función solo acepta la casilla configurada en `learnings` config `agente_casilla` (hoy contacto@).
+Código: [Codigo.gs](agente-correo-script/Codigo.gs) y [appsscript.json](agente-correo-script/appsscript.json).
 
-```javascript
-const CONFIG = {
-  FUNCTION_URL: 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/agente-correo',
-  SECRET: 'PEGAR_EL_MISMO_CARTOLA_SECRET',
-  QUERY: 'in:inbox newer_than:2d',
-  MAX_ADJUNTO: 10 * 1024 * 1024,   // adjuntos de más de 10 MB se informan sin contenido
-};
-
-// Envía al agente los correos recibidos desde la última corrida correcta. El agente descarta los que ya vio
-// (por id de Gmail), así que repetir un correo nunca lo registra dos veces.
-function revisarCorreos() {
-  const props = PropertiesService.getScriptProperties();
-  const desde = Number(props.getProperty('ultimo_ok') || 0) - 60 * 60 * 1000;   // 1 hora de traslape
-  const inicio = Date.now();
-  const yo = Session.getActiveUser().getEmail().toLowerCase();
-  const lote = [];
-  for (const th of GmailApp.search(CONFIG.QUERY, 0, 50)) {
-    for (const m of th.getMessages()) {
-      if (m.getDate().getTime() < desde) continue;
-      if (String(m.getFrom()).toLowerCase().indexOf(yo) >= 0) continue;   // enviados desde esta misma casilla
-      lote.push({
-        id: m.getId(), threadId: th.getId(), date: m.getDate().toISOString(),
-        from: m.getFrom(), to: m.getTo(), cc: m.getCc(), subject: m.getSubject(),
-        body: m.getPlainBody().slice(0, 20000),
-        attachments: m.getAttachments().slice(0, 6).map(a => ({
-          name: a.getName(), mime: a.getContentType(),
-          b64: a.getSize() <= CONFIG.MAX_ADJUNTO ? Utilities.base64Encode(a.getBytes()) : null,
-        })),
-      });
-    }
-  }
-  for (let i = 0; i < lote.length; i += 10) {
-    const res = UrlFetchApp.fetch(CONFIG.FUNCTION_URL, {
-      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-      headers: { Authorization: 'Bearer ' + CONFIG.SECRET },
-      payload: JSON.stringify({ messages: lote.slice(i, i + 10) }),
-    });
-    Logger.log(res.getResponseCode() + ' ' + res.getContentText().slice(0, 300));
-    if (res.getResponseCode() !== 200) return;   // no avanza la marca: la próxima corrida reintenta
-  }
-  props.setProperty('ultimo_ok', String(inicio));
-}
-
-// Correr UNA vez: deja el script revisando la casilla cada 15 minutos.
-function crearTrigger() {
-  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'revisarCorreos').forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('revisarCorreos').timeBased().everyMinutes(15).create();
-}
-```
-
-Pasos:
-1. Ejecutar `revisarCorreos` una vez → autorizar Gmail → el registro de ejecución debe mostrar `200 {"ok":true,...}`.
-2. Ejecutar `crearTrigger` una vez → queda corriendo cada 15 minutos.
-3. Abrir la app en Oficina › Bandeja del agente.
+1. En [script.google.com](https://script.google.com) con la sesión de la casilla de la oficina → **Nuevo proyecto**; nombre «Agente de administración».
+2. Configuración del proyecto (engranaje) → marcar **«Mostrar el archivo de manifiesto appsscript.json en el editor»**.
+3. Editor → `appsscript.json`: reemplazar todo por el contenido de `appsscript.json`. `Código.gs`: reemplazar todo por `Codigo.gs`. Guardar.
+4. Elegir la función `revisarCorreos` → **Ejecutar** → Google pide autorización: revisar que diga solo «Ver tus mensajes de correo» → Permitir.
+   El registro debe mostrar `200 {"ok":true,...}` y «N correos revisados».
+5. Elegir `crearTrigger` → **Ejecutar** una vez. Queda revisando cada 15 minutos.
+6. Para una primera vuelta sin guardar nada: `PRUEBA: true`, ejecutar, revisar el registro, volver a `false`.
 
 ## Probar sin guardar
 
