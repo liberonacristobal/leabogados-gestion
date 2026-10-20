@@ -9252,8 +9252,111 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
   </div>)
 }
 
-function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], anticipos=[], sales=[], fantasmaIds=null, onOpenFlujoCaja, isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros, onOpenCobranza, onOpenSiiSinEnlazar, onOpenProveedores, onOpenSubarriendo }){
+// ── PROCESOS AUTOMÁTICOS: estado de cada tarea programada, desde el registro permanente (procesos_corridas, RPC procesos_estado:
+// solo socios). Fuente única del estado (estadoProceso) para la tarjeta de Oficina y la página. Hora siempre de Chile (Intl, con verano/invierno).
+const _DEMO_PROCESOS = [
+  {jobname:'clientes-drive-sync',nombre:'Clientes desde Drive',schedule:'17 */2 * * *',active:true,cada:'cada 2 horas',ultima:'2026-10-20T04:17:00Z',estado:'ok',respuesta:'{"ok":true,"nuevos":0}',ultima_ok:'2026-10-20T04:17:00Z',fallas_30d:0,corridas_30d:1,atrasado:false},
+  {jobname:'bhe-correo-diario',nombre:'Boletas de honorarios del correo',schedule:'40 11 * * *',active:true,cada:'diario',ultima:'2026-10-19T11:40:00Z',estado:'error',respuesta:'{"error":"Gmail 401"}',ultima_ok:null,fallas_30d:1,corridas_30d:1,atrasado:false},
+  {jobname:'oficina-costos-banco',nombre:'Costos de oficina del banco',schedule:'40 9 * * *',active:true,cada:'diario',ultima:'2026-10-19T09:40:00Z',estado:'ok',respuesta:'INSERT 0 10',ultima_ok:'2026-10-19T09:40:00Z',fallas_30d:0,corridas_30d:1,atrasado:false},
+  {jobname:'cartera-semanal-lunes',nombre:'Cartera semanal',schedule:'0 12 * * 1',active:true,cada:'semanal',ultima:null,estado:null,respuesta:null,ultima_ok:null,fallas_30d:0,corridas_30d:0,atrasado:false},
+  {jobname:'resumen-semanal-facturacion',nombre:'Resumen semanal de facturación',schedule:'0 12 * * 1',active:false,cada:'semanal',ultima:null,estado:null,respuesta:null,ultima_ok:null,fallas_30d:0,corridas_30d:0,atrasado:false},
+  {jobname:'valores-contadora-mensual',nombre:'Valores de la contadora',schedule:'0 12 10-16 * *',active:true,cada:'mensual',ultima:null,estado:null,respuesta:null,ultima_ok:null,fallas_30d:0,corridas_30d:0,atrasado:false},
+]
+const estadoProceso = p => !p.active ? {t:'Pausado',bg:C.bgSoft,c:C.textSoft,k:'pausa'}
+  : p.atrasado ? {t:'Atrasado',bg:C.soonBg,c:C.soonText,k:'falla'}
+  : p.estado==='ok' ? {t:'Correcto',bg:C.greenBg,c:C.greenText,k:'ok'}
+  : p.estado==='apagado' ? {t:'Apagado',bg:C.bgSoft,c:C.textSoft,k:'pausa'}
+  : (p.estado==='error'||p.estado==='sin_respuesta') ? {t:'Con falla',bg:C.overdueBg,c:C.overdueText,k:'falla'}
+  : p.estado==='lanzado' ? {t:'En curso',bg:C.azulBg,c:C.accent,k:'ok'}
+  : {t:'Sin registro',bg:C.bgSoft,c:C.textSoft,k:'sin'}
+// Fecha y hora de Chile en dd-mm-aaaa hh:mm (formato único).
+const fechaHoraCL = iso => { if(!iso) return '—'; const p=new Intl.DateTimeFormat('es-CL',{timeZone:'America/Santiago',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(iso)); const g=t=>p.find(x=>x.type===t)?.value||''; return `${g('day')}-${g('month')}-${g('year')} ${g('hour')}:${g('minute')}` }
+// Horario de una tarea (cron en UTC) leído en hora de Chile de hoy.
+function horarioProceso(schedule, corto=false){
+  const [mi,ho,dom,,dow]=String(schedule||'').split(' ')
+  if(!ho) return ''
+  if(ho.startsWith('*')) return `cada ${ho.slice(2)||1} horas`
+  const d=new Date(); d.setUTCHours(Number(ho),Number(mi)||0,0,0)
+  const t=new Intl.DateTimeFormat('es-CL',{timeZone:'America/Santiago',hour:'2-digit',minute:'2-digit',hour12:false}).format(d)
+  const DL={'1':'lunes','2':'martes','3':'miércoles','4':'jueves','5':'viernes','6':'sábado','0':'domingo'}, DC={'1':'lun.','2':'mar.','3':'mié.','4':'jue.','5':'vie.','6':'sáb.','0':'dom.'}
+  if(dom&&dom!=='*') return `${dom.includes('-')?`días ${dom.split('-')[0]} al ${dom.split('-')[1]}`:`día ${dom}`}${corto?' ':', '}${t}`
+  if(dow==='1-5') return `${corto?'lun. a vie. ':'lunes a viernes, '}${t}`
+  if(dow&&dow!=='*') return `${dow.includes(',')?dow.split(',').map(x=>DC[x]).join(' y '):DL[dow]}${corto?' ':', '}${t}`
+  return corto?`diario ${t}`:`todos los días, ${t}`
+}
+async function cargarProcesos(){ if(DEMO) return _DEMO_PROCESOS; const {data,error}=await supabase.rpc('procesos_estado'); if(error) throw error; return data||[] }
+
+function ProcesosView({isDesktop, onBack, origen}){
+  const [procs,setProcs]=useState(null), [err,setErr]=useState(null), [aviso,setAviso]=useState(null), [sel,setSel]=useState(null), [corr,setCorr]=useState(null)
+  useEffect(()=>{ let on=true; cargarProcesos().then(d=>on&&setProcs(d),e=>on&&setErr(e.message||String(e)))
+    if(!DEMO) supabase.from('learnings').select('value').eq('kind','config').eq('key','vigilancia_procesos').order('updated_at',{ascending:false}).limit(1).then(({data})=>on&&setAviso(String(data?.[0]?.value||'off')==='on'),()=>{}); else setAviso(false)
+    return ()=>{ on=false } },[])
+  useEffect(()=>{ if(!sel){ setCorr(null); return } if(DEMO){ setCorr(sel.ultima?[{id:1,lanzado_at:sel.ultima,estado:sel.estado,respuesta:sel.respuesta}]:[]); return }
+    let on=true; supabase.from('procesos_corridas').select('id,lanzado_at,terminado_at,estado,status_code,respuesta').eq('jobname',sel.jobname).order('lanzado_at',{ascending:false}).limit(30).then(({data})=>on&&setCorr(data||[]),()=>on&&setCorr([]))
+    return ()=>{ on=false } },[sel])
+  const cambiarAviso = async()=>{ const nuevo=!aviso
+    if(!await appConfirm(nuevo?'¿Encender el aviso de fallas? Cada día a las 08:00 la app revisa los procesos y, si alguno falló, no respondió o no corrió a su hora, escribe a los socios desde la cuenta de la oficina, una vez por falla.':'¿Apagar el aviso de fallas? La página sigue mostrando el estado de cada proceso.')) return
+    try{ await setLearningKV('config','vigilancia_procesos',nuevo?'on':'off'); setAviso(nuevo); logActividad('procesos.aviso_'+(nuevo?'encendido':'apagado'),{detalle:{title:`Aviso de fallas de procesos ${nuevo?'encendido':'apagado'}`}}) }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) } }
+  const card={background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
+  const chip=e=><span style={{fontSize:10.5,fontWeight:700,borderRadius:20,padding:'2px 9px',background:e.bg,color:e.c,whiteSpace:'nowrap'}}>{e.t}</span>
+  const wrap=ch=><div style={isDesktop?{maxWidth:1120,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>{ch}</div>
+  if(sel){ const e=estadoProceso(sel)
+    return wrap(<>
+      <PageHeader origen='Procesos automáticos' onBack={()=>setSel(null)} titulo={isDesktop?sel.nombre:'Detalle'} style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
+      <div style={{...card,padding:'12px 14px',marginBottom:12}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sel.nombre}</div><div style={{fontSize:11.5,color:C.textSoft}}>{horarioProceso(sel.schedule)} · hora de Chile</div></div>{chip(e)}</div>
+        <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,minmax(0,1fr))':'minmax(0,1fr)',gap:8,marginTop:10}}>
+          {[['Última corrida',fechaHoraCL(sel.ultima)],['Última correcta',fechaHoraCL(sel.ultima_ok)],['Fallas en 30 días',String(sel.fallas_30d||0)]].map(([a,b])=><div key={a} style={{background:C.bgSoft,borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:11.5,color:C.textSoft}}>{a}</span><b style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{b}</b></div>)}
+        </div>
+      </div>
+      <div style={{...SEC_LBL,margin:'4px 2px 6px'}}>Corridas registradas · {corr?corr.length:'…'}</div>
+      <div style={{...card,overflow:'hidden'}}>
+        {(corr||[]).map((c,i)=>{ const ec=estadoProceso({active:true,estado:c.estado}); return <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:i?`1px solid ${C.track}`:'none'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fechaHoraCL(c.lanzado_at)}</div><div style={{fontSize:10.5,color:C.textSoft,fontFamily:'ui-monospace,Menlo,monospace',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.respuesta?`Respuesta: ${c.respuesta}`:'Sin respuesta todavía'}</div></div>{chip(ec)}</div> })}
+        {corr&&!corr.length&&<div style={{padding:18,textAlign:'center',fontSize:12.5,color:C.muted}}>Sin corridas registradas todavía.</div>}
+      </div>
+    </>) }
+  const lista=procs||[]
+  const n=k=>lista.filter(p=>estadoProceso(p).k===k).length
+  const nOk=n('ok'), nF=n('falla'), nS=n('sin'), nP=n('pausa')
+  const partes=[['Correctos',nOk,C.greenText,C.greenBg],['Con falla',nF,nF?C.overdueText:C.textSoft,nF?C.overdueBg:C.bgSoft],['Sin registro',nS,C.textSoft,C.bgSoft],['Pausados',nP,C.textSoft,C.bgSoft]]
+  const GR=[['cada 2 horas','Cada 2 horas'],['diario','Diarios'],['lunes a viernes','Lunes a viernes'],['semanal','Semanales'],['mensual','Mensuales']]
+  const fila=(p,i)=>{ const e=estadoProceso(p); const ult=p.ultima?`última ${fechaHoraCL(p.ultima)}`:'sin corrida registrada'
+    return <div key={p.jobname} onClick={()=>setSel(p)} style={{display:'flex',alignItems:'center',gap:10,padding:isDesktop?'10px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre}</div>
+        <div style={{fontSize:isDesktop?11:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${horarioProceso(p.schedule)} · hora de Chile`:<><b style={{color:e.c,fontWeight:700}}>{e.t}</b> · {p.ultima?fechaHoraCL(p.ultima):horarioProceso(p.schedule,true)}</>}</div></div>
+      {isDesktop&&<div style={{textAlign:'right',flexShrink:0}}>{chip(e)}<div style={{fontSize:10.5,color:C.textSoft,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{ult}</div></div>}
+      <span style={{color:C.textSoft}}><Gl n='chevron'/></span></div> }
+  return wrap(<>
+    <PageHeader origen={origen||'Oficina'} onBack={onBack} titulo='Procesos automáticos' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
+    {err&&<div style={{...card,padding:16,color:C.overdueText,fontSize:13,marginBottom:12}}>No se pudo leer el estado de los procesos: {err}</div>}
+    {!procs&&!err&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>}
+    {procs&&<>
+      <div style={{...card,padding:isDesktop?'14px 18px':'12px 14px',marginBottom:12}}>
+        <div style={{...SEC_LBL}}>Procesos automáticos</div>
+        <div style={{fontSize:isDesktop?28:24,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{lista.length}</div>
+        <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,marginTop:10}}>
+          {partes.map(([t,v,c,bg])=><div key={t} style={{background:bg,borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:11.5,fontWeight:600,color:c}}>{t}</span><span style={{fontSize:15,fontWeight:800,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>)}
+        </div>
+      </div>
+      <div style={{...card,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',gap:10}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?'Aviso de fallas a los socios':'Aviso de fallas'}</div><div style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?'cada día a las 08:00, desde la cuenta de la oficina, una vez por falla':'a los socios, 08:00'}</div></div>
+        {aviso!=null&&chip(aviso?{t:'Encendido',bg:C.greenBg,c:C.greenText}:{t:'Apagado',bg:C.bgSoft,c:C.textSoft})}
+        {aviso!=null&&!DEMO&&<button onClick={cambiarAviso} style={{fontSize:12,fontWeight:700,border:aviso?`1px solid ${C.border}`:'none',borderRadius:9,padding:'6px 12px',cursor:'pointer',background:aviso?C.surface:C.accent,color:aviso?C.accent:'#fff',whiteSpace:'nowrap'}}>{aviso?'Apagar':'Encender'}</button>}
+      </div>
+      <div style={isDesktop?{columns:2,columnGap:14}:{}}>
+        {GR.map(([k,t])=>{ const ps=lista.filter(p=>p.cada===k); if(!ps.length) return null
+          return <div key={k} style={{breakInside:'avoid',marginBottom:12}}><div style={{...SEC_LBL,margin:'0 2px 6px'}}>{t} · {ps.length}</div><div style={{...card,overflow:'hidden'}}>{ps.map(fila)}</div></div> })}
+      </div>
+    </>}
+  </>)
+}
+
+function OficinaHub({ onOpenProcesos, expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], anticipos=[], sales=[], fantasmaIds=null, onOpenFlujoCaja, isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros, onOpenCobranza, onOpenSiiSinEnlazar, onOpenProveedores, onOpenSubarriendo }){
   const [sub,setSub] = useState(null)
+  // Procesos automáticos (solo socios: la RPC devuelve vacío a los demás y la tarjeta no aparece). Misma fuente que la página.
+  const [procsN,setProcsN] = useState(null)
+  useEffect(()=>{ if(!onOpenProcesos) return; let v=true; cargarProcesos().then(d=>{ if(v&&d&&d.length) setProcsN({total:d.length, falla:d.filter(p=>estadoProceso(p).k==='falla').length}) },()=>{}); return ()=>{ v=false } },[])   // eslint-disable-line react-hooks/exhaustive-deps
   const [scope,setScope] = useState('anio')   // filtro Año / Por mes (protagonista)
   const [selM,setSelM] = useState(0)           // mes elegido en "Por mes" (solo meses cerrados)
   const [comprasRows,setComprasRows] = useState([])   // DTE de compra del SII (sii_compras_docs): foto IVA crédito + módulo Compras
@@ -9378,9 +9481,10 @@ function OficinaHub({ expenses=[], clients=[], costosOfiRows=[], billing=[], ter
           {st('ret',IC.ret,C.tealBg,C.tealText,isDesktop?'Ingresos de socios':'Socios',fmtMill(retPer),C.tealText,()=>onOpenRetiros&&onOpenRetiros(),C.tealBg)}
         </div>
         {L('Gestión de la oficina')}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>
+        <div style={{display:'grid',gridTemplateColumns:isDesktop&&procsN!=null?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
           {st('gv',IC.doc,C.bgWarm,C.muted,isDesktop?'Gastos varios · parte de costos':'Gastos varios',fmtMill(R.gv),C.accent,()=>onOpenVarios&&onOpenVarios())}
           {st('iva',IC.iva,C.azulBg,C.azulInfo,'Compras · IVA',fmtMill(ivaPeriodo),C.azulInfo,()=>setSub('compras'))}
+          {procsN!=null&&<div style={isDesktop?{}:{gridColumn:'1 / -1'}}>{st('pro',IC.doc,C.azulBg,C.accent,'Procesos automáticos',`${procsN.total} procesos${procsN.falla?` · ${procsN.falla} con falla`:''}`,procsN.falla?C.overdueText:C.accent,()=>onOpenProcesos&&onOpenProcesos())}</div>}
         </div>
       </> })()}
 
@@ -39571,11 +39675,11 @@ function AjusteModal({client, user, onSave, onClose, saving, asPage=false, expen
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',miCarga:'Mi carga',editCliente:'Editar cliente'}
+const TAB_LABELS = {proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',miCarga:'Mi carga',editCliente:'Editar cliente'}
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['miCarga','Mi carga']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['procesos','Procesos automáticos'],['miCarga','Mi carga']],
   limited:[['tasks','Tareas'],['cartera','Mi cartera'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
@@ -42553,8 +42657,9 @@ export default function App() {
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack} origen={origenNav('Inicio')}/>}
             {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1100,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Oficina' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} anticipos={anticipos} sales={sales} fantasmaIds={fantasmaAltaIds} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})}/>
+              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} anticipos={anticipos} sales={sales} fantasmaIds={fantasmaAltaIds} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})} onOpenProcesos={()=>navTo({tab:'procesos'})}/>
             </div>}
+            {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
