@@ -8,6 +8,7 @@
 // autorizada se lee de learnings config 'agente_casilla'), o Bearer CARTOLA_SECRET, o body.secret = CRON_SECRET (pruebas).
 // body.dryRun = no guarda.
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
+import { leerAviso, calzarAviso, cuentaNorm, type Aviso } from "./avisos.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -66,6 +67,18 @@ function clientePorNombre(remitente: string, clientes: { id: string; name: strin
   const hits = clientes.filter((c) => { if (c.is_internal) return false; const ct = norm(c.name).split(/[^a-zñ]+/).filter((w) => w.length >= 3); return ct.length >= 2 && ct.length <= 4 && ct.every((w) => rt.some((r) => r === w || (w.length >= 5 && lev(r, w) <= 1))); });
   return hits.length === 1 ? hits[0] : null;
 }
+// Cliente por RUT, mismo orden que procesar-cartola: alias del pagador > razón social > cliente > factura.
+const normRut = (r: string) => String(r || "").replace(/[^0-9kK]/g, "").toUpperCase();
+async function resolverRut() {
+  const map: Record<string, string> = {};
+  const add = (rows: Record<string, unknown>[], rk: string, ik: string) => { for (const r of rows || []) { const k = normRut(r[rk] as string); if (k && r[ik] != null && !map[k]) map[k] = String(r[ik]); } };
+  const [al, en, cl, bi] = await Promise.all([rest("cliente_alias?select=rut_pagador,cliente_id").catch(() => []), rest("client_entities?select=rut,client_id").catch(() => []), rest("clients?select=id,rut").catch(() => []), rest("billing?select=receptor_rut,client_id&receptor_rut=not.is.null").catch(() => [])]);
+  add(al, "rut_pagador", "cliente_id"); add(en, "rut", "client_id"); add(cl, "rut", "id"); add(bi, "receptor_rut", "client_id");
+  return (rut: string | null) => (rut ? map[normRut(rut)] || null : null);
+}
+const BANCO_DOM = /@([a-z0-9-]+\.)*(bice|bancochile|bancoedwards|santander|bancoestado|bci|tbanc|scotiabank|itau|bancosecurity|security|bancofalabella|bancoripley|bancoconsorcio|bancointernacional|btgpactual|hsbc|coopeuch)\.cl$/i;
+const resumenAviso = (a: Aviso) => [a.tipo === "cargo" ? `A ${a.contraparte_nombre || "—"}` : `De ${a.contraparte_nombre || "—"}`, a.mensaje].filter(Boolean).join(" · ");
+
 // Valida el token de identidad con Google y devuelve el correo verificado de quien lo firmó.
 async function correoGoogle(tok: string): Promise<{ email: string | null; motivo?: string }> {
   try {
@@ -131,6 +144,18 @@ Deno.serve(async (req) => {
     ]);
     // Dominio de la oficina = el de la casilla del agente (configuración, no escrito en el código).
     const domOficina = (String(casillaCfg?.[0]?.value || "").split(/[,;\s]+/).find((e) => e.includes("@")) || "").split("@")[1]?.toLowerCase() || "";
+    const desde25 = iso(new Date(Date.now() - 25 * 86400000));
+    // deno-lint-ignore no-explicit-any
+    const [movsRec, avisosPrev]: any[] = await Promise.all([
+      rest(`cartola_movimientos?select=id,cuenta,fecha,tipo,monto,n_operacion,nombre_contraparte,rut_contraparte,detalle_aviso,cliente_id,estado,es_interno&fecha=gte.${desde25}&limit=5000`),
+      rest(`avisos_banco?select=id,gmail_id,banco,tipo,monto,cuenta,fecha_hora,n_operacion,contraparte_nombre,contraparte_rut,mensaje,movimiento_id,estado&created_at=gte.${iso(new Date(Date.now() - 40 * 86400000))}`),
+    ]);
+    const cuentasPropias = new Set((movsRec || []).map((m: { cuenta: string }) => cuentaNorm(m.cuenta)).filter(Boolean));
+    const avisoClave = (a: { banco: string; n_operacion: string | null; monto: number }) => `${a.banco}|${a.n_operacion || ""}|${Math.round(Number(a.monto))}`;
+    const clavesAviso = new Set((avisosPrev || []).filter((a: { n_operacion: string }) => a.n_operacion).map(avisoClave));
+    const gmailConAviso = new Set((avisosPrev || []).map((a: { gmail_id: string }) => a.gmail_id));
+    // deno-lint-ignore no-explicit-any
+    const avisosNuevos: any[] = [];
     // Segunda revisión: los comprobantes «en espera» (depósito aún no en el banco) se vuelven a cruzar con cada cartola nueva.
     const reRev = { revisados: 0, registrados: 0, por_conciliar: 0 };
     // deno-lint-ignore no-explicit-any
@@ -185,7 +210,15 @@ Deno.serve(async (req) => {
       const conocida = cta ? (cuentas || []).find((l: { key: string }) => l.key === llaveCta) : null;
       // deno-lint-ignore no-explicit-any
       const conoc: any = conocida ? (() => { try { return JSON.parse(conocida.value); } catch { return null; } })() : null;
-      if (esInterno) { fila.motivo = "Correo interno de la oficina"; }
+      // Aviso de transferencia de un banco hacia/desde una cuenta de la oficina: se guarda y se une a su movimiento.
+      const av = BANCO_DOM.test(de) ? leerAviso(de, asunto, cuerpo) : null;
+      if (av && cuentasPropias.has(av.cuenta)) {
+        fila.tipo = "aviso_banco"; fila.estado = "espera"; fila.propuesta = {};
+        fila.evidencia = [{ texto: resumenAviso(av), monto: av.monto, fuente: av.banco }];
+        if (av.n_operacion && clavesAviso.has(avisoClave(av))) { fila.estado = "registrado"; fila.motivo = "Aviso repetido: ya está registrado"; }
+        else { fila.motivo = "Aviso del banco · por llegar en la cartola"; avisosNuevos.push({ gmail_id: gid, ...av }); if (av.n_operacion) clavesAviso.add(avisoClave(av)); }
+      }
+      else if (esInterno) { fila.motivo = "Correo interno de la oficina"; }
       else if (ia?.pide_cambio_cuenta || (cta && conoc && conoc.cuenta !== cta.cuenta)) {
         fila.estado = "sospechoso"; fila.tipo = "cuenta_bancaria";
         fila.motivo = conoc && cta ? `La cuenta del correo (${cta.cuenta}) no coincide con la conocida (${conoc.cuenta})` : "El correo pide transferir a otra cuenta o cambiar datos bancarios";
@@ -240,8 +273,67 @@ Deno.serve(async (req) => {
       // deno-lint-ignore no-explicit-any
       if (dryRun) (out as any).filas = [...((out as any).filas || []), { gmail_id: gid, estado: fila.estado, tipo: fila.tipo, cliente: cid ? (cliPorId.get(cid) as { name?: string })?.name : null, abogado, propuesta: fila.propuesta, evidencia: fila.evidencia, motivo: fila.motivo, resumen: fila.resumen }];
     }
+    // Avisos de bancos: los que llegaron antes de esta función (se leen de la bandeja) y los nuevos, unidos a su movimiento.
+    const avStats = { nuevos: 0, calzados: 0, ambiguos: 0, por_calzar: 0 };
+    // deno-lint-ignore no-explicit-any
+    const previos: any[] = await rest(`agente_bandeja?select=gmail_id,de,asunto,cuerpo&recibido_at=gte.${iso(new Date(Date.now() - 30 * 86400000))}&tipo=neq.aviso_banco`);
+    for (const r of previos || []) {
+      if (!BANCO_DOM.test(r.de || "") || gmailConAviso.has(r.gmail_id) || avisosNuevos.some((x) => x.gmail_id === r.gmail_id)) continue;
+      const a = leerAviso(r.de, r.asunto, r.cuerpo || ""); if (!a || !cuentasPropias.has(a.cuenta)) continue;
+      if (a.n_operacion && clavesAviso.has(avisoClave(a))) continue;
+      avisosNuevos.push({ gmail_id: r.gmail_id, ...a }); if (a.n_operacion) clavesAviso.add(avisoClave(a));
+      if (!dryRun) await rest(`agente_bandeja?gmail_id=eq.${encodeURIComponent(r.gmail_id)}`, { method: "PATCH", body: JSON.stringify({ tipo: "aviso_banco", estado: "espera", motivo: "Aviso del banco · por llegar en la cartola", evidencia: [{ texto: resumenAviso(a), monto: a.monto, fuente: a.banco }] }) });
+    }
+    if (avisosNuevos.length && !dryRun) await rest("avisos_banco?on_conflict=gmail_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify(avisosNuevos) });
+    avStats.nuevos = avisosNuevos.length;
+    const pendientesAv = [...(avisosPrev || []).filter((a: { estado: string; movimiento_id: string }) => !a.movimiento_id && a.estado !== "calzado"), ...avisosNuevos.map((a) => ({ ...a, id: null }))];
+    const tomados = new Set<string>((avisosPrev || []).map((a: { movimiento_id: string }) => a.movimiento_id).filter(Boolean));
+    const resolver = pendientesAv.length ? await resolverRut() : () => null;
+    // Transferencias gemelas (mismo remitente, cuenta, monto y día; p. ej. dos fondos iguales de un cliente): si hay tantos
+    // movimientos como avisos, se unen en orden de hora. Monto y remitente son los mismos; solo el mensaje sigue el orden.
+    const diaCL = (ts: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago" }).format(new Date(ts));
+    const gemelos = new Map<string, string>();
+    const grupos = new Map<string, typeof pendientesAv>();
+    for (const a of pendientesAv) { if (!a.fecha_hora) continue; const k = [a.cuenta, a.tipo, Math.round(Number(a.monto)), diaCL(a.fecha_hora), norm(a.contraparte_nombre || "")].join("|"); grupos.set(k, [...(grupos.get(k) || []), a]); }
+    for (const g of grupos.values()) {
+      if (g.length < 2 || !norm(g[0].contraparte_nombre || "")) continue;
+      const r = calzarAviso(g[0], movsRec || [], tomados);
+      if (r.cand.length !== g.length) continue;
+      const av2 = [...g].sort((x, y) => String(x.fecha_hora).localeCompare(String(y.fecha_hora)));
+      const mv2 = [...r.cand].sort((x, y) => Number(x.n_operacion || 0) - Number(y.n_operacion || 0) || String(x.fecha).localeCompare(String(y.fecha)));
+      av2.forEach((a, i) => gemelos.set(a.gmail_id, mv2[i].id));
+    }
+    // deno-lint-ignore no-explicit-any
+    const calces: any[] = [];
+    for (const a of pendientesAv) {
+      const gm = gemelos.get(a.gmail_id);
+      const r = gm ? { estado: "calzado" as const, mov: (movsRec || []).find((m: { id: string }) => m.id === gm), cand: [] } : calzarAviso(a, movsRec || [], tomados);
+      if (r.estado === "calzado" && r.mov) {
+        tomados.add(r.mov.id); avStats.calzados++;
+        // deno-lint-ignore no-explicit-any
+        const mv: any = r.mov, cambios: any = {};
+        if (!mv.nombre_contraparte && a.contraparte_nombre) cambios.nombre_contraparte = a.contraparte_nombre;
+        if (!mv.rut_contraparte && a.contraparte_rut) cambios.rut_contraparte = a.contraparte_rut;
+        if (!mv.detalle_aviso && a.mensaje) cambios.detalle_aviso = a.mensaje;
+        const cli = !mv.cliente_id && !mv.es_interno && mv.estado === "pendiente" ? resolver(a.contraparte_rut) : null;
+        if (cli) cambios.cliente_id = cli;
+        calces.push({ gmail_id: a.gmail_id, movimiento: mv.id, fecha: mv.fecha, cambios });
+        if (!dryRun) {
+          await rest(`avisos_banco?gmail_id=eq.${encodeURIComponent(a.gmail_id)}`, { method: "PATCH", body: JSON.stringify({ movimiento_id: mv.id, estado: "calzado", candidatos: null }) });
+          if (Object.keys(cambios).length) await rest(`cartola_movimientos?id=eq.${mv.id}`, { method: "PATCH", body: JSON.stringify(cambios) });
+          await rest(`agente_bandeja?gmail_id=eq.${encodeURIComponent(a.gmail_id)}`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", motivo: `Unido al movimiento del banco del ${dmy(mv.fecha)}`, propuesta: { movimiento_id: mv.id } }) });
+        }
+      } else if (r.estado === "ambiguo") {
+        avStats.ambiguos++;
+        if (!dryRun) {
+          await rest(`avisos_banco?gmail_id=eq.${encodeURIComponent(a.gmail_id)}`, { method: "PATCH", body: JSON.stringify({ estado: "ambiguo", candidatos: r.cand.map((m) => m.id) }) });
+          await rest(`agente_bandeja?gmail_id=eq.${encodeURIComponent(a.gmail_id)}&estado=neq.descartado`, { method: "PATCH", body: JSON.stringify({ estado: "pendiente", motivo: `${r.cand.length} movimientos del banco por el mismo monto`, propuesta: { accion: "conciliar", titulo: "Elegir el movimiento en Banco", movimiento_id: r.cand[0].id } }) });
+        }
+      } else avStats.por_calzar++;
+    }
     if (!dryRun && out.procesados) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente-correo", action: "agente.correos_procesados", table_name: "agente_bandeja", detail: JSON.stringify({ title: `${out.procesados} correos revisados`, ...out.por_estado }) }) }).catch(() => null);
-    return json({ ok: true, dryRun, ...out, segunda_revision: reRev });
+    if (!dryRun && avStats.calzados) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente-correo", action: "agente.avisos_banco_unidos", table_name: "cartola_movimientos", detail: JSON.stringify({ title: `${avStats.calzados} avisos del banco unidos a su movimiento`, calces }) }) }).catch(() => null);
+    return json({ ok: true, dryRun, ...out, segunda_revision: reRev, avisos_banco: avStats, ...(dryRun ? { calces } : {}) });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }

@@ -38670,6 +38670,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
     const nomBanco=(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))
     return (
                 <div style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
+                  {m.detalle_aviso&&<div style={{fontSize:11,color:C.text,marginBottom:4,lineHeight:1.45}}><b>Mensaje de la transferencia:</b> {m.detalle_aviso}</div>}
                   <div style={{fontSize:10,color:C.muted,marginBottom:5,lineHeight:1.45}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:C.azulInfo,cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
                 {m.es_interno&&(()=>{ const tr=traspasos.de[m.id]; const cta=r=>r==='gastos'?'Cta. Gastos':'Cta. Honorarios'
                   const ir=id=>{ irMov(id); if(isDesktop) setDeskSel({id,idx:0}) }
@@ -39187,7 +39188,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
                   {diaGrande(m.fecha)}
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{quienMov(m)}</div>
-                    <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ec.t}{m.tipo==='cargo'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria&&(cargoSugerencia(m)||liqParaCargo(m))?' · sugerida':''}</div>
+                    <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ec.t}{m.tipo==='cargo'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria&&(cargoSugerencia(m)||liqParaCargo(m))?' · sugerida':''}{m.detalle_aviso?` · ${m.detalle_aviso}`:''}</div>
                   </div>
                   <span style={{width:8,height:8,borderRadius:'50%',background:ec.c,flexShrink:0}}/>
                   <span style={{fontSize:13,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',flexShrink:0}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
@@ -39630,6 +39631,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||tipoMov(m.descripcion)}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.rut_contraparte||'sin RUT'} · {m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</div></div>
                   <div style={{fontSize:16,fontWeight:800,color:C.greenText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>+{fmtM(m.monto)}</div>
                 </div>
+                {m.detalle_aviso&&<div style={{fontSize:11,color:C.text,marginTop:8,lineHeight:1.4}}><b>Mensaje de la transferencia:</b> {m.detalle_aviso}</div>}
                 {m.descripcion&&<div style={{fontSize:10,color:C.muted,marginTop:8,lineHeight:1.4}}><b>Glosa:</b> {(m.descripcion||'').slice(0,90)}{(m.descripcion||'').length>90?'…':''}</div>}
                 {sc
                   ? <div style={{background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:12,padding:'10px 12px',marginTop:12}}>
@@ -39716,7 +39718,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
                     <span style={{fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue,flexShrink:0}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                    <span title={m.descripcion||''} style={{fontSize:11,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliName?(rsId?`${rsId.name}${rsId.rut?` · ${fmtRutCL(rsId.rut)}`:''}`:`${nomBanco}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}`):(m.rut_contraparte||tipoMov(m.descripcion))}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>revisar RUT</span>:''}</span>
+                    <span title={m.descripcion||''} style={{fontSize:11,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliName?(rsId?`${rsId.name}${rsId.rut?` · ${fmtRutCL(rsId.rut)}`:''}`:`${nomBanco}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}`):(m.rut_contraparte||tipoMov(m.descripcion))}{m.detalle_aviso?` · ${m.detalle_aviso}`:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>revisar RUT</span>:''}</span>
                     <span style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
                     {(()=>{ const _pr=m.tipo==='abono'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m)); if(!_pr) return null; const _t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; if(isNaN(_t)) return null; const _d=Math.floor((Date.now()-_t)/86400000); if(_d<30) return null; const _c=_d>90?C.overdueText:C.soonText,_b=_d>90?C.overdueBg:C.soonBg; return <span title={`Sin cruzar hace ${_d} días`} style={{fontSize:9.5,fontWeight:700,color:_c,background:_b,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{_d>90?'+90 días':`${_d} días`}</span> })()}
                     <span onClick={facObj?(e)=>{e.stopPropagation();setFacChip(facChip===m.id?null:m.id)}:undefined} style={{fontSize:10,fontWeight:600,padding:'1px 8px',borderRadius:20,background:ec.bg,color:ec.c,cursor:facObj?'pointer':'default',flexShrink:0}}>{ec.t}{facObj?(facChip===m.id?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span>
