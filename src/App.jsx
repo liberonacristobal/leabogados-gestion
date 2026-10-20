@@ -15122,6 +15122,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const [tf,setTf] = useState(mem?.tf||'todos')        // filtro Por trabajo: todos | por_pagar | por_devengar | pagados | revisar | sincuota | porfacturar
   const [cf,setCf] = useState('todas')                 // filtro de cuotas en la ficha: todas | por_pagar | por_devengar | pagada
   const [cliF,setCliF] = useState(null)                // filtro por cliente en la ficha (no mezclar la bolsa)
+  const [mesF,setMesF] = useState(null)                // filtro por mes de la cuota del cliente (tarjeta Comisiones sujetas a cobro, por mes)
   const [ordC,setOrdC] = useState(-1), [ordP,setOrdP] = useState(-1)   // orden por fecha: comisiones · pagos y facturas del SII (−1 = más nuevo primero)
   const [expT,setExpT] = useState(null), [nVer,setNVer] = useState(5) // comisión desplegada · cuántas se muestran
   const [revOpen,setRevOpen] = useState(false), [secAb,setSecAb] = useState(null), [cliMas,setCliMas] = useState(false)   // ficha: revisar y acciones · tarjetita abierta · más clientes
@@ -15697,7 +15698,10 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     const porIdentP = pagosLibresDe(sel.id).filter(m=>marcas[m.id])
     const nCli = new Set(ts.map(t=>String(cliDe(t)?.id||'x'))).size
     const alCobroTot = sumSaldo(tCob)
-    const filtroT = t => (cf==='todas'||(cf==='sinfac'?sinFacProv.includes(t):est(t)===cf)) && (!cliF||String(cliDe(t)?.id||'x')===String(cliF))
+    // Mes de la comisión sujeta a cobro = el de la cuota del cliente: vencimiento de la factura emitida o fecha de la programada.
+    const fechaCuotaT = t => { const b=facDe(t); return String((b?.invoice_no?venceBill(b):(b?.due||b?.issued_at))||'').slice(0,10) }
+    const mesT = t => fechaCuotaT(t).slice(0,7)
+    const filtroT = t => (cf==='todas'||(cf==='sinfac'?sinFacProv.includes(t):est(t)===cf)) && (!cliF||String(cliDe(t)?.id||'x')===String(cliF)) && (!mesF||mesT(t)===mesF)
     const fEmi = t => String(facDe(t)?.issued_at||facDe(t)?.due||t.pagado_at||t.created_at||'').slice(0,10)
     const tsF = ts.filter(filtroT).sort((a,b)=>ordC*(fEmi(a)<fEmi(b)?-1:fEmi(a)>fEmi(b)?1:0))
     const tsMostrar = tsF.slice(0,nVer)
@@ -15716,6 +15720,31 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       {tile('cob','Sujeto a cobro',alCobroTot,`${tCob.length} factura${tCob.length!==1?'s':''} sin cobrar`,'por_devengar')}
     </div>
     // Quien emite boleta: costo pagado del año separado en retención (F29) y líquido (transferido).
+    const mesLbl = (k,largo) => { const [y,m]=String(k||'').split('-').map(Number); if(!y||!m) return 'Sin fecha'; return largo?mesTitulo(new Date(y,m-1,1)):`${MES_C[m-1]} ${y}` }
+    // Comisiones sujetas a cobro, por mes de la cuota del cliente: monto = líquido (lo que se transfiere), bruto en la línea de abajo. Total en bruto = tarjeta «Sujeto a cobro».
+    const mesCard = (()=>{ if(!ro||!tCob.length) return null
+      const g={}; tCob.forEach(t=>{ const k=mesT(t)||'sin'; (g[k]=g[k]||[]).push(t) })
+      const meses=Object.entries(g).sort((a,b)=>a[0]==='sin'?1:b[0]==='sin'?-1:a[0].localeCompare(b[0]))
+      const liqT=t=>saldoPag(t), totLiq=tCob.reduce((a,t)=>a+liqT(t),0)
+      const ultimo=n=>String(n||'').trim().split(/\s+/).slice(-1)[0]||n
+      const irMes=k=>{ setMesF(mesF===k?null:k); setCf('por_devengar'); setCliF(null); setNVer(30); setTimeout(()=>{ try{ document.getElementById('pv-comisiones')?.scrollIntoView({behavior:'smooth',block:'start'}) }catch(_){} },60) }
+      const cliLnk=(c,txt)=>c&&onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(c.id)}} style={{cursor:'pointer',textDecoration:'underline',textDecorationColor:C.border,textUnderlineOffset:2}}>{txt}</span>:<span>{txt}</span>
+      return <div style={{...card,overflow:'hidden'}}>
+        {band('Comisiones sujetas a cobro, por mes',<span style={{fontSize:11,color:C.muted}}>líquido</span>)}
+        {meses.map(([k,xs],i)=>{ const venc=xs.some(t=>{ const f=fechaCuotaT(t); return !!f&&f<hoyISO }), bruto=xs.reduce((a,t)=>a+saldoT(t),0), liq=xs.reduce((a,t)=>a+liqT(t),0)
+          const clis=[...new Map(xs.map(t=>{ const c=cliDe(t); return [String(c?.id||'x'),c] })).values()]
+          const det=xs.map((t,j)=>{ const c=cliDe(t), nc=nCuotaDe(facDe(t)); return <Fragment key={t.id}>{j?' · ':''}{cliLnk(c,c?.name||'Sin cliente')}{nc?` cuota ${nc.n}${nc.de?'/'+nc.de:''}`:''}</Fragment> })
+          const detM=clis.length===1?`${clis[0]?.name||'Sin cliente'} · ${xs.length} cuota${xs.length!==1?'s':''}`:clis.length===2?`${ultimo(clis[0]?.name)} y ${ultimo(clis[1]?.name)} · ${xs.length} cuotas`:`${clis.length} clientes · ${xs.length} cuotas`
+          return <div key={k} onClick={()=>irMes(k)} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:isDesktop?'10px 14px':'10px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer',outline:mesF===k?`1.5px solid ${C.accent}`:'none',outlineOffset:-1.5}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{k==='sin'?'Sin fecha':mesLbl(k,isDesktop)}{venc&&<span style={{fontSize:10,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'2px 8px',marginLeft:6}}>vencida</span>}</div>
+              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isDesktop?<>{det}{venc&&xs.length===1?' · pendiente de pago del cliente':''} · bruto {fmt(bruto)}</>:detM}</div>
+            </div>
+            <span style={{fontSize:13,fontWeight:800,color:C.text,...num,flexShrink:0}}>{fmt(liq)}</span>
+            {isDesktop&&<span style={{color:C.done,flexShrink:0}}><Gl n='chevron'/></span>}
+          </div> })}
+        <div style={{display:'flex',justifyContent:'space-between',padding:isDesktop?'9px 14px':'9px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12}}><span style={{color:C.muted}}>{tCob.length} cuota{tCob.length!==1?'s':''}{isDesktop?` · bruto ${fmt(alCobroTot)}`:''}</span><b style={{color:C.accent,...num}}>{fmt(totLiq)}</b></div>
+      </div> })()
     const cuadreCard = (()=>{ const {items,ok,filas}=cuadreComisiones({ts, billing, anticipos, concs:ro?concsRo:concs, sales}); if(!items.length&&!ok.length) return null
       const keyR=k=>`${sel.id}:${k}`, cliN=sid=>{ const sv=(sales||[]).find(x=>String(x.id)===String(sid)); return clients.find(c=>String(c.id)===String(sv?.client_id))?.name||'Sin cliente' }
       const pend=items.filter(x=>!cuadreResp[keyR(x.k)])
@@ -15849,9 +15878,9 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
         {enlP?.tid===t.id&&panelEnlace()}</Fragment> }
     const exportCuotas = () => exportCSV(`comisiones_${tituloProv(sel).replace(/\s+/g,'_')}.csv`,['Emitida','Cliente','Tu factura','Glosa','Cliente pagó','Factura del proveedor','Comisión','Le pagaste','Estado'],
       tsF.map(t=>{ const b=facDe(t); return [dmy(fEmi(t)),cliDe(t)?.name||'',b?.invoice_no?`N° ${folioN(b.invoice_no)}`:'',b?glosaFactura(b):'',pagoCli(t)?.fecha?dmy(pagoCli(t).fecha):'',t.factura_numero||'',Math.round(Number(t.monto)||0),t.pagado_at?dmy(t.pagado_at):'',estLbl(t)[0]] }))
-    const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)
+    const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)+(mesF?` · ${mesF==='sin'?'Sin fecha':mesLbl(mesF,true)}`:'')
     const comisionesCard = <div id='pv-comisiones' style={{...card,overflow:'hidden'}}>
-      {band(asgOpen?'Agregar comisión a una factura tuya':tituloLista,asgOpen?link('Cerrar',()=>setAsgOpen(false),C.accent):ordTog(ordC,setOrdC))}
+      {band(asgOpen?'Agregar comisión a una factura tuya':tituloLista,asgOpen?link('Cerrar',()=>setAsgOpen(false),C.accent):<span style={{display:'inline-flex',gap:10,alignItems:'center'}}>{mesF&&link('Quitar mes',()=>setMesF(null),C.accent)}{ordTog(ordC,setOrdC)}</span>)}
       {asgOpen&&(()=>{ const yaAsig=new Set(ts.map(t=>String(t.billing_id))); const asignables = facQ.trim() ? billing.filter(b=>{ if(b.status==='Anulada'||b.billing_type==='reembolso'||yaAsig.has(String(b.id))) return false; const c=clients.find(x=>String(x.id)===String(b.client_id)); return _normTxt(`${c?.name||''} ${b.concept||''} ${b.invoice_no||''} ${b.receptor_name||''}`).includes(_normTxt(facQ)) }).slice(0,10) : []
         const asignar = async bid => { const m=parseInt(montos[bid])||0; if(!m||!onAsignarFacturas) return; setAsgBusy(bid); const ok=await onAsignarFacturas(sel.id,[{billing_id:bid,monto:m}]); setAsgBusy(null); if(ok){ setMontos(p=>{const n={...p};delete n[bid];return n}); const b=billing.find(x=>String(x.id)===String(bid)); logActividad(`proveedores.${sel.id}.asignar`,{tabla:'billing',id:bid,detalle:{title:b?.invoice_no?`Factura ${folioN(b.invoice_no)}`:'Factura',monto:m}}) } }
         return <div style={{padding:'0 14px 10px'}}><Buscador value={facQ} onChange={setFacQ} placeholder='Factura de la oficina: cliente, concepto o N°…' autoFocus/>
@@ -15931,10 +15960,10 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     return (<div>{css}
       <PageHeader origen={ro?origen:'Proveedores'} onBack={ro?onBack:()=>setView('list')} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
       {wrap(isDesktop ? <>
-        {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}{cuadreCard}
+        {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}{mesCard}{cuadreCard}
         <div style={{display:'grid',gridTemplateColumns:conBolF?'minmax(0,1fr) minmax(0,2.8fr)':'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
         {!ro&&minis}{!ro&&secAbierta&&secAbierta.el}
-      </> : <>{tiles}{bolStrip}{datosStrip}{acciones}{revPanel}{cuadreCard}{porClienteCard}{comisionesCard}{!ro&&minis}</>)}
+      </> : <>{tiles}{bolStrip}{datosStrip}{acciones}{revPanel}{mesCard}{cuadreCard}{porClienteCard}{comisionesCard}{!ro&&minis}</>)}
     </div>)
   }
 
