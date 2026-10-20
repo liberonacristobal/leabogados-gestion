@@ -67,6 +67,7 @@ const BRAND = {
   // porque el MISMO deploy sirve ambos → una env var no serviría. Fallback a gestion en localhost / previews de Vercel. LEA queda idéntico.
   dominio: (typeof window!=='undefined' && window.location && window.location.host && !/^localhost|^127\.|\.vercel\.app$/i.test(window.location.host)) ? window.location.host : 'gestion.leabogados.cl',
   web: 'leabogados.cl',
+  emailDominio: 'leabogados.cl',   // dominio de las cuentas del equipo (aviso de reingreso cuando un correo no sale)
   notaria: 'Notaría',
   ccNotaria: '',                     // copia del estudio en los correos a la notaría (configurable: estudios.cc_notaria; antes escrito fijo en 4 lugares)                // notaría con que trabaja el estudio (configurable: estudios.notaria_nombre; LEA = 'Notaría Lascar')
   cajaChicaUmbral: 50000,            // aviso "Caja chica baja" cuando el saldo de un miembro queda en o bajo este monto (configurable por estudio: estudios.caja_chica_umbral)
@@ -1325,6 +1326,8 @@ function fondosSinTrabajo(expenses, clientId, scopeEntId=null){
 }
 // Gastos de una rendición: los guardados (client_render_id) o, en la vista previa sin guardar, los que trae la rendición.
 const gastosDeRend = (r, expenses) => (r&&r._gastos) ? r._gastos : (expenses||[]).filter(e=>e.client_render_id===r?.id)
+// Fondo de una rendición guardada (misma regla que su correo y su PDF): con 2+ RS se acota a la RS de sus gastos; por trabajo, a su trabajo.
+const fondoDeRend = (r, expenses, clientEntities) => { const det=gastosDeRend(r,expenses).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))); const entId=((clientEntities||[]).filter(e=>e.client_id===r.client_id).length>1)?(det.find(e=>e.entity_id)||{}).entity_id:null; return rendicionFondo(expenses, r.client_id, entId, null, r.por_trabajo?(r.project||''):null) }
 // Rendiciones ANTERIORES (para el desglose "Resumen del fondo"): agrupa gastos ya rendidos por rendición,
 // excluyendo la actual. Recibe movimientos ya acotados a la RS. Devuelve [{total,fecha}] y la suma.
 function rendicionesPreviasDe(scopedMovs, excludeRenderId){
@@ -2308,10 +2311,10 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
         // 1) desde el correo del propio usuario (Gmail API)
         try{
           const token = await driveToken()
-          if(token && pdf){ await sendGmailWithPdf(token, {to:toAll, subject:asunto, bodyText:texto, bodyHtml:emb.html, inlineImages:emb.inlineImages, pdfBase64:pdf, pdfName}); sent=true }
+          if(token && pdf){ await sendGmailWithPdf(token, {to:toAll, subject:asunto, bodyText:texto, bodyHtml:emb.html, inlineImages:emb.inlineImages, pdfBase64:pdf, pdfName}); sent='usuario' }
         }catch(_){ sent=false }
         // 2) si el Gmail del usuario falló, se PREGUNTA antes de usar la oficina; si dice que no, cae al mailto (3) desde su correo
-        if(!sent && pdf && await appConfirm(MAIL_OFICINA_CONFIRM)){ try{ await sendMailServer({to:toAll, subject:asunto, html, text:texto, pdfBase64:pdf, pdfName}); sent=true }catch(_){ sent=false } }
+        if(!sent && pdf && await appConfirm(MAIL_OFICINA_CONFIRM)){ try{ await sendMailServer({to:toAll, subject:asunto, html, text:texto, pdfBase64:pdf, pdfName}); sent='oficina' }catch(_){ sent=false } }
         // 3) último recurso: mailto + PDF imprimible para adjuntar a mano
         if(!sent){
           const ccStr = (cc||'').trim() ? '&cc=' + encodeURIComponent(cc.trim()) : ''
@@ -2320,7 +2323,8 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
           mailLink.click()
           try{ generatePDF() }catch(_){}   // abre el PDF imprimible para adjuntar a mano
         }
-        correoOk = true
+        // Confirmación explícita: salió (desde qué cuenta y a quién) o no salió y quedó abierto el correo para enviarlo a mano.
+        correoOk = sent ? {ok:true, t:txtEnviado(sent,{que:'Correo de la liquidación', para:toAll})} : {ok:false, t:'El correo NO se envió automáticamente: se abrió tu correo para enviarlo a mano con el PDF. '+TXT_REINGRESO()}
       }
       setToast({ n: marcados.length, total: totalReal, correo: correoOk })
     } catch(e) { appAlert('Error: '+e.message) }
@@ -2471,7 +2475,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
             <div>
               <div style={{fontSize:13,fontWeight:700,color:C.greenText}}>Liquidación registrada</div>
               <div style={{fontSize:12,color:C.text,marginTop:2}}>{toast.n} gasto{toast.n!==1?'s':''} liquidado{toast.n!==1?'s':''} por {fmtCLP(toast.total)}</div>
-              {toast.correo&&<div style={{fontSize:11,color:C.soon,marginTop:5,fontWeight:600}}>Correo preparado — envíalo desde tu correo</div>}
+              {toast.correo&&<div style={{fontSize:11,color:toast.correo.ok?C.greenText:C.soonText,marginTop:5,fontWeight:600}}>{toast.correo.t}</div>}
             </div>
             <button onClick={()=>setToast(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}><Gl n='x'/></button>
           </div>
@@ -9884,7 +9888,8 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
       const link=`${location.origin}/?merge=${token}`
       if(!DEMO){
         await supabase.from('learnings').insert({kind:'merge_pending',key:token,value:JSON.stringify({survivor_id:survId,loser_id:loserId,survivor_name:s.name,loser_name:l.name,by:user?.name||'',at:new Date().toISOString()})})
-        await enviarComoUsuario({to,subject:`¿Son el mismo cliente? Confirma la fusión — ${s.name}`,html:emailPropuesta(s,l,ks,kl,link),text:`¿"${s.name}" y "${l.name}" son el mismo cliente? Revisa y confirma: ${link}`})
+        const via=await enviarComoUsuario({to,subject:`¿Son el mismo cliente? Confirma la fusión — ${s.name}`,html:emailPropuesta(s,l,ks,kl,link),text:`¿"${s.name}" y "${l.name}" son el mismo cliente? Revisa y confirma: ${link}`,que:'La propuesta de fusión'})
+        if(!via){ await supabase.from('learnings').delete().eq('kind','merge_pending').eq('key',token); setBusy(false); return }   // no salió: no queda una propuesta colgando
       }
       setRes({propuesta:true,owner,to})
     }catch(e){ setMsg('No se pudo proponer: '+(e.message||e)) }
@@ -9917,7 +9922,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     if(!await appConfirm(`¿Avisar a ${surv.abogado_responsable} (${to}) que se fusionaron las fichas de ${surv.name}?`)) return
     try{
       const via=await enviarComoUsuario({to,subject:`Carpetas duplicadas de ${surv.name} — fusionadas`,html:emailDueno(surv,res._l,res._ks,res._kl),text:`Fusioné las dos fichas duplicadas de ${surv.name} en una sola, sin perder información.`})
-      if(via){ setAvisado(true); appAlert('Aviso enviado al responsable'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') }
+      if(via){ setAvisado(true); appAlert(txtEnviado(via,{que:'Aviso',para:'el responsable'})) }
     }catch(e){ appAlert('No se pudo enviar el aviso: '+(e.message||e)) }
   }
   if(res) return (
@@ -11707,7 +11712,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const _tok = await driveToken()
     let batchModo = _tok ? 'usuario' : null
     if(!batchModo){
-      if(!await appConfirm(`No se pudo preparar el envío desde tu correo: tu acceso a Gmail expiró.\nPara que salgan desde TU correo: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl.\n\n¿Enviar las ${conDest.length} desde la cuenta de oficina en su lugar?${sinDest?`\n(${sinDest} se omiten sin correo recordado.)`:''}\n(Cancelar = no enviar)`)) return
+      if(!await appConfirm(`No se pudo preparar el envío desde tu correo: tu acceso a Gmail expiró.\nPara que salgan desde TU correo: cierra sesión y vuelve a entrar con tu cuenta @${BRAND.emailDominio}.\n\n¿Enviar las ${conDest.length} desde la cuenta de oficina en su lugar?${sinDest?`\n(${sinDest} se omiten sin correo recordado.)`:''}\n(Cancelar = no enviar)`)) return
       batchModo='oficina'
     } else if(!await appConfirm(`Enviar ${conDest.length} factura(s) desde TU correo a su destinatario recordado.${sinDest?`\n${sinDest} se omiten (sin correo recordado).`:''}\n\n¿Continuar?`)) return
     setEnvioMasivoBusy(true)
@@ -11731,7 +11736,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       }catch(_){ err++ }
     }
     setEnvioMasivoBusy(false)
-    appAlert(`Envío masivo listo.\nEnviadas: ${ok}${err?` · con error: ${err}`:''}${sinDest?` · omitidas sin correo: ${sinDest}`:''}`)
+    appAlert(txtResumenEnvio({ok, no:err, via:batchModo, que:ok===1?'factura':'facturas', g:'a'})+(sinDest?`\n(${sinDest} sin correo recordado, omitida${sinDest!==1?'s':''}.)`:''))
   }
   // Deshacer un envío (ej. una prueba): limpia email_sent_at → la factura vuelve a "Por enviar". Reversible (vuelves a Enviar cuando quieras).
   const onUnsendFactura = async (b) => {
@@ -12039,7 +12044,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const filas=pend.map(b=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">N° ${folioN(b.invoice_no)||b.invoice_no}</td><td style="padding:6px 8px;border-bottom:1px solid #eee">${b.due?fmtFechaDMY(b.due):'—'}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">$${saldoBill(b).toLocaleString('es-CL')}</td></tr>`).join('')
     const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="${location.origin}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Espero que estén muy bien. Les compartimos el estado de cuenta con las facturas pendientes a la fecha:<br><br><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50">Factura</th><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50">Vence</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #003C50">Saldo</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="2" style="padding:8px 8px;font-weight:bold">Total adeudado</td><td style="padding:8px 8px;text-align:right;font-weight:bold;color:#003C50">$${total.toLocaleString('es-CL')}</td></tr></tfoot></table><br>${DATOS_PAGO_HTML}Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>${BRAND.nombre}</b></div></div>`
     const text=`Estado de cuenta — ${cli.name}\n\n${pend.map(b=>`N° ${folioN(b.invoice_no)||b.invoice_no} · vence ${b.due?fmtFechaDMY(b.due):'—'} · $${saldoBill(b).toLocaleString('es-CL')}`).join('\n')}\n\nTotal adeudado: ${fmt(total)}\n\n${DATOS_PAGO_TXT}\n\nSaludos cordiales,\n${BRAND.nombre}`
-    try{ const via=await enviarComoUsuario({to, subject:`Estado de cuenta — ${BRAND.nombre}`, html, text}); if(via) appAlert(`Estado de cuenta enviado a ${to}${via==='oficina'?' (desde la cuenta de oficina)':''}.`) }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
+    try{ const via=await enviarComoUsuario({to, subject:`Estado de cuenta — ${BRAND.nombre}`, html, text}); if(via) appAlert(txtEnviado(via,{que:'Estado de cuenta',para:to})) }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
   }
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   // Resuelve el correo del cliente igual que los envíos de facturas: ficha → correo aprendido (factura_to) → contactos.
@@ -12057,7 +12062,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   // Envía el recordatorio ya previsualizado (desde el modal de vista previa). La nota se guarda por cliente.
   const enviarRecordatorio = async({b, to, nota})=>{
     const r=recordatorioCobro(b, nota)
-    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; const cid=String(b.client_id||''); if(cid){ try{ await setLearningKV('recordatorio_nota',cid,String(nota||'')); setRecNotaMap(m=>({...m,[cid]:String(nota||'')})) }catch(_){} }; setRecPreview(null); appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
+    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; const cid=String(b.client_id||''); if(cid){ try{ await setLearningKV('recordatorio_nota',cid,String(nota||'')); setRecNotaMap(m=>({...m,[cid]:String(nota||'')})) }catch(_){} }; setRecPreview(null); appAlert(txtEnviado(via,{que:`Recordatorio (${r.nivel})`,para:to})) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Recordatorio de cobro por TANDA (desde el Cierre de mes): una sola compuerta que lista los destinatarios;
@@ -12067,9 +12072,11 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const sinCorreo = (facturas||[]).length - dest.length
     if(!dest.length){ appAlert('Ninguna de estas facturas tiene correo del cliente en la ficha para recordar.'); return }
     if(!await appConfirm(`¿Enviar ${dest.length} recordatorio${dest.length!==1?'s':''} de cobro desde tu cuenta?\n\n${dest.slice(0,8).map(d=>`· ${d.name} — ${d.r.folio}`).join('\n')}${dest.length>8?`\n… y ${dest.length-8} más`:''}${sinCorreo>0?`\n\n(${sinCorreo} sin correo se omiten.)`:''}`)) return
+    const modo=await modoEnvioLote(dest.length)
+    if(modo==='cancelar'){ appAlert(txtResumenEnvio({ok:0,no:dest.length,que:'recordatorios'})); return }
     let ok=0
-    for(const d of dest){ try{ const ad=await facturaPdfAdjunto(d.b); const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text, attachments:ad?[ad]:null}); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(d.b.id),at) }catch(_){}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(_){} }
-    appAlert(`${ok} de ${dest.length} recordatorio${dest.length!==1?'s':''} enviado${ok!==1?'s':''}.`)
+    for(const d of dest){ try{ const ad=await facturaPdfAdjunto(d.b); const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text, attachments:ad?[ad]:null}, modo); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(d.b.id),at) }catch(_){}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(_){} }
+    appAlert(txtResumenEnvio({ok, no:dest.length-ok, via:modo, que:ok===1?'recordatorio':'recordatorios'})+(sinCorreo>0?`\n(${sinCorreo} sin correo en la ficha, omitido${sinCorreo!==1?'s':''}.)`:''))
   }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
   const acuseCobro = async(b)=>{
@@ -12079,7 +12086,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const folio=b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'
     const monto='$'+(b.amount||0).toLocaleString('es-CL')
     if(!await appConfirm(`¿Enviar acuse de pago a ${to} por ${folio} (${monto})?`)) return
-    try{ const via=await acusePagoEmail(to,{folio,monto,fecha:b.paid_at?fmtFechaDMY(b.paid_at):''}); if(via) appAlert(`Acuse de pago enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) }
+    try{ const via=await acusePagoEmail(to,{folio,monto,fecha:b.paid_at?fmtFechaDMY(b.paid_at):''}); if(via) appAlert(txtEnviado(via,{que:'Acuse de pago',para:to})) }
     catch(e){ appAlert('No se pudo enviar el acuse: '+e.message) }
   }
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
@@ -15532,7 +15539,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       return {txt:`${c?.name||'Sin cliente'} · ${b?.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b?.concept||w.titulo||'Comisión')}`, pago:pagoCli(t)?.fecha||null, monto:pagarT(t)} })
     return <CorreoBoletaPage prov={sel} bm={bolMail} lineas={lineas} user={user} onBack={()=>{setBolMail(null);setView('ficha')}}
       onSent={r=>{ logActividad(`proveedores.${sel.id}.boleta_enviada`,{tabla:'terceros_pagos',id:bolMail.ids[0],detalle:{title:`Boleta N° ${bolMail.folio} enviada a la oficina`,monto:bolMail.liq}}); if(!DEMO&&bolMail.bheId) setLearningKV('boleta_enviada',String(bolMail.bheId),new Date().toISOString()).catch(()=>{})
-        appAlert(r==='oficina'?'Enviado desde la cuenta de oficina, con la boleta adjunta.':'Boleta enviada a la oficina.'); setBolMail(null); setView('ficha') }}/> }
+        appAlert(txtEnviado(r==='oficina'?'oficina':'usuario',{que:'Boleta',g:'a',para:'la oficina'})+' Con la boleta adjunta.'); setBolMail(null); setView('ficha') }}/> }
   if(view==='boleta'&&sel&&bol){
     const ts=tercDe(sel.id).filter(t=>est(t)!=='pagada'&&(!ro||(est(t)==='por_pagar'&&!t.factura_numero))).sort((a,b)=>(est(a)==='por_pagar'?0:1)-(est(b)==='por_pagar'?0:1))
     const elegidas=ts.filter(t=>bol.ids.has(t.id)), total=sumM(elegidas), monto=parseInt(String(bol.monto).replace(/\D/g,''))||0
@@ -16323,7 +16330,7 @@ const PasosRend = ({paso}) => (<div style={{display:'flex',alignItems:'center',g
   {[[1,'Gastos y saldo'],[2,'Correo y envío']].map(([n,l],i)=>(<Fragment key={n}>{i>0&&<span style={{color:C.done}}>→</span>}<span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:paso===n?C.accent:C.muted,whiteSpace:'nowrap'}}><span style={{width:20,height:20,borderRadius:'50%',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,background:paso===n?C.accent:C.track,color:paso===n?'#fff':C.muted}}>{n}</span>{l}</span></Fragment>))}
 </div>)
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling, asPage=false}) {
+function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling, asPage=false, preSel=false, navBorr=null, onRevisada=null}) {
   const esEdicion = !!editRend
   const isDesktop = useIsDesktop()
   const [selected, setSelected] = useState(()=> editRend ? new Set((expenses||[]).filter(e=>String(e.client_render_id)===String(editRend.id)).map(e=>e.id)) : new Set())
@@ -16387,7 +16394,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const _variosT = Object.keys(proyConteo).length>=2 && fondosSinTrabajo(expenses, client.id, singleRS?null:selEnt)===0
   const proyectoDefault = _variosT ? '' : (Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])[0] || '')
   // Al cambiar de RS (o al abrir), preseleccionar solo si hay un proyecto con gastos; si no, dejar "Todos" para no esconder nada.
-  useEffect(()=>{ if(esEdicion) return; setProyecto(proyectosDisp.includes(proyecto)?proyecto:proyectoDefault) }, [selEnt])
+  useEffect(()=>{ if(esEdicion) return; setProyecto(proyectosDisp.includes(proyecto)?proyecto:(preSel?'':proyectoDefault)) }, [selEnt])   // borrador preparado: todos sus gastos de la RS, sin acotar a un trabajo
 
   // Gastos disponibles para rendir (no rendidos aun), acotados al proyecto elegido.
   // Un gasto pertenece al proyecto si tiene esa glosa de proyecto O está vinculado a su venta (sale_id).
@@ -16439,6 +16446,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const nSinProyR = gastosSel.filter(e=>!e.sale_id&&!e.project).length
   const faltaProyR = !proyecto && nSinProyR>0
   const puedeRendir = selected.size>0 && !faltaProyR
+  // Borrador preparado (Rendir a cliente › Borradores): abre con todos sus gastos disponibles ya marcados, una sola vez.
+  const _preHecho = useRef(false)
+  useEffect(()=>{ if(!preSel||esEdicion||_preHecho.current||!disponibles.length) return; _preHecho.current=true; setSelected(new Set(disponibles.map(e=>e.id))) },[preSel,disponibles.length])   // eslint-disable-line react-hooks/exhaustive-deps
   const proyPatch = e => { const sid=proyToSale[proyecto]; return proyecto ? {...(!e.project?{project:proyecto}:{}), ...(sid&&!e.sale_id?{sale_id:sid}:{})} : {} }
 
   // IA: profesionaliza las descripciones de los gastos seleccionados (expande abreviaciones legales, corrige tildes). Guarda el resultado.
@@ -16507,6 +16517,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
     let falloMarca = 0; const marcados=[]
     for(const e of gs){ const patch={client_rendered_at:now, client_render_id:renderId, ...(proyectoR?proyPatchT(e,proyectoR):proyPatch(e))}; const {data:upd,error}=await supabase.from('expenses').update(patch).eq('id',e.id).is('client_rendered_at',null).select('id'); if(error||(!DEMO&&!(upd||[]).length)){ falloMarca++; continue } marcados.push({...e,...patch}) }
+    if(!marcados.length){ await supabase.from('rendiciones').delete().eq('id',renderId); throw new Error('ningún gasto quedó en la rendición (ya estaban en otra). No se guardó nada.') }   // nunca una rendición vacía
     if(falloMarca>0){ appAlert(`Atención: ${falloMarca} de ${gs.length} gasto(s) no se marcaron: ya estaban en otra rendición o no se pudieron guardar. Quedan fuera de esta.`); const tot2=marcados.reduce((a,e)=>a+(e.amount||0),0); await supabase.from('rendiciones').update({total:tot2,n_gastos:marcados.length}).eq('id',renderId); fila.total=tot2; fila.n_gastos=marcados.length }
     if(setExpenses) setExpenses(p=>p.map(e=>{ const m=marcados.find(x=>x.id===e.id); return m?{...e,...m}:e }))
     const rendObj = {...fila, created_at:now, correlativo:null}
@@ -16540,8 +16551,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       await guardarDirigido()
       logActividad('rendicion.borrador_guardado',{tabla:'rendiciones',id:hechas[0]?.id,detalle:{cliente:client.name,title:`Borrador guardado${hechas.length>1?` (${hechas.length} rendiciones por trabajo)`:''}`,monto:Math.round(hechas.reduce((a,x)=>a+(x.total||0),0))}})
       setSelected(new Set())
-      appAlert(hechas.length>1?`${hechas.length} borradores guardados. Los encuentras en Rendir a cliente › Borradores.`:'Borrador guardado. Lo encuentras en Rendir a cliente › Borradores.')
-      onClose&&onClose()
+      if(onRevisada) onRevisada()
+      else { appAlert(hechas.length>1?`${hechas.length} borradores guardados. Los encuentras en Rendir a cliente › Borradores.`:'Borrador guardado. Lo encuentras en Rendir a cliente › Borradores.'); onClose&&onClose() }
     }catch(e){ appAlert('Error: '+e.message) }
     setSaving(false)
   }
@@ -16560,14 +16571,17 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         created_at:enviadaAt,sent_at:enviadaAt,correlativo:corr,estado_envio:'externa',comprobante_url:(extLink||'').trim()||null}
       const {error:rErr}=await supabase.from('rendiciones').insert(row)
       if(rErr) throw new Error('No se pudo registrar la rendición: '+rErr.message)
-      let falla=0
-      for(const e of gastosSel){ const {data:upd,error}=await supabase.from('expenses').update({client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}).eq('id',e.id).is('client_rendered_at',null).select('id'); if(error||(!DEMO&&!(upd||[]).length)) falla++ }
-      if(falla>0) appAlert(`Atención: ${falla} de ${gastosSel.length} gasto(s) no quedaron marcados como rendidos.`)
-      if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}:e))
+      // Solo cuentan los gastos que de verdad quedaron marcados (uno ya rendido en otra rendición no se toca): la fila guarda ese total.
+      const marcados=[]
+      for(const e of gastosSel){ const {data:upd,error}=await supabase.from('expenses').update({client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}).eq('id',e.id).is('client_rendered_at',null).select('id'); if(!error&&(DEMO||(upd||[]).length)) marcados.push(e) }
+      const falla=gastosSel.length-marcados.length
+      if(!marcados.length){ await supabase.from('rendiciones').delete().eq('id',renderId); throw new Error('ningún gasto quedó marcado (ya estaban en otra rendición). No se registró nada.') }
+      if(falla>0){ const tot2=marcados.reduce((a,e)=>a+(e.amount||0),0); row.total=tot2; row.n_gastos=marcados.length; await supabase.from('rendiciones').update({total:tot2,n_gastos:marcados.length}).eq('id',renderId); appAlert(`Atención: ${falla} de ${gastosSel.length} gasto(s) ya estaban en otra rendición y no se incluyeron.`) }
+      if(setExpenses) setExpenses(p=>p.map(e=>marcados.find(g=>g.id===e.id)?{...e,client_rendered_at:enviadaAt,client_render_id:renderId,...proyPatch(e)}:e))
       if(setRendiciones) setRendiciones(p=>[row,...(p||[])])
       logActividad('rendicion.externa_registrada',{tabla:'rendiciones',id:renderId,detalle:{cliente:client.name,title:`Rendición N° ${corr} hecha fuera de la app (${fmtFechaDMY(extFecha)})`,monto:Math.round(totalSel),n_gastos:gastosSel.length}})
       setSelected(new Set()); setExtOpen(false); setExtLink('')
-      appAlert(`Rendición N° ${corr} registrada como hecha fuera de la app (${gastosSel.length} gasto${gastosSel.length!==1?'s':''}, ${fmt(totalSel)}). No se envió nada.`)
+      appAlert(`Rendición N° ${corr} registrada como hecha fuera de la app (${row.n_gastos} gasto${row.n_gastos!==1?'s':''}, ${fmt(row.total)}). No se envió nada.`)
       onClose&&onClose()
     } catch(e) { appAlert('Error: '+e.message) }
     setSaving(false)
@@ -16685,7 +16699,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const bKPIs = (
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px',marginBottom:12}}>
         <div style={{...lblG,marginBottom:4}}>{_uno?`Este trabajo · ${_uno.t}`:'Esta rendición'}</div>
-        {lnR(`${selected.size} gasto${selected.size!==1?'s':''} seleccionado${selected.size!==1?'s':''}`, fmtN(totalSel), selected.size?C.overdue:C.muted)}
+        {lnR(`${selected.size} gasto${selected.size!==1?'s':''} seleccionado${selected.size!==1?'s':''}`, fmtN(totalSel), selected.size?C.text:C.muted)}
         {lnR(_uno?'Fondos de este trabajo':'Fondos', fmtN(_uno?_uno.f.totFondos:fondosDisp))}
         {lnR('Ya rendido', fmtN(_uno?_uno.f.rendido:_fondoRend.rendido))}
         {(()=>{ const sal=_uno?_uno.saldo:saldoTrasRendicion; return <div style={{borderTop:`1px solid ${C.track}`,marginTop:4,paddingTop:5}}>{lnR(sal<0?'Saldo a cargo del cliente':'Saldo a favor del cliente', fmtN(Math.abs(sal)), sal<0?C.overdueText:C.greenText, true)}</div> })()}
@@ -16733,7 +16747,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
                   {e.category&&<span style={{padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{e.category}</span>}
                 </div>
               </div>
-              <div style={{fontSize:13,fontWeight:600,color:C.overdue,flexShrink:0}}>{fmtN(e.amount)}</div>
+              <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtN(e.amount)}</div>
             </div>
           )
         })}
@@ -16741,7 +16755,27 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   </>)
   const bResumen = null
   const bIA = selected.size>0&&<button onClick={mejorarDescripcionesIA} disabled={limpiandoIA} style={{...chipBtn('soft'),width:'100%',marginBottom:8,opacity:limpiandoIA?.6:1}}>{limpiandoIA?'Mejorando descripciones…':'Mejorar descripciones con IA'}</button>
-  const bBotones = (<>
+  const bExterna = !esEdicion&&(extOpen
+        ? <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:8,padding:'8px 10px',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10}}>
+            <span style={{fontSize:12,color:C.muted}}>Rendida por fuera el</span>
+            <input type='date' value={extFecha} onChange={e=>setExtFecha(e.target.value)} style={{fontSize:12,padding:'5px 7px',border:`1px solid ${C.border}`,borderRadius:7,color:C.text}}/>
+            <input value={extLink} onChange={e=>setExtLink(e.target.value)} placeholder='Enlace al correo (opcional)' style={{flex:'1 1 160px',minWidth:0,fontSize:12,padding:'5px 8px',border:`1px solid ${C.border}`,borderRadius:7,color:C.text}}/>
+            <button disabled={!puedeRendir||saving||!extFecha} onClick={handleExterna} style={{fontSize:12,fontWeight:700,padding:'6px 12px',borderRadius:8,border:'none',background:puedeRendir?C.accent:C.done,color:'#fff',cursor:puedeRendir?'pointer':'not-allowed'}}>{saving?'…':'Registrar'}</button>
+            <button onClick={()=>setExtOpen(false)} style={{fontSize:12,background:'none',border:'none',color:C.textSoft,cursor:'pointer'}}>Cancelar</button>
+          </div>
+        : <button onClick={()=>setExtOpen(true)} disabled={!puedeRendir} style={{marginTop:8,background:'none',border:'none',padding:0,color:puedeRendir?C.accent:C.done,fontSize:12,fontWeight:600,cursor:puedeRendir?'pointer':'not-allowed'}}>Ya la rendí por fuera de la app</button>)
+  const bBotones = navBorr&&!esEdicion ? (<>
+      {faltaProyR&&<div style={{fontSize:11.5,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
+      <button disabled={!puedeRendir||saving} onClick={()=>handleGenerar('borrador')}
+        style={{width:'100%',padding:'11px 14px',borderRadius:10,border:'none',background:puedeRendir?C.accent:C.done,color:'#fff',fontSize:13.5,fontWeight:700,cursor:puedeRendir?'pointer':'not-allowed'}}>
+        {saving?'Guardando…':(navBorr.i<navBorr.n-1?'Guardar borrador y continuar':'Guardar borrador')}
+      </button>
+      <div style={{display:'flex',gap:8,marginTop:8}}>
+        {modoEf==='junto'&&<button disabled={!puedeRendir||saving} onClick={()=>handleGenerar('pdf')} style={{flex:1,padding:'9px 10px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:puedeRendir?C.accent:C.done,fontSize:13,fontWeight:600,cursor:puedeRendir?'pointer':'not-allowed',whiteSpace:'nowrap'}}>Ver PDF</button>}
+        <button disabled={!puedeRendir||saving} onClick={()=>handleGenerar('correo')} style={{flex:1,padding:'9px 10px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:puedeRendir?C.accent:C.done,fontSize:13,fontWeight:600,cursor:puedeRendir?'pointer':'not-allowed',whiteSpace:'nowrap'}}>Continuar al correo →</button>
+      </div>
+      {bExterna}
+  </>) : (<>
       {faltaProyR&&<div style={{fontSize:11.5,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
       <div style={{display:'flex',gap:8}}>
         {!asPage&&<button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
@@ -16765,21 +16799,22 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         style={{width:'100%',marginTop:10,padding:'11px 14px',borderRadius:10,border:'none',background:puedeRendir?C.normal:C.done,color:'#fff',fontSize:13.5,fontWeight:700,cursor:puedeRendir?'pointer':'not-allowed'}}>
         Continuar al correo →
       </button>}
-      {!esEdicion&&(extOpen
-        ? <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:8,padding:'8px 10px',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10}}>
-            <span style={{fontSize:12,color:C.muted}}>Rendida por fuera el</span>
-            <input type='date' value={extFecha} onChange={e=>setExtFecha(e.target.value)} style={{fontSize:12,padding:'5px 7px',border:`1px solid ${C.border}`,borderRadius:7,color:C.text}}/>
-            <input value={extLink} onChange={e=>setExtLink(e.target.value)} placeholder='Enlace al correo (opcional)' style={{flex:'1 1 160px',minWidth:0,fontSize:12,padding:'5px 8px',border:`1px solid ${C.border}`,borderRadius:7,color:C.text}}/>
-            <button disabled={!puedeRendir||saving||!extFecha} onClick={handleExterna} style={{fontSize:12,fontWeight:700,padding:'6px 12px',borderRadius:8,border:'none',background:puedeRendir?C.accent:C.done,color:'#fff',cursor:puedeRendir?'pointer':'not-allowed'}}>{saving?'…':'Registrar'}</button>
-            <button onClick={()=>setExtOpen(false)} style={{fontSize:12,background:'none',border:'none',color:C.textSoft,cursor:'pointer'}}>Cancelar</button>
-          </div>
-        : <button onClick={()=>setExtOpen(true)} disabled={!puedeRendir} style={{marginTop:8,background:'none',border:'none',padding:0,color:puedeRendir?C.accent:C.done,fontSize:12,fontWeight:600,cursor:puedeRendir?'pointer':'not-allowed'}}>Ya la rendí por fuera de la app</button>)}
+      {bExterna}
   </>)
 
+  // Recorrer los borradores preparados sin volver a la lista (escritorio: arriba a la derecha · celular: al pie).
+  const _navBtn = (dir,dis) => <button onClick={ev=>{ ev.stopPropagation(); if(!saving) (dir<0?navBorr.onPrev:navBorr.onNext)() }} disabled={dis||saving} aria-label={dir<0?'Anterior':'Siguiente'} style={{width:26,height:26,borderRadius:13,border:`1px solid ${C.border}`,background:C.surface,color:dis?C.done:C.accent,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:dis?'default':'pointer',padding:0,flexShrink:0}}><Gl n={dir<0?'chevL':'chevron'}/></button>
+  const bNav = navBorr&&!esEdicion&&(isDesktop
+    ? <span style={{display:'inline-flex',alignItems:'center',gap:8,fontSize:12,color:C.muted,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 4px 3px 12px',whiteSpace:'nowrap'}}>Borrador <b style={{color:C.accent}}>{navBorr.i+1} de {navBorr.n}</b>{_navBtn(-1,navBorr.i<=0)}{_navBtn(1,navBorr.i>=navBorr.n-1)}</span>
+    : <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'6px 8px'}}>
+        <span onClick={()=>!saving&&navBorr.i>0&&navBorr.onPrev()} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:navBorr.i>0?C.accent:C.done,cursor:'pointer'}}>{_navBtn(-1,navBorr.i<=0)}Anterior</span>
+        <span style={{fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>Borrador <b style={{color:C.accent}}>{navBorr.i+1} de {navBorr.n}</b></span>
+        <span onClick={()=>!saving&&navBorr.i<navBorr.n-1&&navBorr.onNext()} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:navBorr.i<navBorr.n-1?C.accent:C.done,cursor:'pointer'}}>Siguiente{_navBtn(1,navBorr.i>=navBorr.n-1)}</span>
+      </div>)
   // Desktop: maestro-detalle (lista | documento). Móvil: apilado en el orden de hoy. Misma JSX, dos arreglos.
   return isDesktop ? (
     <div>
-      {!esEdicion&&<PasosRend paso={1}/>}
+      {!esEdicion&&(bNav?<div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}><PasosRend paso={1}/>{bNav}</div>:<PasosRend paso={1}/>)}
       <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.55fr) minmax(0,1fr)',gap:22,alignItems:'start'}}>
         <div style={{minWidth:0}}>{bLista}</div>
         <div style={{minWidth:0}}>{bContinuidad}{bRS}{bProyecto}{bModo}{bKPIs}{bResumen}{bIA}{bBotones}</div>
@@ -16788,7 +16823,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   ) : (
     <div>
       {!esEdicion&&<PasosRend paso={1}/>}
-      {bContinuidad}{bRS}{bProyecto}{bModo}{bKPIs}{bLista}{bResumen}{bIA}{bBotones}
+      {bContinuidad}{bRS}{bProyecto}{bModo}{bKPIs}{bLista}{bResumen}{bIA}{bBotones}{bNav}
     </div>
   )
 }
@@ -16832,6 +16867,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   const [posOpen,setPosOpen] = useState(true)                 // grupo "posibles duplicados" abierto
   const [posExp,setPosExp] = useState(null)                   // rowId del posible con la comparación expandida
   const [cajaOwner,setCajaOwner] = useState(()=>notaria?'':(cajaPorDefecto||''))   // dueño de la caja chica (un miembro del equipo carga lo que pagó con SU caja; la notaría la paga la oficina): estos gastos van a su caja (created_by = su NOMBRE, igual que un gasto normal)
+  // El dueño por defecto (usuario limited) vale para los gastos NUEVOS; reasignar gastos que ya existen exige elegirlo a mano.
+  const [cajaElegida,setCajaElegida] = useState(false)
+  const cajaReasigna = cajaElegida ? cajaOwner : ''
   // Categorías aprendidas (glosa→categoría, mismo learning que el Asistente IA): pre-rellena la carga cuando la planilla no trae categoría.
   const catLearnRef = useRef({})
   useEffect(()=>{ let on=true; supabase.from('learnings').select('key,value').eq('kind','gasto_categoria').order('updated_at',{ascending:true}).then(({data})=>{ if(!on)return; const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); catLearnRef.current=m }); return ()=>{on=false} },[])
@@ -17560,9 +17598,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:14px;color:#666;margin:0 0 6px">Estimadas ${NOTA_DIRIGIDO},</div><div style="font-size:14px;color:#666;margin:0 0 16px">Espero que estén muy bien. Revisando la liquidación, encontramos las siguientes OT que <b>no logramos reconocer</b> como trabajos de nuestra oficina. ¿Nos podrían dar más detalle (compareciente, materia, a qué corresponden) para poder identificarlas?</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle que tenemos</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}</table><div style="font-size:13px;color:#666;margin:16px 0 0">Quedamos atentos.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">${BRAND.nombre}</b></div></div><div style="padding:16px 28px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio} · ${BRAND.nombre}</div></div></body></html>`
       const texto=`Estimadas ${NOTA_DIRIGIDO},\n\nEspero que estén muy bien. Revisando la liquidación, encontramos las siguientes OT que no logramos reconocer como trabajos de nuestra oficina. ¿Nos podrían dar más detalle para identificarlas?\n\n`+selRows.map(r=>`• ${otDe(r)} · ${(r.materia||r.concepto||'—')}${r.nombre||r.requirente?` · ${r.nombre||r.requirente}`:''} · $${(r.monto||0).toLocaleString('es-CL')}`).join('\n')+'\n\nQuedamos atentos.\nSaludos cordiales,\n'+BRAND.nombre
       const subject=`Consulta sobre OT no reconocidas — ${BRAND.nombre} — ${new Date().toLocaleDateString('es-CL')}`
-      const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject,html,text:texto})
-      if(via===null){ setConsultando(false); return }   // el usuario canceló la autorización de Gmail
-      flash(`Consulta enviada a la notaría por ${selRows.length} OT`)
+      const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject,html,text:texto,que:'La consulta a la notaría'})
+      if(via===null){ setConsultando(false); return }   // no salió: enviarComoUsuario ya avisó qué hacer
+      flash(txtEnviado(via,{que:`Consulta por ${selRows.length} OT`, g:'a', para:dest}))
       setNotaConsultaSel(new Set())
     }catch(e){ appAlert('No se pudo enviar la consulta: '+(e.message||e)) }
     setConsultando(false)
@@ -18097,7 +18135,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         // con un gasto ya pagado a la notaría (ese lo pagó la oficina, no la caja).
         if(r.client_id){ cands=cands.filter(e=>!e.client_id||String(e.client_id)===String(r.client_id)); const sc=cands.filter(e=>e.client_id); if(sc.length) cands=sc }   // un gasto aún sin cliente sí puede ser el mismo
         if(!normOt(r.ot)) cands=cands.filter(e=>!normOt(e.ot_number))
-        if(cajaOwner) cands=cands.filter(e=>!e.notaria_liquidado_at&&!e.notaria_render_id)
+        if(cajaReasigna) cands=cands.filter(e=>!e.notaria_liquidado_at&&!e.notaria_render_id)
         if(cands.length===1) return {g:cands[0],via:'fecha'}
         if(cands.length>1){ const rt=tok(r.concepto); let best=cands[0],bn=-1; cands.forEach(e=>{ const n=ov(tok(e.concept),rt); if(n>bn){bn=n;best=e} }); return {g:best,via:'fecha',score:bn} } }
       // Sin OT ni fecha que calce (históricos sin fecha): cliente + monto + glosa (≥1 palabra en común).
@@ -18107,7 +18145,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     ;(rows||[]).filter(r=>!r.error&&(r.monto||0)>0).forEach(r=>{ if(forzarNuevo.has(r.id)){ nuevos.push(r); return } const m=pick(r); if(m){ used.add(m.g.id); actualizar.push({r,e:m.g,rendido:!!(m.g.render_id||m.g.client_render_id),via:m.via,score:m.score}) } else nuevos.push(r) })
     // ¿Esta actualización CAMBIA algo? Si el gasto ya tiene el cliente/RS/categoría del archivo, no hay nada que corregir.
     const cambia = ({r,e,rendido})=>{
-      if(cajaOwner && String(e.created_by||'')!==String(cajaOwner)) return true   // re-asignar el gasto a la caja chica de cajaOwner (aunque ya exista)
+      if(cajaReasigna && !rendido && !e.rendered_at && String(e.created_by||'')!==String(cajaReasigna)) return true   // re-asignar a la caja chica elegida (nunca un gasto ya rendido o liquidado)
       if(r.paid_by_client!==undefined && Boolean(e.paid_by_client)!==Boolean(r.paid_by_client)) return true   // aplicar la columna "Caja chica sí/no"
       const newCat = tipo==='fondo'?'Fondo':(r.categoria||e.category)
       if(String(e.category||'')!==String(newCat||'')) return true
@@ -18131,7 +18169,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const posibles=[], nuevosLimpios=[]
     nuevosK.forEach(r=>{ if(!r.client_id){ nuevosLimpios.push(r); return } const near=live.find(e=>!used.has(e.id)&&!usedEx.has(e.id)&&(e.amount||0)===(r.monto||0)&&String(e.client_id||'')===String(r.client_id)); if(near) posibles.push({r,e:near}); else nuevosLimpios.push(r) })
     return {actualizar, corregir, yaCorrecto, nuevos:nuevosLimpios, posibles, rendidosN: actualizar.filter(a=>a.rendido).length}
-  },[modo,rows,expenses,tipo,noTocarRendidos,concilMatch,forzarNuevo,cajaOwner])
+  },[modo,rows,expenses,tipo,noTocarRendidos,concilMatch,forzarNuevo,cajaReasigna])
   // Lo realmente seleccionado (las filas que el usuario dejó tildadas). Clave: c_<gastoId> / n_<rowId>.
   const corregirSel = () => (concil?.corregir||[]).filter(a=>!concilExcl.has('c_'+a.e.id))
   const nuevosSel = () => [...(concil?.nuevos||[]).filter(r=>!concilExcl.has('n_'+r.id)), ...(concil?.posibles||[]).filter(p=>posibleDec[p.r.id]==='cargar').map(p=>p.r)]
@@ -18158,7 +18196,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const sel=corregirSel(); if(!sel.length) return
     setGuardando(true)
     try{
-      const actualizaciones = sel.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } if(cajaOwner) a.created_by=cajaOwner; if(r.paid_by_client!==undefined) a.paid_by_client=r.paid_by_client; return a })
+      const actualizaciones = sel.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } if(cajaReasigna && !rendido && !e.rendered_at) a.created_by=cajaReasigna; if(r.paid_by_client!==undefined) a.paid_by_client=r.paid_by_client; return a })
       const res = await onConciliar(actualizaciones, [], {tipo, filename:fileName})
       setConcilBefore(res.before||null)
       setResultado(prev=>({...(prev||{}), concil:true, actualizados:res.actualizados, imported:prev?.imported||0, batchId:prev?.batchId||null, corregirDone:true, nuevosPend:nuevosSel().length}))
@@ -18189,7 +18227,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const alarmasHtml = al.length ? `<div style="margin-top:14px"><b style="color:#9A3A24">Alarmas — estas OT no se cargaron, revísalas:</b>${al.map(x=>li(`${x.otL} · ya ${x.st==='pagada'?'pagada a la notaría':'rendida a '+x.cn}`, '$'+x.monto.toLocaleString('es-CL'))).join('')}${li('<b>Total en alarma</b>','<b>$'+totAl.toLocaleString('es-CL')+'</b>')}</div>` : ''
     const html=`<div style="font-family:Arial,Helvetica,sans-serif;color:#26333A;font-size:13px;line-height:1.6">Hola,<br><br>Cargué <b>${nImp}</b> OT${nImp!==1?'s':''} de la notaría.${li('Con cliente identificado','<b>'+conCli+'</b>')}${li('Por asignar','<b>'+sinCli+'</b>')}${alarmasHtml}<br>Saludos.</div>`
     if(!await appConfirm(`¿Avisar a los socios (Cristóbal y Erasmo) el resumen de esta carga${al.length?` y las ${al.length} alarma${al.length!==1?'s':''}`:''}?`)) return
-    try{ const via=await enviarComoUsuario({to:'cl@leabogados.cl, ee@leabogados.cl', subject:`Carga de notaría — ${nImp} OT${nImp!==1?'s':''}${al.length?` · ${al.length} alarma${al.length!==1?'s':''}`:''}`, html, text:`Cargué ${nImp} OTs de la notaría.${al.length?` ${al.length} alarmas detectadas.`:''}`}); if(via){ setAvisadoSocios(true); appAlert('Aviso enviado a los socios'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') } }catch(e){ appAlert('No se pudo enviar el aviso: '+(e.message||e)) }
+    try{ const via=await enviarComoUsuario({to:'cl@leabogados.cl, ee@leabogados.cl', subject:`Carga de notaría — ${nImp} OT${nImp!==1?'s':''}${al.length?` · ${al.length} alarma${al.length!==1?'s':''}`:''}`, html, text:`Cargué ${nImp} OTs de la notaría.${al.length?` ${al.length} alarmas detectadas.`:''}`}); if(via){ setAvisadoSocios(true); appAlert(txtEnviado(via,{que:'Aviso',para:'los socios'})) } }catch(e){ appAlert('No se pudo enviar el aviso: '+(e.message||e)) }
   }
 
   if(resultado) return (
@@ -18544,8 +18582,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{fontSize:12,color:'#26424E',background:C.azulBg,borderRadius:10,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{nCorr} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya cargadas</b></>:''}, <b>{nNuev} nuevas</b>{concil.posibles.length>0?<> y <b style={{color:'#9A5B12'}}>{concil.posibles.length} posibles duplicados</b> a revisar</>:''}. Destilda las que no quieras; haz una parte ahora y otra después — al re-subir retoma sin duplicar ni rehacer lo hecho.</div>
               {tipo!=='fondo'&&<div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
                 <span style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.4px'}}>Caja chica de</span>
-                <button onClick={()=>setCajaOwner('')} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:cajaOwner===''?`1px solid ${C.accent}`:`1px solid ${C.border}`,background:cajaOwner===''?C.bgSoft:'#fff',color:cajaOwner===''?C.accent:C.muted}}>— Ninguno</button>
-                {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{ const pc=personChip(m); const on=cajaOwner===m; return <button key={m} onClick={()=>setCajaOwner(on?'':m)} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:on?`1px solid ${pc.color}`:`1px solid ${C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted}}>{m}</button> })}
+                <button onClick={()=>{setCajaOwner('');setCajaElegida(true)}} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:cajaOwner===''?`1px solid ${C.accent}`:`1px solid ${C.border}`,background:cajaOwner===''?C.bgSoft:'#fff',color:cajaOwner===''?C.accent:C.muted}}>— Ninguno</button>
+                {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{ const pc=personChip(m); const on=cajaOwner===m; return <button key={m} onClick={()=>{setCajaOwner(on?'':m);setCajaElegida(true)}} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:on?`1px solid ${pc.color}`:`1px solid ${C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted}}>{m}</button> })}
                 {cajaOwner&&<span style={{fontSize:10,color:C.greenText,fontWeight:600,flexBasis:'100%'}}>Los gastos nuevos quedan a su nombre → entran a su caja chica.</span>}
               </div>}
               {/* Tiles: el resultado de la carga */}
@@ -18780,6 +18818,25 @@ const fmtSaldoG = v => (Number(v)<0?'−':'')+fmt(Math.abs(Number(v)||0))
 // Caja chica por liquidar de una persona (FUENTE ÚNICA: Caja chica, Inicio y «Tu semana»): gastos que pagó con SU caja (no los que pagó el cliente o la oficina) y que aún no liquida. Incluye notaría si la pagó con su caja.
 const gastosPorLiquidarCaja = (expenses,persona) => (expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&!e.rendered_at&&!e.paid_by_client&&e.created_by===persona)
 const gastosPorRendirCli = (expenses,cid) => (expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at&&cuentaEnSaldo(e)&&e.category!=='Apertura')
+// Responsable de cada cliente para rendir y pedir fondos: ficha; si no, la venta más reciente (fuente única de Rendir a cliente y sus conteos).
+function respClientes(clients, sales){ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m }
+// Lunes de la semana en curso (dd del corte semanal de los borradores preparados).
+function lunesSemanaISO(){ const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return isoLocal(d.getTime()) }
+// Borrador preparado: gastos por rendir que ya estaban cargados el lunes (fecha local de carga; lo cargado después espera al lunes siguiente).
+// Independiente de un borrador guardado: si quedó algo fuera (otra razón social, otro trabajo), se vuelve a preparar.
+const esPreparadoCli = (pr, lunes) => pr.some(e=>{ const d=e.created_at?isoLocal(e.created_at):(e.date||''); return !!d && d<lunes })
+// Conteo de borradores (preparados por revisar + armados sin enviar) de un abogado o de todos: tarjetas de Gastos y Rendiciones.
+function conteoBorradores({clients, expenses, rendiciones, sales, persona=null}){
+  const resp=respClientes(clients,sales), lunes=lunesSemanaISO(), esOfi=c=>!!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))
+  const arm=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&!r.sent_at&&!r.anulada_at)
+  const deP=cid=>!persona||(resp[String(cid)]||'Sin abogado')===persona
+  let prep=0
+  ;(clients||[]).forEach(c=>{ if(esOfi(c)||c.status==='Terminado'||!deP(c.id)) return
+    const pr=gastosPorRendirCli(expenses,c.id).filter(e=>(Number(e.amount)||0)!==0)
+    if(esPreparadoCli(pr, lunes)) prep++ })
+  const nArm=arm.filter(r=>{ const c=(clients||[]).find(x=>String(x.id)===String(r.client_id)); return c&&!esOfi(c)&&deP(r.client_id) }).length
+  return {prep, arm:nArm}
+}
 // Clientes con gastos por rendir (FUENTE ÚNICA: Inicio y página Rendir a cliente): sin la oficina, sin gastos de $0 y sin clientes terminados.
 const _esOfiCliR = c => !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))
 const clientesPorRendir = (clients,expenses) => (clients||[]).filter(c=>c&&!_esOfiCliR(c)&&c.status!=='Terminado').map(c=>{ const pr=gastosPorRendirCli(expenses,c.id).filter(e=>(Number(e.amount)||0)!==0); return {c, n:pr.length, tot:pr.reduce((a,e)=>a+(Number(e.amount)||0),0)} }).filter(x=>x.n>0).sort((a,b)=>b.tot-a.tot)
@@ -19320,7 +19377,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   const catsOficina = useMemo(()=>{ const s=new Set(CATS_OFICINA_NUEVAS); (expenses||[]).forEach(e=>{ if(esOficina(e.client_id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(catOficinaNueva(e.category)) }); return [...s] },[expenses,clients])
   const setCatOficina = async(e,cat)=>{ setCatMenu(null); const patch={category:cat}; if(!(SUBCATS_OFICINA[cat]||[]).includes(e.subcategory)) patch.subcategory=null; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); const gk=glosaKey(e.concept||''); if(gk&&cat) learnPut('gasto_categoria',gk,cat) }catch(err){ appAlert('No se pudo guardar la categoría: '+err.message) } }
   const setSubcatOficina = async(e,sub)=>{ setSubMenu(null); try{ await supabase.from('expenses').update({subcategory:sub||null}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,subcategory:sub||null}:x)) }catch(err){ appAlert('No se pudo guardar el desglose: '+err.message) } }
-  const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at){ appAlert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ const {error}=await supabase.from('expenses').update(patch).eq('id',e.id); if(error) throw error; setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); logActividad('gastos.personal',{tabla:'expenses',id:e.id,detalle:{..._detG(e),persona:persona||null}}) }catch(err){appAlert('Error: '+err.message)} }
+  const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at||e.notaria_render_id){ appAlert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ const {error}=await supabase.from('expenses').update(patch).eq('id',e.id); if(error) throw error; setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); logActividad('gastos.personal',{tabla:'expenses',id:e.id,detalle:{..._detG(e),persona:persona||null}}) }catch(err){appAlert('Error: '+err.message)} }
   // Fila de OT (Deuda notaría). Escritorio: casilla · OT · fecha · trámite · monto · ›. Móvil: trámite arriba, OT · fecha abajo, monto a la derecha.
   // Tocar la fila la marca (como siempre); › abre el gasto. hlq = texto buscado (se resalta).
   const notaRow = (e, bloqueado=false, adelanto=false, hlq='') => { const on=selNota.has(e.id)
@@ -19392,6 +19449,8 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   }
   // Estado de envío de una liquidación (compat filas viejas sin estado_envio: con sent_at→enviada, si no→pagado).
   const notaEstado = r => r.estado_envio || (r.sent_at?'enviada':'pagado')
+  // Pagada = aviso enviado con comprobante, marcada pagada, o enlazada a su cargo del banco (la prueba del pago) aunque falte el aviso.
+  const notaPagada = r => notaEstado(r)!=='por_enviar' || !!r.movimiento_id
   // Paso 2: enviar a la notaría el detalle + el comprobante de transferencia (ya transferiste). Marca 'enviada'.
   const enviarNotaria = async(r) => {
     const dest=cleanNotaDest(notaEmail)||NOTARIA_DEFAULT
@@ -19431,8 +19490,9 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       else if(pdf) adjuntos.push({base64:pdf, name:`Liquidacion ${BRAND.notaria.normalize('NFD').replace(/[\u0300-\u036f]/g,'')} al ${fechaLiq}.pdf`, mime:'application/pdf'})
       adjuntos.push({base64:compB64, name:`Comprobante transferencia.${ext}`, mime:compMime})
       let sent=false
-      try{ const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); if(via===null){ setNotaSending(false); return } sent=true }catch(_){ sent=false }
-      if(!sent){ appAlert('No se pudo enviar el correo. Revisa la conexión o reintenta.'); setNotaSending(false); return }
+      let viaNota=null, errNota=null
+      try{ viaNota=await enviarComoUsuario({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos,que:'El aviso a la notaría'}); if(viaNota===null){ setNotaSending(false); return } sent=true }catch(e){ sent=false; errNota=e }
+      if(!sent){ avisoNoEnviado('El aviso a la notaría', errNota?.message||null); setNotaSending(false); return }
       const now=new Date().toISOString()
       const correoNota={asunto:subjectNota,cuerpo:mensaje,rs:notaBolRS||BRAND.nombreLegal,rut:notaBolRUT||BRAND.rut,para:dest}
       const {error:sErr}=await supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl,correo:correoNota}).eq('id',r.id)
@@ -19442,6 +19502,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       setExpenses(p=>p.map(e=>String(e.notaria_render_id)===String(r.id)&&!e.notaria_liquidado_at?{...e,notaria_liquidado_at:now}:e))
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl,correo:correoNota}:x))
       setNotaSend(null); setCompFile(null)
+      appAlert(txtEnviado(viaNota,{que:'Aviso de pago a la notaría', para:dest}))
     }catch(e){appAlert('Error al enviar: '+e.message)}
     setNotaSending(false)
   }
@@ -19477,9 +19538,10 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
         if(fid){ try{ const tk=await driveToken(); if(tk){ const b=await driveDownloadB64(tk,fid); if(b&&b.base64){ adjuntos.push({base64:b.base64,name:`Comprobante transferencia.${b.ext}`,mime:b.mime}); conComp=true } } }catch(_){} }
       }
       let sent=false
-      try{ const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); if(via===null){ setReenviando(null); return } sent=true }catch(_){ sent=false }
-      if(!sent){ appAlert('No se pudo reenviar. Revisa la conexión o reintenta.'); setReenviando(null); return }
-      appAlert('Reenviado a la notaría'+(conComp?' con el comprobante.':'.\n(No se pudo recuperar el comprobante de Drive; se reenvió solo el detalle.)'))
+      let viaR=null, errR=null
+      try{ viaR=await enviarComoUsuario({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos,que:'El reenvío a la notaría'}); if(viaR===null){ setReenviando(null); return } sent=true }catch(e){ sent=false; errR=e }
+      if(!sent){ avisoNoEnviado('El reenvío a la notaría', errR?.message||null); setReenviando(null); return }
+      appAlert(txtEnviado(viaR,{que:'Liquidación', verbo:'reenviad', g:'a', para:`la notaría (${dest})`})+(conComp?'\nCon el comprobante adjunto.':'\nNo se pudo recuperar el comprobante de Drive: se reenvió solo el detalle.'))
     }catch(e){ appAlert('Error al reenviar: '+e.message) }
     setReenviando(null)
   }
@@ -19491,16 +19553,16 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
       : `Esta liquidación ya se ${est==='pagado'?'pagó':'envió'} a la notaría. Anularla devuelve las ${r.n_gastos||''} OT a pendientes, pero no revierte el pago ni el correo. ¿Anular igual?`
     if(!await appConfirm(msg+(r.movimiento_id?'\n\nEstá enlazada a un cargo del banco: el cargo vuelve a quedar por conciliar.':''))) return
     try{
-      // Si estaba enlazada a un cargo del banco, se libera: si no, el cargo seguiría conciliado contra una liquidación anulada y las OT podrían pagarse dos veces.
-      if(r.movimiento_id){ const {error:me}=await supabase.from('cartola_movimientos').update({estado:'pendiente',monto_conciliado:0,categoria:null}).eq('id',r.movimiento_id); if(me) throw me
-        const {error:le}=await supabase.from('rendiciones').update({movimiento_id:null}).eq('id',r.id); if(le) throw le }
+      // Orden: 1) liberar las OT, 2) anular (suelta el enlace), 3) liberar el cargo del banco. Si algo falla, lo ya hecho queda coherente.
       const {error:ue}=await supabase.from('expenses').update({notaria_render_id:null,notaria_liquidado_at:null}).eq('notaria_render_id',r.id)
       if(ue) throw ue   // si no se liberan los gastos, NO marcar anulada
+      setExpenses(p=>p.map(e=>e.notaria_render_id===r.id?{...e,notaria_render_id:null,notaria_liquidado_at:null}:e))
       const now=new Date().toISOString(), patch={anulada_at:now, anulada_por:currentUserName||null, movimiento_id:null}
       const {error:re}=await supabase.from('rendiciones').update(patch).eq('id',r.id)
       if(re) throw re
-      setExpenses(p=>p.map(e=>e.notaria_render_id===r.id?{...e,notaria_render_id:null,notaria_liquidado_at:null}:e))
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,...patch}:x))
+      // El cargo del banco vuelve a «por conciliar»: si no, quedaría conciliado contra una liquidación anulada y las OT podrían pagarse dos veces.
+      if(r.movimiento_id){ const {error:me}=await supabase.from('cartola_movimientos').update({estado:'pendiente',monto_conciliado:0,categoria:null}).eq('id',r.movimiento_id); if(me) throw new Error('la liquidación quedó anulada, pero el cargo del banco no se liberó: desenlázalo en Banco ('+me.message+')') }
       logActividad('notaria.liquidacion_anulada',{tabla:'rendiciones',id:r.id,detalle:{title:`${r.n_gastos||0} OT · ${r.periodo||''}`,monto:r.total}})
     }catch(e){appAlert('Error: '+e.message)}
   }
@@ -19521,7 +19583,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   // Añadir gastos pendientes a una liquidación ya creada (corrección): los enlaza y suma al total/n_gastos/OT.
   const anadirGastosNota = async(r, ids) => {
     if(!ids.length) return
-    if(notaEstado(r)!=='por_enviar'){ appAlert('Esta liquidación ya se envió o se pagó a la notaría: las OT nuevas van en una liquidación nueva.'); return }
+    if(notaPagada(r)){ appAlert('Esta liquidación ya se envió o se pagó a la notaría: las OT nuevas van en una liquidación nueva.'); return }
     const adds=notariaPend.filter(e=>ids.includes(e.id)); const addTot=adds.reduce((a,e)=>a+(e.amount||0),0)
     const newOts=[...new Set([...(r.ot_numbers?String(r.ot_numbers).split(', '):[]), ...adds.map(e=>e.ot_number).filter(Boolean)])].join(', ')
     try{
@@ -19931,7 +19993,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     </div>) }
   const gastosClasificar = (expenses||[]).filter(e=> e.type==='gasto' && e.bulk_import_id && e.client_id && !e.personal_de && !e.created_by && !esOficina(e.client_id) && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && !e.deleted_at)
   const isDesktop = useIsDesktop()   // Fase 3: desktop = 2-panel (lista de clientes izq + detalle/paneles der); movil = columna
-  return { histSinEnv, setHistSinEnv, marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen }
+  return { histSinEnv, setHistSinEnv, marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, notaPagada, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen }
 }
 
 const ESTADOS_G=[['vigentes','Vigentes'],['inactivos','Inactivos'],['incobrables','Incobrables'],['todos','Todos']]
@@ -19945,27 +20007,32 @@ const _RENDIR_G = [
   {k:'favor', t:'A favor', ic:'tFavor', bg:C.greenBg, col:C.greenText, btn:'Rendir'},
   {k:'cero',  t:'En cero', ic:'tCero', bg:C.azulBg, col:C.accent, btn:'Rendir'},
   {k:'env',   t:'Borradores', ic:'mail', bg:C.soonBg, col:C.soonText, btn:'Enviar'},
+  {k:'prep',  t:'Borrador preparado', ic:'file', bg:C.soonBg, col:C.soonText, btn:'Revisar'},
   {k:'dep',   t:'Esperando', ic:'tEspera', bg:C.soonBg, col:C.soonText, btn:'Pedir'},
   {k:'envd',  t:'Enviadas', ic:'check', bg:C.greenBg, col:C.greenText, btn:'Ver PDF'},
 ]
-function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendiciones=[], clientEntities=[], sales=[], currentUserName, isAdmin, onRendir, onEnviarRend, onVerRend, onSolicitar, onOpenMovBanco, onOpenClientFicha}){
+function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], expenses=[], rendiciones=[], clientEntities=[], sales=[], currentUserName, isAdmin, onRendir, onEnviarRend, onVerRend, onSolicitar, onOpenMovBanco, onOpenClientFicha}){
   const D=useIsDesktop()
   const prefKey=`fd_rendir_${currentUserName||'x'}`
   const pref=(()=>{ try{ return JSON.parse(localStorage.getItem(prefKey)||'null')||{} }catch(_){ return {} } })()
   const [g,setG]=useState(grupoInicial||pref.g||'pedir')
-  const [abg,setAbg]=useState(pref.abg||null)
+  const [abg,setAbg]=useState(abgInicial||pref.abg||null)
   const [ord,setOrd]=useState(pref.ord||'ant')
   const [q,setQ]=useState('')
   const [verTerm,setVerTerm]=useState(false)
   const [reqs,setReqs]=useState([])
   const [ult,setUlt]=useState(_rendirUlt)
   const [detR,setDetR]=useState(null)   // rendición abierta (borrador o enviada): su detalle
+  const [excl,setExcl]=useState(()=>new Set())   // borradores revisados que NO van en el envío conjunto (por defecto van todos)
+  const [confEnv,setConfEnv]=useState(false)   // confirmación del envío conjunto
+  // Corte semanal: el lunes se preparan los borradores de los clientes que ya tenían gastos por rendir; lo cargado después espera al lunes siguiente.
+  const lunesISO=lunesSemanaISO()
   useEffect(()=>{ try{ localStorage.setItem(prefKey,JSON.stringify({g,abg,ord})) }catch(_){} },[g,abg,ord])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{ if(DEMO) return; let on=true
     supabase.from('fund_requests').select('*').order('enviada_at',{ascending:false}).limit(500).then(({data})=>{ if(on) setReqs(data||[]) },()=>{})
     return ()=>{ on=false } },[])
   // Responsable de cada cliente (ficha; si no, la venta más reciente) — misma regla que «Pedir fondos a los abogados».
-  const respDe=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
+  const respDe=useMemo(()=>respClientes(clients,sales),[clients,sales])
   const esOfi=c=>!!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))
   const filas=useMemo(()=>{
     const conMov=new Set((expenses||[]).filter(e=>!e.deleted_at&&e.client_id).map(e=>String(e.client_id)))
@@ -19982,10 +20049,11 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
       const req=(reqs||[]).filter(r=>String(r.client_id)===String(c.id)).sort((a,b)=>String(b.enviada_at).localeCompare(String(a.enviada_at)))[0]||null
       const reqSt=req?estadoSolicitud(req,expenses):null
       const pedido=req&&reqSt&&reqSt.k!=='rec'?{req,dias:reqSt.dias,vencido:reqSt.k==='sin'}:null
-      const grp = armada?'env' : n>0&&s<=-1000?'pedir' : n>0&&s>=1000?'favor' : n>0?'cero' : s<=-1000?'dep' : 'aldia'
-      return {c, n, m, desde:fechas[0]||null, sinFecha, nRS, s, armada, ultEnv, pedido, grp, term:c.status==='Terminado', abg:respDe[String(c.id)]||'Sin abogado'}
+      const prep = esPreparadoCli(pr, lunesISO)
+      const grp = armada?'env' : prep?'prep' : n>0&&s<=-1000?'pedir' : n>0&&s>=1000?'favor' : n>0?'cero' : s<=-1000?'dep' : 'aldia'
+      return {c, prep, n, m, desde:fechas[0]||null, sinFecha, nRS, s, armada, ultEnv, pedido, grp, term:c.status==='Terminado', abg:respDe[String(c.id)]||'Sin abogado'}
     })
-  },[clients,expenses,rendiciones,reqs,respDe])
+  },[clients,expenses,rendiciones,reqs,respDe,lunesISO])   // eslint-disable-line react-hooks/exhaustive-deps
   // Depósito recibido → cierra sola la solicitud (recibido_at + movimiento del banco), con su rastro en la bitácora.
   useEffect(()=>{ if(DEMO||!reqs.length) return
     const abiertas=reqs.filter(r=>!r.recibido_at).map(r=>({r,st:estadoSolicitud(r,expenses)})).filter(x=>x.st.k==='rec'&&x.st.dep)
@@ -20004,9 +20072,15 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
       const desde=String(r.sent_at).slice(0,10); const req=(reqs||[]).filter(q=>String(q.client_id)===String(c.id)&&String(q.enviada_at||'').slice(0,10)>=desde).sort((a,b)=>String(a.enviada_at).localeCompare(String(b.enviada_at)))[0]||null
       return {r, c, abg:respDe[String(c.id)]||'Sin abogado', req, st:req?estadoSolicitud(req,expenses):null} }).filter(Boolean).sort((a,b)=>String(b.r.sent_at).localeCompare(String(a.r.sent_at))),[rendiciones,clients,reqs,respDe,expenses])   // eslint-disable-line react-hooks/exhaustive-deps
   const term=filas.filter(f=>f.term&&(f.n>0||Math.abs(f.s)>=1000||f.armada))
-  const abgDef = abg || (!isAdmin && vivos.some(f=>f.abg===currentUserName) ? currentUserName : 'Todos')
+  // Se abre en lo del abogado que entra (socio o asociado); «Todos» sigue disponible en las pills.
+  const abgDef = abg || (vivos.some(f=>f.abg===currentUserName) ? currentUserName : 'Todos')
+  const enAbg = x => abgDef==='Todos'||x.abg===abgDef
+  useEffect(()=>{ setConfEnv(false) },[g])   // la confirmación del envío conjunto no reaparece al volver a Borradores
+  // Borradores = armados (guardados, ya revisados) + preparados (calculados en vivo, sin guardar: no tocan «por rendir» hasta revisarlos).
+  const borrItems = [...borradores.map(x=>{ return {k:x.r.id, tipo:'arm', r:x.r, c:x.c, abg:x.abg, n:x.r.n_gastos||0, m:Number(x.r.total)||0, s:fondoDeRend(x.r,expenses,clientEntities).saldo, at:isoLocal(x.r.created_at)} }),
+    ...vivos.filter(f=>f.prep).map(f=>({k:'p'+f.c.id, tipo:'prep', c:f.c, abg:f.abg, n:f.n, m:f.m, s:f.s, at:lunesISO}))].sort((a,b)=>(b.m-a.m)||(a.c.name||'').localeCompare(b.c.name||'','es'))
   const base = verTerm ? term : vivos.filter(f=>f.grp===g)
-  const abgs=['Todos',...[...new Set([...vivos.map(f=>f.abg),...(g==='envd'?enviadas.map(x=>x.abg):g==='env'?borradores.map(x=>x.abg):[])])].filter(a=>a!=='Sin abogado').sort((a,b)=>a.localeCompare(b,'es')),...(vivos.some(f=>f.abg==='Sin abogado')?['Sin abogado']:[])]
+  const abgs=['Todos',...[...new Set([...vivos.map(f=>f.abg),...(g==='envd'?enviadas.map(x=>x.abg):g==='env'?borrItems.map(x=>x.abg):[])])].filter(a=>a!=='Sin abogado').sort((a,b)=>a.localeCompare(b,'es')),...(vivos.some(f=>f.abg==='Sin abogado')?['Sin abogado']:[])]
   const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
   let rows=base.filter(f=>(abgDef==='Todos'||f.abg===abgDef)&&(!q.trim()||nrm(f.c.name).includes(nrm(q.trim()))))
   rows=[...rows].sort((a,b)=> ord==='monto' ? (b.m-a.m)||(a.s-b.s) : ord==='az' ? (a.c.name||'').localeCompare(b.c.name||'','es')
@@ -20017,7 +20091,7 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
     if(f.n>0) return onRendir&&onRendir(f.c)
     return onSolicitar&&onSolicitar(f.c,Math.round(Math.abs(Math.min(0,f.s))),f.abg!=='Sin abogado'?f.abg:null) }
   const btnTxt=f=> f.armada?'Enviar' : f.n>0?(f.s<=-1000?'Rendir y pedir':'Rendir') : f.pedido?'Volver a pedir':`Pedir ${fmt(Math.abs(f.s))}`
-  const tras=f=> f.s<=-1000?<span style={{color:C.overdueText,fontWeight:600}}>falta {fmt(Math.abs(f.s))}</span> : f.s>=1000?<span style={{color:C.greenText,fontWeight:600}}>a favor {fmt(f.s)}</span> : <span style={{color:C.textSoft}}>queda en $0</span>
+  const tras=f=> f.s<=-1000?<span style={{color:C.textSoft}}>falta <b style={{color:C.text,fontWeight:600}}>{fmt(Math.abs(f.s))}</b></span> : f.s>=1000?<span style={{color:C.textSoft}}>a favor <b style={{color:C.greenText,fontWeight:600}}>{fmt(f.s)}</b></span> : <span style={{color:C.textSoft}}>queda en $0</span>
   const diasDe=iso=>iso?Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/86400000)):0
   const chips=f=>{ const out=[]
     if(f.armada) out.push({t:`armada hace ${diasDe(f.armada.created_at)} d`,c:C.soonText,bg:C.soonBg})
@@ -20027,8 +20101,8 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
     return out }
   const chipEl=(x,i)=><span key={i} style={{fontSize:10,fontWeight:600,color:x.c,background:x.bg,borderRadius:6,padding:'1px 6px',whiteSpace:'nowrap'}}>{x.t}</span>
   const subTxt=f=> f.n>0 ? `${f.n} gasto${f.n!==1?'s':''}${f.desde?` · desde ${fmtFechaDMY(f.desde)}`:''}` : f.armada ? `rendición ${fmt(f.armada.total||0)} armada ${fmtFechaDMY(isoLocal(f.armada.created_at))}` : f.ultEnv ? `rendido ${fmtFechaDMY(isoLocal(f.ultEnv.sent_at))}` : 'sin gastos por rendir'
-  const tileSub=k=>{ const a=vivos.filter(f=>f.grp===k); const sum=k==='pedir'||k==='dep'?a.reduce((s,f)=>s+Math.max(0,-f.s),0):a.reduce((s,f)=>s+f.m,0)
-    if(k==='envd'){ const d30=isoLocal(Date.now()-30*86400000); return `${enviadas.filter(x=>String(x.r.sent_at).slice(0,10)>=d30).length} en 30 días` }
+  const tileSub=k=>{ const a=vivos.filter(f=>f.grp===k&&enAbg(f)); const sum=k==='pedir'||k==='dep'?a.reduce((s,f)=>s+Math.max(0,-f.s),0):a.reduce((s,f)=>s+f.m,0)
+    if(k==='envd'){ const d30=isoLocal(Date.now()-30*86400000); return `${enviadas.filter(x=>enAbg(x)&&String(x.r.sent_at).slice(0,10)>=d30).length} en 30 días` }
     return k==='env'?`${a.length} por enviar`:k==='pedir'||k==='dep'?`${a.length} · falta ${fmtMill(sum)}`:`${a.length} · ${fmtMill(sum)}` }
   const exportar=async()=>{ try{ const XLSX=await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
     const head=['Cliente','Abogado','Grupo','Gastos por rendir','Desde','Por rendir','Saldo','Seguimiento']
@@ -20048,9 +20122,9 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
     // Mismo orden en que se guardó (el texto del borrador nombra N° 1, N° 2… en ese orden), se abra desde la fila que se abra.
     const grupo=gr.map(id=>id===r.id?r:(rendiciones||[]).find(x=>x.id===id&&!x.sent_at&&!x.anulada_at)).filter(Boolean)
     onEnviarRend&&onEnviarRend(grupo.length>1?{...grupo[0],_hermanas:grupo.slice(1)}:r) }
-  const envRows = verLista ? (verEnv?enviadas:borradores).filter(x=>(abgDef==='Todos'||x.abg===abgDef)&&(!q.trim()||nrm(x.c.name).includes(nrm(q.trim())))) : []
+  const envRows = verLista ? (verEnv?enviadas:borrItems).filter(x=>(abgDef==='Todos'||x.abg===abgDef)&&(!q.trim()||nrm(x.c.name).includes(nrm(q.trim())))) : []
   const segTxt = x => x.r.estado_envio==='externa' ? {t:'rendida por fuera',c:C.textSoft} : x.st ? (x.st.k==='rec' ? {t:`depósito ${fmtFechaDMY(String(x.req.recibido_at||x.st.dep?.date||'').slice(0,10))}`,c:C.greenText} : {t:`pedido · ${x.st.dias} d`,c:x.st.k==='sin'?C.overdueText:C.soonText}) : {t:'—',c:C.textSoft}
-  const envTable = verLista && (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+  const envTable = verEnv && (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       {D ? (<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr>{(verBorr?['Cliente','Abogado','Trabajo','Armada','Gastos','Total','Correo','']:['Cliente','Abogado','N°','Enviada','Gastos','Total','Seguimiento','']).map((h,i)=><th key={i} style={{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i===4||i===5?'right':'left',padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
         <tbody>{envRows.map((x,i)=>{ const pc=personChip(x.abg); const sg=verBorr?(x.r.correo?{t:'guardado',c:C.greenText}:{t:'sin redactar',c:C.textSoft}):segTxt(x); return (
@@ -20083,7 +20157,98 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
         <span>más reciente primero</span>
       </div>
     </div>)
-  const pillBtn=(a)=>{ const pc=a==='Todos'||a==='Sin abogado'?{bg:C.bgSoft,color:C.accent}:personChip(a); const n=verLista?(verEnv?enviadas:borradores).filter(x=>a==='Todos'||x.abg===a).length:(verTerm?term:base).filter(f=>a==='Todos'||f.abg===a).length
+  // ── Borradores: revisar uno a uno (anterior/siguiente), guardarlos y enviar juntos los guardados (cada correo pasa por su página, en cola).
+  const armRows = verBorr ? envRows.filter(x=>x.tipo==='arm') : []
+  const selArm = armRows.filter(x=>!excl.has(x.r.id))
+  const todosSel = armRows.length>0 && selArm.length===armRows.length
+  const toggleTodos = () => setExcl(todosSel ? new Set(armRows.map(x=>x.r.id)) : new Set())
+  // «Separadas en un correo» (sep1) salen juntas: se marcan y desmarcan como grupo.
+  const grupoDe = r => r.correo?.modo==='sep1'&&(r.correo.grupo||[]).length>1 ? r.correo.grupo : [r.id]
+  const toggleArm = id => setExcl(p=>{ const r=(rendiciones||[]).find(x=>x.id===id); const ids=r?grupoDe(r):[id]; const n=new Set(p); const quitar=!p.has(id); ids.forEach(i=>quitar?n.add(i):n.delete(i)); return n })
+  const abrirPrep = x => { onRendir&&onRendir(x.c, envRows.filter(y=>y.tipo==='prep').map(y=>y.c.id)) }
+  const caja = (on, parcial) => <span style={{width:17,height:17,borderRadius:4,border:`1.5px solid ${on||parcial?C.accent:C.done}`,background:on?C.accent:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on?<SIcon n='check' s={11} c='#fff'/>:parcial?<span style={{width:8,height:2,borderRadius:1,background:C.accent}}/>:null}</span>
+  const cajaDe = x => <span onClick={ev=>{ev.stopPropagation(); x.tipo==='arm'?toggleArm(x.r.id):abrirPrep(x)}} style={{display:'inline-flex',padding:4,margin:-4,cursor:'pointer'}}>{caja(x.tipo==='arm'&&!excl.has(x.r.id))}</span>
+  const cajaTodos = <span onClick={toggleTodos} style={{display:'inline-flex',padding:4,margin:-4,cursor:armRows.length?'pointer':'default'}}>{caja(todosSel, selArm.length>0&&!todosSel)}</span>
+  const nRev = armRows.length
+  const txtEnviar = () => `Enviar ${colaN} borrador${colaN!==1?'es guardados':' guardado'}`
+  // Envío conjunto: cada rendición (o grupo «separadas en un correo») con su N° tentativo y lo que pide; el N° real se fija al enviar.
+  const colaEnvio = (()=>{ if(!verBorr) return []; const vistos=new Set(), cuenta={}, out=[]
+    selArm.forEach(x=>{ if(vistos.has(x.r.id)) return
+      const gr=x.r.correo?.modo==='sep1'?(x.r.correo.grupo||[]).map(id=>(rendiciones||[]).find(y=>y.id===id&&!y.sent_at&&!y.anulada_at)).filter(Boolean):[]
+      const grupo=gr.length>1?gr:[x.r]; grupo.forEach(y=>vistos.add(y.id))
+      const cid=String(x.c.id); const base=corrSiguiente(rendiciones,x.c.id)+(cuenta[cid]||0); cuenta[cid]=(cuenta[cid]||0)+grupo.length
+      const filasG=grupo.map((y,i)=>({r:y, corr:base+i, pide:confEnv?Math.max(0,-fondoDeRend(y,expenses,clientEntities).saldo):0}))   // el fondo se calcula solo al confirmar
+      out.push({c:x.c, filas:filasG}) })
+    return out })()
+  const colaN = colaEnvio.reduce((a,g)=>a+g.filas.length,0)
+  const llaveFondo = (cid,r) => r ? `${cid}|${r.entity_id||''}|${r.por_trabajo?(r.project||''):''}` : `${cid}`
+  const sumaFalta = items => { const vis=new Map(); items.forEach(([k,v])=>{ if(!vis.has(k)) vis.set(k,Math.max(0,v)) }); return [...vis.values()].reduce((a,v)=>a+v,0) }
+  const confirmarEnvio = () => { if(!colaEnvio.length||!onEnviarRend) return
+    const items=colaEnvio.map(g=>{ const [p0,...rest]=g.filas; return {...p0.r, correlativo:p0.corr, _cliName:g.c.name, _hermanas:rest.map(f=>({...f.r,correlativo:f.corr}))} })
+    setConfEnv(false); onEnviarRend({...items[0], _cola:items.slice(1)}) }
+  const cMon = {padding:'10px 12px',textAlign:'right',fontSize:13,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}
+  const thSty = (r)=>({fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:r?'right':'left',padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'})
+  const borrTable = verBorr && (<>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+      {D ? (<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={{...thSty(),width:22}}>{cajaTodos}</th>{['Cliente','Abogado','Armada','Gastos','Por rendir','Saldo',''].map((h,i)=><th key={i} style={thSty(i>=3&&i<=5)}>{h}</th>)}</tr></thead>
+        <tbody>{envRows.map((x,i)=>{ const pc=personChip(x.abg); return (
+          <tr key={x.k} onClick={()=>x.tipo==='arm'?setDetR(x.r.id):abrirPrep(x)} style={{borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
+            <td style={{padding:'10px 12px',width:22}}>{cajaDe(x)}</td>
+            <td style={{padding:'10px 12px'}}><span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,cursor:'pointer'}}>{x.c.name}</span></td>
+            <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><span style={{fontSize:10.5,fontWeight:600,borderRadius:20,padding:'2px 9px',background:pc.bg,color:pc.color}}>{x.abg}</span></td>
+            <td style={{padding:'10px 12px',fontSize:13,whiteSpace:'nowrap'}}>{fmtFechaDMY(x.at)}</td>
+            <td style={cMon}>{x.n||'—'}</td>
+            <td style={{...cMon,fontWeight:700}}>{fmt(x.m)}</td>
+            <td style={cMon}>{tras(x)}</td>
+            <td style={{padding:'10px 12px',textAlign:'right',color:C.textSoft}}><Gl n='chevron'/></td>
+          </tr>)})}</tbody></table></div>)
+      : (<>
+        {envRows.length>0&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:C.bgSoft}}>{cajaTodos}<span onClick={toggleTodos} style={{flex:1,fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer'}}>Seleccionar todo</span><span style={{fontSize:11.5,color:C.textSoft}}>{nRev} de {envRows.length} guardados</span></div>}
+        {envRows.map(x=>(
+          <div key={x.k} onClick={()=>x.tipo==='arm'?setDetR(x.r.id):abrirPrep(x)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
+            {cajaDe(x)}
+            <div style={{flex:1,minWidth:0}}>
+              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.c.name}</div>
+              <div style={{fontSize:11.5,color:C.textSoft,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.n} gasto{x.n!==1?'s':''} · {fmtFechaDMY(x.at)}</div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
+              <div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{fmt(x.m)}</div>
+              <div style={{fontSize:11.5,marginTop:2}}>{tras(x)}</div>
+            </div>
+            <span style={{color:C.textSoft}}><Gl n='chevron'/></span>
+          </div>))}
+      </>)}
+      {envRows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13}}>{q||abgDef!=='Todos'?'Nada calza con el filtro.':'Sin borradores.'}</div>}
+      {envRows.length>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,color:C.textSoft}}>
+        <span><b style={{color:C.text}}>{envRows.length}</b> borrador{envRows.length!==1?'es':''} · {nRev} guardado{nRev!==1?'s':''}</span>
+        <span style={{display:'flex',gap:D?22:0,fontVariantNumeric:'tabular-nums'}}>{D&&<span>{envRows.reduce((a,x)=>a+(x.n||0),0)} gastos</span>}<b style={{color:C.text}}>{fmt(envRows.reduce((a,x)=>a+x.m,0))}</b>{D&&<span>falta <b style={{color:C.text}}>{fmt(sumaFalta(envRows.map(x=>[llaveFondo(x.c.id,x.r),-x.s])))}</b></span>}</span>
+      </div>}
+    </div>
+    {!D&&selArm.length>0&&<button onClick={()=>setConfEnv(true)} style={{width:'100%',marginTop:10,padding:'11px 14px',borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13.5,fontWeight:700,cursor:'pointer'}}>{txtEnviar()}</button>}
+  </>)
+  // Confirmación del envío conjunto: se lee la lista y los botones quedan al pie, después del total.
+  const confPanel = verBorr && confEnv && (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+    <div style={{padding:'11px 14px 7px',...SEC_LBL}}>Enviar {colaN} rendici{colaN!==1?'ones':'ón'}</div>
+    {D ? (<table style={{width:'100%',borderCollapse:'collapse'}}>
+      <thead><tr>{['Cliente','N°','Gastos','Por rendir','Fondos por solicitar'].map((h,i)=><th key={i} style={thSty(i>0)}>{h}</th>)}</tr></thead>
+      <tbody>{colaEnvio.flatMap(gq=>gq.filas.map(f=>(<tr key={f.r.id} style={{borderTop:`1px solid ${C.track}`}}>
+        <td style={{padding:'10px 12px'}}><span style={{...NOMBRE_CLI}}>{gq.c.name}</span>{f.r.project&&gq.filas.length>1&&<span style={{fontSize:11.5,color:C.textSoft}}> · {f.r.project}</span>}</td>
+        <td style={cMon}>{f.corr}</td><td style={cMon}>{f.r.n_gastos||0}</td><td style={{...cMon,fontWeight:700}}>{fmt(f.r.total||0)}</td>
+        <td style={{...cMon,color:f.pide>0?C.text:C.textSoft}}>{f.pide>0?fmt(f.pide):'—'}</td></tr>)))}</tbody>
+      <tfoot><tr style={{background:C.bgSoft,borderTop:`1px solid ${C.border}`}}><td style={{padding:'9px 12px',fontSize:12.5,fontWeight:700}}>{colaN} rendici{colaN!==1?'ones':'ón'}</td><td/>
+        <td style={{...cMon,fontWeight:700}}>{colaEnvio.reduce((a,gq)=>a+gq.filas.reduce((b,f)=>b+(f.r.n_gastos||0),0),0)}</td>
+        <td style={{...cMon,fontWeight:700}}>{fmt(colaEnvio.reduce((a,gq)=>a+gq.filas.reduce((b,f)=>b+(Number(f.r.total)||0),0),0))}</td>
+        <td style={{...cMon,fontWeight:700,color:C.text}}>{(()=>{ const t=sumaFalta(colaEnvio.flatMap(gq=>gq.filas.map(f=>[llaveFondo(gq.c.id,f.r),f.pide]))); return t>0?fmt(t):'—' })()}</td></tr></tfoot>
+    </table>) : colaEnvio.flatMap(gq=>gq.filas.map(f=>(<div key={f.r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.track}`}}>
+        <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{gq.c.name}</div><div style={{fontSize:11.5,color:C.textSoft}}>N° {f.corr} · {f.r.n_gastos||0} gastos</div></div>
+        <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}><div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{fmt(f.r.total||0)}</div><div style={{fontSize:11.5,color:C.textSoft}}>{f.pide>0?<>solicita <b style={{color:C.text,fontWeight:600}}>{fmt(f.pide)}</b></>:'sin solicitud'}</div></div></div>)))}
+    <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.border}`,flexDirection:D?'row':'column-reverse'}}>
+      <button onClick={()=>setConfEnv(false)} style={{border:'none',background:'none',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',padding:'7px 12px'}}>Volver a borradores</button>
+      <button onClick={confirmarEnvio} style={{border:'none',borderRadius:10,background:C.normal,color:'#fff',fontSize:13.5,fontWeight:700,cursor:'pointer',padding:'9px 18px',width:D?'auto':'100%'}}>Confirmar envío</button>
+    </div>
+  </div>)
+  const pillBtn=(a)=>{ const pc=a==='Todos'||a==='Sin abogado'?{bg:C.bgSoft,color:C.accent}:personChip(a); const n=verLista?(verEnv?enviadas:borrItems).filter(x=>a==='Todos'||x.abg===a).length:(verTerm?term:base).filter(f=>a==='Todos'||f.abg===a).length
     return <button key={a} onClick={()=>setAbg(a)} style={pillPersonaSty(pc,abgDef===a)}>{a} {n}</button> }
   if(detR){ const r=(rendiciones||[]).find(x=>x.id===detR)||null
     if(r){ const c=(clients||[]).find(x=>String(x.id)===String(r.client_id)); const gs=(expenses||[]).filter(e=>e.client_render_id===r.id&&!e.deleted_at).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
@@ -20139,14 +20304,16 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
   return (<div>
     {!verTerm&&(()=>{ // Ciclo de la rendición (sin título): cada paso se toca y filtra. «Por rendir» se abre en sus 3 tarjetas.
       const enRendir=['pedir','favor','cero'].includes(g)
-      const nOf=k=>vivos.filter(f=>f.grp===k).length
-      const falta=vivos.filter(f=>['pedir','favor','cero'].includes(f.grp)).reduce((a,f)=>a+Math.max(0,-f.s),0), afavor=vivos.filter(f=>['pedir','favor','cero'].includes(f.grp)).reduce((a,f)=>a+Math.max(0,f.s),0)
-      const faltaDep=vivos.filter(f=>f.grp==='dep').reduce((a,f)=>a+Math.max(0,-f.s),0)
+      // El ciclo sigue al abogado elegido (abre en el que entra): mismas cifras que su lista.
+      const enA=enAbg, vA=vivos.filter(enA)
+      const nOf=k=>vA.filter(f=>f.grp===k).length
+      const falta=vA.filter(f=>['pedir','favor','cero'].includes(f.grp)).reduce((a,f)=>a+Math.max(0,-f.s),0), afavor=vA.filter(f=>['pedir','favor','cero'].includes(f.grp)).reduce((a,f)=>a+Math.max(0,f.s),0)
+      const faltaDep=vA.filter(f=>f.grp==='dep').reduce((a,f)=>a+Math.max(0,-f.s),0)
       const pasos=[
         {k:'rendir', t:'Por rendir', tm:'Por rendir', ic:'clock', col:C.accent, v:`${nOf('pedir')+nOf('favor')+nOf('cero')}${D?' clientes':''}`, sub:`falta ${fmtMill(falta)} · a favor ${fmtMill(afavor)}`},
-        {k:'env', t:'Borradores', tm:'Borrador', ic:'file', col:C.soonText, v:`${borradores.length}`, sub:'armadas sin enviar'},
+        {k:'env', t:'Borradores', tm:'Borrador', ic:'file', col:C.soonText, v:`${borradores.filter(enA).length+vA.filter(f=>f.prep).length}`, sub:'preparados y guardados'},
         {k:'dep', t:'Esperando depósito', tm:'Espera', ic:'tEspera', col:C.azulInfo, v:D?`${nOf('dep')} · ${fmtMill(faltaDep)}`:`${nOf('dep')}`, sub:'rendido y en contra'},
-        {k:'envd', t:'Enviadas', tm:'Enviada', ic:'check', col:C.greenText, v:`${enviadas.length}`, sub:'historial de envíos'},
+        {k:'envd', t:'Enviadas', tm:'Enviada', ic:'check', col:C.greenText, v:`${enviadas.filter(enA).length}`, sub:'historial de envíos'},
       ]
       const on=k=>k==='rendir'?enRendir:g===k
       return (<>
@@ -20180,14 +20347,15 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
       <button onClick={()=>accion(sig)} style={{fontSize:12,fontWeight:700,border:'none',borderRadius:8,padding:'5px 11px',background:C.accent,color:'#fff',cursor:'pointer',whiteSpace:'nowrap'}}>{D?`${btnTxt(sig)} →`:'Ir →'}</button>
       <button onClick={()=>{_rendirUlt=null;setUlt(null)}} aria-label='Cerrar' style={{display:'inline-flex',background:'none',border:'none',padding:2,cursor:'pointer'}}><SIcon n='x' s={14} c={C.textSoft}/></button>
     </div>}
-    <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center',marginBottom:10}}>
+    {confPanel || <><div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center',marginBottom:10}}>
       <div style={{flex:D?'1 1 220px':'1 1 100%',display:'flex',alignItems:'center',gap:8,background:'#F1F4F6',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 11px',minWidth:0}}>
         <SIcon n='search' s={15} c={C.muted}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente…' style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%'}}/></div>
       <div style={{display:'flex',gap:6,flexWrap:D?'wrap':'nowrap',overflowX:D?'visible':'auto',minWidth:0,flex:D?'0 1 auto':'1 1 auto'}}>{abgs.map(pillBtn)}</div>
       {!verLista&&<select value={ord} onChange={e=>setOrd(e.target.value)} style={sel}><option value='ant'>Más antiguo primero</option><option value='rec'>Más reciente primero</option><option value='monto'>Mayor monto</option><option value='az'>A–Z</option></select>}
       {D&&!verLista&&<button onClick={exportar} style={{...sel,display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/>Excel</button>}
+      {D&&verBorr&&selArm.length>0&&<button onClick={()=>setConfEnv(true)} style={{fontSize:13,fontWeight:700,border:'none',borderRadius:10,padding:'8px 16px',cursor:'pointer',background:C.normal,color:'#fff',whiteSpace:'nowrap',marginLeft:'auto'}}>{txtEnviar()}</button>}
     </div>
-    {verLista ? envTable : <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+    {verBorr ? borrTable : verLista ? envTable : <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       {D ? (<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr>{['Cliente','Abogado','Gastos','Desde','Por rendir','Saldo',''].map((h,i)=><th key={i} style={{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i>=4?'right':(i===2?'right':'left'),padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
         <tbody>{rows.map((f,i)=>{ const pc=personChip(f.abg); const ch=chips(f); return (
@@ -20221,13 +20389,19 @@ function RendirClientesPage({grupoInicial=null, clients=[], expenses=[], rendici
         <span><b style={{color:C.text}}>{rows.length}</b> cliente{rows.length!==1?'s':''} · por rendir <b style={{color:C.text}}>{fmt(rows.reduce((a,f)=>a+f.m,0))}</b></span>
         <span>{verTerm?'Terminados':`${aldia} al día, ocultos`}</span>
       </div>
-    </div>}
+    </div>}</>}
   </div>)
 }
 
 function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMovBanco,expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,onMoverAOficina,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened,openGastosOfi,onGastosOfiOpened,costosOfiMes=0,onOpenCostosOfi,onIrConciliacion,bulkImports=[],onUndoImport,navTo,onNavDone,onSolicitarFondos}) {
-  const { histSinEnv, setHistSinEnv, marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
+  const { histSinEnv, setHistSinEnv, marcarConsulta, catMenu, setCatMenu, ofiLente, setOfiLente, ofiMesOpen, setOfiMesOpen, selectedClient, setSelectedClient, notaMenuOpen, setNotaMenuOpen, verArchivadosG, setVerArchivadosG, classifyFor, setClassifyFor, rsPickFor, setRsPickFor, movExp, setMovExp, rendOpen, setRendOpen, gastoOrd, setGastoOrd, gastoCatF, setGastoCatF, gastoPagF, setGastoPagF, gastoRsF, setGastoRsF, saldoTras, pagadoPorGasto, notaLiqOpen, setNotaLiqOpen, notaLiqAdd, setNotaLiqAdd, addSel, setAddSel, addSearch, setAddSearch, addOpenCli, setAddOpenCli, liqDetail, setLiqDetail, cajaPersons, showOrphans, setShowOrphans, orfSug, orfBusy, orfRan, orfAuto, orfAutoOpen, setOrfAutoOpen, orfQ, setOrfQ, orfPickFor, setOrfPickFor, aplicarOrf, deshacerOrf, runOrfAsistente, q, setQ, saldoFilter, setSaldoFilter, showPersonales, setShowPersonales, respFilter, setRespFilter, triageOpen, setTriageOpen, subMenu, setSubMenu, respPickG, setRespPickG, asignarRespG, attachExpense, setAttachExpense, rendEntityIds, setRendEntityIds, selRS, setSelRS, openRS, setOpenRS, rendicionClient, setRendicionClient, rendEdit, setRendEdit, showHistorial, setShowHistorial, histTab, setHistTab, histOrden, setHistOrden, emailRend, setEmailRend, devEmailRend, setDevEmailRend, hQ, setHQ, hMes, setHMes, hAnio, setHAnio, showHistorialFicha, setShowHistorialFicha, hFichaDesde, setHFichaDesde, hFichaHasta, setHFichaHasta, handleAnularRendicion, anularGastoRendido, marcarNotariaPagado, estadoFor, setEstadoFor, marcarEstado, clasifBulk, asignandoRS, setAsignandoRS, expandRend, setExpandRend, balances, clientsWithMovs, archivadosG, filteredClients, filtered, gastoCats, gastoToolbar, orphans, clientById, revGroup, revNoActivo, revOcasional, revOpen, setRevOpen, showRevision, setShowRevision, showReasignar, setShowReasignar, reasignFrom, setReasignFrom, revSel, setRevSel, toggleSel, revDupConfirm, setRevDupConfirm, showHist, setShowHist, showDescuadres, setShowDescuadres, descOpen, setDescOpen, doMove, revMoverA, revPick, setRevPick, revN, showNotaria, setShowNotaria, showClasificar, setShowClasificar, showGastosOficina, setShowGastosOficina, showBuscarClientes, setShowBuscarClientes, showRendiciones, setShowRendiciones, rendSub, setRendSub, revSub, setRevSub, selClasif, setSelClasif, clasifSearch, setClasifSearch, clasifOpen, setClasifOpen, movMode, setMovMode, movSel, setMovSel, selNota, setSelNota, excepNota, setExcepNota, notaSending, setNotaSending, reenviando, setReenviando, notaConfirm, setNotaConfirm, NOTARIA_DEFAULT, cleanNotaDest, notaEmail, setNotaEmail, notaSend, setNotaSend, compFile, setCompFile, notaTab, setNotaTab, notaMsg, setNotaMsg, notaSubject, setNotaSubject, notaBolRS, setNotaBolRS, notaBolRUT, setNotaBolRUT, notaBolPick, setNotaBolPick, abrirEnvioNotaria, aplicarBoletas, notaResp, setNotaResp, notariaPend, notariaAnulados, notaAnulOpen, setNotaAnulOpen, eliminarGastoNota, notaSel, notaTotal, dispCliente, dispPersona, coberturaPersona, notaPendTotal, notaLiquidaciones, toggleNota, notaFondos, setNotaFondos, notaPersonaPick, setNotaPersonaPick, PERSONAS_NOTA, notaGroups, marcarPersonal, esOficina, gastosPorRendir, rendirPend, ultRep, setUltRep, repetirCostosFijos, deshacerRepetir, catsOficina, setCatOficina, setSubcatOficina, triagePersonal, notaRow, notaSinFondosSel, periodoNota, liquidarNotaria, marcarPagadoNotaria, notaEstado, notaPagada, enviarNotaria, reenviarNotaria, deshacerNotaria, fmtOt, descargarExcelNota, anadirGastosNota, CATS, clientBalance, saldo, selEnts, rb, multiRS, cFondos, cSaldo, KpiRect, KpiRow, AdjuntoIcon, renderMov, HH, estadoBadge, rsOfRend, verPdfRend, renderRendRow, renderHistorialTable, exportHist, selStyle, fichaHistorial, esRendido, addPicker, rendidosBlock, gastosClasificar, isDesktop, notaOrigen, setNotaOrigen } = useExpensesModel({ expenses, clients, clientEntities, sales, onAdd, onEdit, onAddFondo, onBulk, onAssignRS, onAssignClientToExpense, onMoverAOficina, setExpenses, setRendiciones, rendiciones, currentUserName, currentUser, isAdmin, expenseAttachments, setExpenseAttachments, onRendicionComplete, billing, setBilling, pettyCash, onAssignCajaChica, onAssignGastoRS, onToggleClientStatus, onCreateOccasional, onSaveClientFields, onOpenClientFicha, expenseAudit, openOfi, onOfiOpened, openGastosOfi, onGastosOfiOpened, costosOfiMes, onOpenCostosOfi, bulkImports })
   const [orfPersona,setOrfPersona] = useState(null)   // gasto sin cliente → selector "Personal de" abierto (id)
+  const [rendNav,setRendNav] = useState(null)   // borradores preparados en revisión: {ids, i} (orden de la lista de Rendir a cliente)
+  const [rendAbg,setRendAbg] = useState(null)   // abogado con que abre Rendir a cliente (el de la tarjeta que se tocó)
+  const _rendCliRef = useRef(null)   // cliente abierto ahora: si se salió mientras se guardaba, no se reabre el siguiente
+  // Borradores del abogado que entra (misma fuente que Rendir a cliente): «N borradores por revisar» / «N por enviar» en las tarjetas.
+  const misBorr = useMemo(()=>conteoBorradores({clients, expenses, rendiciones, sales, persona:currentUserName}),[clients,expenses,rendiciones,sales,currentUserName])
+  const txtBorr = misBorr.prep>0 ? `${misBorr.prep} borrador${misBorr.prep!==1?'es':''} por revisar` : misBorr.arm>0 ? `${misBorr.arm} por enviar` : null
   const [showMov,setShowMov] = useState(false)   // Revisar › Movilización
   const [rendGrupo,setRendGrupo] = useState(null)   // Rendiciones › Rendir a cliente: grupo con que abre (tarjeta «Esperando depósito» → 'dep')
   const [sinDetTodos,setSinDetTodos] = useState(false)   // Revisar › Sin detalle: ver todos
@@ -20314,21 +20488,24 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     }).join('')
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#F5F7F9;font-family:Arial,Helvetica,sans-serif;color:#3D3D3D"><div style="max-width:560px;margin:0 auto;padding:22px 16px"><div style="background:#fff;border:1px solid #E4E8EB;border-radius:14px;overflow:hidden"><div style="background:#003C50;color:#fff;padding:16px 20px"><div style="font-size:15px;font-weight:700">${BRAND.nombre}</div><div style="font-size:11px;opacity:.85">Clientes por provisionar</div></div><div style="padding:20px"><div style="font-size:14px;font-weight:600;color:#003C50;margin-bottom:6px">Hola ${nombre},</div><div style="font-size:13px;line-height:1.55;margin-bottom:16px">La oficina adelantó gastos de estos clientes tuyos que <b>no tienen fondos suficientes</b>. Conviene <b>pedirles provisión</b>:</div>${filas}<div style="background:#003C50;color:#fff;border-radius:9px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center;margin:4px 0 16px"><span style="font-size:12px;color:#85B7EB">Total por pedir</span><span style="font-size:18px;font-weight:800">${fmt(tot)}</span></div><a href="https://${BRAND.dominio}" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 20px;border-radius:9px">Ver en la app</a></div></div><div style="text-align:center;font-size:10px;color:#99ABB4;margin-top:14px">${BRAND.nombre}</div></div></body></html>`
   }
-  const enviarPedir1=async(email,grupo)=>{
+  const enviarPedir1=async(email,grupo,modo)=>{
     const nombre=(grupo.abg||'').split(' ')[0]||grupo.abg||''
     setPedirSent(s=>({...s,[email]:'sending'}))
-    try{ const via=await enviarComoUsuario({to:email,subject:`Pedir fondos — ${grupo.clientes.length} cliente${grupo.clientes.length!==1?'s':''} (${fmt(grupo.total)})`,html:emailPedirFondos(nombre,grupo.clientes),text:`Tienes ${grupo.clientes.length} cliente(s) sin fondos por ${fmt(grupo.total)}. Pídeles provisión.`})
+    try{ const via=await enviarComoUsuario({que:'El aviso de pedir fondos', to:email,subject:`Pedir fondos — ${grupo.clientes.length} cliente${grupo.clientes.length!==1?'s':''} (${fmt(grupo.total)})`,html:emailPedirFondos(nombre,grupo.clientes),text:`Tienes ${grupo.clientes.length} cliente(s) sin fondos por ${fmt(grupo.total)}. Pídeles provisión.`}, modo)
       setPedirSent(s=>({...s,[email]:via?'ok':'skip'}))
+      if(via&&!modo) appAlert(txtEnviado(via,{que:'Aviso de pedir fondos', para:`${grupo.abg} (${email})`}))
       if(via) logActividad('fondos.pedido_enviado',{detalle:{persona:grupo.abg,title:`${grupo.clientes.length} cliente${grupo.clientes.length!==1?'s':''} · ${grupo.clientes.slice(0,4).map(c=>c.name).join(', ')}`,monto:Math.round(grupo.total)}})
       return !!via }
-    catch(e){ setPedirSent(s=>({...s,[email]:'err'})); return false }
+    catch(e){ setPedirSent(s=>({...s,[email]:'err'})); if(!modo) avisoNoEnviado('El aviso de pedir fondos', e.message||String(e)); return false }
   }
   const enviarPedirTodos=async()=>{
     const entries=Object.entries(pedirFondosGrupos).filter(([k])=>k!=='__sin__')
     if(!entries.length) return
     if(!await appConfirm(`¿Enviar el aviso de "pedir fondos" a ${entries.length} abogado(s)? Cada uno recibe solo sus clientes.`)) return
-    for(const [email,grupo] of entries){ await enviarPedir1(email,grupo) }
-    appAlert('Avisos enviados.')
+    const modo=await modoEnvioLote(entries.length)
+    if(modo==='cancelar'){ appAlert(txtResumenEnvio({ok:0,no:entries.length,que:'avisos'})); return }
+    let ok=0; for(const [email,grupo] of entries){ if(await enviarPedir1(email,grupo,modo)) ok++ }
+    appAlert(txtResumenEnvio({ok, no:entries.length-ok, via:modo, que:ok===1?'aviso':'avisos'}))
   }
   // Puentes tras cargar notaría: navegar directo a la sub-vista pedida desde la pantalla de resultado (orphans / deuda / rendir).
   useEffect(()=>{ if(!navTo) return
@@ -20337,7 +20514,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     if(navTo==='orphans') setShowOrphans(true)
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
     else if(navTo==='rendir'){ setShowRendiciones(true); setRendSub(null) }
-    else if(navTo==='rendirCli'){ setShowRendiciones(true); setQ(''); setRendGrupo(null); setRendSub('rendir') }   // Inicio › Rendiciones por hacer: directo a Rendir a cliente
+    else if(navTo==='rendirCli'){ setShowRendiciones(true); setQ(''); setRendGrupo('env'); setRendAbg('Todos'); setRendSub('rendir') }   // Inicio › Rendiciones por hacer: directo a Rendir a cliente › Borradores
     onNavDone&&onNavDone()
   },[navTo])
   // Ledger de cobros de la notaría (fuente única): cada gasto de notaría con su estado (pagada/en liquidación/por pagar) y error (sin cliente/duplicado), agrupado por carga masiva.
@@ -20417,7 +20594,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       const now=new Date().toISOString()
       for(const it of items){ try{ await noNUpdate(it,{estado:'consultada',consultada_at:now,consultada_por:currentUserName||null},{accion:'consultada',detalle:`Consultada a la notaría (${dest})`}) }catch(e){ console.error('noNUpdate',e) } }
       setNoNSel(new Set())
-      appAlert(`Consulta enviada a la notaría por ${items.length} OT${via==='oficina'?' (desde la cuenta de oficina)':''}.`)
+      appAlert(txtEnviado(via,{que:`Consulta por ${items.length} OT`,g:'a',para:'la notaría'}))
     }catch(e){ appAlert('No se pudo enviar la consulta: '+(e.message||e)) }
     setNoNSending(false)
   }
@@ -21023,8 +21200,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const iconSq=(ic,bg,col)=><span style={{width:34,height:34,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:10}}><SIcon n={ic} s={18} c={col}/></span>
         const wrap=ch=><div style={{padding:isDesktop?'4px 22px 100px':'4px 12px 100px',...(isDesktop?{maxWidth:760,margin:'0 auto'}:{})}}>{ch}</div>
         if(rendSub==='rendir'){
-          return <div style={{padding:isDesktop?'4px 22px 100px':'4px 12px 100px',...(isDesktop?{maxWidth:1180,margin:'0 auto'}:{})}}><RendirClientesPage grupoInicial={rendGrupo} clients={clients} expenses={expenses} rendiciones={rendiciones} clientEntities={clientEntities} sales={sales} currentUserName={currentUserName} isAdmin={isAdmin}
-            onRendir={c=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(c)}} onEnviarRend={r=>{ const base=corrSiguiente(rendiciones,r.client_id); setEmailRend({...(r.correlativo?r:{...r,correlativo:base}), _hermanas:(r._hermanas||[]).map((h,i)=>h.correlativo?h:{...h,correlativo:base+1+i})}) }} onVerRend={verPdfRend}
+          return <div style={{padding:isDesktop?'4px 22px 100px':'4px 12px 100px',...(isDesktop?{maxWidth:1180,margin:'0 auto'}:{})}}> <RendirClientesPage grupoInicial={rendGrupo} abgInicial={rendAbg} clients={clients} expenses={expenses} rendiciones={rendiciones} clientEntities={clientEntities} sales={sales} currentUserName={currentUserName} isAdmin={isAdmin}
+            onRendir={(c,lista)=>{setRendEdit(null);setRendEntityIds([]);setRendNav(lista&&lista.length?{ids:lista,i:Math.max(0,lista.findIndex(id=>String(id)===String(c.id)))}:null);setRendicionClient(c)}} onEnviarRend={r=>{ const base=corrSiguiente(rendiciones,r.client_id); setEmailRend({...(r.correlativo?r:{...r,correlativo:base}), _hermanas:(r._hermanas||[]).map((h,i)=>h.correlativo?h:{...h,correlativo:base+1+i})}) }} onVerRend={verPdfRend}
             onSolicitar={(c,monto,resp)=>onSolicitarFondos&&onSolicitarFondos(c,null,monto||null,resp||null)} onOpenMovBanco={onOpenMovBanco} onOpenClientFicha={onOpenClientFicha}/></div>
         }
         if(rendSub==='pend'){
@@ -21049,7 +21226,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         }
         return wrap(
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:isDesktop?12:8}}>
-            <HubTile ic='receipt' bg={C.azulBg} col={C.accent} t='Rendir a cliente' s='rendir, pedir y enviar' sM='rendir y pedir' onClick={()=>{setQ('');setRendGrupo(null);setRendSub('rendir')}}/>
+            <HubTile ic='receipt' bg={C.azulBg} col={C.accent} t='Rendir a cliente' s={txtBorr||'rendir, pedir y enviar'} sM={misBorr.prep>0?`${misBorr.prep} borrador${misBorr.prep!==1?'es':''}`:(txtBorr||'rendir y pedir')} onClick={()=>{setQ('');const hay=misBorr.prep>0||misBorr.arm>0;setRendGrupo(hay?'env':null);setRendAbg(hay?currentUserName:null);setRendSub('rendir')}}/>
             <HubTile ic='tEspera' bg={C.soonBg} col={C.soonText} t='Esperando pago' s='fondos pedidos y su seguimiento' sM='fondos pedidos' onClick={()=>{setQ('');setRendGrupo('dep');setRendSub('rendir')}}/>
             <HubTile ic='clock' bg={C.azulBg} col={C.accent} t='Historial' s='rendiciones enviadas' sM='enviadas' onClick={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}}/>
             <HubTile ic='mail' bg={C.soonBg} col={C.soonText} t='Solicitar fondos' s='pedir provisión' onClick={()=>onSolicitarFondos&&onSolicitarFondos()}/>
@@ -21149,7 +21326,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         const cards=[
           {t:'Pagar', ic:'clock', s:notariaPend.length?`${notariaPend.length} OT · ${fmtShort(notaPendTotal)} por pagar`:'al día', sM:notariaPend.length?`${fmtShort(notaPendTotal)} · ${notariaPend.length} OT`:'al día', col:C.soonText, bg:C.ambarBg, go:()=>setNotaTab('pend')},
           {t:'Cobros', ic:'exchange', s:notaLedger.n?`${notaLedger.n} OT · ${fmtShort(notaLedger.total)}`:'lo que nos cobran', col:C.azulInfo, bg:C.azulBg, go:()=>{setCobrosQ('');setCobEst('');setCobMes('');setCobAnio('');setCobOpenM(null);setNotaTab('cobros')}},
-          {t:'Historial', ic:'check', s:notaLiquidaciones.length?`${notaLiquidaciones.length} pago${notaLiquidaciones.length!==1?'s':''} · ${fmtShort(notaLiquidaciones.reduce((a,r)=>a+(r.total||0),0))}`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
+          {t:'Historial', ic:'check', s:notaLiquidaciones.filter(notaPagada).length?`${notaLiquidaciones.filter(notaPagada).length} pago${notaLiquidaciones.filter(notaPagada).length!==1?'s':''} · ${fmtShort(notaLiquidaciones.filter(notaPagada).reduce((a,r)=>a+(r.total||0),0))}`:'sin pagos', col:C.greenText, bg:C.greenBg, go:()=>setNotaTab('pagados')},
           {t:'Carga masiva', ic:'file', s:'importar · correo', col:C.muted, bg:C.bgSoft, go:()=>{setShowNotaria(false);setHubOpen(false);setCargaOpen(null);setShowCargaPag(true)}},
         ]
         return (
@@ -21382,14 +21559,14 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
           if(qq&&!_n(`${r.periodo||''} ${r.user_name||''} ${r.ot_numbers||''} ${gsDe(r).map(e=>`${e.ot_number||''} ${cliN(e.client_id)} ${e.personal_de||''}`).join(' ')}`).includes(qq)) return false; return true }
         const dirMul = pagosOrd==='nuevo'?1:-1
         const list=[...notaLiquidaciones].filter(okF).sort((a,b)=>dirMul*String(b.created_at||'').localeCompare(String(a.created_at||'')))
-        const tot=list.filter(r=>notaEstado(r)!=='por_enviar').reduce((a,r)=>a+(r.total||0),0)   // pagado = enviado con comprobante o marcado pagado; lo «por enviar» aún no se transfiere
-        const nPorEnv=list.filter(r=>notaEstado(r)==='por_enviar').length
+        const tot=list.filter(notaPagada).reduce((a,r)=>a+(r.total||0),0)   // pagado = enviado con comprobante, marcado pagado o enlazado al cargo; lo «por enviar» aún no se transfiere
+        const nPorEnv=list.filter(r=>!notaPagada(r)).length
         const groups=[]; const gi={}
-        list.forEach(r=>{ const mk=isoLocal(r.created_at).slice(0,7)||'sin'; if(gi[mk]==null){ gi[mk]=groups.length; groups.push({mk,rows:[],tot:0}) } const g=groups[gi[mk]]; g.rows.push(r); g.tot+=(r.total||0) })
+        list.forEach(r=>{ const mk=isoLocal(r.created_at).slice(0,7)||'sin'; if(gi[mk]==null){ gi[mk]=groups.length; groups.push({mk,rows:[],tot:0}) } const g=groups[gi[mk]]; g.rows.push(r); if(notaPagada(r)) g.tot+=(r.total||0) })   // mismo criterio que el total: los meses suman al total
         const mesLbl = mk => { if(mk==='sin'||!/^\d{4}-\d{2}/.test(mk)) return 'Sin fecha'; const [y,m]=mk.split('-'); return mesTitulo(new Date(Number(y),Number(m)-1,1)) }
         const anios=[...new Set(notaLiquidaciones.map(r=>isoLocal(r.created_at).slice(0,4)).filter(Boolean))].sort().reverse()
         const csvRows=()=>{ const head=['Fecha','Periodo','Total','Estado','N OT','OT','Quién','Cargo en banco']; const body=list.map(r=>[fmtFechaDMY(isoLocal(r.created_at))||'', r.periodo||'', r.total||0, notaEstado(r)==='por_enviar'?'Por enviar':'Pagada', r.n_gastos||0, r.ot_numbers||'', r.user_name||'', r.movimiento_id?'Sí':'No']); return [head,...body] }
-        const chip=r=>{ const pe=notaEstado(r)==='por_enviar'; return <span style={{fontSize:9.5,fontWeight:700,color:pe?C.soonText:C.greenText,background:pe?C.soonBg:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{pe?'Por enviar':'Pagada'}</span> }
+        const chip=r=>{ const pe=!notaPagada(r); return <span style={{fontSize:9.5,fontWeight:700,color:pe?C.soonText:C.greenText,background:pe?C.soonBg:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{pe?'Por enviar':'Pagada'}</span> }
         const fila = (r,i) => { const open=notaLiqOpen===r.id; const gs=gsDe(r); const adding=notaLiqAdd===r.id; const est=notaEstado(r); return (
           <div key={r.id} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
             <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',alignItems:'center',gap:12,padding:D?'10px 14px':'10px 12px',cursor:'pointer'}}>
@@ -21438,7 +21615,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                 <span style={{...SEC_LBL}}>Pagado a la notaría{pagAnio?` en ${pagAnio}`:''}</span>
                 {list.length>0&&<button onClick={()=>csvDownload('pagos_notaria.csv',csvRows())} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Exportar ↓</button>}
               </div>
-              <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:25,fontWeight:800,color:C.greenText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span><span style={{fontSize:12,color:C.muted}}>· {list.length} pago{list.length!==1?'s':''}</span></div>
+              <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:25,fontWeight:800,color:C.greenText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span><span style={{fontSize:12,color:C.muted}}>· {list.length-nPorEnv} pago{list.length-nPorEnv!==1?'s':''}</span></div>
               {(notaPendTotal>0||nPorEnv>0)&&<div style={{display:'flex',gap:8,marginTop:12}}>
                 {notaPendTotal>0&&nest('Por pagar',fmt(notaPendTotal),C.tealBg,C.tealText,()=>setNotaTab('pend'))}
                 {nPorEnv>0&&nest('Por enviar',`${nPorEnv} pago${nPorEnv!==1?'s':''}`,C.soonBg,C.soonText)}
@@ -22077,11 +22254,19 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   )
   // Rendición · Enviar rendición · Enviar devolución = PÁGINAS (antes ventanas a pantalla completa): "‹ origen" vuelve al cliente o a Rendiciones.
   const _origenRend = showRendiciones?'Rendiciones':(selectedClient?.name||'Gastos')
-  const _envPag = el => isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{el}</div>:el
-  if(rendicionClient){ const cerrar=()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}
-    return _envPag(<FlujoPagina origen={_origenRend} titulo={rendEdit?'Editar rendición':'Rendición'} ctx={rendicionClient.name&&rendicionClient.name!==_origenRend?rendicionClient.name:null} onBack={cerrar} maxW={1180}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}} asPage/></FlujoPagina>) }
+  const _envPag = el => isDesktop?<div data-envpag style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{el}</div>:el
+  if(rendicionClient){ const cerrar=()=>{_rendCliRef.current=null;setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setRendNav(null)}
+    // Borradores preparados: anterior / siguiente saltan los clientes que ya no tienen gastos por rendir (borrador ya guardado).
+    const _conPend = id => gastosPorRendirCli(expenses,id).some(e=>(Number(e.amount)||0)!==0)
+    const _irBorr = j => { const c=(clients||[]).find(x=>String(x.id)===String(rendNav.ids[j])); if(!c) return; setRendEntityIds([]); setRendEdit(null); setRendicionClient(c); setRendNav({...rendNav,i:j}); requestAnimationFrame(()=>{ window.scrollTo(0,0); const el=document.querySelector('[data-envpag]'); if(el) el.scrollTop=0 }) }
+    const _busca = (desde,paso) => { for(let j=desde;j>=0&&j<rendNav.ids.length;j+=paso){ if(_conPend(rendNav.ids[j])) return j } return -1 }
+    const _nav = rendNav&&!rendEdit ? {i:rendNav.i, n:rendNav.ids.length, onPrev:()=>{ const j=_busca(rendNav.i-1,-1); if(j>=0) _irBorr(j) }, onNext:()=>{ const j=_busca(rendNav.i+1,1); if(j>=0) _irBorr(j) }} : null
+    _rendCliRef.current = rendicionClient.id
+    const _yo = rendicionClient.id
+    const _revisada = rendNav&&!rendEdit ? ()=>{ if(_rendCliRef.current!==_yo) return; const j=_busca(rendNav.i+1,1); if(j>=0) _irBorr(j); else cerrar() } : null
+    return _envPag(<FlujoPagina origen={_origenRend} titulo={rendEdit?'Editar rendición':'Rendición'} ctx={rendicionClient.name&&rendicionClient.name!==_origenRend?rendicionClient.name:null} onBack={cerrar} maxW={1180}><RendicionModal key={rendicionClient.id} client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={cerrar} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} preSel={!!_nav} navBorr={_nav} onRevisada={_revisada} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setRendNav(null);setEmailRend(r)}} asPage/></FlujoPagina>) }
   if(emailRend){ const cli=clients.find(c=>c.id===emailRend.client_id)
-    return _envPag(<FlujoPagina origen={_origenRend} titulo='Enviar rendición' ctx={[cli?.name!==_origenRend?cli?.name:null,emailRend.correlativo?`N° ${emailRend.correlativo}`:null].filter(Boolean).join(' · ')||null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRend(x)} onClose={()=>setEmailRend(null)} asPage/></FlujoPagina>) }
+    return _envPag(<FlujoPagina origen={_origenRend} titulo='Enviar rendición' ctx={[cli?.name!==_origenRend?cli?.name:null,emailRend.correlativo?`N° ${emailRend.correlativo}`:null].filter(Boolean).join(' · ')||null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal key={`${emailRend.id||'v'}-${emailRend.client_id}-${emailRend.correlativo||''}`} r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRend(x)} onClose={()=>setEmailRend(null)} asPage/></FlujoPagina>) }
   if(devEmailRend) return _envPag(<FlujoPagina origen={_origenRend} titulo='Enviar devolución' ctx={devEmailRend.client?.name&&devEmailRend.client.name!==_origenRend?devEmailRend.client.name:null} onBack={()=>setDevEmailRend(null)} maxW={1180}><DevolucionEmailModal client={devEmailRend.client} rend={devEmailRend.rend} rendN={devEmailRend.rend?.correlativo} amount={devEmailRend.amount} fecha={devEmailRend.fecha} user={currentUser} setRendiciones={setRendiciones} onClose={()=>setDevEmailRend(null)} asPage/></FlujoPagina>)
   // Detalle de una liquidación de caja chica = PÁGINA (antes modal): foto guardada al liquidar (fondo · gastado · cubierto) + gastos por cliente.
   if(liqDetail){ const r=liqDetail; const gs=(expenses||[]).filter(e=>String(e.render_id)===String(r.id)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const tot=gs.reduce((a,e)=>a+(e.amount||0),0)
@@ -22291,7 +22476,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     const activos = clientsWithMovs.filter(c=>c.status!=='Terminado')
     const nSin = orphans.length + revN(revNoActivo) + revN(revOcasional)
     const cards = [
-      {t:'Rendiciones', ic:'receipt', s:rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día', col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
+      {t:'Rendiciones', ic:'receipt', s:txtBorr||(rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día'), col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
     ]
     if(revisarRes&&D) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
@@ -22538,6 +22723,8 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
 const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Movilización','Archivo Judicial','Otro']
+// La subcategoría es propia de «Otro» y de toda categoría de oficina (Sueldos, Remuneraciones, Impuestos, Otros…); los trámites del cliente no la usan.
+const conSubcat = c => !!c && (c==='Otro' || !CATS_GASTO.includes(c))
 // Categorías que casi siempre son de un cliente: cargadas a la oficina, se pregunta antes de guardar.
 // Trámites (CBR, notaría, RC, archivo, DO): la glosa tiene que decir de qué es — inmueble, sociedad o persona.
 // Genérica = solo palabras de trámite y el nombre del CBR/notaría («1 Copia con Vigencia», «3 certificados de dominio vigente»).
@@ -23143,7 +23330,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const [sugSub,setSugSub] = useState(null)
   useEffect(()=>{
     if(isFondo || f.subcategory || !f.concept){ setSugSub(null); return }
-    if(!(f.category==='Otro'||CATS_OFICINA_ESTRUCTURAL.includes(f.category))){ setSugSub(null); return }
+    if(!conSubcat(f.category)){ setSugSub(null); return }
     const gk=glosaKey(f.concept); if(!gk){ setSugSub(null); return }
     let alive=true
     supabase.from('learnings').select('value').eq('kind','gasto_subcategoria').eq('key',gk).order('updated_at',{ascending:false}).limit(1).then(({data})=>{ if(alive) setSugSub(data&&data[0]?.value||null) },()=>{})
@@ -23204,7 +23391,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       {!isFondo&&f.category==='Notaria'&&(
         <FloatFld label='OT (notaría)'><input value={f.ot_number||''} onChange={e=>up('ot_number',e.target.value)} placeholder='Ej: OT-447206' style={fInp}/></FloatFld>
       )}
-      {!isFondo&&(f.category==='Otro'||CATS_OFICINA_ESTRUCTURAL.includes(f.category))&&(
+      {!isFondo&&conSubcat(f.category)&&(
         <FloatFld label='Subcategoría'>
           <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Supermercado, Aseo, Insumos...' style={fInp}/>
           <datalist id='expense-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
@@ -23262,7 +23449,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta||detFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':detFalta?'Falta de qué es (inmueble, sociedad o persona)':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:(f.category==='Otro'||CATS_OFICINA_ESTRUCTURAL.includes(f.category))?subOtro(f.subcategory):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date||movFalta||detFalta} title={movFalta?'Falta el trayecto y el motivo de la movilización':detFalta?'Falta de qué es (inmueble, sociedad o persona)':undefined} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:conSubcat(f.category)?subOtro(f.subcategory):null,...movPatch(),...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -25162,18 +25349,19 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     const logosInline=[{cid:'lealogow',b64:_strip(logoBlanco),mime:'image/png'},{cid:'lealogoc',b64:_strip(logoColor),mime:'image/png'}]
     const ccStr=[...cc,...(studioOn?studioEmails:[])].filter(e=>e&&e.toLowerCase()!==(para||'').trim().toLowerCase()).join(', ')
     const atts=comp?[{base64:comp.b64,name:comp.name,mime:comp.mime}]:[]
-    let sent=false,err=null
-    try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:ccStr,subject:asunto,bodyText:body,bodyHtml:buildHtml(body,true),inlineImages:logosInline,attachments:atts}); sent=true } }catch(e){ err=e }
+    let sent=false,err=null,via=null
+    try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:ccStr,subject:asunto,bodyText:body,bodyHtml:buildHtml(body,true),inlineImages:logosInline,attachments:atts}); sent=true; via='usuario' } }catch(e){ err=e }
     if(!sent){
-      if(!await appConfirm(MAIL_OFICINA_CONFIRM)){ setSending(false); return }
-      try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; appAlert('Enviado desde la cuenta de oficina, con el comprobante adjunto.\n(Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)') }catch(e2){ err=e2 }
+      if(!await appConfirm(MAIL_OFICINA_CONFIRM)){ setSending(false); avisoNoEnviado('La devolución de fondos'); return }
+      try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; via='oficina' }catch(e2){ err=e2 }
     }
     setSending(false)
     if(sent){ try{ if(cc.length) await setLearningKV('rendicion_cc',String(client.id),cc.join(', ')) }catch(_){} try{ if((para||'').trim()) await setLearningKV('rendicion_para',String(client.id),para.trim()) }catch(_){}
       // Registrar el envío de la devolución en la rendición → chip "Devolución enviada" en el historial.
       try{ if(rend?.id){ const now=new Date().toISOString(); await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',rend.id); setRendiciones&&setRendiciones(p=>p.map(x=>x.id===rend.id?{...x,devolucion_at:now}:x)) } }catch(_){}
+      appAlert(txtEnviado(via,{que:'Aviso de devolución de fondos', para:[para.trim(),...cc].filter(Boolean).join(', ')})+(comp?'\nCon el comprobante adjunto.':''))
       onClose&&onClose() }
-    else appAlert('No se pudo enviar el correo de devolución.\n'+(err?.message||err||'—'))
+    else avisoNoEnviado('La devolución de fondos', err?.message||String(err||''))
   }
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const flabel={fontSize:10,fontWeight:600,color:C.textSoft,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
@@ -25293,7 +25481,7 @@ async function recordarCobroFactura(b, client, {cc=null}={}){
   let nota=''; try{ const {data}=await supabase.from('learnings').select('value').eq('kind','recordatorio_nota').eq('key',String(client.id)).maybeSingle(); nota=data?.value||'' }catch(_){}
   const r=recordatorioCobro(b, nota)   // incluye la nota guardada de este cliente
   if(!await appConfirm(`¿Enviar recordatorio de cobro a ${to} por ${r.folio} (${r.monto})? Se adjunta el PDF de la factura.`)) return
-  try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, cc, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ try{ await setLearningKV('factura_recordado',String(b.id),new Date().toISOString()) }catch(_){}; appAlert(`Recordatorio enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
+  try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, cc, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ try{ await setLearningKV('factura_recordado',String(b.id),new Date().toISOString()) }catch(_){}; appAlert(txtEnviado(via,{que:'Recordatorio',para:to})) } }
   catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
 }
 async function facturaPdfAdjunto(b){
@@ -25618,8 +25806,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       const bodyTxt=cuerpoFull()   // ya incluye las cuentas (segmentos), en el orden correcto
       if(pedirFondo){ try{ await setLearningKV('cuenta_gastos','estudio',JSON.stringify(ctaGastos)) }catch(_){} }   // recuerda la cuenta de gastos ingresada
       // La factura sale SIEMPRE desde el correo del usuario. Si su Gmail venció, NO cae a la oficina: se le pide reentrar y reintentar (control sobre el remitente).
-      const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos, soloUsuario:true})
-      if(via==='reauth'){ appAlert('La factura NO se envió.\nTu acceso a Gmail expiró: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl para poder enviarla desde tu correo.'); setSending(false); return }
+      const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos, soloUsuario:true, que:'La factura'})
+      if(via==='reauth'){ setSending(false); return }   // el aviso «NO se envió» + reingreso lo da enviarComoUsuario
       if(via===null){ setSending(false); return }
       const viaServer = via==='oficina'
       if(cc.length) try{ await setLearningKV('factura_cc',String(client.id),cc.join(',')) }catch(_){}
@@ -25635,9 +25823,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       }catch(_){} }
       const at=new Date().toISOString()
       for(const f of listF){ try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',f.id) }catch(_){}; onSent&&onSent(f.id,at) }
-      const okMsg=multi?`${listF.length} facturas enviadas al cliente.`:'Factura enviada al cliente.'
-      appAlert(viaServer?`${okMsg}\n(Salió desde la cuenta de oficina porque tu acceso a Gmail expiró. Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)`:okMsg); onClose()
-    }catch(e){ appAlert('Error al enviar: '+(e.message||e)) }
+      appAlert(txtEnviado(via,{que:multi?`${listF.length} facturas`:'Factura', g:multi?'as':'a', para:[para.trim(),...cc].filter(Boolean).join(', ')})); onClose()
+    }catch(e){ appAlert(txtNoEnviado('La factura', e.message||String(e))) }
     setSending(false)
   }
   const fInp={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}
@@ -25793,8 +25980,8 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
     try{
       const text=`${saludo}\n\n${msg}\n\nCuenta destinada a gastos: ${cta.banco} · ${cta.cuenta} · ${cta.razon} · ${fmtRutCL(cta.rut)}\n\n${BRAND.dominio}`
       const adjuntos=extras.map(a=>({base64:a.base64,name:a.name,mime:a.mime}))
-      const via=await enviarComoUsuario({to:para.trim(), cc:cc.join(','), subject:asunto, html:buildHtml(), text, attachments:adjuntos, soloUsuario:true})
-      if(via==='reauth'){ appAlert('No se envió: tu acceso a Gmail expiró. Cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl.'); setSending(false); return }
+      const via=await enviarComoUsuario({to:para.trim(), cc:cc.join(','), subject:asunto, html:buildHtml(), text, attachments:adjuntos, soloUsuario:true, que:'La solicitud de fondos'})
+      if(via==='reauth'){ setSending(false); return }   // el aviso «NO se envió» + reingreso lo da enviarComoUsuario
       if(via===null){ setSending(false); return }
       if(client?.id){
         try{ await setLearningKV('factura_to',String(client.id),para.trim()) }catch(_){}
@@ -25806,7 +25993,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
       // Registro permanente de la solicitud (historial + cruce con el depósito): nada sin rastro.
       try{ const {error:frErr}=await supabase.from('fund_requests').insert({ client_id:client?.id||null, sale_id:sale?.id||null, monto:+monto||0, asunto, para:para.trim(), cc:cc.join(','), enviada_por:user?.name||null, n_adjuntos:extras.length })
         if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:client?.id,detalle:{cliente:client?.name,title:'Solicitud de fondos enviada',monto:+monto||0}}) }catch(_){}
-      appAlert('Solicitud de fondos enviada al cliente'+(cc.length?' (con copia al abogado responsable).':'.')); onClose()
+      appAlert(txtEnviado(via,{que:'Solicitud de fondos', g:'a', para:[para.trim(),...cc].filter(Boolean).join(', ')})); onClose()
     }catch(e){ appAlert('Error al enviar: '+(e.message||e)) }
     setSending(false)
   }
@@ -25897,7 +26084,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   // 1 RS: todo el cliente (incl. fondos sin entity_id) pertenece a esa RS; solo se acota con 2+ RS.
   const entId = ((clientEntities||[]).filter(e=>e.client_id===r.client_id).length>1) ? (det.find(e=>e.entity_id)||{}).entity_id : null
   const _trab = r.por_trabajo ? (r.project||'') : null
-  const _rs0 = rendicionFondo(expenses, r.client_id, entId, null, _trab)
+  const _rs0 = fondoDeRend(r, expenses, clientEntities)
   // Vista previa sin guardar: los gastos aún no están marcados como rendidos → se descuentan aquí (misma cifra que tendrá al guardarse).
   const _rs = r._virtual ? {..._rs0, rendido:_rs0.rendido+det.reduce((a,e)=>a+(e.amount||0),0), saldo:_rs0.saldo-det.reduce((a,e)=>a+(e.amount||0),0)} : _rs0
   const saldoCliente = _rs.saldo
@@ -25917,14 +26104,14 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const adic = {...adicRaw, on:(parseInt(adicRaw.monto)||0)>0}   // sin interruptor: si hay monto, se pide
   // Sugerencia con datos reales (no inventada): el último fondo que mandó este cliente.
   const ultFondo = (expenses||[]).filter(e=>e.type==='fondo'&&e.client_id===r.client_id&&!e.deleted_at&&(e.amount||0)>0).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))[0]||null
-  const [para,setPara] = useState(_borr?.para || r?.dirigido_email || client?.email || '')
+  const [para,setPara] = useState(_borr?.para || r?._carry?.para || r?.dirigido_email || client?.email || '')
   // Cc: gente del cliente (con chips, aprendida y editable) + copia al estudio (responsable + quienes cargaron los gastos).
   const EMAIL_BY_NAME = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
   const toEmail = x => { if(!x) return null; const s=String(x).trim(); return s.includes('@')?s.toLowerCase():(EMAIL_BY_NAME[s]||null) }
   const myEmail = (user?.email||'').toLowerCase()
   const studioEmails = useMemo(()=>{ const set=new Set(); const resp=toEmail(client?.abogado_responsable); if(resp) set.add(resp); det.forEach(e=>{ const em=toEmail(e.created_by); if(em) set.add(em) }); set.delete(myEmail); return [...set] },[client?.abogado_responsable, det, myEmail])
-  const [studioOn,setStudioOn] = useState(_borr?.studioOn!==false)
-  const [cc,setCc] = useState(Array.isArray(_borr?.cc)?_borr.cc:[])
+  const [studioOn,setStudioOn] = useState(_borr?.studioOn!==false && r?._carry?.studioOn!==false)
+  const [cc,setCc] = useState(Array.isArray(_borr?.cc)?_borr.cc:(r?._carry?.cc||[]))
   const [ccInput,setCcInput] = useState('')
   const [fichaContacts,setFichaContacts] = useState([])
   useEffect(()=>{ if(!client?.id) return; let alive=true
@@ -25955,7 +26142,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const removeCc = em => setCc(prev=>prev.filter(x=>x!==em))
   const asuntoMulti = lang => lang==='en' ? `Expense Reports ${_todas.map(x=>`No. ${x.correlativo||'?'}`).join(' and ')} — ${client?.name||''}` : `Rendiciones de gastos ${_todas.map(x=>`N° ${x.correlativo||'?'}`).join(' y ')} — ${client?.name||''}`
   const [asunto,setAsunto] = useState(_borr?.asunto || (_multi ? asuntoMulti('es') : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${r.project||client?.name||''}`))
-  const [lang,setLang] = useState(_borr?.lang||'es')
+  const [lang,setLang] = useState(_borr?.lang||r?._carry?.lang||'es')
   const [firma,setFirma] = useState(FIRMA_DEFAULTS[(user?.email||'').toLowerCase()] || {nombre:user?.name||'', cargo:'Abogado', telefono:''})
   const [showFirma,setShowFirma] = useState(false)
   const [sending,setSending] = useState(false)
@@ -26123,12 +26310,12 @@ Saludos cordiales,`
       const armarAdjuntos = async()=>{ const out=[]; for(const x of conNum){ out.push({base64:await rendicionPdfBase64(x, client, expenses, clientEntities, user, attachSet, lang), name:nombrePdf(x), mime:'application/pdf'}) } return out }
       // Envío directo con PDF adjunto vía Gmail API (si el token tiene el scope gmail.send)
       let conAdjunto = false
-      let sendErr = null
+      let sendErr = null, viaRend = null
       const token = await driveToken()
       if(token){
         try{
           await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:textoFull, bodyHtml:buildEmailHtml(texto, lang, true), inlineImages:logosInline, attachments:await armarAdjuntos()})
-          conAdjunto = true
+          conAdjunto = true; viaRend = 'usuario'
         }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
       if(!conAdjunto){
@@ -26139,8 +26326,7 @@ Saludos cordiales,`
         if(usarOficina){
           try{
             await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto, lang), text:textoFull, attachments:await armarAdjuntos()})
-            conAdjunto = true
-            appAlert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
+            conAdjunto = true; viaRend = 'oficina'
           }catch(srvErr){ irAManual = true; sendErr = sendErr || srvErr }
         }
         if(irAManual && !conAdjunto){
@@ -26160,7 +26346,7 @@ Saludos cordiales,`
           if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(textoFull)}`
           // Envío a mano: la app no sabe si el correo salió. Se registra como enviada solo cuando el usuario lo confirma; si no, queda como borrador.
           const confirmado = await appConfirm('¿Enviaste el correo al cliente con el PDF adjunto?\n\nSi aún no, responde que no: la rendición queda como borrador (sin número) y la envías después desde Rendiciones.')
-          if(!confirmado){ setSending(false); appAlert('La rendición quedó como borrador, sin número. Cuando envíes el correo, ábrela desde Rendiciones y confírmalo.'); return }
+          if(!confirmado){ setSending(false); appAlert(`La rendición NO se envió: queda como borrador, sin número, en Rendir a cliente › Borradores.\n\n${TXT_REINGRESO()}`); return }
         }
       }
       const now = new Date().toISOString()
@@ -26183,15 +26369,21 @@ Saludos cordiales,`
         const pedido=Math.round(_multi ? (_saldosM||[]).reduce((a,o)=>a+(o.saldo<0?-o.saldo:0),0)+_Y : (saldoCliente<0 ? _sal+_Y : (saldoCliente>0 ? Math.max(0,_Y-_sal) : _Y)))
         if(pedido>0){ try{
           // Reenviar no duplica el pedido: si el cliente ya tiene una solicitud abierta (sin depósito), se actualiza esa.
-          const {data:abierta}=await supabase.from('fund_requests').select('id').eq('client_id',r.client_id).is('recibido_at',null).order('enviada_at',{ascending:false}).limit(1).maybeSingle()
+          // Se reusa solo una solicitud abierta, del cliente en general (sin venta) y aún sin depósito; una ya cubierta no se pisa.
+          const {data:abiertas}=await supabase.from('fund_requests').select('*').eq('client_id',r.client_id).is('recibido_at',null).is('sale_id',null).order('enviada_at',{ascending:false}).limit(5)
+          const abierta=(abiertas||[]).find(q=>estadoSolicitud(q,expenses).k!=='rec')||null
           const {error:frErr}= abierta?.id
             ? await supabase.from('fund_requests').update({ monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, enviada_at:new Date().toISOString() }).eq('id',abierta.id)
-            : await supabase.from('fund_requests').insert({ client_id:r.client_id||null, sale_id:r.sale_id||null, monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, n_adjuntos:1 })
+            : await supabase.from('fund_requests').insert({ client_id:r.client_id||null, monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, n_adjuntos:1 })
           if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:r.client_id,detalle:{cliente:client?.name,title:`Pedido en la rendición${corr?` N° ${corr}`:''}`,monto:pedido}}) }catch(_){} } }   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
       try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
-      appAlert(conAdjunto?(conNum.length>1?`Rendiciones N° ${corr} enviadas al cliente con sus PDF adjuntos.`:'Rendición enviada al cliente con el PDF adjunto.'):'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
+      const _paraTxt=[para.trim(),...cc].filter(Boolean).join(', ')
+      appAlert(conAdjunto
+        ? txtEnviado(viaRend,{que:conNum.length>1?`Rendiciones N° ${corr}`:`Rendición${corr?` N° ${corr}`:''}`, g:conNum.length>1?'as':'a', para:_paraTxt})+(conNum.length>1?' Con sus PDF adjuntos.':' Con el PDF adjunto.')
+        : `Rendición${corr?` N° ${corr}`:''} registrada como enviada desde tu correo (envío manual) a ${_paraTxt}.`)
       // Separadas en correos distintos: sigue con la próxima rendición de la cola.
-      if(r._cola?.length && onNext){ const [sig,...resto]=r._cola; onNext({...sig, _cola:resto}) } else onClose()
+      // Mismo cliente: el destinatario, la copia y el idioma elegidos pasan al correo siguiente.
+      if(r._cola?.length && onNext){ const [sig,...resto]=r._cola; onNext({...sig, _cola:resto, ...(String(sig.client_id)===String(r.client_id)?{_carry:{para,cc,lang,studioOn}}:{})}) } else onClose()
     }catch(e){ appAlert('Error: '+e.message) }
     setSending(false)
   }
@@ -26281,7 +26473,7 @@ Saludos cordiales,`
         {_todas.map((x,i)=><button key={i} onClick={()=>verPDF(x)} style={{flex:1,padding:'9px 10px',borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{_multi?`PDF N° ${x.correlativo||i+1}`:'Ver PDF'}</button>)}
         <button onClick={guardarBorrador} disabled={sending} style={{flex:1.3,padding:'9px 10px',borderRadius:10,border:'none',background:C.azulBg,color:C.accent,fontSize:13,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',opacity:sending?.6:1}}>Guardar borrador</button>
       </div>
-      <button onClick={enviar} disabled={sending||!para.trim()} style={{width:'100%',marginTop:10,padding:'11px 14px',borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13.5,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':(_multi?`Enviar en un correo · ${_todas.length} PDF`:(r._cola?.length?`Enviar y seguir con la N° ${r._cola[0].correlativo||'siguiente'}`:'Enviar'))}</button>
+      <button onClick={enviar} disabled={sending||!para.trim()} style={{width:'100%',marginTop:10,padding:'11px 14px',borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13.5,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':(_multi?`Enviar en un correo · ${_todas.length} PDF`:(r._cola?.length?(r._cola[0]._cliName&&String(r._cola[0].client_id)!==String(r.client_id)?`Enviar y seguir con ${r._cola[0]._cliName}`:`Enviar y seguir con la N° ${r._cola[0].correlativo||'siguiente'}`):'Enviar'))}</button>
       </>)
   const _page = (asPage&&isDesktop) ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,460px)',gap:22,alignItems:'start'}}><div style={{minWidth:0}}>{_body}</div><div style={{position:'sticky',top:72}}><div style={{...SEC_LBL,marginBottom:6}}>Vista previa del correo</div><div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:12,background:'#fff',maxHeight:'calc(100vh - 170px)',overflowY:'auto'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></div></div> : _body
   return asPage ? _page : (<Modal fullscreen fsMaxWidth={isDesktop?780:640} title={<><span style={{color:C.accent}}>Enviar rendición</span>{client?.name&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>{_body}</Modal>)
@@ -27874,7 +28066,17 @@ async function liquidacionExcelB64({gastos, clients, titulo, sub}){
 }
 // REGLA (usuario): los correos SIEMPRE salen desde el correo del usuario. Si su acceso a Gmail venció o no tiene el permiso,
 // NO se manda a escondidas desde otra cuenta: se pregunta y se explica cómo dejarlo saliendo desde el suyo (reingresar).
-const MAIL_OFICINA_CONFIRM = 'No se pudo enviar desde tu correo: tu acceso a Gmail expiró.\n\nPara que salga desde TU correo: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl, y reintenta el envío.\n\n¿Enviarlo ahora desde la cuenta de oficina en su lugar?\n(Cancelar = no enviar; reingresas y lo mandas tú)'
+const MAIL_OFICINA_CONFIRM = `El correo no salió desde tu cuenta: el acceso de la app a tu Gmail expiró o no está disponible.\n\nPara que salga desde tu cuenta: cierra sesión en la app, vuelve a entrar con tu cuenta @${BRAND.emailDominio} y reintenta.\n\n¿Enviarlo ahora desde la cuenta de la oficina?\n(Cancelar = no se envía)`
+// Confirmación de envío (fuente única de los textos): siempre se sabe si el correo salió, desde qué cuenta y a quién; y si no salió, qué hacer.
+const TXT_REINGRESO = () => `Cierra sesión en la app, vuelve a entrar con tu cuenta @${BRAND.emailDominio} y reintenta el envío.`
+const txtEnviado = (via, {que='Correo', g='o', para, verbo='enviad'}={}) => `${que} ${verbo}${g}${para?` a ${para}`:''} desde ${via==='oficina'?'la cuenta de la oficina':'tu cuenta'}.`   // g: o · a · os · as
+const txtNoEnviado = (que, detalle) => `${que?`${que}: el`:'El'} correo NO se envió.\n\n${TXT_REINGRESO()}${detalle?`\n\nDetalle: ${detalle}`:''}`
+function avisoNoEnviado(que, detalle){ appAlert(txtNoEnviado(que, detalle)) }
+// Envío en lote: se decide UNA vez desde qué cuenta salen todos (tu correo; sin acceso a Gmail, se pregunta por la oficina) → batch de enviarComoUsuario.
+async function modoEnvioLote(n){ if(await driveToken()) return 'usuario'
+  return await appConfirm(`No hay acceso a tu Gmail para enviar ${n===1?'el correo':`los ${n} correos`} desde tu cuenta.\n\n${TXT_REINGRESO()}\n\n¿Enviar${n===1?'lo':'los'} ahora desde la cuenta de la oficina?\n(Cancelar = no se envía ninguno)`) ? 'oficina' : 'cancelar' }
+// Resumen de un envío en lote: cuántos salieron, desde qué cuenta, y qué hacer con los que no.
+const txtResumenEnvio = ({ok=0, no=0, via=null, que='correos', g='o'}={}) => `${ok} ${que} enviad${g}${ok!==1?'s':''}${ok&&via?` desde ${via==='oficina'?'la cuenta de la oficina':'tu cuenta'}`:''}.${no?`\n${no} NO se enviaron.\n\n${TXT_REINGRESO()}`:''}`
 // Envía desde el Gmail del usuario; si falla, PREGUNTA antes de usar la oficina. Devuelve 'usuario' | 'oficina' | null (cancelado, no se envió).
 // Para envíos masivos pasa modo pre-decidido en `batch` ('usuario'|'oficina'|'cancelar') para no preguntar por cada correo.
 // Convierte los logos del correo (header blanco + firma color) en imágenes INLINE (CID), para que se muestren
@@ -27906,10 +28108,15 @@ async function enviarComoUsuario(opts, batch){
   const server = {to:opts.to, cc:opts.cc, subject:opts.subject, html:opts.html, text:opts.text, pdfBase64:opts.pdfBase64, pdfName:opts.pdfName, attachments:opts.attachments}
   if(batch==='oficina'){ await sendMailServer(server); return 'oficina' }
   if(batch==='cancelar'){ return null }
-  try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token, gmail); return 'usuario' } }catch(_){}
-  if(opts.soloUsuario) return 'reauth'   // facturas: NO caer a la oficina automáticamente; el llamador pide reentrar y reintentar desde tu correo
-  if(batch==='usuario') return null   // en masivo modo-usuario, si falla uno no preguntamos: se omite
-  if(!await appConfirm(MAIL_OFICINA_CONFIRM)) return null
+  // Envío individual sin salir: se avisa SIEMPRE que no salió y qué hacer (salvo que el llamador lo informe con su propio texto: opts.sinAviso).
+  // En lote (batch) el llamador resume al final (txtResumenEnvio).
+  let gErr=null
+  try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token, gmail); return 'usuario' } }catch(e){ gErr=e }
+  const detalle = gErr && !/Gmail API 40[13]/.test(String(gErr.message||'')) ? String(gErr.message||gErr) : null   // 401/403 = acceso expirado (lo cubre el aviso de reingreso)
+  const noSalio = r => { if(!batch&&!opts.sinAviso) avisoNoEnviado(opts.que, detalle); return r }
+  if(opts.soloUsuario) return noSalio('reauth')   // facturas: NO caer a la oficina automáticamente; reingresar y reintentar desde tu correo
+  if(batch==='usuario') return null   // en masivo modo-usuario, si falla uno no preguntamos: se omite (el resumen lo cuenta)
+  if(!await appConfirm(MAIL_OFICINA_CONFIRM)) return noSalio(null)
   await sendMailServer(server); return 'oficina'
 }
 // Envío desde la CUENTA DE OFICINA vía edge function (SMTP). Se usa SOLO cuando el usuario aceptó (ver enviarComoUsuario).
@@ -32250,7 +32457,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose, orige
     setSendingCid(r.cid)
     try{
       const via = await enviarComoUsuario({ to:to.trim(), subject:`Propuesta de actualización de honorarios — ${BRAND.nombre}`, html:cartaInner(r,true), text:'Adjuntamos nuestra propuesta de actualización del honorario mensual.' })
-      if(via){ setDecid(d=>({...d,[r.cid]:'enviado'})); if(!DEMO){ try{ await setLearningKV('repricing_decision',String(r.cid),'enviado') }catch(_){} }; appAlert('Propuesta enviada'+(via==='oficina'?' desde la cuenta de oficina':'')+'.') }
+      if(via){ setDecid(d=>({...d,[r.cid]:'enviado'})); if(!DEMO){ try{ await setLearningKV('repricing_decision',String(r.cid),'enviado') }catch(_){} }; appAlert(txtEnviado(via,{que:'Propuesta',g:'a',para:to.trim()})) }
     }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
     setSendingCid(null)
   }
@@ -32478,39 +32685,50 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
     setRecPrev({g, to, nombre:cn(g.cid), nota:recNotaMap[g.cid]||''})
   }
   // Envío efectivo (fuente única): combinado (un correo con todas) o separado (uno por factura), con/ sin PDF adjunto.
-  async function doEnviar({g, to, bs, combinado, adjuntar, nota}){
-    if(!bs.length) return
+  async function doEnviar({g, to, bs, combinado, adjuntar, nota, modo}){
+    if(!bs.length) return {ok:0,no:0}
+    // Varios correos para un cliente (uno por factura): la cuenta de salida se decide una sola vez.
+    const lote = modo || (!combinado && bs.length>1 ? await modoEnvioLote(bs.length) : undefined)
+    if(lote==='cancelar'){ if(!modo) appAlert(txtResumenEnvio({ok:0,no:bs.length,que:'recordatorios'})); return {ok:0,no:combinado?1:bs.length} }
     setSending(g.cid)
-    const sentIds=[]
+    const sentIds=[]; let nCorreos=0, viaUlt=null, errEnv=null
     try{
       if(DEMO){ await new Promise(r=>setTimeout(r,400)); bs.forEach(b=>sentIds.push(String(b.id))) }
       else{
         const build=async(x)=>{ const r=recordatorioCobro(x, nota); let attachments=null
           if(adjuntar){ const list=Array.isArray(x)?x:[x]; const a=[]; for(const b of list){ const ad=await facturaPdfAdjunto(b); if(ad) a.push(ad) } if(a.length) attachments=a }
           return {r, attachments} }
-        if(combinado){ const {r,attachments}=await build(bs); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments}); if(via) bs.forEach(b=>sentIds.push(String(b.id))) }
-        else{ for(const b of bs){ const {r,attachments}=await build(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments}); if(via) sentIds.push(String(b.id)) } }
+        if(combinado){ const {r,attachments}=await build(bs); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments, que:`El recordatorio a ${cn(g.cid)}`}, lote); if(via){ viaUlt=via; nCorreos++; bs.forEach(b=>sentIds.push(String(b.id))) } }
+        else{ for(const b of bs){ const {r,attachments}=await build(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments, que:`El recordatorio a ${cn(g.cid)}`}, lote); if(via){ viaUlt=via; nCorreos++; sentIds.push(String(b.id)) } } }
       }
-    }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
+    }catch(e){ errEnv=e; if(!modo) avisoNoEnviado(`El recordatorio a ${cn(g.cid)}`, e.message||String(e)) }
+    const nIntentos = combinado?1:bs.length
     if(sentIds.length){ const at=new Date().toISOString()
       if(!DEMO) for(const id of sentIds){ try{ await setLearningKV('factura_recordado',id,at) }catch(_){} }
       setRecMap(m=>{ const n={...m}; sentIds.forEach(id=>n[id]=at); return n })
       const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); if(!DEMO){ try{ await setLearningKV('cobranza_ok',String(g.cid),String(nc)) }catch(_){} }
       if(!DEMO&&g.cid){ try{ await setLearningKV('recordatorio_nota',String(g.cid),String(nota||'')) }catch(_){} }; setRecNotaMap(m=>({...m,[g.cid]:String(nota||'')}))
       setRecPrev(null)
-      appAlert(`Recordatorio enviado a ${cn(g.cid)}${DEMO?' (demo)':''} — ${combinado?'1 correo':sentIds.length+' correos'}, ${sentIds.length} factura${sentIds.length!==1?'s':''}.`)
-    }
+      if(!modo) appAlert(lote&&!combinado
+        ? txtResumenEnvio({ok:nCorreos, no:nIntentos-nCorreos, via:viaUlt, que:nCorreos===1?'recordatorio':'recordatorios'})+` (${cn(g.cid)}, ${to}).`
+        : txtEnviado(DEMO?'usuario':viaUlt,{que:`Recordatorio de ${sentIds.length} factura${sentIds.length!==1?'s':''}`, para:`${cn(g.cid)} (${to})`}))
+    } else if(lote&&!modo&&!errEnv) appAlert(txtResumenEnvio({ok:0,no:nIntentos,que:'recordatorios'}))
     setSending(null)
+    return {ok:nCorreos, no:nIntentos-nCorreos, via:viaUlt}
   }
   // Envío automático (lote / "Enviar a todos"): sin vista previa, combinado con PDF, solo las vencidas que tocan hoy.
-  async function enviarClienteAuto(g){
-    const bs=g.items.filter(x=>x.acc).map(x=>x.b); if(!bs.length) return
-    const to=await resolverTo(g); if(!to) return
-    await doEnviar({g, to, bs, combinado:true, adjuntar:true, nota:recNotaMap[g.cid]||''})
+  async function enviarClienteAuto(g, modo){
+    const bs=g.items.filter(x=>x.acc).map(x=>x.b); if(!bs.length) return null
+    const to=await resolverTo(g); if(!to) return null
+    return await doEnviar({g, to, bs, combinado:true, adjuntar:true, nota:recNotaMap[g.cid]||'', modo})
   }
   async function enviarTodos(){
     if(!(await appConfirm(`¿Enviar el recordatorio que corresponde a ${gruposAccion.length} cliente${gruposAccion.length!==1?'s':''} (${nVencidas} factura${nVencidas!==1?'s':''} vencida${nVencidas!==1?'s':''}, ${f0(vencidoTotal)})?\n\nSe envía un correo por cliente (con todas sus facturas y el PDF adjunto).`))) return
-    for(const g of gruposAccion){ if(!autoCli[g.cid]) await enviarClienteAuto(g) }
+    const lista=gruposAccion.filter(g=>!autoCli[g.cid])
+    const modo=await modoEnvioLote(lista.length)
+    if(modo==='cancelar'){ appAlert(txtResumenEnvio({ok:0,no:lista.length,que:'recordatorios'})); return }
+    let ok=0, no=0, sinCorreo=0; for(const g of lista){ const r=await enviarClienteAuto(g, modo); if(!r) sinCorreo++; else { ok+=r.ok; no+=r.no } }
+    appAlert(txtResumenEnvio({ok, no, via:modo, que:ok===1?'recordatorio':'recordatorios'})+(sinCorreo?`\n(${sinCorreo} cliente${sinCorreo!==1?'s':''} sin correo, omitido${sinCorreo!==1?'s':''}.)`:''))
   }
   async function setAutoGlob(v){   // interruptor global (config cobranza_auto) que habilita el envío automático del edge fn
     const prev=autoGlobal; setAutoGlobal(v); if(DEMO) return
@@ -33000,7 +33218,7 @@ function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing=[], cu
       const {data:rr}=await supabase.from('reportes_horas').insert({client_id:cid,periodo:mes,total_horas:cons,n_entradas:ents.length,dirigido_a:para,estimadas:estMes,consumidas:cons,estado_envio:'enviado',sent_at:new Date().toISOString(),sent_by:me}).select().single()
       if(rr?.id){ await supabase.from('horas').update({report_id:rr.id}).in('id',ents.map(e=>e.id)) }
       try{ await supabase.from('learnings').delete().eq('kind','horas_para').eq('key',String(cid)); await supabase.from('learnings').insert({kind:'horas_para',key:String(cid),value:para}) }catch(_){}
-      appAlert(`Reporte enviado a ${para}${via==='oficina'?' (desde la cuenta de oficina)':''}.`); setRep(null)
+      appAlert(txtEnviado(via,{que:'Reporte',para})); setRep(null)
     }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)); setRep(r=>({...r,sending:false})) }
   }
   const step = {display:'inline-flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff'}
@@ -36319,7 +36537,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
       if(origen!=='lote') logActividad('banco.conciliado',{tabla:'conciliacion',id:cr.id,detalle:{folio:factura.invoice_no,name:cmap[factura.client_id]||mov.nombre_contraparte||null,monto:aplicado}})   // el lote deja una sola línea (banco.conciliar_varias)
-      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N° ${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(await appConfirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).then(via=>{ if(via) appAlert(`Acuse de pago enviado al cliente${via==='oficina'?' (desde la cuenta de oficina)':''}.`) }).catch(e=>appAlert('No se pudo enviar el acuse: '+(e?.message||e))) } }
+      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N° ${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(await appConfirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).then(via=>{ if(via) appAlert(txtEnviado(via,{que:'Acuse de pago',para:to})) }).catch(e=>appAlert('No se pudo enviar el acuse: '+(e?.message||e))) } }
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); appAlert('Error al conciliar: '+e.message) }
     setBusy(null)
   }
@@ -37092,7 +37310,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   const [liqsNota,setLiqsNota]=useState([]); const [rutsNota,setRutsNota]=useState(()=>new Set())
   useEffect(()=>{
     if(DEMO){ setLiqsNota((demoData.rendiciones||[]).filter(r=>r.tipo==='notaria'&&!r.anulada_at)); return }
-    supabase.from('rendiciones').select('id,created_at,total,n_gastos,ot_numbers,periodo,movimiento_id').eq('tipo','notaria').is('anulada_at',null).then(({data})=>setLiqsNota(data||[]),()=>{})
+    supabase.from('rendiciones').select('id,created_at,total,n_gastos,ot_numbers,periodo,movimiento_id,estado_envio,sent_at').eq('tipo','notaria').is('anulada_at',null).then(({data})=>setLiqsNota(data||[]),()=>{})
     supabase.from('learnings').select('key').eq('kind','notaria_rut').then(({data})=>setRutsNota(new Set((data||[]).map(x=>x.key))),()=>{})
   },[])
   const _diasEntre=(a,b)=>Math.round((new Date(String(a).slice(0,10)+'T12:00')-new Date(String(b).slice(0,10)+'T12:00'))/864e5)
@@ -37114,7 +37332,9 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
         const {error:e1}=await supabase.from('rendiciones').update({movimiento_id:m.id}).eq('id',liq.id); if(e1) throw e1
         const {error:e2}=await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:m.monto,categoria:'Notaría'}).eq('id',m.id); if(e2) throw e2
         // El cargo del banco es la prueba del pago: las OT de la liquidación quedan pagadas con la fecha del cargo (si aún no lo estaban).
-        await supabase.from('expenses').update({notaria_liquidado_at:String(m.fecha).slice(0,10)+'T12:00:00Z'}).eq('notaria_render_id',liq.id).is('notaria_liquidado_at',null)
+        const pagadoAt=String(m.fecha).slice(0,10)+'T12:00:00Z'
+        const {error:e3}=await supabase.from('expenses').update({notaria_liquidado_at:pagadoAt}).eq('notaria_render_id',liq.id).is('notaria_liquidado_at',null); if(e3) throw e3
+        setExpenses&&setExpenses(p=>p.map(e=>String(e.notaria_render_id)===String(liq.id)&&!e.notaria_liquidado_at?{...e,notaria_liquidado_at:pagadoAt}:e))
         if(m.rut_contraparte&&!rutsNota.has(m.rut_contraparte)) learnPut('notaria_rut', m.rut_contraparte, '1')
         logActividad('banco.notaria_enlazada',{tabla:'rendiciones',id:liq.id,detalle:{movimiento:m.id,fecha:m.fecha,pagado:m.monto,liquidacion:liq.total}})
       }
@@ -37128,7 +37348,10 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     const liq=liqDeMov(m); if(busy) return; setBusy(m.id)
     try{
       if(!DEMO){
-        if(liq){ const {error:e1}=await supabase.from('rendiciones').update({movimiento_id:null}).eq('id',liq.id); if(e1) throw e1 }
+        if(liq){ const {error:e1}=await supabase.from('rendiciones').update({movimiento_id:null}).eq('id',liq.id); if(e1) throw e1
+          // Sin aviso enviado a la notaría, el cargo era la única prueba del pago: al quitarlo, sus OT vuelven a «por pagar».
+          if(liq.estado_envio==='por_enviar'&&!liq.sent_at){ const {error:e4}=await supabase.from('expenses').update({notaria_liquidado_at:null}).eq('notaria_render_id',liq.id); if(e4) throw e4
+            setExpenses&&setExpenses(p=>p.map(e=>String(e.notaria_render_id)===String(liq.id)?{...e,notaria_liquidado_at:null}:e)) } }
         const {error:e2}=await supabase.from('cartola_movimientos').update({estado:'pendiente',monto_conciliado:0,categoria:null}).eq('id',m.id); if(e2) throw e2
         logActividad('banco.notaria_desenlazada',{tabla:'rendiciones',id:liq?.id||null,detalle:{movimiento:m.id}})
       }
@@ -40513,7 +40736,7 @@ export default function App() {
       if(error) throw error
       if(ins&&ins.length) setTasks(p=>[...ins,...p])
       let via=null
-      if(to){ try{ via = await enviarComoUsuario({to, cc:(cc&&cc.length)?cc:null, subject, html, text}) }catch(e){ appAlert('Las tareas se crearon, pero el correo no se pudo enviar: '+(e?.message||'reintenta desde la tarea')) } }
+      if(to){ try{ via = await enviarComoUsuario({to, cc:(cc&&cc.length)?cc:null, subject, html, text, sinAviso:true}) }catch(e){ via=null } }
       // Aprende: guarda el set confirmado por área (días desde hoy) para mejorar la próxima propuesta.
       try{
         const hoy = Date.parse(new Date().toISOString().slice(0,10))
@@ -40521,7 +40744,7 @@ export default function App() {
         await setLearningKV('propuesta_tareas', String(area||'General'), JSON.stringify(learn))
       }catch(_){}
       setModal(null)
-      appAlert(`Listo: ${rows.length} tarea${rows.length!==1?'s':''} creada${rows.length!==1?'s':''} para ${responsable}${via?(via==='usuario'?' y correo enviado.':' y correo enviado desde la oficina.'):' (sin correo).'}`)
+      appAlert(`${rows.length} tarea${rows.length!==1?'s':''} creada${rows.length!==1?'s':''} para ${responsable}.\n`+(via?txtEnviado(via,{que:'Correo', para:to}):to?`El correo NO se envió.\n\n${TXT_REINGRESO()}`:'Sin correo: el responsable no tiene correo registrado.'))
     }catch(e){ appAlert('Error: '+(e?.message||e)) }
     setSaving(false)
   },[user])
@@ -41966,13 +42189,13 @@ export default function App() {
           const bodyTxt=`${saludoCli(cliNom)},\n\n`+facturaCorreoBody({...fact,invoice_no:String(r.folio)}, sale)
           const html=facturaCorreoHtml(bodyTxt, firma, false)
           const doc=splitSetDTE(r.dteXml)[0]; const pdf=doc?await facturaDtePdfBase64(doc):null
-          const via=await enviarComoUsuario({to:dest, subject:`Factura ${r.folio}`, html, text:bodyTxt, ...(pdf?{pdfBase64:pdf.base64,pdfName:`Factura ${r.folio}.pdf`}:{})})
+          const via=await enviarComoUsuario({to:dest, subject:`Factura ${r.folio}`, html, text:bodyTxt, ...(pdf?{pdfBase64:pdf.base64,pdfName:`Factura ${r.folio}.pdf`}:{}), sinAviso:true})   // el resultado se informa abajo, junto con la emisión
           if(via){ const at=new Date().toISOString()
             await supabase.from('billing').update({email_sent_at:at}).eq('id',ep.billId)
             setBilling(p=>p.map(x=>x.id===ep.billId?{...x,email_sent_at:at}:x))
-            appAlert(`Factura ${r.folio} emitida y enviada a ${dest}${via==='oficina'?' (desde la cuenta de oficina)':''}.`+driveMsg)
-          } else appAlert(`Factura ${r.folio} emitida. Queda en "Por enviar" — la mandas al reingresar a tu correo.`+driveMsg)
-        }catch(e){ appAlert(`Emitida (folio ${r.folio}), pero no se pudo enviar el correo: ${e.message}\nQueda en "Por enviar".`+driveMsg) }
+            appAlert(`Factura ${r.folio} emitida.\n`+txtEnviado(via,{que:'Correo', para:dest})+driveMsg)
+          } else appAlert(`Factura ${r.folio} emitida. El correo NO se envió: queda en «Por enviar».\n\n${TXT_REINGRESO()}`+driveMsg)
+        }catch(e){ appAlert(`Factura ${r.folio} emitida. El correo NO se envió: queda en «Por enviar».\n\n${TXT_REINGRESO()}\n\nDetalle: ${e.message}`+driveMsg) }
       } else {
         appAlert(`Emitida al SII.\nFolio ${r.folio} · estado ${r.estado||'enviado'}${dest?'':`\nQueda en "Por enviar".`}`+driveMsg)
       }

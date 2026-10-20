@@ -171,6 +171,14 @@ Todo lo acordado sobre lenguaje es regla de oro. Antes de escribir **cualquier**
 
 Prohibido: «Lo que te toca», «Esto es lo tuyo», «un toque»/«al toque», «Cuándo te debería llegar», «atrasada» (→ vencida), «listas para cobrar» (→ por pagar), «asume/adelanta la oficina» (→ a cargo de la oficina / adelanto de la oficina), «tanda», asuntos con gancho («Tu semana en 2 minutos»), preguntas o exclamaciones como título, «listo», «ojo».
 
+## REGLA DE ORO: todo correo confirma si salió o no
+
+Nadie debe quedar con la duda de si un correo se envió. Toda acción que envía un correo cierra con **una** confirmación:
+- **Salió:** qué se envió, a quién y desde qué cuenta (tu cuenta / cuenta de la oficina). Texto único: `txtEnviado(via,{que,g,para})`.
+- **No salió:** «El correo NO se envió» + qué hacer: cerrar sesión en la app, volver a entrar con la cuenta del dominio (`BRAND.emailDominio`) y reintentar (`TXT_REINGRESO`, `avisoNoEnviado`). Si hay un error técnico distinto del acceso expirado, se muestra el detalle.
+- **En lote:** la cuenta de salida se decide **una vez** (`modoEnvioLote`) y al final un resumen: cuántos salieron, cuántos no y qué hacer (`txtResumenEnvio`). Nunca un aviso por correo ni «enviado» sin contar.
+- **Cómo:** todo envío pasa por `enviarComoUsuario`, que ya avisa «NO se envió» en envíos individuales; el llamador solo muestra el éxito (o pasa `sinAviso` si informa el resultado con su propio texto). Nunca decir «enviado» antes de que el envío termine ni si `via` es null.
+
 ## REGLA DE ORO: sin franjas de color a la izquierda ("no parecer IA")
 
 Nunca usar líneas o franjas de color a la izquierda para marcar estado: ni `borderLeft` de color, ni `boxShadow: inset Npx 0 0`, ni divs-franja verticales. Aplica a la app Y a todo render, mockup o propuesta. El estado se lee por el color de la cifra o del texto, un punto tenue o el chip del canon. Las etiquetas/títulos de sección y de KPI van en `C.accent` (visibles por jerarquía), no en gris claro.
