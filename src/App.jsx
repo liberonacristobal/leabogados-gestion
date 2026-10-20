@@ -1072,6 +1072,23 @@ function contadoraBancoMes(expenses, clients, ym){ return contadoraBancoItems(ex
 function gastosVariosOfiMes(expenses, clients, ym){ return gastosVariosOfiItems(expenses,clients,ym).reduce((a,e)=>a+(Number(e.amount)||0),0) }
 // Facturado SII (DEVENGADO) de un período: SOLO facturas con DTE real (dte_xml not null) — el único facturado que reconoce el SII.
 // ym con 7 chars = un mes (AAAA-MM); con 4 = un año (AAAA). Fuente única del ingreso devengado (protagonista de Oficina · Estado de resultados).
+// Tipo de factura (FUENTE ÚNICA): honorarios (de una venta) · reembolso = «Gastos» (respaldo de un reembolso, no es ingreso) ·
+// comision (comisión que otro estudio nos paga: 100% nuestra, sin venta; socio = el que la generó) · externo (facturamos por un
+// externo y retenemos un %; nuestro ingreso = amount − monto_terceros) · subarriendo (Oficina) · nota_credito.
+const TIPOS_FACTURA = [
+  {k:'honorarios', t:'Honorarios', col:C.accent},
+  {k:'reembolso', t:'Gastos', col:C.azulInfo},
+  {k:'comision', t:'Comisión', col:C.tealText},
+  {k:'externo', t:'Por externo', col:C.soonText},
+  {k:'subarriendo', t:'Subarriendo', col:C.grisText},
+]
+const tipoFactura = b => { const t=b&&b.billing_type; return ['reembolso','comision','externo','subarriendo','nota_credito'].includes(t) ? t : 'honorarios' }
+// Nombre de una factura en Banco y listas: «Comisión por facturar» si es un cobro de comisión aún sin folio.
+const lblFacturaN = b => b&&!b.invoice_no&&b.billing_type==='comision' ? 'Comisión por facturar' : `Factura N° ${folioN(b?.invoice_no)||'—'}`
+const tipoFacturaLbl = b => (TIPOS_FACTURA.find(x=>x.k===tipoFactura(b))||{t:'Nota de crédito'}).t
+// Factura de ingreso del estudio (lo que antes era solo billing_type==='honorarios'): honorarios + comisiones + por externo.
+// Por externo cuenta solo su parte (montoFactura − monto_terceros) donde corresponde; gastos, subarriendo y notas de crédito, no.
+const esFacIngreso = b => !!b && ['honorarios','comision','externo'].includes(tipoFactura(b))
 const facturadoSiiPeriodo = (billing, ym) => (billing||[]).filter(b=> b && !b.deleted_at && b.dte_xml && b.invoice_no && b.status!=='Anulada' && b.billing_type==='honorarios' && String(b.issued_at||'').startsWith(ym)).reduce((a,b)=>a+montoFactura(b),0)
 // Valor mensual de la asesoría en UF (fuente única): pesos → UF del primer día hábil del año (ufAnioEff).
 const ventaUFmesDe = (s, ufAnioEff) => s?.moneda==='CLP' ? (parseFloat(s?.amount_clp)||0)/(ufAnioEff||UF_FALLBACK) : (parseFloat(s?.amount_uf)||0)
@@ -3792,7 +3809,7 @@ function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fantasmaIds
   // Facturado del año = HONORARIOS EMITIDOS en el año (por fecha de emisión issued_at), monto del DTE (fuente única montoFactura).
   // OJO criterio (afinado con el usuario): captura TODAS las facturas emitidas en el año, incluidas las de ventas de años anteriores;
   // EXCLUYE la facturación de gastos/reembolsos (billing_type='reembolso') — solo honorarios. El desglose por año de venta va en el drill.
-  const _esFactHon = b => b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && b.billing_type==='honorarios'
+  const _esFactHon = b => b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && esFacIngreso(b)   // honorarios + comisión + por externo (el externo va a «por cuenta de terceros» vía extBillIds)
   const extBillIds = useMemo(()=>new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id))),[terceros])
   // Facturado POR CUENTA de terceros (externo con retención): se muestra aparte, no suma a lo propio.
   const facturadoTerceros = useMemo(()=>{ const list=(billing||[]).filter(b=> _esFactHon(b) && extBillIds.has(String(b.id)) && String(b.issued_at||'').slice(0,4)===String(selYear)).sort((a,b)=>String(b.issued_at||'').localeCompare(String(a.issued_at||''))); return {total:list.reduce((a,b)=>a+montoFactura(b),0), totalUF:list.reduce((a,b)=>a+montoFactura(b)/ufDelDia(ufDias,b.issued_at,ufRef),0), list} },[billing,extBillIds,selYear,ufDias,ufRef])
@@ -7577,7 +7594,8 @@ function catSinClienteVenta(b, tercerosByBilling){
   if(!b||b.deleted_at||!(b.invoice_no||b.folio)||b.status==='Anulada'||b.billing_type==='reembolso') return null
   if(String(b.issued_at||b.due||'').slice(0,10)<'2026-06-06') return null
   if(!b.client_id) return 'cli'
-  if(!b.sale_id&&!(tercerosByBilling&&tercerosByBilling.has(b.id))&&['Pendiente','Vencido','Pagado'].includes(b.status)) return 'vta'
+  // Comisión, por externo y subarriendo no van con venta: ya están clasificadas.
+  if(!b.sale_id&&!['comision','externo','subarriendo','nota_credito'].includes(b.billing_type)&&!(tercerosByBilling&&tercerosByBilling.has(b.id))&&['Pendiente','Vencido','Pagado'].includes(b.status)) return 'vta'
   return null
 }
 function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(), clients, clientEntities=[], sales=[], anticipos=[], onFacturarAdelantos, onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onEnviarVarias, onUnsend, onAssignSeries, onCotejar, onCargarXML, onReplaceProgramada}) {
@@ -9743,7 +9761,7 @@ function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[
   const extIds=new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id)))
   let fac=0, subFac=0, facUF=0, subFacUF=0; const facDocs=[], sinReg=[]
   // Sin carga del SII (otro estudio, o demo): las facturas emitidas en la app son la fuente.
-  const docsSrc = (fu?.sii||[]).length ? fu.sii : (billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.status!=='Anulada'&&['honorarios','subarriendo'].includes(b.billing_type||'honorarios')).map(b=>({tipo_dte:34,monto:montoFactura(b),fecha_emision:b.issued_at,folio:folioN(b.invoice_no),receptor_name:b.receptor_name||'',billing_id:b.id}))
+  const docsSrc = (fu?.sii||[]).length ? fu.sii : (billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.status!=='Anulada'&&(esFacIngreso(b)||b.billing_type==='subarriendo')).map(b=>({tipo_dte:34,monto:montoFactura(b),fecha_emision:b.issued_at,folio:folioN(b.invoice_no),receptor_name:b.receptor_name||'',billing_id:b.id}))
   ;docsSrc.filter(d=>String(d.fecha_emision||'').startsWith(ym)).forEach(d=>{ const t=Number(d.tipo_dte), m=Number(d.monto)||0, b=bById[String(d.billing_id)]
     if(t===61){ fac-=m; facUF-=m/u(d.fecha_emision); facDocs.push({...d,b,nc:true}); return }
     if(t!==33&&t!==34) return
@@ -11611,7 +11629,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     if(!cliId || !(monto>0)) return {progId:null, progCand:[]}
     const gp=periodoDeTexto(glosa)
     const scoreCand=(x)=>{ const cp=periodoDeTexto(x.concept||''); let s=0; if(gp.cuota!=null&&cp.cuota!=null&&gp.cuota===cp.cuota) s+=4; s+=mesScoreCandidata(x.concept,x.due||x.issued_at,gp.mes); if(gp.anio!=null&&cp.anio!=null&&gp.anio===cp.anio) s+=1; return s }
-    const cand=(billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && ['Programada','Anticipada'].includes(x.status) && x.billing_type!=='reembolso' && String(x.client_id)===String(cliId) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=120 })()).map(x=>({x,s:scoreCand(x)})).sort((a,b)=> b.s-a.s || String(a.x.due||a.x.issued_at||'').localeCompare(String(b.x.due||b.x.issued_at||''))).map(o=>o.x)
+    const cand=(billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && ['Programada','Anticipada'].includes(x.status) && x.billing_type!=='reembolso' && String(x.client_id)===String(cliId) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=(x.billing_type==='comision'?60:120) })() && (x.billing_type!=='comision'||Math.abs((x.amount||0)-monto)<=1)).map(x=>({x,s:scoreCand(x)})).sort((a,b)=> b.s-a.s || String(a.x.due||a.x.issued_at||'').localeCompare(String(b.x.due||b.x.issued_at||''))).map(o=>o.x)
     const pick = cand.find(c=>!(progUsadas&&progUsadas.has(c.id))) || null
     if(pick&&progUsadas) progUsadas.add(pick.id)
     const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0, sale_id:c.sale_id||null, s:scoreCand(c)}))
@@ -11812,7 +11830,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     setRespaldoBatchId(batchIdRef.current)
     return batchIdRef.current
   }
-  const crearDesdeXML = async(item, idx, saleId=null)=>{
+  const crearDesdeXML = async(item, idx, saleId=null, tipo=null)=>{
     if(!onIngresarSII||creandoFac) return
     const clienteId = crearCli[item.row.folio]||item.clienteId||null   // usa el cliente ya resuelto por RUT si no elegiste otro
     const cliNom = clienteId ? ((clients||[]).find(c=>String(c.id)===String(clienteId))?.name||'') : ''
@@ -11825,6 +11843,8 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
       setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id,_fac:fac}:r))   // por IDENTIDAD (no por índice): idx venía del grupo 'nuevas', no del array completo → marcaba la fila equivocada y la registrada se quedaba NUEVA. _fac = la factura creada (para el link "Ver factura")
       if(fac?.id) marcarStaged(item.row.folio,'registrada',fac.id)
+      // Tipo elegido al cargar (Comisión o Gastos): queda clasificada de una vez; el socio de la comisión se asigna en Por socio › Comisiones por asignar.
+      if(fac?.id&&['comision','reembolso'].includes(tipo)){ const {error:te}=await supabase.from('billing').update({billing_type:tipo,updated_at:new Date().toISOString()}).eq('id',fac.id); if(!te){ setBilling&&setBilling(p=>p.map(x=>x.id===fac.id?{...x,billing_type:tipo}:x)); logActividad('facturacion.tipo_al_cargar',{tabla:'billing',id:fac.id,detalle:{invoice_no:item.row.folio,tipo}}) } }
     }catch(e){ appAlert('No se pudo crear la factura: '+(e.message||e)) }
     setCreandoFac(null)
   }
@@ -11928,7 +11948,8 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     // con la fecha del anticipo, no "por cobrar" (si no, se cobraría dos veces).
     const progRow=(billing||[]).find(x=>String(x.id)===String(item.progId))
     const antPrev=progRow?.status==='Anticipada'&&progRow.prepaid_anticipo_id ? (anticipos||[]).find(a=>String(a.id)===String(progRow.prepaid_anticipo_id)) : null
-    const pagoAnt=progRow?.status==='Anticipada' ? { status:'Pagado', paid:true, paid_at:antPrev?.fecha||isoF||null } : null
+    // Comisión por facturar (cobrada antes de emitir): conserva la fecha del depósito.
+    const pagoAnt=progRow?.status==='Anticipada' ? { status:'Pagado', paid:true, paid_at:antPrev?.fecha||progRow?.paid_at||isoF||null } : null
     const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, ...(isoF?{due:dueFromIssued(isoF)}:{}), dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}), ...(bid?{import_batch_id:bid}:{}) }
     if(pagoAnt) Object.assign(patch,pagoAnt)
     const { error } = await supabase.from('billing').update(patch).eq('id',item.progId)
@@ -12117,7 +12138,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const saleYrById = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(s.year!=null) m[String(s.id)]=s.year }); return m },[sales])
   // Año de venta ESTRICTO (single source, igual que Inicio/ProyeccionDetalle): venta enlazada (sale_id→sales.year) o año a mano (sale_year); NADA de respaldo por issued_at (eso enmascaraba facturas sin enlazar y desalineaba Inicio vs Facturación).
   const anioVentaDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:null)
-  const sinAnio = useMemo(()=> bb.filter(b=>b.status==='Pagado'&&anioVentaDe(b)==null).sort((a,b)=>new Date(b.paid_at||0)-new Date(a.paid_at||0)),[bb,saleYrById])
+  const sinAnio = useMemo(()=> bb.filter(b=>b.status==='Pagado'&&!['comision','externo','subarriendo'].includes(b.billing_type)&&anioVentaDe(b)==null).sort((a,b)=>new Date(b.paid_at||0)-new Date(a.paid_at||0)),[bb,saleYrById])
   const yearBtns = useMemo(()=>{ const ys=sales.map(s=>s.year).filter(Boolean); return [...new Set([currentYear,currentYear-1,currentYear-2,currentYear-3,...ys])].sort((a,b)=>b-a).slice(0,6) },[sales])
   // Cuentas por pagar a proveedores ancladas a cada factura (terceros_pagos.billing_id)
   const tercerosByBilling = useMemo(()=>{
@@ -12583,7 +12604,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
                   {bigDate(kpiDate(b))}
                   <SIcon n={estadoCobro(b).icon} s={15} c={semCol}/>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}{b.billing_type==='reembolso'&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:'#F2E9DE',color:C.soon,fontWeight:700,marginLeft:6,whiteSpace:'nowrap'}}>Reembolso</span>}{anticipada&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.greenBg,color:C.greenText,fontWeight:700,marginLeft:6,whiteSpace:'nowrap'}}>Anticipada</span>}{tercerosByBilling.has(b.id)&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.azulBg,color:C.accent,fontWeight:700,marginLeft:6,whiteSpace:'nowrap'}}>Proveedores</span>}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}{['reembolso','comision','externo'].includes(b.billing_type)&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.bgSoft,color:(TIPOS_FACTURA.find(x=>x.k===b.billing_type)||{}).col||C.muted,fontWeight:700,marginLeft:6,whiteSpace:'nowrap'}}>{tipoFacturaLbl(b)}</span>}{anticipada&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.greenBg,color:C.greenText,fontWeight:700,marginLeft:6,whiteSpace:'nowrap'}}>Anticipada</span>}{tercerosByBilling.has(b.id)&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.azulBg,color:C.accent,fontWeight:700,marginLeft:6,whiteSpace:'nowrap'}}>Proveedores</span>}</div>
                     <div style={{fontSize:11,color:C.textSoft,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{prog?'Programada':`Factura N° ${folioN(b.invoice_no)||'—'}`}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
@@ -12871,7 +12892,7 @@ function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terceros=[],
     return m },[billing,expenses,y,fondoExtra,fu.gc])
   const revTram=useMemo(()=>(billing||[]).filter(b=>b&&fondoCand[String(b.id)]&&!fondoEnFac[String(b.id)]&&!fu.hok.has(String(b.id))),[billing,fondoCand,fondoEnFac,fu.hok])
   const revCuo=useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&!b.invoice_no&&b.issued_at&&!['Programada','Anulada'].includes(b.status)&&b.billing_type!=='reembolso'),[billing])
-  const revBda=useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.status!=='Anulada'&&b.sale_id&&/^comisi/i.test(String(saleById[String(b.sale_id)]?.title||''))&&!fu.ov[String(b.id)]),[billing,saleById,fu.ov])
+  const revBda=useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.status!=='Anulada'&&(b.billing_type==='comision'||(b.sale_id&&/^comisi/i.test(String(saleById[String(b.sale_id)]?.title||''))))&&!fu.ov[String(b.id)]),[billing,saleById,fu.ov])
   const esHonorario=async b=>{ setFu(f=>({...f,hok:new Set([...f.hok,String(b.id)])})); if(!DEMO){ await setLearningKV('honorario_sin_gasto',b.id,'1'); logActividad('honorario_sin_gasto',{tabla:'billing',id:b.id,detalle:b}) } }
   const ligar=async(b,e)=>{ setFondoExtra(x=>({...x,[String(e.id)]:b.id})); setLigando(null); if(!DEMO){ const {error}=await supabase.from('expenses').update({invoice_id:b.id}).eq('id',e.id).is('invoice_id',null); if(error){ appAlert('No se pudo ligar el gasto: '+error.message); return } logActividad('fondo_ligado_factura',{tabla:'expenses',id:e.id,detalle:{invoice_no:b.invoice_no,monto:e.amount}}) } }
   const asignar=async(b,soc)=>{ setFu(f=>({...f,ov:{...f.ov,[String(b.id)]:soc}})); if(!DEMO){ await setLearningKV('socio_factura',b.id,soc); logActividad('socio_factura',{tabla:'billing',id:b.id,detalle:{invoice_no:b.invoice_no,persona:soc}}) } }
@@ -13043,6 +13064,9 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
   },[xmlHub])   // eslint-disable-line
   const [tblSort,setTblSort] = usePersisted('fd_bill_tblsort',{col:'fecha',dir:'desc'})   // Desktop "Todas": orden de la tabla, recordado entre sesiones
   const [ordPC,setOrdPC] = useState({k:'nombre',dir:1})   // Por cliente (escritorio): columna de orden
+  const [tipoFL,setTipoFL] = useState('')   // listado de facturas: filtro por tipo ('' = todos)
+  const [comSoc,setComSoc] = useState('')   // Por clasificar › Comisión: socio que la generó
+  const [comOrig,setComOrig] = useState('')   // Por clasificar › Comisión: quién o qué la generó
   const [porRevOpen,setPorRevOpen] = useState(false)   // hub: tarjeta "Por revisar" desplegada
 
   const xmlHubPage = xmlHub ? (()=>{
@@ -13265,7 +13289,9 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                         <div style={{...SEC_LBL,padding:'9px 12px 3px'}}>¿A qué corresponde esta factura?</div>
                         {ventasCli.slice(0,4).map(s=>opt('◆',`Asociar a «${s.title||'Venta'}»`, ventasCli.length===1?'reconocida por RUT · no duplica la venta':'venta activa del cliente',()=>{setQueCorr(null);crearDesdeXML(r,i,s.id)},{bg:C.greenBg,fg:C.greenText}))}
                         {opt('◆',ventasCli.length?'Otra venta nueva':'Una venta nuestra','Abre el formato de venta (lee la propuesta del Drive)',()=>{setQueCorr(null);onCrearVentaForm&&onCrearVentaForm(r)},{bg:C.azulBg,fg:C.accent})}
-                        {opt('▤','Solo la factura','Sin venta asociada',()=>{setQueCorr(null);crearDesdeXML(r,i)},{bg:C.bgSoft,fg:C.muted})}
+                        {opt('%','Una comisión que nos pagan','Otro estudio nos paga por un cliente derivado · sin venta',()=>{setQueCorr(null);crearDesdeXML(r,i,null,'comision')},{bg:C.tealBg,fg:C.tealText})}
+                        {opt('▤','Respaldo de un reembolso de gastos','No es ingreso · abona a los gastos del cliente',()=>{setQueCorr(null);crearDesdeXML(r,i,null,'reembolso')},{bg:C.azulBg,fg:C.azulInfo})}
+                        {opt('▤','Solo la factura','Sin venta asociada · se clasifica después',()=>{setQueCorr(null);crearDesdeXML(r,i)},{bg:C.bgSoft,fg:C.muted})}
                         {opt('⇆','El ingreso es de un externo','La cobramos nosotros, pero la plata es de otro',()=>{setQueCorr(null);abrirTercero(r)},{bg:C.tealBg,fg:C.tealText})}
                       </div> })()}
                     {crearVentaFor===r&&(()=>{ const AREAS=[...new Set(['Corporativo','Tributario','Laboral','Sucesorio','Otro',...(sales||[]).map(s=>s.area).filter(Boolean)])]; const ABOGS=[...new Set([...WHO_LIST,...(sales||[]).map(s=>s.responsible),...(clients||[]).map(c=>c.abogado_responsable)].map(x=>String(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')); /* desde los datos (antes lista fija): quien entre al equipo aparece solo */ const ufN=parseFloat(String(cvForm.ufVal).replace(',','.'))||0; return (
@@ -13542,7 +13568,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             : filter==='sinemitir'
             ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.soonBg,color:C.soonText,flexShrink:0}}>Cuotas vencidas sin facturar</span>
             : filter==='porcompletar'
-            ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.overdueBg,color:C.overdueText,flexShrink:0}}>Sin cliente / venta</span>
+            ? <span style={{fontSize:11,fontWeight:700,padding:'5px 13px',borderRadius:20,background:C.overdueBg,color:C.overdueText,flexShrink:0}}>Por clasificar</span>
             : <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
             {[['clientes','Por cliente'],['all','Todas']].map(([v,l])=><span key={v} onClick={()=>{setFilter(v);clearSel();setSoloSinEnviar(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 13px',cursor:'pointer',background:filter===v?C.accent:'transparent',color:filter===v?'#fff':C.muted}}>{l}</span>)}
           </div>}
@@ -13777,7 +13803,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 {/* POR REVISAR = una tarjeta del grid (mismo formato que las demás); al tocarla, sus acciones se despliegan bajo las tarjetas. */}
                 {(()=>{ const tarjetas=[
                   revisar.length>0&&accCard('#fff',C.overdueText,P('M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01'),'Por revisar',`${revisar.length} ${revisar.length===1?'acción':'acciones'} · ${porRevOpen?'ocultar':'ver'}`,()=>setPorRevOpen(o=>!o),{badge:revTotal,badgeCol:C.soonText,titCol:C.text}),
-                  porCompletarN>0&&accCard('#fff',C.overdueText,P('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01'),'Facturas sin cliente / venta','No suman en ventas ni ingresos',()=>go('porcompletar'),{badge:porCompletarN,badgeCol:C.overdueText,cardBg:C.overdueBg,titCol:C.overdueText,subCol:C.overdueText}),
+                  porCompletarN>0&&accCard('#fff',C.overdueText,P('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01'),'Por clasificar','Sin cliente, sin venta o sin tipo',()=>go('porcompletar'),{badge:porCompletarN,badgeCol:C.overdueText,cardBg:C.overdueBg,titCol:C.overdueText,subCol:C.overdueText}),
                   accCard(C.soonBg,C.soonText,P('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01'),'Anticipos disponibles','a favor de clientes',()=>go('anticipos'),{value:antDisp>0?fmtShort(antDisp):'—',valCol:antDisp>0?C.soonText:C.done,dot:antDisp>0?'#EF9F27':null}),
                   onIrCobranza&&accCard(C.greenBg,C.greenText,P('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0'),'Cobranza','Por cobrar · recordatorios de pago',()=>onIrCobranza()),
                   onOpenPorSocio&&accCard(C.azulBg,C.accent,P('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7'),'Por socio','Facturado y caja · mes/año',onOpenPorSocio),
@@ -14243,6 +14269,32 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const doRS=(e,entId)=>{ const ent=(clientEntities||[]).find(x=>String(x.id)===String(entId)); pedir(e,`Asignar razón social ${ent?.name||''}.`,async()=>{ if(ent){ await supabase.from('billing').update({entity_id:entId,receptor_name:ent.name,receptor_rut:ent.rut||e.b.receptor_rut||null,updated_at:new Date().toISOString()}).eq('id',e.b.id); setBilling&&setBilling(p=>p.map(x=>x.id===e.b.id?{...x,entity_id:entId,receptor_name:ent.name,receptor_rut:ent.rut||x.receptor_rut}:x)) } limpiar(); onRefresh&&onRefresh() }) }
           const doXml=(e)=>pedir(e,'Adjuntar el XML firmado que está en la cola del SII.',async()=>{ await adjuntarXmlCola([e.b]); limpiar() })
           const sub={fontSize:10,fontWeight:600,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}
+          // Tipo de factura como primer paso (Honorarios → venta · Gastos · Comisión → socio y origen · Por externo → externo y %).
+          // Sugerencia aprendida por cliente: el tipo de sus facturas anteriores (BDA → Comisión, Geslog → Por externo).
+          const tipoPrevio=cid=>{ const ts=(billing||[]).filter(x=>!x.deleted_at&&x.status!=='Anulada'&&String(x.client_id)===String(cid)&&['comision','externo'].includes(x.billing_type)); if(!ts.length) return null; const c={}; ts.forEach(x=>{ c[x.billing_type]=(c[x.billing_type]||0)+1 }); return Object.keys(c).sort((a,z)=>c[z]-c[a])[0] }
+          const tipoChips=(e,b,{ventaOpen,extOpen})=>{ const comOpen=anioPickFor===('com:'+b.id), sug=tipoPrevio(b.client_id)
+            const ch=(k,lbl,on,fn,col)=><span key={k} onClick={fn} style={{fontSize:11.5,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.surface,color:on?'#fff':C.accent,cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:7,height:7,borderRadius:'50%',background:on?'#fff':col}}/>{lbl}</span>
+            return <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:10}}>
+              {ch('h','Honorarios',ventaOpen,()=>{setAnioPickFor(ventaOpen?null:b.id);setVentaBusca('')},C.accent)}
+              {ch('g','Gastos',false,()=>doReembolso(e),C.azulInfo)}
+              {ch('c','Comisión',comOpen,()=>{ if(comOpen){ setAnioPickFor(null); return } setComSoc(''); setComOrig(''); setAnioPickFor('com:'+b.id) },C.tealText)}
+              {onReclasificarTercero&&ch('x','Por externo',extOpen,()=>{setAnioPickFor(extOpen?null:('ext:'+b.id));setTvProv('');setTvNuevo('');setTvPct('')},C.soonText)}
+              {sug&&<span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>sugerido: {sug==='comision'?'Comisión':'Por externo'}</span>}
+            </div> }
+          // Comisión: queda billing_type='comision', con su origen (texto) y el socio que la generó (learnings socio_factura, fuente de Por socio).
+          const comPanel=(e,b)=>{ const ok=!!comSoc
+            const doCom=()=>pedir(e,`Marcar como comisión de ${comSoc}${comOrig.trim()?` · ${comOrig.trim()}`:''}.`,async()=>{ try{
+                const {error}=await supabase.from('billing').update({billing_type:'comision',comision_origen:comOrig.trim()||null,updated_at:new Date().toISOString()}).eq('id',b.id); if(error) throw error
+                if(!DEMO) await setLearningKV('socio_factura',b.id,comSoc)
+                setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,billing_type:'comision',comision_origen:comOrig.trim()||null}:x))
+                logActividad('facturacion.tipo_comision',{tabla:'billing',id:b.id,detalle:{invoice_no:b.invoice_no,amount:b.amount,socio:comSoc,origen:comOrig.trim()||null,antes:b.billing_type}})
+                limpiar(); onRefresh&&onRefresh() }catch(err){ appAlert('No se pudo marcar como comisión: '+(err.message||err)) } })
+            const fl={fontSize:9,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.textSoft}
+            return <div style={{marginTop:10,display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-end'}}>
+              <label style={{display:'flex',flexDirection:'column',gap:3,flex:'1 1 160px',minWidth:0}}><span style={fl}>Quién la generó</span><input value={comOrig} onChange={ev=>setComOrig(ev.target.value)} placeholder='Cliente derivado o asunto' style={{fontSize:12,padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,outline:'none',minWidth:0}}/></label>
+              <label style={{display:'flex',flexDirection:'column',gap:3}}><span style={fl}>Socio</span><select value={comSoc} onChange={ev=>setComSoc(ev.target.value)} style={{fontSize:12,padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text}}><option value=''>Elegir</option>{ADMIN_NAMES.map(n=><option key={n} value={n}>{n}</option>)}</select></label>
+              <button disabled={!ok} onClick={doCom} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:ok?C.accent:C.done,border:'none',borderRadius:8,padding:'8px 14px',cursor:ok?'pointer':'not-allowed',whiteSpace:'nowrap'}}>Marcar comisión</button>
+            </div> }
           const entryCard=(e)=>{ const t=TINT[e.cat]; const b=e.b; const cid=b?b.client_id:null
             const assignOpen=anioPickFor===('cli:'+e.id); const ventaOpen=b&&anioPickFor===b.id; const extOpen=b&&anioPickFor===('ext:'+b.id); const rsOpen=anioPickFor===('rs:'+e.id)
             const confirming=pcConfirm&&pcConfirm._eid===e.id
@@ -14250,7 +14302,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             const ents=(e.cat==='dat'&&cid)?(clientEntities||[]).filter(x=>String(x.client_id)===String(cid)):[]
             let primLabel='', primAction=null, subEl=null
             if(e.cat==='cli'){ primLabel='Asignar cliente'; primAction=()=>setAnioPickFor(assignOpen?null:('cli:'+e.id)); if(e.src==='sii') subEl=<span onClick={()=>doSinCli(e)} style={sub}>o sin cliente</span> }
-            else if(e.cat==='vta'){ primLabel='Asociar venta'; primAction=()=>{setAnioPickFor(ventaOpen?null:b.id);setVentaBusca('')}; subEl=<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5}}>{onReclasificarTercero&&<span onClick={()=>{setAnioPickFor(extOpen?null:('ext:'+b.id));setTvProv('');setTvNuevo('');setTvPct('')}} style={sub}>de un externo</span>}<span onClick={()=>doReembolso(e)} style={sub}>es reembolso</span></div> }
+            else if(e.cat==='vta'){ primLabel=null; primAction=null; subEl=null }   // el primer paso es el tipo (chips abajo)
             else { if(faltaXml(b)){ primLabel='Adjuntar XML'; primAction=()=>doXml(e) } else { primLabel='Asignar RS'; primAction=()=>setAnioPickFor(rsOpen?null:('rs:'+e.id)) } }
             return <div key={e.id} style={{background:t.bg,border:`1px solid ${C.border}`,borderRadius:13,padding:'12px 13px',marginBottom:9}}>
               <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
@@ -14265,14 +14317,16 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 </div>
                 <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:9,minWidth:84}}>
                   <div style={{fontSize:13.5,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(e.monto)}</div>
-                  <button onClick={primAction} style={{fontSize:10.5,fontWeight:700,border:`1px solid ${C.accent}`,color:C.accent,background:'transparent',borderRadius:8,padding:'6px 11px',whiteSpace:'nowrap',cursor:'pointer'}}>{primLabel}</button>
+                  {primLabel&&<button onClick={primAction} style={{fontSize:10.5,fontWeight:700,border:`1px solid ${C.accent}`,color:C.accent,background:'transparent',borderRadius:8,padding:'6px 11px',whiteSpace:'nowrap',cursor:'pointer'}}>{primLabel}</button>}
                   {subEl}
                 </div>
               </div>
               {sc&&!confirming&&<div style={{fontSize:11,color:C.muted,marginTop:10}}>Se parece a <b style={{color:C.accent}}>{sc.name}</b> <span onClick={()=>doAssignCli(e,sc.id)} style={{color:C.accent,fontWeight:700,cursor:'pointer',marginLeft:3,whiteSpace:'nowrap'}}>· Sí, es <Gl n='chevron'/></span></div>}
               {assignOpen&&<div style={{marginTop:10}}><AsignarClienteInline bill={e.src==='sii'?{receptor_rut:e.rut,receptor_name:e.nm}:e.b} clients={clients} onAssign={(_,cid2)=>doAssignCli(e,cid2)} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/></div>}
+              {e.cat==='vta'&&b&&tipoChips(e,b,{ventaOpen,extOpen})}
               {ventaOpen&&salePicker(cid,(sid)=>doVenta(e,sid))}
               {extOpen&&extPanel(b)}
+              {b&&anioPickFor===('com:'+b.id)&&comPanel(e,b)}
               {rsOpen&&<div style={{marginTop:10}}>{ents.length?<select defaultValue='' onChange={ev=>{ if(ev.target.value) doRS(e,ev.target.value) }} style={{width:'100%',fontSize:11.5,padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text}}><option value=''>Asignar razón social…</option>{ents.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${fmtRut(en.rut)}`:''}</option>)}</select>:<div style={{fontSize:10.5,color:C.muted}}>Sin razones sociales en la ficha · <span onClick={()=>onEdit&&onEdit(b)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>abrir factura</span></div>}</div>}
               {confirming&&<div style={{marginTop:11,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:10,padding:'11px 13px',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
                 <div style={{flex:'1 1 150px',minWidth:0,fontSize:12,color:C.text,lineHeight:1.4}}>{pcConfirm.label}</div>
@@ -14306,12 +14360,18 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 <option value='folioasc'>Folio ↑</option>
               </select>
             </div>
-            <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'-4px 2px 0'}}>{entries.length} factura{entries.length!==1?'s':''} sin cliente o sin venta · <b style={{color:C.accent}}>{fmtMon(totMonto)}</b></div>
+            <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'-4px 2px 0'}}>{entries.length} factura{entries.length!==1?'s':''} por clasificar · <b style={{color:C.accent}}>{fmtMon(totMonto)}</b></div>
             {sinRegN>0&&<div onClick={()=>cargarSinRegistrar()} style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
               <span style={{width:30,height:30,borderRadius:9,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg></span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{sinRegN} emitida{sinRegN!==1?'s':''} en el SII sin cargar</div><div style={{fontSize:11,color:C.muted}}>Cárgalas para registrarlas en el sistema</div></div>
               <span style={{color:C.accent,fontSize:16,flexShrink:0}}><Gl n='chevron'/></span>
             </div>}
+            {(()=>{ const pf=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type==='comision'&&!b.invoice_no&&b.status==='Anticipada'); if(!pf.length) return null; const tot=pf.reduce((a,b)=>a+(Number(b.amount)||0),0)
+              return <div style={{background:C.tealBg,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 14px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'baseline'}}><span style={{fontSize:13,fontWeight:700,color:C.tealText}}>{pf.length} comisi{pf.length!==1?'ones':'ón'} por facturar</span><span style={{fontSize:13,fontWeight:700,color:C.tealText,fontVariantNumeric:'tabular-nums'}}>{fmtMon(tot)}</span></div>
+                <div style={{fontSize:11,color:C.muted,margin:'2px 0 6px'}}>Ya se cobraron. Al cargar su factura del SII por el mismo monto se cruzan solas.</div>
+                {pf.map(b=>{ const cn=(clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||'—'; return <div key={b.id} onClick={()=>onEdit&&onEdit(b)} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:12,padding:'4px 0',borderTop:`1px solid ${C.border}`,cursor:'pointer'}}><span style={{minWidth:0,color:C.text}}><b style={{color:C.accent}}>{cn}</b> · {fDMY(String(b.paid_at||'').slice(0,10))}{b.comision_origen?` · ${b.comision_origen}`:''}</span><span style={{fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(b.amount)}</span></div> })}
+              </div> })()}
             {entries.length===0&&sinRegN===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todo al día — no hay facturas por completar.</div>}
             {catSection('cli','Sin cliente',cliE)}
             {catSection('vta','Falta venta',vtaE)}
@@ -14328,6 +14388,8 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
           if(q.trim()) rows=rows.filter(b=>{ const cl=clients.find(x=>x.id===b.client_id); const s=q.toLowerCase(); return (cl?.name||'').toLowerCase().includes(s)||(b.concept||'').toLowerCase().includes(s)||folioN(b.invoice_no).toLowerCase().includes(s) })
           rows=rows.filter(matchEst)
+          if(tipoFL) rows=rows.filter(b=>tipoFactura(b)===tipoFL)
+          const tiposEn=[...new Set(bb.filter(b=>!b.deleted_at).map(tipoFactura))]
           if(soloSinEnviar) rows=rows.filter(sinEnviar)
           const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy; return b.amount||0 } return montoFactura(b) }
           const mesC=d=>(d||'').slice(0,7); const conc=new Set()
@@ -14385,6 +14447,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
             </div>
           )}
           return (<div>
+            {tiposEn.length>1&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}><select value={tipoFL} onChange={e=>setTipoFL(e.target.value)} style={{fontSize:12,fontWeight:600,color:C.accent,border:`1px solid ${C.border}`,background:C.surface,borderRadius:9,padding:'6px 9px'}}><option value=''>Tipo: todos</option>{TIPOS_FACTURA.filter(t=>tiposEn.includes(t.k)).map(t=><option key={t.k} value={t.k}>{t.t}</option>)}</select></div>}
             {rows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>}
             {isDesktop&&rows.length>0&&<div style={{display:'grid',gridTemplateColumns:'62px 20px minmax(0,1fr) 96px 92px 150px',gap:14,padding:'2px 14px 6px',borderBottom:`1px solid ${C.border}`,marginBottom:2,alignItems:'center'}}>
               {hCell('fecha','Fecha')}
@@ -14641,12 +14704,15 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
         })()}
 
         <div>
-          <label style={flabel}>Tipo de cobro</label>
-          <div style={{display:'flex',background:C.bgSoft,borderRadius:10,padding:3,gap:2}}>
-            {[['honorarios','Honorarios'],['reembolso','Reembolso gastos']].map(([v,l])=>{ const on=f.billing_type===v; return (
+          <label style={flabel}>Tipo de factura</label>
+          {f.billing_type==='externo'||f.billing_type==='subarriendo'
+            ? <div style={{fontSize:12.5,color:C.text,background:C.bgSoft,borderRadius:10,padding:'9px 12px'}}>{tipoFacturaLbl(f)}{f.billing_type==='externo'?' · el externo y el % se ven abajo, en «De terceros»':''}</div>
+            : <div style={{display:'flex',background:C.bgSoft,borderRadius:10,padding:3,gap:2}}>
+            {[['honorarios','Honorarios'],['reembolso','Gastos'],['comision','Comisión']].map(([v,l])=>{ const on=(f.billing_type||'honorarios')===v; return (
               <button key={v} type='button' onClick={()=>up('billing_type',v)} style={{flex:1,border:on?'0.5px solid rgba(0,0,0,.08)':'0.5px solid transparent',borderRadius:8,padding:'8px 0',background:on?'#fff':'transparent',color:on?C.text:C.muted,fontSize:12,cursor:'pointer'}}>{l}</button>
             )})}
-          </div>
+          </div>}
+          {f.billing_type==='comision'&&<input value={f.comision_origen||''} onChange={e=>up('comision_origen',e.target.value)} placeholder='Quién la generó (cliente derivado o asunto)' style={{...inp,marginTop:6}}/>}
         </div>
 
         <div><label style={flabel}>Concepto</label><input value={f.concept||''} onChange={e=>up('concept',e.target.value)} placeholder='Descripción del cobro...' style={inp}/></div>
@@ -15286,7 +15352,7 @@ const comisionesACobrar = (p, terceros, billing, yr) => {
   const vivo = b => !!b && !b.deleted_at && b.status!=='Anulada'
   const items=[]
   ;(terceros||[]).filter(t=>String(t.proveedor_id)===String(p?.id)&&Number(t.comision_monto)>0).forEach(t=>{ const b=bId[String(t.billing_id)]; if(vivo(b)) items.push({k:'r'+t.id,tipo:'ret',b,t,monto:Number(t.comision_monto)||0,cob:b.status==='Pagado'}) })
-  if(p?.client_id) (billing||[]).filter(b=>String(b.client_id)===String(p.client_id)&&b.billing_type==='honorarios'&&b.invoice_no&&vivo(b)).forEach(b=>items.push({k:'f'+b.id,tipo:'fac',b,monto:Number(b.amount)||0,cob:b.status==='Pagado'}))
+  if(p?.client_id) (billing||[]).filter(b=>String(b.client_id)===String(p.client_id)&&['honorarios','comision'].includes(tipoFactura(b))&&b.invoice_no&&vivo(b)).forEach(b=>items.push({k:'f'+b.id,tipo:'fac',b,monto:Number(b.amount)||0,cob:b.status==='Pagado'}))
   const delAnio = x => String(x.b.paid_at||x.b.issued_at||'').slice(0,4)===String(yr)
   return {items, porCobrar:items.filter(x=>!x.cob).reduce((s,x)=>s+x.monto,0), cobradasAnio:items.filter(x=>x.cob&&delAnio(x)).reduce((s,x)=>s+x.monto,0)} }
 const RETENCION_BHE = {2024:.1375, 2025:.145, 2026:.1525, 2027:.16, 2028:.17}
@@ -15627,7 +15693,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
   const cargosDe = id => { const p=proveedores.find(x=>String(x.id)===String(id)); const r=_nRut(p?.rut); if(!r) return []; const eq=esEquipo(id); return cargos.filter(m=>_nRut(m.rut_contraparte)===r).map(m=>({...m,_cl:claseCargo(m,eq)})).filter(m=>m._cl!=='otro') }
   const docsDe = id => docs.filter(d=>String(d.proveedor_id)===String(id))
   const clienteDe = p => p?.client_id ? clients.find(c=>String(c.id)===String(p.client_id)) : null
-  const factQueTePaga = p => p?.client_id ? billing.filter(b=>String(b.client_id)===String(p.client_id)&&b.billing_type==='honorarios'&&!b.deleted_at&&b.status!=='Anulada') : []
+  const factQueTePaga = p => p?.client_id ? billing.filter(b=>String(b.client_id)===String(p.client_id)&&['honorarios','comision'].includes(tipoFactura(b))&&!b.deleted_at&&b.status!=='Anulada') : []
   // Métricas por proveedor. Comisión/Pagada/Por pagar/Sujeto a cobro = saldo vivo; Pagadas del año y transferido = año del filtro.
   const met = p => { const ts=tercDe(p.id), by=e=>ts.filter(t=>est(t)===e)
     const reten=ts.filter(t=>Number(t.comision_monto)>0)
@@ -16501,7 +16567,7 @@ function SubarriendoView({sales=[],billing=[],anticipos=[],clients=[],onOpenSale
   const subVentas = sales.filter(s=>esSubarriendo(s)&&!s.deleted_at)
   const venta = subVentas[0]||null
   const ventaIds = new Set(subVentas.map(s=>String(s.id)))
-  const subFacturas = billing.filter(b=>!b.deleted_at&&b.status!=='Anulada'&&(b.billing_type==='subarriendo'||ventaIds.has(String(b.sale_id)))&&b.billing_type!=='honorarios')
+  const subFacturas = billing.filter(b=>!b.deleted_at&&b.status!=='Anulada'&&(b.billing_type==='subarriendo'||ventaIds.has(String(b.sale_id)))&&!esFacIngreso(b))
   const subAnt = anticipos.filter(a=>ventaIds.has(String(a.sale_id)))
   const mensual = venta ? (Number(venta.amount_clp)||0) : 0
   const cli = venta ? clients.find(c=>String(c.id)===String(venta.client_id)) : null
@@ -25588,7 +25654,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   // Cotejo cuota↔factura anidado dentro de cada proyecto (huérfanas del mismo RUT + asociar FIFO reversible).
   const [cjOpen,setCjOpen] = useState(()=>new Set())
   const toggleCj = id => setCjOpen(p=>{ const n=new Set(p); n.has(String(id))?n.delete(String(id)):n.add(String(id)); return n })
-  const cotejoSinVenta = all.filter(b=> b.invoice_no && b.status!=='Anulada' && b.billing_type!=='reembolso' && !b.sale_id)
+  const cotejoSinVenta = all.filter(b=> b.invoice_no && b.status!=='Anulada' && !['reembolso','comision','externo','subarriendo'].includes(b.billing_type) && !b.sale_id)
   const cotejoOrphansFor = s => cotejoSinVenta.filter(b=> !s.entity_id || !b.entity_id || String(b.entity_id)===String(s.entity_id))
   const cotejoAsociar = async (progId, orphanId) => {
     const o=(billing||[]).find(b=>String(b.id)===String(orphanId)); const h=(billing||[]).find(b=>String(b.id)===String(progId)); if(!o||!h) return
@@ -25755,7 +25821,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   {bigDate(kpiDate(b))}
                   <SIcon n={estadoCobro(b).icon} s={15} c={borde(b)}/>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{b.billing_type==='reembolso'&&<span style={{fontSize:9,color:C.muted,marginLeft:5}}>Reembolso</span>}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{['reembolso','comision','externo'].includes(b.billing_type)&&<span style={{fontSize:9,color:C.muted,marginLeft:5}}>{tipoFacturaLbl(b)}</span>}</div>
                     {b.invoice_no&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>}
                     {(proj||rsNm)&&<div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{proj||''}{proj&&rsNm?' · ':''}{rsNm&&<b style={{fontWeight:600}}>{rsNm}</b>}</div>}
                   </div>
@@ -37664,6 +37730,49 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   // Guarda una fila en ingresos_oficina (libro de ingresos reales; no ensucia gastos ni el presupuesto), concilia el
   // movimiento (tipo_destino='ingreso') y lo marca 'Ingresos Oficina'. Comisión Recibida se puede asignar a un proveedor/tercero.
   // Reversible: Deshacer borra la fila + la conciliación (ver el caso 'ingreso' en deshacer).
+  // ── Comisión por facturar: depósito de quien nos paga comisiones, aún sin factura. Queda como cobro de comisión SIN folio
+  // (billing_type 'comision', estado Anticipada, pagado en la fecha del depósito) conciliado a ese depósito. Cuando llega la factura
+  // del SII por el mismo monto (≤60 días), el cruce de cuotas sin folio (matchProgramada → registrarProg) le pone el folio y queda
+  // Pagada: la comisión se cuenta una sola vez (caja = el depósito; facturado = recién con folio).
+  const cliPagadorCom = m => { if(m.cliente_id) return String(m.cliente_id); const rk=crNormRut(m.rut_contraparte||''); if(!rk) return null
+    const c=(clients||[]).find(x=>crNormRut(x.rut||'')===rk) || (()=>{ const en=(clientEntities||[]).find(e=>crNormRut(e.rut||'')===rk); return en?(clients||[]).find(x=>String(x.id)===String(en.client_id)):null })(); return c?String(c.id):null }
+  const pagaComisiones = cid => !!cid && (billing||[]).some(b=>!b.deleted_at&&b.billing_type==='comision'&&String(b.client_id)===String(cid))
+  // Calce automático solo si es inequívoco: paga comisiones, no tiene comisiones facturadas abiertas (el depósito podría pagarlas) y el
+  // monto es menor que su cuota de subarriendo (BDA también nos arrienda: un arriendo nunca se toma por comisión).
+  const comisionAutoOk = (m, cid) => { if(!pagaComisiones(cid)) return false
+    const bs=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&String(b.client_id)===String(cid))
+    if(bs.some(b=>b.billing_type==='comision'&&['Pendiente','Vencido'].includes(b.status)&&saldoFactura(b)>TOL)) return false
+    const sub=bs.filter(b=>b.billing_type==='subarriendo').map(b=>Number(b.amount)||0).filter(x=>x>0)
+    return !sub.length || (Number(m.monto)||0) < Math.min(...sub) }
+  const comisionPorFacturar = async(mov, {clientId, socio=null, origen=null, auto=false}={})=>{
+    if(!auto&&busy) return false
+    if(!clientId){ appAlert('Falta quién paga la comisión (el cliente del depósito).'); return false }
+    const monto=(mov.monto||0)-(mov.monto_conciliado||0); if(monto<=TOL) return false
+    // Nunca dos veces por el mismo depósito: ni una comisión ya ligada a este movimiento, ni una conciliación ya guardada en la base.
+    if((billing||[]).some(b=>!b.deleted_at&&b.billing_type==='comision'&&String(b.notes||'').includes(`[mov:${mov.id}]`))) return false
+    if(!DEMO){ const {count}=await supabase.from('conciliacion').select('id',{count:'exact',head:true}).eq('movimiento_id',mov.id); if(count>0) return false }
+    if(!auto) setBusy(mov.id)
+    try{
+      const row={client_id:clientId, billing_type:'comision', status:'Anticipada', paid:true, paid_at:mov.fecha, due:mov.fecha, amount:monto, payment_method:'Transferencia',
+        concept:'Comisión por facturar'+(origen?` · ${origen}`:''), comision_origen:origen||null, notes:`Depósito del ${fmtFechaDMY(mov.fecha)} sin factura: se le pone el folio cuando llegue la factura del SII por el mismo monto. [mov:${mov.id}]`}
+      let fac=null, cr=null
+      if(DEMO){ fac={...row,id:'demo-com-'+mov.id}; cr={id:'demo-cc-'+mov.id,movimiento_id:mov.id,tipo_destino:'factura',factura_id:fac.id,monto_aplicado:monto,origen:auto?'auto':'manual'} }
+      else {
+        const ins=await supabase.from('billing').insert(row).select().single(); if(ins.error) throw ins.error; fac=ins.data
+        const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id, tipo_destino:'factura', factura_id:fac.id, monto_aplicado:monto, origen:auto?'auto':'manual'}).select().single()
+        if(ic.error){ await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',fac.id); throw ic.error } cr=ic.data; marcaQuien(cr.id)
+        const movAplic=(mov.monto_conciliado||0)+monto, estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+        const {error:me}=await supabase.from('cartola_movimientos').update({estado, monto_conciliado:movAplic, cliente_id:mov.cliente_id||clientId}).eq('id',mov.id); if(me) throw me
+        if(socio) await setLearningKV('socio_factura',fac.id,socio)
+      }
+      const movAplic=(mov.monto_conciliado||0)+monto, estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      setBilling&&setBilling(p=>[...(p||[]),fac]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,cliente_id:x.cliente_id||clientId}:x))
+      logActividad('banco.comision_por_facturar',{tabla:'billing',id:fac.id,detalle:{title:auto?'Comisión por facturar (automática)':'Comisión por facturar',name:mov.nombre_contraparte||null,monto,socio,origen,movimiento:mov.id}})
+      if(!auto){ setIngFor(null); setIngComFor(null); setIngProvQ(''); setAbFam(p=>({...p,[mov.id]:undefined})); setModalMov(null) }
+      return true
+    }catch(e){ if(!auto) appAlert('No se pudo registrar la comisión por facturar: '+(e.message||e)); return false }
+    finally{ if(!auto) setBusy(null) }
+  }
   const ingresoOficina = async(mov, sub, proveedorId=null)=>{
     if(busy) return
     if(!sub){ appAlert('Elige el tipo de ingreso de oficina.'); return }
@@ -37744,6 +37853,10 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
           if(!(r.factura_id in restantes)) restantes[r.factura_id]=(aplicadoByFactura[r.factura_id]||0)
           restantes[r.factura_id]=Math.max(0,restantes[r.factura_id]-(r.monto_aplicado||0))
           const nuevoAplic=restantes[r.factura_id]
+          // Comisión por facturar (creada desde este depósito, aún sin folio): al deshacer se da de baja; nunca queda un cobro sin depósito.
+          if(fac&&fac.billing_type==='comision'&&!fac.invoice_no&&fac.status==='Anticipada'){ const now=new Date().toISOString()
+            const {error:de}=await supabase.from('billing').update({deleted_at:now,updated_at:now}).eq('id',fac.id); if(de) throw de
+            setBilling&&setBilling(p=>p.filter(b=>b.id!==fac.id)); continue }
           if(fac){ const now=new Date().toISOString()
             let patch
             if(r.marco_pago){
@@ -37764,13 +37877,14 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
           const { error:ae } = await supabase.from('anticipos').delete().eq('id',r.anticipo_id); if(ae) throw ae
           setAnticipos&&setAnticipos(p=>p.filter(a=>String(a.id)!==String(r.anticipo_id)))
         } else if((r.tipo_destino==='fondo'||r.tipo_destino==='gasto') && r.gasto_id){
-          // 3.B: si este fondo había marcado gastos como reembolsados, libéralos (reembolso_fondo_id → null).
-          const marcados=(expenses||[]).filter(x=>String(x.reembolso_fondo_id)===String(r.gasto_id)).map(x=>x.id)
-          if(marcados.length){ await supabase.from('expenses').update({reembolso_fondo_id:null}).eq('reembolso_fondo_id',r.gasto_id)
-            setExpenses&&setExpenses(p=>p.map(x=>marcados.includes(x.id)?{...x,reembolso_fondo_id:null}:x)) }
           // 'gasto' (3.D) y los 'fondo' CREADOS por conciliación se borran. Un fondo VINCULADO (manual preexistente, #4) solo se desenlaza.
           const exp=(expenses||[]).find(x=>String(x.id)===String(r.gasto_id))
           const creadoAqui = r.tipo_destino==='gasto' || (exp && /conciliaci[oó]n/i.test(exp.concept||''))
+          // 3.B: si el fondo se borra, los gastos ligados a él (reembolsados o asignados a ese fondo) quedan libres (reembolso_fondo_id → null).
+          // Si solo se desenlaza del banco, el fondo sigue existiendo y sus gastos siguen ligados.
+          const marcados=creadoAqui?(expenses||[]).filter(x=>String(x.reembolso_fondo_id)===String(r.gasto_id)).map(x=>x.id):[]
+          if(marcados.length){ await supabase.from('expenses').update({reembolso_fondo_id:null}).eq('reembolso_fondo_id',r.gasto_id)
+            setExpenses&&setExpenses(p=>p.map(x=>marcados.includes(x.id)?{...x,reembolso_fondo_id:null}:x)) }
           if(creadoAqui){ const { error:fe } = await supabase.from('expenses').delete().eq('id',r.gasto_id); if(fe) throw fe
             setExpenses&&setExpenses(p=>p.filter(x=>String(x.id)!==String(r.gasto_id))) }
         } else if(r.tipo_destino==='ingreso'){
@@ -38374,7 +38488,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
   const conciliarAuto = async()=>{
     if(autoRun||busy) return
-    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0, cmb=0, nInt=0; const used=new Set(), doneMovs=new Set()
+    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0, cmb=0, nInt=0, nCom=0; const used=new Set(), doneMovs=new Set()
     let sinId=0, sinIdM=0, sinCalce=0, sinCalceM=0   // Mejora 2: desglose de lo que QUEDA tras el auto, por razón
     try{
       // 1) Traspasos internos — LA GLOSA MANDA (BICE no muestra el nombre de quien nos paga, así que un pago de tercero se ve casi igual que un traspaso propio; solo la glosa los distingue):
@@ -38414,6 +38528,9 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
         if(f){ used.add(f.id); doneMovs.add(mov.id); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto; continue }
         const cb=comboExacto(mov, used) || comboExacto3(mov, used)
         if(cb){ cb.forEach(f=>used.add(f.id)); doneMovs.add(mov.id); await reconciliarCombo(mov, cb); cmb++; ok++; monto+=mov.monto } }
+      // 3) Comisión por facturar: abono de quien nos paga comisiones que no calzó con una factura, solo si es inequívoco (comisionAutoOk).
+      for(const mov of pend){ if(doneMovs.has(mov.id)||mov.tipo!=='abono') continue; const cid=cliPagadorCom(mov); if(!comisionAutoOk(mov,cid)) continue
+        const okC=await comisionPorFacturar(mov,{clientId:cid, origen:mov.detalle_aviso||null, auto:true}); if(okC){ doneMovs.add(mov.id); ok++; monto+=mov.monto; nCom++ } }
       // Mejora 2 — desglose de lo que NO se pudo conciliar, por razón:
       //   sin calce  = abono YA identificado (cliente_id) que no encontró factura de monto exacto en ventana → el monto no cuadra.
       //   sin id     = abono sin cliente_id (ni auto-identificado) → falta cruzar el pagador (el auto no puede tocarlo).
@@ -38423,12 +38540,20 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
       sinId = sinIdList.length; sinIdM = sinIdList.reduce((s,m)=>s+(m.monto||0),0)
     }catch(e){ appAlert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
-    const hecho = (ok||nInt)? `Conciliadas ${ok} · ${fmtM(monto)}.${marc?`\n${marc} marcaron la factura pagada`:''}${enl?` · ${enl} enlazaron facturas ya pagadas`:''}${cmb?` · ${cmb} pagaron varias facturas`:''}${nInt?`\n${nInt} movimiento${nInt!==1?'s':''} interno${nInt!==1?'s':''} marcado${nInt!==1?'s':''} (por glosa)`:''}` : 'No hubo calces nuevos.'
+    const hecho = (ok||nInt)? `Conciliadas ${ok} · ${fmtM(monto)}.${marc?`\n${marc} marcaron la factura pagada`:''}${enl?` · ${enl} enlazaron facturas ya pagadas`:''}${cmb?` · ${cmb} pagaron varias facturas`:''}${nCom?`\n${nCom} comisi${nCom!==1?'ones':'ón'} por facturar (se cruzan solas con su factura del SII)`:''}${nInt?`\n${nInt} movimiento${nInt!==1?'s':''} interno${nInt!==1?'s':''} marcado${nInt!==1?'s':''} (por glosa)`:''}` : 'No hubo calces nuevos.'
     const queda = (sinId||sinCalce)
       ? `\n\nQuedan sin conciliar:${sinId?`\n· ${sinId} sin identificar (${fmtM(sinIdM)}) — falta cruzar el pagador`:''}${sinCalce?`\n· ${sinCalce} identificadas sin calce exacto (${fmtM(sinCalceM)}) — el monto no cuadra con una factura`:''}`
       : '\n\nNo queda nada por conciliar.'
     appAlert(hecho+queda)
   }
+  // Comisión por facturar automática: al abrir Banco, cada abono de quien nos paga comisiones que no tiene factura que calce
+  // y es inequívoco (comisionAutoOk) queda registrado solo, una vez por sesión. Queda en la bitácora y se deshace desde el movimiento.
+  const _comAutoHecho = useRef(false)
+  useEffect(()=>{ if(_comAutoHecho.current||loading||!movs.length||!(billing||[]).length) return; _comAutoHecho.current=true
+    const cands=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.estado==='pendiente'&&!(Number(m.monto_conciliado)>0)&&m.rol_cuenta!=='gastos'&&!(concByMov[m.id]?.length)&&!m.categoria&&!mejorCandidato(m,new Set())).map(m=>({m,cid:cliPagadorCom(m)})).filter(x=>comisionAutoOk(x.m,x.cid))
+    if(!cands.length) return
+    ;(async()=>{ let n=0; for(const {m,cid} of cands){ if(await comisionPorFacturar(m,{clientId:cid, origen:m.detalle_aviso||null, auto:true})) n++ } })()
+  },[loading,movs.length,(billing||[]).length])   // eslint-disable-line react-hooks/exhaustive-deps
   // El panel "Revisar propuesta" se eliminó (era una UI paralela al detalle del movimiento). El icono de banco del landing abre el filtro "Por conciliar" — un solo flujo, la misma tarjeta del detalle.
   useEffect(()=>{ if(openProp){ setSub('abonos'); setConcView('porconciliar'); onPropOpened&&onPropOpened() } },[openProp])
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
@@ -38523,7 +38648,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
       const fon=cc.find(c=>c.tipo_destino==='fondo'), ant=cc.find(c=>c.tipo_destino==='anticipo'), facs=cc.filter(c=>c.tipo_destino==='factura')
       // Factura primero (un abono "factura + gastos" se rotula por la factura; el fondo de reembolso es secundario).
       if(facs.length>1) return {t:`→ ${facs.length} facturas`, c:C.greenText, bg:C.greenBg}
-      if(facs.length===1){ const f=billing.find(b=>b.id===facs[0].factura_id); return {t:`→ Factura N° ${folioN(f?.invoice_no)||'—'}`, c:C.greenText, bg:C.greenBg} }
+      if(facs.length===1){ const f=billing.find(b=>b.id===facs[0].factura_id); return {t:`→ ${lblFacturaN(f)}`, c:C.greenText, bg:C.greenBg} }
       // Fondo: Devolución (cian invertido) vs Fondo por Rendir (verde invertido) según el concepto del fondo creado.
       if(fon){ const fe=(expenses||[]).find(e=>String(e.id)===String(fon.gasto_id)); const dev=fe&&/^(devoluci|reembolso)/i.test(fe.concept||''); return dev?{t:'→ Devolución', c:C.coralText, bg:'#FAECE7'}:{t:'Fondo por Rendir', c:C.tealText, bg:C.tealBg} }
       if(ant) return {t:'→ Anticipo', c:C.azulInfo, bg:C.azulBg}
@@ -38549,7 +38674,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     if(s.includes('transf')) return 'Transferencia (sin RUT en glosa)'
     return 'Movimiento bancario' }
 
-  return { liqParaCargo, enlazarNotaria, EQUIPO_RUT, SOCIO_RUT, CONTADORA_RUT, movs, setMovs, loading, setLoading, importing, setImporting, prog, setProg, reportes, setReportes, cargaPreview, setCargaPreview, verifRes, setVerifRes, verificando, setVerificando, aliases, setAliases, sub, setSub, cobradasOpen, setCobradasOpen, cuentaF, setCuentaF, anioF, setAnioF, mesF, setMesF, concYCol, setConcYCol, concMOpen, setConcMOpen, respF, setRespF, facChip, setFacChip, facMyc, setFacMyc, devolFor, setDevolFor, devolSel, setDevolSel, respByCid, respDisp, q, setQ, orden, setOrden, verCartolas, setVerCartolas, verCarga, setVerCarga, verFiltros, setVerFiltros, editMov, setEditMov, tagFor, setTagFor, tipoAprendido, setTipoAprendido, splitMov, setSplitMov, splitAdel, setSplitAdel, fondoFor, setFondoFor, otroFor, setOtroFor, otraFacFor, setOtraFacFor, editForm, setEditForm, conc, setConc, concView, setConcView, isDesktop, autoRun, setAutoRun, pickFor, setPickFor, revSugOpen, setRevSugOpen, revSugSel, setRevSugSel, revSugBusy, setRevSugBusy, comboFor, setComboFor, reembFor, setReembFor, detFor, setDetFor, facBuscaQ, setFacBuscaQ, rsConcOpen, setRsConcOpen, modalMov, setModalMov, otrasSet, setOtrasSet, toggleOtras, verGlosa, setVerGlosa, busy, setBusy, costosOfi, setCostosOfi, costosClaudia, setCostosClaudia, valoresBusy, setValoresBusy, valoresInfo, setValoresInfo, leerValores, poolCostos, gcFor, setGcFor, gcCli, setGcCli, gcEnt, setGcEnt, ofiFor, setOfiFor, ofiCat, setOfiCat, ofiSub, setOfiSub, cargoCliLearn, setCargoCliLearn, costoOfiLearn, setCostoOfiLearn, ccFam, setCcFam, ccCat, setCcCat, ccQ, setCcQ, abFam, setAbFam, TOL, fmtM, mesAbbr, cargar, cmap, nameByRut, provByRut, _stripNom, _toksNom, tipoSugerido, costoOfiSugerido, _NOM_COMUN, nombreIdx, sugerencias, tipoContraparte, TAG_STY, CATS_CARGO, CATS_ABONO, RESUELTAS_ABO, ESTRUCT_ABO, setCategoria, marcarNoCliente, desmarcarInterno, resolver, resolverNombre, onFiles, confirmarCarga, onVerificar, identificar, guardarRut, origenInterno, espejoInterno, traspasos, irMov, aplicadoByFactura, cartolaHasta, concByMov, saldoFactura, facturasConSaldo, facturasPorCliente, esConciliable, facturasCliente, _rutsCliente, _rutsFactura, facturasParaMov, mesDiff, candidatos, folioGlosa, mejorCandidato, candidatosMostrar, tieneCand, clientePorMonto, facturaPorMontoManual, sugeridosId, identificarLote, esDescalce, persistPagoFactura, marcaPago, marcaQuien, reconciliar, combos, comboExacto, comboExacto3, cidByMov, reembGastoByCliente, gastoPend, gastosReembolsables, facturaMasGastos, reconciliarCombo, loteOpen, setLoteOpen, loteBusy, setLoteBusy, loteProg, setLoteProg, loteConfirm, setLoteConfirm, siiBuscando, setSiiBuscando, siiResumen, setSiiResumen, siiMovBusy, setSiiMovBusy, siiMovHit, setSiiMovHit, siiMovIng, setSiiMovIng, buscarMovSII, ingresarYConciliar, buscarTodoSII, conciliarLote, grupoPago, reconciliarGrupo, reconciliarFacturaGastos, reconciliarReembolso, marcarGastosReembolsados, devolucionGastos, saldoAFavor, splitAdelantoFondo, fondoExistente, vincularFondo, anticipoExistente, vincularAnticipo, crearFondoProvision, crearFondoPersonal, gastoPorCuentaCliente, ofiCli, catsOficinaConc, costoOficina, costoOficinaSplit, ingresoOficina, cobroSubarriendo, ingFor, setIngFor, ingComFor, setIngComFor, ingProvQ, setIngProvQ, deshacer, CARGO_OFI_GRUPOS, CARGO_SUB_LABEL, cargoPersonas, cargoSugerencia, _glosaHas, matchPresupuesto, matchGrupoPresupuesto, cargoRachaHint, marcarCargoCliente, quitarCargoCliente, cajaChicaMatch, _cierraCaja, abonoCajaChica, deshacerCajaChica, marcarControlCargo, registrarCargoOficina, terc, setTerc, pagoSel, setPagoSel, provDeCargo, bDue, comisPorPagar, preselFifo, fFifoDate, conciliarComisiones, deshacerComisiones, renderPagoProveedor, renderCargoClasificar, conciliarAuto, resumenConc, G, cartolas, aniosDisp, lista, chipCounts, rolChip, estadoChip, tipoMov }
+  return { liqParaCargo, enlazarNotaria, EQUIPO_RUT, SOCIO_RUT, CONTADORA_RUT, movs, setMovs, loading, setLoading, importing, setImporting, prog, setProg, reportes, setReportes, cargaPreview, setCargaPreview, verifRes, setVerifRes, verificando, setVerificando, aliases, setAliases, sub, setSub, cobradasOpen, setCobradasOpen, cuentaF, setCuentaF, anioF, setAnioF, mesF, setMesF, concYCol, setConcYCol, concMOpen, setConcMOpen, respF, setRespF, facChip, setFacChip, facMyc, setFacMyc, devolFor, setDevolFor, devolSel, setDevolSel, respByCid, respDisp, q, setQ, orden, setOrden, verCartolas, setVerCartolas, verCarga, setVerCarga, verFiltros, setVerFiltros, editMov, setEditMov, tagFor, setTagFor, tipoAprendido, setTipoAprendido, splitMov, setSplitMov, splitAdel, setSplitAdel, fondoFor, setFondoFor, otroFor, setOtroFor, otraFacFor, setOtraFacFor, editForm, setEditForm, conc, setConc, concView, setConcView, isDesktop, autoRun, setAutoRun, pickFor, setPickFor, revSugOpen, setRevSugOpen, revSugSel, setRevSugSel, revSugBusy, setRevSugBusy, comboFor, setComboFor, reembFor, setReembFor, detFor, setDetFor, facBuscaQ, setFacBuscaQ, rsConcOpen, setRsConcOpen, modalMov, setModalMov, otrasSet, setOtrasSet, toggleOtras, verGlosa, setVerGlosa, busy, setBusy, costosOfi, setCostosOfi, costosClaudia, setCostosClaudia, valoresBusy, setValoresBusy, valoresInfo, setValoresInfo, leerValores, poolCostos, gcFor, setGcFor, gcCli, setGcCli, gcEnt, setGcEnt, ofiFor, setOfiFor, ofiCat, setOfiCat, ofiSub, setOfiSub, cargoCliLearn, setCargoCliLearn, costoOfiLearn, setCostoOfiLearn, ccFam, setCcFam, ccCat, setCcCat, ccQ, setCcQ, abFam, setAbFam, TOL, fmtM, mesAbbr, cargar, cmap, nameByRut, provByRut, _stripNom, _toksNom, tipoSugerido, costoOfiSugerido, _NOM_COMUN, nombreIdx, sugerencias, tipoContraparte, TAG_STY, CATS_CARGO, CATS_ABONO, RESUELTAS_ABO, ESTRUCT_ABO, setCategoria, marcarNoCliente, desmarcarInterno, resolver, resolverNombre, onFiles, confirmarCarga, onVerificar, identificar, guardarRut, origenInterno, espejoInterno, traspasos, irMov, aplicadoByFactura, cartolaHasta, concByMov, saldoFactura, facturasConSaldo, facturasPorCliente, esConciliable, facturasCliente, _rutsCliente, _rutsFactura, facturasParaMov, mesDiff, candidatos, folioGlosa, mejorCandidato, candidatosMostrar, tieneCand, clientePorMonto, facturaPorMontoManual, sugeridosId, identificarLote, esDescalce, persistPagoFactura, marcaPago, marcaQuien, reconciliar, combos, comboExacto, comboExacto3, cidByMov, reembGastoByCliente, gastoPend, gastosReembolsables, facturaMasGastos, reconciliarCombo, loteOpen, setLoteOpen, loteBusy, setLoteBusy, loteProg, setLoteProg, loteConfirm, setLoteConfirm, siiBuscando, setSiiBuscando, siiResumen, setSiiResumen, siiMovBusy, setSiiMovBusy, siiMovHit, setSiiMovHit, siiMovIng, setSiiMovIng, buscarMovSII, ingresarYConciliar, buscarTodoSII, conciliarLote, grupoPago, reconciliarGrupo, reconciliarFacturaGastos, reconciliarReembolso, marcarGastosReembolsados, devolucionGastos, saldoAFavor, splitAdelantoFondo, fondoExistente, vincularFondo, anticipoExistente, vincularAnticipo, crearFondoProvision, crearFondoPersonal, gastoPorCuentaCliente, ofiCli, catsOficinaConc, costoOficina, costoOficinaSplit, ingresoOficina, comisionPorFacturar, cliPagadorCom, pagaComisiones, comisionAutoOk, cobroSubarriendo, ingFor, setIngFor, ingComFor, setIngComFor, ingProvQ, setIngProvQ, deshacer, CARGO_OFI_GRUPOS, CARGO_SUB_LABEL, cargoPersonas, cargoSugerencia, _glosaHas, matchPresupuesto, matchGrupoPresupuesto, cargoRachaHint, marcarCargoCliente, quitarCargoCliente, cajaChicaMatch, _cierraCaja, abonoCajaChica, deshacerCajaChica, marcarControlCargo, registrarCargoOficina, terc, setTerc, pagoSel, setPagoSel, provDeCargo, bDue, comisPorPagar, preselFifo, fFifoDate, conciliarComisiones, deshacerComisiones, renderPagoProveedor, renderCargoClasificar, conciliarAuto, resumenConc, G, cartolas, aniosDisp, lista, chipCounts, rolChip, estadoChip, tipoMov }
 }
 
 // Tarjeta de alerta: días hábiles sin cartola (el banco no envió, o falta cargarla). Amarillo claro; roja a los 3+ días.
@@ -38587,9 +38712,10 @@ function CartolaGapCard({ cartolaHasta, onCargar }){
 }
 
 function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChicaRevConsumed,clients=[],clientEntities=[],billing=[],sales=[],setRendiciones,setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],pettyCash=[],setPettyCash,user,focusMovId,onFocusConsumed,focusBuscar,onBuscarConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII,onFacturaPagada,onOpenFactura,onOpenProveedor}){
-  const { liqParaCargo, enlazarNotaria, EQUIPO_RUT, SOCIO_RUT, CONTADORA_RUT, movs, setMovs, loading, setLoading, importing, setImporting, prog, setProg, reportes, setReportes, cargaPreview, setCargaPreview, verifRes, setVerifRes, verificando, setVerificando, aliases, setAliases, sub, setSub, cobradasOpen, setCobradasOpen, cuentaF, setCuentaF, anioF, setAnioF, mesF, setMesF, concYCol, setConcYCol, concMOpen, setConcMOpen, respF, setRespF, facChip, setFacChip, facMyc, setFacMyc, devolFor, setDevolFor, devolSel, setDevolSel, respByCid, respDisp, q, setQ, orden, setOrden, verCartolas, setVerCartolas, verCarga, setVerCarga, verFiltros, setVerFiltros, editMov, setEditMov, tagFor, setTagFor, tipoAprendido, setTipoAprendido, splitMov, setSplitMov, splitAdel, setSplitAdel, fondoFor, setFondoFor, otroFor, setOtroFor, otraFacFor, setOtraFacFor, editForm, setEditForm, conc, setConc, concView, setConcView, isDesktop, autoRun, setAutoRun, pickFor, setPickFor, revSugOpen, setRevSugOpen, revSugSel, setRevSugSel, revSugBusy, setRevSugBusy, comboFor, setComboFor, reembFor, setReembFor, detFor, setDetFor, facBuscaQ, setFacBuscaQ, rsConcOpen, setRsConcOpen, modalMov, setModalMov, otrasSet, setOtrasSet, toggleOtras, verGlosa, setVerGlosa, busy, setBusy, costosOfi, setCostosOfi, costosClaudia, setCostosClaudia, valoresBusy, setValoresBusy, valoresInfo, setValoresInfo, leerValores, poolCostos, gcFor, setGcFor, gcCli, setGcCli, gcEnt, setGcEnt, ofiFor, setOfiFor, ofiCat, setOfiCat, ofiSub, setOfiSub, cargoCliLearn, setCargoCliLearn, costoOfiLearn, setCostoOfiLearn, ccFam, setCcFam, ccCat, setCcCat, ccQ, setCcQ, abFam, setAbFam, TOL, fmtM, mesAbbr, cargar, cmap, nameByRut, provByRut, _stripNom, _toksNom, tipoSugerido, costoOfiSugerido, _NOM_COMUN, nombreIdx, sugerencias, tipoContraparte, TAG_STY, CATS_CARGO, CATS_ABONO, RESUELTAS_ABO, ESTRUCT_ABO, setCategoria, marcarNoCliente, desmarcarInterno, resolver, resolverNombre, onFiles, confirmarCarga, onVerificar, identificar, guardarRut, origenInterno, espejoInterno, traspasos, irMov, aplicadoByFactura, cartolaHasta, concByMov, saldoFactura, facturasConSaldo, facturasPorCliente, esConciliable, facturasCliente, _rutsCliente, _rutsFactura, facturasParaMov, mesDiff, candidatos, folioGlosa, mejorCandidato, candidatosMostrar, tieneCand, clientePorMonto, facturaPorMontoManual, sugeridosId, identificarLote, esDescalce, persistPagoFactura, marcaPago, marcaQuien, reconciliar, combos, comboExacto, comboExacto3, cidByMov, reembGastoByCliente, gastoPend, gastosReembolsables, facturaMasGastos, reconciliarCombo, loteOpen, setLoteOpen, loteBusy, setLoteBusy, loteProg, setLoteProg, loteConfirm, setLoteConfirm, siiBuscando, setSiiBuscando, siiResumen, setSiiResumen, siiMovBusy, setSiiMovBusy, siiMovHit, setSiiMovHit, siiMovIng, setSiiMovIng, buscarMovSII, ingresarYConciliar, buscarTodoSII, conciliarLote, grupoPago, reconciliarGrupo, reconciliarFacturaGastos, reconciliarReembolso, marcarGastosReembolsados, devolucionGastos, saldoAFavor, splitAdelantoFondo, fondoExistente, vincularFondo, anticipoExistente, vincularAnticipo, crearFondoProvision, crearFondoPersonal, gastoPorCuentaCliente, ofiCli, catsOficinaConc, costoOficina, costoOficinaSplit, ingresoOficina, cobroSubarriendo, ingFor, setIngFor, ingComFor, setIngComFor, ingProvQ, setIngProvQ, deshacer, CARGO_OFI_GRUPOS, CARGO_SUB_LABEL, cargoPersonas, cargoSugerencia, _glosaHas, matchPresupuesto, matchGrupoPresupuesto, cargoRachaHint, marcarCargoCliente, quitarCargoCliente, cajaChicaMatch, _cierraCaja, abonoCajaChica, deshacerCajaChica, marcarControlCargo, registrarCargoOficina, terc, setTerc, pagoSel, setPagoSel, provDeCargo, bDue, comisPorPagar, preselFifo, fFifoDate, conciliarComisiones, deshacerComisiones, renderPagoProveedor, renderCargoClasificar, conciliarAuto, resumenConc, G, cartolas, aniosDisp, lista, chipCounts, rolChip, estadoChip, tipoMov } = useConciliacionModel({ setTercerosRoot, clients, clientEntities, billing, sales, setRendiciones, setBilling, anticipos, setAnticipos, expenses, setExpenses, proveedores, pettyCash, setPettyCash, user, focusMovId, onFocusConsumed, focusBuscar, onBuscarConsumed, openProp, onPropOpened, onClose, onOpenClientFicha, onCotejarSII, onBuscarSII, onIngresarSII, onFacturaPagada, onOpenProveedor })
+  const { liqParaCargo, enlazarNotaria, EQUIPO_RUT, SOCIO_RUT, CONTADORA_RUT, movs, setMovs, loading, setLoading, importing, setImporting, prog, setProg, reportes, setReportes, cargaPreview, setCargaPreview, verifRes, setVerifRes, verificando, setVerificando, aliases, setAliases, sub, setSub, cobradasOpen, setCobradasOpen, cuentaF, setCuentaF, anioF, setAnioF, mesF, setMesF, concYCol, setConcYCol, concMOpen, setConcMOpen, respF, setRespF, facChip, setFacChip, facMyc, setFacMyc, devolFor, setDevolFor, devolSel, setDevolSel, respByCid, respDisp, q, setQ, orden, setOrden, verCartolas, setVerCartolas, verCarga, setVerCarga, verFiltros, setVerFiltros, editMov, setEditMov, tagFor, setTagFor, tipoAprendido, setTipoAprendido, splitMov, setSplitMov, splitAdel, setSplitAdel, fondoFor, setFondoFor, otroFor, setOtroFor, otraFacFor, setOtraFacFor, editForm, setEditForm, conc, setConc, concView, setConcView, isDesktop, autoRun, setAutoRun, pickFor, setPickFor, revSugOpen, setRevSugOpen, revSugSel, setRevSugSel, revSugBusy, setRevSugBusy, comboFor, setComboFor, reembFor, setReembFor, detFor, setDetFor, facBuscaQ, setFacBuscaQ, rsConcOpen, setRsConcOpen, modalMov, setModalMov, otrasSet, setOtrasSet, toggleOtras, verGlosa, setVerGlosa, busy, setBusy, costosOfi, setCostosOfi, costosClaudia, setCostosClaudia, valoresBusy, setValoresBusy, valoresInfo, setValoresInfo, leerValores, poolCostos, gcFor, setGcFor, gcCli, setGcCli, gcEnt, setGcEnt, ofiFor, setOfiFor, ofiCat, setOfiCat, ofiSub, setOfiSub, cargoCliLearn, setCargoCliLearn, costoOfiLearn, setCostoOfiLearn, ccFam, setCcFam, ccCat, setCcCat, ccQ, setCcQ, abFam, setAbFam, TOL, fmtM, mesAbbr, cargar, cmap, nameByRut, provByRut, _stripNom, _toksNom, tipoSugerido, costoOfiSugerido, _NOM_COMUN, nombreIdx, sugerencias, tipoContraparte, TAG_STY, CATS_CARGO, CATS_ABONO, RESUELTAS_ABO, ESTRUCT_ABO, setCategoria, marcarNoCliente, desmarcarInterno, resolver, resolverNombre, onFiles, confirmarCarga, onVerificar, identificar, guardarRut, origenInterno, espejoInterno, traspasos, irMov, aplicadoByFactura, cartolaHasta, concByMov, saldoFactura, facturasConSaldo, facturasPorCliente, esConciliable, facturasCliente, _rutsCliente, _rutsFactura, facturasParaMov, mesDiff, candidatos, folioGlosa, mejorCandidato, candidatosMostrar, tieneCand, clientePorMonto, facturaPorMontoManual, sugeridosId, identificarLote, esDescalce, persistPagoFactura, marcaPago, marcaQuien, reconciliar, combos, comboExacto, comboExacto3, cidByMov, reembGastoByCliente, gastoPend, gastosReembolsables, facturaMasGastos, reconciliarCombo, loteOpen, setLoteOpen, loteBusy, setLoteBusy, loteProg, setLoteProg, loteConfirm, setLoteConfirm, siiBuscando, setSiiBuscando, siiResumen, setSiiResumen, siiMovBusy, setSiiMovBusy, siiMovHit, setSiiMovHit, siiMovIng, setSiiMovIng, buscarMovSII, ingresarYConciliar, buscarTodoSII, conciliarLote, grupoPago, reconciliarGrupo, reconciliarFacturaGastos, reconciliarReembolso, marcarGastosReembolsados, devolucionGastos, saldoAFavor, splitAdelantoFondo, fondoExistente, vincularFondo, anticipoExistente, vincularAnticipo, crearFondoProvision, crearFondoPersonal, gastoPorCuentaCliente, ofiCli, catsOficinaConc, costoOficina, costoOficinaSplit, ingresoOficina, comisionPorFacturar, cliPagadorCom, pagaComisiones, comisionAutoOk, cobroSubarriendo, ingFor, setIngFor, ingComFor, setIngComFor, ingProvQ, setIngProvQ, deshacer, CARGO_OFI_GRUPOS, CARGO_SUB_LABEL, cargoPersonas, cargoSugerencia, _glosaHas, matchPresupuesto, matchGrupoPresupuesto, cargoRachaHint, marcarCargoCliente, quitarCargoCliente, cajaChicaMatch, _cierraCaja, abonoCajaChica, deshacerCajaChica, marcarControlCargo, registrarCargoOficina, terc, setTerc, pagoSel, setPagoSel, provDeCargo, bDue, comisPorPagar, preselFifo, fFifoDate, conciliarComisiones, deshacerComisiones, renderPagoProveedor, renderCargoClasificar, conciliarAuto, resumenConc, G, cartolas, aniosDisp, lista, chipCounts, rolChip, estadoChip, tipoMov } = useConciliacionModel({ setTercerosRoot, clients, clientEntities, billing, sales, setRendiciones, setBilling, anticipos, setAnticipos, expenses, setExpenses, proveedores, pettyCash, setPettyCash, user, focusMovId, onFocusConsumed, focusBuscar, onBuscarConsumed, openProp, onPropOpened, onClose, onOpenClientFicha, onCotejarSII, onBuscarSII, onIngresarSII, onFacturaPagada, onOpenProveedor })
   // Hub de entrada (patrón del hub de Gastos): landing de tarjetas que rutea a las secciones ya existentes.
   // Pura presentación — no toca cifras (reusa resumenConc/G/cartolas y los predicados del modelo).
+  const [comPF,setComPF] = useState({soc:'',orig:''})   // Comisión por facturar: socio y quién la generó (detalle del depósito)
   const [ingProvCambiar,setIngProvCambiar] = useState(null)   // Comisión Recibida: mov id en que el usuario pidió elegir otro tercero (ignora el sugerido)
   const [deskSel,setDeskSel] = useState(()=>viewMemLeer('concView')?.deskSel??null)   // escritorio: movimiento elegido en la bandeja {id,idx}; si sale de la lista (se resolvió) pasa al que quedó en su lugar
   useEffect(()=>{ if(focusMovId) setDeskSel({id:focusMovId,idx:0}) },[focusMovId])   // escritorio: un salto "ver en Banco" deja elegido ESE movimiento
@@ -38910,6 +39036,17 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
   const ofiIngresoPicker = (m, resto) => { const stop=e=>e.stopPropagation(); const provSug=provDelRemitente(m); return (
     <div onClick={stop} style={{marginBottom:6}}>
       <div onClick={()=>setAbFam(p=>({...p,[m.id]:undefined}))} style={{display:'flex',alignItems:'center',gap:7,padding:'6px 2px 4px',cursor:'pointer'}}><span style={{color:C.accent,fontSize:15}}><Gl n='chevL'/></span><span style={{fontSize:11,fontWeight:700,color:C.accent}}>Ingreso de oficina</span>{resto!=null&&<span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.soon,flexShrink:0}}>Resta {fmtM(resto)}</span>}</div>
+      {(()=>{ const cid=cliPagadorCom(m); if(!pagaComisiones(cid)) return null; const nm=(clients||[]).find(c=>String(c.id)===cid)?.name||'quien paga'
+        const fl={fontSize:9,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.textSoft}
+        return <div style={{border:`1px solid ${C.accent}`,background:C.azulBg,borderRadius:9,padding:'9px 10px',margin:'2px 2px 8px'}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Comisión por facturar</div>
+          <div style={{fontSize:10.5,color:C.muted,marginBottom:7}}>{nm} nos paga comisiones · queda pendiente hasta que llegue la factura</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'flex-end'}}>
+            <label style={{display:'flex',flexDirection:'column',gap:3,flex:'1 1 140px',minWidth:0}}><span style={fl}>Quién la generó</span><input value={comPF.orig} onChange={e=>setComPF(p=>({...p,orig:e.target.value}))} placeholder={m.detalle_aviso||'Cliente derivado o asunto'} style={{fontSize:12,padding:'6px 8px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.text,outline:'none',minWidth:0}}/></label>
+            <label style={{display:'flex',flexDirection:'column',gap:3}}><span style={fl}>Socio</span><select value={comPF.soc} onChange={e=>setComPF(p=>({...p,soc:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.text}}><option value=''>Elegir</option>{ADMIN_NAMES.map(n=><option key={n} value={n}>{n}</option>)}</select></label>
+            <button disabled={busy===m.id} onClick={async()=>{ const ok=await comisionPorFacturar(m,{clientId:cid, socio:comPF.soc||null, origen:(comPF.orig.trim()||m.detalle_aviso||'').trim()||null}); if(ok) setComPF({soc:'',orig:''}) }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>{busy===m.id?'Registrando…':'Registrar'}</button>
+          </div>
+        </div> })()}
       <div style={{padding:'2px 2px 6px'}}>
         {[['Comisión Recibida','asignable a un tercero'],['Subarrendamiento','se aplica a la cuota del mes'],['Reembolso a la oficina','algo que adelantamos y nos devuelven'],['Otros','otro ingreso']].map(([sub,hint])=>{
           const esCom=sub==='Comisión Recibida'; const comOpen=esCom&&ingComFor===m.id; const conSug=esCom&&provSug&&ingProvCambiar!==m.id
@@ -39150,7 +39287,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       <div style={{...SEC_LBL,marginBottom:4}}>Conciliar</div>
                       {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?6:0}}>
-                        {myConc.map(r=>{ const fe=r.tipo_destino==='fondo'?(expenses||[]).find(e=>String(e.id)===String(r.gasto_id)):null; const dev=fe&&/^(devoluci|reembolso)/i.test(fe.concept||''); const sty=r.tipo_destino==='fondo'?(dev?{color:C.coralText,background:'#FAECE7'}:{color:C.tealText,background:C.tealBg}):r.tipo_destino==='anticipo'?{color:C.azulInfo,background:C.azulBg}:{color:C.greenText,background:C.greenBg}; const lbl=r.tipo_destino==='anticipo'?`Saldo a Favor | Anticipo · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='gasto'?`Reembolso gastos · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='fondo'?`${dev?'Devolución':'Fondo por Rendir'} · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=!r.marco_pago&&f&&f.status==='Pagado';return `Factura N° ${folioN(f?.invoice_no)||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
+                        {myConc.map(r=>{ const fe=r.tipo_destino==='fondo'?(expenses||[]).find(e=>String(e.id)===String(r.gasto_id)):null; const dev=fe&&/^(devoluci|reembolso)/i.test(fe.concept||''); const sty=r.tipo_destino==='fondo'?(dev?{color:C.coralText,background:'#FAECE7'}:{color:C.tealText,background:C.tealBg}):r.tipo_destino==='anticipo'?{color:C.azulInfo,background:C.azulBg}:{color:C.greenText,background:C.greenBg}; const lbl=r.tipo_destino==='anticipo'?`Saldo a Favor | Anticipo · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='gasto'?`Reembolso gastos · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='fondo'?`${dev?'Devolución':'Fondo por Rendir'} · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=!r.marco_pago&&f&&f.status==='Pagado';return `${lblFacturaN(f)} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
                           const clickable=r.tipo_destino==='factura'&&r.factura_id; const sinFlecha=r.tipo_destino==='fondo'&&!dev
                           return <span key={r.id} onClick={clickable?(e)=>{e.stopPropagation();setFacMyc(facMyc===r.factura_id?null:r.factura_id)}:undefined} style={{fontSize:10,fontWeight:700,color:sty.color,background:sty.background,borderRadius:20,padding:'2px 9px',cursor:clickable?'pointer':'default'}}>{sinFlecha?'':'→ '}{lbl}{clickable?(facMyc===r.factura_id?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span> })}
                         <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button>
@@ -39527,7 +39664,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:18,fontWeight:700,color:sel.cliente_id&&onOpenClientFicha?C.accent:C.text,cursor:sel.cliente_id&&onOpenClientFicha?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={sel.cliente_id&&onOpenClientFicha?()=>onOpenClientFicha(sel.cliente_id):undefined} title={sel.cliente_id&&onOpenClientFicha?'Ver ficha del cliente':undefined}>{quienMov(sel)}</div>
                   <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{fmtFechaDMY(sel.fecha)} · {rolChip(sel.rol_cuenta).t}{sel.rut_contraparte?` · ${sel.rut_contraparte}`:''}{sel.cliente_id&&sel.nombre_contraparte&&sel.nombre_contraparte!==quienMov(sel)?` · ${sel.nombre_contraparte}`:''}</div>
-                  {facObj&&<span onClick={onOpenFactura?()=>onOpenFactura(facObj):undefined} style={{display:'inline-block',marginTop:6,fontSize:12,fontWeight:700,color:C.accent,cursor:onOpenFactura?'pointer':'default',textDecoration:onOpenFactura?'underline':'none',textUnderlineOffset:2}}>Factura N° {folioN(facObj.invoice_no)||'—'} <Gl n='chevron'/></span>}
+                  {facObj&&<span onClick={onOpenFactura?()=>onOpenFactura(facObj):undefined} style={{display:'inline-block',marginTop:6,fontSize:12,fontWeight:700,color:C.accent,cursor:onOpenFactura?'pointer':'default',textDecoration:onOpenFactura?'underline':'none',textUnderlineOffset:2}}>{lblFacturaN(facObj)} <Gl n='chevron'/></span>}
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
                   <div style={{fontSize:20,fontWeight:800,color:sel.tipo==='abono'?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{sel.tipo==='abono'?'+':'−'}{fmtM(sel.monto)}</div>
@@ -40050,7 +40187,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
                     return Object.values(g).map(x=><div key={x.id||x.nom} onClick={e=>{e.stopPropagation();x.id&&onOpenProveedor&&onOpenProveedor(x.id)}} style={{fontSize:10.5,color:C.muted,marginTop:3,cursor:x.id&&onOpenProveedor?'pointer':'default'}}>Incluye comisión de {(proveedores||[]).find(p=>String(p.id)===String(x.id))?.nombre||x.nom} · {x.pend>0?<><b style={{color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtM(x.pend)}</b> por pagar</>:<>{fmtM(x.pag)} pagada</>} <Gl n='chevron'/></div>) })()}
                   {facObj&&facChip===m.id&&(()=>{ const paid=facObj.status==='Pagado'; return (
                     <div onClick={e=>e.stopPropagation()} style={{marginTop:6,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>Factura N° {folioN(facObj.invoice_no)||'—'}</span>{(()=>{ const e=facturaRespaldo(facObj,aplicadoByFactura,cartolaHasta); return e?<span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:e.bg,color:e.fg,whiteSpace:'nowrap'}}>{e.label}</span>:null })()}</div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>{lblFacturaN(facObj)}</span>{(()=>{ const e=facturaRespaldo(facObj,aplicadoByFactura,cartolaHasta); return e?<span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:e.bg,color:e.fg,whiteSpace:'nowrap'}}>{e.label}</span>:null })()}</div>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.textSoft}}>Concepto</span><span style={{color:C.text,fontWeight:600,maxWidth:'62%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{facObj.concept||'—'}</span></div>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.textSoft}}>Emisión</span><span style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(facObj.issued_at)}{facObj.due?` · vence ${fmtFechaDMY(facObj.due)}`:''}</span></div>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.textSoft}}>Monto</span><span style={{color:C.text,fontWeight:600}}>{fmtM(facObj.amount)}</span></div>
@@ -42571,7 +42708,7 @@ export default function App() {
     const ufR = (readUFCache()?.value) || (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK   // ufRef no vive en App; se calcula igual que en 3545
     const saleYrById={}; sales.forEach(s=>{ if(s.year!=null) saleYrById[String(s.id)]=s.year })
     const anioDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:null)
-    const pend=(billing||[]).filter(b=>b.status==='Pagado'&&(b.billing_type||'')!=='reembolso'&&!b.deleted_at&&!b.anio_manual&&b.sale_id==null&&b.sale_year==null&&anioDe(b)==null)
+    const pend=(billing||[]).filter(b=>b.status==='Pagado'&&!['reembolso','comision','externo','subarriendo'].includes(b.billing_type||'')&&!b.deleted_at&&!b.anio_manual&&b.sale_id==null&&b.sale_year==null&&anioDe(b)==null)
     if(!pend.length){ if(!opts.silent) appAlert('No hay facturas pagadas sin año por reprocesar.'); return {asociadas:0,pendientes:0} }
     const cn = id => clients.find(c=>String(c.id)===String(id))?.name || null
     const ventasPorCliente={}; sales.forEach(s=>{ (ventasPorCliente[String(s.client_id)]=ventasPorCliente[String(s.client_id)]||[]).push(s) })
@@ -42786,7 +42923,7 @@ export default function App() {
       const {error}=await supabase.from('terceros_pagos').insert(cp); if(error)throw error
       const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}); if(nt)setTerceros(nt)
       // Fuente única del monto del externo = billing.monto_terceros (lo que lee/edita el editor de factura). Nuestro ingreso = amount − monto_terceros.
-      try{ await supabase.from('billing').update({monto_terceros:payable, updated_at:new Date().toISOString()}).eq('id',fac.id); setBilling(p=>p.map(b=>b.id===fac.id?{...b,monto_terceros:payable}:b)) }catch(_){}
+      try{ await supabase.from('billing').update({monto_terceros:payable, ...(pct>0?{billing_type:'externo'}:{}), updated_at:new Date().toISOString()}).eq('id',fac.id); setBilling(p=>p.map(b=>b.id===fac.id?{...b,monto_terceros:payable,...(pct>0?{billing_type:'externo'}:{})}:b)) }catch(_){}
       if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(_){} }   // aprende el % por externo (ej. Rodrigo = 15)
     }catch(e){ appAlert('La factura se registró, pero no se pudo crear la cuenta por pagar al externo: '+(e.message||e)) }
     return {factura:fac, proveedor:prov}
@@ -42806,7 +42943,7 @@ export default function App() {
         tipo_costo:'clp', valor:payable, monto:payable, comision_pct: pct||null, comision_monto: comision||null, estado: bill.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null }
       const {error}=await supabase.from('terceros_pagos').insert(cp); if(error)throw error
       const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}); if(nt)setTerceros(nt)
-      try{ await supabase.from('billing').update({monto_terceros:payable, updated_at:new Date().toISOString()}).eq('id',bill.id); setBilling(p=>p.map(b=>b.id===bill.id?{...b,monto_terceros:payable}:b)) }catch(_){}   // fuente única del monto del externo
+      try{ await supabase.from('billing').update({monto_terceros:payable, ...(pct>0?{billing_type:'externo'}:{}), updated_at:new Date().toISOString()}).eq('id',bill.id); setBilling(p=>p.map(b=>b.id===bill.id?{...b,monto_terceros:payable,...(pct>0?{billing_type:'externo'}:{})}:b)) }catch(_){}   // fuente única del monto del externo
       if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(_){} }
     }catch(e){ appAlert('No se pudo asociar la factura al externo: '+(e.message||e)); return null }
     return {proveedor:prov}
