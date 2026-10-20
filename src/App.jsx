@@ -69,6 +69,7 @@ const BRAND = {
   web: 'leabogados.cl',
   emailDominio: 'leabogados.cl',   // dominio de las cuentas del equipo (aviso de reingreso cuando un correo no sale)
   notaria: 'Notaría',
+  casillaAgente: '',                 // casilla que lee el agente de administración (learnings config 'agente_casilla'): va en copia en solicitudes de fondos y rendiciones para que la respuesta del cliente (comprobante) le llegue
   ccNotaria: '',                     // copia del estudio en los correos a la notaría (configurable: estudios.cc_notaria; antes escrito fijo en 4 lugares)                // notaría con que trabaja el estudio (configurable: estudios.notaria_nombre; LEA = 'Notaría Lascar')
   cajaChicaUmbral: 50000,            // aviso "Caja chica baja" cuando el saldo de un miembro queda en o bajo este monto (configurable por estudio: estudios.caja_chica_umbral)
   portal: 'portal.leabogados.cl',                   // dominio del portal del cliente
@@ -86,6 +87,8 @@ const BRAND = {
     dolares:    { banco:'Banco BICE', cuenta:'01301087698', moneda:'USD', email:'contacto@leabogados.cl' },
   },
 }
+// Correo del propio equipo (dominio de la oficina): nunca se aprende como contacto de un cliente.
+const esCorreoOficina = e => String(e||'').trim().toLowerCase().endsWith('@'+String(BRAND.emailDominio||'').toLowerCase())
 BRAND.logoUrl = 'https://' + BRAND.dominio         // base ABSOLUTA para logos en correos (deriva del dominio, no se cablea)
 
 // ── Multi-tenant (Fase 3): la identidad del estudio puede venir de la tabla `estudios` (DB); este BRAND es el fallback.
@@ -26096,7 +26099,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       // (no repetir: la app aprende quién recibe facturas). No pisa contactos existentes.
       if(client?.id){ try{
         const yaMails=new Set((contacts||[]).map(c=>(c.email||'').toLowerCase()))
-        const nuevos=[para.trim(),...cc].map(e=>e.trim()).filter(e=>e&&e.includes('@')&&!yaMails.has(e.toLowerCase()))
+        const nuevos=[para.trim(),...cc].map(e=>e.trim()).filter(e=>e&&e.includes('@')&&!esCorreoOficina(e)&&!yaMails.has(e.toLowerCase()))
         const dedup=[...new Set(nuevos.map(e=>e.toLowerCase()))]
         if(dedup.length){ const {data:ins}=await supabase.from('contacts').insert(dedup.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))).select(); if(ins) setContacts(p=>[...p,...ins]) }
       }catch(_){} }
@@ -26213,7 +26216,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
   const proyecto = sale?.title || ''
   const isDesktop = useIsDesktop()
   const [para,setPara]=useState(client?.email||'')
-  const [cc,setCc]=useState(respEmail?[respEmail]:[]); const [ccInput,setCcInput]=useState('')
+  const [cc,setCc]=useState([respEmail,BRAND.casillaAgente].filter(Boolean)); const [ccInput,setCcInput]=useState('')
   const [contacts,setContacts]=useState([])
   const [monto,setMonto]=useState(montoInicial?String(montoInicial):'')
   const [asunto,setAsunto]=useState(`Solicitud de provisión de fondos${proyecto?` — ${proyecto}`:''}`)
@@ -26267,7 +26270,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
         if(cc.length) try{ await setLearningKV('factura_cc',String(client.id),cc.join(',')) }catch(_){}
         try{ await supabase.from('learnings').delete().eq('kind','cuenta_gastos').eq('key','estudio'); await supabase.from('learnings').insert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(cta)}) }catch(_){}
         // Los correos ingresados quedan como contactos del cliente → sugeridos en todo correo futuro (compartido con FacturaEmailModal).
-        try{ const ya=new Set(contacts.map(c=>(c.email||'').toLowerCase())); const nuevos=[...new Set([para.trim(),...cc].map(e=>String(e).trim().toLowerCase()).filter(e=>e&&e.includes('@')&&!ya.has(e)))]; if(nuevos.length) await supabase.from('contacts').insert(nuevos.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))) }catch(_){}
+        try{ const ya=new Set(contacts.map(c=>(c.email||'').toLowerCase())); const nuevos=[...new Set([para.trim(),...cc].map(e=>String(e).trim().toLowerCase()).filter(e=>e&&e.includes('@')&&!esCorreoOficina(e)&&!ya.has(e)))]; if(nuevos.length) await supabase.from('contacts').insert(nuevos.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))) }catch(_){}
       }
       // Registro permanente de la solicitud (historial + cruce con el depósito): nada sin rastro.
       try{ const {error:frErr}=await supabase.from('fund_requests').insert({ client_id:client?.id||null, sale_id:sale?.id||null, monto:+monto||0, asunto, para:para.trim(), cc:cc.join(','), enviada_por:user?.name||null, n_adjuntos:extras.length })
@@ -26388,7 +26391,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const EMAIL_BY_NAME = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
   const toEmail = x => { if(!x) return null; const s=String(x).trim(); return s.includes('@')?s.toLowerCase():(EMAIL_BY_NAME[s]||null) }
   const myEmail = (user?.email||'').toLowerCase()
-  const studioEmails = useMemo(()=>{ const set=new Set(); const resp=toEmail(client?.abogado_responsable); if(resp) set.add(resp); det.forEach(e=>{ const em=toEmail(e.created_by); if(em) set.add(em) }); set.delete(myEmail); return [...set] },[client?.abogado_responsable, det, myEmail])
+  const studioEmails = useMemo(()=>{ const set=new Set(); const resp=toEmail(client?.abogado_responsable); if(resp) set.add(resp); det.forEach(e=>{ const em=toEmail(e.created_by); if(em) set.add(em) }); if(BRAND.casillaAgente) set.add(BRAND.casillaAgente); set.delete(myEmail); return [...set] },[client?.abogado_responsable, det, myEmail])
   const [studioOn,setStudioOn] = useState(_borr?.studioOn!==false && r?._carry?.studioOn!==false)
   const [cc,setCc] = useState(Array.isArray(_borr?.cc)?_borr.cc:(r?._carry?.cc||[]))
   const [ccInput,setCcInput] = useState('')
@@ -40212,6 +40215,7 @@ export default function App() {
   // Etapa 2 multi-tenant: al resolver la sesión, cargar la identidad del estudio del usuario desde la tabla `estudios` (la RLS la filtra a la suya) → BRAND desde la DB, con la constante de fallback. Para LEA los valores son idénticos (cero cambio visible).
   useEffect(()=>{ if(DEMO || !user?.email) return; let alive=true
     supabase.from('estudios').select('*').maybeSingle().then(({data})=>{ if(alive && data){ applyEstudioToBrand(data); setBrandV(v=>v+1) } }).catch(()=>{})
+    supabase.from('learnings').select('value').eq('kind','config').eq('key','agente_casilla').order('updated_at',{ascending:false}).limit(1).then(({data})=>{ const v=String(data?.[0]?.value||'').split(/[,;\s]+/).find(e=>e.includes('@')); if(alive&&v){ BRAND.casillaAgente=v.toLowerCase(); setBrandV(x=>x+1) } },()=>{})
     return ()=>{ alive=false } },[user?.email])
   const [userRole,setUserRole]=useState(null)   // vista actual: 'admin' | 'limited' | null (admin puede previsualizar 'limited')
   const [actualRole,setActualRole]=useState(null) // rol REAL e inmutable de la DB — fuente de verdad para permisos
