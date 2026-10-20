@@ -141,6 +141,7 @@ export const demoData = {
     { id:'b13', client_id:'c3', sale_id:'s3', concept:'Litigio laboral — cuota 2',              amount:35000000, status:'Vencido',    invoice_no:'1270', issued_at:'2026-04-01', due:'2026-05-05', paid_at:'2026-05-20', paid_amount:35000000, payment_date:'2026-05-20', billing_type:'honorarios', monto_terceros:0 },
     { id:'b14', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 2/3',          amount:26000000, status:'Vencido',    invoice_no:'1248', issued_at:'2026-03-10', due:'2026-03-25', paid_at:'2026-04-15', paid_amount:26000000, reconciled_at:'2026-04-15', billing_type:'honorarios', monto_terceros:0 },
     // Programadas (futuro, cash flow)
+    { id:'b13a1', client_id:'c3', sale_id:'s13', concept:'Asesoría laboral por hora — Cuota 1/3', amount:351000, status:'Anticipada', prepaid_anticipo_id:'ant5', invoice_no:null, issued_at:null, due:'2026-09-01', billing_type:'honorarios', monto_terceros:0 },
     { id:'b15', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 3/4', amount:19500000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-07-15', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b16', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 4/4', amount:19500000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-08-15', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b17', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 3/3',          amount:26000000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-09-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
@@ -299,6 +300,8 @@ export const demoData = {
     { id:'ant1', client_id:'c4', monto:1500000, fecha:'2026-06-10', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'ant2', client_id:'c4', monto:1500000, fecha:'2026-07-15', nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'ant3', client_id:'c4', monto:1200000, fecha:'2026-08-01', nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+    { id:'ant5', client_id:'c3', sale_id:'s13', monto:200000, fecha:'2026-08-28', nota:'Honorarios sin factura (conciliación bancaria)', estado:'consumido', created_by:'Cristóbal' },
+    { id:'ant6', client_id:'c3', sale_id:'s13', billing_id:'b13a1', monto:151000, fecha:'2026-09-03', nota:'Honorarios sin factura (conciliación bancaria)', estado:'consumido', created_by:'Cristóbal' },
     { id:'ant4', client_id:'c3', monto:800000, fecha:new Date(Date.now()-5*864e5).toISOString().slice(0,10), nota:'Provisión de fondos del cliente', estado:'disponible', created_by:'Erasmo' },
   ],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.

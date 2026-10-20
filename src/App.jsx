@@ -33448,7 +33448,28 @@ function ProponerVentaPage({clients=[], sales=[], user, edit=null, onBack, onSav
 // «Por cobrar a mis clientes» (responsable limitado): FUENTE ÚNICA del acceso en Mi cartera y de su página.
 // Mis clientes = los de mis ventas (sales ya llega filtrado a las suyas) o donde soy el abogado responsable. Honorarios = porCobrarBills
 // (mismo criterio que la ficha y Cobranza); gastos = saldo en contra de fgCliente.
-function porCobrarMisClientes({clients=[], sales=[], billing=[], expenses=[], nombre=''}){
+// Número de cuota desde el concepto de la programada ("Cuota 3/8", "Cobro 2 (17.5 UF)").
+const nCuotaDe = b => { const m=String(b?.concept||'').match(/(?:Cuota|Cobro)\s+(\d+)(?:\s*\/\s*(\d+))?/i); return m?{n:+m[1],de:m[2]?+m[2]:null}:null }
+const rangoCuotas = ns => { const u=[...new Set(ns)].sort((a,b)=>a-b); if(!u.length) return ''; const seguidas=u.every((x,i)=>i===0||x===u[i-1]+1)
+  return u.length===1?`la cuota ${u[0]}`:seguidas?`las cuotas ${u[0]} a ${u[u.length-1]}`:`las cuotas ${u.slice(0,-1).join(', ')} y ${u[u.length-1]}` }
+// Pagos de clientes que entraron al banco y aún no tienen factura (anticipos sin factura o aplicados a cuotas sin folio), agrupados por cliente y trabajo.
+function pagosSinFactura({anticipos=[], billing=[], sales=[], clientIds=null}){
+  const byId={}; (billing||[]).forEach(b=>{ if(b) byId[String(b.id)]=b })
+  const prepaid={}; (billing||[]).forEach(b=>{ if(b&&!b.deleted_at&&b.prepaid_anticipo_id) prepaid[String(b.prepaid_anticipo_id)]=b })
+  const grupos={}
+  ;(anticipos||[]).forEach(a=>{ if(!a||!(Number(a.monto)>0)) return; if(clientIds&&!clientIds.has(String(a.client_id))) return
+    const fb=a.billing_id?byId[String(a.billing_id)]:null; if(fb&&fb.invoice_no) return
+    const cuota=prepaid[String(a.id)]||(fb&&!fb.invoice_no?fb:null)
+    const k=String(a.client_id)+'|'+String(a.sale_id||'')
+    const g=grupos[k]=grupos[k]||{key:k,client_id:a.client_id,sale_id:a.sale_id||null,pagos:[],total:0}
+    g.pagos.push({a,cuota,nc:cuota?nCuotaDe(cuota):null,aplicado:a.estado==='consumido'}); g.total+=Number(a.monto)||0 })
+  return Object.values(grupos).map(g=>{ g.pagos.sort((x,y)=>String(x.a.fecha||'').localeCompare(String(y.a.fecha||'')))
+    const venta=(sales||[]).find(s=>String(s.id)===String(g.sale_id))
+    const cuotasN=(billing||[]).filter(b=>b&&!b.deleted_at&&!b.invoice_no&&b.status==='Anticipada'&&g.sale_id&&String(b.sale_id)===String(g.sale_id)).map(nCuotaDe).filter(Boolean).map(x=>x.n)
+    return {...g, venta, nAplic:g.pagos.filter(p=>p.aplicado).length, nPorImputar:g.pagos.filter(p=>!p.aplicado).length, cuotas:rangoCuotas(cuotasN), ultimo:g.pagos[g.pagos.length-1]?.a.fecha, primero:g.pagos[0]?.a.fecha}
+  }).sort((a,b)=>b.total-a.total)
+}
+function porCobrarMisClientes({clients=[], sales=[], billing=[], expenses=[], anticipos=[], nombre=''}){
   const yo=_normTxt(nombre||''), ids=new Set((sales||[]).map(s=>String(s.client_id)))
   const clis=(clients||[]).filter(c=>c&&!c.is_internal&&(ids.has(String(c.id))||(!!yo&&_normTxt(c.abogado_responsable||'')===yo)))
   const mios=new Set(clis.map(c=>String(c.id)))
@@ -33456,19 +33477,21 @@ function porCobrarMisClientes({clients=[], sales=[], billing=[], expenses=[], no
     .sort((a,b)=>String(venceBill(a)||'').localeCompare(String(venceBill(b)||'')))
   const honor=porCobrarBills(bills), venc=bills.filter(esVencidaB).reduce((a,b)=>a+saldoBill(b),0)
   const gastos=clis.map(c=>({c,...fgCliente(expenses,c.id)})).filter(x=>x.saldo<0).sort((a,b)=>a.saldo-b.saldo)
-  return {clis, bills, honor, venc, alDia:honor-venc, gastos, gastosTot:gastos.reduce((a,x)=>a-x.saldo,0)}
+  const sinFac=pagosSinFactura({anticipos, billing, sales, clientIds:mios})
+  return {clis, bills, honor, venc, alDia:honor-venc, gastos, gastosTot:gastos.reduce((a,x)=>a-x.saldo,0), sinFac, sinFacTot:sinFac.reduce((a,g)=>a+g.total,0)}
 }
 // Proveedor que corresponde a un miembro del equipo (sus comisiones): por RUT del miembro (miembros.rut); si no, por el primer nombre.
 const provDeMiembro = (proveedores, nombre) => { const e=(EQUIPO_CFG||[]).find(x=>_normTxt(x.nombre)===_normTxt(nombre||'')), r=e?_nRut(e.rut):''
   return (r&&(proveedores||[]).find(p=>_nRut(p.rut)===r)) || (proveedores||[]).find(p=>nombre&&_normTxt(p.nombre||p.razon_social||'').split(' ')[0]===_normTxt(nombre).split(' ')[0]) || null }
 
-function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], currentUserName, onBack, origen='Mi cartera', onOpenClientFicha, onPedirFondos}){
+function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], anticipos=[], currentUserName, onBack, origen='Mi cartera', onOpenClientFicha, onPedirFondos}){
   const isDesktop = useIsDesktop()
-  const d = porCobrarMisClientes({clients, sales, billing, expenses, nombre:currentUserName})
+  const d = porCobrarMisClientes({clients, sales, billing, expenses, anticipos, nombre:currentUserName})
+  const [abiertoSF,setAbiertoSF] = useState(()=>new Set())
   const cliDe = id => (clients||[]).find(c=>String(c.id)===String(id))
   const ventaDe = b => (sales||[]).find(s=>String(s.id)===String(b.sale_id))
   const exportar = () => { const esc=c=>{ const x=String(c==null?'':c); return /[",\n;]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x }
-    const rows=[['Tipo','Cliente','Trabajo','Factura','Emitida','Vence','Monto']].concat(d.bills.map(b=>['Honorarios',cliDe(b.client_id)?.name||'',ventaDe(b)?.title||b.concept||'',`N° ${folioN(b.invoice_no)}`,fmtFechaDMY(String(b.issued_at||'').slice(0,10)),fmtFechaDMY(venceBill(b)),Math.round(saldoBill(b))]),d.gastos.map(x=>['Gastos por reembolsar',x.c.name,'','','','',Math.round(-x.saldo)]))
+    const rows=[['Tipo','Cliente','Trabajo','Factura','Emitida','Vence','Monto']].concat(d.bills.map(b=>['Honorarios',cliDe(b.client_id)?.name||'',ventaDe(b)?.title||b.concept||'',`N° ${folioN(b.invoice_no)}`,fmtFechaDMY(String(b.issued_at||'').slice(0,10)),fmtFechaDMY(venceBill(b)),Math.round(saldoBill(b))]),d.gastos.map(x=>['Gastos por reembolsar',x.c.name,'','','','',Math.round(-x.saldo)]),d.sinFac.flatMap(g=>g.pagos.map(p=>['Pago sin factura',cliDe(g.client_id)?.name||'',g.venta?.title||'',p.aplicado?(p.nc?`Aplicado a cuota ${p.nc.n}${p.nc.de?'/'+p.nc.de:''}`:'Aplicado a cuotas'):'Pendiente de imputación',fmtFechaDMY(String(p.a.fecha||'').slice(0,10)),'',Math.round(Number(p.a.monto)||0)])))
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+rows.map(r=>r.map(esc).join(';')).join('\n')],{type:'text/csv;charset=utf-8'})); a.download='por_cobrar_mis_clientes.csv'; document.body.appendChild(a); a.click(); a.remove() }
   const card = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
   const num = {fontVariantNumeric:'tabular-nums'}
@@ -33507,6 +33530,25 @@ function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], curre
           {d.bills.length>1&&<div style={{display:'flex',justifyContent:'space-between',padding:'9px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,fontWeight:700}}><span>{d.bills.length} facturas</span><span style={num}>{fmt(d.honor)}</span></div>}
         </div>
       </div>
+      {d.sinFac.length>0&&<div>
+        <div style={{display:'flex',alignItems:'baseline',marginBottom:6}}><span style={{...SEC_LBL,flex:1}}>Pagos recibidos sin factura</span><b style={{fontSize:12.5,color:C.accent,...num}}>{fmt(d.sinFacTot)}</b></div>
+        <div style={{...card,overflow:'hidden'}}>
+          {d.sinFac.map(g=>{ const c=cliDe(g.client_id), ab=abiertoSF.has(g.key)
+            const estado = g.nPorImputar===0 ? `aplicado${g.pagos.length!==1?'s':''} a ${g.cuotas||'cuotas'} · factura pendiente de emisión` : g.nAplic===0 ? 'pendientes de imputación' : `${g.nAplic} aplicado${g.nAplic!==1?'s':''} · ${g.nPorImputar} por imputar`
+            const estadoM = g.nPorImputar===0 ? `${g.cuotas?g.cuotas.replace(/^(la|las) /,''):'cuotas'} · sin factura` : g.nAplic===0 ? 'por imputar a cuotas' : `${g.nPorImputar} por imputar`
+            const toggle = () => setAbiertoSF(p=>{ const n=new Set(p); n.has(g.key)?n.delete(g.key):n.add(g.key); return n })
+            return (<div key={g.key}>
+              {fila(g.key, diaGrande(g.ultimo),
+                <><div style={{fontSize:12.5,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span onClick={c&&onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(c.id)}:undefined} style={{cursor:c&&onOpenClientFicha?'pointer':'default',textDecoration:'underline',textDecorationColor:C.border,textUnderlineOffset:2}}>{c?.name||'Sin cliente'}</span>{isDesktop&&g.venta?.title&&<span style={{fontWeight:500,color:C.muted}}> · {g.venta.title}</span>}</div>
+                  <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.pagos.length} pago{g.pagos.length!==1?'s':''}{isDesktop?` desde el ${fmtFechaDMY(String(g.primero||'').slice(0,10))}`:''} · {isDesktop?estado:estadoM}</div></>,
+                <><span style={{fontSize:13,fontWeight:700,color:C.text,...num,flexShrink:0}}>{fmt(g.total)}</span><span style={{color:C.done,flexShrink:0,display:'inline-flex',transform:ab?'rotate(-90deg)':'rotate(90deg)'}}><Gl n='chevron'/></span></>,
+                toggle)}
+              {ab&&g.pagos.map(p=><div key={p.a.id} style={{display:'flex',alignItems:'center',gap:10,padding:isDesktop?'7px 14px 7px 62px':'7px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12}}>
+                <div style={{flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span style={{color:C.text}}>{fmtFechaDMY(String(p.a.fecha||'').slice(0,10))}</span> <span style={{color:C.muted}}>· {p.aplicado?(p.nc?`${isDesktop?'aplicado a ':''}cuota ${p.nc.n}${p.nc.de?'/'+p.nc.de:''}`:'aplicado a cuotas'):'pendiente de imputación'}</span></div>
+                <span style={{fontWeight:600,color:C.text,...num,flexShrink:0}}>{fmt(p.a.monto)}</span></div>)}
+            </div>) })}
+        </div>
+      </div>}
       <div>
         <div style={{...SEC_LBL,marginBottom:6}}>Gastos por reembolsar</div>
         <div style={{...card,overflow:'hidden'}}>
@@ -42180,7 +42222,7 @@ export default function App() {
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView setTercerosRoot={setTerceros} openCajaChicaRev={ccRevFocus} sales={sales} setRendiciones={setRendiciones} onCajaChicaRevConsumed={()=>setCcRevFocus(false)} onOpenProveedor={id=>navTo({tab:'proveedores',provId:id})} onOpenFactura={b=>setModal({type:'billing',data:b})} clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='misComisiones'&&userRole==='limited'&&miProv&&<ProveedoresView soloProvId={miProv.id} proveedores={[miProv]} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} user={user} onOpenClientFicha={handleOpenClientFicha} onBack={goBack} origen={origenLim||origenNav('Mi cartera')}/>}
             {tab==='proponerVenta'&&userRole==='limited'&&<ProponerVentaPage clients={clients} sales={sales} user={user} edit={propEdit} onBack={goBack} onSaved={sv=>{ setSales(p=>p.some(x=>x.id===sv.id)?p.map(x=>x.id===sv.id?sv:x):[sv,...p]); setPropEdit(null); goBack() }}/>}
-            {tab==='porCobrarMios'&&userRole==='limited'&&<PorCobrarMiosPage clients={clients} sales={sales} billing={billing} expenses={expenses} currentUserName={user?.name} onBack={goBack} origen={origenLim||origenNav('Mi cartera')} onOpenClientFicha={handleOpenClientFicha} onPedirFondos={(c,m)=>setModal({type:'solicitarFondos',data:{client:c,sale:null,monto:Math.round(m)||null,responsable:user?.name||null}})}/>}
+            {tab==='porCobrarMios'&&userRole==='limited'&&<PorCobrarMiosPage clients={clients} sales={sales} billing={billing} expenses={expenses} anticipos={anticipos} currentUserName={user?.name} onBack={goBack} origen={origenLim||origenNav('Mi cartera')} onOpenClientFicha={handleOpenClientFicha} onPedirFondos={(c,m)=>setModal({type:'solicitarFondos',data:{client:c,sale:null,monto:Math.round(m)||null,responsable:user?.name||null}})}/>}
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} resumenCom={resumenComLim} resumenCobro={resumenCobroLim} onMisComisiones={miProv?()=>navTo({tab:'misComisiones'}):null} onPorCobrar={resumenCobroLim?()=>navTo({tab:'porCobrarMios'}):null} proyEquipo={proyEquipo} proyHitos={proyHitos} expenses={expenses} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onProponerVenta={(miProv||resumenCobroLim)?(v=>{ setPropEdit(v); navTo({tab:'proponerVenta'}) }):null} propuestas={(sales||[]).filter(x=>x&&!x.deleted_at&&x.status==='Propuesta'&&x.propuesta_de&&_normTxt(x.propuesta_de)===_normTxt(user?.name||''))} onClose={goBack} origen={origenNav('Inicio')} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
             {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onSaveOperacion={handleSaveOperacion} onDelOperacion={handleDelOperacion} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarEvidencia={handleAplicarEvidencia} onDescartarEvidencia={handleDescartarEvidencia} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} terceros={terceros} billing={billing} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
