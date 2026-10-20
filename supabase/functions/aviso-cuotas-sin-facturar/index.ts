@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
   if (body.dryRun) return json({ ok: true, olvidadas: olv.length, clientes: nCli, monto: total, dryRun: true, subject: asunto, html });
   if (!ON) return json({ ok: true, olvidadas: olv.length, clientes: nCli, monto: total, enviado: false, motivo: "interruptor apagado (learnings config aviso_cuotas != on) - dry-run", detalle: olv });
 
-  const to = body.testTo ? String(body.testTo) : SOCIOS.join(", ");
+  const to = body.testTo ? String(body.testTo) : [...SOCIOS];
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
     await client.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to, subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
