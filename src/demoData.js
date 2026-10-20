@@ -42,6 +42,8 @@ export const demoData = {
     { id:'p5', cliente_id:'c4', nombre_proyecto:'Due diligence de compra', estado:'verde', etapa_idx:1, responsable:'MC', nota:'Revisando carpeta tributaria en Drive', plazo_label:null, plazo:null, ultima_actividad:new Date(Date.now()-1*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
     { id:'p6', cliente_id:'c2', nombre_proyecto:'Reorganización Ríofrío', estado:'verde', etapa_idx:1, responsable:'EE', nota:'Holding familiar', plazo_label:null, plazo:new Date(Date.now()+30*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-3*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
   ],
+  // Equipo de los proyectos (proyecto_equipo): responsables + Martín de apoyo en la reestructuración de Cristóbal (demo de «Donde colaboras»).
+  proyecto_equipo: [ {proyecto_id:'p1',miembro:'CL',rol:'responsable'}, {proyecto_id:'p1',miembro:'MC',rol:'apoyo'}, {proyecto_id:'p2',miembro:'RD',rol:'responsable'}, {proyecto_id:'p3',miembro:'EE',rol:'responsable'}, {proyecto_id:'p4',miembro:'MP',rol:'responsable'}, {proyecto_id:'p5',miembro:'MC',rol:'responsable'}, {proyecto_id:'p6',miembro:'EE',rol:'responsable'} ],
   // OLA 3 — de qué operación nació cada proyecto (para que la biblioteca aprenda del uso). p1 y p6 = reorganización (op2).
   pmo_proy_op: { p1:'op2', p6:'op2' },
   // OLA 4 — plazos legales del cliente (tabla plazos), para integrarlos al Calendario del proyecto. Título de práctica legal real.
