@@ -185,6 +185,7 @@ export const demoData = {
     { id:'x3', client_id:'c1', entity_id:'e1', type:'gasto', amount:320000, concept:'Inscripción Conservador', category:'CBR', revision_estado:'consultar', revisado_por:'Martín',      date:'2026-03-10', created_by:'Martín',  client_rendered_at:null },
     { id:'x4', client_id:'c2', type:'gasto', amount:180000, concept:'Notaría — escritura',     category:'Notaria',        date:'2026-04-02', created_by:'Martín',  paid_by_client:false },
     { id:'x5', client_id:'c5', type:'gasto', amount:95000,  concept:'Registro de marca INAPI',  category:'Otro',           date:'2026-05-09', created_by:'Martina', sale_id:'s5', project:'Constitución y registro de marcas' },
+    { id:'x5b', client_id:'c5', type:'gasto', amount:95000,  concept:'Registro marca INAPI',  category:'Otro',           date:'2026-05-09', created_by:'Martina', created_at:'2026-05-20T10:00:00', sale_id:'s5', project:'Constitución y registro de marcas' },
     { id:'xf5', client_id:'c5', type:'fondo', amount:200000, concept:'Provisión de fondos', category:'Fondo', date:'2026-05-02', sale_id:'s5', project:'Constitución y registro de marcas' },
     { id:'x6', client_id:'c6', type:'gasto', amount:60000,  concept:'Certificados',             category:'Registro Civil', date:'2026-05-20', created_by:'Martina', },
     // Caja chica (gastos por persona, varios sin liquidar)

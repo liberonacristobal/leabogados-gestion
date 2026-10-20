@@ -742,6 +742,26 @@ function cuotasOlvidadas(saleBills=[]){
 // ─── Conciliación de facturas: motor de cruce + auto-generación de conocimiento ───
 // Normaliza texto (sin tildes/símbolos) y mide similitud por tokens (Jaccard) 0..1, para cruzar glosa↔proyecto.
 const _normTxt = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
+// Posibles duplicados de gastos — REGLA ÚNICA (caja chica y rendición a cliente): mismo monto y misma fecha con glosa
+// parecida (o igual), o la misma OT de notaría. Devuelve Map id → gasto con que se repite (el más antiguo del grupo no se marca).
+function posiblesDuplicadosGastos(gastos){
+  const out=new Map(), grupos={}
+  ;(gastos||[]).forEach(e=>{ if(!e||e.deleted_at||!Number(e.amount)) return; const k=`${Math.round(Number(e.amount))}|${e.date||''}`; (grupos[k]||(grupos[k]=[])).push(e) })
+  Object.values(grupos).forEach(g=>{ if(g.length<2) return; const ord=[...g].sort((a,b)=>String(a.created_at||a.id).localeCompare(String(b.created_at||b.id)))
+    for(let i=1;i<ord.length;i++){ const b=ord[i]; const a=ord.slice(0,i).find(x=>gastosParecidos(x,b)); if(a) out.set(b.id,a) } })
+  return out
+}
+// Dos gastos del mismo monto y día son el MISMO solo si nada los distingue: OT distintas o números de registro/operación
+// distintos en la glosa (p. ej. tasas INAPI por marcas diferentes) = gastos distintos, aunque el texto sea casi igual.
+const _numsGlosa = t => new Set((String(t||'').match(/\d[\d.\-]{2,}\d/g)||[]).map(x=>x.replace(/\D/g,'')).filter(x=>x.length>=4))
+function gastosParecidos(x,b){
+  if(x.ot_number&&b.ot_number) return String(x.ot_number).replace(/\D/g,'')===String(b.ot_number).replace(/\D/g,'')
+  const ca=x.concept||'', cb=b.concept||''; if(!ca||!cb) return false
+  const na=_numsGlosa(ca), nb=_numsGlosa(cb); if(na.size&&nb.size&&![...na].some(n=>nb.has(n))) return false
+  if(_normTxt(ca)===_normTxt(cb)||simTexto(ca,cb)>=0.55) return true
+  const wa=_normTxt(ca).split(' ').filter(w=>w.length>2), wb=new Set(_normTxt(cb).split(' ').filter(w=>w.length>2)), wa2=new Set(wa)
+  const [corto,largo]=wa2.size<=wb.size?[wa2,wb]:[wb,wa2]; return corto.size>=3&&[...corto].every(w=>largo.has(w))
+}
 const simTexto = (a,b) => { const A=new Set(_normTxt(a).split(' ').filter(w=>w.length>2)), B=new Set(_normTxt(b).split(' ').filter(w=>w.length>2)); if(!A.size||!B.size) return 0; let i=0; A.forEach(w=>{ if(B.has(w)) i++ }); return i/(A.size+B.size-i) }
 // Normalizador ÚNICO de nombres de cliente (mismo criterio que el edge function clientes-drive-sync): minúsculas + sin acentos + espacios colapsados. Anti-duplicados.
 const nrmCliente = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim()
@@ -2178,16 +2198,14 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
   const asistFindings = useMemo(()=>{
     if(!asistRan) return null
     // Posibles duplicados: mismo monto y misma fecha con glosa parecida → se marca todo menos el primero del grupo.
-    const grupos = {}
-    misPendientes.forEach(e=>{ const k=`${e.amount||0}|${e.date||''}`; (grupos[k]||(grupos[k]=[])).push(e) })
-    const dupFlag = new Set()
-    Object.values(grupos).forEach(g=>{ if(g.length<2) return; const ord=[...g].sort((a,b)=>(String(a.id)>String(b.id)?1:-1)); for(let i=1;i<ord.length;i++){ const a=ord[0],b=ord[i]; const sim=simTexto(a.concept||'',b.concept||''); if((a.concept||'')&&(b.concept||'')&&(sim>=0.55||_normTxt(a.concept)===_normTxt(b.concept))) dupFlag.add(b.id) } })
+    const _dupM = posiblesDuplicadosGastos(misPendientes)
+    const dupFlag = new Set(_dupM.keys())
     const revisar=[], listos=[]
     misPendientes.forEach(e=>{
       const sug=iaSug[e.id]||{}
       if(!e.client_id){ revisar.push({e,tipo:'cliente',sug}); return }
       if(!e.category){ revisar.push({e,tipo:'categoria',sug}); return }
-      if(dupFlag.has(e.id)&&!dupOk.has(e.id)){ revisar.push({e,tipo:'dup',ref:(grupos[`${e.amount||0}|${e.date||''}`]||[]).find(x=>String(x.id)!==String(e.id))}); return }
+      if(dupFlag.has(e.id)&&!dupOk.has(e.id)){ revisar.push({e,tipo:'dup',ref:_dupM.get(e.id)}); return }
       listos.push(e)
     })
     const totListos = listos.reduce((a,e)=>a+(e.amount||0),0)
@@ -16689,6 +16707,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
 
   // Gastos disponibles para rendir (no rendidos aun), acotados al proyecto elegido.
   // Un gasto pertenece al proyecto si tiene esa glosa de proyecto O está vinculado a su venta (sale_id).
+  // Posibles duplicados del cliente (misma regla que caja chica): se comparan con todos sus gastos, también los ya rendidos.
+  const dupRend = posiblesDuplicadosGastos(allMovs.filter(e=>e.type==='gasto'))
   const disponibles = allMovs.filter(e=>{
     if(e.type!=='gasto') return false
     const mine = esEdicion && String(e.client_render_id)===String(editRend.id)   // gasto que YA está en esta rendición: siempre visible (pre-marcado)
@@ -17016,14 +17036,16 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         {_uno&&fondosDisp>_uno.f.totFondos&&<div style={{fontSize:11.5,color:C.textSoft,marginTop:4}}>Otros {fmtN(fondosDisp-_uno.f.totFondos)} en fondos del cliente están asignados a otro trabajo.</div>}
       </div>
   )
+  const nDupR = disponibles.filter(e=>dupRend.has(e.id)).length
   const bLista = (<>
+      {!isDesktop&&nDupR>0&&<div style={{fontSize:11.5,fontWeight:700,color:C.overdueText,marginBottom:6}}>{nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</div>}
       {wipRec&&selected.size>0&&<div style={{display:'flex',alignItems:'center',gap:8,background:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>
         <span style={{flex:1,minWidth:0,fontSize:11.5,color:C.accent,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Selección recuperada · {selected.size} gasto{selected.size!==1?'s':''}</span>
         <button onClick={()=>{ setSelected(new Set()); setWipRec(false) }} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Descartar</button>
       </div>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles</span>
+          <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles{isDesktop&&nDupR>0&&<b style={{color:C.overdueText,fontWeight:700}}> · {nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</b>}</span>
           <button onClick={()=>setShowFiltroFecha(v=>!v)} style={{fontSize:10,color:(fDesde||fHasta)?C.accent:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Filtrar por fecha{(fDesde||fHasta)?' ·':''} {showFiltroFecha?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>
         </div>
         {disponibles.length>0&&<button onClick={toggleAll} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>
@@ -17063,6 +17085,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
                 <div style={{fontSize:10,color:C.muted,marginTop:1,display:'flex',gap:5,alignItems:'center'}}>
                   {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
                   {e.category&&<span style={{padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{e.category}</span>}
+                  {dupRend.has(e.id)&&(()=>{ const r=dupRend.get(e.id); return <span title={`Mismo monto y fecha que «${r.concept||'—'}»${r.client_rendered_at?' (ya rendido)':''}`} style={{padding:'2px 8px',borderRadius:20,background:C.overdueBg,color:C.overdueText,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{r.client_rendered_at?'Posible duplicado · ya rendido':'Posible duplicado'}</span> })()}
                 </div>
               </div>
               <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtN(e.amount)}</div>
@@ -40331,7 +40354,11 @@ export default function App() {
   const [loading,setLoading]=useState(false)
   const [booted,setBooted]=useState(false)   // primera carga completada: las recargas posteriores NO desmontan la UI (no te sacan de donde estabas)
   const [saving,setSaving]=useState(false)
-  const [tab,setTab]=useState('dashboard')
+  // Pestaña en curso guardada en la sesión del navegador (30 min): si el iPhone recarga la app al volver de otra, se sigue donde estaba.
+  const _TAB_KEY='fd_tab_actual', _TAB_PAGINAS=['tarea','gasto','flujo','factura','editCliente']
+  const [_tabGuardado] = useState(()=>{ try{ const v=JSON.parse(sessionStorage.getItem(_TAB_KEY)||'null'); return v&&v.tab&&!_TAB_PAGINAS.includes(v.tab)&&Date.now()-(v.at||0)<30*60*1000?v.tab:null }catch(_){ return null } })
+  const [tab,setTab]=useState(()=>_tabGuardado||'dashboard')
+  useEffect(()=>{ if(_TAB_PAGINAS.includes(tab)) return; try{ sessionStorage.setItem(_TAB_KEY,JSON.stringify({tab,at:Date.now()})) }catch(_){} },[tab])   // eslint-disable-line react-hooks/exhaustive-deps
   // Registro de pantallas visitadas (usage_events area 'vista'): para saber con datos qué se usa antes de rediseñar o quitar algo.
   useEffect(()=>{ if(DEMO||!user?.email) return; logEvent('vista',tab,{},user?.name||user?.email) },[tab,user?.email])   // eslint-disable-line
   const isDesktop = useIsDesktop()   // Fase 1: shell de escritorio (sidebar + ancho) vs móvil actual
@@ -40579,6 +40606,10 @@ export default function App() {
       if((data||[]).length) setEquipoCfg(eq)                // equipo (no-socios con RUT) para el tagger de conciliación
     }catch(_){}
   },[])
+  // El limitado parte en Tareas SOLO al entrar. Supabase vuelve a avisar la sesión cada vez que la app regresa a primer plano
+  // (iPhone: cambiar de app y volver); antes cada aviso lo devolvía a Tareas y perdía la página en que estaba.
+  const _rolInicial = useRef(true)
+  const _aTareasSoloAlEntrar = () => { if(_rolInicial.current){ _rolInicial.current=false; setTab(t=>_tabGuardado&&t===_tabGuardado&&TABS_LIMITED.some(x=>x.id===t)?t:'tasks') } }
   const loadUserRole = async(email) => {
     // Fuente tenant-aware: `miembros` (email→estudio_id→rol+nombre). Si hay fila, manda.
     // Si no hay fila o falla, cae al comportamiento actual (user_roles) → nunca deja al usuario sin rol.
@@ -40586,7 +40617,7 @@ export default function App() {
       const rm=await supabase.from('miembros').select('estudio_id,rol,nombre').eq('email',(email||'').toLowerCase()).maybeSingle()
       if(!rm.error && rm.data && rm.data.rol){
         setActualRole(rm.data.rol); setUserRole(rm.data.rol)
-        if(rm.data.rol==='limited') setTab('tasks')
+        if(rm.data.rol==='limited') _aTareasSoloAlEntrar(); else _rolInicial.current=false
         loadSocios(rm.data.estudio_id)
         return { role:rm.data.rol, name:rm.data.nombre || (email||'').split('@')[0], estudio_id:rm.data.estudio_id }
       }
@@ -40599,7 +40630,7 @@ export default function App() {
     if(data) {
       setActualRole(data.role)
       setUserRole(data.role)
-      if(data.role==='limited') setTab('tasks')
+      if(data.role==='limited') _aTareasSoloAlEntrar(); else _rolInicial.current=false
       return data
     }
     // Sin fila en `miembros` NI en `user_roles` (ambas queries OK): DESCONOCIDO → denegar.
