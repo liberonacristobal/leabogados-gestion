@@ -57,11 +57,12 @@ export function elegirCombo(mov, pool) {
   const pm = (mov.fecha || '').slice(0, 7), M = mov.monto || 0
   const fs = (pool || []).filter(x => x.saldo > 0 && x.saldo < M && (() => { const d = mesDiff((x.b.issued_at || '').slice(0, 7), pm); return d == null || d <= 0 })())
     .sort((a, b) => (a.b.issued_at || '').localeCompare(b.b.issued_at || ''))
-  if (fs.length < 2 || fs.length > 45) return null
+  if (fs.length < 2) return null   // el tope de 45 es solo para tríos e iguales (pares: como la app de antes)
   const elegir = sets => { if (!sets.length) return null; const k = s => s.map(x => x.saldo).sort((a, b) => a - b).join(','); const k0 = k(sets[0]); if (!sets.every(s => k(s) === k0)) return null
     const fe = s => s.map(x => x.b.issued_at || '').sort().join('|'); return [...sets].sort((a, b) => fe(a).localeCompare(fe(b)))[0].map(x => x.b) }
   const pares = []; for (let i = 0; i < fs.length; i++) for (let j = i + 1; j < fs.length; j++) if (fs[i].saldo + fs[j].saldo === M) pares.push([fs[i], fs[j]])
   if (pares.length) return elegir(pares)
+  if (fs.length > 45) return null
   const trios = []; for (let i = 0; i < fs.length; i++) for (let j = i + 1; j < fs.length; j++) for (let k = j + 1; k < fs.length; k++) if (fs[i].saldo + fs[j].saldo + fs[k].saldo === M) trios.push([fs[i], fs[j], fs[k]])
   if (trios.length) return elegir(trios)
   const porMonto = {}; fs.forEach(x => { (porMonto[x.saldo] = porMonto[x.saldo] || []).push(x) })
@@ -162,5 +163,6 @@ export function repartoContadora(monto, valores, retenciones) {
   const sel = uno.length === 1 ? uno : (its.reduce((s, i) => s + Math.round(Number(i.monto)), 0) === M ? its : null)
   if (!sel) return null
   const out = sel.map(partes); if (out.some(x => !x) || out.flat().some(p => p.monto < 0)) return null
-  return out.flat()
+  // PPM igual a las retenciones: no queda gasto de PPM (solo la parte «tercero»); nunca un gasto ni una conciliación en $0.
+  return out.flat().filter(p => p.monto > 0)
 }
