@@ -1,6 +1,6 @@
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
-// notaria-pedir-liquidacion — recordatorio para pedir a la notaría su liquidación (días 10 y 20 de cada mes).
+// notaria-pedir-liquidacion — recordatorio para pedir a la notaría su liquidación (días de config, hoy 15 y 30 de cada mes).
 // Si el día cae sábado, domingo o feriado (tabla `feriados`), sale el DÍA HÁBIL SIGUIENTE. Corre por cron cada día hábil;
 // solo envía el día que corresponde y una sola vez por fecha (dedupe en la bitácora activity_log).
 // "Desde" = día siguiente a la OT de notaría más reciente ya cargada (expenses Notaria con OT) → no se piden OT repetidas.
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
   if (raw.toLowerCase() === "off" && !testTo) return json({ ok: true, skipped: "apagado" });
   // deno-lint-ignore no-explicit-any
   let cfg: any = {}; try { cfg = raw ? JSON.parse(raw) : {}; } catch { cfg = {}; }
-  const dias: number[] = Array.isArray(cfg.dias) && cfg.dias.length ? cfg.dias.map(Number).filter((n: number) => n >= 1 && n <= 28) : [10, 20];
+  const dias: number[] = Array.isArray(cfg.dias) && cfg.dias.length ? cfg.dias.map(Number).filter((n: number) => n >= 1 && n <= 31) : [15, 30];
   const to: string = String(cfg.to || "");
   const cc: string[] = Array.isArray(cfg.cc) ? cfg.cc.filter((x: string) => String(x).includes("@")) : [];
   const nombreEstudio = est?.[0]?.nombre || "Liberona Escala Abogados";
@@ -71,10 +71,17 @@ Deno.serve(async (req) => {
   const esHabil = (d: Date) => { const w = d.getDay(); return w !== 0 && w !== 6 && !feriados.has(iso(d)); };
   const today = body.fecha && /^\d{4}-\d{2}-\d{2}$/.test(body.fecha) ? new Date(body.fecha + "T00:00:00") : hoySantiago();
   let slot: string | null = null;
-  for (const dia of dias) {
-    const d = new Date(today.getFullYear(), today.getMonth(), dia); let g = 0;
-    while (!esHabil(d) && g++ < 10) d.setDate(d.getDate() + 1);
-    if (iso(d) === iso(today)) { slot = iso(new Date(today.getFullYear(), today.getMonth(), dia)); break; }
+  // Mes anterior y actual: el hábil siguiente puede caer en el mes que viene (28-02-2027 domingo → 01-03).
+  for (const off of [-1, 0]) {
+    for (const dia of dias) {
+      // Un día que el mes no tiene (30 en febrero) → el último día del mes; luego, el hábil siguiente.
+      const y = today.getFullYear(), m = today.getMonth() + off;
+      const ultimo = new Date(y, m + 1, 0).getDate(), base = new Date(y, m, Math.min(dia, ultimo));
+      const d = new Date(base); let g = 0;
+      while (!esHabil(d) && g++ < 10) d.setDate(d.getDate() + 1);
+      if (iso(d) === iso(today)) { slot = iso(base); break; }
+    }
+    if (slot) break;
   }
   // ── Pedido directo a la notaría (config "notaria") ──────────────────────────────────────────────────────────────
   const notaria: string[] = Array.isArray(cfg.notaria) ? cfg.notaria.filter((x: string) => String(x).includes("@")) : [];
