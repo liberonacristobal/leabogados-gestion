@@ -42,65 +42,63 @@ Deno.serve(async (req) => {
   const esCron = !!CRON_SECRET && (body.secret === CRON_SECRET || bearer === CRON_SECRET);
   if (!esCron) return json({ error: "No autorizado" }, 403);
 
-  // Feriados + coberturas POR CUENTA + última fecha con movimientos de cada cuenta.
-  // Antes era una sola cobertura global y solo miraba los días POSTERIORES a la última carga: no veía (a) un día que faltó en
-  // medio (29-09-2026: se perdió un cargo de $60.000) ni (b) que la cuenta de gastos dejó de llegar (solo entra a mano).
-  const CTAS = [{ rol: "honorarios", et: "01-40383-4", diaria: true }, { rol: "gastos", et: "01-38392-2", diaria: false }];
-  const [fer, cargasAll, ...ultMovs] = await Promise.all([
+  // Solo avisa SALTOS REALES: un día hábil de la cuenta con envío diario (honorarios) que ninguna carga cubre — ni la diaria
+  // de ese día, ni una diaria posterior (son acumuladas desde el día 1 del mes), ni una carga manual o «sin movimientos».
+  // No avisa atrasos de la cuenta de gastos: llega solo a mano, por diseño, y eso no es un salto (usuario 21-10-2026).
+  // Cada salto se avisa UNA vez (learnings config alerta_cartola_avisados = días ya avisados); la tarjeta de Conciliación
+  // lo sigue mostrando hasta que se cargue.
+  const [fer, cargas, cfgAv] = await Promise.all([
     sb("feriados?select=fecha"),
-    sb("cartola_cargas?select=fecha_desde,fecha_hasta,rol_cuenta,origen"),
-    ...CTAS.map((c) => sb(`cartola_movimientos?select=fecha&rol_cuenta=eq.${c.rol}&order=fecha.desc&limit=1`)),
+    sb("cartola_cargas?select=fecha_desde,fecha_hasta,rol_cuenta&or=(rol_cuenta.is.null,rol_cuenta.eq.honorarios)"),
+    sb("learnings?select=id,value&kind=eq.config&key=eq.alerta_cartola_avisados"),
   ]);
   const feriados = new Set((fer || []).map((f) => String(f.fecha).slice(0, 10)));
-  const esHabil = (d: Date) => { const w = d.getDay(); if (w === 0 || w === 6) return false; return !feriados.has(iso(d)); };
+  // 31-dic = feriado bancario: BICE no envía cartola ese día aunque no esté en la tabla de feriados.
+  const esHabil = (d: Date) => { const w = d.getDay(); if (w === 0 || w === 6) return false; const s = iso(d); return !feriados.has(s) && !s.endsWith("-12-31"); };
   const today = hoy();
-  const gap: string[] = [];          // días hábiles sin cartola de la cuenta con envío diario (honorarios), últimos 30 días
-  const atrasos: string[] = [];      // cuentas sin cartola hace más de 5 días hábiles
-  let lastCov: string | null = null;
-  CTAS.forEach((c, k) => {
-    const cov = new Set<string>(); let maxCarga: string | null = null;
-    // Cargas sin cuenta ('sin movimientos' marcados en la app) cubren ambas cuentas.
-    for (const r of (cargasAll || []).filter((r) => !r.rol_cuenta || r.rol_cuenta === c.rol)) {
-      let d = new Date(String(r.fecha_desde) + "T00:00:00"); const h = new Date(String(r.fecha_hasta) + "T00:00:00"); let g = 0;
-      while (d <= h && g++ < 400) { cov.add(iso(d)); d.setDate(d.getDate() + 1); }
-      if (r.rol_cuenta === c.rol) { const fh = String(r.fecha_hasta).slice(0, 10); if (!maxCarga || fh > maxCarga) maxCarga = fh; }
-    }
-    const maxMov = ultMovs[k]?.[0]?.fecha ? String(ultMovs[k][0].fecha).slice(0, 10) : null;
-    const ult = [maxCarga, maxMov].filter(Boolean).sort().pop() || null;
-    if (c.diaria) {
-      lastCov = ult;
-      const d = new Date(today); d.setDate(d.getDate() - 30); let guard = 0;
-      while (d < today && guard++ < 40) { const s = iso(d); if (esHabil(d) && !cov.has(s)) gap.push(s); d.setDate(d.getDate() + 1); }
-    }
-    if (ult) { let n = 0; const d = new Date(ult + "T00:00:00"); d.setDate(d.getDate() + 1); let guard = 0; while (d < today && guard++ < 90) { if (esHabil(d)) n++; d.setDate(d.getDate() + 1); } if (n > 5) atrasos.push(`Cuenta ${c.rol} ${c.et}: sin cartola desde el ${lindo(ult)} (${n} días hábiles)`); }
-  });
-  if (!gap.length && !atrasos.length) return json({ ok: true, gap: 0, ultima: lastCov });
+  const cov = new Set<string>(); let lastCov: string | null = null;
+  for (const r of cargas || []) {
+    let d = new Date(String(r.fecha_desde) + "T00:00:00"); const h = new Date(String(r.fecha_hasta) + "T00:00:00"); let g = 0;
+    while (d <= h && g++ < 400) { cov.add(iso(d)); d.setDate(d.getDate() + 1); }
+    const fh = String(r.fecha_hasta).slice(0, 10); if (!lastCov || fh > lastCov) lastCov = fh;
+  }
+  // Días hábiles de los últimos 30 hasta AYER: la cartola de hoy trae los movimientos hasta el día hábil anterior.
+  const gap: string[] = [];
+  { const d = new Date(today); d.setDate(d.getDate() - 30); let guard = 0;
+    while (d < today && guard++ < 40) { const s = iso(d); if (esHabil(d) && !cov.has(s)) gap.push(s); d.setDate(d.getDate() + 1); } }
+  let avisados: string[] = []; try { avisados = JSON.parse(String(cfgAv?.[0]?.value || "[]")); } catch { avisados = []; }
+  const nuevos = gap.filter((s) => !avisados.includes(s));
+  if (!nuevos.length && !body.dryRun) return json({ ok: true, gap: gap.length, nuevos: 0, ultima: lastCov });
 
   // Interruptor de envío (base): learnings config alerta_cartola = 'on'
   const cfg = await sb("learnings?select=value&kind=eq.config&key=eq.alerta_cartola");
   const ON = String(cfg?.[0]?.value || "off").trim().toLowerCase() === "on";
 
-  const asunto = gap.length === 1 ? `Falta la cartola BICE del ${lindo(gap[0])}` : gap.length ? `${gap.length} días sin cartola BICE` : `Cartola BICE atrasada`;
+  const asunto = gap.length === 1 ? `Falta la cartola BICE del ${lindo(gap[0])}` : `${gap.length} días sin cartola BICE`;
   const lista = gap.map(lindo).join(", ");
   const html = `<div style="font-family:-apple-system,Arial,sans-serif;max-width:520px;color:#3D3D3D;font-size:14px;line-height:1.55">
     <p>Hola:</p>
     <ul style="margin:8px 0 12px;padding-left:18px">
-      ${gap.length ? `<li><b>Cuenta honorarios, falta${gap.length !== 1 ? "n" : ""}:</b> ${lista}</li>` : ""}
-      ${atrasos.map((a) => `<li>${a}</li>`).join("")}
+      <li><b>Cuenta honorarios, falta${gap.length !== 1 ? "n" : ""}:</b> ${lista}</li>
       ${lastCov ? `<li><b>Movimientos cargados hasta (honorarios):</b> ${lindo(lastCov)}</li>` : ""}
     </ul>
-    <p>Mientras falte, los pagos de esos días quedan <b>sin conciliar</b>. Carga la cartola en la app o pídela a BICE.</p>
+    <p>Ninguna cartola posterior trae los movimientos de ${gap.length !== 1 ? "esos días" : "ese día"}: quedan <b>sin conciliar</b>. Carga la cartola en la app o pídela a BICE.</p>
     <p style="color:#99ABB4;font-size:12px;margin-top:20px">Liberona Escala Abogados &middot; aviso automático de cartolas</p>
   </div>`;
 
-  if (!ON) return json({ ok: true, gap: gap.length, dias: gap, atrasos, ultima: lastCov, enviado: false, motivo: "interruptor apagado (learnings config alerta_cartola != on) — dry-run" });
+  if (!ON || body.dryRun) return json({ ok: true, gap: gap.length, dias: gap, nuevos: nuevos.length, ultima: lastCov, enviado: false, motivo: body.dryRun ? "dry-run pedido" : "interruptor apagado (learnings config alerta_cartola != on) — dry-run" });
 
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
     await client.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: [...SOCIOS], subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
     await client.close();
-    return json({ ok: true, gap: gap.length, dias: gap, ultima: lastCov, enviado: true });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
+  // Recordar los días avisados (solo los que siguen en la ventana) para no repetir el correo por el mismo salto.
+  const val = JSON.stringify([...new Set([...avisados.filter((s) => gap.includes(s)), ...gap])].sort());
+  const hdr = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" };
+  if (cfgAv?.[0]?.id) await fetch(`${SB_URL}/rest/v1/learnings?id=eq.${cfgAv[0].id}`, { method: "PATCH", headers: hdr, body: JSON.stringify({ value: val }) });
+  else await fetch(`${SB_URL}/rest/v1/learnings`, { method: "POST", headers: hdr, body: JSON.stringify({ kind: "config", key: "alerta_cartola_avisados", value: val, estudio_id: "lea" }) });
+  return json({ ok: true, gap: gap.length, dias: gap, nuevos: nuevos.length, ultima: lastCov, enviado: true });
 });
