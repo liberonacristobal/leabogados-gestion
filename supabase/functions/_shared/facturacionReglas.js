@@ -64,3 +64,11 @@ export function ultimoDiaHabilMesEmision(iso, esHabil) {
   let guard = 0; while (!ok(last) && guard++ < 15) last.setDate(last.getDate() - 1)
   return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
 }
+// La serie (venta) ya tiene una factura emitida en el mismo mes que esta: una segunda factura del mismo monto puede ser un mes
+// ATRASADO que no estaba programado (BDA, F489 del 20-10-2026 = junio, con octubre ya facturado el 07-10) o uno adelantado. La
+// cuota que toque no se puede saber por la regla «la más antigua» → la elige una persona. billing = facturas del cliente.
+export function serieYaFacturadaEnMes(billing, saleId, fecha, folio) {
+  if (!saleId || !fecha) return null
+  const mes = String(fecha).slice(0, 7)
+  return (billing || []).find(b => !b.deleted_at && b.status !== 'Anulada' && String(b.sale_id) === String(saleId) && b.invoice_no && String(b.invoice_no).replace(/^factura\s*/i, '').trim() !== String(folio) && String(b.issued_at || '').slice(0, 7) === mes) || null
+}
