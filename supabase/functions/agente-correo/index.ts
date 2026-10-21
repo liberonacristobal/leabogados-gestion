@@ -200,6 +200,54 @@ Deno.serve(async (req) => {
     }
     const vistos = new Set((ya || []).map((x: { gmail_id: string }) => x.gmail_id));
     const cliPorId = new Map((clientes || []).map((c: { id: string }) => [c.id, c]));
+    // ── Respaldo de gastos desde el correo ──
+    // Montos del PDF: con signo $ y miles (montosEn) o tras «TOTAL»; números de OT («OT N° 445512»).
+    const montosPdf2 = (t: string) => [...new Set([...montosEn(t), ...[...String(t || "").matchAll(/total[^\d$]{0,20}\$?\s?(\d{1,3}(?:\.\d{3})+|\d{4,7})(?!\d)/gi)].map((m) => Number(m[1].replace(/\./g, "")))].filter((n) => n >= 100))];
+    const nTok = (x: string) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const STOPR = new Set(["certificado", "copia", "escritura", "sociedad", "inscripcion", "pago", "gastos", "notaria", "tramite", "solicitud", "para", "desde", "hasta", "registro"]);
+    // Gastos candidatos: monto exacto, cargados entre 15 días antes y 3 después del correo, sin respaldo; con OT → solo la OT.
+    // Un solo candidato con su OT en el PDF, o uno solo cuyo cliente o palabra propia de la glosa aparece en el PDF → se adjunta
+    // solo. Si no, una persona elige entre los candidatos (o espera a que se cargue el gasto).
+    // deno-lint-ignore no-explicit-any
+    const respaldoCandidatos = async (texto: string, recibido: Date, nombre: string): Promise<{ montos: number[]; cands: any[]; seguro: any | null }> => {
+      const txt = nTok(`${texto} ${nombre}`), montos = montosPdf2(texto);
+      if (!montos.length) return { montos, cands: [], seguro: null };
+      const d0 = iso(new Date(recibido.getTime() - 15 * 86400000)), d1 = iso(new Date(recibido.getTime() + 3 * 86400000));
+      const gs = await rest(`expenses?select=id,client_id,amount,date,concept,category,ot_number,created_by&type=eq.gasto&deleted_at=is.null&date=gte.${d0}&date=lte.${d1}&amount=in.(${montos.join(",")})`);
+      const ids = (gs || []).map((g: { id: string }) => g.id);
+      const conAdj = ids.length ? new Set((await rest(`expense_attachments?select=expense_id&expense_id=in.(${ids.map((x: string) => `"${x}"`).join(",")})`) || []).map((x: { expense_id: string }) => x.expense_id)) : new Set();
+      const cands = (gs || []).filter((g: { id: string }) => !conAdj.has(g.id));
+      const porOT = cands.filter((g: { ot_number: string }) => g.ot_number && new RegExp(`\\b${String(g.ot_number).replace(/\D/g, "")}\\b`).test(txt));
+      if (porOT.length === 1) return { montos, cands, seguro: porOT[0] };
+      const pista = (g: { client_id: string; concept: string }) => { const cn = nTok((cliPorId.get(g.client_id) as { name?: string })?.name || ""); const tk = nTok(g.concept).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 4 && !STOPR.has(w));
+        return (cn.length >= 4 && txt.includes(cn)) || tk.some((w) => txt.includes(w)); };
+      const conPista = cands.filter(pista);
+      return { montos, cands, seguro: conPista.length === 1 ? conPista[0] : null };
+    };
+    // deno-lint-ignore no-explicit-any
+    const descG = (g: any) => ({ id: g.id, fecha: g.date, monto: Number(g.amount), cliente: (cliPorId.get(g.client_id) as { name?: string })?.name || "Sin cliente", concepto: String(g.concept || g.category || "").slice(0, 80) });
+    // deno-lint-ignore no-explicit-any
+    const respaldoFila = async (c: { montos: number[]; cands: any[]; seguro: any }, r0: { nombre: string; path?: string }, recibido: Date, dry: boolean): Promise<any> => {
+      const base = { path: r0.path || null, nombre: r0.nombre };
+      if (c.seguro) {
+        const g = descG(c.seguro);
+        if (!dry && r0.path) await rest("expense_attachments", { method: "POST", body: JSON.stringify({ expense_id: g.id, name: r0.nombre, storage_path: r0.path, uploaded_by: "Agente (correo)" }) });
+        return { estado: "registrado", motivo: `Respaldo adjuntado al gasto de ${g.cliente} ${"$" + Math.round(g.monto).toLocaleString("es-CL")} del ${dmy(g.fecha)}`, propuesta: { ...base, expense_id: g.id }, evidencia: [{ texto: `${g.cliente} · ${g.concepto}`, monto: g.monto, fuente: "gasto" }] };
+      }
+      if (c.cands.length) return { estado: "pendiente", motivo: c.cands.length > 1 ? `${c.cands.length} gastos por el mismo monto` : "Calza por monto y fecha", propuesta: { accion: "adjuntar_respaldo", titulo: "Adjuntar el respaldo al gasto", ...base, candidatos: c.cands.slice(0, 8).map(descG) }, evidencia: c.montos.slice(0, 2).map((m) => ({ texto: "Monto del documento", monto: m, fuente: "PDF" })) };
+      return { estado: "espera", motivo: c.montos.length ? "Sin gasto por ese monto · se vuelve a revisar" : "No se pudo leer el monto del documento", propuesta: { accion: "adjuntar_respaldo", titulo: "Adjuntar el respaldo al gasto", ...base, candidatos: [], montos: c.montos }, evidencia: c.montos.slice(0, 2).map((m) => ({ texto: "Monto del documento", monto: m, fuente: "PDF" })) };
+    };
+    // Segunda revisión: respaldos en espera (el gasto aún no estaba cargado) se vuelven a cruzar, hasta 30 días.
+    // deno-lint-ignore no-explicit-any
+    const esperaR: any[] = await rest(`agente_bandeja?select=id,recibido_at,propuesta&tipo=eq.respaldo_gasto&estado=eq.espera&recibido_at=gte.${iso(new Date(Date.now() - 30 * 86400000))}`);
+    for (const e of esperaR || []) {
+      const p = e.propuesta || {}; if (!(p.montos || []).length || !p.path) continue;
+      const c = await respaldoCandidatos(`total $${(p.montos || []).map((m: number) => m.toLocaleString("es-CL")).join(" total $")}`, new Date(e.recibido_at), p.nombre || "");
+      if (!c.cands.length) continue;
+      // Sin el texto del PDF a mano, nunca se adjunta solo: queda propuesto.
+      const f2 = await respaldoFila({ ...c, seguro: null }, { nombre: p.nombre, path: p.path }, new Date(e.recibido_at), dryRun);
+      if (!dryRun) await rest(`agente_bandeja?id=eq.${e.id}`, { method: "PATCH", body: JSON.stringify(f2) });
+    }
     const cliPorEmail = new Map<string, string>(); const cliPorDominio = new Map<string, Set<string>>();
     const addMail = (em: string, cid: string) => { if (!em || !cid) return; const e = em.toLowerCase().trim(); if (domOficina && e.endsWith("@" + domOficina)) return; cliPorEmail.set(e, cid); const d = e.split("@")[1]; if (d && !GENERICOS.test(d)) { if (!cliPorDominio.has(d)) cliPorDominio.set(d, new Set()); cliPorDominio.get(d)!.add(cid); } };
     (contactos || []).forEach((c: { email: string; client_id: string }) => addMail(c.email, c.client_id));
@@ -243,6 +291,11 @@ Deno.serve(async (req) => {
       const bheDe: { bhe: ReturnType<typeof parseBHE>; path?: string }[] = [];
       for (const a of adj) { if (!a.b64 || !/\.pdf$/i.test(a.name || "") || !/bhe|boleta|honorario/i.test(a.name || "")) continue;
         const b = parseBHE(await itemsPdf(a.b64)); if (b && rutEstudio && nRutB(b.receptor_rut) === rutEstudio) bheDe.push({ bhe: b, path: adjGuardados.find((g) => g.nombre === a.name)?.path }); }
+      // Boletas y facturas de trámites (notaría, conservador, registro civil, diario oficial) → respaldo del gasto ya cargado.
+      const esTramite = esNotaria || /notari|conservador|cbr|registrocivil|srcei|diariooficial/i.test(dom);
+      const respaldos: { nombre: string; path?: string; texto: string }[] = [];
+      if (esTramite && !bheDe.length) for (const a of adj) { if (!a.b64 || !/\.pdf$/i.test(a.name || "") || !/boleta|factura/i.test(a.name || "")) continue;
+        respaldos.push({ nombre: a.name, path: adjGuardados.find((g) => g.nombre === a.name)?.path, texto: await textoPdf(a.b64) }); }
       if (respPedido && !dryRun && !respGids.has(gid)) {
         const ped = (pedLiq || []).find((p: { created_at: string }) => new Date(p.created_at) <= recibido);
         if (ped) { const xl = adj.find((a: { name: string }) => /\.xlsx?$/i.test(a.name || "")); respGids.add(gid);
@@ -321,6 +374,10 @@ Deno.serve(async (req) => {
         fila.estado = "pendiente"; fila.tipo = "cuenta_bancaria";
         fila.propuesta = { accion: "guardar_cuenta", titulo: "Guardar la cuenta como conocida", dominio: llaveCta, cuenta: cta.cuenta, banco: cta.banco, rut: cta.rut };
         fila.evidencia = [{ texto: `Cuenta del correo${cta.banco ? ` · ${cta.banco}` : ""}`, valor: cta.cuenta, fuente: "correo" }, ...(cta.rut ? [{ texto: "RUT titular", valor: cta.rut, fuente: "correo" }] : [])];
+      } else if (respaldos.length) {
+        fila.tipo = "respaldo_gasto";
+        const r0 = respaldos[0], c = await respaldoCandidatos(r0.texto, recibido, r0.nombre);
+        Object.assign(fila, await respaldoFila(c, r0, recibido, dryRun));
       } else if (cid && (pareceComprob || ia?.tipo === "comprobante")) {
         fila.tipo = "comprobante";
         const montosPdf = montosEn(txtPdf);
