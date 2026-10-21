@@ -53,22 +53,33 @@ Deno.serve(async (req) => {
     ]);
     // Propuestas abiertas cuya factura ya se registró (en la app o aquí) → se cierran solas.
     const pendFolios = new Set(docs.map((d) => `sii:${d.folio}-${d.tipo_dte}`));
-    for (const r of abiertas) if (!pendFolios.has(r.gmail_id)) { out.cerradas++; if (!dryRun) await rest(`agente_bandeja?id=eq.${r.id}`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", motivo: "Factura registrada en Facturación", resuelto_at: new Date().toISOString() }) }); }
+    for (const r of abiertas) if (!pendFolios.has(r.gmail_id)) {
+      const [, folio, tipo] = String(r.gmail_id).match(/^sii:(.+)-(\d+)$/) || [];
+      const doc = folio ? (await rest(`sii_cargas_docs?select=billing_id,estado&folio=eq.${encodeURIComponent(folio)}&tipo_dte=eq.${tipo}&limit=1`))?.[0] : null;
+      out.cerradas++; if (!dryRun) await rest(`agente_bandeja?id=eq.${r.id}`, { method: "PATCH", body: JSON.stringify({ estado: doc?.billing_id ? "registrado" : "resuelto", motivo: doc?.billing_id ? "Factura registrada en Facturación" : "Ya no está por registrar", resuelto_at: new Date().toISOString() }) });
+    }
     if (!docs.length) return json({ ok: true, dryRun, ...out });
     const esHabil = await feriados([...new Set(docs.map((d) => Number(String(d.fecha_emision).slice(0, 4))).concat(docs.map((d) => Number(String(d.fecha_emision).slice(0, 4)) + 1)))]);
     const esSub = (s: { cobro_config?: { subarriendo?: boolean }; area?: string }) => s?.cobro_config?.subarriendo === true || (s?.area || "") === "Subarriendo";
     const cliDe = (rut: string) => { const k = nRut(rut); if (!k) return null; const e = ents.find((x) => nRut(x.rut) === k); if (e) return { cid: e.client_id, ent: e.id }; const c = clients.find((x) => nRut(x.rut) === k); return c ? { cid: c.id, ent: null } : null; };
+    // RUT con el formato de la app (78.457.999-9): el SII lo trae sin puntos y el UNIQUE de client_entities compara el texto tal cual.
+    const rutApp = (r: string) => { const c = nRut(r); return c.length < 2 ? r : c.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "-" + c.slice(-1); };
     const usadas = new Set<string>();
     const bandeja = async (d: any, motivo: string, cid: string | null) => {
       out.a_bandeja.push({ folio: d.folio, monto: d.monto, motivo });
       if (dryRun) return;
       await rest("agente_bandeja?on_conflict=gmail_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ gmail_id: `sii:${d.folio}-${d.tipo_dte}`, recibido_at: `${String(d.fecha_emision).slice(0, 10)}T12:00:00Z`, de: d.receptor_name || "", de_nombre: d.receptor_name || "", asunto: `Factura N° ${d.folio} emitida en el SII`, tipo: "factura_sin_registrar", cliente_id: cid, estado: "pendiente", motivo, propuesta: { accion: "registrar_factura", titulo: `Registrar la factura N° ${d.folio}`, folio: d.folio }, evidencia: [{ texto: `Factura N° ${d.folio} del ${dmy(d.fecha_emision)} · ${d.receptor_name || ""}`, monto: Number(d.monto), fuente: "SII" }] }) });
     };
-    for (const d of docs) {
+    for (const d of docs) { try {
       const monto = Math.round(Number(d.monto) || 0), fecha = String(d.fecha_emision).slice(0, 10), now = new Date().toISOString();
-      const ya = (await rest(`billing?select=id,invoice_no,receptor_rut&invoice_no=in.(${encodeURIComponent(`"${d.folio}","Factura ${d.folio}"`)})&deleted_at=is.null`) || []).filter((b: { invoice_no: string; receptor_rut: string }) => folioN(b.invoice_no) === String(d.folio) && (!b.receptor_rut || !d.receptor_rut || nRut(b.receptor_rut) === nRut(d.receptor_rut)));
+      const conFolio = (await rest(`billing?select=id,invoice_no,receptor_rut&invoice_no=in.(${encodeURIComponent(`"${d.folio}","Factura ${d.folio}"`)})&deleted_at=is.null`) || []).filter((b: { invoice_no: string }) => folioN(b.invoice_no) === String(d.folio));
+      const ya = conFolio.filter((b: { receptor_rut: string }) => !b.receptor_rut || !d.receptor_rut || nRut(b.receptor_rut) === nRut(d.receptor_rut));
+      if (!ya.length && conFolio.length) { await bandeja(d, "El folio ya está en Facturación con otro RUT", null); continue; }
       if (ya.length) { out.registradas.push({ folio: d.folio, como: "ya estaba en Facturación" }); if (!dryRun) await rest(`sii_cargas_docs?id=eq.${d.id}`, { method: "PATCH", body: JSON.stringify({ estado: "registrada", billing_id: ya[0].id, updated_at: now }) }); continue; }
-      const cli = d.client_id ? { cid: d.client_id, ent: null } : cliDe(d.receptor_rut);
+      // El RUT manda (y da la razón social); si el documento ya traía un cliente distinto del que da el RUT, lo decide una persona.
+      const porRut = cliDe(d.receptor_rut);
+      if (d.client_id && porRut && porRut.cid !== d.client_id) { await bandeja(d, "El RUT es de otro cliente que el asignado al documento", d.client_id); continue; }
+      const cli = porRut || (d.client_id ? { cid: d.client_id, ent: null } : null);
       if (!cli) { await bandeja(d, "El RUT del receptor no está en la app", null); continue; }
       const billingCli = await todas(`billing?select=id,client_id,sale_id,concept,amount,status,due,issued_at,invoice_no,billing_type,deleted_at,prepaid_anticipo_id,paid_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=is.null`);
       const facturadasCli = await todas(`billing?select=id,sale_id,invoice_no,issued_at,status,deleted_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=not.is.null`);
@@ -106,14 +117,14 @@ Deno.serve(async (req) => {
       // Nueva: si al asociarla a su venta habría que retirar una cuota programada de esa venta, lo hace la app (mueve sus comisiones).
       if (dec.saleId && billingCli.some((b: { status: string; sale_id: string; amount: number }) => b.status === "Programada" && b.sale_id === dec.saleId && monto > 0 && Math.abs((Number(b.amount) || 0) - monto) / monto <= 0.06)) { await bandeja(d, "Reemplaza una cuota de su venta (hay que retirarla)", cli.cid); continue; }
       let ent = cli.ent;
-      if (!ent && d.receptor_rut && !dryRun) { const ne = await rest("client_entities", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ client_id: cli.cid, rut: d.receptor_rut, name: d.receptor_name || null }) }).catch(() => null); ent = ne?.[0]?.id || null; }
+      if (!ent && d.receptor_rut && !dryRun) { const ne = await rest("client_entities", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ client_id: cli.cid, rut: rutApp(d.receptor_rut), name: d.receptor_name || null }) }).catch(() => null); ent = ne?.[0]?.id || null; }
       const venta = dec.saleId ? sales.find((s) => s.id === dec.saleId) : null;
       out.registradas.push({ folio: d.folio, cliente: nombre, monto, como: venta ? `nueva en la venta «${venta.title}»` : "nueva, sin venta", due });
       if (dryRun) continue;
       const ins = await rest("billing", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ client_id: cli.cid, entity_id: ent, concept: d.glosa || "Honorarios", receptor_name: d.receptor_name || null, receptor_rut: d.receptor_rut || null, amount: monto, status: "Pendiente", invoice_no: String(d.folio), issued_at: fecha, due, billing_type: "honorarios", sii_tipo_dte: Number(d.tipo_dte), sii_synced_at: now, ...(dec.saleId ? { sale_id: dec.saleId } : {}) }) });
       await rest(`sii_cargas_docs?id=eq.${d.id}`, { method: "PATCH", body: JSON.stringify({ estado: "registrada", billing_id: ins[0].id, updated_at: now }) });
       await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "facturacion.registrada_auto", table_name: "billing", record_id: ins[0].id, estudio_id: "lea", detail: JSON.stringify({ title: `Factura N° ${d.folio} registrada sola: ${nombre} ${fmt(monto)}${venta ? ` · ${venta.title}` : " · sin venta"}`, folio: d.folio }) }) });
-    }
+    } catch (e) { (out as any).errores = [...((out as any).errores || []), { folio: d.folio, error: String((e as Error).message || e) }]; } }   // un documento con error no corta la corrida
     return json({ ok: true, dryRun, ...out });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);

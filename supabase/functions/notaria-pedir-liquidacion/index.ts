@@ -32,6 +32,13 @@ async function sb(path: string): Promise<any[]> {
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
   return r.ok ? await r.json() : [];
 }
+// Lectura que DEBE responder (antes de enviar): si falla, no se asume «no enviado» (se reenviaría).
+// deno-lint-ignore no-explicit-any
+async function sbOk(path: string): Promise<any[]> {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
+  if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`);
+  return await r.json();
+}
 async function sbInsert(table: string, row: unknown) {
   await fetch(`${SB_URL}/rest/v1/${table}`, { method: "POST", headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify(row) });
 }
@@ -46,12 +53,17 @@ Deno.serve(async (req) => {
   if (!esCron) {
     const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
     const u = await fetch(`${SB_URL}/auth/v1/user`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${bearer}` } }).then((r) => r.ok ? r.json() : null).catch(() => null);
-    if (!u?.email) return json({ error: "No autorizado" }, 403);
-    dry = !body.seguimiento;   // un seguimiento lo envía una persona desde la app: sí sale
+    // Solo un miembro del estudio (tabla miembros), no cualquier cuenta con sesión.
+    const mb = u?.email ? await sb(`miembros?select=email&email=eq.${encodeURIComponent(String(u.email).toLowerCase())}&limit=1`) : [];
+    if (!mb.length) return json({ error: "No autorizado" }, 403);
+    dry = !body.seguimiento || !!body.dryRun;   // un seguimiento lo envía una persona desde la app: sí sale (salvo dryRun)
     body.__quien = u.email;
   }
-  const testTo = typeof body.testTo === "string" && body.testTo.includes("@") ? body.testTo : null;
-  if (testTo) dry = false;   // una prueba explícita a un correo sí se envía (solo a ese correo)
+  // Prueba a un correo: solo con el secreto del cron, y SIEMPRE solo a ese correo (nunca a la notaría ni con copia).
+  const testTo = esCron && typeof body.testTo === "string" && body.testTo.includes("@") ? body.testTo : null;
+  if (testTo) dry = !!body.dryRun;
+  // Simular un día (body.fecha) sin prueba a un correo nunca envía ni registra nada real.
+  if (body.fecha && !testTo) dry = true;
 
   // Config del estudio
   const [cfgRow, est] = await Promise.all([sb("learnings?select=value&kind=eq.config&key=eq.notaria_pedir_liquidacion&limit=1"), sb(`estudios?select=nombre,telefono,direccion_firma,ciudad,sitio&id=eq.${encodeURIComponent(String(body.estudio || "lea"))}&limit=1`)]);
@@ -109,8 +121,8 @@ Deno.serve(async (req) => {
     const saludo = String(cfg.saludo || "Estimados").trim();
     const enviar = async (o: { to: string[]; cc: string[]; subject: string; html: string; messageId?: string; inReplyTo?: string }) => {
       const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-      await client.send({ from: `${toAscii(nombreEstudio)} <${GMAIL_USER}>`, to: o.to, ...(o.cc.length ? { cc: o.cc } : {}), subject: toAscii(o.subject), content: aTexto(o.html), html: qpSafe(o.html), headers: { "Content-Language": "es", ...(o.messageId ? { "Message-ID": o.messageId } : {}) },
-        ...(o.inReplyTo ? { inReplyTo: o.inReplyTo, references: o.inReplyTo } : {}) });
+      await client.send({ from: `${toAscii(nombreEstudio)} <${GMAIL_USER}>`, to: o.to, ...(o.cc.length ? { cc: o.cc } : {}), subject: toAscii(o.subject), content: aTexto(o.html), html: qpSafe(o.html), headers: { "Content-Language": "es", ...(o.messageId ? { "Message-ID": o.messageId } : {}), ...(o.inReplyTo ? { "In-Reply-To": o.inReplyTo } : {}) },   // denomailer escribe mal «inReplyTo»: va como encabezado
+        ...(o.inReplyTo ? { references: o.inReplyTo } : {}) });
       await client.close();
     };
     // Versión en texto del mismo correo (para quien lo lee sin formato).
@@ -156,11 +168,12 @@ Deno.serve(async (req) => {
       const nom = String(fP.nombre || (await sb(`miembros?select=nombre&email=eq.${encodeURIComponent(quien)}&limit=1`))?.[0]?.nombre || quien.split("@")[0] || nombreEstudio);
       // Respuesta de una persona: sin la tarjeta de marca (Gmail desarma una respuesta que repite el encabezado del pedido).
       const html = respuesta(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos nuevamente respecto de nuestra solicitud del ${dmy(String(ped.created_at))}${pd.desde ? `, de la liquidación de los gastos notariales desde el ${dmy(pd.desde)}` : ", de la liquidación de los gastos notariales"}. Les agradeceríamos mucho enviarla en formato Excel cuando les sea posible.</p><p>Muchas gracias por su ayuda.</p>${firma({ nombre: nom, cargo: fP.cargo || "", telefono: fP.telefono || E.telefono || "" })}<div class="gmail_quote" style="margin-top:22px;font-size:12.5px;color:#888"><div>El ${dmy(String(ped.created_at))}, ${esc(nombreEstudio)} &lt;${esc(GMAIL_USER)}&gt; escribió:</div><blockquote class="gmail_quote" style="margin:6px 0 0 0;padding-left:10px;border-left:1px solid #ccc;color:#888">${esc(saludo)}:<br><br>Espero que estén muy bien.<br><br>Les escribimos para pedirles, por favor, la liquidación de nuestros gastos notariales en formato Excel, con las órdenes de trabajo${pd.desde ? ` desde el ${dmy(pd.desde)}` : ""} a la fecha.</blockquote></div>`);
-      const para = slotS === "__prueba__" ? [testTo!] : Array.isArray(pd.to) ? pd.to : notaria, copia = slotS === "__prueba__" ? [] : Array.isArray(pd.cc) ? pd.cc : cc;
+      const para = testTo ? [testTo] : Array.isArray(pd.to) ? pd.to : notaria, copia = testTo ? [] : Array.isArray(pd.cc) ? pd.cc : cc;
+      if (dry && !testTo) return json({ ok: true, modo: "simulacion", seguimiento: slotS, para, cc: copia });
       if (dry) return json({ ok: true, modo: "simulacion", para, cc: copia, html });
       try { await enviar({ to: para, cc: copia, subject: `Re: ${pd.asunto || ASUNTO}`, html, inReplyTo: pd.message_id || undefined }); }
       catch (e) { await log("notaria.seguimiento_liquidacion_fallido", { slot: slotS, title: "El seguimiento NO se envió", error: String((e as Error).message || e) }, quien); return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
-      if (slotS !== "__prueba__") await log("notaria.seguimiento_liquidacion", { slot: slotS, title: `Seguimiento enviado por ${nom}`, to: para, cc: copia, desde: GMAIL_USER }, quien);
+      if (slotS !== "__prueba__" && !testTo) await log("notaria.seguimiento_liquidacion", { slot: slotS, title: `Seguimiento enviado por ${nom}`, to: para, cc: copia, desde: GMAIL_USER }, quien);
       return json({ ok: true, enviado: true, para, cc: copia, desde: GMAIL_USER });
     }
 
@@ -186,7 +199,7 @@ Deno.serve(async (req) => {
 
     // (c) El pedido, el día que corresponde (o una prueba a un solo correo).
     if (!slot && !testTo) return json({ ok: true, enviado: false, motivo: `hoy (${iso(today)}) no corresponde`, sin_respuesta: sinResp });
-    if (slot && !testTo) { const ya = await sb(`activity_log?select=id&action=eq.notaria.pedido_liquidacion&detail=like.*${slot}*&limit=1`); if (ya?.length) return json({ ok: true, enviado: false, motivo: `ya enviado (${slot})`, sin_respuesta: sinResp }); }
+    if (slot && !testTo) { const ya = await sbOk(`activity_log?select=id&action=eq.notaria.pedido_liquidacion&detail=like.*${slot}*&limit=1`); if (ya?.length) return json({ ok: true, enviado: false, motivo: `ya enviado (${slot})`, sin_respuesta: sinResp }); }
     const uo = await sb("expenses?select=date&category=eq.Notaria&ot_number=not.is.null&date=not.is.null&deleted_at=is.null&order=date.desc.nullslast&limit=1");
     const uoF = uo?.[0]?.date ? String(uo[0].date).slice(0, 10) : null;
     const desdeN = uoF ? (() => { const d = new Date(uoF + "T00:00:00"); d.setDate(d.getDate() + 1); return iso(d); })() : null;
