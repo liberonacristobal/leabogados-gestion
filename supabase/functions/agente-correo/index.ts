@@ -23,6 +23,17 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
   if (!r.ok) throw new Error(`${path.split("?")[0]} ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const t = await r.text(); return t ? JSON.parse(t) : null;
 }
+const _MES_ES: Record<string, number> = { ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, sept: 8, set: 8, oct: 9, nov: 10, dic: 11 };
+// Fecha y autor de nuestra solicitud citada bajo la respuesta («El lun, 19 oct 2026 a las 16:01, Erasmo Escala (<ee@…>) escribió:»).
+// Misma lectura que solicitudCitada de la app. La hora citada es de Chile.
+function solicitudCitada(cuerpo: string) {
+  const m = String(cuerpo || "").match(/El\s+\S+,\s+(\d{1,2})\s+([a-zá]+)\.?\s+(\d{4})\s+a\s+las\s+(\d{1,2}):(\d{2}),\s*([^(<\n]+?)\s*\(?<([\w.+-]+@[\w.-]+)>/i);
+  if (!m) return null;
+  const mes = _MES_ES[m[2].toLowerCase().slice(0, 4)] ?? _MES_ES[m[2].toLowerCase().slice(0, 3)];
+  const p2 = (n: number | string) => String(n).padStart(2, "0");
+  const fecha = mes == null ? null : new Date(`${m[3]}-${p2(mes + 1)}-${p2(m[1])}T${p2(m[4])}:${m[5]}:00-03:00`);
+  return { fecha: fecha && !isNaN(fecha.getTime()) ? fecha.toISOString() : null, autor: m[6].trim().split(/\s+/)[0] || null };
+}
 const GENERICOS = /^(gmail|hotmail|outlook|live|yahoo|icloud|me|msn|googlemail)\./i;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const dmy = (s: string) => { const [y, m, d] = String(s).slice(0, 10).split("-"); return `${d}-${m}-${y}`; };
@@ -280,7 +291,15 @@ Deno.serve(async (req) => {
           const asuntoBase = norm(asunto.replace(/^((re|rv|fw|fwd)\s*:\s*)+/i, ""));
           const yaPedido = (fondosReq || []).filter((f: { client_id: string; monto: number; asunto?: string }) => f.client_id === cid && pedidos.includes(Math.round(Number(f.monto))) && (!f.asunto || norm(f.asunto) === asuntoBase));
           fila.motivo = `Por recibir · cartola al ${cartolaHasta ? dmy(cartolaHasta) : "—"}`;
-          if (pedidos.length && !yaPedido.length) { fila.estado = "pendiente"; fila.propuesta = { accion: "registrar_solicitud", titulo: pedidos.length > 1 ? `Registrar ${pedidos.length} solicitudes de fondos` : "Registrar la solicitud de fondos", montos: pedidos }; fila.evidencia = pedidos.map((v) => ({ texto: "Solicitud citada en el correo", monto: v, fuente: "correo" })); }
+          // La solicitud citada (nuestro correo, debajo de la respuesta) con UN monto se registra sola: es un hecho nuestro, no una
+          // decisión. Con varios montos en la cita (puede haber saldos u otras cifras), una persona confirma cuáles son.
+          // Con ella, el depósito que llegue por ese monto queda propuesto como fondo (conciliacion-auto › pareceFondo).
+          if (pedidos.length > 1 && !yaPedido.length) { fila.estado = "pendiente"; fila.propuesta = { accion: "registrar_solicitud", titulo: `Registrar ${pedidos.length} solicitudes de fondos`, montos: pedidos }; fila.evidencia = pedidos.map((v) => ({ texto: "Solicitud citada en el correo", monto: v, fuente: "correo" })); }
+          else if (pedidos.length === 1 && !yaPedido.length) {
+            const cit = solicitudCitada(cuerpo), asu = asunto.replace(/^((re|rv|fw|fwd)\s*:\s*)+/i, "").trim() || "Solicitud de fondos";
+            if (!dryRun) await rest("fund_requests", { method: "POST", body: JSON.stringify(pedidos.map((v) => ({ client_id: cid, monto: v, asunto: asu, para: de, enviada_por: cit?.autor || abogado || null, enviada_at: cit?.fecha || recibido.toISOString(), n_adjuntos: 0 }))) });
+            fila.estado = "espera"; fila.motivo = "Solicitud registrada · por recibir"; fila.evidencia = pedidos.map((v) => ({ texto: "Solicitud citada en el correo", monto: v, fuente: "correo" }));
+          }
           else { fila.estado = "espera"; if (yaPedido.length) fila.motivo = "Solicitud registrada · por recibir"; fila.evidencia = montosPdf.map((v) => ({ texto: "Monto del comprobante", monto: v, fuente: "comprobante PDF" })); }
           fila.propuesta.montos_cand = cand;
         }

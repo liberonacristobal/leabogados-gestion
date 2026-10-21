@@ -9606,13 +9606,46 @@ function ProcesosView({isDesktop, onBack, origen}){
 // Al abrir, la propia página confirma lo que ya se hizo por otra vía (depósito conciliado, liquidación cargada) y lo cierra sola.
 const _DEMO_BANDEJA = [
   {id:'d1',recibido_at:'2026-10-20T10:05:57Z',de:'genesis.garcia@sbschile.com',de_nombre:'Génesis Garcia',asunto:'Re: Solicitud de fondos por rendir Proyecto Villarica',cuerpo:'Adjunto comprobante de pago solicitado.\n\nEl lun, 19 oct 2026 a las 16:01, Erasmo Escala (<ee@leabogados.cl>) escribió:\n> ... por un total de $1.200.000.-',adjuntos:[{nombre:'Comprobante Operación Express.pdf',mime:'application/pdf'}],tipo:'comprobante',cliente_nombre:'Alejandro Lee',abogado:'Erasmo',estado:'pendiente',motivo:'Por recibir · cartola al 19-10-2026',propuesta:{accion:'registrar_solicitud',titulo:'Registrar la solicitud de fondos',montos:[1200000],montos_cand:[1200000]},evidencia:[{texto:'Solicitud citada en el correo',monto:1200000,fuente:'correo'}]},
+  {id:'df1',gmail_id:'fondo:demo-av1',recibido_at:'2026-10-20T10:07:00Z',de:'Inversiones Ríofrío Ltda',de_nombre:'Inversiones Ríofrío Ltda',asunto:'Fondo por registrar',tipo:'fondo_por_registrar',cliente_id:'c2',estado:'pendiente',motivo:'El mensaje de la transferencia indica un fondo',propuesta:{accion:'registrar_fondo',titulo:'Registrar el fondo',monto:1200000,fecha:'2026-10-20',proyecto:'Reorganización societaria',concepto:null,fuente:'mensaje',movimiento_id:null,aviso_gmail:'demo-av1'},evidencia:[{texto:'Transferencia de Inversiones Ríofrío Ltda · «provisión reorganización»',monto:1200000,fuente:'Banco de Chile'}]},
+  {id:'df2',gmail_id:'fondo:demo-av2',recibido_at:'2026-10-20T10:04:00Z',de:'Inversiones Ríofrío Ltda',de_nombre:'Inversiones Ríofrío Ltda',asunto:'Fondo por registrar',tipo:'fondo_por_registrar',cliente_id:'c2',estado:'pendiente',motivo:'El mensaje de la transferencia indica un fondo',propuesta:{accion:'registrar_fondo',titulo:'Registrar el fondo',monto:1200000,fecha:'2026-10-20',proyecto:'Due diligence adquisición',concepto:null,fuente:'mensaje',movimiento_id:null,aviso_gmail:'demo-av2'},evidencia:[{texto:'Transferencia de Inversiones Ríofrío Ltda · «viáticos due diligence»',monto:1200000,fuente:'Banco de Chile'}]},
   {id:'d2',recibido_at:'2026-10-18T00:35:16Z',de:'ccoquelet@gmail.com',de_nombre:'Catalina Coquelet',asunto:'Re: Reserva sitio El Maqui',cuerpo:'Hola Cristobal,\nAdjunto promesa firmada\nSaludos',adjuntos:[{nombre:'Promesa firmada.pdf',mime:'application/pdf'}],tipo:'pedido_cliente',cliente_nombre:'Catalina Coquelett',abogado:'Cristóbal',estado:'pendiente',motivo:'Cliente reconocido por el nombre',propuesta:{accion:'crear_tarea',titulo:'Crear tarea a Cristóbal: Revisar la promesa firmada',tarea:'Revisar la promesa firmada',asignado:'Cristóbal',aprender_email:'ccoquelet@gmail.com'},evidencia:[]},
   {id:'d3',recibido_at:'2026-10-13T20:20:20Z',de:'sdelgado@notarialascar.cl',de_nombre:'Silvana Delgado',asunto:'RE: Liquidación gastos notaría',cuerpo:'Envío deuda y número de cuenta.',adjuntos:[{nombre:'LIBERONA ESCALA ABOGADOS.xlsx',mime:'application/vnd.ms-excel'}],tipo:'cuenta_bancaria',estado:'pendiente',motivo:'Liquidación cargada el 15-10-2026',propuesta:{accion:'guardar_cuenta',titulo:'Guardar la cuenta de la notaría como conocida',dominio:'notarialascar.cl',cuenta:'206659341',banco:'Itaú',rut:'8.215.914-2'},evidencia:[{texto:'Cuenta de la notaría · Itaú',valor:'206659341',fuente:'correo'},{texto:'RUT titular',valor:'8.215.914-2',fuente:'correo'}]},
   {id:'d4',recibido_at:'2026-10-14T19:29:07Z',de:'julio.cisterna@ludipek.com',de_nombre:'Julio Cisterna',asunto:'RE: Solicitud de fondo por rendir',cuerpo:'',adjuntos:[],tipo:'comprobante',cliente_nombre:'Juan Pablo Martinez',abogado:'Cristóbal',estado:'registrado',motivo:'Depósito del 15-10-2026 ya conciliado',propuesta:{},evidencia:[{texto:'Depósito 15-10-2026',monto:500000,fuente:'cartola'}]},
   {id:'d5',recibido_at:'2026-10-09T14:29:00Z',de:'adquisiciones@bastro.cl',de_nombre:'Bastro',asunto:'COMPROBANTE DE PAGO',cuerpo:'',adjuntos:[],tipo:'comprobante',cliente_nombre:'Eduardo Barra',abogado:'Erasmo',estado:'registrado',motivo:'Depósito del 09-10-2026 ya conciliado',propuesta:{},evidencia:[{texto:'Depósito 09-10-2026',monto:1369907,fuente:'cartola'}]},
   {id:'d6',recibido_at:'2026-10-16T12:00:00Z',de:'noticias@legalnews.cl',de_nombre:'Legal News',asunto:'Boletín semanal',cuerpo:'',adjuntos:[],tipo:'spam',estado:'sin_accion',motivo:'Publicidad o notificación',propuesta:{},evidencia:[]},
 ]
-const BANDEJA_BTN = {registrar_solicitud:'Confirmar',crear_tarea:'Crear tarea',guardar_cuenta:'Guardar cuenta',conciliar:'Conciliar en Banco',cargar_notaria:'Cargar liquidación',revisar:'Revisado'}
+const BANDEJA_BTN = {registrar_fondo:'Registrar fondo',registrar_solicitud:'Confirmar',crear_tarea:'Crear tarea',guardar_cuenta:'Guardar cuenta',conciliar:'Conciliar en Banco',cargar_notaria:'Cargar liquidación',revisar:'Revisado'}
+// Fondo por registrar (conciliacion-auto lo propone desde el aviso del banco o la cartola, con señal de fondo): una persona
+// lo confirma desde Gastos › Revisar o la Bandeja. Nunca dos veces: si el depósito ya se concilió en Banco, solo se cierra; si
+// el cliente ya tiene un fondo igual sin respaldo del banco (±10 días), se vincula ese en vez de crear otro. Con el movimiento
+// del banco a la vista, el fondo queda conciliado en el mismo paso; si aún no llega la cartola, lo concilia el agente al llegar.
+async function registrarFondoPropuesto(r, {proyecto, yo, sales, expenses, onFondo}={}){
+  const p=r.propuesta||{}, cid=r.cliente_id, monto=Math.round(Number(p.monto)||0), fecha=String(p.fecha||r.recibido_at||'').slice(0,10)
+  if(!cid||!monto||!fecha) throw new Error('Falta el cliente, el monto o la fecha.')
+  const cierre={resuelto_por:yo,resuelto_at:new Date().toISOString()}
+  const ps=proyecto?proyectoSeguro(cid,sales,{titulo:proyecto}):{}
+  const fondoBase={client_id:cid, ...(ps.project?ps:proyecto?{project:proyecto}:{}), type:'fondo', amount:monto, date:fecha,
+    concept:(p.concepto||`Provisión de fondos${proyecto?` · ${proyecto}`:''}`).slice(0,200), category:'Fondo', created_by:yo}
+  if(DEMO){ const data={...fondoBase,id:'demo-f-'+Date.now(),created_at:new Date().toISOString()}; onFondo&&onFondo(data); return {estado:'registrado',motivo:`Fondo registrado por ${yo}`,...cierre,propuesta:{...p,proyecto,fondo_id:data.id}} }
+  const {data:act}=await supabase.from('agente_bandeja').select('estado').eq('id',r.id).single()
+  if(act&&act.estado!=='pendiente') return {estado:act.estado}
+  let mov=null
+  if(p.movimiento_id){ const {data:m}=await supabase.from('cartola_movimientos').select('id,estado,monto,monto_conciliado,fecha').eq('id',p.movimiento_id).single(); mov=m||null
+    if(mov&&(mov.estado!=='pendiente'||Number(mov.monto_conciliado)>0)){ const c={estado:'registrado',motivo:'El depósito ya está conciliado en Banco',...cierre}; await supabase.from('agente_bandeja').update(c).eq('id',r.id); return c } }
+  const t0=new Date(fecha+'T12:00').getTime()
+  const {data:ligados}=await supabase.from('conciliacion').select('gasto_id').eq('tipo_destino','fondo').not('gasto_id','is',null)
+  const lig=new Set((ligados||[]).map(x=>String(x.gasto_id)))
+  let fondo=(expenses||[]).find(e=>!e.deleted_at&&e.type==='fondo'&&String(e.client_id)===String(cid)&&Math.round(Number(e.amount)||0)===monto&&e.date&&Math.abs(new Date(String(e.date).slice(0,10)+'T12:00').getTime()-t0)<=10*86400000&&!lig.has(String(e.id)))||null
+  const vinculado=!!fondo
+  if(!fondo){ const {data,error}=await supabase.from('expenses').insert(fondoBase).select().single(); if(error) throw error; fondo=data; onFondo&&onFondo(data) }
+  if(mov){ const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id,tipo_destino:'fondo',gasto_id:fondo.id,monto_aplicado:monto,origen:'manual'}).select().single()
+    if(!ic.error){ const {error:me}=await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:monto}).eq('id',mov.id); if(me) await supabase.from('conciliacion').delete().eq('id',ic.data.id) } }
+  if(p.solicitud_id) await supabase.from('fund_requests').update({recibido_at:new Date(fecha+'T12:00').toISOString(),movimiento_id:mov?.id||null,estado:'recibida'}).eq('id',p.solicitud_id).is('recibido_at',null)
+  const c={estado:'registrado',motivo:vinculado?`Fondo vinculado por ${yo}`:`Fondo registrado por ${yo}`,...cierre,propuesta:{...p,proyecto:proyecto||null,fondo_id:fondo.id}}
+  await supabase.from('agente_bandeja').update(c).eq('id',r.id)
+  logActividad('fondos.registrado_desde_banco',{tabla:'expenses',id:fondo.id,detalle:{title:`${vinculado?'Fondo vinculado':'Fondo registrado'}: ${fmt(monto)} del ${fmtFechaDMY(fecha)}${proyecto?` · ${proyecto}`:''}`,bandeja:r.id,movimiento:mov?.id||null}})
+  return c
+}
 const _MES_ES = {ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,sept:8,set:8,oct:9,nov:10,dic:11}
 // Fecha y autor de nuestra solicitud citada bajo la respuesta («El lun, 19 oct 2026 a las 16:01, Erasmo Escala (<ee@…>) escribió:»).
 function solicitudCitada(cuerpo){
@@ -9623,7 +9656,7 @@ function solicitudCitada(cuerpo){
   return {fecha:d&&!isNaN(d)?d.toISOString():null, autor:m[6].trim().split(/\s+/)[0]||null, email:m[7].toLowerCase()}
 }
 const asuntoBase = s => String(s||'').replace(/^((re|rv|fw|fwd)\s*:\s*)+/i,'').trim()
-function BandejaView({isDesktop, onBack, origen, clients=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada}){
+function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado}){
   const [rows,setRows]=useState(null), [err,setErr]=useState(null), [busy,setBusy]=useState(null), [abierto,setAbierto]=useState(null), [verSin,setVerSin]=useState(false)
   const cliPorId=useMemo(()=>new Map((clients||[]).map(c=>[String(c.id),c])),[clients])
   const yo=user?.name||'Oficina'
@@ -9654,7 +9687,10 @@ function BandejaView({isDesktop, onBack, origen, clients=[], user, onOpenClientF
     if(a==='cargar_notaria'){ onCargarNotaria&&onCargarNotaria(p.path?{path:p.path,nombre:p.nombre||'Liquidación notaría.xlsx'}:null); return }
     setBusy(r.id)
     try{
-      if(a==='registrar_solicitud'){
+      if(a==='registrar_fondo'){
+        const c=await registrarFondoPropuesto(r,{proyecto:p.proyecto||null,yo,sales,expenses,onFondo:onFondoRegistrado})
+        setRows(q=>(q||[]).map(x=>x.id===r.id?{...x,...c}:x))
+      } else if(a==='registrar_solicitud'){
         const montos=(p.montos||[]).map(Number).filter(n=>n>0); if(!montos.length) throw new Error('El correo no trae el monto de la solicitud.')
         const cit=solicitudCitada(r.cuerpo), asu=asuntoBase(r.asunto)||'Solicitud de fondos'
         if(!DEMO){
@@ -21272,6 +21308,26 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   const [rendDetIni,setRendDetIni] = useState(null)   // al editar un borrador desde su detalle, al volver se reabre ese detalle
   const [rendGrupo,setRendGrupo] = useState(null)   // Rendiciones › Rendir a cliente: grupo con que abre (tarjeta «Esperando depósito» → 'dep')
   const [sinDetTodos,setSinDetTodos] = useState(false)   // Revisar › Sin detalle: ver todos
+  // Revisar › Fondos por registrar: depósitos con señal de fondo que el agente propone (agente_bandeja tipo fondo_por_registrar).
+  const [fondosReg,setFondosReg] = useState([]), [fondoAb,setFondoAb] = useState(null), [fondoProy,setFondoProy] = useState({}), [fondoBusy,setFondoBusy] = useState(null)
+  useEffect(()=>{ let on=true
+    if(DEMO){ setFondosReg(_DEMO_BANDEJA.filter(r=>r.tipo==='fondo_por_registrar'&&r.estado==='pendiente')); return }
+    supabase.from('agente_bandeja').select('id,gmail_id,recibido_at,de,de_nombre,cliente_id,estado,motivo,propuesta,evidencia').eq('tipo','fondo_por_registrar').eq('estado','pendiente').order('recibido_at',{ascending:false}).limit(100)
+      .then(({data})=>{ if(on) setFondosReg(data||[]) },()=>{})
+    return ()=>{ on=false } },[])
+  const proyectosDe = cid => { const tit=(sales||[]).filter(x=>String(x.client_id)===String(cid)&&VENTA_REAL(x)).map(x=>x.title).filter(Boolean); const k=new Set(tit.map(t=>t.trim().toLowerCase()))
+    const ex=[...new Set((expenses||[]).filter(e=>!e.deleted_at&&String(e.client_id)===String(cid)&&e.project&&!k.has(String(e.project).trim().toLowerCase())).map(e=>String(e.project).trim()))]
+    return [...new Set(tit), ...ex] }
+  const resolverFondo = async(r, registrar) => { setFondoBusy(r.id)
+    try{ const yo=currentUserName||'Oficina'
+      if(registrar){ const proy=(fondoProy[r.id]!==undefined?fondoProy[r.id]:r.propuesta?.proyecto)||null
+        await registrarFondoPropuesto(r,{proyecto:proy,yo,sales,expenses,onFondo:d=>setExpenses&&setExpenses(p=>[d,...(p||[])])}) }
+      else{ const c={estado:'descartado',motivo:`No corresponde · ${yo}`,resuelto_por:yo,resuelto_at:new Date().toISOString()}
+        if(!DEMO){ const {error}=await supabase.from('agente_bandeja').update(c).eq('id',r.id); if(error) throw error }
+        logActividad('fondos.propuesta_descartada',{tabla:'agente_bandeja',id:r.id,detalle:{title:`Fondo por registrar descartado: ${fmt(r.propuesta?.monto)} del ${fmtFechaDMY(r.propuesta?.fecha)}`}}) }
+      setFondosReg(p=>p.filter(x=>x.id!==r.id)); setFondoAb(null)
+    }catch(e){ appAlert('No se pudo completar: '+(e.message||e)) }
+    setFondoBusy(null) }
   // Hub de Gastos: cara de entrada (hero Por cobrar/A favor + 6 tarjetas). Al tocar una tarjeta se navega a la vista existente. Presentación pura — no toca cifras.
   const [hubOpen,setHubOpen] = useState(()=>{ const vm=viewMemLeer('gastos'); return vm ? vm.hubOpen : !(gastosVolverLeer()||rendAbiertaLeer()) })
   // Revisión de gastos cargados a la oficina por el equipo: quién revisa sale de miembros.revisa_gastos (configurable por estudio).
@@ -23186,7 +23242,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     const consultas = (expenses||[]).filter(e=>!e.deleted_at&&e.revision_estado==='consultar'&&(isAdmin||e.revisado_por===currentUserName)).sort((a,b)=>String(a.revisado_por||'').localeCompare(String(b.revisado_por||''),'es')||String(b.date||'').localeCompare(String(a.date||'')))
     const verGas = true   // todos ven Gastos (el limited, solo lo que cargó)
     const sinCli = orphans.length ? {s:`${orphans.length} por asignar`, col:C.soonText} : {s:'al día'}
-    const resumenC = [verGas?resumen:null, orphans.length?`${orphans.length} sin cliente`:null, consultas.length?`${consultas.length} consulta${consultas.length!==1?'s':''}`:null].filter(Boolean).join(' · ')
+    const resumenC = [fondosReg.length?`${fondosReg.length} fondo${fondosReg.length!==1?'s':''}`:null, verGas?resumen:null, orphans.length?`${orphans.length} sin cliente`:null, consultas.length?`${consultas.length} consulta${consultas.length!==1?'s':''}`:null].filter(Boolean).join(' · ')
     return {alCC, caja, gas, verGas, sinCli, resumen:resumenC, sinCC, sinPorPersona, consultas, col:negCC.length&&isAdmin?C.overdueText:resumenC?C.soonText:undefined}
   })()
   if(showRevisar&&revCaja&&revisarRes&&isAdmin){ const r=revisarRes
@@ -23219,6 +23275,34 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         <HubTile ic='alert' bg={C.overdueBg} col={C.overdueText} t='Sin cliente' s={r.sinCli.s} sCol={r.sinCli.col} onClick={()=>setShowOrphans(true)}/>
         <HubTile icNode={<MovIcon s={isDesktop?17:15} c={C.tealText||C.accent}/>} bg={C.tealBg||C.azulBg} t='Movilización' s={_mv.sinMotivo.length?`${_mv.sinMotivo.length} sin motivo`:_mvMes?`${fmt(_mvMes.tot)} en ${MES_C[+_mvMes.k.slice(5,7)-1]||''}`:'sin viajes'} sCol={_mv.sinMotivo.length?C.soonText:undefined} onClick={()=>setShowMov(true)}/>
       </div>
+      {fondosReg.length>0&&<div style={{marginTop:16}}>
+        <div style={{...SEC_LBL,margin:'0 2px 6px'}}>Fondos por registrar · {fondosReg.length}</div>
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{fondosReg.map((r,i)=>{ const p=r.propuesta||{}, cl=(clients||[]).find(c=>String(c.id)===String(r.cliente_id)), cn=cl?.name||r.cliente_nombre||r.de_nombre||'Cliente', ab=fondoAb===r.id, busy=fondoBusy===r.id
+          // Quien transfiere solo se nombra si no es el mismo cliente (p. ej. la empresa del cliente que paga por él).
+          const ev=(r.evidencia||[])[0]||{}, nq=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,''), otro=r.de_nombre&&nq(r.de_nombre)!==nq(cn)?r.de_nombre:null
+          const msg=String(ev.texto||'').match(/«[^»]*»/)?.[0]||null, proyV=fondoProy[r.id]!==undefined?fondoProy[r.id]:p.proyecto
+          const sub=isDesktop?[otro?`Transferencia de ${otro}`:'Transferencia',msg].filter(Boolean).join(' · '):(proyV||msg||(otro?`Transferencia de ${otro}`:'Sin proyecto'))
+          const ops=proyectosDe(r.cliente_id), val=fondoProy[r.id]!==undefined?fondoProy[r.id]:(p.proyecto||'')
+          const sel=<select value={val} onClick={e=>e.stopPropagation()} onChange={e=>setFondoProy(o=>({...o,[r.id]:e.target.value}))} style={{fontSize:12.5,border:`1px solid ${C.border}`,borderRadius:9,padding:'7px 10px',color:C.text,background:C.surface,maxWidth:isDesktop?320:'100%',width:isDesktop?'auto':'100%'}}>
+            <option value=''>Proyecto: sin proyecto</option>{[...new Set([...(p.proyecto?[p.proyecto]:[]),...ops])].map(o=><option key={o} value={o}>Proyecto: {o}</option>)}</select>
+          const btnG={fontSize:12.5,fontWeight:600,borderRadius:9,padding:'7px 12px',border:`1px solid ${C.border}`,background:C.surface,color:C.accent,cursor:busy?'default':'pointer',whiteSpace:'nowrap',opacity:busy?.6:1}
+          const btnP={fontSize:12.5,fontWeight:700,borderRadius:9,padding:'8px 14px',border:'none',background:C.accent,color:'#fff',cursor:busy?'default':'pointer',whiteSpace:'nowrap',opacity:busy?.6:1}
+          const fuente=<span style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{ev.fuente&&ev.fuente!=='cartola'?`Aviso de ${ev.fuente}`:'Cartola del banco'}</span>
+          const acc=<><button disabled={busy} onClick={e=>{e.stopPropagation();resolverFondo(r,false)}} style={btnG}>No corresponde</button><button disabled={busy} onClick={e=>{e.stopPropagation();resolverFondo(r,true)}} style={btnP}>{busy?'Registrando…':isDesktop?'Registrar fondo':'Registrar'}</button></>
+          return <div key={r.id} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
+            <div onClick={()=>setFondoAb(ab?null:r.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer'}}>
+              {diaGrande(p.fecha||String(r.recibido_at||'').slice(0,10))}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span onClick={ev=>{ if(r.cliente_id&&onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(r.cliente_id) } }}>{cn}</span></div>
+                <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+              </div>
+              <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?96:0,textAlign:'right',flexShrink:0}}>{fmt(p.monto)}</span>
+            </div>
+            {ab&&(isDesktop
+              ?<div style={{display:'flex',alignItems:'center',gap:10,padding:'2px 14px 12px 62px'}}>{sel}{fuente}<span style={{flex:1}}/>{acc}</div>
+              :<div style={{display:'flex',flexDirection:'column',gap:8,padding:'0 12px 12px'}}>{sel}<div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>{acc}</div></div>)}
+          </div> })}</div>
+      </div>}
       {(()=>{ // Trámites del año cuya glosa no dice de qué es: se completan en Editar gasto (chips «¿De qué?»). Cada miembro ve lo suyo.
         const y0=`${new Date().getFullYear()}-01-01`
         const sd=(expenses||[]).filter(e=>!e.deleted_at&&e.type!=='fondo'&&!e.ot_number&&String(e.date||'')>=y0&&CATS_DE_CLIENTE.has(e.category)&&glosaSinDetalle(e.concept)&&(isAdmin||e.created_by===currentUserName)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
@@ -43693,7 +43777,7 @@ export default function App() {
             {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
-            {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
+            {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}

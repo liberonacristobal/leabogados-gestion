@@ -91,3 +91,40 @@ export function elegirFondo(mov, fondos, texto) {
   const firma = f => `${_norm(f.concept).trim()}|${_norm(f.project).trim()}`
   return cs.every(f => firma(f) === firma(cs[0])) ? cs[0] : null
 }
+
+// Trabajo del cliente que nombra un texto (mensaje del aviso, asunto de la solicitud): «constitución sociedad osorno» →
+// Osorno; «viáticos villa rica» → Villarica. Nombres del mismo trabajo (la venta «Puesta en marcha Osorno» y el proyecto
+// «OSORNO» de los gastos: un nombre contiene al otro) cuentan como uno y se devuelve el primero de la lista (la venta, que
+// el que llama pone primero). Varios trabajos distintos con la misma coincidencia («ovalle» en cuatro ventas) → null.
+export function proyectoEnTexto(texto, proyectos) {
+  const txt = _norm(texto).replace(/[^a-z0-9ñ]/g, ''); if (!txt) return null
+  const ps = [...new Set((proyectos || []).map(p => String(p || '').trim()).filter(Boolean))]
+  const hits = ps.map((p, i) => { const t = new Set(_toks(p)); return { p, i, t, m: [...t].filter(w => txt.includes(w)).length } }).filter(h => h.m)
+    .sort((a, b) => b.m - a.m || a.i - b.i)
+  if (!hits.length) return null
+  const best = hits[0], dentro = (a, b) => [...a].every(w => b.has(w))
+  return hits.filter(h => h.m === best.m).every(h => dentro(h.t, best.t) || dentro(best.t, h.t)) ? best.p : null
+}
+const _FONDO = /\b(fondos?|provisi[oó]n|vi[aá]ticos?|gastos?|rendir|rendici[oó]n)\b/i
+const _NO_FONDO = /\b(factura|fact|honorarios?|cuota|boleta)\b/i
+// ¿Un abono SIN destino en la app (sin factura exacta, combinación ni fondo registrado) es un fondo que falta registrar?
+// Solo con señal positiva (la prueba con la historia mostró que la mayoría de los abonos sin destino son pagos de facturas):
+// 1) una solicitud de fondos del cliente por ese monto exacto, enviada hasta 45 días antes y aún sin fondo; o 2) el mensaje
+// de la transferencia nombra un trabajo del cliente o habla de fondos/viáticos/gastos. Con palabras de factura → null.
+// solicitudes = [{id, monto, asunto, enviada_at}] del cliente; proyectos = nombres de trabajo del cliente.
+// Devuelve {fuente, solicitud, proyecto, concepto} o null. Nunca crea nada: es la propuesta que una persona confirma.
+export function pareceFondo(mov, texto, solicitudes, proyectos) {
+  const M = Math.round(mov.monto || 0), t0 = mov.fecha ? _t(mov.fecha) : null, tx = String(texto || '')
+  if (!M || _NO_FONDO.test(tx) || folioEnTexto(tx)) return null
+  const sols = (solicitudes || []).filter(s => Math.round(Number(s.monto) || 0) === M && (!t0 || !s.enviada_at || ((t0 - _t(s.enviada_at)) / 86400000 >= -3 && (t0 - _t(s.enviada_at)) / 86400000 <= 45)))
+    .sort((a, b) => String(a.enviada_at || '').localeCompare(String(b.enviada_at || '')))
+  const pMsg = proyectoEnTexto(tx, proyectos)
+  if (sols.length) {
+    // Varias solicitudes del mismo monto (dos trabajos): la que nombra el mensaje; si no nombra ninguna, el trabajo lo elige una persona.
+    const s = (pMsg && sols.find(x => proyectoEnTexto(x.asunto, proyectos) === pMsg)) || (sols.length === 1 ? sols[0] : null)
+    if (!s) return { fuente: 'solicitud', solicitud: null, proyecto: null, concepto: null }
+    return { fuente: 'solicitud', solicitud: s.id, proyecto: pMsg || proyectoEnTexto(s.asunto, proyectos), concepto: String(s.asunto || '').replace(/^((re|rv|fw|fwd)\s*:\s*)+/i, '').trim() || null }
+  }
+  if (pMsg || _FONDO.test(tx)) return { fuente: 'mensaje', solicitud: null, proyecto: pMsg, concepto: null }
+  return null
+}
