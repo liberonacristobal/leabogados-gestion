@@ -181,6 +181,16 @@ Deno.serve(async (req) => {
     const dominiosNotaria = new Set<string>(["notarialascar.cl"]);
     (notaEm || []).forEach((l: { value: string }) => String(l.value || "").split(/[,;\s]+/).map(emailDe).filter(Boolean).forEach((e) => { const d = e.split("@")[1]; if (d && !GENERICOS.test(d)) dominiosNotaria.add(d); }));
     const cartolaHasta = ultCart?.[0]?.fecha || null;
+    // Pedidos de liquidación a la notaría (notaria-pedir-liquidacion): la respuesta en el mismo asunto queda en la bitácora,
+    // unida a su pedido; las direcciones del pedido (aunque sean genéricas, como gmail) cuentan como de la notaría.
+    // deno-lint-ignore no-explicit-any
+    const [pedLiq, respLiq, cfgPed]: any[] = await Promise.all([
+      rest("activity_log?select=created_at,detail&action=eq.notaria.pedido_liquidacion&order=created_at.desc&limit=10"),
+      rest("activity_log?select=detail&action=eq.notaria.respuesta_liquidacion&order=created_at.desc&limit=60"),
+      rest("learnings?select=value&kind=eq.config&key=eq.notaria_pedir_liquidacion&limit=1")]);
+    const jd = (x: unknown) => { try { return typeof x === "string" ? JSON.parse(x) : (x || {}); } catch { return {}; } };
+    const respGids = new Set((respLiq || []).map((r: { detail: unknown }) => jd(r.detail).gmail_id).filter(Boolean));
+    const correosNotaria = new Set<string>((jd(cfgPed?.[0]?.value).notaria || []).map((e: string) => String(e).toLowerCase().trim()));
     const out = { procesados: 0, omitidos: 0, por_estado: {} as Record<string, number> };
     for (const m of msgs) {
       const gid = String(m.id || ""); if (!gid || vistos.has(gid)) { out.omitidos++; continue; }
@@ -196,8 +206,15 @@ Deno.serve(async (req) => {
       // Texto de los PDF adjuntos (comprobantes): fuente de montos.
       let txtPdf = ""; for (const a of adj) if (/pdf/i.test(a.mime || a.name || "") && a.b64) txtPdf += await textoPdf(a.b64);
       const ia = esInterno ? null : await clasificarIA({ de: m.from, asunto, cuerpo, adjuntos: adj.map((a: { name: string }) => a.name) });
-      const esNotaria = dominiosNotaria.has(dom);
+      const respPedido = !esInterno && /liquidaci[oó]n de gastos notariales/i.test(asunto);
+      const esNotaria = dominiosNotaria.has(dom) || correosNotaria.has(de) || respPedido;
       const tieneXlsx = adj.some((a: { name: string }) => /\.xlsx?$/i.test(a.name || ""));
+      if (respPedido && !dryRun && !respGids.has(gid)) {
+        const ped = (pedLiq || []).find((p: { created_at: string }) => new Date(p.created_at) <= recibido);
+        if (ped) { const xl = adj.find((a: { name: string }) => /\.xlsx?$/i.test(a.name || "")); respGids.add(gid);
+          await rest("activity_log", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_email: "agente", action: "notaria.respuesta_liquidacion", table_name: "expenses", estudio_id: "lea",
+            detail: JSON.stringify({ slot: jd(ped.detail).slot, title: `Respuesta de ${nombreDe(m.from)}${xl ? ` · Excel «${xl.name}»` : " · sin liquidación"}`, de, gmail_id: gid, con_excel: !!xl }) }) }).catch(() => null); }
+      }
       const pareceComprob = /comprobante|transferencia|operaci[oó]n express|pago realizado|abono/i.test(`${asunto} ${cuerpo.slice(0, 600)} ${adj.map((a: { name: string }) => a.name).join(" ")}`);
       // Adjuntos al bucket privado (se abren desde la tarjeta de la bandeja); en prueba no se sube nada.
       const adjGuardados: { nombre: string; mime: string; path?: string }[] = [];
