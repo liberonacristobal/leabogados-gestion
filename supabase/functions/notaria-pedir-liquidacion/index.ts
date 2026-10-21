@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
   if (testTo) dry = false;   // una prueba explícita a un correo sí se envía (solo a ese correo)
 
   // Config del estudio
-  const [cfgRow, est] = await Promise.all([sb("learnings?select=value&kind=eq.config&key=eq.notaria_pedir_liquidacion&limit=1"), sb(`estudios?select=nombre&id=eq.${encodeURIComponent(String(body.estudio || "lea"))}&limit=1`)]);
+  const [cfgRow, est] = await Promise.all([sb("learnings?select=value&kind=eq.config&key=eq.notaria_pedir_liquidacion&limit=1"), sb(`estudios?select=nombre,telefono,direccion_firma,ciudad,sitio&id=eq.${encodeURIComponent(String(body.estudio || "lea"))}&limit=1`)]);
   const raw = String(cfgRow?.[0]?.value || "").trim();
   if (raw.toLowerCase() === "off" && !testTo) return json({ ok: true, skipped: "apagado" });
   // deno-lint-ignore no-explicit-any
@@ -93,8 +93,12 @@ Deno.serve(async (req) => {
     const shell = (cuerpo: string) => `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb">
 <div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${logoSrc}" alt="${esc(nombreEstudio)}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div>
 <div style="padding:24px 28px;font-size:14px;color:#3D3D3D;line-height:1.6">${cuerpo}</div>
-<div style="padding:14px 28px;border-top:1px solid #eee;font-size:11px;color:#999">${esc(nombreEstudio)} · leabogados.cl</div></div></body></html>`;
-    const firma = (nombre: string) => `<p style="margin:0">Saludos cordiales,<br><b>${esc(nombre)}</b><br><span style="color:#888;font-size:12.5px">${nombre === nombreEstudio ? "Administración · " : esc(nombreEstudio) + " · "}${esc(GMAIL_USER)}</span></p>`;
+</div></body></html>`;
+    // Firma: mismo formato que firmaCorreoHtml de la app (logo a color · nombre · cargo · teléfono · dirección · ciudad · web).
+    const E = est?.[0] || {};
+    const firma = (f: { nombre: string; cargo?: string; telefono?: string }) => `<p style="margin:0 0 4px">Saludos cordiales,</p><table cellpadding="0" cellspacing="0" style="margin-top:18px;max-width:100%"><tbody><tr><td style="vertical-align:middle;padding-right:16px"><img src="${APP_URL}/le-logo-color.png" alt="${esc(nombreEstudio)}" width="150" style="display:block;width:150px;max-width:100%;height:auto;border:0;outline:none"/></td><td style="vertical-align:middle;border-left:1px solid #B9C2C8;padding-left:16px"><div style="font-size:13px;font-weight:700;color:#3D3D3D;text-transform:uppercase;letter-spacing:.3px;line-height:1.35">${esc(f.nombre)}</div>${f.cargo ? `<div style="font-size:11px;color:#537281;line-height:1.5">${esc(f.cargo)}</div>` : ""}${f.telefono ? `<div style="font-size:11px;color:#537281;margin-top:10px;line-height:1.5">${esc(f.telefono)}</div>` : ""}${E.direccion_firma ? `<div style="font-size:11px;color:#537281;line-height:1.5">${esc(E.direccion_firma)}</div>` : ""}<div style="font-size:11px;color:#537281;line-height:1.5">${esc(E.ciudad || "Santiago")} - Chile</div><div style="font-size:11px;color:#537281;line-height:1.5">${esc(GMAIL_USER)}</div>${E.sitio ? `<a href="https://${esc(E.sitio)}" style="font-size:11px;color:#5E8088;text-decoration:none;display:inline-block;line-height:1.5">www.${esc(E.sitio)}</a>` : ""}</td></tr></tbody></table>`;
+    const firmaOficina = { nombre: nombreEstudio, cargo: "Administración", telefono: E.telefono || "" };
+    const saludo = String(cfg.saludo || "Estimados").trim();
     const enviar = async (o: { to: string[]; cc: string[]; subject: string; html: string; messageId?: string; inReplyTo?: string }) => {
       const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
       await client.send({ from: `${toAscii(nombreEstudio)} <${GMAIL_USER}>`, to: o.to, ...(o.cc.length ? { cc: o.cc } : {}), subject: toAscii(o.subject), content: aTexto(o.html), html: qpSafe(o.html),
@@ -106,20 +110,25 @@ Deno.serve(async (req) => {
     const log = (action: string, detail: unknown, quien: string | null = null) => sbInsert("activity_log", { user_email: quien, action, table_name: "expenses", record_id: null, detail: JSON.stringify(detail), estudio_id: "lea" });
     const pedidos = await sb(`activity_log?select=created_at,detail&action=eq.notaria.pedido_liquidacion&order=created_at.desc&limit=30`);
 
+    // Prueba del seguimiento (cron + testTo + body.seguimientoPrueba = email de quien firma): mismo correo, solo a testTo.
+    if (body.seguimientoPrueba && testTo && esCron) { body.seguimiento = { slot: "__prueba__" }; body.__quien = String(body.seguimientoPrueba); }
     // (a) Seguimiento: lo envía una persona desde la app, en el mismo hilo del pedido.
     if (body.seguimiento) {
       const slotS = String(body.seguimiento.slot || "");
       // deno-lint-ignore no-explicit-any
-      const ped = (pedidos || []).find((r: any) => det(r).slot === slotS); if (!ped) return json({ ok: false, error: "No encontré ese pedido" }, 404);
+      const ped = slotS === "__prueba__" ? { created_at: iso(hoy) + "T12:00:00Z", detail: JSON.stringify({ slot: "__prueba__", desde: "2026-10-10", to: [testTo], cc: [] }) } : (pedidos || []).find((r: any) => det(r).slot === slotS); if (!ped) return json({ ok: false, error: "No encontré ese pedido" }, 404);
       const pd = det(ped);
       const quien = String(body.__quien || "");
-      const nom = String((await sb(`miembros?select=nombre&email=eq.${encodeURIComponent(quien)}&limit=1`))?.[0]?.nombre || quien.split("@")[0] || nombreEstudio);
-      const html = shell(`<p>Estimados,</p><p>Espero que estén muy bien.</p><p>Les escribimos nuevamente respecto de nuestra solicitud del ${dmy(String(ped.created_at))}${pd.desde ? `, de la liquidación de los gastos notariales desde el ${dmy(pd.desde)}` : ", de la liquidación de los gastos notariales"}. Les agradeceremos enviarla en formato Excel en cuanto les sea posible.</p>${firma(nom)}`);
-      const para = Array.isArray(pd.to) ? pd.to : notaria, copia = Array.isArray(pd.cc) ? pd.cc : cc;
+      const fGuard = await sb(`learnings?select=value&kind=eq.firma_correo&key=eq.${encodeURIComponent(quien.toLowerCase())}&limit=1`);
+      // deno-lint-ignore no-explicit-any
+      let fP: any = {}; try { fP = JSON.parse(String(fGuard?.[0]?.value || "{}")); } catch { fP = {}; }
+      const nom = String(fP.nombre || (await sb(`miembros?select=nombre&email=eq.${encodeURIComponent(quien)}&limit=1`))?.[0]?.nombre || quien.split("@")[0] || nombreEstudio);
+      const html = shell(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos nuevamente respecto de nuestra solicitud del ${dmy(String(ped.created_at))}${pd.desde ? `, de la liquidación de los gastos notariales desde el ${dmy(pd.desde)}` : ", de la liquidación de los gastos notariales"}. Les agradeceríamos mucho enviarla en formato Excel cuando les sea posible.</p><p>Muchas gracias por su ayuda.</p>${firma({ nombre: nom, cargo: fP.cargo || "", telefono: fP.telefono || E.telefono || "" })}`);
+      const para = slotS === "__prueba__" ? [testTo!] : Array.isArray(pd.to) ? pd.to : notaria, copia = slotS === "__prueba__" ? [] : Array.isArray(pd.cc) ? pd.cc : cc;
       if (dry) return json({ ok: true, modo: "simulacion", para, cc: copia, html });
       try { await enviar({ to: para, cc: copia, subject: `Re: ${pd.asunto || ASUNTO}`, html, inReplyTo: pd.message_id || undefined }); }
       catch (e) { await log("notaria.seguimiento_liquidacion_fallido", { slot: slotS, title: "El seguimiento NO se envió", error: String((e as Error).message || e) }, quien); return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
-      await log("notaria.seguimiento_liquidacion", { slot: slotS, title: `Seguimiento enviado por ${nom}`, to: para, cc: copia, desde: GMAIL_USER }, quien);
+      if (slotS !== "__prueba__") await log("notaria.seguimiento_liquidacion", { slot: slotS, title: `Seguimiento enviado por ${nom}`, to: para, cc: copia, desde: GMAIL_USER }, quien);
       return json({ ok: true, enviado: true, para, cc: copia, desde: GMAIL_USER });
     }
 
@@ -149,7 +158,7 @@ Deno.serve(async (req) => {
     const uo = await sb("expenses?select=date&category=eq.Notaria&ot_number=not.is.null&date=not.is.null&deleted_at=is.null&order=date.desc.nullslast&limit=1");
     const uoF = uo?.[0]?.date ? String(uo[0].date).slice(0, 10) : null;
     const desdeN = uoF ? (() => { const d = new Date(uoF + "T00:00:00"); d.setDate(d.getDate() + 1); return iso(d); })() : null;
-    const html = shell(`<p>Estimados,</p><p>Espero que estén muy bien.</p><p>Les escribimos para solicitar la liquidación de los gastos notariales de ${esc(nombreEstudio)}, en formato Excel, de las órdenes de trabajo ${desdeN ? `desde el ${dmy(desdeN)} ` : ""}a la fecha.</p><p>Agradeceremos responder a este correo.</p>${firma(nombreEstudio)}`);
+    const html = shell(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos para pedirles, por favor, la liquidación de nuestros gastos notariales en formato Excel, con las órdenes de trabajo ${desdeN ? `desde el ${dmy(desdeN)} ` : ""}a la fecha.</p><p>Muchas gracias de antemano por su ayuda. Quedamos atentos a su respuesta.</p>${firma(firmaOficina)}`);
     const destTo = testTo ? [testTo] : notaria, destCc = testTo ? [] : cc;
     const messageId = `<liquidacion-${slot || iso(today)}-${Date.now()}@${(GMAIL_USER.split("@")[1] || "leabogados.cl")}>`;
     if (dry) return json({ ok: true, modo: "simulacion", slot, para: destTo, cc: destCc, desde: desdeN, asunto: ASUNTO, sin_respuesta: sinResp, html });
