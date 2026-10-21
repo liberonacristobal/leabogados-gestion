@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
     <ul style="margin:8px 0 12px;padding-left:18px">
       ${gap.length ? `<li><b>Cuenta honorarios, falta${gap.length !== 1 ? "n" : ""}:</b> ${lista}</li>` : ""}
       ${atrasos.map((a) => `<li>${a}</li>`).join("")}
-      ${lastCov ? `<li><b>Última cargada (honorarios):</b> ${lindo(lastCov)}</li>` : ""}
+      ${lastCov ? `<li><b>Movimientos cargados hasta (honorarios):</b> ${lindo(lastCov)}</li>` : ""}
     </ul>
     <p>Mientras falte, los pagos de esos días quedan <b>sin conciliar</b>. Carga la cartola en la app o pídela a BICE.</p>
     <p style="color:#99ABB4;font-size:12px;margin-top:20px">Liberona Escala Abogados &middot; aviso automático de cartolas</p>
