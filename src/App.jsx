@@ -1259,6 +1259,88 @@ function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, va
 }
 
 // Último registro de una bitácora (activity_log por prefijo) → render(row|null). Para tarjetas-resumen que abren la bitácora completa.
+// Pedidos de liquidación a la notaría (edge notaria-pedir-liquidacion + agente-correo): cada pedido con su recorrido
+// (envío, tarea de seguimiento, seguimiento, respuesta). Fuente única para la tarjeta de Notaría y la vista Pedidos.
+const _PED_ACC=['notaria.pedido_liquidacion','notaria.pedido_liquidacion_fallido','notaria.pedido_sin_respuesta','notaria.seguimiento_liquidacion','notaria.seguimiento_liquidacion_fallido','notaria.respuesta_liquidacion']
+function usePedidosNotaria(){
+  const [rows,setRows]=useState(null), [rev,setRev]=useState(0)
+  useEffect(()=>{ let vivo=true; if(DEMO){ setRows((demoData.historial||[]).filter(r=>_PED_ACC.includes(r.action))); return }
+    supabase.from('activity_log').select('id,action,detail,user_email,created_at').in('action',_PED_ACC).order('created_at',{ascending:false}).limit(200)
+      .then(({data})=>{ if(vivo) setRows(data||[]) }).catch(()=>{ if(vivo) setRows([]) })
+    return ()=>{ vivo=false } },[rev])
+  const pedidos=useMemo(()=>{ if(!rows) return null
+    const j=d=>{ try{ return typeof d==='string'?JSON.parse(d):(d||{}) }catch(_){ return {} } }
+    const ev=rows.map(r=>({...r,d:j(r.detail)}))
+    return ev.filter(e=>e.action==='notaria.pedido_liquidacion'||e.action==='notaria.pedido_liquidacion_fallido').map(p=>{
+      const slot=p.d.slot, mismos=ev.filter(e=>e.d.slot===slot).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))
+      const resp=mismos.find(e=>e.action==='notaria.respuesta_liquidacion'), seg=mismos.filter(e=>e.action==='notaria.seguimiento_liquidacion'), sinR=mismos.find(e=>e.action==='notaria.pedido_sin_respuesta')
+      const fallo=p.action==='notaria.pedido_liquidacion_fallido'
+      const estado=fallo?'fallo':resp?'resp':sinR?'sin':'env'
+      const ultSeg=seg.length?seg[seg.length-1]:null
+      return {slot, p, eventos:mismos, estado, resp, porSeguir:estado==='sin'&&(!ultSeg||String(ultSeg.created_at)<String(sinR.created_at))}
+    }) },[rows])
+  return {pedidos, recargar:()=>setRev(v=>v+1)}
+}
+const _PED_CHIP={resp:['Respondida',C.greenText,C.greenBg],sin:['Sin respuesta',C.soonText,C.soonBg],env:['Enviado',C.azulInfo,C.azulBg],fallo:['No se envió',C.overdueText,C.overdueBg]}
+function PedidosTile({render}){ const {pedidos}=usePedidosNotaria(); return render(pedidos===null?undefined:(pedidos[0]||null)) }
+function PedidosNotaria({isDesktop}){
+  const {pedidos,recargar}=usePedidosNotaria()
+  const [busy,setBusy]=useState(null)
+  const D=isDesktop
+  const [nombres,setNombres]=useState(_nombresMiembrosCache||{})
+  useEffect(()=>{ nombresMiembros().then(m=>setNombres(m)) },[])
+  const nomCc=cc=>{ const ns=(cc||[]).map(e=>String(nombres[String(e).toLowerCase()]||(DEMO?({'mp@leabogados.cl':'Martina','mc@leabogados.cl':'Martín'})[e]:null)||String(e).split('@')[0]).split(' ')[0]); return ns.length>1?`${ns.slice(0,-1).join(', ')} y ${ns[ns.length-1]}`:(ns[0]||'') }
+  const hm=ts=>{ const d=new Date(ts); return `${fmtFechaDMY(isoLocal(ts))}${D?` · ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`:''}` }
+  const etiqueta=e=>{ const d=e.d||{}
+    if(e.action==='notaria.pedido_liquidacion') return `Enviado desde ${String(d.enviado_desde||'contacto@').split('@')[0]}@`
+    if(e.action==='notaria.pedido_liquidacion_fallido') return 'El pedido NO se envió'
+    if(e.action==='notaria.pedido_sin_respuesta') return D?(d.title||'Tarea de seguimiento'):'Tarea de seguimiento'
+    if(e.action==='notaria.seguimiento_liquidacion') return D?(d.title||'Seguimiento enviado'):'Seguimiento enviado'
+    if(e.action==='notaria.seguimiento_liquidacion_fallido') return 'El seguimiento NO se envió'
+    if(e.action==='notaria.respuesta_liquidacion') return D?(d.title||'Respuesta de la notaría'):(d.con_excel?'Respuesta con Excel':'Respuesta sin liquidación')
+    return e.action }
+  const seguir=async x=>{ if(busy) return; setBusy(x.slot)
+    try{ if(DEMO){ appAlert('Seguimiento enviado a la notaría desde contacto@ (demo: no sale ningún correo).'); return }
+      const {data,error}=await supabase.functions.invoke('notaria-pedir-liquidacion',{body:{seguimiento:{slot:x.slot}}})
+      if(error||!data?.enviado) throw new Error(data?.error||error?.message||'sin respuesta del servidor')
+      appAlert(`Seguimiento enviado a ${(data.para||[]).join(', ')}${(data.cc||[]).length?`, con copia a ${data.cc.join(', ')}`:''}, desde ${data.desde}.`)
+      recargar()
+    }catch(e){ appAlert(`El correo NO se envió.\n\n${e.message||e}`) }
+    finally{ setBusy(null) } }
+  if(pedidos===null) return <div style={{fontSize:12,color:C.muted,padding:'10px 2px'}}>Cargando…</div>
+  const pend=pedidos.filter(x=>x.porSeguir)
+  const btn={fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',cursor:'pointer',padding:'9px 14px',whiteSpace:'nowrap',minHeight:38}
+  return (<div style={{display:'flex',flexDirection:'column',gap:12}}>
+    {pend.map(x=>{ const f=fmtFechaDMY(isoLocal(x.p.created_at))
+      return D
+        ? <div key={'s'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
+            <span style={{width:32,height:32,borderRadius:9,background:C.soonBg,color:C.soonText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='mail' s={16} c={C.soonText}/></span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{`Pedido del ${f} sin respuesta`}</div><div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{`3 días hábiles${x.p.d.desde?` · desde el ${fmtFechaDMY(x.p.d.desde)}`:''}`}</div></div>
+            <button disabled={busy===x.slot} onClick={()=>seguir(x)} style={{...btn,opacity:busy===x.slot?.6:1}}>{busy===x.slot?'Enviando…':'Enviar seguimiento'}</button>
+          </div>
+        : <div key={'s'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',display:'flex',flexDirection:'column',gap:9}}>
+            <div><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Pedido sin respuesta</div><div style={{fontSize:11.5,color:C.muted}}>{`${f} · 3 días hábiles`}</div></div>
+            <button disabled={busy===x.slot} onClick={()=>seguir(x)} style={{...btn,width:'100%',padding:'10px',opacity:busy===x.slot?.6:1}}>{busy===x.slot?'Enviando…':'Enviar seguimiento'}</button>
+          </div> })}
+    <div style={{...SEC_LBL,margin:'4px 2px 0'}}>Pedidos de liquidación</div>
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+      {!pedidos.length&&<div style={{fontSize:12.5,color:C.muted,padding:'12px 14px'}}>Aún no hay pedidos. Salen los días 10 y 20 (o el día hábil siguiente), desde contacto@ a la notaría.</div>}
+      {pedidos.map((x,i)=>{ const [lbl,col,bg]=_PED_CHIP[x.estado]; const d=x.p.d||{}
+        return <div key={x.slot+'-'+i} style={{display:'flex',gap:12,padding:D?'12px 14px':'11px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',minWidth:0}}>
+          {diaGrande(isoLocal(x.p.created_at))}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><div style={{fontSize:13.5,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.desde?`Desde el ${fmtFechaDMY(d.desde)}`:'A la fecha'}</div><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',background:bg,color:col}}>{lbl}</span></div>
+            <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{D?`A ${(d.to||[]).join(' y ')}${(d.cc||[]).length?` · copia ${nomCc(d.cc)}`:''}`:`A la notaría${(d.cc||[]).length?` · copia ${nomCc(d.cc)}`:''}`}</div>
+            <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:4}}>
+              {x.eventos.map(e=><div key={e.id} style={{display:'flex',gap:8,alignItems:'baseline',fontSize:12,color:C.text,minWidth:0}}>
+                <span style={{color:C.muted,width:D?128:78,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{hm(e.created_at)}</span>
+                <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{etiqueta(e)}</span></div>)}
+            </div>
+          </div>
+        </div> })}
+    </div>
+  </div>)
+}
 function BitacoraUltima({prefijo, render}){
   const [row,setRow]=useState(undefined)
   useEffect(()=>{ let vivo=true; if(DEMO){ setRow((demoData.historial||[]).filter(r=>String(r.action).startsWith(prefijo)).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)))[0]||null); return }
@@ -21627,7 +21709,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,...(isDesktop&&selectedClient?{minWidth:0,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}:{})}}>
-                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial de rendiciones':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?(rendSub==='rendir'?'Rendir a cliente':rendSub==='pend'?'Pendientes':'Rendiciones'):showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Historial de pagos':notaTab==='pend'?'Pagar':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Recordatorios':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
+                  {selectedClient?selectedClient.name:showCargaPag?'Carga masiva':showHistorial?'Historial de rendiciones':showGastosOficina?'Gastos oficina':notaMenuOpen?'Cargar':showRendiciones?(rendSub==='rendir'?'Rendir a cliente':rendSub==='pend'?'Pendientes':'Rendiciones'):showBuscarClientes?'Buscar clientes':showReasignar?'Reasignar gastos':showOrphans?'Sin cliente · por asignar':showRevision?(revSub==='archivados'?'Clientes archivados':revSub==='ocasionales'?'Clientes ocasionales':'Gastos por revisar'):showNotaria?(notaTab==='enviar'?'Pagar a la notaría':notaTab==='cobros'?'Cobros':notaTab==='pagados'?'Historial de pagos':notaTab==='pend'?'Pagar':notaTab==='nonuestras'?'No son nuestras':notaTab==='recordatorios'?'Pedidos':'Notaría'):showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Clientes'}
                 </span>
                 {selectedClient&&!esOficina(selectedClient.id)&&onOpenClientFicha&&<span onClick={()=>onOpenClientFicha(selectedClient.id)} title='Ver ficha del cliente' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Ver ficha <Gl n='chevron'/></span>}
                 {selectedClient&&!esOficina(selectedClient.id)&&(()=>{
@@ -22113,8 +22195,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                     ic:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={rojo?C.overdueText:C.muted} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg>,
                     bg:rojo?C.surface:C.bgSoft, cardBg:rojo?C.overdueBg:undefined, cardBd:rojo?C.overdueText+'44':undefined, tCol:rojo?C.overdueText:undefined,
                     go:()=>{ setNoNSel(new Set(nn.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }})}
-                  <BitacoraUltima prefijo='notaria.recordatorio' render={u=>tile('rec',{t:'Recordatorios', s:u===undefined?'…':u?`último ${fmtFechaDMY(isoLocal(u.created_at))}`:'días 10 y 20',
-                    ic:<SIcon n='mail' s={17} c={C.muted}/>, bg:C.bgSoft, go:()=>setNotaTab('recordatorios')})}/>
+                  <PedidosTile render={u=>tile('rec',{t:'Pedidos', s:u===undefined?'…':u?`${fmtFechaDMY(isoLocal(u.p.created_at))} · ${_PED_CHIP[u.estado][0].toLowerCase()}`:'días 10 y 20',
+                    ic:<SIcon n='mail' s={17} c={u&&u.porSeguir?C.soonText:C.muted}/>, bg:u&&u.porSeguir?C.soonBg:C.bgSoft, go:()=>setNotaTab('recordatorios')})}/>
                 </div>) })()}
           </div>
         )
@@ -22199,7 +22281,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       {/* Vista "No son nuestras": OT no reconocidas acumuladas de las cargas — se consultan a la notaría cuando quieras (no solo en la carga) */}
       {showNotaria&&notaTab==='recordatorios'&&(
         <div style={{padding:isDesktop?'8px 22px 44px':'6px 12px 30px',maxWidth:isDesktop?760:undefined,margin:'0 auto'}}>
-          <BitacoraLista prefijo='notaria.recordatorio' titulo='Recordatorios para pedir la liquidación' etiquetas={{'notaria.recordatorio_liquidacion':'Recordatorio enviado','notaria.recordatorio_liquidacion_prueba':'Recordatorio de prueba'}} limite={30} vacio='Aún no se ha enviado ninguno · salen los días 10 y 20 (o el día hábil siguiente).'/>
+          <PedidosNotaria isDesktop={isDesktop}/>
         </div>
       )}
       {showNotaria&&notaTab==='nonuestras'&&(()=>{

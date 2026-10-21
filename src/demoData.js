@@ -174,6 +174,11 @@ export const demoData = {
     { id:'nn1', ot:'491007', fecha:'2026-09-30', materia:'Escritura de compraventa', requirente:'Tercero sin vínculo', monto:35000, estado:'pendiente', cargas:[{fecha:'2026-10-15'}], historial:[] },
   ],
   historial: [
+    { id:'pn1', action:'notaria.pedido_liquidacion', created_at:'2026-10-15T12:00:00Z', user_email:null, detail:JSON.stringify({slot:'2026-10-15', title:'Pedido desde el 30-09-2026', desde:'2026-09-30', to:['sdelgado@notarialascar.cl','sdanotaria@gmail.com'], cc:['mp@leabogados.cl','mc@leabogados.cl'], enviado_desde:'contacto@leabogados.cl'}) },
+    { id:'pn2', action:'notaria.pedido_sin_respuesta', created_at:'2026-10-20T12:00:00Z', user_email:null, detail:JSON.stringify({slot:'2026-10-15', title:'Sin respuesta en 3 días hábiles · tarea a Martina'}) },
+    { id:'pn3', action:'notaria.pedido_liquidacion', created_at:'2026-10-05T12:00:00Z', user_email:null, detail:JSON.stringify({slot:'2026-10-05', title:'Pedido desde el 10-09-2026', desde:'2026-09-10', to:['sdelgado@notarialascar.cl','sdanotaria@gmail.com'], cc:['mp@leabogados.cl','mc@leabogados.cl'], enviado_desde:'contacto@leabogados.cl'}) },
+    { id:'pn4', action:'notaria.seguimiento_liquidacion', created_at:'2026-10-08T14:42:00Z', user_email:'mp@leabogados.cl', detail:JSON.stringify({slot:'2026-10-05', title:'Seguimiento enviado por Martina Pérez'}) },
+    { id:'pn5', action:'notaria.respuesta_liquidacion', created_at:'2026-10-08T19:05:00Z', user_email:'agente', detail:JSON.stringify({slot:'2026-10-05', title:'Respuesta de Silvana Delgado · Excel «Liquidación.xlsx»', con_excel:true}) },
     { id:'h3', action:'notaria.recordatorio_liquidacion', created_at:'2026-10-13T12:00:00Z', user_email:'cl@leabogados.cl', detail:JSON.stringify({texto:'Pedir desde el 02-09-2026'}) },
     { id:'h1', action:'clientes.c2.auditoria', created_at:'2026-10-13T12:00:00Z', user_email:'cl@leabogados.cl', detail:JSON.stringify({texto:'Se registra el pago a la notaría por $180.000 (OT 406644, 01-12-2025), pagada el 24-12-2025. Fuente: planilla "Deuda Notaría" al 31-12-2025.'}) },
     { id:'h2', action:'clientes.c2.auditoria', created_at:'2026-10-13T11:00:00Z', user_email:'cl@leabogados.cl', detail:JSON.stringify({texto:'Los gastos sin fecha vienen del registro histórico importado el 25-06-2026; el original no trae fecha.'}) },
