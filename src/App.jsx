@@ -17,7 +17,7 @@ import { demoData } from './demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from './cartola'
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../supabase/functions/_shared/conciliacionReglas.js'
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
-import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, ultimoDiaHabilMesEmision as _udhme } from '../supabase/functions/_shared/facturacionReglas.js'
+import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme } from '../supabase/functions/_shared/facturacionReglas.js'
 import logoBlanco from './le-logo-blanco.png'
 
 // LA CLAVE ANÓNIMA NO IDENTIFICA A NADIE: viaja en este mismo paquete. Las
@@ -12003,7 +12003,9 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       // FIFO recurrente: si TODAS las candidatas son la MISMA serie (mismo sale_id), no hay ambigüedad real →
       // consumir la MÁS ANTIGUA sin facturar (regla "siempre la más antigua, nunca saltarse"), automático.
       // Solo se mantiene la compuerta cuando las candidatas son de VENTAS distintas (ahí sí: ¿cuál proyecto?).
-      for(const it of rows.filter(r=>r.estado==='programada' && r.clienteId && ((r.progCand||[]).length<=1 || unaSerie(r.progCand)))){
+      // Regla compartida: si la venta ya tiene una factura emitida ese mes, la cuota que toca (mes atrasado o adelantado) la elige una persona.
+      const yaEnMes = it => { const pc=(it.progCand||[]).find(c=>String(c.id)===String(it.progId))||(it.progCand||[])[0]; return serieYaFacturadaEnMes((billing||[]).filter(b=>String(b.client_id)===String(it.clienteId)), pc?.sale_id, it.fecha, it.folio) }
+      for(const it of rows.filter(r=>r.estado==='programada' && r.clienteId && ((r.progCand||[]).length<=1 || unaSerie(r.progCand)) && !yaEnMes(r))){
         try{
           if((it.progCand||[]).length>1){ const old=[...it.progCand].sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))[0]; if(old?.id) it.progId=old.id }   // varias cuotas iguales de la misma serie → la más antigua (FIFO)
           await registrarProg(it); autoOk++; setRespaldoRes(p=>(p||[]).map(r=>r===it?{...r,estado:'registrada',_auto:true}:r))

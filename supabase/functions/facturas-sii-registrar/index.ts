@@ -7,7 +7,7 @@
 // Lo que la app resuelve con reglas extra (comisión por facturar, cuota anticipada, cuota que habría que retirar) y lo ambiguo
 // (RUT sin cliente, cuotas de ventas distintas, sin venta clara) queda en la Bandeja del agente → «Abrir en Facturación». Bitácora de todo.
 // Body: {secret, dryRun?}. Auth: CRON_SECRET. verify_jwt=false. Lo llama el cron diario (después del cuadre del RCV).
-import { candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision } from "../_shared/facturacionReglas.js";
+import { candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes } from "../_shared/facturacionReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
       const cli = d.client_id ? { cid: d.client_id, ent: null } : cliDe(d.receptor_rut);
       if (!cli) { await bandeja(d, "El RUT del receptor no está en la app", null); continue; }
       const billingCli = await todas(`billing?select=id,client_id,sale_id,concept,amount,status,due,issued_at,invoice_no,billing_type,deleted_at,prepaid_anticipo_id,paid_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=is.null`);
+      const facturadasCli = await todas(`billing?select=id,sale_id,invoice_no,issued_at,status,deleted_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=not.is.null`);
       const cands = candidatasProgramadas(billingCli, cli.cid, monto, fecha, d.glosa || "").filter((c: { id: string }) => !usadas.has(c.id));
       const activas = sales.filter((s) => s.client_id === cli.cid && !esSub(s));
       const dec = decidirRegistroSII(cands, activas);
@@ -80,6 +81,8 @@ Deno.serve(async (req) => {
       if (dec.tipo === "prog") {
         const p = dec.prog;
         // Comisión por facturar y cuota anticipada tienen reglas propias en la app (monto del depósito, fecha del anticipo).
+        const mismoMes = serieYaFacturadaEnMes(facturadasCli, p.sale_id, fecha, d.folio);
+        if (mismoMes) { await bandeja(d, `Su venta ya tiene la factura N° ${String(mismoMes.invoice_no).replace(/^factura\s*/i, "")} emitida este mes: puede ser un mes atrasado o adelantado`, cli.cid); continue; }
         if (p.billing_type === "comision" || p.status === "Anticipada") { await bandeja(d, p.billing_type === "comision" ? "Calza con una comisión por facturar" : "Calza con una cuota ya pagada por adelantado", cli.cid); continue; }
         usadas.add(p.id);
         out.registradas.push({ folio: d.folio, cliente: nombre, monto, como: `cuota «${p.concept}»`, due });
