@@ -1259,10 +1259,12 @@ function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, va
 }
 
 // Último registro de una bitácora (activity_log por prefijo) → render(row|null). Para tarjetas-resumen que abren la bitácora completa.
+// Toca una vez, al montar, el botón que calza con el selector (p. ej. «Analizar» de la liquidación que llegó por correo).
+function AutoClick({sel}){ const hecho=useRef(false); useEffect(()=>{ if(hecho.current) return; hecho.current=true; const b=document.querySelector(sel); if(b) b.click() },[sel]); return null }
 // Pedidos de liquidación a la notaría (edge notaria-pedir-liquidacion + agente-correo): cada pedido con su recorrido
 // (envío, tarea de seguimiento, seguimiento, respuesta). Fuente única para la tarjeta de Notaría y la vista Pedidos.
-const _PED_ACC=['notaria.pedido_liquidacion','notaria.pedido_liquidacion_fallido','notaria.pedido_sin_respuesta','notaria.seguimiento_liquidacion','notaria.seguimiento_liquidacion_fallido','notaria.respuesta_liquidacion']
-function usePedidosNotaria(){
+const _PED_ACC=['notaria.pedido_liquidacion','notaria.pedido_liquidacion_fallido','notaria.pedido_sin_respuesta','notaria.seguimiento_liquidacion','notaria.seguimiento_liquidacion_fallido','notaria.respuesta_liquidacion','notaria.aviso_liquidacion','notaria.aviso_liquidacion_fallido']
+function usePedidosNotaria(bulkImports=[]){
   const [rows,setRows]=useState(null), [rev,setRev]=useState(0)
   useEffect(()=>{ let vivo=true; if(DEMO){ setRows((demoData.historial||[]).filter(r=>_PED_ACC.includes(r.action))); return }
     supabase.from('activity_log').select('id,action,detail,user_email,created_at').in('action',_PED_ACC).order('created_at',{ascending:false}).limit(200)
@@ -1275,16 +1277,19 @@ function usePedidosNotaria(){
       const slot=p.d.slot, mismos=ev.filter(e=>e.d.slot===slot).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))
       const resp=mismos.find(e=>e.action==='notaria.respuesta_liquidacion'), seg=mismos.filter(e=>e.action==='notaria.seguimiento_liquidacion'), sinR=mismos.find(e=>e.action==='notaria.pedido_sin_respuesta')
       const fallo=p.action==='notaria.pedido_liquidacion_fallido'
-      const estado=fallo?'fallo':resp?'resp':sinR?'sin':'env'
+      // Liquidación cargada = una carga de notaría (bulk_imports) hecha después de la respuesta con Excel.
+      const carga=resp&&resp.d.con_excel?(bulkImports||[]).filter(b=>(b.status||'active')==='active'&&(b.resumen?.notaria===true||/notar/i.test(String(b.filename||'')))&&String(b.created_at)>=String(resp.created_at)).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))[0]||null:null
+      const eventos=carga?[...mismos,{id:'c'+carga.id,action:'__carga',created_at:carga.created_at,d:{n:carga.resumen?.cargadas??carga.row_count}}]:mismos
+      const estado=fallo?'fallo':carga?'carg':resp?(resp.d.con_excel?'rev':'resp'):sinR?'sin':'env'
       const ultSeg=seg.length?seg[seg.length-1]:null
-      return {slot, p, eventos:mismos, estado, resp, porSeguir:estado==='sin'&&(!ultSeg||String(ultSeg.created_at)<String(sinR.created_at))}
-    }) },[rows])
+      return {slot, p, eventos, estado, resp, carga, porSeguir:estado==='sin'&&(!ultSeg||String(ultSeg.created_at)<String(sinR.created_at))}
+    }) },[rows,bulkImports])
   return {pedidos, recargar:()=>setRev(v=>v+1)}
 }
-const _PED_CHIP={resp:['Respondida',C.greenText,C.greenBg],sin:['Sin respuesta',C.soonText,C.soonBg],env:['Enviado',C.azulInfo,C.azulBg],fallo:['No se envió',C.overdueText,C.overdueBg]}
-function PedidosTile({render}){ const {pedidos}=usePedidosNotaria(); return render(pedidos===null?undefined:(pedidos[0]||null)) }
-function PedidosNotaria({isDesktop}){
-  const {pedidos,recargar}=usePedidosNotaria()
+const _PED_CHIP={carg:['Cargada',C.greenText,C.greenBg],rev:['Por revisar',C.azulInfo,C.azulBg],resp:['Respondida',C.greenText,C.greenBg],sin:['Sin respuesta',C.soonText,C.soonBg],env:['Enviado',C.azulInfo,C.azulBg],fallo:['No se envió',C.overdueText,C.overdueBg]}
+function PedidosTile({render, bulkImports}){ const {pedidos}=usePedidosNotaria(bulkImports); return render(pedidos===null?undefined:(pedidos[0]||null)) }
+function PedidosNotaria({isDesktop, bulkImports, onRevisar}){
+  const {pedidos,recargar}=usePedidosNotaria(bulkImports)
   const [busy,setBusy]=useState(null)
   const D=isDesktop
   const [nombres,setNombres]=useState(_nombresMiembrosCache||{})
@@ -1298,6 +1303,9 @@ function PedidosNotaria({isDesktop}){
     if(e.action==='notaria.seguimiento_liquidacion') return D?(d.title||'Seguimiento enviado'):'Seguimiento enviado'
     if(e.action==='notaria.seguimiento_liquidacion_fallido') return 'El seguimiento NO se envió'
     if(e.action==='notaria.respuesta_liquidacion') return D?(d.title||'Respuesta de la notaría'):(d.con_excel?'Respuesta con Excel':'Respuesta sin liquidación')
+    if(e.action==='notaria.aviso_liquidacion') return D?(d.title||'Aviso y tarea de revisión'):'Tarea de revisión'
+    if(e.action==='notaria.aviso_liquidacion_fallido') return 'El aviso NO se envió'
+    if(e.action==='__carga') return `Liquidación cargada${d.n!=null?` · ${d.n} OT`:''}`
     return e.action }
   const seguir=async x=>{ if(busy) return; setBusy(x.slot)
     try{ if(DEMO){ appAlert('Seguimiento enviado a la notaría desde contacto@ (demo: no sale ningún correo).'); return }
@@ -1309,8 +1317,21 @@ function PedidosNotaria({isDesktop}){
     finally{ setBusy(null) } }
   if(pedidos===null) return <div style={{fontSize:12,color:C.muted,padding:'10px 2px'}}>Cargando…</div>
   const pend=pedidos.filter(x=>x.porSeguir)
+  const porRev=pedidos.filter(x=>x.estado==='rev')
+  const revisar=x=>{ const d=x.resp?.d||{}; if(!d.path){ appAlert('No encontré el Excel guardado de esa respuesta. Ábrelo desde el correo y cárgalo en Carga masiva › Notaría.'); return } onRevisar&&onRevisar({path:d.path,nombre:d.nombre||'Liquidación notaría.xlsx'}) }
   const btn={fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',cursor:'pointer',padding:'9px 14px',whiteSpace:'nowrap',minHeight:38}
   return (<div style={{display:'flex',flexDirection:'column',gap:12}}>
+    {porRev.map(x=>{ const f=fmtFechaDMY(isoLocal(x.resp.created_at)), d=x.resp.d||{}, quien=String(d.title||'').replace(/^Respuesta de /,'').split(' · ')[0]
+      return D
+        ? <div key={'r'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
+            <span style={{width:32,height:32,borderRadius:9,background:C.azulBg,color:C.azulInfo,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='mail' s={16} c={C.azulInfo}/></span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{`Liquidación recibida el ${f} · por revisar`}</div><div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[quien,d.nombre?`«${d.nombre}»`:null].filter(Boolean).join(' · ')}</div></div>
+            <button onClick={()=>revisar(x)} style={btn}>Revisar liquidación</button>
+          </div>
+        : <div key={'r'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',display:'flex',flexDirection:'column',gap:9}}>
+            <div><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Liquidación por revisar</div><div style={{fontSize:11.5,color:C.muted}}>{`recibida el ${f}`}</div></div>
+            <button onClick={()=>revisar(x)} style={{...btn,width:'100%',padding:'10px'}}>Revisar liquidación</button>
+          </div> })}
     {pend.map(x=>{ const f=fmtFechaDMY(isoLocal(x.p.created_at))
       return D
         ? <div key={'s'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
@@ -1335,6 +1356,7 @@ function PedidosNotaria({isDesktop}){
               {x.eventos.map(e=><div key={e.id} style={{display:'flex',gap:8,alignItems:'baseline',fontSize:12,color:C.text,minWidth:0}}>
                 <span style={{color:C.muted,width:D?128:78,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{hm(e.created_at)}</span>
                 <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{etiqueta(e)}</span></div>)}
+              {x.estado==='rev'&&<div style={{display:'flex',gap:8,fontSize:12}}><span style={{width:D?128:78,flexShrink:0}}/><span onClick={()=>revisar(x)} style={{fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Revisar liquidación ›</span></div>}
             </div>
           </div>
         </div> })}
@@ -19423,9 +19445,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Paso 1: tipo + subir archivo */}
       {!rows&&(
         <>
+          {notaria&&archivoCorreo&&!cargando&&!rows&&<AutoClick sel="[data-analizar-correo='1']"/>}
           {notaria&&archivoCorreo&&!cargando&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderRadius:12,border:`1px solid ${C.border}`,background:C.card,marginBottom:10}}>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Liquidación recibida por correo</div><div style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{archivoCorreo.nombre}</div></div>
-            <button onClick={async()=>{ try{ const {data,error}=await supabase.storage.from('documentos').download(archivoCorreo.path); if(error||!data) throw (error||new Error('sin archivo')); await onFile({target:{files:[new File([data],archivoCorreo.nombre,{type:data.type||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})]}}) }catch(e){ appAlert('No se pudo abrir el archivo del correo: '+(e.message||e)) } }} style={{fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'7px 14px',cursor:'pointer',whiteSpace:'nowrap'}}>Analizar</button>
+            <button data-analizar-correo='1' onClick={async()=>{ try{ const {data,error}=await supabase.storage.from('documentos').download(archivoCorreo.path); if(error||!data) throw (error||new Error('sin archivo')); await onFile({target:{files:[new File([data],archivoCorreo.nombre,{type:data.type||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})]}}) }catch(e){ appAlert('No se pudo abrir el archivo del correo: '+(e.message||e)) } }} style={{fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'7px 14px',cursor:'pointer',whiteSpace:'nowrap'}}>Analizar</button>
           </div>}
           {notaria
             ? <label style={{display:'block',padding:'26px 24px',borderRadius:12,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:C.bgPanel,marginBottom:12}}>
@@ -22195,8 +22218,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                     ic:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={rojo?C.overdueText:C.muted} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg>,
                     bg:rojo?C.surface:C.bgSoft, cardBg:rojo?C.overdueBg:undefined, cardBd:rojo?C.overdueText+'44':undefined, tCol:rojo?C.overdueText:undefined,
                     go:()=>{ setNoNSel(new Set(nn.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }})}
-                  <PedidosTile render={u=>tile('rec',{t:'Pedidos', s:u===undefined?'…':u?`${fmtFechaDMY(isoLocal(u.p.created_at))} · ${_PED_CHIP[u.estado][0].toLowerCase()}`:'días 10 y 20',
-                    ic:<SIcon n='mail' s={17} c={u&&u.porSeguir?C.soonText:C.muted}/>, bg:u&&u.porSeguir?C.soonBg:C.bgSoft, go:()=>setNotaTab('recordatorios')})}/>
+                  <PedidosTile bulkImports={bulkImports} render={u=>tile('rec',{t:'Pedidos', s:u===undefined?'…':u?`${fmtFechaDMY(isoLocal(u.p.created_at))} · ${_PED_CHIP[u.estado][0].toLowerCase()}`:'días 10 y 20',
+                    ic:<SIcon n='mail' s={17} c={u&&u.porSeguir?C.soonText:u&&u.estado==='rev'?C.azulInfo:C.muted}/>, bg:u&&u.porSeguir?C.soonBg:u&&u.estado==='rev'?C.azulBg:C.bgSoft, go:()=>setNotaTab('recordatorios')})}/>
                 </div>) })()}
           </div>
         )
@@ -22281,7 +22304,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
       {/* Vista "No son nuestras": OT no reconocidas acumuladas de las cargas — se consultan a la notaría cuando quieras (no solo en la carga) */}
       {showNotaria&&notaTab==='recordatorios'&&(
         <div style={{padding:isDesktop?'8px 22px 44px':'6px 12px 30px',maxWidth:isDesktop?760:undefined,margin:'0 auto'}}>
-          <PedidosNotaria isDesktop={isDesktop}/>
+          <PedidosNotaria isDesktop={isDesktop} bulkImports={bulkImports} onRevisar={arch=>onBulk&&onBulk(true,arch)}/>
         </div>
       )}
       {showNotaria&&notaTab==='nonuestras'&&(()=>{
@@ -43687,7 +43710,7 @@ export default function App() {
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Mi carga' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
               <MiCargaModal tasks={tasks} proyectosCartera={proyectosCartera} setProyectosCartera={setProyectosCartera} clients={clients} user={user} onClose={goBack} onOpenClientFicha={handleOpenClientFicha}/>
             </div>}
-            {tab==='expenses'&&<ExpensesView onOpenMovBanco={id=>navTo({tab:'conciliacion',conc:id})} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} onRevisionCajaChica={()=>navTo({tab:'conciliacion',ccRev:true})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
+            {tab==='expenses'&&<ExpensesView onOpenMovBanco={id=>navTo({tab:'conciliacion',conc:id})} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} onRevisionCajaChica={()=>navTo({tab:'conciliacion',ccRev:true})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria,arch)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria,archivoCorreo:arch||null}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView isAdmin={userRole==='admin'} expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} onAsociarTrabajo={handleAsociarTrabajo} clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} setExpenses={setExpenses} setRendiciones={setRendiciones} setBilling={setBilling} user={user} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView onAsociarTrabajo={handleAsociarTrabajo} clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}

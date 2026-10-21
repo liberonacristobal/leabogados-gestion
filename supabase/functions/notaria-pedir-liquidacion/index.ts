@@ -111,6 +111,28 @@ Deno.serve(async (req) => {
     const log = (action: string, detail: unknown, quien: string | null = null) => sbInsert("activity_log", { user_email: quien, action, table_name: "expenses", record_id: null, detail: JSON.stringify(detail), estudio_id: "lea" });
     const pedidos = await sb(`activity_log?select=created_at,detail&action=eq.notaria.pedido_liquidacion&order=created_at.desc&limit=30`);
 
+    // (0) Llegó la liquidación (lo llama agente-correo): aviso a quienes van en copia + tarea a quien revisa. Una vez por correo.
+    if (body.avisoLiquidacion && (esCron || testTo)) {
+      const av = body.avisoLiquidacion;
+      if (!testTo && av.gmail_id) { const ya = await sb(`activity_log?select=id&action=eq.notaria.aviso_liquidacion&detail=like.*${encodeURIComponent(String(av.gmail_id))}*&limit=1`); if (ya?.length) return json({ ok: true, enviado: false, motivo: "ya avisado" }); }
+      // deno-lint-ignore no-explicit-any
+      const ped = (pedidos || []).find((r: any) => det(r).slot === av.slot) || null;
+      const para = testTo ? [testTo] : cc;
+      const mm = await sb(`miembros?select=email,nombre&email=in.(${cc.map((e) => `"${e}"`).join(",")})`);
+      const pila = cc.map((e) => String((mm || []).find((m: { email: string }) => String(m.email).toLowerCase() === e.toLowerCase())?.nombre || e.split("@")[0]).split(" ")[0]);
+      const nombres = pila.length > 1 ? `${pila.slice(0, -1).join(", ")} y ${pila[pila.length - 1]}` : (pila[0] || "");
+      const html = shell(`<p>Hola${nombres ? " " + esc(nombres) : ""}:</p><p>Espero que estén muy bien.</p><p>Llegó la liquidación de la notaría${av.de ? ` (${esc(av.de)}${av.nombre ? `, «${esc(av.nombre)}»` : ""})` : ""}${ped ? `, en respuesta al pedido del ${dmy(String(ped.created_at))}` : ""}. Está precargada en la app para que la revisen en <b>Gastos › Notaría › Pedidos › «Revisar liquidación»</b>.</p><p>No se carga ninguna OT hasta que la confirmen.</p><p style="margin:18px 0"><a href="${APP_URL}" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:10px 20px;border-radius:18px;font-size:13px;font-weight:bold">Revisar en la app</a></p><p style="margin:0;font-size:12px;color:#888">${esc(nombreEstudio)} · aviso automático</p>`);
+      if (dry && !testTo) return json({ ok: true, modo: "simulacion", para, html });
+      try { await enviar({ to: para, cc: [], subject: "Liquidación de notaría recibida - por revisar en la app" + (testTo ? " (prueba)" : ""), html }); }
+      catch (e) { if (!testTo) await log("notaria.aviso_liquidacion_fallido", { slot: av.slot, gmail_id: av.gmail_id, title: "El aviso de la liquidación NO se envió", error: String((e as Error).message || e) }); return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
+      if (testTo) return json({ ok: true, enviado: true, para });
+      const quienRev = String(cfg.seguimiento_a || "Martina");
+      const ofi = await sb(`clients?select=id&name=ilike.*liberona*escala*&limit=1`);
+      await sbInsert("tasks", { title: "Revisar la liquidación de la notaría", who: quienRev, assignees: [quienRev], assigned_by: "App", status: "Activo", client_id: ofi?.[0]?.id || null, due: iso(hoy),
+        note: `Llegó la liquidación${av.nombre ? ` «${av.nombre}»` : ""}. En Gastos › Notaría › Pedidos, toca «Revisar liquidación».`, estudio_id: "lea" });
+      await log("notaria.aviso_liquidacion", { slot: av.slot, gmail_id: av.gmail_id, title: `Aviso a ${nombres} · tarea a ${quienRev}`, to: para });
+      return json({ ok: true, enviado: true, para });
+    }
     // Prueba del seguimiento (cron + testTo + body.seguimientoPrueba = email de quien firma): mismo correo, solo a testTo.
     if (body.seguimientoPrueba && testTo && esCron) { body.seguimiento = { slot: "__prueba__" }; body.__quien = String(body.seguimientoPrueba); }
     // (a) Seguimiento: lo envía una persona desde la app, en el mismo hilo del pedido.
