@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
     // Logo publicado en el dominio de la app (como el resto de los correos). Incrustado (cid) Gmail lo mostraba roto y como adjunto.
     const logo = null;
     const logoSrc = `${APP_URL}/le-logo-blanco.png`;
-    const shell = (cuerpo: string) => `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb">
+    const shell = (cuerpo: string) => `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta http-equiv="Content-Language" content="es"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb">
 <div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${logoSrc}" alt="${esc(nombreEstudio)}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div>
 <div style="padding:24px 28px;font-size:14px;color:#3D3D3D;line-height:1.6">${cuerpo}</div>
 </div></body></html>`;
@@ -101,8 +101,8 @@ Deno.serve(async (req) => {
     const saludo = String(cfg.saludo || "Estimados").trim();
     const enviar = async (o: { to: string[]; cc: string[]; subject: string; html: string; messageId?: string; inReplyTo?: string }) => {
       const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-      await client.send({ from: `${toAscii(nombreEstudio)} <${GMAIL_USER}>`, to: o.to, ...(o.cc.length ? { cc: o.cc } : {}), subject: toAscii(o.subject), content: aTexto(o.html), html: qpSafe(o.html),
-        ...(o.inReplyTo ? { inReplyTo: o.inReplyTo, references: o.inReplyTo } : {}), ...(o.messageId ? { headers: { "Message-ID": o.messageId } } : {}) });
+      await client.send({ from: `${toAscii(nombreEstudio)} <${GMAIL_USER}>`, to: o.to, ...(o.cc.length ? { cc: o.cc } : {}), subject: toAscii(o.subject), content: aTexto(o.html), html: qpSafe(o.html), headers: { "Content-Language": "es", ...(o.messageId ? { "Message-ID": o.messageId } : {}) },
+        ...(o.inReplyTo ? { inReplyTo: o.inReplyTo, references: o.inReplyTo } : {}) });
       await client.close();
     };
     // Versión en texto del mismo correo (para quien lo lee sin formato).
@@ -116,14 +116,15 @@ Deno.serve(async (req) => {
     if (body.seguimiento) {
       const slotS = String(body.seguimiento.slot || "");
       // deno-lint-ignore no-explicit-any
-      const ped = slotS === "__prueba__" ? { created_at: iso(hoy) + "T12:00:00Z", detail: JSON.stringify({ slot: "__prueba__", desde: "2026-10-10", to: [testTo], cc: [] }) } : (pedidos || []).find((r: any) => det(r).slot === slotS); if (!ped) return json({ ok: false, error: "No encontré ese pedido" }, 404);
+      const prueba = slotS === "__prueba__" ? (await sb(`activity_log?select=created_at,detail&action=eq.notaria.pedido_liquidacion_prueba&order=created_at.desc&limit=1`))?.[0] : null;
+      const ped = slotS === "__prueba__" ? (prueba || { created_at: iso(hoy) + "T12:00:00Z", detail: JSON.stringify({ slot: "__prueba__", desde: "2026-10-10" }) }) : (pedidos || []).find((r: any) => det(r).slot === slotS); if (!ped) return json({ ok: false, error: "No encontré ese pedido" }, 404);
       const pd = det(ped);
       const quien = String(body.__quien || "");
       const fGuard = await sb(`learnings?select=value&kind=eq.firma_correo&key=eq.${encodeURIComponent(quien.toLowerCase())}&limit=1`);
       // deno-lint-ignore no-explicit-any
       let fP: any = {}; try { fP = JSON.parse(String(fGuard?.[0]?.value || "{}")); } catch { fP = {}; }
       const nom = String(fP.nombre || (await sb(`miembros?select=nombre&email=eq.${encodeURIComponent(quien)}&limit=1`))?.[0]?.nombre || quien.split("@")[0] || nombreEstudio);
-      const html = shell(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos nuevamente respecto de nuestra solicitud del ${dmy(String(ped.created_at))}${pd.desde ? `, de la liquidación de los gastos notariales desde el ${dmy(pd.desde)}` : ", de la liquidación de los gastos notariales"}. Les agradeceríamos mucho enviarla en formato Excel cuando les sea posible.</p><p>Muchas gracias por su ayuda.</p>${firma({ nombre: nom, cargo: fP.cargo || "", telefono: fP.telefono || E.telefono || "" })}`);
+      const html = shell(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos nuevamente respecto de nuestra solicitud del ${dmy(String(ped.created_at))}${pd.desde ? `, de la liquidación de los gastos notariales desde el ${dmy(pd.desde)}` : ", de la liquidación de los gastos notariales"}. Les agradeceríamos mucho enviarla en formato Excel cuando les sea posible.</p><p>Muchas gracias por su ayuda.</p>${firma({ nombre: nom, cargo: fP.cargo || "", telefono: fP.telefono || E.telefono || "" })}<div class="gmail_quote" style="margin-top:22px;font-size:12.5px;color:#888"><div>El ${dmy(String(ped.created_at))}, ${esc(nombreEstudio)} &lt;${esc(GMAIL_USER)}&gt; escribió:</div><blockquote class="gmail_quote" style="margin:6px 0 0 0;padding-left:10px;border-left:1px solid #ccc;color:#888">${esc(saludo)}:<br><br>Espero que estén muy bien.<br><br>Les escribimos para pedirles, por favor, la liquidación de nuestros gastos notariales en formato Excel, con las órdenes de trabajo${pd.desde ? ` desde el ${dmy(pd.desde)}` : ""} a la fecha.</blockquote></div>`);
       const para = slotS === "__prueba__" ? [testTo!] : Array.isArray(pd.to) ? pd.to : notaria, copia = slotS === "__prueba__" ? [] : Array.isArray(pd.cc) ? pd.cc : cc;
       if (dry) return json({ ok: true, modo: "simulacion", para, cc: copia, html });
       try { await enviar({ to: para, cc: copia, subject: `Re: ${pd.asunto || ASUNTO}`, html, inReplyTo: pd.message_id || undefined }); }
@@ -158,13 +159,14 @@ Deno.serve(async (req) => {
     const uo = await sb("expenses?select=date&category=eq.Notaria&ot_number=not.is.null&date=not.is.null&deleted_at=is.null&order=date.desc.nullslast&limit=1");
     const uoF = uo?.[0]?.date ? String(uo[0].date).slice(0, 10) : null;
     const desdeN = uoF ? (() => { const d = new Date(uoF + "T00:00:00"); d.setDate(d.getDate() + 1); return iso(d); })() : null;
-    const html = shell(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos para pedirles, por favor, la liquidación de nuestros gastos notariales en formato Excel, con las órdenes de trabajo ${desdeN ? `desde el ${dmy(desdeN)} ` : ""}a la fecha.</p><p>Muchas gracias de antemano por su ayuda. Quedamos atentos a su respuesta.</p>${firma(firmaOficina)}`);
+    const html = shell(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos para pedirles, por favor, la liquidación de nuestros gastos notariales en formato Excel, con las órdenes de trabajo ${desdeN ? `desde el ${dmy(desdeN)} ` : ""}a la fecha.</p><p>Muchas gracias de antemano por su ayuda.<br>Quedamos atentos a su respuesta.</p>${firma(firmaOficina)}`);
     const destTo = testTo ? [testTo] : notaria, destCc = testTo ? [] : cc;
+    const asuntoEnv = testTo ? `${ASUNTO} (prueba ${new Date().toLocaleTimeString("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit" })})` : ASUNTO;
     const messageId = `<liquidacion-${slot || iso(today)}-${Date.now()}@${(GMAIL_USER.split("@")[1] || "leabogados.cl")}>`;
     if (dry) return json({ ok: true, modo: "simulacion", slot, para: destTo, cc: destCc, desde: desdeN, asunto: ASUNTO, sin_respuesta: sinResp, html });
-    try { await enviar({ to: destTo, cc: destCc, subject: ASUNTO, html, messageId }); }
+    try { await enviar({ to: destTo, cc: destCc, subject: asuntoEnv, html, messageId }); }
     catch (e) { await log(testTo ? "notaria.pedido_liquidacion_prueba_fallido" : "notaria.pedido_liquidacion_fallido", { slot, title: "El pedido NO se envió", error: String((e as Error).message || e) }); return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
-    await log(testTo ? "notaria.pedido_liquidacion_prueba" : "notaria.pedido_liquidacion", { slot: testTo ? `prueba-${iso(today)}` : slot, title: desdeN ? `Pedido desde el ${dmy(desdeN)}` : "Pedido de liquidación", desde: desdeN, to: destTo, cc: destCc, asunto: ASUNTO, message_id: messageId, enviado_desde: GMAIL_USER });
+    await log(testTo ? "notaria.pedido_liquidacion_prueba" : "notaria.pedido_liquidacion", { slot: testTo ? `prueba-${iso(today)}` : slot, title: desdeN ? `Pedido desde el ${dmy(desdeN)}` : "Pedido de liquidación", desde: desdeN, to: destTo, cc: destCc, asunto: asuntoEnv, message_id: messageId, enviado_desde: GMAIL_USER });
     return json({ ok: true, enviado: true, slot, para: destTo, cc: destCc, desde: desdeN, enviado_desde: GMAIL_USER, sin_respuesta: sinResp });
   }
   if (!slot && !testTo) return json({ ok: true, enviado: false, motivo: `hoy (${iso(today)}) no corresponde`, dias });
