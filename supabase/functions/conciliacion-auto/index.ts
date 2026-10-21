@@ -14,6 +14,7 @@
 // CARGOS RECURRENTES: racha (rachaCargo: 3 cargos previos al mismo RUT con la misma clase de oficina y monto ±30%) → costo de
 // oficina igual; contadora (repartoContadora con el correo VALORES del mes anterior, al peso; PPM menos retenciones BHE del
 // mes). Nunca socios, equipo, proveedores ni clientes. body.backtestCargos = compara la regla con lo ya clasificado.
+// TARJETA ↔ UBER: el pago de la tarjeta se une con los viajes de Uber Business ya registrados como gasto (lo demás, por rubro).
 // Modos (body): dryRun = calcula sin escribir · backtest = recorre lo ya conciliado y compara qué habría hecho.
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
@@ -434,7 +435,32 @@ Deno.serve(async (req) => {
         }
       }
     } catch (e) { car.error = String((e as Error).message || e); }
-    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car });
+    // ── Pago de la tarjeta de la oficina ↔ viajes de Uber Business ya registrados ──
+    // Cada viaje ya es un gasto (lo crea el agente al llegar el recibo). El pago de la tarjeta se une con esos viajes (los más antiguos
+    // sin unir, hasta 70 días antes, sin pasarse del monto) y lo demás del pago queda para repartir por rubro; así el Uber no se suma dos veces.
+    const tc = { unidos: [] as unknown[], error: null as string | null };
+    try {
+      const pagosTC = (await todas(`cartola_movimientos?select=id,fecha,monto,monto_conciliado,descripcion,estado,categoria&tipo=eq.cargo&estado=eq.pendiente&fecha=gte.${desde}`))
+        .filter((m) => /pago\s+(de\s+)?tarjeta/i.test(m.descripcion || "") && !(Number(m.monto_conciliado) > 0) && !(concPorMov[m.id] || []).length);
+      if (pagosTC.length) {
+        const viajes = await todas(`expenses?select=id,date,amount&created_by=eq.Uber%20Business&category=eq.Movilización&deleted_at=is.null&order=date.asc`);
+        const unidos = new Set(concAll.filter((c) => c.gasto_id).map((c) => c.gasto_id));
+        for (const m of pagosTC.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))) {
+          const M = Math.abs(Number(m.monto) || 0), d0 = new Date(new Date(m.fecha).getTime() - 70 * 86400000).toISOString().slice(0, 10);
+          const sel: any[] = []; let sum = 0;
+          for (const v of viajes) { if (unidos.has(v.id) || String(v.date) > String(m.fecha) || String(v.date) < d0) continue; if (sum + Number(v.amount) > M) break; sel.push(v); sum += Number(v.amount); }
+          if (!sel.length) continue;
+          sel.forEach((v) => unidos.add(v.id));
+          tc.unidos.push({ fecha: m.fecha, pago: M, viajes: sel.length, uber: sum, falta: M - sum });
+          if (dryRun) continue;
+          const nuevas: string[] = [];
+          for (const v of sel) { const c = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: "gasto", gasto_id: v.id, monto_aplicado: Number(v.amount), origen: "auto" }) }); nuevas.push(c[0].id); }
+          await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado: M - sum <= 0 ? "conciliado" : "parcial", monto_conciliado: sum, categoria: "Gastos Oficina" }) });
+          await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: nuevas[0], estudio_id: "lea", detail: { title: `Pago de la tarjeta ${fmt(M)} del ${dmy(m.fecha)}: ${sel.length} viaje${sel.length !== 1 ? "s" : ""} de Uber Business (${fmt(sum)}) ya registrados; falta repartir ${fmt(M - sum)} por rubro (sin volver a sumar Uber)`, mov: m.id, conciliacion: nuevas } }) });
+        }
+      }
+    } catch (e) { tc.error = String((e as Error).message || e); }
+    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }

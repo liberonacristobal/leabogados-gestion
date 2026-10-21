@@ -37949,6 +37949,11 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   // Un pago a proveedor vive en UN solo lugar: como comisión de su venta (terceros_pagos, rebaja el ingreso) o como gasto.
   // Registrarlo en ambos lo cuenta dos veces (pasó con MJ, BDA, Pedro Isla y Menchaca).
   const yaEsComision = m => (terc||[]).some(t=>String(t.movimiento_id)===String(m.id)) || (conc||[]).some(c=>String(c.movimiento_id)===String(m.id)&&c.tipo_destino==='tercero')
+  // Pago de la tarjeta con viajes de Uber Business ya unidos (los registra el agente, uno por recibo): repartir el resto otra vez
+  // como «Movilización › Uber» contaría ese Uber dos veces.
+  const uberYaUnido = mov => conc.some(c=>String(c.movimiento_id)===String(mov.id)&&c.tipo_destino==='gasto'&&(expenses||[]).find(e=>String(e.id)===String(c.gasto_id))?.created_by==='Uber Business')
+  const avisoUberDoble = async (mov, lineas) => { if(!uberYaUnido(mov)||!lineas.some(l=>l.categoria==='Movilización'&&/uber/i.test(l.sub||''))) return true
+    return await appConfirm('Este pago de la tarjeta ya tiene unidos los viajes de Uber Business (registrados uno a uno desde sus recibos). Si agregas «Movilización › Uber» se contaría dos veces. ¿Registrar igual?') }
   const guardaComision = (mov, category) => {
     if(yaEsComision(mov)){ appAlert('Este cargo ya está registrado como pago de comisión a un proveedor (rebaja el ingreso de su venta). No se registra además como gasto de oficina.'); return false }
     const prov = ['Proveedores','Comisiones'].includes(category) ? provDeCargo(mov) : null
@@ -37960,6 +37965,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     if(!ofiCli){ appAlert('No se encontró el cliente interno (Oficina).'); return }
     if(!category){ appAlert('Elige la categoría del costo de oficina.'); return }
     if(!guardaComision(mov, category)) return
+    if(!(await avisoUberDoble(mov,[{categoria:category,sub:subcategory}]))) return
     setBusy(mov.id)
     let gasto=null, cr=null
     try{
@@ -37984,6 +37990,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     if(!ofiCli){ appAlert('No se encontró el cliente interno (Oficina).'); return }
     if(!items?.length) return
     if(!guardaComision(mov, null)) return
+    if(!(await avisoUberDoble(mov,items.map(i=>({categoria:i.categoria,sub:i.item}))))) return
     if(!await appConfirm(`Repartir este cargo (${fmtM(mov.monto)}) en ${items.length} costos de oficina?\n\n${items.map(i=>`· ${i.item} · ${fmtM(i.monto)}`).join('\n')}`)) return
     setBusy(mov.id)
     const creados=[]

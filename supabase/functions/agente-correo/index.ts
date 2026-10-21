@@ -167,7 +167,8 @@ Deno.serve(async (req) => {
       rest("learnings?kind=eq.config&key=eq.agente_casilla&select=value&order=updated_at.desc&limit=1"),
     ]);
     // deno-lint-ignore no-explicit-any
-    const [provsBoleta, estRow, miembrosNom]: any[] = await Promise.all([rest("proveedores?select=id,rut,nombre&documento=eq.boleta"), rest("estudios?select=rut&id=eq.lea&limit=1"), rest("miembros?select=email,nombre")]);
+    const [provsBoleta, estRow, miembrosNom, internoRow]: any[] = await Promise.all([rest("proveedores?select=id,rut,nombre&documento=eq.boleta"), rest("estudios?select=rut&id=eq.lea&limit=1"), rest("miembros?select=email,nombre"), rest("clients?select=id&is_internal=eq.true&limit=1")]);
+    const interno = internoRow?.[0]?.id || null;
     const rutEstudio = nRutB(estRow?.[0]?.rut || "");
     // Dominio de la oficina = el de la casilla del agente (configuración, no escrito en el código).
     const domOficina = (String(casillaCfg?.[0]?.value || "").split(/[,;\s]+/).find((e) => e.includes("@")) || "").split("@")[1]?.toLowerCase() || "";
@@ -347,6 +348,27 @@ Deno.serve(async (req) => {
             if (n) { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} registrada · asignada a ${n} comisi${n === 1 ? "ón" : "ones"}`; }
             else { fila.estado = "pendiente"; fila.propuesta = { accion: "revisar", titulo: "Asignar la boleta a sus comisiones" }; fila.motivo = `Boleta N° ${bhe.folio} registrada · el líquido no calza con una sola comisión`; }
           } else { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} por registrar (prueba)`; }
+        }
+      }
+      else if (/(^|\.)uber\.com$/i.test(dom) && /^\s*\[business\]/i.test(asunto)) {
+        // Viaje de la cuenta Uber Business (la usan solo los socios; se paga con la tarjeta de la oficina): cada viaje es un gasto de
+        // Movilización › Uber socios a cargo de la oficina el día del viaje, que NO sale de una caja chica. Al pagar la tarjeta, la
+        // conciliación une ese pago con estos viajes (no se vuelven a sumar). El recibo final con otro total (propina) corrige el monto.
+        fila.tipo = "viaje_uber";
+        const fh = cuerpo.match(/(\d{2})-(\d{2})-(\d{4})\s*,?\s*(\d{1,2}:\d{2})/), tot = cuerpo.match(/Total\s*\$\s?(\d{1,3}(?:\.\d{3})+|\d+)/i);
+        const monto = tot ? Number(tot[1].replace(/\./g, "")) : 0;
+        if (!fh || !monto || !interno) { fila.estado = "pendiente"; fila.propuesta = { accion: "revisar", titulo: "Viaje de Uber: no se pudo leer la fecha o el total" }; }
+        else {
+          const fecha = `${fh[3]}-${fh[2]}-${fh[1]}`, hora = fh[4].padStart(5, "0"), marca = `Uber Business ${hora}`;
+          const ya = (await rest(`expenses?select=id,amount&client_id=eq.${interno}&date=eq.${fecha}&category=eq.Movilización&deleted_at=is.null&notas=like.${encodeURIComponent(marca + "*")}`)) || [];
+          fila.evidencia = [{ texto: `Viaje del ${dmy(fecha)} ${hora}`, monto, fuente: "Uber Business" }];
+          if (ya.length) {
+            if (Math.round(Number(ya[0].amount)) !== monto && !dryRun) await rest(`expenses?id=eq.${ya[0].id}`, { method: "PATCH", body: JSON.stringify({ amount: monto }) });
+            fila.estado = "registrado"; fila.motivo = Math.round(Number(ya[0].amount)) !== monto ? `Total del viaje corregido a $${monto.toLocaleString("es-CL")}` : "Viaje ya registrado"; fila.propuesta = { expense_id: ya[0].id };
+          } else {
+            const g = dryRun ? [{ id: null }] : await rest("expenses", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ client_id: interno, type: "gasto", amount: monto, date: fecha, category: "Movilización", subcategory: "Uber socios", concept: `Viaje Uber ${dmy(fecha)} ${hora}`, notas: `${marca} · pagado con la tarjeta de la oficina`, created_by: "Uber Business", paid_by_client: true }) });
+            fila.estado = "registrado"; fila.motivo = "Viaje registrado en Movilización (tarjeta de la oficina)"; fila.propuesta = { expense_id: g?.[0]?.id || null };
+          }
         }
       }
       else if (esInterno && /(solicitud|provisi[oó]n) de fondos/i.test(asunto) && !/^\s*((re|rv|fw|fwd)\s*:)/i.test(asunto)) {
