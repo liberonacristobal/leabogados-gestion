@@ -72,7 +72,22 @@ export function leerAviso(de: string, asunto: string, cuerpo: string): Aviso | n
   return null;
 }
 
-type Mov = { id: string; cuenta: string; fecha: string; tipo: string; monto: number; n_operacion: string | null };
+type Mov = { id: string; cuenta: string; fecha: string; tipo: string; monto: number; n_operacion: string | null; descripcion?: string | null };
+// Entre varios movimientos del mismo monto, el que corresponde al aviso: (1) el único cuyo n° de operación BICE aparece dentro del
+// código del otro banco (Banco de Chile lo incluye: «INT_EMP…6140361240» ↔ op 1403612), o (2) el único cuya hora de la glosa
+// («a las 07:07») coincide con la del aviso (±2 min). Si ninguna pista da uno solo, null: lo decide una persona.
+// Nunca el orden del n° de operación: en BICE no sigue la hora (20-10-2026: 1403612 fue a las 07:07 y 1403672 a las 07:04).
+export function pistaMov(a: { n_operacion?: string | null; fecha_hora?: string | null }, cand: Mov[]): Mov | null {
+  const cod = String(a.n_operacion || "").replace(/\D/g, "");
+  if (cod) { const m = cand.filter((x) => x.n_operacion && String(x.n_operacion).length >= 6 && cod.includes(String(x.n_operacion))); if (m.length === 1) return m[0]; }
+  if (a.fecha_hora) {
+    const hm = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(a.fecha_hora));
+    const min = (s: string) => { const [h, mi] = s.split(":").map(Number); return h * 60 + mi; };
+    const m = cand.filter((x) => { const g = String(x.descripcion || "").match(/a las (\d{1,2}):(\d{2})/i); return !!g && Math.abs(min(`${g[1]}:${g[2]}`) - min(hm)) <= 2; });
+    if (m.length === 1) return m[0];
+  }
+  return null;
+}
 // Calce exacto: misma cuenta propia, mismo tipo y monto, fecha de la cartola entre el día del aviso y 3 días después
 // (lo hecho de noche entra al día hábil siguiente). Si la cartola trae número de operación, debe ser el comienzo del
 // del aviso (BICE lo corta a 7 dígitos). Uno solo → calzado; varios → ambiguo (lo decide una persona); ninguno → espera.
@@ -86,6 +101,6 @@ export function calzarAviso(a: Aviso & { fecha_hora: string | null }, movs: Mov[
   const mismoBanco = a.banco === "BICE" && !!a.n_operacion;
   const cand = mismoBanco ? base.filter((m) => !m.n_operacion || a.n_operacion!.startsWith(String(m.n_operacion))) : base;
   if (cand.length === 1) return { estado: "calzado" as const, mov: cand[0], cand };
-  if (cand.length > 1) return { estado: "ambiguo" as const, mov: null, cand };
+  if (cand.length > 1) { const p = pistaMov(a, cand); return p ? { estado: "calzado" as const, mov: p, cand } : { estado: "ambiguo" as const, mov: null, cand }; }
   return { estado: "por_calzar" as const, mov: null, cand: [] as Mov[] };
 }
