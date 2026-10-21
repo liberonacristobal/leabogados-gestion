@@ -70,6 +70,8 @@ Deno.serve(async (req) => {
         try { reintento = await rest("rpc/reintentar_proceso", { method: "POST", body: JSON.stringify({ p_job: p.jobname }) }); } catch (e) { reintento = "error: " + String((e as Error).message || e).slice(0, 120); }
       }
       if (st.n > MAX && !st.avisado) avisar.push({ ...p, st });
+      // Bitácora resumida: una línea al detectar la falla (no una por reintento); otra al resolverse o al avisar.
+      if (st.n === 1 && !dryRun) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.falla_detectada", table_name: "procesos_corridas", detail: JSON.stringify({ title: `${p.nombre}: ${st.motivo}`, name: p.reintentable ? "se reintenta cada hora" : "no se reintenta solo (envía correos)" }) }) }).catch(() => null);
       await guardar(p.jobname, st);
       detalle.push({ job: p.jobname, intento: st.n, reintentable: !!p.reintentable, reintento });
     }
@@ -79,7 +81,8 @@ Deno.serve(async (req) => {
       if (dryRun) continue;
       const st = prev.get(k);
       await rest(`learnings?kind=eq.vigilancia_reintento&key=eq.${encodeURIComponent(k)}`, { method: "DELETE" });
-      if (st && st.n > 1) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.resuelto", table_name: "procesos_corridas", detail: JSON.stringify({ title: `Proceso resuelto: ${k}`, intentos: st.n, desde: st.desde, avisado: !!st.avisado }) }) }).catch(() => null);
+      const nom = (procs || []).find((x) => x.jobname === k)?.nombre || k;
+      if (st) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.resuelto", table_name: "procesos_corridas", detail: JSON.stringify({ title: `${nom}: resuelto${st.n > 1 ? ` tras ${st.n} intentos` : ""}`, name: st.avisado && !st.revisado ? "se había avisado" : null }) }) }).catch(() => null);
     }
     const resumen = { ok: true, revisados: (procs || []).length, en_falla: enFalla.length, resueltos: resueltos.length, por_avisar: avisar.length, dryRun, detalle };
     if (!avisar.length) return json({ ...resumen, enviado: false });

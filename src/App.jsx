@@ -9490,6 +9490,7 @@ function ProcesosView({isDesktop, onBack, origen}){
         {GR.map(([k,t])=>{ const ps=lista.filter(p=>p.cada===k); if(!ps.length) return null
           return <div key={k} style={{breakInside:'avoid',marginBottom:12}}><div style={{...SEC_LBL,margin:'0 2px 6px'}}>{t} · {ps.length}</div><div style={{...card,overflow:'hidden'}}>{ps.map(fila)}</div></div> })}
       </div>
+      <div style={{marginTop:6}}><BitacoraLista prefijo='procesos.' titulo='Bitácora de procesos' limite={12} vacio='Aún no hay registros.' etiquetas={{'procesos.falla_detectada':'Falla detectada','procesos.resuelto':'Resuelto','procesos.falla_avisada':'Aviso enviado','procesos.aviso_encendido':'Aviso encendido','procesos.aviso_apagado':'Aviso apagado','procesos.vigilancia_encendida':'Aviso encendido','procesos.fallas_revisadas':'Fallas revisadas'}}/></div>
     </>}
   </>)
 }
