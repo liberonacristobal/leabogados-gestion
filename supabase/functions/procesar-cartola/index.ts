@@ -159,6 +159,8 @@ Deno.serve(async (req) => {
     } catch (_) { /* el registro es best-effort: nunca debe romper la ingesta */ }
     // Traspasos entre las dos cuentas propias: se marcan internos solo si existe el movimiento espejo en la otra cuenta.
     try { await sbFetch('rpc/emparejar_traspasos_propios', { method: 'POST', body: JSON.stringify({}) }) } catch (_) { /* best-effort */ }
+    // Concilia solo lo inequívoco de lo recién llegado (mismas reglas que la app). Best-effort: nunca rompe la ingesta.
+    try { const cs = Deno.env.get('CRON_SECRET') || ''; if (cs) await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/conciliacion-auto`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: cs }) }) } catch (_) { /* best-effort */ }
 
     return json({
       ok: true,
