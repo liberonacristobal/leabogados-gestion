@@ -9073,6 +9073,11 @@ function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOf
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + subarriendo) − egresos (planilla real oficina_costos_mensual + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
 function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, user, expenses=[], clients=[] }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
+  // Salud de datos › Fondos de clientes: el reparto por fondo (repartoFondos) debe sumar el saldo de la ficha (fgCliente), cliente por cliente.
+  // Una sola pasada por los gastos, agrupados por cliente (ambas funciones filtran por cliente: mismo resultado); se recalcula solo si cambian.
+  const fondosChk = useMemo(()=>{ const by={}; (expenses||[]).forEach(e=>{ if(e&&e.client_id) (by[e.client_id]=by[e.client_id]||[]).push(e) })
+    const ids=Object.keys(by), desc=ids.filter(cid=>Math.round(repartoFondos(by[cid],cid).saldo)!==Math.round(fgCliente(by[cid],cid).saldo)).map(cid=>(clients||[]).find(c=>String(c.id)===String(cid))?.name||'cliente')
+    return {n:ids.length, desc} },[expenses,clients])
   const [yr,setYr]=useState(curY)
   const [scope,setScope]=useState('ytd')
   const [selM,setSelM]=useState(curM)
@@ -9366,14 +9371,12 @@ function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], isDeskto
       const faltaClaudia=allM.filter(m=>{ const r=cmBy[m]; return r && (Number(r.cotizaciones)===0||Number(r.ppm)===0||r.estimado) })
       const sldFalta=allM.filter(m=>{ const r=cmBy[m]; return !r || Number(r.sueldos)===0 })
       const pendCierre=allM.filter(m=>cierreDisponible(m)&&mesEstado(m)!=='cerrado')   // ya corresponde cerrar por fecha, pero faltan datos o está estimado
-      // Fondos de clientes: el reparto de gastos entre fondos (repartoFondos) debe sumar el saldo de la ficha (fgCliente), cliente por cliente.
-      const _cliF=[...new Set((expenses||[]).filter(e=>e.client_id).map(e=>e.client_id))]
-      const descF=_cliF.filter(cid=>Math.round(repartoFondos(expenses,cid).saldo)!==Math.round(fgCliente(expenses,cid).saldo)).map(cid=>(clients||[]).find(c=>c.id===cid)?.name||'cliente')
+      const descF=fondosChk.desc
       const checks=[
         [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · tócalo para ver cuáles`:'todas enlazadas a una venta', sinEnl.length?{label:sinEnlOpen?'ocultar':'ver',on:()=>setSinEnlOpen(o=>!o)}:null],
         [pendCierre.length===0,'Cierre de meses',pendCierre.length?`${pendCierre.length} mes${pendCierre.length!==1?'es':''} por cerrar · faltan datos reales (completa abajo)`:`se cierran solos · ${nCerrados} cerrado${nCerrados!==1?'s':''}`, null],
         [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia', faltaClaudia.length?{label:'editar',on:()=>abrirEditor(faltaClaudia[0])}:null],
-        [descF.length===0,'Fondos de clientes',descF.length?`${descF.length} cliente${descF.length!==1?'s':''} cuyo reparto por fondo no suma su saldo: ${descF.slice(0,3).join(', ')}`:`el reparto por fondo suma el saldo de cada ficha · ${_cliF.length} clientes`],
+        [descF.length===0,'Fondos de clientes',descF.length?`${descF.length} cliente${descF.length!==1?'s':''} cuyo reparto por fondo no suma su saldo: ${descF.slice(0,3).join(', ')}`:`el reparto por fondo suma el saldo de cada ficha · ${fondosChk.n} clientes`],
         [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],
       ]
       return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
