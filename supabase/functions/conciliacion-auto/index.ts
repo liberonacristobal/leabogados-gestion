@@ -9,10 +9,13 @@
 // (pareceFondo: solicitud de fondos por ese monto, o mensaje que nombra el trabajo o habla de fondos) queda como propuesta en
 // agente_bandeja (tipo fondo_por_registrar) para Gastos › Revisar; una persona lo registra. Solicitudes de fondos con 7 días
 // sin depósito → tarea a quien la envió (una vez).
+// PAGOS DE COMISIONES: un cargo al RUT de un proveedor que calza exacto y único con lo que falta transferirle de una comisión
+// por pagar (calcesPagoComision, la misma regla que «Conciliación sola» de Proveedores) la deja pagada y concilia el cargo.
 // Modos (body): dryRun = calcula sin escribir · backtest = recorre lo ya conciliado y compara qué habría hecho.
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
 import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, delMes, pareceFondo } from "../_shared/conciliacionReglas.js";
+import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../_shared/comisionesReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -296,7 +299,44 @@ Deno.serve(async (req) => {
         }
       }
     } catch (e) { (fpr as any).error = String((e as Error).message || e); }
-    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr });
+    // ── Pagos de comisiones ──
+    const com = { pagadas: [] as unknown[], error: null as string | null };
+    try {
+      const provs = (await todas("proveedores?select=id,rut,nombre")).filter((p) => normRut(p.rut));
+      const ruts = new Set(provs.map((p) => normRut(p.rut)));
+      const cg = (await todas(`cartola_movimientos?select=id,fecha,monto,monto_conciliado,rut_contraparte,categoria,estado,n_operacion&tipo=eq.cargo&estado=eq.pendiente&fecha=gte.${desde}`))
+        .filter((m) => ruts.has(normRut(m.rut_contraparte)) && !(Number(m.monto_conciliado) > 0) && !(concPorMov[m.id] || []).length && (!m.categoria || ["Proveedor", "Comisiones", "Equipo"].includes(m.categoria)));
+      if (cg.length) {
+        const [ts, aps] = await Promise.all([
+          todas(`terceros_pagos?select=id,proveedor_id,billing_id,monto,liquido,retencion,estado,bhe_id,movimiento_id&proveedor_id=in.${enLista(provs.map((p) => p.id))}`),
+          todas("learnings?select=key,value&kind=eq.pago_prov_aporte"),
+        ]);
+        const ligados = new Set(ts.map((t) => t.movimiento_id).filter(Boolean));
+        const aporte: Record<string, number> = {}, conAporte = new Set<string>();
+        aps.forEach((l) => { conAporte.add(l.key); try { (JSON.parse(l.value).asig || []).forEach((a: { t: string; monto: number }) => { aporte[a.t] = (aporte[a.t] || 0) + (Number(a.monto) || 0); }); } catch { /* valor ilegible */ } });
+        const bids = [...new Set(ts.map((t) => t.billing_id).filter(Boolean))];
+        const bs = bids.length ? await todas(`billing?select=id,status,deleted_at&id=in.${enLista(bids)}`) : [];
+        const bId: Record<string, any> = Object.fromEntries(bs.map((b) => [b.id, b]));
+        for (const p of provs) {
+          const libres = cg.filter((m) => normRut(m.rut_contraparte) === normRut(p.rut) && !ligados.has(m.id) && !conAporte.has(m.id));
+          if (!libres.length) continue;
+          const porPagar = ts.filter((t) => t.proveedor_id === p.id && !(t.billing_id && (!bId[t.billing_id] || bId[t.billing_id].status === "Anulada" || bId[t.billing_id].deleted_at)) && estadoComision(t, bId[t.billing_id]) === "por_pagar")
+            .map((t) => ({ ...t, saldo: Math.max(0, pagarT(t) - (aporte[t.id] || 0)) })).filter((t) => t.saldo > 0);
+          for (const { mov: m, t } of calcesPagoComision(porPagar, libres)) {
+            const monto = Math.abs(Number(m.monto) || 0), fecha = String(m.fecha).slice(0, 10);
+            com.pagadas.push({ proveedor: p.nombre, fecha, monto, comision: t.id });
+            if (dryRun) continue;
+            const patch = { estado: "pagado", pagado_at: fecha, movimiento_id: m.id, referencia: `Pagada: ${dmy(fecha).slice(0, 5)} ${fmt(monto)}`, ...(reajusteBHEPago(t, fecha) || {}) };
+            await rest(`terceros_pagos?id=eq.${t.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+            const ins = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: "tercero", monto_aplicado: monto, origen: "auto" }) });
+            await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ categoria: m.categoria || "Proveedor", monto_conciliado: monto, estado: "conciliado" }) });
+            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: `proveedores.${p.id}.enlace`, table_name: "cartola_movimientos", record_id: m.id, estudio_id: "lea", detail: { title: `Pago del ${dmy(fecha).slice(0, 5)} ↔ 1 pagada (conciliación automática)`, monto, conciliacion: ins?.[0]?.id, comision: t.id } }) });
+            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: ins?.[0]?.id, estudio_id: "lea", detail: { title: `Conciliado automáticamente: pago a ${p.nombre} ${fmt(monto)} del ${dmy(fecha)} → comisión por pagar`, mov: m.id } }) });
+          }
+        }
+      }
+    } catch (e) { com.error = String((e as Error).message || e); }
+    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }

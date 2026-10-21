@@ -9,6 +9,7 @@
 // body.dryRun = no guarda.
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
 import { leerAviso, calzarAviso, pistaMov, cuentaNorm, type Aviso } from "./avisos.ts";
+import { parseBHE, elegirComisionesBHE } from "../_shared/comisionesReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -53,6 +54,16 @@ async function subir(path: string, b64: string, mime: string) {
   const r = await fetch(`${SB_URL}/storage/v1/object/documentos/${path.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": mime || "application/octet-stream", "x-upsert": "true" }, body: bytes });
   return r.ok;
 }
+// Texto de la 1.ª página con los ítems unidos por « | » (formato que lee parseBHE, igual que bhe-correo).
+async function itemsPdf(b64: string): Promise<string> {
+  try {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false, disableFontFace: true }).promise;
+    const tc = await (await doc.getPage(1)).getTextContent();
+    return tc.items.map((x: { str?: string }) => x.str || "").filter((x: string) => x.trim()).join(" | ");
+  } catch { return ""; }
+}
+const nRutB = (r: string) => String(r || "").replace(/[^0-9kK]/g, "").toUpperCase();
 async function textoPdf(b64: string): Promise<string> {
   try {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -138,6 +149,8 @@ Deno.serve(async (req) => {
   const dryRun = !!body.dryRun;
   // deno-lint-ignore no-explicit-any
   const msgs: any[] = Array.isArray(body.messages) ? body.messages.slice(0, 40) : [];
+  // Prueba (solo dryRun): un adjunto puede venir como {name, path} de un archivo ya guardado en el bucket documentos.
+  if (dryRun) for (const m of msgs) for (const a of (m.attachments || [])) if (!a.b64 && a.path) { const r = await fetch(`${SB_URL}/storage/v1/object/documentos/${a.path}`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }); if (r.ok) { const u = new Uint8Array(await r.arrayBuffer()); let bin = ""; for (let i = 0; i < u.length; i++) bin += String.fromCharCode(u[i]); a.b64 = btoa(bin); } }
   try {
     const desde60 = iso(new Date(Date.now() - 60 * 86400000));
     const [contactos, clientes, ventas, cuentas, notaEm, abonos, ultCart, fondosReq, cargasNota, ya, casillaCfg] = await Promise.all([
@@ -153,6 +166,9 @@ Deno.serve(async (req) => {
       msgs.length ? rest(`agente_bandeja?select=gmail_id&gmail_id=in.(${msgs.map((m) => `"${String(m.id).replace(/"/g, "")}"`).join(",")})`) : Promise.resolve([]),
       rest("learnings?kind=eq.config&key=eq.agente_casilla&select=value&order=updated_at.desc&limit=1"),
     ]);
+    // deno-lint-ignore no-explicit-any
+    const [provsBoleta, estRow]: any[] = await Promise.all([rest("proveedores?select=id,rut,nombre&documento=eq.boleta"), rest("estudios?select=rut&id=eq.lea&limit=1")]);
+    const rutEstudio = nRutB(estRow?.[0]?.rut || "");
     // Dominio de la oficina = el de la casilla del agente (configuración, no escrito en el código).
     const domOficina = (String(casillaCfg?.[0]?.value || "").split(/[,;\s]+/).find((e) => e.includes("@")) || "").split("@")[1]?.toLowerCase() || "";
     const desde25 = iso(new Date(Date.now() - 25 * 86400000));
@@ -223,6 +239,10 @@ Deno.serve(async (req) => {
       // Adjuntos al bucket privado (se abren desde la tarjeta de la bandeja); en prueba no se sube nada.
       const adjGuardados: { nombre: string; mime: string; path?: string }[] = [];
       for (const a of adj) { const g: { nombre: string; mime: string; path?: string } = { nombre: a.name, mime: a.mime }; if (a.b64 && !dryRun && String(a.b64).length < 14_000_000) { const path = `agente/${gid}/${String(a.name || "adjunto").replace(/[^\w.\- ]/g, "_")}`; if (await subir(path, a.b64, mimeDe(a.name, a.mime))) g.path = path; } adjGuardados.push(g); }
+      // Boletas de honorarios emitidas al estudio en los PDF adjuntos.
+      const bheDe: { bhe: ReturnType<typeof parseBHE>; path?: string }[] = [];
+      for (const a of adj) { if (!a.b64 || !/\.pdf$/i.test(a.name || "") || !/bhe|boleta|honorario/i.test(a.name || "")) continue;
+        const b = parseBHE(await itemsPdf(a.b64)); if (b && rutEstudio && nRutB(b.receptor_rut) === rutEstudio) bheDe.push({ bhe: b, path: adjGuardados.find((g) => g.nombre === a.name)?.path }); }
       if (respPedido && !dryRun && !respGids.has(gid)) {
         const ped = (pedLiq || []).find((p: { created_at: string }) => new Date(p.created_at) <= recibido);
         if (ped) { const xl = adj.find((a: { name: string }) => /\.xlsx?$/i.test(a.name || "")); respGids.add(gid);
@@ -248,6 +268,33 @@ Deno.serve(async (req) => {
         fila.evidencia = [{ texto: resumenAviso(av), monto: av.monto, fuente: av.banco }];
         if (av.n_operacion && clavesAviso.has(avisoClave(av))) { fila.estado = "registrado"; fila.motivo = "Aviso repetido: ya está registrado"; }
         else { fila.motivo = "Aviso del banco · por llegar en la cartola"; avisosNuevos.push({ gmail_id: gid, ...av }); if (av.n_operacion) clavesAviso.add(avisoClave(av)); }
+      }
+      else if (bheDe.length) {
+        // Boleta de honorarios emitida al estudio (la copia del SII o la que manda el emisor): se registra y se asigna a sus
+        // comisiones con la misma regla que bhe-correo (elegirComisionesBHE). Nunca marca pagos: eso lo hace el banco.
+        fila.tipo = "boleta_honorarios";
+        const { bhe, path } = bheDe[0];
+        const prov = (provsBoleta || []).find((p: { rut: string }) => nRutB(p.rut) === nRutB(bhe.emisor_rut));
+        const ev = [{ texto: `Boleta N° ${bhe.folio} del ${dmy(bhe.fecha)} · ${bhe.emisor_nombre}`, monto: bhe.bruto, fuente: "boleta" }, { texto: "Retención", monto: bhe.retencion, fuente: "boleta" }, { texto: "Líquido", monto: bhe.liquido, fuente: "boleta" }];
+        fila.evidencia = ev;
+        if (!prov) { fila.estado = "pendiente"; fila.propuesta = { accion: "revisar", titulo: `Boleta de ${bhe.emisor_nombre}: no está como proveedor que emite boleta` }; fila.motivo = "Emisor sin ficha de proveedor"; }
+        else {
+          const ya = await rest(`boletas_honorarios?select=id&emisor_rut=eq.${encodeURIComponent(bhe.emisor_rut)}&folio=eq.${bhe.folio}&limit=1`);
+          if (ya?.length) { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} ya registrada`; }
+          else if (!dryRun) {
+            const ins = (await rest("boletas_honorarios", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ proveedor_id: prov.id, emisor_rut: bhe.emisor_rut, emisor_nombre: bhe.emisor_nombre, folio: bhe.folio, fecha: bhe.fecha, bruto: bhe.bruto, retencion: bhe.retencion, liquido: bhe.liquido, tasa: bhe.tasa, glosa: bhe.glosa, storage_path: path || null, created_by: "correo contacto@" }) }))?.[0];
+            const ts = await rest(`terceros_pagos?select=id,monto,liquido,retencion,estado,billing_id,bhe_id&proveedor_id=eq.${prov.id}&bhe_id=is.null`);
+            const bids = [...new Set((ts || []).map((t: { billing_id: string }) => t.billing_id).filter(Boolean))];
+            const bs = bids.length ? await rest(`billing?select=id,status&id=in.(${bids.map((x) => `"${x}"`).join(",")})`) : [];
+            const st: Record<string, string> = {}; (bs || []).forEach((b: { id: string; status: string }) => { st[b.id] = b.status; });
+            const sel = elegirComisionesBHE((ts || []).map((t: { billing_id: string }) => ({ ...t, billing_status: st[t.billing_id] })), bhe);
+            for (const c of sel || []) await rest(`terceros_pagos?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify({ bhe_id: ins.id, monto: c.monto, retencion: c.retencion, liquido: c.liquido, factura_numero: String(bhe.folio), factura_fecha: bhe.fecha }) });
+            const n = sel?.length || 0;
+            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente-correo", action: "boletas.leida_correo", table_name: "boletas_honorarios", record_id: ins.id, detail: JSON.stringify({ folio: bhe.folio, name: prov.nombre, monto: bhe.bruto, title: n ? `asignada a ${n} comisi${n === 1 ? "ón" : "ones"}` : "sin asignar" }) }) }).catch(() => null);
+            if (n) { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} registrada · asignada a ${n} comisi${n === 1 ? "ón" : "ones"}`; }
+            else { fila.estado = "pendiente"; fila.propuesta = { accion: "revisar", titulo: "Asignar la boleta a sus comisiones" }; fila.motivo = `Boleta N° ${bhe.folio} registrada · el líquido no calza con una sola comisión`; }
+          } else { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} por registrar (prueba)`; }
+        }
       }
       else if (esInterno) { fila.motivo = "Correo interno de la oficina"; }
       else if (ia?.pide_cambio_cuenta || (cta && conoc && conoc.cuenta !== cta.cuenta)) {

@@ -9,6 +9,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
+import { parseBHE, elegirComisionesBHE } from "../_shared/comisionesReglas.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -38,10 +39,7 @@ async function getToken(): Promise<string> {
 }
 
 const nRut = (r: string) => String(r || "").replace(/[^0-9kK]/g, "").toUpperCase();
-const fmtRut = (r: string) => { const c = nRut(r); return c.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "-" + c.slice(-1); };
-const num = (s: string) => parseInt(String(s || "").replace(/[^\d]/g, ""), 10) || 0;
 const b64urlBytes = (s: string) => { const b = atob(s.replace(/-/g, "+").replace(/_/g, "/")); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
-const MESES: Record<string, string> = { enero: "01", febrero: "02", marzo: "03", abril: "04", mayo: "05", junio: "06", julio: "07", agosto: "08", septiembre: "09", setiembre: "09", octubre: "10", noviembre: "11", diciembre: "12" };
 
 // Texto de la boleta (el PDF del SII viene cifrado sin clave de usuario: pdfjs lo abre).
 async function textoPdf(bytes: Uint8Array): Promise<string> {
@@ -50,55 +48,18 @@ async function textoPdf(bytes: Uint8Array): Promise<string> {
   // deno-lint-ignore no-explicit-any
   return tc.items.map((i: any) => i.str || "").filter((s: string) => s.trim()).join(" | ");
 }
-// Campos de una boleta de honorarios electrónica del SII.
-export function parseBHE(t: string) {
-  if (!/BOLETA DE HONORARIOS/i.test(t)) return null;
-  const folio = num((t.match(/N\s*°\s*(\d+)/) || [])[1] || "");
-  const ruts = [...t.matchAll(/R(?:UT|ut):?\s*\|?\s*([\d.]+\s*[−\-–]\s*[\dkK])/g)].map(m => fmtRut(m[1]));
-  const emisor_rut = ruts[0] || "", receptor_rut = ruts[1] || "";
-  const emisor_nombre = (t.split(" | ")[0] || "").trim();
-  let fecha = "";
-  const fe = t.match(/Emisi[oó]n:\s*(\d{2})\/(\d{2})\/(\d{4})/); if (fe) fecha = `${fe[3]}-${fe[2]}-${fe[1]}`;
-  if (!fecha) { const f2 = t.match(/(\d{1,2}) de (\w+) de (\d{4})/i); if (f2) fecha = `${f2[3]}-${MESES[f2[2].toLowerCase()] || "01"}-${f2[1].padStart(2, "0")}`; }
-  const bruto = num((t.match(/Total Honorarios:?\s*\$?:?\s*\|\s*([\d.]+)/i) || [])[1] || "");
-  const tasaM = t.match(/([\d.,]+)\s*%\s*Impto\.?\s*Retenido:?\s*\|\s*([\d.]+)/i);
-  const tasa = tasaM ? parseFloat(tasaM[1].replace(",", ".")) / 100 : null;
-  const retencion = tasaM ? num(tasaM[2]) : 0;
-  const liquido = num((t.match(/\|\s*Total:\s*\|\s*([\d.]+)/i) || [])[1] || "") || (bruto - retencion);
-  const glosa = ((t.match(/Por atenci[oó]n profesional:\s*\|\s*([^|]+)/i) || [])[1] || "").trim();
-  if (!folio || !emisor_rut || !bruto || !fecha || bruto - retencion !== liquido) return null;
-  return { folio, emisor_rut, receptor_rut, emisor_nombre, fecha, bruto, retencion, liquido, tasa, glosa };
-}
-
 // deno-lint-ignore no-explicit-any
 async function asignar(sb: any, provId: string, bhe: any) {
-  // Comisiones sin boleta ya cobradas al cliente (o pagadas): el líquido de la boleta debe calzar con 1–3 de ellas, y de UNA sola forma.
+  // Comisiones sin boleta ya cobradas al cliente (o pagadas): regla única elegirComisionesBHE (calce del líquido, una sola forma).
   const { data: ts } = await sb.from("terceros_pagos").select("id,monto,liquido,retencion,estado,billing_id,bhe_id").eq("proveedor_id", provId).is("bhe_id", null);
   // deno-lint-ignore no-explicit-any
   const bids = [...new Set((ts || []).map((t: any) => t.billing_id).filter(Boolean))];
   const { data: bs } = bids.length ? await sb.from("billing").select("id,status").in("id", bids) : { data: [] };
   const st: Record<string, string> = {}; (bs || []).forEach((b: { id: string; status: string }) => { st[b.id] = b.status; });
   // deno-lint-ignore no-explicit-any
-  const cand = (ts || []).filter((t: any) => t.liquido != null && (t.estado === "pagado" || t.estado === "por_pagar" || ["Pagado", "Anticipada"].includes(st[t.billing_id])));
-  // deno-lint-ignore no-explicit-any
-  const L = (t: any) => Number(t.liquido) || 0, ok = (s: number) => Math.abs(s - bhe.liquido) <= 2;
-  // deno-lint-ignore no-explicit-any
-  const hits: any[][] = [];
-  for (let i = 0; i < cand.length; i++) {
-    if (ok(L(cand[i]))) hits.push([cand[i]]);
-    for (let j = i + 1; j < cand.length; j++) {
-      if (ok(L(cand[i]) + L(cand[j]))) hits.push([cand[i], cand[j]]);
-      for (let k = j + 1; k < cand.length; k++) if (ok(L(cand[i]) + L(cand[j]) + L(cand[k]))) hits.push([cand[i], cand[j], cand[k]]);
-    }
-  }
-  if (hits.length !== 1) return 0;
-  const sel = hits[0], tot = sel.reduce((s, t) => s + L(t), 0);
-  let accB = 0, accR = 0;
-  for (const [i, t] of sel.entries()) {
-    const last = i === sel.length - 1, sh = tot > 0 ? L(t) / tot : 1 / sel.length;
-    const b2 = last ? bhe.bruto - accB : Math.round(bhe.bruto * sh), r2 = last ? bhe.retencion - accR : Math.round(bhe.retencion * sh); accB += b2; accR += r2;
-    await sb.from("terceros_pagos").update({ bhe_id: bhe.id, monto: b2, retencion: r2, liquido: b2 - r2, factura_numero: String(bhe.folio), factura_fecha: bhe.fecha }).eq("id", t.id);
-  }
+  const sel = elegirComisionesBHE((ts || []).map((t: any) => ({ ...t, billing_status: st[t.billing_id] })), bhe);
+  if (!sel) return 0;
+  for (const c of sel) await sb.from("terceros_pagos").update({ bhe_id: bhe.id, monto: c.monto, retencion: c.retencion, liquido: c.liquido, factura_numero: String(bhe.folio), factura_fecha: bhe.fecha }).eq("id", c.id);
   return sel.length;
 }
 

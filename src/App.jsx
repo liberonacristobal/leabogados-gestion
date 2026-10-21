@@ -16,6 +16,7 @@ import {
 import { demoData } from './demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from './cartola'
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../supabase/functions/_shared/conciliacionReglas.js'
+import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
 import logoBlanco from './le-logo-blanco.png'
 
 // LA CLAVE ANÓNIMA NO IDENTIFICA A NADIE: viaja en este mismo paquete. Las
@@ -15594,20 +15595,12 @@ const comisionesACobrar = (p, terceros, billing, yr) => {
   if(p?.client_id) (billing||[]).filter(b=>String(b.client_id)===String(p.client_id)&&['honorarios','comision'].includes(tipoFactura(b))&&b.invoice_no&&vivo(b)).forEach(b=>items.push({k:'f'+b.id,tipo:'fac',b,monto:Number(b.amount)||0,cob:b.status==='Pagado'}))
   const delAnio = x => String(x.b.paid_at||x.b.issued_at||'').slice(0,4)===String(yr)
   return {items, porCobrar:items.filter(x=>!x.cob).reduce((s,x)=>s+x.monto,0), cobradasAnio:items.filter(x=>x.cob&&delAnio(x)).reduce((s,x)=>s+x.monto,0)} }
-const RETENCION_BHE = {2024:.1375, 2025:.145, 2026:.1525, 2027:.16, 2028:.17}
-const tasaBHE = f => { const y=Number(String(f||'').slice(0,4))||new Date().getFullYear(); const ks=Object.keys(RETENCION_BHE).map(Number).sort((a,b)=>a-b); return RETENCION_BHE[Math.min(Math.max(y,ks[0]),ks[ks.length-1])] }
 const pctBHE = t => `${(t*100).toLocaleString('es-CL',{maximumFractionDigits:2})} %`
 const esBoletaProv = p => p?.documento==='boleta'
-// Lo que se le transfiere por una comisión (líquido si emite boleta; si factura, el monto). Toda conciliación con el banco usa esto.
-const pagarT = t => t?.liquido!=null ? (Number(t.liquido)||0) : (Number(t?.monto)||0)
 // Costo de una comisión nueva de quien emite boleta. % y UF: lo pactado es lo que RECIBE (líquido) → costo = líquido ÷ (1 − tasa).
 // Monto fijo ($): se ingresa el costo (bruto) → líquido = bruto × (1 − tasa). Quien factura: monto tal cual.
 // Fecha que fija la tasa: la del pago si ya se pagó; si no, el vencimiento, pero nunca una fecha pasada (una cuota atrasada se pagará este año).
 const fechaBHE = (pagadaEn, vence) => { const hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}); return pagadaEn ? String(pagadaEn).slice(0,10) : (vence&&String(vence).slice(0,10)>hoy ? String(vence).slice(0,10) : hoy) }
-// Al pagar una comisión de quien emite boleta SIN boleta registrada, el costo estimado se rehace con la tasa del AÑO DEL PAGO
-// (la estimación pudo hacerse con la de otro año). Con boleta registrada mandan sus cifras reales.
-const reajusteBHEPago = (t, fecha) => { if(t?.liquido==null||t?.bhe_id||!(Number(t?.retencion)>0)) return null
-  const liq=Number(t.liquido)||0, bruto=Math.round(liq/(1-tasaBHE(fecha))); return bruto!==Number(t.monto) ? {monto:bruto, retencion:bruto-liq} : null }
 // Retención de boleta ↔ F29: va en el F29 del MES DE LA BOLETA (período P, cód. 151) y se paga en P+1 con el PPM
 // (gasto 'Impuestos y patentes › PPM', concepto "IVA/PPM MM-AAAA"). Pagada = existe ese pago, sin marcar nada a mano.
 // La fuente de verdad es el cód. 151 del F29 (SII); no se infiere nada del texto del concepto (falso positivo Delpino 09-2025).
@@ -15632,7 +15625,6 @@ const abrirDocumento = async path => { if(!path) return; const w=window.open('',
 // Se deriva de la factura del cliente y no solo del flag guardado: si la cuota está Pagada, la comisión queda por pagar aunque el flag
 // (que mueve handleConciliarTerceros) no haya alcanzado a cambiar. `b` = la cuota del cliente (billing) o null si la comisión no tiene cuota.
 // Una cuota 'Anticipada' (cubierta por un anticipo del cliente, p. ej. Rodrigo Macho que paga sin factura) ya está cobrada → su comisión se debe.
-const estadoComision = (t, b) => t?.estado==='pagado' ? 'pagada' : (t?.estado==='por_pagar' || b?.status==='Pagado' || b?.status==='Anticipada') ? 'por_pagar' : 'por_devengar'
 // Saldos de comisiones (fuente única para Inicio, Oficina y Proveedores). Excluye las de cuotas borradas o anuladas.
 function saldoComisiones(terceros=[], billing=[]){
   const byId=new Map((billing||[]).map(b=>[String(b.id),b]))
