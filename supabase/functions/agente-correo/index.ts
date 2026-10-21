@@ -8,7 +8,7 @@
 // autorizada se lee de learnings config 'agente_casilla'), o Bearer CARTOLA_SECRET, o body.secret = CRON_SECRET (pruebas).
 // body.dryRun = no guarda.
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
-import { leerAviso, calzarAviso, cuentaNorm, type Aviso } from "./avisos.ts";
+import { leerAviso, calzarAviso, pistaMov, cuentaNorm, type Aviso } from "./avisos.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
     const desde25 = iso(new Date(Date.now() - 25 * 86400000));
     // deno-lint-ignore no-explicit-any
     const [movsRec, avisosPrev]: any[] = await Promise.all([
-      rest(`cartola_movimientos?select=id,cuenta,fecha,tipo,monto,n_operacion,nombre_contraparte,rut_contraparte,detalle_aviso,cliente_id,estado,es_interno&fecha=gte.${desde25}&limit=5000`),
+      rest(`cartola_movimientos?select=id,cuenta,fecha,tipo,monto,n_operacion,descripcion,nombre_contraparte,rut_contraparte,detalle_aviso,cliente_id,estado,es_interno&fecha=gte.${desde25}&limit=5000`),
       rest(`avisos_banco?select=id,gmail_id,banco,tipo,monto,cuenta,fecha_hora,n_operacion,contraparte_nombre,contraparte_rut,mensaje,movimiento_id,estado&created_at=gte.${iso(new Date(Date.now() - 40 * 86400000))}`),
     ]);
     const cuentasPropias = new Set((movsRec || []).map((m: { cuenta: string }) => cuentaNorm(m.cuenta)).filter(Boolean));
@@ -289,8 +289,9 @@ Deno.serve(async (req) => {
     const pendientesAv = [...(avisosPrev || []).filter((a: { estado: string; movimiento_id: string }) => !a.movimiento_id && a.estado !== "calzado"), ...avisosNuevos.map((a) => ({ ...a, id: null }))];
     const tomados = new Set<string>((avisosPrev || []).map((a: { movimiento_id: string }) => a.movimiento_id).filter(Boolean));
     const resolver = pendientesAv.length ? await resolverRut() : () => null;
-    // Transferencias gemelas (mismo remitente, cuenta, monto y día; p. ej. dos fondos iguales de un cliente): si hay tantos
-    // movimientos como avisos, se unen en orden de hora. Monto y remitente son los mismos; solo el mensaje sigue el orden.
+    // Transferencias gemelas (mismo remitente, cuenta, monto y día; p. ej. dos fondos iguales de un cliente): cada aviso va al
+    // movimiento que señala su pista (n° de operación dentro del código del otro banco, o la hora de la glosa). Solo se unen si
+    // todos quedan con un movimiento distinto; si no, quedan para elegir. El mensaje del aviso dice a qué trabajo va cada uno.
     const diaCL = (ts: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago" }).format(new Date(ts));
     const gemelos = new Map<string, string>();
     const grupos = new Map<string, typeof pendientesAv>();
@@ -299,9 +300,9 @@ Deno.serve(async (req) => {
       if (g.length < 2 || !norm(g[0].contraparte_nombre || "")) continue;
       const r = calzarAviso(g[0], movsRec || [], tomados);
       if (r.cand.length !== g.length) continue;
-      const av2 = [...g].sort((x, y) => String(x.fecha_hora).localeCompare(String(y.fecha_hora)));
-      const mv2 = [...r.cand].sort((x, y) => Number(x.n_operacion || 0) - Number(y.n_operacion || 0) || String(x.fecha).localeCompare(String(y.fecha)));
-      av2.forEach((a, i) => gemelos.set(a.gmail_id, mv2[i].id));
+      const asig = g.map((a) => pistaMov(a, r.cand));
+      if (asig.some((m) => !m) || new Set(asig.map((m) => m!.id)).size !== g.length) continue;
+      g.forEach((a, i) => gemelos.set(a.gmail_id, asig[i]!.id));
     }
     // deno-lint-ignore no-explicit-any
     const calces: any[] = [];
