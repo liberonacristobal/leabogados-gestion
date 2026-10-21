@@ -9,7 +9,7 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 // (Martina y Martín). Bitácora: notaria.pedido_liquidacion (envío, con message_id para el hilo), .._fallido, .._prueba,
 // notaria.pedido_sin_respuesta (3 días hábiles sin respuesta → tarea a quien va en "seguimiento_a"), y
 // notaria.seguimiento_liquidacion (body.seguimiento, lo envía una persona desde la app, en el mismo hilo).
-// La respuesta de la notaría la registra agente-correo (notaria.respuesta_liquidacion). El logo va incrustado (cid).
+// La respuesta de la notaría la registra agente-correo (notaria.respuesta_liquidacion). Logo: el publicado en APP_URL.
 // Auth: cron con secreto. JWT @dominio = simulación. body.dryRun=true arma sin enviar; body.testTo=correo prueba a uno;
 // body.fecha='YYYY-MM-DD' simula el día (para probar el corrimiento a día hábil).
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
@@ -87,8 +87,9 @@ Deno.serve(async (req) => {
     const habilesDesde = (desdeIso: string) => { const d = new Date(desdeIso.slice(0, 10) + "T00:00:00"); d.setDate(d.getDate() + 1); let n = 0, g = 0; while (d <= hoy && g++ < 60) { if (habil(d)) n++; d.setDate(d.getDate() + 1); } return n; };
     // deno-lint-ignore no-explicit-any
     const det = (r: any) => { try { return typeof r.detail === "string" ? JSON.parse(r.detail) : (r.detail || {}); } catch { return {}; } };
-    const logo = await (async () => { try { const r = await fetch(`${APP_URL}/le-logo-blanco.png`); if (!r.ok) return null; return { filename: "logo.png", contentType: "image/png", encoding: "binary" as const, content: new Uint8Array(await r.arrayBuffer()), contentID: "logo-oficina" }; } catch { return null; } })();
-    const logoSrc = logo ? "cid:logo-oficina" : `${APP_URL}/le-logo-blanco.png`;
+    // Logo publicado en el dominio de la app (como el resto de los correos). Incrustado (cid) Gmail lo mostraba roto y como adjunto.
+    const logo = null;
+    const logoSrc = `${APP_URL}/le-logo-blanco.png`;
     const shell = (cuerpo: string) => `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb">
 <div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${logoSrc}" alt="${esc(nombreEstudio)}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div>
 <div style="padding:24px 28px;font-size:14px;color:#3D3D3D;line-height:1.6">${cuerpo}</div>
@@ -97,7 +98,7 @@ Deno.serve(async (req) => {
     const enviar = async (o: { to: string[]; cc: string[]; subject: string; html: string; messageId?: string; inReplyTo?: string }) => {
       const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
       await client.send({ from: `${toAscii(nombreEstudio)} <${GMAIL_USER}>`, to: o.to, ...(o.cc.length ? { cc: o.cc } : {}), subject: toAscii(o.subject), content: aTexto(o.html), html: qpSafe(o.html),
-        ...(logo ? { attachments: [logo] } : {}), ...(o.inReplyTo ? { inReplyTo: o.inReplyTo, references: o.inReplyTo } : {}), ...(o.messageId ? { headers: { "Message-ID": o.messageId } } : {}) });
+        ...(o.inReplyTo ? { inReplyTo: o.inReplyTo, references: o.inReplyTo } : {}), ...(o.messageId ? { headers: { "Message-ID": o.messageId } } : {}) });
       await client.close();
     };
     // Versión en texto del mismo correo (para quien lo lee sin formato).
@@ -155,7 +156,7 @@ Deno.serve(async (req) => {
     try { await enviar({ to: destTo, cc: destCc, subject: ASUNTO, html, messageId }); }
     catch (e) { await log(testTo ? "notaria.pedido_liquidacion_prueba_fallido" : "notaria.pedido_liquidacion_fallido", { slot, title: "El pedido NO se envió", error: String((e as Error).message || e) }); return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
     await log(testTo ? "notaria.pedido_liquidacion_prueba" : "notaria.pedido_liquidacion", { slot: testTo ? `prueba-${iso(today)}` : slot, title: desdeN ? `Pedido desde el ${dmy(desdeN)}` : "Pedido de liquidación", desde: desdeN, to: destTo, cc: destCc, asunto: ASUNTO, message_id: messageId, enviado_desde: GMAIL_USER });
-    return json({ ok: true, enviado: true, slot, para: destTo, cc: destCc, desde: desdeN, enviado_desde: GMAIL_USER, logo: !!logo, sin_respuesta: sinResp });
+    return json({ ok: true, enviado: true, slot, para: destTo, cc: destCc, desde: desdeN, enviado_desde: GMAIL_USER, sin_respuesta: sinResp });
   }
   if (!slot && !testTo) return json({ ok: true, enviado: false, motivo: `hoy (${iso(today)}) no corresponde`, dias });
 
