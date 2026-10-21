@@ -128,3 +128,39 @@ export function pareceFondo(mov, texto, solicitudes, proyectos) {
   if (pMsg || _FONDO.test(tx)) return { fuente: 'mensaje', solicitud: null, proyecto: pMsg, concepto: null }
   return null
 }
+
+// ── Cargos recurrentes ──
+// Racha: los últimos 3 cargos al mismo RUT quedaron como UN costo de oficina con la misma categoría y subcategoría, y el
+// monto nuevo está a ±30% del promedio de esos 3 → el siguiente se clasifica igual. Una clasificación distinta corta la racha.
+// previos = [{fecha, monto, clas: 'Categoría›Sub' | null}] del mismo RUT, anteriores al cargo. Devuelve la clase o null.
+export function rachaCargo(previos, monto) {
+  const u = [...(previos || [])].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 3)
+  if (u.length < 3 || u.some(x => !x.clas) || new Set(u.map(x => x.clas)).size !== 1) return null
+  const prom = u.reduce((s, x) => s + Math.abs(Number(x.monto) || 0), 0) / 3, M = Math.abs(Number(monto) || 0)
+  return prom > 0 && M >= prom * 0.7 && M <= prom * 1.3 ? u[0].clas : null
+}
+// Contadora: la transferencia se reparte con el correo «VALORES MM-AAAA» (items {item, categoria, monto}) solo si calza al
+// peso con UNA partida o con la suma de TODAS. Al PPM se le restan las retenciones de boletas de honorarios del mes (van en
+// el costo de cada boleta y se concilian como 'tercero'). Devuelve [{tipo, categoria, subcategoria, monto, concepto}] o null.
+export function repartoContadora(monto, valores, retenciones) {
+  const M = Math.round(Math.abs(Number(monto) || 0)), its = (valores?.items || []).filter(i => Number(i.monto) > 0)
+  if (!M || !its.length) return null
+  const [y, m] = String(valores.mes || '').split('-'), per = `${m}-${y}`
+  const ret = (retenciones || []).reduce((s, r) => s + (Number(r.monto) || 0), 0)
+  const partes = i => {
+    const v = Math.round(Number(i.monto))
+    if (/ppm/i.test(i.item)) {
+      const det = (retenciones || []).map(r => `${r.nombre} N°${r.folio} $${Math.round(r.monto).toLocaleString('es-CL')}`).join(', ')
+      return [{ tipo: 'gasto', categoria: i.categoria || 'Impuestos y patentes', subcategoria: 'PPM', monto: v - ret, concepto: `IVA/PPM ${per}${ret ? ` (retenciones BHE de ${det} van en el costo de su boleta)` : ''}` },
+        ...(ret ? [{ tipo: 'tercero', monto: ret, concepto: 'Retenciones de boletas de honorarios' }] : [])]
+    }
+    if (/cotiza/i.test(i.item)) return [{ tipo: 'gasto', categoria: i.categoria || 'Leyes sociales', subcategoria: 'Cotizaciones', monto: v, concepto: `Cotizaciones sueldos ${per}` }]
+    if (/contador/i.test(i.item)) return [{ tipo: 'gasto', categoria: i.categoria || 'Remuneraciones', subcategoria: 'Contadora', monto: v, concepto: `Honorario contadora ${per}` }]
+    return null
+  }
+  const uno = its.filter(i => Math.round(Number(i.monto)) === M)
+  const sel = uno.length === 1 ? uno : (its.reduce((s, i) => s + Math.round(Number(i.monto)), 0) === M ? its : null)
+  if (!sel) return null
+  const out = sel.map(partes); if (out.some(x => !x) || out.flat().some(p => p.monto < 0)) return null
+  return out.flat()
+}
