@@ -257,6 +257,7 @@ export const demoData = {
     { id:'pc1', user_name:'Martín',  amount:300000, delivered_at:'2026-06-01', delivered_by:'Cristóbal', notes:'Caja del mes' },
     { id:'pc2', user_name:'Martina', amount:250000, delivered_at:'2026-06-01', delivered_by:'Cristóbal', notes:'Caja del mes' },
     { id:'pc3', user_name:'Demo',    amount:200000, delivered_at:'2026-09-01', delivered_by:'Cristóbal', notes:'Caja del mes' },
+    { id:'pc4', user_name:'Martín',  amount:211000, delivered_at:'2026-07-03', delivered_by:'Cristóbal', notes:'Reembolso CBR (también conciliado al gasto: caso para «Registradas dos veces»)', movimiento_id:'mvdob' },
   ],
   tasks: [
     { id:'tp1', title:'Redactar minuta para el CBR', client_id:'c3', project_id:'p2', project:'Regularización de servidumbre', status:'Activo', due:new Date(Date.now()+2*864e5).toISOString().slice(0,10), assignees:['Rodrigo'], assigned_by:'Erasmo', created_at:new Date(Date.now()-2*864e5).toISOString().slice(0,10) },
@@ -317,6 +318,7 @@ export const demoData = {
   ],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.
   cartola_movimientos: [
+    { id:'mvdob', fecha:'2026-07-03', monto:211000, tipo:'cargo', es_interno:false, estado:'conciliado', monto_conciliado:211000, categoria:null, cuenta:'01-38392-2', rol_cuenta:'gastos', cliente_id:null, rut_contraparte:null, nombre_contraparte:'Martín (demo)', descripcion:'Transf. a terceros vía Internet' },
     { id:'ms3', fecha:'2026-03-02', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
     { id:'ms4', fecha:'2026-04-07', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
     { id:'ms6', fecha:'2026-06-01', monto:1080000, tipo:'abono', es_interno:false, estado:'conciliado', monto_conciliado:1080000, categoria:'Subarriendo', cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:null, nombre_contraparte:null, descripcion:'Transf. a terceros vía internet a cuenta 1403834 B.BICE' },
@@ -369,6 +371,7 @@ export const demoData = {
   ],
   cliente_alias: [],
   conciliacion: [
+    { id:'condob', movimiento_id:'mvdob', tipo_destino:'gasto', gasto_id:'x5c', factura_id:null, anticipo_id:null, monto_aplicado:210955, origen:'demo' },
     { id:'cms3', movimiento_id:'ms3', tipo_destino:'factura', factura_id:'bsub1', anticipo_id:null, monto_aplicado:1080000, origen:'demo' },
     { id:'cms4', movimiento_id:'ms4', tipo_destino:'factura', factura_id:'bsub1', anticipo_id:null, monto_aplicado:1080000, origen:'demo' },
     { id:'cms6', movimiento_id:'ms6', tipo_destino:'anticipo', factura_id:null, anticipo_id:'antsub6', monto_aplicado:1080000, origen:'demo' },

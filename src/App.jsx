@@ -38886,6 +38886,20 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
     const r=calceCajaChica(pettyCash, (movs||[]).filter(m=>!ccNoCaja.has(String(m.id))), {conciliados, sueldos})
     return { ...r, listas:r.auto, porRevisar:r.sugeridos }
   },[pettyCash,movs,concByMov,EQUIPO_RUT,ccNoCaja])   // eslint-disable-line
+  // Transferencias contadas dos veces: ligadas a una caja chica y además conciliadas, por más de lo que mide el movimiento.
+  // Partirla (caja + gasto que suman la transferencia) es válido; la base ya impide crear nuevas dobles (trigger _guard_mov_no_doble).
+  const dobleCC = useMemo(()=>{ const byMov={}, out=[]
+    ;(pettyCash||[]).forEach(p=>{ if(p.movimiento_id) (byMov[p.movimiento_id]=byMov[p.movimiento_id]||[]).push(p) })
+    Object.entries(byMov).forEach(([mid,ps])=>{ const m=(movs||[]).find(x=>String(x.id)===String(mid)); if(!m) return
+      const conc=(concByMov[mid]||[]).reduce((a,c)=>a+(Number(c.monto_aplicado)||0),0), pc=ps.reduce((a,p)=>a+Math.abs(Number(p.amount)||0),0)
+      if(conc>0&&conc+pc>Math.abs(Number(m.monto)||0)+1) out.push({m,ps,conc,pc}) })
+    return out.sort((a,b)=>String(a.m.fecha||'').localeCompare(String(b.m.fecha||''))) },[pettyCash,movs,concByMov])
+  const quitarDobleCC = async(x)=>{ const per=x.ps[0]?.user_name||'la persona'
+    if(!await appConfirm(`¿Quitar de la caja chica de ${per} la transferencia del ${fmtFechaDMY(x.m.fecha)} (${fmtN(x.pc)})?\n\nYa está conciliada en Banco por ${fmtN(x.conc)}; su caja deja de contarla. Banco no cambia.`)) return
+    try{ await logActividad('cajachica.doble_quitada',{tabla:'petty_cash',id:x.ps[0].id,detalle:{title:'Caja chica: transferencia contada dos veces, se quita de la caja',persona:per,monto:Math.round(x.pc),conciliado:Math.round(x.conc),movimiento:x.m.id,filas:x.ps},completo:true})
+      if(!DEMO){ const {error}=await supabase.from('petty_cash').delete().in('id',x.ps.map(p=>p.id)); if(error) throw error }
+      setPettyCash&&setPettyCash(p=>(p||[]).filter(y=>!x.ps.some(z=>z.id===y.id)))
+    }catch(e){ appAlert('No se pudo quitar: '+(e.message||e)) } }
   const marcarNoCajaCC = async(m)=>{ setCcNoCaja(p=>new Set([...p,String(m.id)])); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','cc_no_caja').eq('key',String(m.id)); await supabase.from('learnings').insert({kind:'cc_no_caja',key:String(m.id),value:'admin'}) }catch(_){} }
   // Acciones de confirmación (compuerta). Ajustar/fusionar/dividir dejan la caja = lo transferido, con nota y bitácora; nada se pierde.
   const confirmarCC = async(s)=>{
@@ -40370,6 +40384,18 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
             <div><div style={{fontSize:12,fontWeight:700,color:C.text}}>Barrido automático diario</div><div style={{fontSize:10,color:C.muted}}>enlaza solo: mismo monto, transferencia el mismo día de la caja o el anterior</div></div>
             <span onClick={()=>setCcAutoGlob(!ccAuto)} title='Barrido diario' style={{width:34,height:18,borderRadius:20,background:ccAuto?C.greenText:C.toggleOff,position:'relative',flexShrink:0,cursor:'pointer'}}><span style={{position:'absolute',top:2,left:ccAuto?18:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></span>
           </div>
+          {dobleCC.length>0 && <div>
+            <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.overdueText,margin:'0 0 7px'}}>Registradas dos veces · caja chica y conciliación · {dobleCC.length}</div>
+            {dobleCC.map(x=>(<div key={x.m.id} style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:10,padding:'10px 11px',border:`1px solid ${C.overdueBd}`,background:'#fff',borderRadius:10,marginBottom:7}}>
+              {diaGrande(x.m.fecha)}
+              <div style={{flex:'1 1 170px',minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.text}}>{x.ps[0]?.user_name||'—'} · {x.m.tipo==='abono'?'devolución':'transferencia'} <span style={{color:C.accent}}>{fmtM(Math.abs(x.m.monto||0))}</span></div>
+                <div style={{fontSize:10.5,color:C.muted,marginTop:2}}>conciliada {fmtN(x.conc)} · en la caja {fmtN(x.pc)}</div>
+              </div>
+              <button onClick={()=>verMovCC(x.m.id)} style={{fontSize:11,fontWeight:700,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px',cursor:'pointer',flexShrink:0}}>Ver en Banco</button>
+              <button onClick={()=>quitarDobleCC(x)} style={{fontSize:11,fontWeight:700,color:C.overdueText,background:C.surface,border:`1px solid ${C.overdueBd}`,borderRadius:8,padding:'6px 10px',cursor:'pointer',flexShrink:0}}>Quitar de la caja</button>
+            </div>))}
+          </div>}
           {revisionCC.listas.length>0 && <div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7,gap:8}}>
               <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.greenText}}>Se enlazan solas · mismo monto, mismo día o el anterior</span>
@@ -40952,7 +40978,7 @@ export default function App() {
   },[tab,openFichaId,pagina])
   const goBack=useCallback(()=>{ if(navStack.length) handleBackOrigin(); else setTab(userRole==='admin'?'dashboard':'tasks') },[navStack,userRole,handleBackOrigin])
   // Abrir una novedad: marca vistas y salta a su vista (con «Volver» al lugar de origen). Sub-vistas de Gastos vía expNav.
-  const abrirNovedad = n => { marcarNovVistas(); const d=n?.destino||{}; if(!d.tab) return; navTo({tab:d.tab}); if(d.exp) setExpNav(d.exp) }
+  const abrirNovedad = n => { marcarNovVistas(); const {exp,...d}=n?.destino||{}; if(!d.tab) return; navTo(d); if(exp) setExpNav(exp) }   // d: {tab, conc?, ccRev?, cartera?…} = lo que entiende navTo
   const verNovedades = () => { marcarNovVistas(); if(tab!=='novedades') navTo({tab:'novedades'}) }
   const editarNovedad = async(n,titulo) => { if(!DEMO){ const {error}=await supabase.from('novedades').update({titulo}).eq('id',n.id); if(error){ appAlert('No se pudo guardar: '+error.message); return } }
     setNovRows(p=>p.map(x=>x.id===n.id?{...x,titulo}:x)); logActividad('novedades.editada',{tabla:'novedades',id:n.id,detalle:{title:titulo,antes:n.titulo},completo:true}) }
