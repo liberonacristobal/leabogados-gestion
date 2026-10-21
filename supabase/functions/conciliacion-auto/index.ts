@@ -11,10 +11,13 @@
 // sin depósito → tarea a quien la envió (una vez).
 // PAGOS DE COMISIONES: un cargo al RUT de un proveedor que calza exacto y único con lo que falta transferirle de una comisión
 // por pagar (calcesPagoComision, la misma regla que «Conciliación sola» de Proveedores) la deja pagada y concilia el cargo.
+// CARGOS RECURRENTES: racha (rachaCargo: 3 cargos previos al mismo RUT con la misma clase de oficina y monto ±30%) → costo de
+// oficina igual; contadora (repartoContadora con el correo VALORES del mes anterior, al peso; PPM menos retenciones BHE del
+// mes). Nunca socios, equipo, proveedores ni clientes. body.backtestCargos = compara la regla con lo ya clasificado.
 // Modos (body): dryRun = calcula sin escribir · backtest = recorre lo ya conciliado y compara qué habría hecho.
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
-import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, delMes, pareceFondo } from "../_shared/conciliacionReglas.js";
+import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, delMes, pareceFondo, rachaCargo, repartoContadora } from "../_shared/conciliacionReglas.js";
 import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../_shared/comisionesReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -336,7 +339,93 @@ Deno.serve(async (req) => {
         }
       }
     } catch (e) { com.error = String((e as Error).message || e); }
-    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com });
+    // ── Cargos recurrentes y contadora ──
+    const car = { racha: [] as unknown[], contadora: [] as unknown[], backtest: null as unknown, error: null as string | null };
+    try {
+      const [mbr, provR, intern, cfgC, vals] = await Promise.all([
+        todas("miembros?select=rut,paga_con_boleta&rut=not.is.null"), todas("proveedores?select=id,rut,nombre"), todas("clients?select=id&is_internal=eq.true"),
+        todas("learnings?select=value&kind=eq.config&key=eq.contadora_rut"), todas("learnings?select=key,value&kind=eq.valores_contadora"),
+      ]);
+      const interno = intern[0]?.id, rutCont = normRut(cfgC[0]?.value || "");
+      const excl = new Set<string>([...mbr.map((x) => normRut(x.rut)), ...provR.map((x) => normRut(x.rut)), ...Object.keys(porRutCli())].filter(Boolean));
+      function porRutCli() { const o: Record<string, 1> = {}; Object.values(rutsCli).forEach((rs) => rs.forEach((r) => { o[r] = 1; })); return o; }
+      const valores: Record<string, any> = {}; vals.forEach((l) => { try { valores[l.key] = JSON.parse(l.value); } catch { /* ilegible */ } });
+      const hace400 = new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10);
+      const todosC = (await todas(`cartola_movimientos?select=id,fecha,monto,monto_conciliado,rut_contraparte,estado,es_interno,descripcion&tipo=eq.cargo&rut_contraparte=not.is.null&fecha=gte.${hace400}`)).filter((m) => !m.es_interno);
+      const concC = concAll.filter((c) => todosC.some((m) => m.id === c.movimiento_id));
+      const gids = [...new Set(concC.map((c) => c.gasto_id).filter(Boolean))];
+      const gastos: Record<string, any> = {}; for (let i = 0; i < gids.length; i += 150) (await todas(`expenses?select=id,client_id,category,subcategory,concept,amount&id=in.${enLista(gids.slice(i, i + 150))}`)).forEach((g) => { gastos[g.id] = g; });
+      const cPor: Record<string, any[]> = {}; concC.forEach((c) => { (cPor[c.movimiento_id] = cPor[c.movimiento_id] || []).push(c); });
+      const clasDe = (id: string) => { const cs = cPor[id] || []; if (cs.length !== 1 || cs[0].tipo_destino !== "gasto") return null; const g = gastos[cs[0].gasto_id]; return g && g.client_id === interno ? `${g.category}›${g.subcategory || ""}` : null; };
+      const previosDe = (m: any) => todosC.filter((x) => normRut(x.rut_contraparte) === normRut(m.rut_contraparte) && x.id !== m.id && `${x.fecha}|${x.id}` < `${m.fecha}|${m.id}` && (cPor[x.id] || []).length).map((x) => ({ fecha: x.fecha, monto: x.monto, clas: clasDe(x.id) }));
+      const boletas = await todas("boletas_honorarios?select=id,folio,fecha,retencion,emisor_nombre,emisor_rut,proveedor_id");
+      // Retención que se descuenta del PPM = la de boletas cuyo costo ya está en bruto (ligadas a una comisión). La de quien recibe su
+      // sueldo por boleta (miembros.paga_con_boleta) es parte del costo del PPM. Cualquier otra boleta del mes sin ligar → el PPM lo ve una persona.
+      const ligadasBHE = new Set((await todas("terceros_pagos?select=bhe_id&bhe_id=not.is.null")).map((t) => t.bhe_id));
+      const sueldoBoleta = new Set(mbr.filter((x) => x.paga_con_boleta).map((x) => normRut(x.rut)));
+      const provNom: Record<string, string> = Object.fromEntries(provR.map((p) => [p.id, String(p.nombre || "").split(" ")[0]]));
+      const bandBol = await todas("agente_bandeja?select=evidencia,estado&tipo=eq.boleta_honorarios&estado=eq.pendiente");
+      const mesAnt = (f: string) => { const [y, mo] = f.slice(0, 7).split("-").map(Number); const d = new Date(Date.UTC(y, mo - 2, 1)); return d.toISOString().slice(0, 7); };
+      const repartoDe = (m: any) => {
+        const P = mesAnt(String(m.fecha)), v = valores[P]; if (!v) return null;
+        const delMesB = boletas.filter((b) => String(b.fecha).slice(0, 7) === P && Number(b.retencion) > 0 && !sueldoBoleta.has(normRut(b.emisor_rut)));
+        const sinLigar = delMesB.some((b) => !ligadasBHE.has(b.id));
+        const rets = delMesB.filter((b) => ligadasBHE.has(b.id)).map((b) => ({ nombre: provNom[b.proveedor_id] || String(b.emisor_nombre || "").split(" ")[0], folio: b.folio, monto: Number(b.retencion) }));
+        const r = repartoContadora(m.monto, v, rets); if (!r) return null;
+        // Boleta del mes aún sin registrar (en la Bandeja): su retención no se conoce → el PPM queda para una persona.
+        const [yy, mm] = P.split("-"); const pend = bandBol.some((b) => (b.evidencia || []).some((e: { texto?: string }) => new RegExp(`\\d{2}-${mm}-${yy}`).test(String(e.texto || ""))));
+        if ((pend || sinLigar) && r.some((p: any) => p.subcategoria === "PPM")) return null;
+        return r;
+      };
+      if (body.backtestCargos) {
+        const res = { racha: { igual: 0, distinto: 0, se_abstiene: 0 }, contadora: { igual: 0, distinto: 0, se_abstiene: 0 } }, distintos: unknown[] = [];
+        for (const m of todosC.filter((x) => x.estado === "conciliado" && x.fecha >= desde)) {
+          const r = normRut(m.rut_contraparte);
+          if (r === rutCont) {
+            const p = repartoDe(m); if (!p) { res.contadora.se_abstiene++; continue; }
+            const real = (cPor[m.id] || []).map((c) => c.tipo_destino === "gasto" ? `${gastos[c.gasto_id]?.subcategory}:${Math.round(c.monto_aplicado)}` : `tercero:${Math.round(c.monto_aplicado)}`).sort().join(",");
+            const prop = p.map((x: any) => x.tipo === "gasto" ? `${x.subcategoria}:${x.monto}` : `tercero:${x.monto}`).sort().join(",");
+            if (real === prop) res.contadora.igual++; else { res.contadora.distinto++; distintos.push({ fecha: m.fecha, monto: m.monto, real, prop }); }
+            continue;
+          }
+          if (excl.has(r)) continue;
+          const k = rachaCargo(previosDe(m), m.monto); if (!k) { res.racha.se_abstiene++; continue; }
+          if (k === clasDe(m.id)) res.racha.igual++; else { res.racha.distinto++; distintos.push({ fecha: m.fecha, monto: m.monto, rut: r, real: clasDe(m.id), prop: k }); }
+        }
+        car.backtest = { ...res, distintos };
+      } else if (interno) {
+        const pendC = todosC.filter((m) => m.estado === "pendiente" && m.fecha >= desde && !(Number(m.monto_conciliado) > 0) && !(cPor[m.id] || []).length && !concAll.some((c) => c.movimiento_id === m.id));
+        for (const m of pendC) {
+          const r = normRut(m.rut_contraparte), M = Math.abs(Number(m.monto) || 0), fecha = String(m.fecha).slice(0, 10);
+          let partes: any[] | null = null, regla = "";
+          if (rutCont && r === rutCont) {
+            partes = repartoDe(m); regla = "correo VALORES de la contadora";
+            // Nunca dos veces: si ya hay un costo con el mismo concepto del período, queda para una persona.
+            if (partes) { const ya = await todas(`expenses?select=id&client_id=eq.${interno}&deleted_at=is.null&concept=in.(${encodeURIComponent(partes.filter((p) => p.tipo === "gasto").map((p) => `"${p.concepto.split(" (")[0]}"`).join(","))})`); if (ya.length) partes = null; }
+            if (partes) car.contadora.push({ fecha, monto: M, partes: partes.map((p) => `${p.subcategoria || p.tipo} ${fmt(p.monto)}`) });
+          } else if (!excl.has(r)) {
+            const k = rachaCargo(previosDe(m), m.monto);
+            if (k) { const [cat, sub] = k.split("›"); partes = [{ tipo: "gasto", categoria: cat, subcategoria: sub || null, monto: M, concepto: String(m.descripcion || "Costo de oficina").slice(0, 200) }]; regla = `racha: los 3 cargos anteriores a este RUT fueron ${cat}${sub ? " › " + sub : ""}`; car.racha.push({ fecha, monto: M, clase: k }); }
+          }
+          if (!partes || dryRun) continue;
+          const nuevas: string[] = [], gNuevos: string[] = [];
+          try {
+            for (const p of partes) {
+              let gid = null;
+              if (p.tipo === "gasto") { const g = await rest("expenses", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ client_id: interno, type: "gasto", amount: p.monto, date: fecha, concept: p.concepto, category: p.categoria, subcategory: p.subcategoria, created_by: "agente", paid_by_client: false }) }); gid = g[0].id; gNuevos.push(gid); }
+              const c = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: p.tipo, gasto_id: gid, monto_aplicado: p.monto, origen: "auto" }) }); nuevas.push(c[0].id);
+            }
+            await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado: "conciliado", monto_conciliado: M, categoria: "Gastos Oficina" }) });
+            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: nuevas[0], estudio_id: "lea", detail: { title: `Clasificado automáticamente: cargo ${fmt(M)} del ${dmy(fecha)} → ${partes.filter((p) => p.tipo === "gasto").map((p) => `${p.categoria}${p.subcategoria ? " › " + p.subcategoria : ""}`).join(" + ")}`, mov: m.id, regla, conciliacion: nuevas, gastos: gNuevos } }) });
+          } catch (e) {
+            for (const id of nuevas) { try { await rest(`conciliacion?id=eq.${id}`, { method: "DELETE" }); } catch { /* */ } }
+            for (const id of gNuevos) { try { await rest(`expenses?id=eq.${id}`, { method: "DELETE" }); } catch { /* */ } }
+            car.error = String((e as Error).message || e);
+          }
+        }
+      }
+    } catch (e) { car.error = String((e as Error).message || e); }
+    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
