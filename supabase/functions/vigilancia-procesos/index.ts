@@ -1,9 +1,10 @@
 // vigilancia-procesos — revisa que cada proceso automático haya corrido y terminado bien.
 // Fuente: procesos_estado() sobre procesos_corridas (registro permanente: lanzar_proceso anota cada corrida y
 // recoger_corridas guarda la respuesta real de la función antes de que pg_net la borre).
-// Si un proceso falló, no respondió o no corrió dentro de su plazo, avisa a los socios (miembros rol admin) desde
-// GMAIL_USER (contacto@), UNA vez por falla (learnings kind 'vigilancia_aviso', key = jobname, value = corrida avisada).
-// Interruptor: learnings config 'vigilancia_procesos' = 'on' para enviar (por defecto apagado = solo calcula).
+// Corre cada hora. Si un proceso falló, no respondió o no corrió en su plazo: lo REINTENTA (solo los marcados reintentable en
+// procesos_catalogo: los que no mandan correos a personas) y cuenta el intento. Recién después de 6 intentos fallidos seguidos
+// avisa UNA vez, solo a learnings config 'vigilancia_avisar_a' (hoy Cristóbal). Estado por proceso: learnings 'vigilancia_reintento'.
+// Interruptor del correo: learnings config 'vigilancia_procesos' = 'on'.
 // Auth: CRON_SECRET en body.secret, o JWT @leabogados.cl. body.dryRun = no envía ni marca avisos.
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
@@ -41,56 +42,65 @@ Deno.serve(async (req) => {
     if (!u?.email || !String(u.email).toLowerCase().endsWith("@leabogados.cl")) return json({ error: "No autorizado" }, 403);
   }
   const dryRun = !!body.dryRun;
+  const MAX = 6;   // reintentos antes de avisar
   try {
     // deno-lint-ignore no-explicit-any
     const procs: any[] = await rest("rpc/procesos_estado", { method: "POST", body: "{}" });
-    const problemas = (procs || []).filter((p) => p.active && (p.atrasado || p.estado === "error" || p.estado === "sin_respuesta")).map((p) => ({
-      jobname: p.jobname, nombre: p.nombre, cada: p.cada, ultima: p.ultima, ultima_ok: p.ultima_ok,
-      motivo: p.atrasado ? `No corrió dentro de su plazo (${p.cada}).` : p.estado === "sin_respuesta" ? "La función no respondió." : "Terminó con error.",
-      detalle: p.atrasado ? "" : String(p.respuesta || "").slice(0, 300),
-      // Llave de la falla: una falla se avisa una sola vez; si se repite en otra corrida, es una falla nueva.
-      llave: p.atrasado ? `atraso:${p.ultima || "nunca"}` : `${p.estado}:${p.ultima}`,
-    }));
+    const enFalla = (procs || []).filter((p) => p.active && p.jobname !== "vigilancia-procesos-diario" && (p.atrasado || p.estado === "error" || p.estado === "sin_respuesta"));
     // deno-lint-ignore no-explicit-any
-    const avisados: any[] = await rest("learnings?kind=eq.vigilancia_aviso&select=key,value");
-    const yaAvisado = new Map((avisados || []).map((a) => [a.key, a.value]));
-    const nuevos = problemas.filter((p) => yaAvisado.get(p.jobname) !== p.llave);
-    const resumen = { ok: true, revisados: (procs || []).length, problemas: problemas.length, nuevos: nuevos.length, dryRun };
-    if (!nuevos.length) return json({ ...resumen, enviado: false, motivo: problemas.length ? "fallas ya avisadas" : "todo en orden" });
+    const guardados: any[] = await rest("learnings?kind=eq.vigilancia_reintento&select=key,value");
+    // deno-lint-ignore no-explicit-any
+    const prev = new Map<string, any>((guardados || []).map((g) => { try { return [g.key, JSON.parse(g.value)]; } catch { return [g.key, null]; } }));
+    const guardar = async (job: string, st: unknown) => {
+      if (dryRun) return;
+      const enc = encodeURIComponent(job), value = JSON.stringify(st);
+      if (prev.has(job)) await rest(`learnings?kind=eq.vigilancia_reintento&key=eq.${enc}`, { method: "PATCH", body: JSON.stringify({ value, updated_at: new Date().toISOString() }) });
+      else await rest("learnings", { method: "POST", body: JSON.stringify({ kind: "vigilancia_reintento", key: job, value }) });
+    };
+    const ahora = new Date().toISOString();
+    // deno-lint-ignore no-explicit-any
+    const detalle: any[] = [], avisar: any[] = [];
+    for (const p of enFalla) {
+      const st = prev.get(p.jobname) || { n: 0, desde: ahora, avisado: false };
+      st.n = (st.n || 0) + 1;   // cada revisión horaria en falla cuenta un intento
+      st.motivo = p.atrasado ? `No corrió dentro de su plazo (${p.cada}).` : p.estado === "sin_respuesta" ? "La función no respondió." : "Terminó con error.";
+      st.detalle = p.atrasado ? "" : String(p.respuesta || "").slice(0, 300);
+      let reintento: string | null = null;
+      if (p.reintentable && st.n <= MAX && !dryRun) {
+        try { reintento = await rest("rpc/reintentar_proceso", { method: "POST", body: JSON.stringify({ p_job: p.jobname }) }); } catch (e) { reintento = "error: " + String((e as Error).message || e).slice(0, 120); }
+      }
+      if (st.n > MAX && !st.avisado) avisar.push({ ...p, st });
+      await guardar(p.jobname, st);
+      detalle.push({ job: p.jobname, intento: st.n, reintentable: !!p.reintentable, reintento });
+    }
+    // Lo que ya no está en falla se resolvió: se borra su estado (y queda en la bitácora si había costado más de un intento).
+    const resueltos = [...prev.keys()].filter((k) => !enFalla.some((p) => p.jobname === k));
+    for (const k of resueltos) {
+      if (dryRun) continue;
+      const st = prev.get(k);
+      await rest(`learnings?kind=eq.vigilancia_reintento&key=eq.${encodeURIComponent(k)}`, { method: "DELETE" });
+      if (st && st.n > 1) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.resuelto", table_name: "procesos_corridas", detail: JSON.stringify({ title: `Proceso resuelto: ${k}`, intentos: st.n, desde: st.desde, avisado: !!st.avisado }) }) }).catch(() => null);
+    }
+    const resumen = { ok: true, revisados: (procs || []).length, en_falla: enFalla.length, resueltos: resueltos.length, por_avisar: avisar.length, dryRun, detalle };
+    if (!avisar.length) return json({ ...resumen, enviado: false });
 
     // deno-lint-ignore no-explicit-any
-    const cfg: any[] = await rest("learnings?kind=eq.config&key=eq.vigilancia_procesos&select=value&limit=1");
-    const encendido = String(cfg?.[0]?.value || "").toLowerCase() === "on";
-    // deno-lint-ignore no-explicit-any
-    const socios: any[] = await rest("miembros?rol=eq.admin&select=email,rut,nombre");
-    // Solo correos del dominio de la cuenta que envía (no otros estudios ni correos personales) y uno por persona:
-    // los alias (cl@ y cristobal.liberona@) son la misma casilla y duplicaban el aviso.
+    const cfg: any[] = await rest("learnings?kind=eq.config&key=in.(vigilancia_procesos,vigilancia_avisar_a)&select=key,value");
+    const encendido = String((cfg || []).find((c) => c.key === "vigilancia_procesos")?.value || "").toLowerCase() === "on";
+    // Destinatarios configurables (hoy solo Cristóbal); solo correos del dominio de la cuenta que envía.
     const dom = String(GMAIL_USER || "").toLowerCase().split("@")[1] || "";
-    const porPersona = new Map<string, string>();
-    for (const s of socios || []) {
-      const e = String(s.email || "").trim().toLowerCase();
-      if (!e || !dom || !e.endsWith("@" + dom)) continue;
-      const k = String(s.rut || s.nombre || e).replace(/[^0-9kK]/g, "") || e;
-      const prev = porPersona.get(k);
-      if (!prev || e.length < prev.length) porPersona.set(k, e);
-    }
-    const para = [...porPersona.values()];
-    if (dryRun || !encendido || !para.length) return json({ ...resumen, enviado: false, motivo: dryRun ? "prueba" : !encendido ? "apagado" : "sin destinatarios", nuevosDet: nuevos });
+    const para = String((cfg || []).find((c) => c.key === "vigilancia_avisar_a")?.value || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((e) => e && dom && e.endsWith("@" + dom));
+    if (dryRun || !encendido || !para.length) return json({ ...resumen, enviado: false, motivo: dryRun ? "prueba" : !encendido ? "apagado" : "sin destinatarios" });
 
-    const filas = nuevos.map((p) => `<tr><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#003C50;font-weight:bold">${esc(p.nombre)}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#3D3D3D">${esc(p.motivo)}${p.detalle ? `<div style="font-size:11px;color:#537281;margin-top:3px">${esc(p.detalle)}</div>` : ""}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:12px;color:#537281;white-space:nowrap;text-align:right">Última: ${esc(fechaCL(p.ultima))}<br>Última correcta: ${esc(fechaCL(p.ultima_ok))}</td></tr>`).join("");
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:20px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">Espero que estén muy bien.</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">${nuevos.length === 1 ? "Un proceso automático de la app requiere revisión:" : `${nuevos.length} procesos automáticos de la app requieren revisión:`}</p><table style="width:100%;border-collapse:collapse">${filas}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">El detalle completo está en la app, en Oficina › Procesos automáticos.</p></div></body></html>`;
-    const asunto = nuevos.length === 1 ? `Proceso automático con falla: ${nuevos[0].nombre}` : `${nuevos.length} procesos automáticos con falla`;
+    const filas = avisar.map((p) => `<tr><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#003C50;font-weight:bold">${esc(p.nombre)}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#3D3D3D">${esc(p.st.motivo)}${p.st.detalle ? `<div style="font-size:11px;color:#537281;margin-top:3px">${esc(p.st.detalle)}</div>` : ""}<div style="font-size:11px;color:#537281;margin-top:3px">${p.reintentable ? `${MAX} reintentos sin resultado` : "No se reintenta solo (envía correos)"} · en falla desde ${esc(fechaCL(p.st.desde))}</div></td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:12px;color:#537281;white-space:nowrap;text-align:right">Última: ${esc(fechaCL(p.ultima))}<br>Última correcta: ${esc(fechaCL(p.ultima_ok))}</td></tr>`).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:20px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">${para.length > 1 ? "Espero que estén muy bien." : "Espero que estés muy bien."}</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">${avisar.length === 1 ? "Un proceso automático de la app sigue con falla después de 6 horas:" : `${avisar.length} procesos automáticos de la app siguen con falla después de 6 horas:`}</p><table style="width:100%;border-collapse:collapse">${filas}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">El detalle completo está en la app, en Oficina › Procesos automáticos.</p></div></body></html>`;
+    const asunto = avisar.length === 1 ? `Proceso automatico con falla: ${avisar[0].nombre}` : `${avisar.length} procesos automaticos con falla`;
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-    await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, subject: toAscii(asunto), content: nuevos.map((p) => `${p.nombre}: ${p.motivo}`).join("\n"), html: html.replace(/[ \t]+$/gm, "") });
+    await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, subject: toAscii(asunto), content: avisar.map((p) => `${p.nombre}: ${p.st.motivo}`).join("\n"), html: html.replace(/[ \t]+$/gm, "") });
     await client.close();
-    // Recién enviado el aviso, se marca cada falla como avisada (una fila por proceso: update o insert).
-    for (const p of nuevos) {
-      const enc = encodeURIComponent(p.jobname);
-      if (yaAvisado.has(p.jobname)) await rest(`learnings?kind=eq.vigilancia_aviso&key=eq.${enc}`, { method: "PATCH", body: JSON.stringify({ value: p.llave }) });
-      else await rest("learnings", { method: "POST", body: JSON.stringify({ kind: "vigilancia_aviso", key: p.jobname, value: p.llave }) });
-    }
-    await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.falla_avisada", table_name: "procesos_corridas", detail: JSON.stringify({ title: asunto, para, procesos: nuevos.map((p) => p.jobname) }) }) }).catch(() => null);
-    return json({ ...resumen, enviado: true, para, procesos: nuevos.map((p) => p.jobname) });
+    for (const p of avisar) { p.st.avisado = true; prev.set(p.jobname, p.st); await guardar(p.jobname, p.st); }
+    await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.falla_avisada", table_name: "procesos_corridas", detail: JSON.stringify({ title: asunto, para, procesos: avisar.map((p) => p.jobname) }) }) }).catch(() => null);
+    return json({ ...resumen, enviado: true, para, procesos: avisar.map((p) => p.jobname) });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
