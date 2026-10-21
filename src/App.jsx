@@ -3000,22 +3000,22 @@ function NovedadFila({n, isAdmin, onOpen, compact, first, acciones}){
   </div>)
 }
 // Aviso al entrar: panel centrado en escritorio, pantalla completa en el celular. «Entendido» las marca vistas.
-function NovedadesAviso({items, isDesktop, isAdmin, onOpen, onClose, onVerTodas}){
-  const sty = isDesktop ? {position:'fixed',inset:0,background:'rgba(4,36,47,.38)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300}
-    : {position:'fixed',inset:0,background:C.surface,zIndex:300,display:'flex',flexDirection:'column',paddingTop:'env(safe-area-inset-top,0px)',paddingBottom:'env(safe-area-inset-bottom,0px)'}
-  const panel = (<div onClick={e=>e.stopPropagation()} style={isDesktop?{width:600,maxWidth:'calc(100vw - 32px)',maxHeight:'calc(100vh - 80px)',background:C.surface,borderRadius:16,boxShadow:'0 18px 50px rgba(0,30,40,.28)',overflow:'hidden',display:'flex',flexDirection:'column'}:{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-    <div style={{display:'flex',alignItems:'center',gap:11,padding:isDesktop?'16px 18px 12px':'14px 14px 12px',borderBottom:`1px solid ${C.border}`}}>
-      <span style={{width:34,height:34,borderRadius:10,background:C.greenBg,color:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='sparkle'/></span>
-      <div style={{flex:1,minWidth:0}}><div style={{fontSize:17,fontWeight:700,color:C.accent}}>Novedades</div><div style={{fontSize:12,color:C.muted}}>desde tu última visita · {items.length}</div></div>
-      <button onClick={onClose} aria-label='Cerrar' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}><Gl n='x'/></button>
+// Aviso al entrar: solo el número de novedades no vistas, sin la lista (no tapa la pantalla). «Ver novedades» abre la página
+// Novedades y «Continuar» lo cierra; en ambos casos quedan vistas. Mismo aviso centrado en escritorio y celular.
+function NovedadesAviso({items, isDesktop, onClose, onVerTodas}){
+  const n=items.length
+  return createPortal(<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(4,36,47,.38)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300,padding:'0 16px'}}>
+    <div onClick={e=>e.stopPropagation()} role='dialog' aria-label='Novedades' style={{width:isDesktop?420:'100%',maxWidth:420,background:C.surface,borderRadius:16,boxShadow:'0 18px 50px rgba(0,30,40,.28)',padding:'20px 20px 16px',display:'flex',flexDirection:'column',gap:14}}>
+      <div style={{display:'flex',alignItems:'center',gap:12}}>
+        <span style={{width:34,height:34,borderRadius:10,background:C.greenBg,color:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='sparkle'/></span>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:700,color:C.accent}}>Novedades</div><div style={{fontSize:13,color:C.text,marginTop:2}}>{`Hay ${n} novedad${n!==1?'es':''} desde tu última visita.`}</div></div>
+      </div>
+      <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <button onClick={onVerTodas} style={{fontSize:13,fontWeight:700,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 18px',cursor:'pointer',minHeight:38}}>Ver novedades</button>
+        <button onClick={onClose} style={{fontSize:13,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:10,padding:'9px 18px',cursor:'pointer',minHeight:38}}>Continuar</button>
+      </div>
     </div>
-    <div style={{flex:1,overflowY:'auto',minHeight:0}}>{items.map((n,i)=><NovedadFila key={n.id} n={n} isAdmin={isAdmin} onOpen={onOpen} compact={!isDesktop} first={i===0}/>)}</div>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:isDesktop?'12px 18px':'12px 14px 16px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
-      <button onClick={onVerTodas} style={{fontSize:13,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>Ver todas</button>
-      <button onClick={onClose} style={{background:C.accent,color:'#fff',fontSize:13,fontWeight:700,borderRadius:10,padding:'9px 22px',border:'none',cursor:'pointer'}}>Entendido</button>
-    </div>
-  </div>)
-  return createPortal(<div style={sty} onClick={isDesktop?onClose:undefined}>{panel}</div>, document.body)
+  </div>, document.body)
 }
 // Menú › Novedades: historial por semana (esta, la anterior) y luego por mes. Los socios pueden editar el texto o quitar una novedad.
 function NovedadesView({items, isDesktop, isAdmin, onOpen, onBack, origen, onEditar, onQuitar}){
@@ -43587,7 +43587,7 @@ export default function App() {
             </div>}
             {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
-            {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
+            {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
