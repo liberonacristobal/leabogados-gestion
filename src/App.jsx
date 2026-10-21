@@ -253,6 +253,7 @@ const estadoCobro = (b, opts={}) => {
 }
 // Iconos SVG inline (la app NO tiene Tabler; iconos como SVG stroke, estilo Feather). Set mínimo para las secciones de la ficha.
 const _ICON_PATHS = {
+  sparkle:'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6',
   building:'M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M3 21h18M9 7h1M9 11h1M9 15h1M14 7h1M14 11h1M14 15h1',
   file:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8',
   briefcase:'M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16',
@@ -2973,7 +2974,74 @@ function useIsDesktop(){
 }
 
 // SideNav (escritorio): barra lateral fija que reusa TABS_ADMIN/LIMITED + moduloOn. Oculta bajo 1024px por CSS (.sidenav).
-function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioActive}){
+// ── NOVEDADES de la app: al entrar, lo nuevo que le sirve a cada persona (tabla `novedades`, por estudio).
+// El equipo ve las de su rol; los socios ven todas (las del equipo rotuladas «también al equipo»). «Ya vista» = learnings novedades_vista (key = email, value = ISO).
+const NOV_DEMO = [
+  {id:'nv1', fecha:'2026-10-20', titulo:'Borradores: ahora se editan y se eliminan', area:'Rendir a cliente › Borradores', roles:['admin','limited'], destino:{tab:'expenses',exp:'rendirCli'}, created_at:'2026-10-20T20:00:00Z'},
+  {id:'nv2', fecha:'2026-10-20', titulo:'Cada factura tiene su tipo', area:'Facturación › Por clasificar', roles:['admin'], destino:{tab:'billing'}, created_at:'2026-10-20T19:00:00Z'},
+  {id:'nv3', fecha:'2026-10-20', titulo:'Comisión por facturar: se cruza con el SII', area:'Banco', roles:['admin'], destino:{tab:'conciliacion'}, created_at:'2026-10-20T19:00:00Z'},
+  {id:'nv4', fecha:'2026-10-19', titulo:'El detalle del gasto se corrige tocándolo', area:'Rendir a cliente', roles:['admin','limited'], destino:{tab:'expenses',exp:'rendir'}, created_at:'2026-10-19T19:00:00Z'},
+]
+const novedadesDe = (rows, rol) => (rows||[]).filter(n=>n&&n.activo!==false&&(rol==='admin'||(n.roles||[]).includes(rol)))
+  .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))||String(b.created_at||'').localeCompare(String(a.created_at||'')))
+// Sin registro de vista (primera vez): solo lo de las últimas 2 semanas, nunca el historial completo.
+const novedadesNoVistas = (items, vista) => { const desde = vista || new Date(Date.now()-14*86400000).toISOString(); return (items||[]).filter(n=>String(n.created_at||'')>String(desde)) }
+function NovedadFila({n, isAdmin, onOpen, compact, first, acciones}){
+  const equipo = isAdmin && (n.roles||[]).some(r=>r!=='admin')
+  return (<div onClick={()=>onOpen&&onOpen(n)} style={{display:'flex',alignItems:'center',gap:compact?9:12,padding:compact?'11px 12px':'11px 18px',borderTop:first?'none':`1px solid ${C.bgSoft}`,cursor:onOpen?'pointer':'default',minWidth:0}}>
+    {diaGrande(n.fecha)}
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:compact?13:13.5,fontWeight:600,color:C.text,lineHeight:1.3}}>{n.titulo}</div>
+      <div style={{fontSize:11.5,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[n.area,equipo?'también al equipo':null].filter(Boolean).join(' · ')}</div>
+    </div>
+    {acciones||(onOpen&&<span style={{color:C.done,display:'flex',flexShrink:0}}><Gl n='chevron'/></span>)}
+  </div>)
+}
+// Aviso al entrar: panel centrado en escritorio, pantalla completa en el celular. «Entendido» las marca vistas.
+function NovedadesAviso({items, isDesktop, isAdmin, onOpen, onClose, onVerTodas}){
+  const sty = isDesktop ? {position:'fixed',inset:0,background:'rgba(4,36,47,.38)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300}
+    : {position:'fixed',inset:0,background:C.surface,zIndex:300,display:'flex',flexDirection:'column',paddingTop:'env(safe-area-inset-top,0px)',paddingBottom:'env(safe-area-inset-bottom,0px)'}
+  const panel = (<div onClick={e=>e.stopPropagation()} style={isDesktop?{width:600,maxWidth:'calc(100vw - 32px)',maxHeight:'calc(100vh - 80px)',background:C.surface,borderRadius:16,boxShadow:'0 18px 50px rgba(0,30,40,.28)',overflow:'hidden',display:'flex',flexDirection:'column'}:{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+    <div style={{display:'flex',alignItems:'center',gap:11,padding:isDesktop?'16px 18px 12px':'14px 14px 12px',borderBottom:`1px solid ${C.border}`}}>
+      <span style={{width:34,height:34,borderRadius:10,background:C.greenBg,color:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='sparkle'/></span>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:17,fontWeight:700,color:C.accent}}>Novedades</div><div style={{fontSize:12,color:C.muted}}>desde tu última visita · {items.length}</div></div>
+      <button onClick={onClose} aria-label='Cerrar' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}><Gl n='x'/></button>
+    </div>
+    <div style={{flex:1,overflowY:'auto',minHeight:0}}>{items.map((n,i)=><NovedadFila key={n.id} n={n} isAdmin={isAdmin} onOpen={onOpen} compact={!isDesktop} first={i===0}/>)}</div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:isDesktop?'12px 18px':'12px 14px 16px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
+      <button onClick={onVerTodas} style={{fontSize:13,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>Ver todas</button>
+      <button onClick={onClose} style={{background:C.accent,color:'#fff',fontSize:13,fontWeight:700,borderRadius:10,padding:'9px 22px',border:'none',cursor:'pointer'}}>Entendido</button>
+    </div>
+  </div>)
+  return createPortal(<div style={sty} onClick={isDesktop?onClose:undefined}>{panel}</div>, document.body)
+}
+// Menú › Novedades: historial por semana (esta, la anterior) y luego por mes. Los socios pueden editar el texto o quitar una novedad.
+function NovedadesView({items, isDesktop, isAdmin, onOpen, onBack, origen, onEditar, onQuitar}){
+  const [ed,setEd]=useState(null), [txt,setTxt]=useState('')
+  const lun=lunesSemanaISO(), lunAnt=(()=>{ const d=new Date(lun+'T12:00'); d.setDate(d.getDate()-7); return isoLocal(d.getTime()) })()
+  const grupoDe=n=>{ const f=String(n.fecha||''); return f>=lun?'Esta semana':f>=lunAnt?'Semana anterior':mesTitulo(f+'T12:00') }
+  const grupos=[]; items.forEach(n=>{ const g=grupoDe(n); let x=grupos.find(y=>y.g===g); if(!x){ x={g,ns:[]}; grupos.push(x) } x.ns.push(n) })
+  const btn={fontSize:11.5,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px',background:C.surface,cursor:'pointer'}
+  return (<div style={{padding:isDesktop?'4px 22px 100px':'4px 12px 100px',...(isDesktop?{maxWidth:760,margin:'0 auto'}:{})}}>
+    <div style={{display:'flex',alignItems:'center',gap:10,margin:'4px 0 12px'}}><BackBtn onBack={onBack} origen={origen}/><span style={{color:C.done}}>|</span><span style={{fontSize:17,fontWeight:700,color:C.accent}}>Novedades</span></div>
+    {!items.length&&<div style={{fontSize:13,color:C.muted,padding:'20px 4px'}}>Aún no hay novedades.</div>}
+    {grupos.map(g=>(<div key={g.g} style={{marginBottom:14}}>
+      <div style={{...SEC_LBL,margin:'0 2px 6px'}}>{g.g}</div>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+        {g.ns.map((n,i)=> ed===n.id
+          ? <div key={n.id} style={{display:'flex',gap:8,alignItems:'center',padding:'10px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',flexWrap:'wrap'}}>
+              <input value={txt} onChange={e=>setTxt(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&txt.trim()){ onEditar(n,txt.trim()); setEd(null) } if(e.key==='Escape') setEd(null) }} autoFocus style={{flex:'1 1 220px',minWidth:0,fontSize:13,padding:'7px 9px',border:`1px solid ${C.border}`,borderRadius:8}}/>
+              <button onClick={()=>{ if(txt.trim()){ onEditar(n,txt.trim()); setEd(null) } }} style={{...btn,background:C.accent,color:'#fff',border:'none'}}>Guardar</button>
+              <button onClick={()=>setEd(null)} style={{...btn,color:C.muted}}>Cancelar</button>
+            </div>
+          : <NovedadFila key={n.id} n={n} isAdmin={isAdmin} onOpen={onOpen} compact={!isDesktop} first={i===0}
+              acciones={isAdmin?<span onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexShrink:0}}><button onClick={()=>{ setEd(n.id); setTxt(n.titulo||'') }} style={{...btn,color:C.accent}}>Editar</button><button onClick={()=>onQuitar(n)} style={{...btn,color:C.overdueText}}>Quitar</button></span>:null}/>)}
+      </div>
+    </div>))}
+  </div>)
+}
+
+function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioActive,onNovedades,novN=0}){
   const sp = {fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
   const I = {
     grid:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>,
@@ -3029,6 +3097,7 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioAct
         {s.items.map(item)}
       </div>))}
       <div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:7,paddingTop:10}}>
+        {onNovedades&&<button onClick={onNovedades} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 11px',borderRadius:8,border:'none',background:tab==='novedades'?'rgba(255,255,255,.12)':'transparent',color:novN||tab==='novedades'?'#fff':'#a8c2ca',fontSize:13,fontWeight:500,cursor:'pointer',textAlign:'left'}}><span style={{display:'flex',fontSize:17}}><Gl n='sparkle' w={1.8}/></span>Novedades{novN>0&&<span style={{marginLeft:'auto',background:C.normal,color:'#fff',fontSize:10,fontWeight:700,borderRadius:20,padding:'1px 7px'}}>{novN}</span>}</button>}
         {/* Copiloto: la IA del estudio → protagonista al pie (full-width, destacado). Buscar queda secundario. */}
         <button onClick={onCopiloto} title='Counsel AI' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:7,padding:'10px',borderRadius:10,border:'1px solid rgba(159,225,203,.35)',background:'rgba(159,225,203,.12)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}><svg width="16" height="16" viewBox="0 0 24 24" fill="#9FE1CB"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Counsel AI</button>
         <button onClick={onPalette} title='Buscar (⌘K)' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'7px',borderRadius:8,border:'1px solid rgba(255,255,255,.14)',background:'transparent',color:'#a8c2ca',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}><svg width="13" height="13" viewBox="0 0 24 24" {...sp}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar</button>
@@ -21197,8 +21266,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     if(navTo&&navTo.cli){ const c=(clients||[]).find(x=>String(x.id)===String(navTo.cli)); if(c){ setHubOpen(false); if(isDesktop) setShowBuscarClientes(true); setSelectedClient(c) } }
     if(navTo==='orphans') setShowOrphans(true)
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
-    else if(navTo==='rendir'){ setShowRendiciones(true); setRendSub(null) }
-    else if(navTo==='rendirCli'){ setShowRendiciones(true); setQ(''); setRendGrupo('env'); setRendAbg('Todos'); setRendSub('rendir') }   // Inicio › Rendiciones por hacer: directo a Rendir a cliente › Borradores
+    else if(navTo==='rendir'){ setHubOpen(false); setShowRendiciones(true); setRendSub(null) }
+    else if(navTo==='rendirCli'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('env'); setRendAbg('Todos'); setRendSub('rendir') }   // Inicio › Rendiciones por hacer: directo a Rendir a cliente › Borradores
     onNavDone&&onNavDone()
   },[navTo])
   // Ledger de cobros de la notaría (fuente única): cada gasto de notaría con su estado (pagada/en liquidación/por pagar) y error (sin cliente/duplicado), agrupado por carga masiva.
@@ -40385,7 +40454,7 @@ function AjusteModal({client, user, onSave, onClose, saving, asPage=false, expen
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente'}
+const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente'}
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
@@ -40751,6 +40820,20 @@ export default function App() {
     return ()=>{ alive=false } },[user?.email])
   const [userRole,setUserRole]=useState(null)   // vista actual: 'admin' | 'limited' | null (admin puede previsualizar 'limited')
   const [actualRole,setActualRole]=useState(null) // rol REAL e inmutable de la DB — fuente de verdad para permisos
+  // Novedades de la app: se cargan al entrar; el aviso sale solo si hay alguna no vista por esta persona.
+  const [novRows,setNovRows]=useState([]), [novVista,setNovVista]=useState(undefined), [novAviso,setNovAviso]=useState(false)
+  useEffect(()=>{ if(!user?.email||!userRole) return; let alive=true
+    if(DEMO){ setNovRows(NOV_DEMO); setNovVista(null); return }
+    Promise.all([supabase.from('novedades').select('*').eq('activo',true).order('fecha',{ascending:false}).limit(200),
+      supabase.from('learnings').select('value').eq('kind','novedades_vista').eq('key',String(user.email).toLowerCase()).order('updated_at',{ascending:false}).limit(1)])
+      .then(([n,l])=>{ if(!alive) return; setNovRows(n.data||[]); setNovVista(l.data?.[0]?.value||null) }).catch(()=>{})
+    return ()=>{ alive=false } },[user?.email,userRole])
+  const novMias = useMemo(()=>novedadesDe(novRows, userRole), [novRows,userRole])
+  const novNuevas = useMemo(()=>novVista===undefined?[]:novedadesNoVistas(novMias, novVista), [novMias,novVista])
+  const _novMostrado = useRef(false)
+  useEffect(()=>{ if(!_novMostrado.current&&novNuevas.length){ _novMostrado.current=true; setNovAviso(true) } },[novNuevas.length])
+  const marcarNovVistas = useCallback(()=>{ const ahora=new Date().toISOString(); setNovVista(ahora); setNovAviso(false)
+    if(!DEMO&&user?.email) setLearningKV('novedades_vista', String(user.email).toLowerCase(), ahora).catch(()=>{}) },[user?.email])
   const [clients,setClients]=useState([])
   const [salesAll,setSales]=useState([])
   const [proyectosCartera,setProyectosCartera]=useState([])
@@ -40868,6 +40951,14 @@ export default function App() {
     setTab(dest.tab); setTimeout(()=>restoreScroll({w:0,d:0}),0)
   },[tab,openFichaId,pagina])
   const goBack=useCallback(()=>{ if(navStack.length) handleBackOrigin(); else setTab(userRole==='admin'?'dashboard':'tasks') },[navStack,userRole,handleBackOrigin])
+  // Abrir una novedad: marca vistas y salta a su vista (con «Volver» al lugar de origen). Sub-vistas de Gastos vía expNav.
+  const abrirNovedad = n => { marcarNovVistas(); const d=n?.destino||{}; if(!d.tab) return; navTo({tab:d.tab}); if(d.exp) setExpNav(d.exp) }
+  const verNovedades = () => { marcarNovVistas(); if(tab!=='novedades') navTo({tab:'novedades'}) }
+  const editarNovedad = async(n,titulo) => { if(!DEMO){ const {error}=await supabase.from('novedades').update({titulo}).eq('id',n.id); if(error){ appAlert('No se pudo guardar: '+error.message); return } }
+    setNovRows(p=>p.map(x=>x.id===n.id?{...x,titulo}:x)); logActividad('novedades.editada',{tabla:'novedades',id:n.id,detalle:{title:titulo,antes:n.titulo},completo:true}) }
+  const quitarNovedad = async n => { if(!await appConfirm(`¿Quitar «${n.titulo}» de las novedades?`)) return
+    if(!DEMO){ const {error}=await supabase.from('novedades').update({activo:false}).eq('id',n.id); if(error){ appAlert('No se pudo quitar: '+error.message); return } }
+    setNovRows(p=>p.filter(x=>x.id!==n.id)); logActividad('novedades.quitada',{tabla:'novedades',id:n.id,detalle:{title:n.titulo,fila:n},completo:true}) }
   // Tarea y Gasto son PÁGINAS (no modales). Se intercepta setModal para que TODOS los puntos de apertura existentes (setModal({type:'task'|...}))
   // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
   // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
@@ -41149,7 +41240,7 @@ export default function App() {
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
-    const esPagina=tab==='editCliente'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'||(userRole==='limited'&&(tab==='misComisiones'||tab==='porCobrarMios'||tab==='proponerVenta'))   // páginas de edición (drill fuera de la barra) + páginas del responsable limitado
+    const esPagina=tab==='editCliente'||tab==='novedades'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'||(userRole==='limited'&&(tab==='misComisiones'||tab==='porCobrarMios'||tab==='proponerVenta'))   // páginas de edición (drill fuera de la barra) + páginas del responsable limitado
     if((tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
     if(userRole==='limited' && !esPagina && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
@@ -43309,6 +43400,11 @@ export default function App() {
             </div>
             {menuOpen&&(
               <div style={{position:'absolute',top:40,right:0,width:210,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'4px 0',zIndex:100,boxShadow:'0 8px 24px rgba(0,0,0,.1)'}}>
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);verNovedades()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <span style={{display:'flex',color:'#99ABB4',fontSize:16}}><Gl n='sparkle' w={2}/></span>
+                  Novedades
+                  {novNuevas.length>0&&<span style={{marginLeft:'auto',minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:C.greenText,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{novNuevas.length}</span>}
+                </div>
                 {userRole==='admin'&&<>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'conciliaHub'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='3' y1='21' x2='21' y2='21'/><line x1='3' y1='10' x2='21' y2='10'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='12' y1='14' x2='12' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></svg>
@@ -43444,6 +43540,8 @@ export default function App() {
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} anticipos={anticipos} sales={sales} fantasmaIds={fantasmaAltaIds} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})} onOpenProcesos={()=>navTo({tab:'procesos'})} onOpenBandeja={()=>navTo({tab:'bandeja'})}/>
             </div>}
             {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')}/>}
+            {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
+            {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
@@ -43472,7 +43570,7 @@ export default function App() {
             <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
           </button>
         )}
-        <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)} onPrioridades={abrirPrioridades} prioActive={tab==='dashboard'&&prioOpen}/>
+        <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)} onPrioridades={abrirPrioridades} prioActive={tab==='dashboard'&&prioOpen} onNovedades={verNovedades} novN={novNuevas.length}/>
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='rechazoMotivo'&&<Modal fullscreenOnMobile title={<span style={{color:C.accent}}>Rechazar propuesta</span>} onClose={()=>setModal(null)} closeOnBackdrop={false}><RechazoMotivoModal sale={modal.data} onConfirm={handleConfirmRechazo} onCancel={()=>setModal(null)}/></Modal>}
