@@ -17,6 +17,7 @@ import { demoData } from './demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from './cartola'
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../supabase/functions/_shared/conciliacionReglas.js'
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
+import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, ultimoDiaHabilMesEmision as _udhme } from '../supabase/functions/_shared/facturacionReglas.js'
 import logoBlanco from './le-logo-blanco.png'
 
 // LA CLAVE ANÓNIMA NO IDENTIFICA A NADIE: viaja en este mismo paquete. Las
@@ -438,15 +439,7 @@ async function cargarFeriadosCL(){
 const _esDiaHabil = dt => { const w=dt.getDay(); if(w===0||w===6) return false; const s=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; return !FERIADOS_CL.has(s) }
 // Vencimiento de pago = ÚLTIMO DÍA HÁBIL del mes de emisión si se emite dentro de los primeros 10 días;
 // si se emite después del día 10, salta al último día hábil del mes SIGUIENTE. Día hábil = ni fin de semana ni feriado (Chile).
-function ultimoDiaHabilMesEmision(iso){
-  if(!iso) return null
-  const d=new Date(String(iso).slice(0,10)+'T00:00:00'); if(isNaN(d)) return null
-  let y=d.getFullYear(), m=d.getMonth()
-  if(d.getDate()>10){ m++; if(m>11){m=0;y++} }
-  const last=new Date(y,m+1,0)
-  let guard=0; while(!_esDiaHabil(last) && guard++<15) last.setDate(last.getDate()-1)   // retrocede sobre fines de semana y feriados
-  return `${last.getFullYear()}-${String(last.getMonth()+1).padStart(2,'0')}-${String(last.getDate()).padStart(2,'0')}`
-}
+function ultimoDiaHabilMesEmision(iso){ return _udhme(iso, _esDiaHabil) }
 function dueFromIssued(iso){ return ultimoDiaHabilMesEmision(iso) }
 // Guardapelos de año: un <input type=date> puede aceptar un año de 2 dígitos ("26" → "0026") y corromper toda la cadena
 // de cuotas (ej. cobroInicio "0026-09-09" → la venta no genera programadas). Expande cualquier año < 1000 a 20YY.
@@ -9607,6 +9600,7 @@ function ProcesosView({isDesktop, onBack, origen}){
 // Al abrir, la propia página confirma lo que ya se hizo por otra vía (depósito conciliado, liquidación cargada) y lo cierra sola.
 const _DEMO_BANDEJA = [
   {id:'d1',recibido_at:'2026-10-20T10:05:57Z',de:'genesis.garcia@sbschile.com',de_nombre:'Génesis Garcia',asunto:'Re: Solicitud de fondos por rendir Proyecto Villarica',cuerpo:'Adjunto comprobante de pago solicitado.\n\nEl lun, 19 oct 2026 a las 16:01, Erasmo Escala (<ee@leabogados.cl>) escribió:\n> ... por un total de $1.200.000.-',adjuntos:[{nombre:'Comprobante Operación Express.pdf',mime:'application/pdf'}],tipo:'comprobante',cliente_nombre:'Alejandro Lee',abogado:'Erasmo',estado:'pendiente',motivo:'Por recibir · cartola al 19-10-2026',propuesta:{accion:'registrar_solicitud',titulo:'Registrar la solicitud de fondos',montos:[1200000],montos_cand:[1200000]},evidencia:[{texto:'Solicitud citada en el correo',monto:1200000,fuente:'correo'}]},
+  {id:'ds1',gmail_id:'sii:491-34',recibido_at:'2026-10-20T12:00:00Z',de:'OLIVER SPA',de_nombre:'OLIVER SPA',asunto:'Factura N° 491 emitida en el SII',tipo:'factura_sin_registrar',cliente_id:'c3',estado:'pendiente',motivo:'3 ventas activas: elegir la venta · puede cubrir 2 cuotas de «Reorganización» ($1.634.880)',propuesta:{accion:'registrar_factura',titulo:'Registrar la factura N° 491',folio:'491'},evidencia:[{texto:'Factura N° 491 del 20-10-2026 · OLIVER SPA',monto:1634180,fuente:'SII'}]},
   {id:'dr1',recibido_at:'2026-10-20T15:17:28Z',de:'usuario@notariarapanui.cl',de_nombre:'Notaría Rapa Nui',asunto:'RE: Consulta solicitud de documentos',tipo:'respaldo_gasto',cliente_nombre:'Notaría Rapa Nui',estado:'pendiente',motivo:'2 gastos por el mismo monto',adjuntos:[{nombre:'4677 BOLETA CERTIFICADO DE VIGENCIA.pdf',mime:'application/pdf'}],propuesta:{accion:'adjuntar_respaldo',titulo:'Adjuntar el respaldo al gasto',path:'demo/boleta.pdf',nombre:'4677 BOLETA CERTIFICADO DE VIGENCIA.pdf',candidatos:[{id:'e-demo-1',fecha:'2026-10-20',monto:20000,cliente:'Viñedos del Maipo Ltda',concepto:'Certificado de vigencia'},{id:'e-demo-2',fecha:'2026-10-09',monto:20000,cliente:'Comercial Andes SpA',concepto:'Gastos notariales'}]},evidencia:[{texto:'Monto del documento',monto:20000,fuente:'PDF'}]},
   {id:'df1',gmail_id:'fondo:demo-av1',recibido_at:'2026-10-20T10:07:00Z',de:'Inversiones Ríofrío Ltda',de_nombre:'Inversiones Ríofrío Ltda',asunto:'Fondo por registrar',tipo:'fondo_por_registrar',cliente_id:'c2',estado:'pendiente',motivo:'El mensaje de la transferencia indica un fondo',propuesta:{accion:'registrar_fondo',titulo:'Registrar el fondo',monto:1200000,fecha:'2026-10-20',proyecto:'Reorganización societaria',concepto:null,fuente:'mensaje',movimiento_id:null,aviso_gmail:'demo-av1'},evidencia:[{texto:'Transferencia de Inversiones Ríofrío Ltda · «provisión reorganización»',monto:1200000,fuente:'Banco de Chile'}]},
   {id:'df2',gmail_id:'fondo:demo-av2',recibido_at:'2026-10-20T10:04:00Z',de:'Inversiones Ríofrío Ltda',de_nombre:'Inversiones Ríofrío Ltda',asunto:'Fondo por registrar',tipo:'fondo_por_registrar',cliente_id:'c2',estado:'pendiente',motivo:'El mensaje de la transferencia indica un fondo',propuesta:{accion:'registrar_fondo',titulo:'Registrar el fondo',monto:1200000,fecha:'2026-10-20',proyecto:'Due diligence adquisición',concepto:null,fuente:'mensaje',movimiento_id:null,aviso_gmail:'demo-av2'},evidencia:[{texto:'Transferencia de Inversiones Ríofrío Ltda · «viáticos due diligence»',monto:1200000,fuente:'Banco de Chile'}]},
@@ -9616,7 +9610,7 @@ const _DEMO_BANDEJA = [
   {id:'d5',recibido_at:'2026-10-09T14:29:00Z',de:'adquisiciones@bastro.cl',de_nombre:'Bastro',asunto:'COMPROBANTE DE PAGO',cuerpo:'',adjuntos:[],tipo:'comprobante',cliente_nombre:'Eduardo Barra',abogado:'Erasmo',estado:'registrado',motivo:'Depósito del 09-10-2026 ya conciliado',propuesta:{},evidencia:[{texto:'Depósito 09-10-2026',monto:1369907,fuente:'cartola'}]},
   {id:'d6',recibido_at:'2026-10-16T12:00:00Z',de:'noticias@legalnews.cl',de_nombre:'Legal News',asunto:'Boletín semanal',cuerpo:'',adjuntos:[],tipo:'spam',estado:'sin_accion',motivo:'Publicidad o notificación',propuesta:{},evidencia:[]},
 ]
-const BANDEJA_BTN = {adjuntar_respaldo:'Adjuntar al gasto',registrar_fondo:'Registrar fondo',registrar_solicitud:'Confirmar',crear_tarea:'Crear tarea',guardar_cuenta:'Guardar cuenta',conciliar:'Conciliar en Banco',cargar_notaria:'Cargar liquidación',revisar:'Revisado'}
+const BANDEJA_BTN = {registrar_factura:'Abrir en Facturación',adjuntar_respaldo:'Adjuntar al gasto',registrar_fondo:'Registrar fondo',registrar_solicitud:'Confirmar',crear_tarea:'Crear tarea',guardar_cuenta:'Guardar cuenta',conciliar:'Conciliar en Banco',cargar_notaria:'Cargar liquidación',revisar:'Revisado'}
 // Fondo por registrar (conciliacion-auto lo propone desde el aviso del banco o la cartola, con señal de fondo): una persona
 // lo confirma desde Gastos › Revisar o la Bandeja. Nunca dos veces: si el depósito ya se concilió en Banco, solo se cierra; si
 // el cliente ya tiene un fondo igual sin respaldo del banco (±10 días), se vincula ese en vez de crear otro. Con el movimiento
@@ -9658,7 +9652,7 @@ function solicitudCitada(cuerpo){
   return {fecha:d&&!isNaN(d)?d.toISOString():null, autor:m[6].trim().split(/\s+/)[0]||null, email:m[7].toLowerCase()}
 }
 const asuntoBase = s => String(s||'').replace(/^((re|rv|fw|fwd)\s*:\s*)+/i,'').trim()
-function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado}){
+function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado, onIrFacturasSII}){
   const [elegido,setElegido]=useState({})   // adjuntar_respaldo: gasto elegido por tarjeta
   const [rows,setRows]=useState(null), [err,setErr]=useState(null), [busy,setBusy]=useState(null), [abierto,setAbierto]=useState(null), [verSin,setVerSin]=useState(false)
   const cliPorId=useMemo(()=>new Map((clients||[]).map(c=>[String(c.id),c])),[clients])
@@ -9687,6 +9681,7 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
   const hecho=async(r,cambios,log)=>{ await patch(r.id,{...cambios,resuelto_por:yo,resuelto_at:new Date().toISOString()}); logActividad('agente.'+(log||'confirmado'),{tabla:'agente_bandeja',id:r.id,detalle:{cliente:nombreCli(r),title:cambios.motivo||'Correo del agente resuelto'}}) }
   const confirmar=async r=>{ const p=r.propuesta||{}, a=p.accion
     if(a==='conciliar'){ onIrBanco&&onIrBanco(p.movimiento_id); return }
+    if(a==='registrar_factura'){ onIrFacturasSII&&onIrFacturasSII(); return }   // la registra el motor de Facturación (Cargadas sin registrar); la propuesta se cierra sola al quedar registrada
     if(a==='cargar_notaria'){ onCargarNotaria&&onCargarNotaria(p.path?{path:p.path,nombre:p.nombre||'Liquidación notaría.xlsx'}:null); return }
     setBusy(r.id)
     try{
@@ -10979,34 +10974,10 @@ function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
 
 // Señales de período en una glosa/concepto: mes (0-11), año y N° de cuota. Sirve para calzar la factura del SII con SU cuota
 // programada por lo que DICE ("Asesoría permanente julio 2026", "Cuota 7/12"), no solo por monto/fecha (que fallan con cuotas viejas sin registrar).
-const _MESES_FULL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-const _MESES_ABR=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-function periodoDeTexto(txt){
-  const t=(txt||'').toLowerCase()
-  let mes=null
-  for(let i=0;i<12;i++){ if(t.includes(_MESES_FULL[i])){ mes=i; break } }
-  if(mes==null){ for(let i=0;i<12;i++){ if(new RegExp('\\b'+_MESES_ABR[i]+'\\.?').test(t)){ mes=i; break } } }
-  const yM=t.match(/\b20(\d{2})\b/); const anio=yM?2000+ +yM[1]:null
-  // Cuota/pago: "cuota 2", "pago 1", "2/5", "3 de 24" (evita el dash para no confundir años tipo 2026-07). 1-2 dígitos.
-  const cM=t.match(/(?:cuota|pago)\s*(\d{1,2})/)||t.match(/\b(\d{1,2})\s*(?:\/|\sde\s)\s*\d{1,2}\b/); const cuota=cM?+cM[1]:null
-  return {mes,anio,cuota}
-}
 // UF que menciona la glosa de un DTE ("Equivalente a 37,3 UF", "(30 UF)", "45,83 UF") → número. Sirve para crear la venta EN UF desde la factura.
 const ufDeGlosa = g => { const m=String(g||'').match(/(\d[\d.,]*)\s*UF\b/i); if(!m) return null; let s=m[1]; if(s.includes(',')) s=s.replace(/\./g,'').replace(',','.'); const n=parseFloat(s); return n>0?n:null }
 // Puntúa cuánto calza el MES de servicio de la glosa (gmes) con una candidata. Prioriza la convención "mes vencido" de la firma
 // (servicio = vencimiento − 1), luego el N° de cuota, y deja el mes directo como señal débil. Evita que cuotas de meses contiguos empaten.
-function mesScoreCandidata(concept,due,gmes){
-  if(gmes==null) return 0
-  const cp=periodoDeTexto(concept||'')
-  if(cp.mes===gmes) return 3                                   // el concepto nombra el mes
-  const dm = due? new Date(due).getUTCMonth() : null
-  const dmOk = dm!=null && !isNaN(dm)
-  if(dmOk && ((dm-1+12)%12)===gmes) return 3                   // vencimiento − 1 (mes vencido)
-  if(cp.cuota!=null && ((cp.cuota-2+12)%12)===gmes) return 2   // cuota N ≈ servicio del mes N−1 (0-idx N−2)
-  if(dmOk && dm===gmes) return 1                               // vencimiento mismo mes (etiquetado directo)
-  if(cp.cuota!=null && ((cp.cuota-1+12)%12)===gmes) return 1
-  return 0
-}
 
 // Chequeo de cobertura del año: facturas EMITIDAS (con folio real) que quedaron SIN CLIENTE = fantasmas por asignar.
 // Read-only salvo asignar (compuerta humana). Para las del SII que NO están en el sistema, deriva al cotejo mes a mes.
@@ -11826,7 +11797,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   // Deep-link desde los accesos directos del Inicio: abre el cotejo SII o el checklist "Facturas del mes"
   const [cotejoMes,setCotejoMes] = useState(null)   // mes con el que abrir el cotejo (para buscar facturas antiguas del mes de un pago)
   const [cierreOpen,setCierreOpen] = useState(()=>!!viewMemLeer('billing')?.cierreOpen)
-  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='sinemitir') setFilter('sinemitir'); else if(intent==='cierre') setCierreOpen(true); else if(intent==='sii') setSiiPageOpen(true); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
+  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='sinemitir') setFilter('sinemitir'); else if(intent==='cierre') setCierreOpen(true); else if(intent==='sii') setSiiPageOpen(true); else if(intent==='sinregistrar') setTimeout(()=>cargarSinRegistrar(),0); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
   useEffect(()=>{ contarSinRegistrar() },[])   // badge del hub: cargas sin registrar // eslint-disable-line
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
@@ -11858,12 +11829,10 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   // Fuente ÚNICA del match doc→programada (la usan la carga y la lista persistente). Devuelve la mejor candidata y todas.
   const matchProgramada = (cliId, monto, fecha, glosa, progUsadas)=>{
     if(!cliId || !(monto>0)) return {progId:null, progCand:[]}
-    const gp=periodoDeTexto(glosa)
-    const scoreCand=(x)=>{ const cp=periodoDeTexto(x.concept||''); let s=0; if(gp.cuota!=null&&cp.cuota!=null&&gp.cuota===cp.cuota) s+=4; s+=mesScoreCandidata(x.concept,x.due||x.issued_at,gp.mes); if(gp.anio!=null&&cp.anio!=null&&gp.anio===cp.anio) s+=1; return s }
-    const cand=(billing||[]).filter(x=>!x.deleted_at && !x.invoice_no && ['Programada','Anticipada'].includes(x.status) && x.billing_type!=='reembolso' && String(x.client_id)===String(cliId) && Math.abs((x.amount||0)-monto)/monto<=0.06 && (()=>{ const dv=x.due||x.issued_at; if(!dv||!fecha) return true; return Math.abs((new Date(dv)-new Date(fecha))/86400000)<=(x.billing_type==='comision'?60:120) })() && (x.billing_type!=='comision'||Math.abs((x.amount||0)-monto)<=1)).map(x=>({x,s:scoreCand(x)})).sort((a,b)=> b.s-a.s || String(a.x.due||a.x.issued_at||'').localeCompare(String(b.x.due||b.x.issued_at||''))).map(o=>o.x)
+    const cand=candidatasProgramadas(billing, cliId, monto, fecha, glosa)   // regla única (_shared/facturacionReglas.js)
     const pick = cand.find(c=>!(progUsadas&&progUsadas.has(c.id))) || null
     if(pick&&progUsadas) progUsadas.add(pick.id)
-    const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0, sale_id:c.sale_id||null, s:scoreCand(c)}))
+    const progCand = cand.map(c=>({id:c.id, due:c.due||c.issued_at||null, concept:c.concept||'', amount:c.amount||0, sale_id:c.sale_id||null, s:c._s}))
     return {progId:pick?.id||null, progCand}
   }
   // «Comisión por facturar» abierta del cliente (cobrada sin folio) más cercana en fecha a la factura (≤60 días), aunque el monto no calce exacto.
@@ -12034,7 +12003,6 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       // FIFO recurrente: si TODAS las candidatas son la MISMA serie (mismo sale_id), no hay ambigüedad real →
       // consumir la MÁS ANTIGUA sin facturar (regla "siempre la más antigua, nunca saltarse"), automático.
       // Solo se mantiene la compuerta cuando las candidatas son de VENTAS distintas (ahí sí: ¿cuál proyecto?).
-      const unaSerie = pc => (pc||[]).length>1 && pc.every(c=>c.sale_id && String(c.sale_id)===String(pc[0].sale_id))
       for(const it of rows.filter(r=>r.estado==='programada' && r.clienteId && ((r.progCand||[]).length<=1 || unaSerie(r.progCand)))){
         try{
           if((it.progCand||[]).length>1){ const old=[...it.progCand].sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))[0]; if(old?.id) it.progId=old.id }   // varias cuotas iguales de la misma serie → la más antigua (FIFO)
@@ -43787,7 +43755,7 @@ export default function App() {
             {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
-            {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
+            {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
