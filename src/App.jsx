@@ -1345,7 +1345,7 @@ function PedidosNotaria({isDesktop, bulkImports, onRevisar}){
           </div> })}
     <div style={{...SEC_LBL,margin:'4px 2px 0'}}>Pedidos de liquidación</div>
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-      {!pedidos.length&&<div style={{fontSize:12.5,color:C.muted,padding:'12px 14px'}}>Aún no hay pedidos. Salen los días 10 y 20 (o el día hábil siguiente), desde contacto@ a la notaría.</div>}
+      {!pedidos.length&&<div style={{fontSize:12.5,color:C.muted,padding:'12px 14px'}}>Aún no hay pedidos. Salen los días 15 y 30 (o el día hábil siguiente), desde contacto@ a la notaría.</div>}
       {pedidos.map((x,i)=>{ const [lbl,col,bg]=_PED_CHIP[x.estado]; const d=x.p.d||{}
         return <div key={x.slot+'-'+i} style={{display:'flex',gap:12,padding:D?'12px 14px':'11px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',minWidth:0}}>
           {diaGrande(isoLocal(x.p.created_at))}
@@ -22209,7 +22209,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8}}>
               {cards.map(c=><HubTile key={c.t} ic={c.ic} t={c.t} s={c.s} sM={c.sM} col={c.col} bg={c.bg} onClick={c.go}/>)}
             </div>
-            {/* Avisos como tarjetas hermanas bajo las 4: "No son nuestras" (roja si hay por resolver) y "Recordatorios" (bitácora del pedido de liquidación, días 10 y 20). */}
+            {/* Avisos como tarjetas hermanas bajo las 4: "No son nuestras" (roja si hay por resolver) y "Recordatorios" (bitácora del pedido de liquidación, días 15 y 30). */}
             {(()=>{ const nn=notaNoNuestras, hayNN=nn.items.length>0, rojo=nn.n>0
               const tile=(k,{ic,t,s,sM,bg,cardBg,cardBd,tCol,go})=><div key={k} style={{gridColumn:hayNN?undefined:'1 / -1',minWidth:0}}><HubTile icNode={ic} t={t} s={s} sM={sM} bg={bg} cardBg={cardBg} cardBd={cardBd} tCol={tCol} onClick={go}/></div>
               return (
@@ -22218,7 +22218,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                     ic:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={rojo?C.overdueText:C.muted} strokeWidth='1.9'><circle cx='12' cy='12' r='9'/><path d='M15 9l-6 6M9 9l6 6'/></svg>,
                     bg:rojo?C.surface:C.bgSoft, cardBg:rojo?C.overdueBg:undefined, cardBd:rojo?C.overdueText+'44':undefined, tCol:rojo?C.overdueText:undefined,
                     go:()=>{ setNoNSel(new Set(nn.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }})}
-                  <PedidosTile bulkImports={bulkImports} render={u=>tile('rec',{t:'Pedidos', s:u===undefined?'…':u?`${fmtFechaDMY(isoLocal(u.p.created_at))} · ${_PED_CHIP[u.estado][0].toLowerCase()}`:'días 10 y 20',
+                  <PedidosTile bulkImports={bulkImports} render={u=>tile('rec',{t:'Pedidos', s:u===undefined?'…':u?`${fmtFechaDMY(isoLocal(u.p.created_at))} · ${_PED_CHIP[u.estado][0].toLowerCase()}`:'días 15 y 30',
                     ic:<SIcon n='mail' s={17} c={u&&u.porSeguir?C.soonText:u&&u.estado==='rev'?C.azulInfo:C.muted}/>, bg:u&&u.porSeguir?C.soonBg:u&&u.estado==='rev'?C.azulBg:C.bgSoft, go:()=>setNotaTab('recordatorios')})}/>
                 </div>) })()}
           </div>
