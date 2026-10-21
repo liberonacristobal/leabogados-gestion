@@ -176,6 +176,8 @@ export const demoData = {
   historial: [
     { id:'pn1', action:'notaria.pedido_liquidacion', created_at:'2026-10-15T12:00:00Z', user_email:null, detail:JSON.stringify({slot:'2026-10-15', title:'Pedido desde el 30-09-2026', desde:'2026-09-30', to:['sdelgado@notarialascar.cl','sdanotaria@gmail.com'], cc:['mp@leabogados.cl','mc@leabogados.cl'], enviado_desde:'contacto@leabogados.cl'}) },
     { id:'pn2', action:'notaria.pedido_sin_respuesta', created_at:'2026-10-20T12:00:00Z', user_email:null, detail:JSON.stringify({slot:'2026-10-15', title:'Sin respuesta en 3 días hábiles · tarea a Martina'}) },
+    { id:'pn6', action:'notaria.respuesta_liquidacion', created_at:'2026-10-21T18:20:00Z', user_email:'agente', detail:JSON.stringify({slot:'2026-10-15', title:'Respuesta de Silvana Delgado · Excel «Liquidación.xlsx»', con_excel:true, path:'agente/demo/Liquidacion.xlsx', nombre:'Liquidación.xlsx'}) },
+    { id:'pn7', action:'notaria.aviso_liquidacion', created_at:'2026-10-21T18:20:30Z', user_email:null, detail:JSON.stringify({slot:'2026-10-15', title:'Aviso a Martina y Martín · tarea a Martina'}) },
     { id:'pn3', action:'notaria.pedido_liquidacion', created_at:'2026-10-05T12:00:00Z', user_email:null, detail:JSON.stringify({slot:'2026-10-05', title:'Pedido desde el 10-09-2026', desde:'2026-09-10', to:['sdelgado@notarialascar.cl','sdanotaria@gmail.com'], cc:['mp@leabogados.cl','mc@leabogados.cl'], enviado_desde:'contacto@leabogados.cl'}) },
     { id:'pn4', action:'notaria.seguimiento_liquidacion', created_at:'2026-10-08T14:42:00Z', user_email:'mp@leabogados.cl', detail:JSON.stringify({slot:'2026-10-05', title:'Seguimiento enviado por Martina Pérez'}) },
     { id:'pn5', action:'notaria.respuesta_liquidacion', created_at:'2026-10-08T19:05:00Z', user_email:'agente', detail:JSON.stringify({slot:'2026-10-05', title:'Respuesta de Silvana Delgado · Excel «Liquidación.xlsx»', con_excel:true}) },
@@ -247,6 +249,7 @@ export const demoData = {
   ],
   // Cargas masivas de notaría (Carga masiva / historial). El resumen guarda las "no son nuestras" para el panel dedicado.
   bulk_imports: [
+    { id:'bi9', created_at:'2026-10-09T15:10:00Z', created_by:'Martina', filename:'Liquidación.xlsx', row_count:18, status:'active', resumen:{ leidas:19, cargadas:18, pendientes:0, error:0, omitidas:1, notaria:true } },
     { id:'bi1', created_at:'2026-08-21', created_by:'Martina', filename:'Notaría Lascar — agosto.xlsx', row_count:12, status:'active',
       resumen:{ leidas:16, cargadas:12, pendientes:0, error:1, omitidas:0, notaria:true,
         erroresDet:[{ ot:'48360', nombre:'—', motivo:'Sin monto en la planilla' }],

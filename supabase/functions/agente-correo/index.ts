@@ -209,16 +209,19 @@ Deno.serve(async (req) => {
       const respPedido = !esInterno && /liquidaci[oó]n de gastos notariales/i.test(asunto);
       const esNotaria = dominiosNotaria.has(dom) || correosNotaria.has(de) || respPedido;
       const tieneXlsx = adj.some((a: { name: string }) => /\.xlsx?$/i.test(a.name || ""));
-      if (respPedido && !dryRun && !respGids.has(gid)) {
-        const ped = (pedLiq || []).find((p: { created_at: string }) => new Date(p.created_at) <= recibido);
-        if (ped) { const xl = adj.find((a: { name: string }) => /\.xlsx?$/i.test(a.name || "")); respGids.add(gid);
-          await rest("activity_log", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_email: "agente", action: "notaria.respuesta_liquidacion", table_name: "expenses", estudio_id: "lea",
-            detail: JSON.stringify({ slot: jd(ped.detail).slot, title: `Respuesta de ${nombreDe(m.from)}${xl ? ` · Excel «${xl.name}»` : " · sin liquidación"}`, de, gmail_id: gid, con_excel: !!xl }) }) }).catch(() => null); }
-      }
-      const pareceComprob = /comprobante|transferencia|operaci[oó]n express|pago realizado|abono/i.test(`${asunto} ${cuerpo.slice(0, 600)} ${adj.map((a: { name: string }) => a.name).join(" ")}`);
       // Adjuntos al bucket privado (se abren desde la tarjeta de la bandeja); en prueba no se sube nada.
       const adjGuardados: { nombre: string; mime: string; path?: string }[] = [];
       for (const a of adj) { const g: { nombre: string; mime: string; path?: string } = { nombre: a.name, mime: a.mime }; if (a.b64 && !dryRun && String(a.b64).length < 14_000_000) { const path = `agente/${gid}/${String(a.name || "adjunto").replace(/[^\w.\- ]/g, "_")}`; if (await subir(path, a.b64, mimeDe(a.name, a.mime))) g.path = path; } adjGuardados.push(g); }
+      if (respPedido && !dryRun && !respGids.has(gid)) {
+        const ped = (pedLiq || []).find((p: { created_at: string }) => new Date(p.created_at) <= recibido);
+        if (ped) { const xl = adj.find((a: { name: string }) => /\.xlsx?$/i.test(a.name || "")); respGids.add(gid);
+          const xg = xl ? adjGuardados.find((g) => g.nombre === xl.name && g.path) : null;
+          await rest("activity_log", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_email: "agente", action: "notaria.respuesta_liquidacion", table_name: "expenses", estudio_id: "lea",
+            detail: JSON.stringify({ slot: jd(ped.detail).slot, title: `Respuesta de ${nombreDe(m.from)}${xl ? ` · Excel «${xl.name}»` : " · sin liquidación"}`, de, gmail_id: gid, con_excel: !!xl, ...(xg ? { path: xg.path, nombre: xg.nombre } : {}) }) }) }).catch(() => null);
+          // Aviso a quienes van en copia + tarea de revisión (lo envía notaria-pedir-liquidacion, que tiene los correos de la notaría).
+          if (xl) await fetch(`${SB_URL}/functions/v1/notaria-pedir-liquidacion`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: CRON_SECRET, avisoLiquidacion: { slot: jd(ped.detail).slot, gmail_id: gid, de: nombreDe(m.from), nombre: xl.name, path: xg?.path || null } }) }).catch(() => null); }
+      }
+      const pareceComprob = /comprobante|transferencia|operaci[oó]n express|pago realizado|abono/i.test(`${asunto} ${cuerpo.slice(0, 600)} ${adj.map((a: { name: string }) => a.name).join(" ")}`);
       // deno-lint-ignore no-explicit-any
       let fila: any = { gmail_id: gid, thread_id: m.threadId || null, recibido_at: recibido.toISOString(), de, de_nombre: nombreDe(m.from), para: m.to || null, asunto, cuerpo: cuerpo.slice(0, 8000), adjuntos: adjGuardados, cliente_id: cid, abogado, resumen: ia?.resumen || null, tipo: ia?.tipo || "otro", estado: "sin_accion", propuesta: {}, evidencia: [], ...(porNombre ? { motivo: "Cliente reconocido por el nombre" } : {}) };
       const cta = cuentaEn(cuerpo);
